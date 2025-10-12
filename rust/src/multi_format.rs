@@ -20,10 +20,10 @@ pub enum StringOrData {
 #[derive(Debug, Clone, uniffi::Enum)]
 pub enum MultiFormat {
     Address(Arc<AddressWithNetwork>),
-    Hardware(Arc<HardwareExport>),
-    Mnem(Arc<crate::mnemonic::Mnemonic>),
+    HardwareExport(Arc<HardwareExport>),
+    Mnemonic(Arc<crate::mnemonic::Mnemonic>),
     Transaction(Arc<crate::transaction::ffi::BitcoinTransaction>),
-    Labels(Arc<Bip329Labels>),
+    Bip329Labels(Arc<Bip329Labels>),
     /// TAPSIGNER has not been initialized yet
     TapSignerReady(Arc<cove_tap_card::TapSigner>),
     /// TAPSIGNER has not been initialized yet
@@ -64,7 +64,7 @@ impl MultiFormat {
         // try parsing a seed qr
         if let Ok(seed_qr) = crate::seed_qr::SeedQr::try_from_data(data) {
             let mnemonic = seed_qr.into_mnemonic();
-            return Ok(Self::Mnem(Arc::new(mnemonic.into())));
+            return Ok(Self::Mnemonic(Arc::new(mnemonic.into())));
         }
 
         Err(MultiFormatError::UnrecognizedFormat)
@@ -101,18 +101,18 @@ impl MultiFormat {
         // try to parse hardware export (xpub, json, descriptors...)
         if let Ok(format) = pubport::Format::try_new_from_str(string) {
             let hardware_export = HardwareExport::new(format);
-            return Ok(Self::Hardware(hardware_export.into()));
+            return Ok(Self::HardwareExport(hardware_export.into()));
         }
 
         // try to parse seed qr
         if let Ok(seed_qr) = crate::seed_qr::SeedQr::try_from_str(string) {
             let mnemonic = seed_qr.into_mnemonic();
-            return Ok(Self::Mnem(Arc::new(mnemonic.into())));
+            return Ok(Self::Mnemonic(Arc::new(mnemonic.into())));
         }
 
         // try to parse a mnemonic
         if let Ok(mnemonic) = string.parse_mnemonic() {
-            return Ok(Self::Mnem(Arc::new(mnemonic.into())));
+            return Ok(Self::Mnemonic(Arc::new(mnemonic.into())));
         }
 
         // try to parse a transaction
@@ -126,7 +126,7 @@ impl MultiFormat {
 
         // try and parse bip329 labels
         if let Ok(labels) = bip329::Labels::try_from_str(string) {
-            return Ok(Self::Labels(Arc::new(labels.into())));
+            return Ok(Self::Bip329Labels(Arc::new(labels.into())));
         }
 
         if string.contains("tapsigner.com/start") {
@@ -134,11 +134,11 @@ impl MultiFormat {
                 .map_err(|e| MultiFormatError::InvalidTapSigner(e.into()))?;
 
             match tap_card {
-                cove_tap_card::TapCard::Tap(card) => {
+                cove_tap_card::TapCard::TapSigner(card) => {
                     return Ok(MultiFormat::from(card));
                 }
 
-                cove_tap_card::TapCard::Sats(_card) => {
+                cove_tap_card::TapCard::SatsCard(_card) => {
                     unreachable!("tap card should not be a sats card");
                 }
             }

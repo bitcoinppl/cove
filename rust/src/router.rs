@@ -22,7 +22,7 @@ pub enum Route {
     NewWallet(NewWalletRoute),
     Settings(SettingsRoute),
     SecretWords(WalletId),
-    TxDetails { id: WalletId, details: Arc<TransactionDetails> },
+    TransactionDetails { id: WalletId, details: Arc<TransactionDetails> },
     Send(SendRoute),
     CoinControl(CoinControlRoute),
 }

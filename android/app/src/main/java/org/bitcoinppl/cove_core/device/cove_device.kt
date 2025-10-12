@@ -59,7 +59,7 @@ open class RustBuffer : Structure() {
     companion object {
         internal fun alloc(size: ULong = 0UL) = uniffiRustCall() { status ->
             // Note: need to convert the size to a `Long` value to make this work with JVM.
-            UniffiLib.INSTANCE.ffi_cove_device_rustbuffer_alloc(size.toLong(), status)
+            UniffiLib.ffi_cove_device_rustbuffer_alloc(size.toLong(), status)
         }.also {
             if(it.data == null) {
                throw RuntimeException("RustBuffer.alloc() returned null data pointer (size=${size})")
@@ -75,7 +75,7 @@ open class RustBuffer : Structure() {
         }
 
         internal fun free(buf: RustBuffer.ByValue) = uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.ffi_cove_device_rustbuffer_free(buf, status)
+            UniffiLib.ffi_cove_device_rustbuffer_free(buf, status)
         }
     }
 
@@ -84,40 +84,6 @@ open class RustBuffer : Structure() {
         this.data?.getByteBuffer(0, this.len.toLong())?.also {
             it.order(ByteOrder.BIG_ENDIAN)
         }
-}
-
-/**
- * The equivalent of the `*mut RustBuffer` type.
- * Required for callbacks taking in an out pointer.
- *
- * Size is the sum of all values in the struct.
- *
- * @suppress
- */
-class RustBufferByReference : ByReference(16) {
-    /**
-     * Set the pointed-to `RustBuffer` to the given value.
-     */
-    fun setValue(value: RustBuffer.ByValue) {
-        // NOTE: The offsets are as they are in the C-like struct.
-        val pointer = getPointer()
-        pointer.setLong(0, value.capacity)
-        pointer.setLong(8, value.len)
-        pointer.setPointer(16, value.data)
-    }
-
-    /**
-     * Get a `RustBuffer.ByValue` from this reference.
-     */
-    fun getValue(): RustBuffer.ByValue {
-        val pointer = getPointer()
-        val value = RustBuffer.ByValue()
-        value.writeField("capacity", pointer.getLong(0))
-        value.writeField("len", pointer.getLong(8))
-        value.writeField("data", pointer.getLong(16))
-
-        return value
-    }
 }
 
 // This is a helper for safely passing byte references into the rust code.
@@ -388,12 +354,6 @@ private fun findLibraryName(componentName: String): String {
         return libOverride
     }
     return "coveffi"
-}
-
-private inline fun <reified Lib : Library> loadIndirect(
-    componentName: String
-): Lib {
-    return Native.load<Lib>(findLibraryName(componentName), Lib::class.java)
 }
 
 // Define FFI callback types
@@ -708,205 +668,182 @@ internal open class UniffiVTableCallbackInterfaceKeychainAccess(
 
 }
 
+// A JNA Library to expose the extern-C FFI definitions.
+// This is an implementation detail which will be called internally by the public API.
+
 // For large crates we prevent `MethodTooLargeException` (see #2340)
-// N.B. the name of the extension is very misleading, since it is 
-// rather `InterfaceTooLargeException`, caused by too many methods 
+// N.B. the name of the extension is very misleading, since it is
+// rather `InterfaceTooLargeException`, caused by too many methods
 // in the interface for large crates.
 //
 // By splitting the otherwise huge interface into two parts
-// * UniffiLib 
-// * IntegrityCheckingUniffiLib (this)
+// * UniffiLib (this)
+// * IntegrityCheckingUniffiLib
+// And all checksum methods are put into `IntegrityCheckingUniffiLib`
 // we allow for ~2x as many methods in the UniffiLib interface.
-// 
-// The `ffi_uniffi_contract_version` method and all checksum methods are put 
-// into `IntegrityCheckingUniffiLib` and these methods are called only once,
-// when the library is loaded.
-internal interface IntegrityCheckingUniffiLib : Library {
-    // Integrity check functions only
-    fun uniffi_cove_device_checksum_constructor_device_new(
-): Short
-fun uniffi_cove_device_checksum_constructor_keychain_new(
-): Short
-fun uniffi_cove_device_checksum_method_deviceaccess_timezone(
-): Short
-fun uniffi_cove_device_checksum_method_keychainaccess_save(
-): Short
-fun uniffi_cove_device_checksum_method_keychainaccess_get(
-): Short
-fun uniffi_cove_device_checksum_method_keychainaccess_delete(
-): Short
-fun ffi_cove_device_uniffi_contract_version(
-): Int
-
+//
+// Note: above all written when we used JNA's `loadIndirect` etc.
+// We now use JNA's "direct mapping" - unclear if same considerations apply exactly.
+internal object IntegrityCheckingUniffiLib {
+    init {
+        Native.register(IntegrityCheckingUniffiLib::class.java, findLibraryName(componentName = "cove_device"))
+        uniffiCheckContractApiVersion(this)
+        uniffiCheckApiChecksums(this)
+    }
+    external fun uniffi_cove_device_checksum_constructor_device_new(
+    ): Short
+    external fun uniffi_cove_device_checksum_constructor_keychain_new(
+    ): Short
+    external fun uniffi_cove_device_checksum_method_deviceaccess_timezone(
+    ): Short
+    external fun uniffi_cove_device_checksum_method_keychainaccess_save(
+    ): Short
+    external fun uniffi_cove_device_checksum_method_keychainaccess_get(
+    ): Short
+    external fun uniffi_cove_device_checksum_method_keychainaccess_delete(
+    ): Short
+    external fun ffi_cove_device_uniffi_contract_version(
+    ): Int
+    
+        
 }
 
-// A JNA Library to expose the extern-C FFI definitions.
-// This is an implementation detail which will be called internally by the public API.
-internal interface UniffiLib : Library {
-    companion object {
-        internal val INSTANCE: UniffiLib by lazy {
-            val componentName = "cove_device"
-            // For large crates we prevent `MethodTooLargeException` (see #2340)
-            // N.B. the name of the extension is very misleading, since it is 
-            // rather `InterfaceTooLargeException`, caused by too many methods 
-            // in the interface for large crates.
-            //
-            // By splitting the otherwise huge interface into two parts
-            // * UniffiLib (this)
-            // * IntegrityCheckingUniffiLib
-            // And all checksum methods are put into `IntegrityCheckingUniffiLib`
-            // we allow for ~2x as many methods in the UniffiLib interface.
-            // 
-            // Thus we first load the library with `loadIndirect` as `IntegrityCheckingUniffiLib`
-            // so that we can (optionally!) call `uniffiCheckApiChecksums`...
-            loadIndirect<IntegrityCheckingUniffiLib>(componentName)
-                .also { lib: IntegrityCheckingUniffiLib ->
-                    uniffiCheckContractApiVersion(lib)
-                    uniffiCheckApiChecksums(lib)
-                }
-            // ... and then we load the library as `UniffiLib`
-            // N.B. we cannot use `loadIndirect` once and then try to cast it to `UniffiLib`
-            // => results in `java.lang.ClassCastException: com.sun.proxy.$Proxy cannot be cast to ...`
-            // error. So we must call `loadIndirect` twice. For crates large enough
-            // to trigger this issue, the performance impact is negligible, running on
-            // a macOS M1 machine the `loadIndirect` call takes ~50ms.
-            val lib = loadIndirect<UniffiLib>(componentName)
-            // No need to check the contract version and checksums, since 
-            // we already did that with `IntegrityCheckingUniffiLib` above.
-            uniffiCallbackInterfaceDeviceAccess.register(lib)
-            uniffiCallbackInterfaceKeychainAccess.register(lib)
-            // Loading of library with integrity check done.
-            lib
-        }
-        
-        // The Cleaner for the whole library
-        internal val CLEANER: UniffiCleaner by lazy {
-            UniffiCleaner.create()
-        }
+internal object UniffiLib {
+    
+    // The Cleaner for the whole library
+    internal val CLEANER: UniffiCleaner by lazy {
+        UniffiCleaner.create()
     }
+    
 
-    // FFI functions
-    fun uniffi_cove_device_fn_clone_device(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-fun uniffi_cove_device_fn_free_device(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Unit
-fun uniffi_cove_device_fn_constructor_device_new(`device`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-fun uniffi_cove_device_fn_clone_keychain(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-fun uniffi_cove_device_fn_free_keychain(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Unit
-fun uniffi_cove_device_fn_constructor_keychain_new(`keychain`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-fun uniffi_cove_device_fn_init_callback_vtable_deviceaccess(`vtable`: UniffiVTableCallbackInterfaceDeviceAccess,
-): Unit
-fun uniffi_cove_device_fn_init_callback_vtable_keychainaccess(`vtable`: UniffiVTableCallbackInterfaceKeychainAccess,
-): Unit
-fun ffi_cove_device_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-fun ffi_cove_device_rustbuffer_from_bytes(`bytes`: ForeignBytes.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-fun ffi_cove_device_rustbuffer_free(`buf`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): Unit
-fun ffi_cove_device_rustbuffer_reserve(`buf`: RustBuffer.ByValue,`additional`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-fun ffi_cove_device_rust_future_poll_u8(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
-): Unit
-fun ffi_cove_device_rust_future_cancel_u8(`handle`: Long,
-): Unit
-fun ffi_cove_device_rust_future_free_u8(`handle`: Long,
-): Unit
-fun ffi_cove_device_rust_future_complete_u8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Byte
-fun ffi_cove_device_rust_future_poll_i8(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
-): Unit
-fun ffi_cove_device_rust_future_cancel_i8(`handle`: Long,
-): Unit
-fun ffi_cove_device_rust_future_free_i8(`handle`: Long,
-): Unit
-fun ffi_cove_device_rust_future_complete_i8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Byte
-fun ffi_cove_device_rust_future_poll_u16(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
-): Unit
-fun ffi_cove_device_rust_future_cancel_u16(`handle`: Long,
-): Unit
-fun ffi_cove_device_rust_future_free_u16(`handle`: Long,
-): Unit
-fun ffi_cove_device_rust_future_complete_u16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Short
-fun ffi_cove_device_rust_future_poll_i16(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
-): Unit
-fun ffi_cove_device_rust_future_cancel_i16(`handle`: Long,
-): Unit
-fun ffi_cove_device_rust_future_free_i16(`handle`: Long,
-): Unit
-fun ffi_cove_device_rust_future_complete_i16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Short
-fun ffi_cove_device_rust_future_poll_u32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
-): Unit
-fun ffi_cove_device_rust_future_cancel_u32(`handle`: Long,
-): Unit
-fun ffi_cove_device_rust_future_free_u32(`handle`: Long,
-): Unit
-fun ffi_cove_device_rust_future_complete_u32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Int
-fun ffi_cove_device_rust_future_poll_i32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
-): Unit
-fun ffi_cove_device_rust_future_cancel_i32(`handle`: Long,
-): Unit
-fun ffi_cove_device_rust_future_free_i32(`handle`: Long,
-): Unit
-fun ffi_cove_device_rust_future_complete_i32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Int
-fun ffi_cove_device_rust_future_poll_u64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
-): Unit
-fun ffi_cove_device_rust_future_cancel_u64(`handle`: Long,
-): Unit
-fun ffi_cove_device_rust_future_free_u64(`handle`: Long,
-): Unit
-fun ffi_cove_device_rust_future_complete_u64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-fun ffi_cove_device_rust_future_poll_i64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
-): Unit
-fun ffi_cove_device_rust_future_cancel_i64(`handle`: Long,
-): Unit
-fun ffi_cove_device_rust_future_free_i64(`handle`: Long,
-): Unit
-fun ffi_cove_device_rust_future_complete_i64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-fun ffi_cove_device_rust_future_poll_f32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
-): Unit
-fun ffi_cove_device_rust_future_cancel_f32(`handle`: Long,
-): Unit
-fun ffi_cove_device_rust_future_free_f32(`handle`: Long,
-): Unit
-fun ffi_cove_device_rust_future_complete_f32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Float
-fun ffi_cove_device_rust_future_poll_f64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
-): Unit
-fun ffi_cove_device_rust_future_cancel_f64(`handle`: Long,
-): Unit
-fun ffi_cove_device_rust_future_free_f64(`handle`: Long,
-): Unit
-fun ffi_cove_device_rust_future_complete_f64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Double
-fun ffi_cove_device_rust_future_poll_rust_buffer(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
-): Unit
-fun ffi_cove_device_rust_future_cancel_rust_buffer(`handle`: Long,
-): Unit
-fun ffi_cove_device_rust_future_free_rust_buffer(`handle`: Long,
-): Unit
-fun ffi_cove_device_rust_future_complete_rust_buffer(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-fun ffi_cove_device_rust_future_poll_void(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
-): Unit
-fun ffi_cove_device_rust_future_cancel_void(`handle`: Long,
-): Unit
-fun ffi_cove_device_rust_future_free_void(`handle`: Long,
-): Unit
-fun ffi_cove_device_rust_future_complete_void(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Unit
-
+    init {
+        Native.register(UniffiLib::class.java, findLibraryName(componentName = "cove_device"))
+        uniffiCallbackInterfaceDeviceAccess.register(this)
+        uniffiCallbackInterfaceKeychainAccess.register(this)
+        
+    }
+    external fun uniffi_cove_device_fn_clone_device(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_device_fn_free_device(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_cove_device_fn_constructor_device_new(`device`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_device_fn_clone_keychain(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_device_fn_free_keychain(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_cove_device_fn_constructor_keychain_new(`keychain`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_device_fn_init_callback_vtable_deviceaccess(`vtable`: UniffiVTableCallbackInterfaceDeviceAccess,
+    ): Unit
+    external fun uniffi_cove_device_fn_init_callback_vtable_keychainaccess(`vtable`: UniffiVTableCallbackInterfaceKeychainAccess,
+    ): Unit
+    external fun ffi_cove_device_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun ffi_cove_device_rustbuffer_from_bytes(`bytes`: ForeignBytes.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun ffi_cove_device_rustbuffer_free(`buf`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun ffi_cove_device_rustbuffer_reserve(`buf`: RustBuffer.ByValue,`additional`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun ffi_cove_device_rust_future_poll_u8(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+    ): Unit
+    external fun ffi_cove_device_rust_future_cancel_u8(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_device_rust_future_free_u8(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_device_rust_future_complete_u8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
+    external fun ffi_cove_device_rust_future_poll_i8(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+    ): Unit
+    external fun ffi_cove_device_rust_future_cancel_i8(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_device_rust_future_free_i8(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_device_rust_future_complete_i8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
+    external fun ffi_cove_device_rust_future_poll_u16(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+    ): Unit
+    external fun ffi_cove_device_rust_future_cancel_u16(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_device_rust_future_free_u16(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_device_rust_future_complete_u16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Short
+    external fun ffi_cove_device_rust_future_poll_i16(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+    ): Unit
+    external fun ffi_cove_device_rust_future_cancel_i16(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_device_rust_future_free_i16(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_device_rust_future_complete_i16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Short
+    external fun ffi_cove_device_rust_future_poll_u32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+    ): Unit
+    external fun ffi_cove_device_rust_future_cancel_u32(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_device_rust_future_free_u32(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_device_rust_future_complete_u32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Int
+    external fun ffi_cove_device_rust_future_poll_i32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+    ): Unit
+    external fun ffi_cove_device_rust_future_cancel_i32(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_device_rust_future_free_i32(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_device_rust_future_complete_i32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Int
+    external fun ffi_cove_device_rust_future_poll_u64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+    ): Unit
+    external fun ffi_cove_device_rust_future_cancel_u64(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_device_rust_future_free_u64(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_device_rust_future_complete_u64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun ffi_cove_device_rust_future_poll_i64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+    ): Unit
+    external fun ffi_cove_device_rust_future_cancel_i64(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_device_rust_future_free_i64(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_device_rust_future_complete_i64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun ffi_cove_device_rust_future_poll_f32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+    ): Unit
+    external fun ffi_cove_device_rust_future_cancel_f32(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_device_rust_future_free_f32(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_device_rust_future_complete_f32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Float
+    external fun ffi_cove_device_rust_future_poll_f64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+    ): Unit
+    external fun ffi_cove_device_rust_future_cancel_f64(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_device_rust_future_free_f64(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_device_rust_future_complete_f64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Double
+    external fun ffi_cove_device_rust_future_poll_rust_buffer(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+    ): Unit
+    external fun ffi_cove_device_rust_future_cancel_rust_buffer(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_device_rust_future_free_rust_buffer(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_device_rust_future_complete_rust_buffer(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun ffi_cove_device_rust_future_poll_void(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+    ): Unit
+    external fun ffi_cove_device_rust_future_cancel_void(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_device_rust_future_free_void(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_device_rust_future_complete_void(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    
+        
 }
 
 private fun uniffiCheckContractApiVersion(lib: IntegrityCheckingUniffiLib) {
@@ -944,7 +881,10 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
  * @suppress
  */
 public fun uniffiEnsureInitialized() {
-    UniffiLib.INSTANCE
+    IntegrityCheckingUniffiLib
+    // UniffiLib() initialized as objects are used, but we still need to explicitly
+    // reference it so initialization across crates works as expected.
+    UniffiLib
 }
 
 // Async support
@@ -1332,7 +1272,7 @@ open class Device: Disposable, AutoCloseable, DeviceInterface
     constructor(`device`: DeviceAccess) :
         this(UniffiWithHandle, 
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_device_fn_constructor_device_new(
+    UniffiLib.uniffi_cove_device_fn_constructor_device_new(
     
         FfiConverterTypeDeviceAccess.lower(`device`),_status)
 }
@@ -1392,7 +1332,7 @@ open class Device: Disposable, AutoCloseable, DeviceInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_device_fn_free_device(handle, status)
+                UniffiLib.uniffi_cove_device_fn_free_device(handle, status)
             }
         }
     }
@@ -1405,7 +1345,7 @@ open class Device: Disposable, AutoCloseable, DeviceInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_device_fn_clone_device(handle, status)
+            UniffiLib.uniffi_cove_device_fn_clone_device(handle, status)
         }
     }
 
@@ -1576,7 +1516,7 @@ open class Keychain: Disposable, AutoCloseable, KeychainInterface
     constructor(`keychain`: KeychainAccess) :
         this(UniffiWithHandle, 
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_device_fn_constructor_keychain_new(
+    UniffiLib.uniffi_cove_device_fn_constructor_keychain_new(
     
         FfiConverterTypeKeychainAccess.lower(`keychain`),_status)
 }
@@ -1636,7 +1576,7 @@ open class Keychain: Disposable, AutoCloseable, KeychainInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_device_fn_free_keychain(handle, status)
+                UniffiLib.uniffi_cove_device_fn_free_keychain(handle, status)
             }
         }
     }
@@ -1649,7 +1589,7 @@ open class Keychain: Disposable, AutoCloseable, KeychainInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_device_fn_clone_keychain(handle, status)
+            UniffiLib.uniffi_cove_device_fn_clone_keychain(handle, status)
         }
     }
 

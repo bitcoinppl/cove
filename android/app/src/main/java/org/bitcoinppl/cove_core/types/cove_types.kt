@@ -59,7 +59,7 @@ open class RustBuffer : Structure() {
     companion object {
         internal fun alloc(size: ULong = 0UL) = uniffiRustCall() { status ->
             // Note: need to convert the size to a `Long` value to make this work with JVM.
-            UniffiLib.INSTANCE.ffi_cove_types_rustbuffer_alloc(size.toLong(), status)
+            UniffiLib.ffi_cove_types_rustbuffer_alloc(size.toLong(), status)
         }.also {
             if(it.data == null) {
                throw RuntimeException("RustBuffer.alloc() returned null data pointer (size=${size})")
@@ -75,7 +75,7 @@ open class RustBuffer : Structure() {
         }
 
         internal fun free(buf: RustBuffer.ByValue) = uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.ffi_cove_types_rustbuffer_free(buf, status)
+            UniffiLib.ffi_cove_types_rustbuffer_free(buf, status)
         }
     }
 
@@ -84,40 +84,6 @@ open class RustBuffer : Structure() {
         this.data?.getByteBuffer(0, this.len.toLong())?.also {
             it.order(ByteOrder.BIG_ENDIAN)
         }
-}
-
-/**
- * The equivalent of the `*mut RustBuffer` type.
- * Required for callbacks taking in an out pointer.
- *
- * Size is the sum of all values in the struct.
- *
- * @suppress
- */
-class RustBufferByReference : ByReference(16) {
-    /**
-     * Set the pointed-to `RustBuffer` to the given value.
-     */
-    fun setValue(value: RustBuffer.ByValue) {
-        // NOTE: The offsets are as they are in the C-like struct.
-        val pointer = getPointer()
-        pointer.setLong(0, value.capacity)
-        pointer.setLong(8, value.len)
-        pointer.setPointer(16, value.data)
-    }
-
-    /**
-     * Get a `RustBuffer.ByValue` from this reference.
-     */
-    fun getValue(): RustBuffer.ByValue {
-        val pointer = getPointer()
-        val value = RustBuffer.ByValue()
-        value.writeField("capacity", pointer.getLong(0))
-        value.writeField("len", pointer.getLong(8))
-        value.writeField("data", pointer.getLong(16))
-
-        return value
-    }
 }
 
 // This is a helper for safely passing byte references into the rust code.
@@ -390,12 +356,6 @@ private fun findLibraryName(componentName: String): String {
     return "coveffi"
 }
 
-private inline fun <reified Lib : Library> loadIndirect(
-    componentName: String
-): Lib {
-    return Native.load<Lib>(findLibraryName(componentName), Lib::class.java)
-}
-
 // Define FFI callback types
 internal interface UniffiRustFutureContinuationCallback : com.sun.jna.Callback {
     fun callback(`data`: Long,`pollResult`: Byte,)
@@ -652,735 +612,712 @@ internal interface UniffiForeignFutureCompleteVoid : com.sun.jna.Callback {
     fun callback(`callbackData`: Long,`result`: UniffiForeignFutureResultVoid.UniffiByValue,)
 }
 
+// A JNA Library to expose the extern-C FFI definitions.
+// This is an implementation detail which will be called internally by the public API.
+
 // For large crates we prevent `MethodTooLargeException` (see #2340)
-// N.B. the name of the extension is very misleading, since it is 
-// rather `InterfaceTooLargeException`, caused by too many methods 
+// N.B. the name of the extension is very misleading, since it is
+// rather `InterfaceTooLargeException`, caused by too many methods
 // in the interface for large crates.
 //
 // By splitting the otherwise huge interface into two parts
-// * UniffiLib 
-// * IntegrityCheckingUniffiLib (this)
+// * UniffiLib (this)
+// * IntegrityCheckingUniffiLib
+// And all checksum methods are put into `IntegrityCheckingUniffiLib`
 // we allow for ~2x as many methods in the UniffiLib interface.
-// 
-// The `ffi_uniffi_contract_version` method and all checksum methods are put 
-// into `IntegrityCheckingUniffiLib` and these methods are called only once,
-// when the library is loaded.
-internal interface IntegrityCheckingUniffiLib : Library {
-    // Integrity check functions only
-    fun uniffi_cove_types_checksum_func_address_is_equal(
-): Short
-fun uniffi_cove_types_checksum_func_address_is_valid(
-): Short
-fun uniffi_cove_types_checksum_func_address_is_valid_for_network(
-): Short
-fun uniffi_cove_types_checksum_func_address_string_spaced_out(
-): Short
-fun uniffi_cove_types_checksum_func_all_color_schemes(
-): Short
-fun uniffi_cove_types_checksum_func_all_networks(
-): Short
-fun uniffi_cove_types_checksum_func_all_units(
-): Short
-fun uniffi_cove_types_checksum_func_color_scheme_selection_capitalized_string(
-): Short
-fun uniffi_cove_types_checksum_func_fee_rate_options_with_total_fee_is_equal(
-): Short
-fun uniffi_cove_types_checksum_func_fee_speed_duration(
-): Short
-fun uniffi_cove_types_checksum_func_fee_speed_is_custom(
-): Short
-fun uniffi_cove_types_checksum_func_fee_speed_to_circle_color(
-): Short
-fun uniffi_cove_types_checksum_func_fee_speed_to_string(
-): Short
-fun uniffi_cove_types_checksum_func_network_to_string(
-): Short
-fun uniffi_cove_types_checksum_func_preview_new_utxo_list(
-): Short
-fun uniffi_cove_types_checksum_func_unit_to_string(
-): Short
-fun uniffi_cove_types_checksum_func_utxo_date(
-): Short
-fun uniffi_cove_types_checksum_func_utxo_hash_to_uint(
-): Short
-fun uniffi_cove_types_checksum_func_utxo_is_equal(
-): Short
-fun uniffi_cove_types_checksum_func_utxo_name(
-): Short
-fun uniffi_cove_types_checksum_method_address_hashtouint(
-): Short
-fun uniffi_cove_types_checksum_method_address_spaced_out(
-): Short
-fun uniffi_cove_types_checksum_method_address_string(
-): Short
-fun uniffi_cove_types_checksum_method_address_unformatted(
-): Short
-fun uniffi_cove_types_checksum_method_addressinfo_address(
-): Short
-fun uniffi_cove_types_checksum_method_addressinfo_address_unformatted(
-): Short
-fun uniffi_cove_types_checksum_method_addressinfo_index(
-): Short
-fun uniffi_cove_types_checksum_method_addressinfowithderivation_address(
-): Short
-fun uniffi_cove_types_checksum_method_addressinfowithderivation_address_spaced_out(
-): Short
-fun uniffi_cove_types_checksum_method_addressinfowithderivation_address_unformatted(
-): Short
-fun uniffi_cove_types_checksum_method_addressinfowithderivation_derivation_path(
-): Short
-fun uniffi_cove_types_checksum_method_addressinfowithderivation_index(
-): Short
-fun uniffi_cove_types_checksum_method_addresswithnetwork_address(
-): Short
-fun uniffi_cove_types_checksum_method_addresswithnetwork_amount(
-): Short
-fun uniffi_cove_types_checksum_method_addresswithnetwork_isvalidfornetwork(
-): Short
-fun uniffi_cove_types_checksum_method_addresswithnetwork_network(
-): Short
-fun uniffi_cove_types_checksum_method_amount_as_btc(
-): Short
-fun uniffi_cove_types_checksum_method_amount_as_sats(
-): Short
-fun uniffi_cove_types_checksum_method_amount_btc_string(
-): Short
-fun uniffi_cove_types_checksum_method_amount_btc_string_with_unit(
-): Short
-fun uniffi_cove_types_checksum_method_amount_fmt_string(
-): Short
-fun uniffi_cove_types_checksum_method_amount_fmt_string_with_unit(
-): Short
-fun uniffi_cove_types_checksum_method_amount_sats_string(
-): Short
-fun uniffi_cove_types_checksum_method_amount_sats_string_with_unit(
-): Short
-fun uniffi_cove_types_checksum_method_confirmdetails_fee_percentage(
-): Short
-fun uniffi_cove_types_checksum_method_confirmdetails_fee_rate(
-): Short
-fun uniffi_cove_types_checksum_method_confirmdetails_fee_total(
-): Short
-fun uniffi_cove_types_checksum_method_confirmdetails_id(
-): Short
-fun uniffi_cove_types_checksum_method_confirmdetails_id_hash(
-): Short
-fun uniffi_cove_types_checksum_method_confirmdetails_inputs(
-): Short
-fun uniffi_cove_types_checksum_method_confirmdetails_normalized_id(
-): Short
-fun uniffi_cove_types_checksum_method_confirmdetails_outputs(
-): Short
-fun uniffi_cove_types_checksum_method_confirmdetails_psbt(
-): Short
-fun uniffi_cove_types_checksum_method_confirmdetails_psbt_bytes(
-): Short
-fun uniffi_cove_types_checksum_method_confirmdetails_psbt_to_bbqr(
-): Short
-fun uniffi_cove_types_checksum_method_confirmdetails_psbt_to_hex(
-): Short
-fun uniffi_cove_types_checksum_method_confirmdetails_sending_amount(
-): Short
-fun uniffi_cove_types_checksum_method_confirmdetails_sending_to(
-): Short
-fun uniffi_cove_types_checksum_method_confirmdetails_spending_amount(
-): Short
-fun uniffi_cove_types_checksum_method_feerate_sat_per_vb(
-): Short
-fun uniffi_cove_types_checksum_method_feerateoption_duration(
-): Short
-fun uniffi_cove_types_checksum_method_feerateoption_fee_rate(
-): Short
-fun uniffi_cove_types_checksum_method_feerateoption_fee_speed(
-): Short
-fun uniffi_cove_types_checksum_method_feerateoption_is_equal(
-): Short
-fun uniffi_cove_types_checksum_method_feerateoption_sat_per_vb(
-): Short
-fun uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_duration(
-): Short
-fun uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_fee_rate(
-): Short
-fun uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_fee_rate_options(
-): Short
-fun uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_fee_speed(
-): Short
-fun uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_is_custom(
-): Short
-fun uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_is_equal(
-): Short
-fun uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_sat_per_vb(
-): Short
-fun uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_total_fee(
-): Short
-fun uniffi_cove_types_checksum_method_feerateoptions_fast(
-): Short
-fun uniffi_cove_types_checksum_method_feerateoptions_medium(
-): Short
-fun uniffi_cove_types_checksum_method_feerateoptions_slow(
-): Short
-fun uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_add_custom_fee_rate(
-): Short
-fun uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_calculate_custom_fee_speed(
-): Short
-fun uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_custom(
-): Short
-fun uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_fast(
-): Short
-fun uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_fee_rate_options(
-): Short
-fun uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_get_fee_rate_with(
-): Short
-fun uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_medium(
-): Short
-fun uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_remove_custom_fee(
-): Short
-fun uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_slow(
-): Short
-fun uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_transaction_size(
-): Short
-fun uniffi_cove_types_checksum_method_outpoint_eq(
-): Short
-fun uniffi_cove_types_checksum_method_outpoint_hashtouint(
-): Short
-fun uniffi_cove_types_checksum_method_outpoint_txid(
-): Short
-fun uniffi_cove_types_checksum_method_outpoint_txid_str(
-): Short
-fun uniffi_cove_types_checksum_method_outpoint_txn_link(
-): Short
-fun uniffi_cove_types_checksum_method_psbt_fee(
-): Short
-fun uniffi_cove_types_checksum_method_psbt_output_total_amount(
-): Short
-fun uniffi_cove_types_checksum_method_psbt_tx_id(
-): Short
-fun uniffi_cove_types_checksum_method_psbt_weight(
-): Short
-fun uniffi_cove_types_checksum_method_sentandreceived_amount(
-): Short
-fun uniffi_cove_types_checksum_method_sentandreceived_amount_fmt(
-): Short
-fun uniffi_cove_types_checksum_method_sentandreceived_direction(
-): Short
-fun uniffi_cove_types_checksum_method_sentandreceived_external_sent(
-): Short
-fun uniffi_cove_types_checksum_method_sentandreceived_label(
-): Short
-fun uniffi_cove_types_checksum_method_sentandreceived_received(
-): Short
-fun uniffi_cove_types_checksum_method_sentandreceived_sent(
-): Short
-fun uniffi_cove_types_checksum_method_txid_as_hash_string(
-): Short
-fun uniffi_cove_types_checksum_method_txid_is_equal(
-): Short
-fun uniffi_cove_types_checksum_constructor_address_from_string(
-): Short
-fun uniffi_cove_types_checksum_constructor_address_preview_new(
-): Short
-fun uniffi_cove_types_checksum_constructor_address_random(
-): Short
-fun uniffi_cove_types_checksum_constructor_addresswithnetwork_new(
-): Short
-fun uniffi_cove_types_checksum_constructor_amount_from_sat(
-): Short
-fun uniffi_cove_types_checksum_constructor_amount_one_btc(
-): Short
-fun uniffi_cove_types_checksum_constructor_amount_one_sat(
-): Short
-fun uniffi_cove_types_checksum_constructor_confirmdetails_preview_new(
-): Short
-fun uniffi_cove_types_checksum_constructor_feerate_from_sat_per_vb(
-): Short
-fun uniffi_cove_types_checksum_constructor_feerateoption_new(
-): Short
-fun uniffi_cove_types_checksum_constructor_feerateoptionwithtotalfee_new(
-): Short
-fun uniffi_cove_types_checksum_constructor_feerateoptions_preview_new(
-): Short
-fun uniffi_cove_types_checksum_constructor_feerateoptionswithtotalfee_preview_new(
-): Short
-fun uniffi_cove_types_checksum_constructor_outpoint_preview_new(
-): Short
-fun uniffi_cove_types_checksum_constructor_outpoint_with_vout(
-): Short
-fun uniffi_cove_types_checksum_constructor_psbt_new(
-): Short
-fun ffi_cove_types_uniffi_contract_version(
-): Int
-
+//
+// Note: above all written when we used JNA's `loadIndirect` etc.
+// We now use JNA's "direct mapping" - unclear if same considerations apply exactly.
+internal object IntegrityCheckingUniffiLib {
+    init {
+        Native.register(IntegrityCheckingUniffiLib::class.java, findLibraryName(componentName = "cove_types"))
+        uniffiCheckContractApiVersion(this)
+        uniffiCheckApiChecksums(this)
+    }
+    external fun uniffi_cove_types_checksum_func_address_is_equal(
+    ): Short
+    external fun uniffi_cove_types_checksum_func_address_is_valid(
+    ): Short
+    external fun uniffi_cove_types_checksum_func_address_is_valid_for_network(
+    ): Short
+    external fun uniffi_cove_types_checksum_func_address_string_spaced_out(
+    ): Short
+    external fun uniffi_cove_types_checksum_func_all_color_schemes(
+    ): Short
+    external fun uniffi_cove_types_checksum_func_all_networks(
+    ): Short
+    external fun uniffi_cove_types_checksum_func_all_units(
+    ): Short
+    external fun uniffi_cove_types_checksum_func_color_scheme_selection_capitalized_string(
+    ): Short
+    external fun uniffi_cove_types_checksum_func_fee_rate_options_with_total_fee_is_equal(
+    ): Short
+    external fun uniffi_cove_types_checksum_func_fee_speed_duration(
+    ): Short
+    external fun uniffi_cove_types_checksum_func_fee_speed_is_custom(
+    ): Short
+    external fun uniffi_cove_types_checksum_func_fee_speed_to_circle_color(
+    ): Short
+    external fun uniffi_cove_types_checksum_func_fee_speed_to_string(
+    ): Short
+    external fun uniffi_cove_types_checksum_func_network_to_string(
+    ): Short
+    external fun uniffi_cove_types_checksum_func_preview_new_utxo_list(
+    ): Short
+    external fun uniffi_cove_types_checksum_func_unit_to_string(
+    ): Short
+    external fun uniffi_cove_types_checksum_func_utxo_date(
+    ): Short
+    external fun uniffi_cove_types_checksum_func_utxo_hash_to_uint(
+    ): Short
+    external fun uniffi_cove_types_checksum_func_utxo_is_equal(
+    ): Short
+    external fun uniffi_cove_types_checksum_func_utxo_name(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_address_hashtouint(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_address_spaced_out(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_address_string(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_address_unformatted(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_addressinfo_address(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_addressinfo_address_unformatted(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_addressinfo_index(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_addressinfowithderivation_address(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_addressinfowithderivation_address_spaced_out(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_addressinfowithderivation_address_unformatted(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_addressinfowithderivation_derivation_path(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_addressinfowithderivation_index(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_addresswithnetwork_address(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_addresswithnetwork_amount(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_addresswithnetwork_isvalidfornetwork(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_addresswithnetwork_network(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_amount_as_btc(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_amount_as_sats(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_amount_btc_string(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_amount_btc_string_with_unit(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_amount_fmt_string(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_amount_fmt_string_with_unit(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_amount_sats_string(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_amount_sats_string_with_unit(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_confirmdetails_fee_percentage(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_confirmdetails_fee_rate(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_confirmdetails_fee_total(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_confirmdetails_id(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_confirmdetails_id_hash(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_confirmdetails_inputs(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_confirmdetails_normalized_id(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_confirmdetails_outputs(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_confirmdetails_psbt(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_confirmdetails_psbt_bytes(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_confirmdetails_psbt_to_bbqr(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_confirmdetails_psbt_to_hex(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_confirmdetails_sending_amount(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_confirmdetails_sending_to(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_confirmdetails_spending_amount(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerate_sat_per_vb(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoption_duration(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoption_fee_rate(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoption_fee_speed(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoption_is_equal(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoption_sat_per_vb(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_duration(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_fee_rate(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_fee_rate_options(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_fee_speed(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_is_custom(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_is_equal(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_sat_per_vb(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_total_fee(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoptions_fast(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoptions_medium(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoptions_slow(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_add_custom_fee_rate(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_calculate_custom_fee_speed(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_custom(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_fast(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_fee_rate_options(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_get_fee_rate_with(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_medium(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_remove_custom_fee(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_slow(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_transaction_size(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_outpoint_eq(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_outpoint_hashtouint(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_outpoint_txid(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_outpoint_txid_str(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_outpoint_txn_link(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_psbt_fee(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_psbt_output_total_amount(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_psbt_tx_id(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_psbt_weight(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_sentandreceived_amount(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_sentandreceived_amount_fmt(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_sentandreceived_direction(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_sentandreceived_external_sent(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_sentandreceived_label(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_sentandreceived_received(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_sentandreceived_sent(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_txid_as_hash_string(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_txid_is_equal(
+    ): Short
+    external fun uniffi_cove_types_checksum_constructor_address_from_string(
+    ): Short
+    external fun uniffi_cove_types_checksum_constructor_address_preview_new(
+    ): Short
+    external fun uniffi_cove_types_checksum_constructor_address_random(
+    ): Short
+    external fun uniffi_cove_types_checksum_constructor_addresswithnetwork_new(
+    ): Short
+    external fun uniffi_cove_types_checksum_constructor_amount_from_sat(
+    ): Short
+    external fun uniffi_cove_types_checksum_constructor_amount_one_btc(
+    ): Short
+    external fun uniffi_cove_types_checksum_constructor_amount_one_sat(
+    ): Short
+    external fun uniffi_cove_types_checksum_constructor_confirmdetails_preview_new(
+    ): Short
+    external fun uniffi_cove_types_checksum_constructor_feerate_from_sat_per_vb(
+    ): Short
+    external fun uniffi_cove_types_checksum_constructor_feerateoption_new(
+    ): Short
+    external fun uniffi_cove_types_checksum_constructor_feerateoptionwithtotalfee_new(
+    ): Short
+    external fun uniffi_cove_types_checksum_constructor_feerateoptions_preview_new(
+    ): Short
+    external fun uniffi_cove_types_checksum_constructor_feerateoptionswithtotalfee_preview_new(
+    ): Short
+    external fun uniffi_cove_types_checksum_constructor_outpoint_preview_new(
+    ): Short
+    external fun uniffi_cove_types_checksum_constructor_outpoint_with_vout(
+    ): Short
+    external fun uniffi_cove_types_checksum_constructor_psbt_new(
+    ): Short
+    external fun ffi_cove_types_uniffi_contract_version(
+    ): Int
+    
+        
 }
 
-// A JNA Library to expose the extern-C FFI definitions.
-// This is an implementation detail which will be called internally by the public API.
-internal interface UniffiLib : Library {
-    companion object {
-        internal val INSTANCE: UniffiLib by lazy {
-            val componentName = "cove_types"
-            // For large crates we prevent `MethodTooLargeException` (see #2340)
-            // N.B. the name of the extension is very misleading, since it is 
-            // rather `InterfaceTooLargeException`, caused by too many methods 
-            // in the interface for large crates.
-            //
-            // By splitting the otherwise huge interface into two parts
-            // * UniffiLib (this)
-            // * IntegrityCheckingUniffiLib
-            // And all checksum methods are put into `IntegrityCheckingUniffiLib`
-            // we allow for ~2x as many methods in the UniffiLib interface.
-            // 
-            // Thus we first load the library with `loadIndirect` as `IntegrityCheckingUniffiLib`
-            // so that we can (optionally!) call `uniffiCheckApiChecksums`...
-            loadIndirect<IntegrityCheckingUniffiLib>(componentName)
-                .also { lib: IntegrityCheckingUniffiLib ->
-                    uniffiCheckContractApiVersion(lib)
-                    uniffiCheckApiChecksums(lib)
-                }
-            // ... and then we load the library as `UniffiLib`
-            // N.B. we cannot use `loadIndirect` once and then try to cast it to `UniffiLib`
-            // => results in `java.lang.ClassCastException: com.sun.proxy.$Proxy cannot be cast to ...`
-            // error. So we must call `loadIndirect` twice. For crates large enough
-            // to trigger this issue, the performance impact is negligible, running on
-            // a macOS M1 machine the `loadIndirect` call takes ~50ms.
-            val lib = loadIndirect<UniffiLib>(componentName)
-            // No need to check the contract version and checksums, since 
-            // we already did that with `IntegrityCheckingUniffiLib` above.
-            // Loading of library with integrity check done.
-            lib
-        }
-        
-        // The Cleaner for the whole library
-        internal val CLEANER: UniffiCleaner by lazy {
-            UniffiCleaner.create()
-        }
+internal object UniffiLib {
+    
+    // The Cleaner for the whole library
+    internal val CLEANER: UniffiCleaner by lazy {
+        UniffiCleaner.create()
     }
+    
 
-    // FFI functions
-    fun uniffi_cove_types_fn_clone_address(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    init {
+        Native.register(UniffiLib::class.java, findLibraryName(componentName = "cove_types"))
+        
+    }
+    external fun uniffi_cove_types_fn_clone_address(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_free_address(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_free_address(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_types_fn_constructor_address_from_string(`address`: RustBuffer.ByValue,`network`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_constructor_address_from_string(`address`: RustBuffer.ByValue,`network`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_constructor_address_preview_new(uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_constructor_address_preview_new(uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_constructor_address_random(uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_constructor_address_random(uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_method_address_hashtouint(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_address_hashtouint(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_method_address_spaced_out(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_address_spaced_out(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_types_fn_method_address_string(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_address_string(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_types_fn_method_address_unformatted(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_address_unformatted(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_types_fn_clone_addressinfo(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_clone_addressinfo(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_free_addressinfo(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_free_addressinfo(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_types_fn_method_addressinfo_address(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_addressinfo_address(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_method_addressinfo_address_unformatted(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_addressinfo_address_unformatted(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_types_fn_method_addressinfo_index(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_addressinfo_index(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Int
-fun uniffi_cove_types_fn_clone_addressinfowithderivation(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_clone_addressinfowithderivation(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_free_addressinfowithderivation(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_free_addressinfowithderivation(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_types_fn_method_addressinfowithderivation_address(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_addressinfowithderivation_address(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_method_addressinfowithderivation_address_spaced_out(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_addressinfowithderivation_address_spaced_out(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_types_fn_method_addressinfowithderivation_address_unformatted(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_addressinfowithderivation_address_unformatted(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_types_fn_method_addressinfowithderivation_derivation_path(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_addressinfowithderivation_derivation_path(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_types_fn_method_addressinfowithderivation_index(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_addressinfowithderivation_index(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Int
-fun uniffi_cove_types_fn_clone_addresswithnetwork(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_clone_addresswithnetwork(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_free_addresswithnetwork(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_free_addresswithnetwork(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_types_fn_constructor_addresswithnetwork_new(`address`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_constructor_addresswithnetwork_new(`address`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_method_addresswithnetwork_address(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_addresswithnetwork_address(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_method_addresswithnetwork_amount(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_addresswithnetwork_amount(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_types_fn_method_addresswithnetwork_isvalidfornetwork(`ptr`: Long,`network`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_addresswithnetwork_isvalidfornetwork(`ptr`: Long,`network`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_types_fn_method_addresswithnetwork_network(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_addresswithnetwork_network(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_types_fn_clone_amount(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_clone_amount(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_free_amount(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_free_amount(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_types_fn_constructor_amount_from_sat(`sats`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_constructor_amount_from_sat(`sats`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_constructor_amount_one_btc(uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_constructor_amount_one_btc(uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_constructor_amount_one_sat(uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_constructor_amount_one_sat(uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_method_amount_as_btc(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_amount_as_btc(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Double
-fun uniffi_cove_types_fn_method_amount_as_sats(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_amount_as_sats(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_method_amount_btc_string(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_amount_btc_string(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_types_fn_method_amount_btc_string_with_unit(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_amount_btc_string_with_unit(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_types_fn_method_amount_fmt_string(`ptr`: Long,`unit`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_amount_fmt_string(`ptr`: Long,`unit`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_types_fn_method_amount_fmt_string_with_unit(`ptr`: Long,`unit`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_amount_fmt_string_with_unit(`ptr`: Long,`unit`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_types_fn_method_amount_sats_string(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_amount_sats_string(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_types_fn_method_amount_sats_string_with_unit(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_amount_sats_string_with_unit(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_types_fn_clone_chainposition(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_clone_chainposition(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_free_chainposition(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_free_chainposition(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_types_fn_clone_confirmdetails(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_clone_confirmdetails(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_free_confirmdetails(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_free_confirmdetails(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_types_fn_constructor_confirmdetails_preview_new(`amount`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_constructor_confirmdetails_preview_new(`amount`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_method_confirmdetails_fee_percentage(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_confirmdetails_fee_percentage(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_method_confirmdetails_fee_rate(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_confirmdetails_fee_rate(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_method_confirmdetails_fee_total(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_confirmdetails_fee_total(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_method_confirmdetails_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_confirmdetails_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_method_confirmdetails_id_hash(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_confirmdetails_id_hash(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_types_fn_method_confirmdetails_inputs(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_confirmdetails_inputs(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_types_fn_method_confirmdetails_normalized_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_confirmdetails_normalized_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_types_fn_method_confirmdetails_outputs(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_confirmdetails_outputs(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_types_fn_method_confirmdetails_psbt(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_confirmdetails_psbt(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_method_confirmdetails_psbt_bytes(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_confirmdetails_psbt_bytes(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_types_fn_method_confirmdetails_psbt_to_bbqr(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_confirmdetails_psbt_to_bbqr(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_types_fn_method_confirmdetails_psbt_to_hex(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_confirmdetails_psbt_to_hex(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_types_fn_method_confirmdetails_sending_amount(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_confirmdetails_sending_amount(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_method_confirmdetails_sending_to(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_confirmdetails_sending_to(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_method_confirmdetails_spending_amount(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_confirmdetails_spending_amount(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_clone_feerate(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_clone_feerate(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_free_feerate(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_free_feerate(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_types_fn_constructor_feerate_from_sat_per_vb(`satPerVb`: Float,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_constructor_feerate_from_sat_per_vb(`satPerVb`: Float,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_method_feerate_sat_per_vb(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_feerate_sat_per_vb(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Float
-fun uniffi_cove_types_fn_clone_feerateoption(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_clone_feerateoption(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_free_feerateoption(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_free_feerateoption(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_types_fn_constructor_feerateoption_new(`feeSpeed`: RustBuffer.ByValue,`feeRate`: Float,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_constructor_feerateoption_new(`feeSpeed`: RustBuffer.ByValue,`feeRate`: Float,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_method_feerateoption_duration(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_feerateoption_duration(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_types_fn_method_feerateoption_fee_rate(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_feerateoption_fee_rate(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_method_feerateoption_fee_speed(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_feerateoption_fee_speed(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_types_fn_method_feerateoption_is_equal(`ptr`: Long,`rhs`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_feerateoption_is_equal(`ptr`: Long,`rhs`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_types_fn_method_feerateoption_sat_per_vb(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_feerateoption_sat_per_vb(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Float
-fun uniffi_cove_types_fn_clone_feerateoptionwithtotalfee(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_clone_feerateoptionwithtotalfee(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_free_feerateoptionwithtotalfee(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_free_feerateoptionwithtotalfee(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_types_fn_constructor_feerateoptionwithtotalfee_new(`feeSpeed`: RustBuffer.ByValue,`feeRate`: Long,`totalFee`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_constructor_feerateoptionwithtotalfee_new(`feeSpeed`: RustBuffer.ByValue,`feeRate`: Long,`totalFee`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_method_feerateoptionwithtotalfee_duration(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_feerateoptionwithtotalfee_duration(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_types_fn_method_feerateoptionwithtotalfee_fee_rate(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_feerateoptionwithtotalfee_fee_rate(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_method_feerateoptionwithtotalfee_fee_rate_options(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_feerateoptionwithtotalfee_fee_rate_options(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_method_feerateoptionwithtotalfee_fee_speed(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_feerateoptionwithtotalfee_fee_speed(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_types_fn_method_feerateoptionwithtotalfee_is_custom(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_feerateoptionwithtotalfee_is_custom(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_types_fn_method_feerateoptionwithtotalfee_is_equal(`ptr`: Long,`rhs`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_feerateoptionwithtotalfee_is_equal(`ptr`: Long,`rhs`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_types_fn_method_feerateoptionwithtotalfee_sat_per_vb(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_feerateoptionwithtotalfee_sat_per_vb(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Float
-fun uniffi_cove_types_fn_method_feerateoptionwithtotalfee_total_fee(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_feerateoptionwithtotalfee_total_fee(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_clone_feerateoptions(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_clone_feerateoptions(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_free_feerateoptions(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_free_feerateoptions(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_types_fn_constructor_feerateoptions_preview_new(uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_constructor_feerateoptions_preview_new(uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_method_feerateoptions_fast(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_feerateoptions_fast(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_method_feerateoptions_medium(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_feerateoptions_medium(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_method_feerateoptions_slow(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_feerateoptions_slow(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_clone_feerateoptionswithtotalfee(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_clone_feerateoptionswithtotalfee(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_free_feerateoptionswithtotalfee(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_free_feerateoptionswithtotalfee(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_types_fn_constructor_feerateoptionswithtotalfee_preview_new(uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_constructor_feerateoptionswithtotalfee_preview_new(uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_method_feerateoptionswithtotalfee_add_custom_fee_rate(`ptr`: Long,`feeRate`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_feerateoptionswithtotalfee_add_custom_fee_rate(`ptr`: Long,`feeRate`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_method_feerateoptionswithtotalfee_calculate_custom_fee_speed(`ptr`: Long,`feeRate`: Float,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_feerateoptionswithtotalfee_calculate_custom_fee_speed(`ptr`: Long,`feeRate`: Float,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_types_fn_method_feerateoptionswithtotalfee_custom(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_feerateoptionswithtotalfee_custom(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_types_fn_method_feerateoptionswithtotalfee_fast(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_feerateoptionswithtotalfee_fast(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_method_feerateoptionswithtotalfee_fee_rate_options(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_feerateoptionswithtotalfee_fee_rate_options(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_method_feerateoptionswithtotalfee_get_fee_rate_with(`ptr`: Long,`feeRate`: Float,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_feerateoptionswithtotalfee_get_fee_rate_with(`ptr`: Long,`feeRate`: Float,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_types_fn_method_feerateoptionswithtotalfee_medium(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_feerateoptionswithtotalfee_medium(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_method_feerateoptionswithtotalfee_remove_custom_fee(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_feerateoptionswithtotalfee_remove_custom_fee(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_method_feerateoptionswithtotalfee_slow(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_feerateoptionswithtotalfee_slow(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_method_feerateoptionswithtotalfee_transaction_size(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_feerateoptionswithtotalfee_transaction_size(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_clone_inputoutputdetails(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_clone_inputoutputdetails(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_free_inputoutputdetails(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_free_inputoutputdetails(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_types_fn_clone_outpoint(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_clone_outpoint(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_free_outpoint(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_free_outpoint(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_types_fn_constructor_outpoint_preview_new(uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_constructor_outpoint_preview_new(uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_constructor_outpoint_with_vout(`vout`: Int,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_constructor_outpoint_with_vout(`vout`: Int,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_method_outpoint_eq(`ptr`: Long,`rhs`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_outpoint_eq(`ptr`: Long,`rhs`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_types_fn_method_outpoint_hashtouint(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_outpoint_hashtouint(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_method_outpoint_txid(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_outpoint_txid(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_method_outpoint_txid_str(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_outpoint_txid_str(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_types_fn_method_outpoint_txn_link(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_outpoint_txn_link(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_types_fn_clone_psbt(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_clone_psbt(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_free_psbt(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_free_psbt(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_types_fn_constructor_psbt_new(`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_constructor_psbt_new(`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_method_psbt_fee(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_psbt_fee(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_method_psbt_output_total_amount(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_psbt_output_total_amount(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_method_psbt_tx_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_psbt_tx_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_method_psbt_weight(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_psbt_weight(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_clone_sentandreceived(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_clone_sentandreceived(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_free_sentandreceived(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_free_sentandreceived(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_types_fn_method_sentandreceived_amount(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_sentandreceived_amount(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_method_sentandreceived_amount_fmt(`ptr`: Long,`unit`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_sentandreceived_amount_fmt(`ptr`: Long,`unit`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_types_fn_method_sentandreceived_direction(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_sentandreceived_direction(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_types_fn_method_sentandreceived_external_sent(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_sentandreceived_external_sent(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_method_sentandreceived_label(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_sentandreceived_label(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_types_fn_method_sentandreceived_received(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_sentandreceived_received(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_method_sentandreceived_sent(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_sentandreceived_sent(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_clone_txid(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_clone_txid(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_free_txid(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_free_txid(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_types_fn_method_txid_as_hash_string(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_txid_as_hash_string(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_types_fn_method_txid_is_equal(`ptr`: Long,`other`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_txid_is_equal(`ptr`: Long,`other`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_types_fn_clone_txin(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_clone_txin(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_free_txin(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_free_txin(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_types_fn_clone_txout(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_clone_txout(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_free_txout(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_free_txout(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_types_fn_clone_utxolist(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_clone_utxolist(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_free_utxolist(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_free_utxolist(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_types_fn_func_address_is_equal(`lhs`: Long,`rhs`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_func_address_is_equal(`lhs`: Long,`rhs`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_types_fn_func_address_is_valid(`address`: RustBuffer.ByValue,`network`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_func_address_is_valid(`address`: RustBuffer.ByValue,`network`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_types_fn_func_address_is_valid_for_network(`address`: RustBuffer.ByValue,`network`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_func_address_is_valid_for_network(`address`: RustBuffer.ByValue,`network`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_types_fn_func_address_string_spaced_out(`address`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_func_address_string_spaced_out(`address`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_types_fn_func_all_color_schemes(uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_func_all_color_schemes(uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_types_fn_func_all_networks(uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_func_all_networks(uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_types_fn_func_all_units(uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_func_all_units(uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_types_fn_func_color_scheme_selection_capitalized_string(`colorScheme`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_func_color_scheme_selection_capitalized_string(`colorScheme`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_types_fn_func_fee_rate_options_with_total_fee_is_equal(`lhs`: Long,`rhs`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_func_fee_rate_options_with_total_fee_is_equal(`lhs`: Long,`rhs`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_types_fn_func_fee_speed_duration(`feeSpeed`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_func_fee_speed_duration(`feeSpeed`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_types_fn_func_fee_speed_is_custom(`feeSpeed`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_func_fee_speed_is_custom(`feeSpeed`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_types_fn_func_fee_speed_to_circle_color(`feeSpeed`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_func_fee_speed_to_circle_color(`feeSpeed`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_types_fn_func_fee_speed_to_string(`feeSpeed`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_func_fee_speed_to_string(`feeSpeed`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_types_fn_func_network_to_string(`network`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_func_network_to_string(`network`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_types_fn_func_preview_new_utxo_list(`outputCount`: Byte,`changeCount`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_func_preview_new_utxo_list(`outputCount`: Byte,`changeCount`: Byte,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_types_fn_func_unit_to_string(`unit`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_func_unit_to_string(`unit`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_types_fn_func_utxo_date(`utxo`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_func_utxo_date(`utxo`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_types_fn_func_utxo_hash_to_uint(`utxo`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_func_utxo_hash_to_uint(`utxo`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_types_fn_func_utxo_is_equal(`lhs`: RustBuffer.ByValue,`rhs`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_func_utxo_is_equal(`lhs`: RustBuffer.ByValue,`rhs`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_types_fn_func_utxo_name(`utxo`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_func_utxo_name(`utxo`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun ffi_cove_types_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun ffi_cove_types_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun ffi_cove_types_rustbuffer_from_bytes(`bytes`: ForeignBytes.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun ffi_cove_types_rustbuffer_from_bytes(`bytes`: ForeignBytes.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun ffi_cove_types_rustbuffer_free(`buf`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun ffi_cove_types_rustbuffer_free(`buf`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun ffi_cove_types_rustbuffer_reserve(`buf`: RustBuffer.ByValue,`additional`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun ffi_cove_types_rustbuffer_reserve(`buf`: RustBuffer.ByValue,`additional`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun ffi_cove_types_rust_future_poll_u8(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+external fun ffi_cove_types_rust_future_poll_u8(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
 ): Unit
-fun ffi_cove_types_rust_future_cancel_u8(`handle`: Long,
+external fun ffi_cove_types_rust_future_cancel_u8(`handle`: Long,
 ): Unit
-fun ffi_cove_types_rust_future_free_u8(`handle`: Long,
+external fun ffi_cove_types_rust_future_free_u8(`handle`: Long,
 ): Unit
-fun ffi_cove_types_rust_future_complete_u8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun ffi_cove_types_rust_future_complete_u8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun ffi_cove_types_rust_future_poll_i8(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+external fun ffi_cove_types_rust_future_poll_i8(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
 ): Unit
-fun ffi_cove_types_rust_future_cancel_i8(`handle`: Long,
+external fun ffi_cove_types_rust_future_cancel_i8(`handle`: Long,
 ): Unit
-fun ffi_cove_types_rust_future_free_i8(`handle`: Long,
+external fun ffi_cove_types_rust_future_free_i8(`handle`: Long,
 ): Unit
-fun ffi_cove_types_rust_future_complete_i8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun ffi_cove_types_rust_future_complete_i8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun ffi_cove_types_rust_future_poll_u16(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+external fun ffi_cove_types_rust_future_poll_u16(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
 ): Unit
-fun ffi_cove_types_rust_future_cancel_u16(`handle`: Long,
+external fun ffi_cove_types_rust_future_cancel_u16(`handle`: Long,
 ): Unit
-fun ffi_cove_types_rust_future_free_u16(`handle`: Long,
+external fun ffi_cove_types_rust_future_free_u16(`handle`: Long,
 ): Unit
-fun ffi_cove_types_rust_future_complete_u16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun ffi_cove_types_rust_future_complete_u16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Short
-fun ffi_cove_types_rust_future_poll_i16(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+external fun ffi_cove_types_rust_future_poll_i16(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
 ): Unit
-fun ffi_cove_types_rust_future_cancel_i16(`handle`: Long,
+external fun ffi_cove_types_rust_future_cancel_i16(`handle`: Long,
 ): Unit
-fun ffi_cove_types_rust_future_free_i16(`handle`: Long,
+external fun ffi_cove_types_rust_future_free_i16(`handle`: Long,
 ): Unit
-fun ffi_cove_types_rust_future_complete_i16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun ffi_cove_types_rust_future_complete_i16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Short
-fun ffi_cove_types_rust_future_poll_u32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+external fun ffi_cove_types_rust_future_poll_u32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
 ): Unit
-fun ffi_cove_types_rust_future_cancel_u32(`handle`: Long,
+external fun ffi_cove_types_rust_future_cancel_u32(`handle`: Long,
 ): Unit
-fun ffi_cove_types_rust_future_free_u32(`handle`: Long,
+external fun ffi_cove_types_rust_future_free_u32(`handle`: Long,
 ): Unit
-fun ffi_cove_types_rust_future_complete_u32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun ffi_cove_types_rust_future_complete_u32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Int
-fun ffi_cove_types_rust_future_poll_i32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+external fun ffi_cove_types_rust_future_poll_i32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
 ): Unit
-fun ffi_cove_types_rust_future_cancel_i32(`handle`: Long,
+external fun ffi_cove_types_rust_future_cancel_i32(`handle`: Long,
 ): Unit
-fun ffi_cove_types_rust_future_free_i32(`handle`: Long,
+external fun ffi_cove_types_rust_future_free_i32(`handle`: Long,
 ): Unit
-fun ffi_cove_types_rust_future_complete_i32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun ffi_cove_types_rust_future_complete_i32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Int
-fun ffi_cove_types_rust_future_poll_u64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+external fun ffi_cove_types_rust_future_poll_u64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
 ): Unit
-fun ffi_cove_types_rust_future_cancel_u64(`handle`: Long,
+external fun ffi_cove_types_rust_future_cancel_u64(`handle`: Long,
 ): Unit
-fun ffi_cove_types_rust_future_free_u64(`handle`: Long,
+external fun ffi_cove_types_rust_future_free_u64(`handle`: Long,
 ): Unit
-fun ffi_cove_types_rust_future_complete_u64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun ffi_cove_types_rust_future_complete_u64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun ffi_cove_types_rust_future_poll_i64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+external fun ffi_cove_types_rust_future_poll_i64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
 ): Unit
-fun ffi_cove_types_rust_future_cancel_i64(`handle`: Long,
+external fun ffi_cove_types_rust_future_cancel_i64(`handle`: Long,
 ): Unit
-fun ffi_cove_types_rust_future_free_i64(`handle`: Long,
+external fun ffi_cove_types_rust_future_free_i64(`handle`: Long,
 ): Unit
-fun ffi_cove_types_rust_future_complete_i64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun ffi_cove_types_rust_future_complete_i64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun ffi_cove_types_rust_future_poll_f32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+external fun ffi_cove_types_rust_future_poll_f32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
 ): Unit
-fun ffi_cove_types_rust_future_cancel_f32(`handle`: Long,
+external fun ffi_cove_types_rust_future_cancel_f32(`handle`: Long,
 ): Unit
-fun ffi_cove_types_rust_future_free_f32(`handle`: Long,
+external fun ffi_cove_types_rust_future_free_f32(`handle`: Long,
 ): Unit
-fun ffi_cove_types_rust_future_complete_f32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun ffi_cove_types_rust_future_complete_f32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Float
-fun ffi_cove_types_rust_future_poll_f64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+external fun ffi_cove_types_rust_future_poll_f64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
 ): Unit
-fun ffi_cove_types_rust_future_cancel_f64(`handle`: Long,
+external fun ffi_cove_types_rust_future_cancel_f64(`handle`: Long,
 ): Unit
-fun ffi_cove_types_rust_future_free_f64(`handle`: Long,
+external fun ffi_cove_types_rust_future_free_f64(`handle`: Long,
 ): Unit
-fun ffi_cove_types_rust_future_complete_f64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun ffi_cove_types_rust_future_complete_f64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Double
-fun ffi_cove_types_rust_future_poll_rust_buffer(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+external fun ffi_cove_types_rust_future_poll_rust_buffer(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
 ): Unit
-fun ffi_cove_types_rust_future_cancel_rust_buffer(`handle`: Long,
+external fun ffi_cove_types_rust_future_cancel_rust_buffer(`handle`: Long,
 ): Unit
-fun ffi_cove_types_rust_future_free_rust_buffer(`handle`: Long,
+external fun ffi_cove_types_rust_future_free_rust_buffer(`handle`: Long,
 ): Unit
-fun ffi_cove_types_rust_future_complete_rust_buffer(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun ffi_cove_types_rust_future_complete_rust_buffer(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun ffi_cove_types_rust_future_poll_void(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+external fun ffi_cove_types_rust_future_poll_void(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
 ): Unit
-fun ffi_cove_types_rust_future_cancel_void(`handle`: Long,
+external fun ffi_cove_types_rust_future_cancel_void(`handle`: Long,
 ): Unit
-fun ffi_cove_types_rust_future_free_void(`handle`: Long,
+external fun ffi_cove_types_rust_future_free_void(`handle`: Long,
 ): Unit
-fun ffi_cove_types_rust_future_complete_void(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun ffi_cove_types_rust_future_complete_void(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
 
+    
 }
 
 private fun uniffiCheckContractApiVersion(lib: IntegrityCheckingUniffiLib) {
@@ -1760,7 +1697,10 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
  * @suppress
  */
 public fun uniffiEnsureInitialized() {
-    UniffiLib.INSTANCE
+    IntegrityCheckingUniffiLib
+    // UniffiLib() initialized as objects are used, but we still need to explicitly
+    // reference it so initialization across crates works as expected.
+    UniffiLib
 }
 
 // Async support
@@ -2352,7 +2292,7 @@ open class Address: Disposable, AutoCloseable, AddressInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_types_fn_free_address(handle, status)
+                UniffiLib.uniffi_cove_types_fn_free_address(handle, status)
             }
         }
     }
@@ -2365,7 +2305,7 @@ open class Address: Disposable, AutoCloseable, AddressInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_types_fn_clone_address(handle, status)
+            UniffiLib.uniffi_cove_types_fn_clone_address(handle, status)
         }
     }
 
@@ -2373,7 +2313,7 @@ open class Address: Disposable, AutoCloseable, AddressInterface
             return FfiConverterULong.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_address_hashtouint(
+    UniffiLib.uniffi_cove_types_fn_method_address_hashtouint(
         it,
         _status)
 }
@@ -2386,7 +2326,7 @@ open class Address: Disposable, AutoCloseable, AddressInterface
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_address_spaced_out(
+    UniffiLib.uniffi_cove_types_fn_method_address_spaced_out(
         it,
         _status)
 }
@@ -2399,7 +2339,7 @@ open class Address: Disposable, AutoCloseable, AddressInterface
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_address_string(
+    UniffiLib.uniffi_cove_types_fn_method_address_string(
         it,
         _status)
 }
@@ -2412,7 +2352,7 @@ open class Address: Disposable, AutoCloseable, AddressInterface
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_address_unformatted(
+    UniffiLib.uniffi_cove_types_fn_method_address_unformatted(
         it,
         _status)
 }
@@ -2432,7 +2372,7 @@ open class Address: Disposable, AutoCloseable, AddressInterface
     @Throws(AddressException::class) fun `fromString`(`address`: kotlin.String, `network`: Network): Address {
             return FfiConverterTypeAddress.lift(
     uniffiRustCallWithError(AddressException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_constructor_address_from_string(
+    UniffiLib.uniffi_cove_types_fn_constructor_address_from_string(
     
         FfiConverterString.lower(`address`),FfiConverterTypeNetwork.lower(`network`),_status)
 }
@@ -2443,7 +2383,7 @@ open class Address: Disposable, AutoCloseable, AddressInterface
          fun `previewNew`(): Address {
             return FfiConverterTypeAddress.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_constructor_address_preview_new(
+    UniffiLib.uniffi_cove_types_fn_constructor_address_preview_new(
     
         _status)
 }
@@ -2454,7 +2394,7 @@ open class Address: Disposable, AutoCloseable, AddressInterface
          fun `random`(): Address {
             return FfiConverterTypeAddress.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_constructor_address_random(
+    UniffiLib.uniffi_cove_types_fn_constructor_address_random(
     
         _status)
 }
@@ -2678,7 +2618,7 @@ open class AddressInfo: Disposable, AutoCloseable, AddressInfoInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_types_fn_free_addressinfo(handle, status)
+                UniffiLib.uniffi_cove_types_fn_free_addressinfo(handle, status)
             }
         }
     }
@@ -2691,7 +2631,7 @@ open class AddressInfo: Disposable, AutoCloseable, AddressInfoInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_types_fn_clone_addressinfo(handle, status)
+            UniffiLib.uniffi_cove_types_fn_clone_addressinfo(handle, status)
         }
     }
 
@@ -2699,7 +2639,7 @@ open class AddressInfo: Disposable, AutoCloseable, AddressInfoInterface
             return FfiConverterTypeAddress.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_addressinfo_address(
+    UniffiLib.uniffi_cove_types_fn_method_addressinfo_address(
         it,
         _status)
 }
@@ -2712,7 +2652,7 @@ open class AddressInfo: Disposable, AutoCloseable, AddressInfoInterface
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_addressinfo_address_unformatted(
+    UniffiLib.uniffi_cove_types_fn_method_addressinfo_address_unformatted(
         it,
         _status)
 }
@@ -2725,7 +2665,7 @@ open class AddressInfo: Disposable, AutoCloseable, AddressInfoInterface
             return FfiConverterUInt.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_addressinfo_index(
+    UniffiLib.uniffi_cove_types_fn_method_addressinfo_index(
         it,
         _status)
 }
@@ -2963,7 +2903,7 @@ open class AddressInfoWithDerivation: Disposable, AutoCloseable, AddressInfoWith
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_types_fn_free_addressinfowithderivation(handle, status)
+                UniffiLib.uniffi_cove_types_fn_free_addressinfowithderivation(handle, status)
             }
         }
     }
@@ -2976,7 +2916,7 @@ open class AddressInfoWithDerivation: Disposable, AutoCloseable, AddressInfoWith
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_types_fn_clone_addressinfowithderivation(handle, status)
+            UniffiLib.uniffi_cove_types_fn_clone_addressinfowithderivation(handle, status)
         }
     }
 
@@ -2984,7 +2924,7 @@ open class AddressInfoWithDerivation: Disposable, AutoCloseable, AddressInfoWith
             return FfiConverterTypeAddress.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_addressinfowithderivation_address(
+    UniffiLib.uniffi_cove_types_fn_method_addressinfowithderivation_address(
         it,
         _status)
 }
@@ -2997,7 +2937,7 @@ open class AddressInfoWithDerivation: Disposable, AutoCloseable, AddressInfoWith
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_addressinfowithderivation_address_spaced_out(
+    UniffiLib.uniffi_cove_types_fn_method_addressinfowithderivation_address_spaced_out(
         it,
         _status)
 }
@@ -3010,7 +2950,7 @@ open class AddressInfoWithDerivation: Disposable, AutoCloseable, AddressInfoWith
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_addressinfowithderivation_address_unformatted(
+    UniffiLib.uniffi_cove_types_fn_method_addressinfowithderivation_address_unformatted(
         it,
         _status)
 }
@@ -3023,7 +2963,7 @@ open class AddressInfoWithDerivation: Disposable, AutoCloseable, AddressInfoWith
             return FfiConverterOptionalString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_addressinfowithderivation_derivation_path(
+    UniffiLib.uniffi_cove_types_fn_method_addressinfowithderivation_derivation_path(
         it,
         _status)
 }
@@ -3036,7 +2976,7 @@ open class AddressInfoWithDerivation: Disposable, AutoCloseable, AddressInfoWith
             return FfiConverterUInt.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_addressinfowithderivation_index(
+    UniffiLib.uniffi_cove_types_fn_method_addressinfowithderivation_index(
         it,
         _status)
 }
@@ -3220,7 +3160,7 @@ open class AddressWithNetwork: Disposable, AutoCloseable, AddressWithNetworkInte
     constructor(`address`: kotlin.String) :
         this(UniffiWithHandle, 
     uniffiRustCallWithError(AddressException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_constructor_addresswithnetwork_new(
+    UniffiLib.uniffi_cove_types_fn_constructor_addresswithnetwork_new(
     
         FfiConverterString.lower(`address`),_status)
 }
@@ -3280,7 +3220,7 @@ open class AddressWithNetwork: Disposable, AutoCloseable, AddressWithNetworkInte
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_types_fn_free_addresswithnetwork(handle, status)
+                UniffiLib.uniffi_cove_types_fn_free_addresswithnetwork(handle, status)
             }
         }
     }
@@ -3293,7 +3233,7 @@ open class AddressWithNetwork: Disposable, AutoCloseable, AddressWithNetworkInte
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_types_fn_clone_addresswithnetwork(handle, status)
+            UniffiLib.uniffi_cove_types_fn_clone_addresswithnetwork(handle, status)
         }
     }
 
@@ -3301,7 +3241,7 @@ open class AddressWithNetwork: Disposable, AutoCloseable, AddressWithNetworkInte
             return FfiConverterTypeAddress.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_addresswithnetwork_address(
+    UniffiLib.uniffi_cove_types_fn_method_addresswithnetwork_address(
         it,
         _status)
 }
@@ -3314,7 +3254,7 @@ open class AddressWithNetwork: Disposable, AutoCloseable, AddressWithNetworkInte
             return FfiConverterOptionalTypeAmount.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_addresswithnetwork_amount(
+    UniffiLib.uniffi_cove_types_fn_method_addresswithnetwork_amount(
         it,
         _status)
 }
@@ -3327,7 +3267,7 @@ open class AddressWithNetwork: Disposable, AutoCloseable, AddressWithNetworkInte
             return FfiConverterBoolean.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_addresswithnetwork_isvalidfornetwork(
+    UniffiLib.uniffi_cove_types_fn_method_addresswithnetwork_isvalidfornetwork(
         it,
         FfiConverterTypeNetwork.lower(`network`),_status)
 }
@@ -3340,7 +3280,7 @@ open class AddressWithNetwork: Disposable, AutoCloseable, AddressWithNetworkInte
             return FfiConverterTypeNetwork.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_addresswithnetwork_network(
+    UniffiLib.uniffi_cove_types_fn_method_addresswithnetwork_network(
         it,
         _status)
 }
@@ -3584,7 +3524,7 @@ open class Amount: Disposable, AutoCloseable, AmountInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_types_fn_free_amount(handle, status)
+                UniffiLib.uniffi_cove_types_fn_free_amount(handle, status)
             }
         }
     }
@@ -3597,7 +3537,7 @@ open class Amount: Disposable, AutoCloseable, AmountInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_types_fn_clone_amount(handle, status)
+            UniffiLib.uniffi_cove_types_fn_clone_amount(handle, status)
         }
     }
 
@@ -3605,7 +3545,7 @@ open class Amount: Disposable, AutoCloseable, AmountInterface
             return FfiConverterDouble.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_amount_as_btc(
+    UniffiLib.uniffi_cove_types_fn_method_amount_as_btc(
         it,
         _status)
 }
@@ -3618,7 +3558,7 @@ open class Amount: Disposable, AutoCloseable, AmountInterface
             return FfiConverterULong.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_amount_as_sats(
+    UniffiLib.uniffi_cove_types_fn_method_amount_as_sats(
         it,
         _status)
 }
@@ -3631,7 +3571,7 @@ open class Amount: Disposable, AutoCloseable, AmountInterface
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_amount_btc_string(
+    UniffiLib.uniffi_cove_types_fn_method_amount_btc_string(
         it,
         _status)
 }
@@ -3644,7 +3584,7 @@ open class Amount: Disposable, AutoCloseable, AmountInterface
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_amount_btc_string_with_unit(
+    UniffiLib.uniffi_cove_types_fn_method_amount_btc_string_with_unit(
         it,
         _status)
 }
@@ -3657,7 +3597,7 @@ open class Amount: Disposable, AutoCloseable, AmountInterface
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_amount_fmt_string(
+    UniffiLib.uniffi_cove_types_fn_method_amount_fmt_string(
         it,
         FfiConverterTypeBitcoinUnit.lower(`unit`),_status)
 }
@@ -3670,7 +3610,7 @@ open class Amount: Disposable, AutoCloseable, AmountInterface
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_amount_fmt_string_with_unit(
+    UniffiLib.uniffi_cove_types_fn_method_amount_fmt_string_with_unit(
         it,
         FfiConverterTypeBitcoinUnit.lower(`unit`),_status)
 }
@@ -3683,7 +3623,7 @@ open class Amount: Disposable, AutoCloseable, AmountInterface
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_amount_sats_string(
+    UniffiLib.uniffi_cove_types_fn_method_amount_sats_string(
         it,
         _status)
 }
@@ -3696,7 +3636,7 @@ open class Amount: Disposable, AutoCloseable, AmountInterface
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_amount_sats_string_with_unit(
+    UniffiLib.uniffi_cove_types_fn_method_amount_sats_string_with_unit(
         it,
         _status)
 }
@@ -3715,7 +3655,7 @@ open class Amount: Disposable, AutoCloseable, AmountInterface
          fun `fromSat`(`sats`: kotlin.ULong): Amount {
             return FfiConverterTypeAmount.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_constructor_amount_from_sat(
+    UniffiLib.uniffi_cove_types_fn_constructor_amount_from_sat(
     
         FfiConverterULong.lower(`sats`),_status)
 }
@@ -3726,7 +3666,7 @@ open class Amount: Disposable, AutoCloseable, AmountInterface
          fun `oneBtc`(): Amount {
             return FfiConverterTypeAmount.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_constructor_amount_one_btc(
+    UniffiLib.uniffi_cove_types_fn_constructor_amount_one_btc(
     
         _status)
 }
@@ -3737,7 +3677,7 @@ open class Amount: Disposable, AutoCloseable, AmountInterface
          fun `oneSat`(): Amount {
             return FfiConverterTypeAmount.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_constructor_amount_one_sat(
+    UniffiLib.uniffi_cove_types_fn_constructor_amount_one_sat(
     
         _status)
 }
@@ -3955,7 +3895,7 @@ open class ChainPosition: Disposable, AutoCloseable, ChainPositionInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_types_fn_free_chainposition(handle, status)
+                UniffiLib.uniffi_cove_types_fn_free_chainposition(handle, status)
             }
         }
     }
@@ -3968,7 +3908,7 @@ open class ChainPosition: Disposable, AutoCloseable, ChainPositionInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_types_fn_clone_chainposition(handle, status)
+            UniffiLib.uniffi_cove_types_fn_clone_chainposition(handle, status)
         }
     }
 
@@ -4221,7 +4161,7 @@ open class ConfirmDetails: Disposable, AutoCloseable, ConfirmDetailsInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_types_fn_free_confirmdetails(handle, status)
+                UniffiLib.uniffi_cove_types_fn_free_confirmdetails(handle, status)
             }
         }
     }
@@ -4234,7 +4174,7 @@ open class ConfirmDetails: Disposable, AutoCloseable, ConfirmDetailsInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_types_fn_clone_confirmdetails(handle, status)
+            UniffiLib.uniffi_cove_types_fn_clone_confirmdetails(handle, status)
         }
     }
 
@@ -4242,7 +4182,7 @@ open class ConfirmDetails: Disposable, AutoCloseable, ConfirmDetailsInterface
             return FfiConverterULong.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_confirmdetails_fee_percentage(
+    UniffiLib.uniffi_cove_types_fn_method_confirmdetails_fee_percentage(
         it,
         _status)
 }
@@ -4255,7 +4195,7 @@ open class ConfirmDetails: Disposable, AutoCloseable, ConfirmDetailsInterface
             return FfiConverterTypeFeeRate.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_confirmdetails_fee_rate(
+    UniffiLib.uniffi_cove_types_fn_method_confirmdetails_fee_rate(
         it,
         _status)
 }
@@ -4268,7 +4208,7 @@ open class ConfirmDetails: Disposable, AutoCloseable, ConfirmDetailsInterface
             return FfiConverterTypeAmount.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_confirmdetails_fee_total(
+    UniffiLib.uniffi_cove_types_fn_method_confirmdetails_fee_total(
         it,
         _status)
 }
@@ -4281,7 +4221,7 @@ open class ConfirmDetails: Disposable, AutoCloseable, ConfirmDetailsInterface
             return FfiConverterTypeTxId.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_confirmdetails_id(
+    UniffiLib.uniffi_cove_types_fn_method_confirmdetails_id(
         it,
         _status)
 }
@@ -4294,7 +4234,7 @@ open class ConfirmDetails: Disposable, AutoCloseable, ConfirmDetailsInterface
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_confirmdetails_id_hash(
+    UniffiLib.uniffi_cove_types_fn_method_confirmdetails_id_hash(
         it,
         _status)
 }
@@ -4307,7 +4247,7 @@ open class ConfirmDetails: Disposable, AutoCloseable, ConfirmDetailsInterface
             return FfiConverterSequenceTypeAddressAndAmount.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_confirmdetails_inputs(
+    UniffiLib.uniffi_cove_types_fn_method_confirmdetails_inputs(
         it,
         _status)
 }
@@ -4320,7 +4260,7 @@ open class ConfirmDetails: Disposable, AutoCloseable, ConfirmDetailsInterface
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_confirmdetails_normalized_id(
+    UniffiLib.uniffi_cove_types_fn_method_confirmdetails_normalized_id(
         it,
         _status)
 }
@@ -4333,7 +4273,7 @@ open class ConfirmDetails: Disposable, AutoCloseable, ConfirmDetailsInterface
             return FfiConverterSequenceTypeAddressAndAmount.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_confirmdetails_outputs(
+    UniffiLib.uniffi_cove_types_fn_method_confirmdetails_outputs(
         it,
         _status)
 }
@@ -4346,7 +4286,7 @@ open class ConfirmDetails: Disposable, AutoCloseable, ConfirmDetailsInterface
             return FfiConverterTypePsbt.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_confirmdetails_psbt(
+    UniffiLib.uniffi_cove_types_fn_method_confirmdetails_psbt(
         it,
         _status)
 }
@@ -4359,7 +4299,7 @@ open class ConfirmDetails: Disposable, AutoCloseable, ConfirmDetailsInterface
             return FfiConverterByteArray.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_confirmdetails_psbt_bytes(
+    UniffiLib.uniffi_cove_types_fn_method_confirmdetails_psbt_bytes(
         it,
         _status)
 }
@@ -4373,7 +4313,7 @@ open class ConfirmDetails: Disposable, AutoCloseable, ConfirmDetailsInterface
             return FfiConverterSequenceString.lift(
     callWithHandle {
     uniffiRustCallWithError(ConfirmDetailsException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_confirmdetails_psbt_to_bbqr(
+    UniffiLib.uniffi_cove_types_fn_method_confirmdetails_psbt_to_bbqr(
         it,
         _status)
 }
@@ -4386,7 +4326,7 @@ open class ConfirmDetails: Disposable, AutoCloseable, ConfirmDetailsInterface
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_confirmdetails_psbt_to_hex(
+    UniffiLib.uniffi_cove_types_fn_method_confirmdetails_psbt_to_hex(
         it,
         _status)
 }
@@ -4399,7 +4339,7 @@ open class ConfirmDetails: Disposable, AutoCloseable, ConfirmDetailsInterface
             return FfiConverterTypeAmount.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_confirmdetails_sending_amount(
+    UniffiLib.uniffi_cove_types_fn_method_confirmdetails_sending_amount(
         it,
         _status)
 }
@@ -4412,7 +4352,7 @@ open class ConfirmDetails: Disposable, AutoCloseable, ConfirmDetailsInterface
             return FfiConverterTypeAddress.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_confirmdetails_sending_to(
+    UniffiLib.uniffi_cove_types_fn_method_confirmdetails_sending_to(
         it,
         _status)
 }
@@ -4425,7 +4365,7 @@ open class ConfirmDetails: Disposable, AutoCloseable, ConfirmDetailsInterface
             return FfiConverterTypeAmount.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_confirmdetails_spending_amount(
+    UniffiLib.uniffi_cove_types_fn_method_confirmdetails_spending_amount(
         it,
         _status)
 }
@@ -4444,7 +4384,7 @@ open class ConfirmDetails: Disposable, AutoCloseable, ConfirmDetailsInterface
          fun `previewNew`(`amount`: kotlin.ULong = 20448uL): ConfirmDetails {
             return FfiConverterTypeConfirmDetails.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_constructor_confirmdetails_preview_new(
+    UniffiLib.uniffi_cove_types_fn_constructor_confirmdetails_preview_new(
     
         FfiConverterULong.lower(`amount`),_status)
 }
@@ -4664,7 +4604,7 @@ open class FeeRate: Disposable, AutoCloseable, FeeRateInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_types_fn_free_feerate(handle, status)
+                UniffiLib.uniffi_cove_types_fn_free_feerate(handle, status)
             }
         }
     }
@@ -4677,7 +4617,7 @@ open class FeeRate: Disposable, AutoCloseable, FeeRateInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_types_fn_clone_feerate(handle, status)
+            UniffiLib.uniffi_cove_types_fn_clone_feerate(handle, status)
         }
     }
 
@@ -4685,7 +4625,7 @@ open class FeeRate: Disposable, AutoCloseable, FeeRateInterface
             return FfiConverterFloat.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_feerate_sat_per_vb(
+    UniffiLib.uniffi_cove_types_fn_method_feerate_sat_per_vb(
         it,
         _status)
 }
@@ -4704,7 +4644,7 @@ open class FeeRate: Disposable, AutoCloseable, FeeRateInterface
          fun `fromSatPerVb`(`satPerVb`: kotlin.Float): FeeRate {
             return FfiConverterTypeFeeRate.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_constructor_feerate_from_sat_per_vb(
+    UniffiLib.uniffi_cove_types_fn_constructor_feerate_from_sat_per_vb(
     
         FfiConverterFloat.lower(`satPerVb`),_status)
 }
@@ -4880,7 +4820,7 @@ open class FeeRateOption: Disposable, AutoCloseable, FeeRateOptionInterface
     constructor(`feeSpeed`: FeeSpeed, `feeRate`: kotlin.Float) :
         this(UniffiWithHandle, 
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_constructor_feerateoption_new(
+    UniffiLib.uniffi_cove_types_fn_constructor_feerateoption_new(
     
         FfiConverterTypeFeeSpeed.lower(`feeSpeed`),FfiConverterFloat.lower(`feeRate`),_status)
 }
@@ -4940,7 +4880,7 @@ open class FeeRateOption: Disposable, AutoCloseable, FeeRateOptionInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_types_fn_free_feerateoption(handle, status)
+                UniffiLib.uniffi_cove_types_fn_free_feerateoption(handle, status)
             }
         }
     }
@@ -4953,7 +4893,7 @@ open class FeeRateOption: Disposable, AutoCloseable, FeeRateOptionInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_types_fn_clone_feerateoption(handle, status)
+            UniffiLib.uniffi_cove_types_fn_clone_feerateoption(handle, status)
         }
     }
 
@@ -4961,7 +4901,7 @@ open class FeeRateOption: Disposable, AutoCloseable, FeeRateOptionInterface
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_feerateoption_duration(
+    UniffiLib.uniffi_cove_types_fn_method_feerateoption_duration(
         it,
         _status)
 }
@@ -4974,7 +4914,7 @@ open class FeeRateOption: Disposable, AutoCloseable, FeeRateOptionInterface
             return FfiConverterTypeFeeRate.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_feerateoption_fee_rate(
+    UniffiLib.uniffi_cove_types_fn_method_feerateoption_fee_rate(
         it,
         _status)
 }
@@ -4987,7 +4927,7 @@ open class FeeRateOption: Disposable, AutoCloseable, FeeRateOptionInterface
             return FfiConverterTypeFeeSpeed.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_feerateoption_fee_speed(
+    UniffiLib.uniffi_cove_types_fn_method_feerateoption_fee_speed(
         it,
         _status)
 }
@@ -5000,7 +4940,7 @@ open class FeeRateOption: Disposable, AutoCloseable, FeeRateOptionInterface
             return FfiConverterBoolean.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_feerateoption_is_equal(
+    UniffiLib.uniffi_cove_types_fn_method_feerateoption_is_equal(
         it,
         FfiConverterTypeFeeRateOption.lower(`rhs`),_status)
 }
@@ -5013,7 +4953,7 @@ open class FeeRateOption: Disposable, AutoCloseable, FeeRateOptionInterface
             return FfiConverterFloat.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_feerateoption_sat_per_vb(
+    UniffiLib.uniffi_cove_types_fn_method_feerateoption_sat_per_vb(
         it,
         _status)
 }
@@ -5205,7 +5145,7 @@ open class FeeRateOptionWithTotalFee: Disposable, AutoCloseable, FeeRateOptionWi
     constructor(`feeSpeed`: FeeSpeed, `feeRate`: FeeRate, `totalFee`: Amount) :
         this(UniffiWithHandle, 
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_constructor_feerateoptionwithtotalfee_new(
+    UniffiLib.uniffi_cove_types_fn_constructor_feerateoptionwithtotalfee_new(
     
         FfiConverterTypeFeeSpeed.lower(`feeSpeed`),FfiConverterTypeFeeRate.lower(`feeRate`),FfiConverterTypeAmount.lower(`totalFee`),_status)
 }
@@ -5265,7 +5205,7 @@ open class FeeRateOptionWithTotalFee: Disposable, AutoCloseable, FeeRateOptionWi
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_types_fn_free_feerateoptionwithtotalfee(handle, status)
+                UniffiLib.uniffi_cove_types_fn_free_feerateoptionwithtotalfee(handle, status)
             }
         }
     }
@@ -5278,7 +5218,7 @@ open class FeeRateOptionWithTotalFee: Disposable, AutoCloseable, FeeRateOptionWi
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_types_fn_clone_feerateoptionwithtotalfee(handle, status)
+            UniffiLib.uniffi_cove_types_fn_clone_feerateoptionwithtotalfee(handle, status)
         }
     }
 
@@ -5286,7 +5226,7 @@ open class FeeRateOptionWithTotalFee: Disposable, AutoCloseable, FeeRateOptionWi
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_feerateoptionwithtotalfee_duration(
+    UniffiLib.uniffi_cove_types_fn_method_feerateoptionwithtotalfee_duration(
         it,
         _status)
 }
@@ -5299,7 +5239,7 @@ open class FeeRateOptionWithTotalFee: Disposable, AutoCloseable, FeeRateOptionWi
             return FfiConverterTypeFeeRate.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_feerateoptionwithtotalfee_fee_rate(
+    UniffiLib.uniffi_cove_types_fn_method_feerateoptionwithtotalfee_fee_rate(
         it,
         _status)
 }
@@ -5312,7 +5252,7 @@ open class FeeRateOptionWithTotalFee: Disposable, AutoCloseable, FeeRateOptionWi
             return FfiConverterTypeFeeRateOption.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_feerateoptionwithtotalfee_fee_rate_options(
+    UniffiLib.uniffi_cove_types_fn_method_feerateoptionwithtotalfee_fee_rate_options(
         it,
         _status)
 }
@@ -5325,7 +5265,7 @@ open class FeeRateOptionWithTotalFee: Disposable, AutoCloseable, FeeRateOptionWi
             return FfiConverterTypeFeeSpeed.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_feerateoptionwithtotalfee_fee_speed(
+    UniffiLib.uniffi_cove_types_fn_method_feerateoptionwithtotalfee_fee_speed(
         it,
         _status)
 }
@@ -5338,7 +5278,7 @@ open class FeeRateOptionWithTotalFee: Disposable, AutoCloseable, FeeRateOptionWi
             return FfiConverterBoolean.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_feerateoptionwithtotalfee_is_custom(
+    UniffiLib.uniffi_cove_types_fn_method_feerateoptionwithtotalfee_is_custom(
         it,
         _status)
 }
@@ -5351,7 +5291,7 @@ open class FeeRateOptionWithTotalFee: Disposable, AutoCloseable, FeeRateOptionWi
             return FfiConverterBoolean.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_feerateoptionwithtotalfee_is_equal(
+    UniffiLib.uniffi_cove_types_fn_method_feerateoptionwithtotalfee_is_equal(
         it,
         FfiConverterTypeFeeRateOptionWithTotalFee.lower(`rhs`),_status)
 }
@@ -5364,7 +5304,7 @@ open class FeeRateOptionWithTotalFee: Disposable, AutoCloseable, FeeRateOptionWi
             return FfiConverterFloat.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_feerateoptionwithtotalfee_sat_per_vb(
+    UniffiLib.uniffi_cove_types_fn_method_feerateoptionwithtotalfee_sat_per_vb(
         it,
         _status)
 }
@@ -5377,7 +5317,7 @@ open class FeeRateOptionWithTotalFee: Disposable, AutoCloseable, FeeRateOptionWi
             return FfiConverterTypeAmount.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_feerateoptionwithtotalfee_total_fee(
+    UniffiLib.uniffi_cove_types_fn_method_feerateoptionwithtotalfee_total_fee(
         it,
         _status)
 }
@@ -5611,7 +5551,7 @@ open class FeeRateOptions: Disposable, AutoCloseable, FeeRateOptionsInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_types_fn_free_feerateoptions(handle, status)
+                UniffiLib.uniffi_cove_types_fn_free_feerateoptions(handle, status)
             }
         }
     }
@@ -5624,7 +5564,7 @@ open class FeeRateOptions: Disposable, AutoCloseable, FeeRateOptionsInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_types_fn_clone_feerateoptions(handle, status)
+            UniffiLib.uniffi_cove_types_fn_clone_feerateoptions(handle, status)
         }
     }
 
@@ -5632,7 +5572,7 @@ open class FeeRateOptions: Disposable, AutoCloseable, FeeRateOptionsInterface
             return FfiConverterTypeFeeRateOption.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_feerateoptions_fast(
+    UniffiLib.uniffi_cove_types_fn_method_feerateoptions_fast(
         it,
         _status)
 }
@@ -5645,7 +5585,7 @@ open class FeeRateOptions: Disposable, AutoCloseable, FeeRateOptionsInterface
             return FfiConverterTypeFeeRateOption.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_feerateoptions_medium(
+    UniffiLib.uniffi_cove_types_fn_method_feerateoptions_medium(
         it,
         _status)
 }
@@ -5658,7 +5598,7 @@ open class FeeRateOptions: Disposable, AutoCloseable, FeeRateOptionsInterface
             return FfiConverterTypeFeeRateOption.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_feerateoptions_slow(
+    UniffiLib.uniffi_cove_types_fn_method_feerateoptions_slow(
         it,
         _status)
 }
@@ -5677,7 +5617,7 @@ open class FeeRateOptions: Disposable, AutoCloseable, FeeRateOptionsInterface
          fun `previewNew`(): FeeRateOptions {
             return FfiConverterTypeFeeRateOptions.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_constructor_feerateoptions_preview_new(
+    UniffiLib.uniffi_cove_types_fn_constructor_feerateoptions_preview_new(
     
         _status)
 }
@@ -5915,7 +5855,7 @@ open class FeeRateOptionsWithTotalFee: Disposable, AutoCloseable, FeeRateOptions
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_types_fn_free_feerateoptionswithtotalfee(handle, status)
+                UniffiLib.uniffi_cove_types_fn_free_feerateoptionswithtotalfee(handle, status)
             }
         }
     }
@@ -5928,7 +5868,7 @@ open class FeeRateOptionsWithTotalFee: Disposable, AutoCloseable, FeeRateOptions
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_types_fn_clone_feerateoptionswithtotalfee(handle, status)
+            UniffiLib.uniffi_cove_types_fn_clone_feerateoptionswithtotalfee(handle, status)
         }
     }
 
@@ -5936,7 +5876,7 @@ open class FeeRateOptionsWithTotalFee: Disposable, AutoCloseable, FeeRateOptions
             return FfiConverterTypeFeeRateOptionsWithTotalFee.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_feerateoptionswithtotalfee_add_custom_fee_rate(
+    UniffiLib.uniffi_cove_types_fn_method_feerateoptionswithtotalfee_add_custom_fee_rate(
         it,
         FfiConverterTypeFeeRateOptionWithTotalFee.lower(`feeRate`),_status)
 }
@@ -5949,7 +5889,7 @@ open class FeeRateOptionsWithTotalFee: Disposable, AutoCloseable, FeeRateOptions
             return FfiConverterTypeFeeSpeed.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_feerateoptionswithtotalfee_calculate_custom_fee_speed(
+    UniffiLib.uniffi_cove_types_fn_method_feerateoptionswithtotalfee_calculate_custom_fee_speed(
         it,
         FfiConverterFloat.lower(`feeRate`),_status)
 }
@@ -5962,7 +5902,7 @@ open class FeeRateOptionsWithTotalFee: Disposable, AutoCloseable, FeeRateOptions
             return FfiConverterOptionalTypeFeeRateOptionWithTotalFee.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_feerateoptionswithtotalfee_custom(
+    UniffiLib.uniffi_cove_types_fn_method_feerateoptionswithtotalfee_custom(
         it,
         _status)
 }
@@ -5975,7 +5915,7 @@ open class FeeRateOptionsWithTotalFee: Disposable, AutoCloseable, FeeRateOptions
             return FfiConverterTypeFeeRateOptionWithTotalFee.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_feerateoptionswithtotalfee_fast(
+    UniffiLib.uniffi_cove_types_fn_method_feerateoptionswithtotalfee_fast(
         it,
         _status)
 }
@@ -5988,7 +5928,7 @@ open class FeeRateOptionsWithTotalFee: Disposable, AutoCloseable, FeeRateOptions
             return FfiConverterTypeFeeRateOptions.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_feerateoptionswithtotalfee_fee_rate_options(
+    UniffiLib.uniffi_cove_types_fn_method_feerateoptionswithtotalfee_fee_rate_options(
         it,
         _status)
 }
@@ -6001,7 +5941,7 @@ open class FeeRateOptionsWithTotalFee: Disposable, AutoCloseable, FeeRateOptions
             return FfiConverterOptionalTypeFeeRateOptionWithTotalFee.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_feerateoptionswithtotalfee_get_fee_rate_with(
+    UniffiLib.uniffi_cove_types_fn_method_feerateoptionswithtotalfee_get_fee_rate_with(
         it,
         FfiConverterFloat.lower(`feeRate`),_status)
 }
@@ -6014,7 +5954,7 @@ open class FeeRateOptionsWithTotalFee: Disposable, AutoCloseable, FeeRateOptions
             return FfiConverterTypeFeeRateOptionWithTotalFee.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_feerateoptionswithtotalfee_medium(
+    UniffiLib.uniffi_cove_types_fn_method_feerateoptionswithtotalfee_medium(
         it,
         _status)
 }
@@ -6027,7 +5967,7 @@ open class FeeRateOptionsWithTotalFee: Disposable, AutoCloseable, FeeRateOptions
             return FfiConverterTypeFeeRateOptionsWithTotalFee.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_feerateoptionswithtotalfee_remove_custom_fee(
+    UniffiLib.uniffi_cove_types_fn_method_feerateoptionswithtotalfee_remove_custom_fee(
         it,
         _status)
 }
@@ -6040,7 +5980,7 @@ open class FeeRateOptionsWithTotalFee: Disposable, AutoCloseable, FeeRateOptions
             return FfiConverterTypeFeeRateOptionWithTotalFee.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_feerateoptionswithtotalfee_slow(
+    UniffiLib.uniffi_cove_types_fn_method_feerateoptionswithtotalfee_slow(
         it,
         _status)
 }
@@ -6053,7 +5993,7 @@ open class FeeRateOptionsWithTotalFee: Disposable, AutoCloseable, FeeRateOptions
             return FfiConverterULong.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_feerateoptionswithtotalfee_transaction_size(
+    UniffiLib.uniffi_cove_types_fn_method_feerateoptionswithtotalfee_transaction_size(
         it,
         _status)
 }
@@ -6072,7 +6012,7 @@ open class FeeRateOptionsWithTotalFee: Disposable, AutoCloseable, FeeRateOptions
          fun `previewNew`(): FeeRateOptionsWithTotalFee {
             return FfiConverterTypeFeeRateOptionsWithTotalFee.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_constructor_feerateoptionswithtotalfee_preview_new(
+    UniffiLib.uniffi_cove_types_fn_constructor_feerateoptionswithtotalfee_preview_new(
     
         _status)
 }
@@ -6290,7 +6230,7 @@ open class InputOutputDetails: Disposable, AutoCloseable, InputOutputDetailsInte
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_types_fn_free_inputoutputdetails(handle, status)
+                UniffiLib.uniffi_cove_types_fn_free_inputoutputdetails(handle, status)
             }
         }
     }
@@ -6303,7 +6243,7 @@ open class InputOutputDetails: Disposable, AutoCloseable, InputOutputDetailsInte
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_types_fn_clone_inputoutputdetails(handle, status)
+            UniffiLib.uniffi_cove_types_fn_clone_inputoutputdetails(handle, status)
         }
     }
 
@@ -6536,7 +6476,7 @@ open class OutPoint: Disposable, AutoCloseable, OutPointInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_types_fn_free_outpoint(handle, status)
+                UniffiLib.uniffi_cove_types_fn_free_outpoint(handle, status)
             }
         }
     }
@@ -6549,7 +6489,7 @@ open class OutPoint: Disposable, AutoCloseable, OutPointInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_types_fn_clone_outpoint(handle, status)
+            UniffiLib.uniffi_cove_types_fn_clone_outpoint(handle, status)
         }
     }
 
@@ -6557,7 +6497,7 @@ open class OutPoint: Disposable, AutoCloseable, OutPointInterface
             return FfiConverterBoolean.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_outpoint_eq(
+    UniffiLib.uniffi_cove_types_fn_method_outpoint_eq(
         it,
         FfiConverterTypeOutPoint.lower(`rhs`),_status)
 }
@@ -6570,7 +6510,7 @@ open class OutPoint: Disposable, AutoCloseable, OutPointInterface
             return FfiConverterULong.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_outpoint_hashtouint(
+    UniffiLib.uniffi_cove_types_fn_method_outpoint_hashtouint(
         it,
         _status)
 }
@@ -6583,7 +6523,7 @@ open class OutPoint: Disposable, AutoCloseable, OutPointInterface
             return FfiConverterTypeTxId.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_outpoint_txid(
+    UniffiLib.uniffi_cove_types_fn_method_outpoint_txid(
         it,
         _status)
 }
@@ -6596,7 +6536,7 @@ open class OutPoint: Disposable, AutoCloseable, OutPointInterface
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_outpoint_txid_str(
+    UniffiLib.uniffi_cove_types_fn_method_outpoint_txid_str(
         it,
         _status)
 }
@@ -6609,7 +6549,7 @@ open class OutPoint: Disposable, AutoCloseable, OutPointInterface
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_outpoint_txn_link(
+    UniffiLib.uniffi_cove_types_fn_method_outpoint_txn_link(
         it,
         _status)
 }
@@ -6628,7 +6568,7 @@ open class OutPoint: Disposable, AutoCloseable, OutPointInterface
          fun `previewNew`(): OutPoint {
             return FfiConverterTypeOutPoint.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_constructor_outpoint_preview_new(
+    UniffiLib.uniffi_cove_types_fn_constructor_outpoint_preview_new(
     
         _status)
 }
@@ -6639,7 +6579,7 @@ open class OutPoint: Disposable, AutoCloseable, OutPointInterface
          fun `withVout`(`vout`: kotlin.UInt): OutPoint {
             return FfiConverterTypeOutPoint.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_constructor_outpoint_with_vout(
+    UniffiLib.uniffi_cove_types_fn_constructor_outpoint_with_vout(
     
         FfiConverterUInt.lower(`vout`),_status)
 }
@@ -6825,7 +6765,7 @@ open class Psbt: Disposable, AutoCloseable, PsbtInterface
     constructor(`data`: kotlin.ByteArray) :
         this(UniffiWithHandle, 
     uniffiRustCallWithError(PsbtException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_constructor_psbt_new(
+    UniffiLib.uniffi_cove_types_fn_constructor_psbt_new(
     
         FfiConverterByteArray.lower(`data`),_status)
 }
@@ -6885,7 +6825,7 @@ open class Psbt: Disposable, AutoCloseable, PsbtInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_types_fn_free_psbt(handle, status)
+                UniffiLib.uniffi_cove_types_fn_free_psbt(handle, status)
             }
         }
     }
@@ -6898,7 +6838,7 @@ open class Psbt: Disposable, AutoCloseable, PsbtInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_types_fn_clone_psbt(handle, status)
+            UniffiLib.uniffi_cove_types_fn_clone_psbt(handle, status)
         }
     }
 
@@ -6910,7 +6850,7 @@ open class Psbt: Disposable, AutoCloseable, PsbtInterface
             return FfiConverterTypeAmount.lift(
     callWithHandle {
     uniffiRustCallWithError(PsbtException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_psbt_fee(
+    UniffiLib.uniffi_cove_types_fn_method_psbt_fee(
         it,
         _status)
 }
@@ -6926,7 +6866,7 @@ open class Psbt: Disposable, AutoCloseable, PsbtInterface
             return FfiConverterTypeAmount.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_psbt_output_total_amount(
+    UniffiLib.uniffi_cove_types_fn_method_psbt_output_total_amount(
         it,
         _status)
 }
@@ -6942,7 +6882,7 @@ open class Psbt: Disposable, AutoCloseable, PsbtInterface
             return FfiConverterTypeTxId.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_psbt_tx_id(
+    UniffiLib.uniffi_cove_types_fn_method_psbt_tx_id(
         it,
         _status)
 }
@@ -6958,7 +6898,7 @@ open class Psbt: Disposable, AutoCloseable, PsbtInterface
             return FfiConverterULong.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_psbt_weight(
+    UniffiLib.uniffi_cove_types_fn_method_psbt_weight(
         it,
         _status)
 }
@@ -7200,7 +7140,7 @@ open class SentAndReceived: Disposable, AutoCloseable, SentAndReceivedInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_types_fn_free_sentandreceived(handle, status)
+                UniffiLib.uniffi_cove_types_fn_free_sentandreceived(handle, status)
             }
         }
     }
@@ -7213,7 +7153,7 @@ open class SentAndReceived: Disposable, AutoCloseable, SentAndReceivedInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_types_fn_clone_sentandreceived(handle, status)
+            UniffiLib.uniffi_cove_types_fn_clone_sentandreceived(handle, status)
         }
     }
 
@@ -7221,7 +7161,7 @@ open class SentAndReceived: Disposable, AutoCloseable, SentAndReceivedInterface
             return FfiConverterTypeAmount.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_sentandreceived_amount(
+    UniffiLib.uniffi_cove_types_fn_method_sentandreceived_amount(
         it,
         _status)
 }
@@ -7234,7 +7174,7 @@ open class SentAndReceived: Disposable, AutoCloseable, SentAndReceivedInterface
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_sentandreceived_amount_fmt(
+    UniffiLib.uniffi_cove_types_fn_method_sentandreceived_amount_fmt(
         it,
         FfiConverterTypeBitcoinUnit.lower(`unit`),_status)
 }
@@ -7247,7 +7187,7 @@ open class SentAndReceived: Disposable, AutoCloseable, SentAndReceivedInterface
             return FfiConverterTypeTransactionDirection.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_sentandreceived_direction(
+    UniffiLib.uniffi_cove_types_fn_method_sentandreceived_direction(
         it,
         _status)
 }
@@ -7260,7 +7200,7 @@ open class SentAndReceived: Disposable, AutoCloseable, SentAndReceivedInterface
             return FfiConverterTypeAmount.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_sentandreceived_external_sent(
+    UniffiLib.uniffi_cove_types_fn_method_sentandreceived_external_sent(
         it,
         _status)
 }
@@ -7273,7 +7213,7 @@ open class SentAndReceived: Disposable, AutoCloseable, SentAndReceivedInterface
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_sentandreceived_label(
+    UniffiLib.uniffi_cove_types_fn_method_sentandreceived_label(
         it,
         _status)
 }
@@ -7286,7 +7226,7 @@ open class SentAndReceived: Disposable, AutoCloseable, SentAndReceivedInterface
             return FfiConverterTypeAmount.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_sentandreceived_received(
+    UniffiLib.uniffi_cove_types_fn_method_sentandreceived_received(
         it,
         _status)
 }
@@ -7299,7 +7239,7 @@ open class SentAndReceived: Disposable, AutoCloseable, SentAndReceivedInterface
             return FfiConverterTypeAmount.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_sentandreceived_sent(
+    UniffiLib.uniffi_cove_types_fn_method_sentandreceived_sent(
         it,
         _status)
 }
@@ -7531,7 +7471,7 @@ open class TxId: Disposable, AutoCloseable, TxIdInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_types_fn_free_txid(handle, status)
+                UniffiLib.uniffi_cove_types_fn_free_txid(handle, status)
             }
         }
     }
@@ -7544,7 +7484,7 @@ open class TxId: Disposable, AutoCloseable, TxIdInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_types_fn_clone_txid(handle, status)
+            UniffiLib.uniffi_cove_types_fn_clone_txid(handle, status)
         }
     }
 
@@ -7552,7 +7492,7 @@ open class TxId: Disposable, AutoCloseable, TxIdInterface
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_txid_as_hash_string(
+    UniffiLib.uniffi_cove_types_fn_method_txid_as_hash_string(
         it,
         _status)
 }
@@ -7565,7 +7505,7 @@ open class TxId: Disposable, AutoCloseable, TxIdInterface
             return FfiConverterBoolean.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_method_txid_is_equal(
+    UniffiLib.uniffi_cove_types_fn_method_txid_is_equal(
         it,
         FfiConverterTypeTxId.lower(`other`),_status)
 }
@@ -7793,7 +7733,7 @@ open class TxIn: Disposable, AutoCloseable, TxInInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_types_fn_free_txin(handle, status)
+                UniffiLib.uniffi_cove_types_fn_free_txin(handle, status)
             }
         }
     }
@@ -7806,7 +7746,7 @@ open class TxIn: Disposable, AutoCloseable, TxInInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_types_fn_clone_txin(handle, status)
+            UniffiLib.uniffi_cove_types_fn_clone_txin(handle, status)
         }
     }
 
@@ -8029,7 +7969,7 @@ open class TxOut: Disposable, AutoCloseable, TxOutInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_types_fn_free_txout(handle, status)
+                UniffiLib.uniffi_cove_types_fn_free_txout(handle, status)
             }
         }
     }
@@ -8042,7 +7982,7 @@ open class TxOut: Disposable, AutoCloseable, TxOutInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_types_fn_clone_txout(handle, status)
+            UniffiLib.uniffi_cove_types_fn_clone_txout(handle, status)
         }
     }
 
@@ -8265,7 +8205,7 @@ open class UtxoList: Disposable, AutoCloseable, UtxoListInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_types_fn_free_utxolist(handle, status)
+                UniffiLib.uniffi_cove_types_fn_free_utxolist(handle, status)
             }
         }
     }
@@ -8278,7 +8218,7 @@ open class UtxoList: Disposable, AutoCloseable, UtxoListInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_types_fn_clone_utxolist(handle, status)
+            UniffiLib.uniffi_cove_types_fn_clone_utxolist(handle, status)
         }
     }
 
@@ -8982,7 +8922,7 @@ public object FfiConverterTypeFeeSpeed : FfiConverterRustBuffer<FeeSpeed>{
 sealed class FfiColor {
     
     data class Red(
-        val v1: FfiOpacity) : FfiColor()
+        val v1: org.bitcoinppl.cove_core.types.FfiOpacity) : FfiColor()
         
     {
         
@@ -8991,7 +8931,7 @@ sealed class FfiColor {
     }
     
     data class Blue(
-        val v1: FfiOpacity) : FfiColor()
+        val v1: org.bitcoinppl.cove_core.types.FfiOpacity) : FfiColor()
         
     {
         
@@ -9000,7 +8940,7 @@ sealed class FfiColor {
     }
     
     data class Green(
-        val v1: FfiOpacity) : FfiColor()
+        val v1: org.bitcoinppl.cove_core.types.FfiOpacity) : FfiColor()
         
     {
         
@@ -9009,7 +8949,7 @@ sealed class FfiColor {
     }
     
     data class Yellow(
-        val v1: FfiOpacity) : FfiColor()
+        val v1: org.bitcoinppl.cove_core.types.FfiOpacity) : FfiColor()
         
     {
         
@@ -9018,7 +8958,7 @@ sealed class FfiColor {
     }
     
     data class Orange(
-        val v1: FfiOpacity) : FfiColor()
+        val v1: org.bitcoinppl.cove_core.types.FfiOpacity) : FfiColor()
         
     {
         
@@ -9027,7 +8967,7 @@ sealed class FfiColor {
     }
     
     data class Purple(
-        val v1: FfiOpacity) : FfiColor()
+        val v1: org.bitcoinppl.cove_core.types.FfiOpacity) : FfiColor()
         
     {
         
@@ -9036,7 +8976,7 @@ sealed class FfiColor {
     }
     
     data class Pink(
-        val v1: FfiOpacity) : FfiColor()
+        val v1: org.bitcoinppl.cove_core.types.FfiOpacity) : FfiColor()
         
     {
         
@@ -9045,7 +8985,7 @@ sealed class FfiColor {
     }
     
     data class White(
-        val v1: FfiOpacity) : FfiColor()
+        val v1: org.bitcoinppl.cove_core.types.FfiOpacity) : FfiColor()
         
     {
         
@@ -9054,7 +8994,7 @@ sealed class FfiColor {
     }
     
     data class Black(
-        val v1: FfiOpacity) : FfiColor()
+        val v1: org.bitcoinppl.cove_core.types.FfiOpacity) : FfiColor()
         
     {
         
@@ -9063,7 +9003,7 @@ sealed class FfiColor {
     }
     
     data class Gray(
-        val v1: FfiOpacity) : FfiColor()
+        val v1: org.bitcoinppl.cove_core.types.FfiOpacity) : FfiColor()
         
     {
         
@@ -9072,7 +9012,7 @@ sealed class FfiColor {
     }
     
     data class CoolGray(
-        val v1: FfiOpacity) : FfiColor()
+        val v1: org.bitcoinppl.cove_core.types.FfiOpacity) : FfiColor()
         
     {
         
@@ -9081,8 +9021,8 @@ sealed class FfiColor {
     }
     
     data class Custom(
-        val v1: Rgb, 
-        val v2: FfiOpacity) : FfiColor()
+        val v1: org.bitcoinppl.cove_core.types.Rgb, 
+        val v2: org.bitcoinppl.cove_core.types.FfiOpacity) : FfiColor()
         
     {
         
@@ -9842,7 +9782,7 @@ public typealias WalletId = kotlin.String
 public typealias FfiConverterTypeWalletId = FfiConverterString fun `addressIsEqual`(`lhs`: Address, `rhs`: Address): kotlin.Boolean {
             return FfiConverterBoolean.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_func_address_is_equal(
+    UniffiLib.uniffi_cove_types_fn_func_address_is_equal(
     
         FfiConverterTypeAddress.lower(`lhs`),FfiConverterTypeAddress.lower(`rhs`),_status)
 }
@@ -9853,7 +9793,7 @@ public typealias FfiConverterTypeWalletId = FfiConverterString fun `addressIsEqu
     @Throws(AddressException::class) fun `addressIsValid`(`address`: kotlin.String, `network`: Network)
         = 
     uniffiRustCallWithError(AddressException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_func_address_is_valid(
+    UniffiLib.uniffi_cove_types_fn_func_address_is_valid(
     
         FfiConverterString.lower(`address`),FfiConverterTypeNetwork.lower(`network`),_status)
 }
@@ -9863,7 +9803,7 @@ public typealias FfiConverterTypeWalletId = FfiConverterString fun `addressIsEqu
     @Throws(AddressException::class) fun `addressIsValidForNetwork`(`address`: kotlin.String, `network`: Network)
         = 
     uniffiRustCallWithError(AddressException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_func_address_is_valid_for_network(
+    UniffiLib.uniffi_cove_types_fn_func_address_is_valid_for_network(
     
         FfiConverterString.lower(`address`),FfiConverterTypeNetwork.lower(`network`),_status)
 }
@@ -9872,7 +9812,7 @@ public typealias FfiConverterTypeWalletId = FfiConverterString fun `addressIsEqu
  fun `addressStringSpacedOut`(`address`: kotlin.String): kotlin.String {
             return FfiConverterString.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_func_address_string_spaced_out(
+    UniffiLib.uniffi_cove_types_fn_func_address_string_spaced_out(
     
         FfiConverterString.lower(`address`),_status)
 }
@@ -9882,7 +9822,7 @@ public typealias FfiConverterTypeWalletId = FfiConverterString fun `addressIsEqu
  fun `allColorSchemes`(): List<ColorSchemeSelection> {
             return FfiConverterSequenceTypeColorSchemeSelection.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_func_all_color_schemes(
+    UniffiLib.uniffi_cove_types_fn_func_all_color_schemes(
     
         _status)
 }
@@ -9892,7 +9832,7 @@ public typealias FfiConverterTypeWalletId = FfiConverterString fun `addressIsEqu
  fun `allNetworks`(): List<Network> {
             return FfiConverterSequenceTypeNetwork.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_func_all_networks(
+    UniffiLib.uniffi_cove_types_fn_func_all_networks(
     
         _status)
 }
@@ -9902,7 +9842,7 @@ public typealias FfiConverterTypeWalletId = FfiConverterString fun `addressIsEqu
  fun `allUnits`(): List<BitcoinUnit> {
             return FfiConverterSequenceTypeBitcoinUnit.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_func_all_units(
+    UniffiLib.uniffi_cove_types_fn_func_all_units(
     
         _status)
 }
@@ -9912,7 +9852,7 @@ public typealias FfiConverterTypeWalletId = FfiConverterString fun `addressIsEqu
  fun `colorSchemeSelectionCapitalizedString`(`colorScheme`: ColorSchemeSelection): kotlin.String {
             return FfiConverterString.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_func_color_scheme_selection_capitalized_string(
+    UniffiLib.uniffi_cove_types_fn_func_color_scheme_selection_capitalized_string(
     
         FfiConverterTypeColorSchemeSelection.lower(`colorScheme`),_status)
 }
@@ -9922,7 +9862,7 @@ public typealias FfiConverterTypeWalletId = FfiConverterString fun `addressIsEqu
  fun `feeRateOptionsWithTotalFeeIsEqual`(`lhs`: FeeRateOptionsWithTotalFee, `rhs`: FeeRateOptionsWithTotalFee): kotlin.Boolean {
             return FfiConverterBoolean.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_func_fee_rate_options_with_total_fee_is_equal(
+    UniffiLib.uniffi_cove_types_fn_func_fee_rate_options_with_total_fee_is_equal(
     
         FfiConverterTypeFeeRateOptionsWithTotalFee.lower(`lhs`),FfiConverterTypeFeeRateOptionsWithTotalFee.lower(`rhs`),_status)
 }
@@ -9932,7 +9872,7 @@ public typealias FfiConverterTypeWalletId = FfiConverterString fun `addressIsEqu
  fun `feeSpeedDuration`(`feeSpeed`: FeeSpeed): kotlin.String {
             return FfiConverterString.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_func_fee_speed_duration(
+    UniffiLib.uniffi_cove_types_fn_func_fee_speed_duration(
     
         FfiConverterTypeFeeSpeed.lower(`feeSpeed`),_status)
 }
@@ -9942,7 +9882,7 @@ public typealias FfiConverterTypeWalletId = FfiConverterString fun `addressIsEqu
  fun `feeSpeedIsCustom`(`feeSpeed`: FeeSpeed): kotlin.Boolean {
             return FfiConverterBoolean.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_func_fee_speed_is_custom(
+    UniffiLib.uniffi_cove_types_fn_func_fee_speed_is_custom(
     
         FfiConverterTypeFeeSpeed.lower(`feeSpeed`),_status)
 }
@@ -9952,7 +9892,7 @@ public typealias FfiConverterTypeWalletId = FfiConverterString fun `addressIsEqu
  fun `feeSpeedToCircleColor`(`feeSpeed`: FeeSpeed): FfiColor {
             return FfiConverterTypeFfiColor.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_func_fee_speed_to_circle_color(
+    UniffiLib.uniffi_cove_types_fn_func_fee_speed_to_circle_color(
     
         FfiConverterTypeFeeSpeed.lower(`feeSpeed`),_status)
 }
@@ -9962,7 +9902,7 @@ public typealias FfiConverterTypeWalletId = FfiConverterString fun `addressIsEqu
  fun `feeSpeedToString`(`feeSpeed`: FeeSpeed): kotlin.String {
             return FfiConverterString.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_func_fee_speed_to_string(
+    UniffiLib.uniffi_cove_types_fn_func_fee_speed_to_string(
     
         FfiConverterTypeFeeSpeed.lower(`feeSpeed`),_status)
 }
@@ -9972,7 +9912,7 @@ public typealias FfiConverterTypeWalletId = FfiConverterString fun `addressIsEqu
  fun `networkToString`(`network`: Network): kotlin.String {
             return FfiConverterString.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_func_network_to_string(
+    UniffiLib.uniffi_cove_types_fn_func_network_to_string(
     
         FfiConverterTypeNetwork.lower(`network`),_status)
 }
@@ -9982,7 +9922,7 @@ public typealias FfiConverterTypeWalletId = FfiConverterString fun `addressIsEqu
  fun `previewNewUtxoList`(`outputCount`: kotlin.UByte, `changeCount`: kotlin.UByte): List<Utxo> {
             return FfiConverterSequenceTypeUtxo.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_func_preview_new_utxo_list(
+    UniffiLib.uniffi_cove_types_fn_func_preview_new_utxo_list(
     
         FfiConverterUByte.lower(`outputCount`),FfiConverterUByte.lower(`changeCount`),_status)
 }
@@ -9992,7 +9932,7 @@ public typealias FfiConverterTypeWalletId = FfiConverterString fun `addressIsEqu
  fun `unitToString`(`unit`: BitcoinUnit): kotlin.String {
             return FfiConverterString.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_func_unit_to_string(
+    UniffiLib.uniffi_cove_types_fn_func_unit_to_string(
     
         FfiConverterTypeBitcoinUnit.lower(`unit`),_status)
 }
@@ -10002,7 +9942,7 @@ public typealias FfiConverterTypeWalletId = FfiConverterString fun `addressIsEqu
  fun `utxoDate`(`utxo`: Utxo): kotlin.String {
             return FfiConverterString.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_func_utxo_date(
+    UniffiLib.uniffi_cove_types_fn_func_utxo_date(
     
         FfiConverterTypeUtxo.lower(`utxo`),_status)
 }
@@ -10012,7 +9952,7 @@ public typealias FfiConverterTypeWalletId = FfiConverterString fun `addressIsEqu
  fun `utxoHashToUint`(`utxo`: Utxo): kotlin.ULong {
             return FfiConverterULong.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_func_utxo_hash_to_uint(
+    UniffiLib.uniffi_cove_types_fn_func_utxo_hash_to_uint(
     
         FfiConverterTypeUtxo.lower(`utxo`),_status)
 }
@@ -10022,7 +9962,7 @@ public typealias FfiConverterTypeWalletId = FfiConverterString fun `addressIsEqu
  fun `utxoIsEqual`(`lhs`: Utxo, `rhs`: Utxo): kotlin.Boolean {
             return FfiConverterBoolean.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_func_utxo_is_equal(
+    UniffiLib.uniffi_cove_types_fn_func_utxo_is_equal(
     
         FfiConverterTypeUtxo.lower(`lhs`),FfiConverterTypeUtxo.lower(`rhs`),_status)
 }
@@ -10032,7 +9972,7 @@ public typealias FfiConverterTypeWalletId = FfiConverterString fun `addressIsEqu
  fun `utxoName`(`utxo`: Utxo): kotlin.String {
             return FfiConverterString.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_types_fn_func_utxo_name(
+    UniffiLib.uniffi_cove_types_fn_func_utxo_name(
     
         FfiConverterTypeUtxo.lower(`utxo`),_status)
 }

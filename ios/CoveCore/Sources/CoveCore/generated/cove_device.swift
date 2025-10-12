@@ -549,6 +549,8 @@ public convenience init(device: DeviceAccess) {
     
 
     
+
+    
 }
 
 
@@ -576,9 +578,6 @@ public struct FfiConverterTypeDevice: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -659,6 +658,8 @@ public convenience init(keychain: KeychainAccess) {
     
 
     
+
+    
 }
 
 
@@ -688,9 +689,6 @@ public struct FfiConverterTypeKeychain: FfiConverter {
 }
 
 
-
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -708,7 +706,7 @@ public func FfiConverterTypeKeychain_lower(_ value: Keychain) -> UInt64 {
 
 
 
-public enum KeychainError: Swift.Error {
+public enum KeychainError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -720,8 +718,19 @@ public enum KeychainError: Swift.Error {
     )
     case Decrypt(String
     )
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension KeychainError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -799,21 +808,6 @@ public func FfiConverterTypeKeychainError_lift(_ buf: RustBuffer) throws -> Keyc
 public func FfiConverterTypeKeychainError_lower(_ value: KeychainError) -> RustBuffer {
     return FfiConverterTypeKeychainError.lower(value)
 }
-
-
-extension KeychainError: Equatable, Hashable {}
-
-
-
-
-extension KeychainError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
 
 
 

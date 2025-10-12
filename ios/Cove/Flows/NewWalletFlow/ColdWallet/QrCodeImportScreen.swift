@@ -144,7 +144,7 @@ struct QrCodeImportScreen: View {
                 Log.debug("Imported Wallet: \(id)")
                 alert = AlertItem(type: .success("Imported Wallet Successfully"))
                 try app.rust.selectWallet(id: id)
-            } catch let WalletError.MultiFormatError(error) {
+            } catch let WalletError.MultiFormat(error) {
                 app.popRoute()
                 self.alert = AlertItem(type: .error(error.describe, "Invalid Format"))
             } catch let WalletError.WalletAlreadyExists(id) {

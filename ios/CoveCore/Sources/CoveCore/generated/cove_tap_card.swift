@@ -582,6 +582,8 @@ open func isEqual(rhs: TapSigner) -> Bool  {
 })
 }
     
+
+    
 }
 
 
@@ -611,9 +613,6 @@ public struct FfiConverterTypeTapSigner: FfiConverter {
 }
 
 
-
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -631,7 +630,7 @@ public func FfiConverterTypeTapSigner_lower(_ value: TapSigner) -> UInt64 {
 
 
 
-public struct SatsCard {
+public struct SatsCard: Equatable, Hashable {
     public var state: SatsCardState
     public var slotNumber: UInt32
     public var addressSuffix: String
@@ -647,46 +646,13 @@ public struct SatsCard {
         self.nonce = nonce
         self.signature = signature
     }
+
+    
 }
 
 #if compiler(>=6)
 extension SatsCard: Sendable {}
 #endif
-
-
-
-
-
-extension SatsCard: Equatable, Hashable {
-    public static func ==(lhs: SatsCard, rhs: SatsCard) -> Bool {
-        if lhs.state != rhs.state {
-            return false
-        }
-        if lhs.slotNumber != rhs.slotNumber {
-            return false
-        }
-        if lhs.addressSuffix != rhs.addressSuffix {
-            return false
-        }
-        if lhs.nonce != rhs.nonce {
-            return false
-        }
-        if lhs.signature != rhs.signature {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(state)
-        hasher.combine(slotNumber)
-        hasher.combine(addressSuffix)
-        hasher.combine(nonce)
-        hasher.combine(signature)
-    }
-}
-
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -730,7 +696,7 @@ public func FfiConverterTypeSatsCard_lower(_ value: SatsCard) -> RustBuffer {
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum Field {
+public enum Field: Equatable, Hashable {
     
     case signature
     case ident
@@ -739,7 +705,10 @@ public enum Field {
     case slotNumber
     case address
 
+
+
 }
+
 #if compiler(>=6)
 extension Field: Sendable {}
 #endif
@@ -817,27 +786,19 @@ public func FfiConverterTypeField_lower(_ value: Field) -> RustBuffer {
 }
 
 
-
-
-extension Field: Equatable, Hashable {}
-
-
-
-
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum SatsCardState {
+public enum SatsCardState: Equatable, Hashable {
     
     case sealed
     case unsealed
     case error
 
+
+
 }
+
 #if compiler(>=6)
 extension SatsCardState: Sendable {}
 #endif
@@ -897,28 +858,20 @@ public func FfiConverterTypeSatsCardState_lower(_ value: SatsCardState) -> RustB
 }
 
 
-
-
-extension SatsCardState: Equatable, Hashable {}
-
-
-
-
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum TapCard {
     
-    case sats(SatsCard
+    case satsCard(SatsCard
     )
-    case tap(TapSigner
+    case tapSigner(TapSigner
     )
 
+
+
 }
+
 #if compiler(>=6)
 extension TapCard: Sendable {}
 #endif
@@ -933,10 +886,10 @@ public struct FfiConverterTypeTapCard: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
         
-        case 1: return .sats(try FfiConverterTypeSatsCard.read(from: &buf)
+        case 1: return .satsCard(try FfiConverterTypeSatsCard.read(from: &buf)
         )
         
-        case 2: return .tap(try FfiConverterTypeTapSigner.read(from: &buf)
+        case 2: return .tapSigner(try FfiConverterTypeTapSigner.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -947,12 +900,12 @@ public struct FfiConverterTypeTapCard: FfiConverterRustBuffer {
         switch value {
         
         
-        case let .sats(v1):
+        case let .satsCard(v1):
             writeInt(&buf, Int32(1))
             FfiConverterTypeSatsCard.write(v1, into: &buf)
             
         
-        case let .tap(v1):
+        case let .tapSigner(v1):
             writeInt(&buf, Int32(2))
             FfiConverterTypeTapSigner.write(v1, into: &buf)
             
@@ -977,11 +930,7 @@ public func FfiConverterTypeTapCard_lower(_ value: TapCard) -> RustBuffer {
 
 
 
-
-
-
-
-public enum TapCardParseError: Swift.Error {
+public enum TapCardParseError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -999,8 +948,19 @@ public enum TapCardParseError: Swift.Error {
     case UnableToParseSignature(String
     )
     case UnableToRecoverPubkey
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension TapCardParseError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -1103,31 +1063,19 @@ public func FfiConverterTypeTapCardParseError_lower(_ value: TapCardParseError) 
     return FfiConverterTypeTapCardParseError.lower(value)
 }
 
-
-extension TapCardParseError: Equatable, Hashable {}
-
-
-
-
-extension TapCardParseError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum TapSignerState {
+public enum TapSignerState: Equatable, Hashable {
     
     case sealed
     case unused
     case error
 
+
+
 }
+
 #if compiler(>=6)
 extension TapSignerState: Sendable {}
 #endif
@@ -1185,17 +1133,6 @@ public func FfiConverterTypeTapSignerState_lift(_ buf: RustBuffer) throws -> Tap
 public func FfiConverterTypeTapSignerState_lower(_ value: TapSignerState) -> RustBuffer {
     return FfiConverterTypeTapSignerState.lower(value)
 }
-
-
-
-
-extension TapSignerState: Equatable, Hashable {}
-
-
-
-
-
-
 
 public func tapSignerPreviewNew(preview: Bool) -> TapSigner  {
     return try!  FfiConverterTypeTapSigner_lift(try! rustCall() {
