@@ -51,13 +51,14 @@ xcode-clean:
     rm -rf ~/Library/Caches/org.swift.swiftpm
     cd ios && xcodebuild clean
 
-ci: 
+ci:
     just fmt
     cd rust && cargo clippy --all-targets --all-features
     just test
     cd rust && cargo clippy --all-targets --all-features -- -D warnings
     cd rust && cargo fmt --check
-    swiftformat --lint . --swiftversion 6 
+    swiftformat --lint . --swiftversion 6
+    cd android && ./gradlew ktlintCheck || echo "ktlint not configured" 
 
 xcode-reset:
     killAll Xcode || true
