@@ -41,6 +41,9 @@ fmt:
     swiftformat . --swiftversion 6
     cd android && ./gradlew ktlintFormat 
 
+fix *flags="":
+    cd rust && cargo fix --workspace {{flags}}
+
 clippy *flags="":
     cd rust && cargo clippy {{flags}}
 
