@@ -1,3 +1,6 @@
+// allow deprecated generic_array methods until chacha20poly1305 updates to generic-array 1.x
+#![allow(deprecated)]
+
 use base64::Engine as _;
 use base64::prelude::BASE64_STANDARD;
 use chacha20poly1305::aead::OsRng;
