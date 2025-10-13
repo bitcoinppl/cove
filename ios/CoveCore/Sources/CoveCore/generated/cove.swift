@@ -709,6 +709,8 @@ public convenience init(address: Address, changeAddress: Address?, direction: Tr
     
 
     
+
+    
 }
 
 
@@ -736,9 +738,6 @@ public struct FfiConverterTypeAddressArgs: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -829,6 +828,8 @@ open func check(pin: String) -> Bool  {
 })
 }
     
+
+    
 }
 
 
@@ -856,9 +857,6 @@ public struct FfiConverterTypeAuthPin: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -952,6 +950,8 @@ open func isValidWord(word: String) -> Bool  {
     )
 })
 }
+    
+
     
 }
 
@@ -1076,9 +1076,6 @@ public struct FfiConverterTypeAutoComplete: FfiConverter {
 }
 
 
-
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -1166,6 +1163,8 @@ open func spendable() -> Amount  {
 })
 }
     
+
+    
 }
 
 
@@ -1193,9 +1192,6 @@ public struct FfiConverterTypeBalance: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -1298,6 +1294,8 @@ open func partsLeft() -> UInt32  {
 })
 }
     
+
+    
 }
 
 
@@ -1325,9 +1323,6 @@ public struct FfiConverterTypeBbqrJoinResult: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -1421,6 +1416,8 @@ open func getSeedWords()throws  -> [String]  {
 })
 }
     
+
+    
 }
 
 
@@ -1448,9 +1445,6 @@ public struct FfiConverterTypeBbqrJoined: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -1523,6 +1517,8 @@ open class Bip329Labels: Bip329LabelsProtocol, @unchecked Sendable {
     
 
     
+
+    
 }
 
 
@@ -1550,9 +1546,6 @@ public struct FfiConverterTypeBip329Labels: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -1672,6 +1665,8 @@ open func nextFieldNumber(currentFieldNumber: UInt8, enteredWords: [String]) -> 
 })
 }
     
+
+    
 }
 
 
@@ -1699,10 +1694,7 @@ public struct FfiConverterTypeBip39AutoComplete: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
 extension Bip39AutoComplete: AutoComplete {}
-
 
 
 
@@ -1832,6 +1824,8 @@ open func nextFieldNumber(currentFieldNumber: UInt8, enteredWords: [String]) -> 
 })
 }
     
+
+    
 }
 
 
@@ -1859,9 +1853,6 @@ public struct FfiConverterTypeBip39WordSpecificAutocomplete: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -1996,6 +1987,8 @@ open func txIdHash() -> String  {
 })
 }
     
+
+    
 }
 
 
@@ -2023,9 +2016,6 @@ public struct FfiConverterTypeBitcoinTransaction: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -2116,6 +2106,8 @@ open func route() -> Route  {
 })
 }
     
+
+    
 }
 
 
@@ -2143,9 +2135,6 @@ public struct FfiConverterTypeBoxedRoute: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -2227,6 +2216,8 @@ public static func previewNew(outputCount: UInt8 = UInt8(20), changeCount: UInt8
     
 
     
+
+    
 }
 
 
@@ -2254,9 +2245,6 @@ public struct FfiConverterTypeCoinControlManagerState: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -2429,6 +2417,8 @@ open func sentAndReceived() -> SentAndReceived  {
 })
 }
     
+
+    
 }
 
 
@@ -2456,9 +2446,6 @@ public struct FfiConverterTypeConfirmedTransaction: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -2560,6 +2547,8 @@ open func removeFiatSuffix(fiatAmount: String) -> String  {
 })
 }
     
+
+    
 }
 
 
@@ -2587,9 +2576,6 @@ public struct FfiConverterTypeConverter: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -2728,6 +2714,8 @@ open func wallets() -> WalletsTable  {
 })
 }
     
+
+    
 }
 
 
@@ -2755,9 +2743,6 @@ public struct FfiConverterTypeDatabase: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -3213,6 +3198,8 @@ open func version() -> String  {
 })
 }
     
+
+    
 }
 
 
@@ -3240,9 +3227,6 @@ public struct FfiConverterTypeFfiApp: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -3315,6 +3299,8 @@ open class FiatClient: FiatClientProtocol, @unchecked Sendable {
     
 
     
+
+    
 }
 
 
@@ -3342,9 +3328,6 @@ public struct FfiConverterTypeFiatClient: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -3435,6 +3418,8 @@ open func read()throws  -> MultiFormat  {
 })
 }
     
+
+    
 }
 
 
@@ -3462,9 +3447,6 @@ public struct FfiConverterTypeFileHandler: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -3537,6 +3519,8 @@ open class FilteredUtxos: FilteredUtxosProtocol, @unchecked Sendable {
     
 
     
+
+    
 }
 
 
@@ -3564,9 +3548,6 @@ public struct FfiConverterTypeFilteredUtxos: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -3667,6 +3648,8 @@ open func asUppercase() -> String  {
 })
 }
     
+
+    
 }
 
 
@@ -3694,9 +3677,6 @@ public struct FfiConverterTypeFingerprint: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -3769,6 +3749,8 @@ open class FoundJson: FoundJsonProtocol, @unchecked Sendable {
     
 
     
+
+    
 }
 
 
@@ -3796,9 +3778,6 @@ public struct FfiConverterTypeFoundJson: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -4071,6 +4050,8 @@ open func walletMode() -> WalletMode  {
 })
 }
     
+
+    
 }
 
 
@@ -4098,9 +4079,6 @@ public struct FfiConverterTypeGlobalConfigTable: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -4237,6 +4215,8 @@ open func toggleBoolConfig(key: GlobalFlagKey)throws   {try rustCallWithError(Ff
 }
 }
     
+
+    
 }
 
 
@@ -4264,9 +4244,6 @@ public struct FfiConverterTypeGlobalFlagTable: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -4339,6 +4316,8 @@ open class HardwareExport: HardwareExportProtocol, @unchecked Sendable {
     
 
     
+
+    
 }
 
 
@@ -4366,9 +4345,6 @@ public struct FfiConverterTypeHardwareExport: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -4491,6 +4467,8 @@ open func ringColor(state: TransactionState, colorScheme: FfiColorScheme, direct
 })
 }
     
+
+    
 }
 
 
@@ -4518,9 +4496,6 @@ public struct FfiConverterTypeHeaderIconPresenter: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -4593,6 +4568,8 @@ open class HistoricalPriceTable: HistoricalPriceTableProtocol, @unchecked Sendab
     
 
     
+
+    
 }
 
 
@@ -4620,9 +4597,6 @@ public struct FfiConverterTypeHistoricalPriceTable: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -4695,6 +4669,8 @@ open class HistoricalPricesResponse: HistoricalPricesResponseProtocol, @unchecke
     
 
     
+
+    
 }
 
 
@@ -4722,9 +4698,6 @@ public struct FfiConverterTypeHistoricalPricesResponse: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -4889,6 +4862,8 @@ open func transactionLabel(txId: TxId) -> String?  {
 })
 }
     
+
+    
 }
 
 
@@ -4916,9 +4891,6 @@ public struct FfiConverterTypeLabelManager: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -4991,6 +4963,8 @@ open class LabelsTable: LabelsTableProtocol, @unchecked Sendable {
     
 
     
+
+    
 }
 
 
@@ -5018,9 +4992,6 @@ public struct FfiConverterTypeLabelsTable: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -5129,6 +5100,8 @@ open func words() -> [String]  {
 })
 }
     
+
+    
 }
 
 
@@ -5156,9 +5129,6 @@ public struct FfiConverterTypeMnemonic: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -5319,6 +5289,8 @@ open func totalParts() -> UInt32  {
 })
 }
     
+
+    
 }
 
 
@@ -5346,9 +5318,6 @@ public struct FfiConverterTypeMultiQr: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -5522,6 +5491,8 @@ open func selectedNode() -> NodeSelection  {
 })
 }
     
+
+    
 }
 
 
@@ -5549,9 +5520,6 @@ public struct FfiConverterTypeNodeSelector: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -5624,6 +5592,8 @@ open class PendingWallet: PendingWalletProtocol, @unchecked Sendable {
     
 
     
+
+    
 }
 
 
@@ -5651,9 +5621,6 @@ public struct FfiConverterTypePendingWallet: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -5747,6 +5714,8 @@ open func getForCurrency(currency: FiatCurrency) -> UInt64  {
 })
 }
     
+
+    
 }
 
 
@@ -5774,9 +5743,6 @@ public struct FfiConverterTypePriceResponse: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -5849,6 +5815,8 @@ open class PushTx: PushTxProtocol, @unchecked Sendable {
     
 
     
+
+    
 }
 
 
@@ -5876,9 +5844,6 @@ public struct FfiConverterTypePushTx: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -6185,6 +6150,8 @@ open func walletSettings(id: WalletId, route: WalletSettingsRoute) -> Route  {
 })
 }
     
+
+    
 }
 
 
@@ -6212,9 +6179,6 @@ public struct FfiConverterTypeRouteFactory: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -6566,6 +6530,8 @@ open func validatePinSettings(pin: String)throws   {try rustCallWithError(FfiCon
 }
 }
     
+
+    
 }
 
 
@@ -6593,9 +6559,6 @@ public struct FfiConverterTypeRustAuthManager: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -6774,6 +6737,8 @@ open func utxos() -> [Utxo]  {
 })
 }
     
+
+    
 }
 
 
@@ -6801,9 +6766,6 @@ public struct FfiConverterTypeRustCoinControlManager: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -6926,6 +6888,8 @@ open func listenForUpdates(reconciler: ImportWalletManagerReconciler)  {try! rus
 }
 }
     
+
+    
 }
 
 
@@ -6953,9 +6917,6 @@ public struct FfiConverterTypeRustImportWalletManager: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -7122,6 +7083,8 @@ open func saveWallet()throws  -> WalletMetadata  {
 })
 }
     
+
+    
 }
 
 
@@ -7149,9 +7112,6 @@ public struct FfiConverterTypeRustPendingWalletManager: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -7484,6 +7444,8 @@ open func walletId() -> WalletId  {
 })
 }
     
+
+    
 }
 
 
@@ -7511,9 +7473,6 @@ public struct FfiConverterTypeRustSendFlowManager: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -8346,6 +8305,8 @@ open func wordValidator()throws  -> WordValidator  {
 })
 }
     
+
+    
 }
 
 
@@ -8373,9 +8334,6 @@ public struct FfiConverterTypeRustWalletManager: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -8485,6 +8443,8 @@ open func groupedPlainWords(groupsOf: UInt8) -> [[String]]  {
 })
 }
     
+
+    
 }
 
 
@@ -8512,9 +8472,6 @@ public struct FfiConverterTypeSeedQr: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -8587,6 +8544,8 @@ open class SendFlowManagerState: SendFlowManagerStateProtocol, @unchecked Sendab
     
 
     
+
+    
 }
 
 
@@ -8614,9 +8573,6 @@ public struct FfiConverterTypeSendFlowManagerState: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -8699,6 +8655,8 @@ public static func tryNew(factoryPin: String, newPin: String, chainCode: Data? =
     
 
     
+
+    
 }
 
 
@@ -8726,9 +8684,6 @@ public struct FfiConverterTypeSetupCmd: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -8921,6 +8876,8 @@ open func sign(psbt: Psbt, pin: String)async throws  -> Psbt  {
         )
 }
     
+
+    
 }
 
 
@@ -8948,9 +8905,6 @@ public struct FfiConverterTypeTapSignerReader: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -9295,6 +9249,8 @@ open func txId() -> TxId  {
 })
 }
     
+
+    
 }
 
 
@@ -9322,9 +9278,6 @@ public struct FfiConverterTypeTransactionDetails: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -9447,6 +9400,8 @@ open func sentAndReceived() -> SentAndReceived  {
 })
 }
     
+
+    
 }
 
 
@@ -9474,9 +9429,6 @@ public struct FfiConverterTypeUnconfirmedTransaction: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -9606,6 +9558,8 @@ open func spendingAmount() -> Amount  {
 })
 }
     
+
+    
 }
 
 
@@ -9633,9 +9587,6 @@ public struct FfiConverterTypeUnsignedTransaction: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -9748,6 +9699,8 @@ open func walletId() -> WalletId  {
 })
 }
     
+
+    
 }
 
 
@@ -9775,9 +9728,6 @@ public struct FfiConverterTypeUnsignedTransactionRecord: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -9872,6 +9822,8 @@ open func getTxThrow(txId: TxId)throws  -> UnsignedTransactionRecord  {
 })
 }
     
+
+    
 }
 
 
@@ -9899,9 +9851,6 @@ public struct FfiConverterTypeUnsignedTransactionsTable: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -10007,6 +9956,8 @@ open func id() -> WalletId  {
 })
 }
     
+
+    
 }
 
 
@@ -10034,9 +9985,6 @@ public struct FfiConverterTypeWallet: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -10109,6 +10057,8 @@ open class WalletDataDb: WalletDataDbProtocol, @unchecked Sendable {
     
 
     
+
+    
 }
 
 
@@ -10136,9 +10086,6 @@ public struct FfiConverterTypeWalletDataDb: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -10211,6 +10158,8 @@ open class WalletKey: WalletKeyProtocol, @unchecked Sendable {
     
 
     
+
+    
 }
 
 
@@ -10238,9 +10187,6 @@ public struct FfiConverterTypeWalletKey: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -10355,6 +10301,8 @@ open func len(network: Network, mode: WalletMode)throws  -> UInt16  {
 })
 }
     
+
+    
 }
 
 
@@ -10382,9 +10330,6 @@ public struct FfiConverterTypeWalletsTable: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -10500,6 +10445,8 @@ open func possibleWords(`for`: UInt8) -> [String]  {
 })
 }
     
+
+    
 }
 
 
@@ -10529,9 +10476,6 @@ public struct FfiConverterTypeWordValidator: FfiConverter {
 }
 
 
-
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -10557,16 +10501,13 @@ public struct AppState {
     public init(router: Router) {
         self.router = router
     }
+
+    
 }
 
 #if compiler(>=6)
 extension AppState: Sendable {}
 #endif
-
-
-
-
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -10600,32 +10541,19 @@ public func FfiConverterTypeAppState_lower(_ value: AppState) -> RustBuffer {
 }
 
 
-public struct AuthManagerState {
+public struct AuthManagerState: Equatable, Hashable {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
     public init() {
     }
+
+    
 }
 
 #if compiler(>=6)
 extension AuthManagerState: Sendable {}
 #endif
-
-
-
-
-
-extension AuthManagerState: Equatable, Hashable {
-    public static func ==(lhs: AuthManagerState, rhs: AuthManagerState) -> Bool {
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-    }
-}
-
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -10656,7 +10584,7 @@ public func FfiConverterTypeAuthManagerState_lower(_ value: AuthManagerState) ->
 }
 
 
-public struct ConfirmedDetails {
+public struct ConfirmedDetails: Equatable, Hashable {
     public var blockNumber: UInt32
     public var confirmationTime: UInt64
 
@@ -10666,34 +10594,13 @@ public struct ConfirmedDetails {
         self.blockNumber = blockNumber
         self.confirmationTime = confirmationTime
     }
+
+    
 }
 
 #if compiler(>=6)
 extension ConfirmedDetails: Sendable {}
 #endif
-
-
-
-
-
-extension ConfirmedDetails: Equatable, Hashable {
-    public static func ==(lhs: ConfirmedDetails, rhs: ConfirmedDetails) -> Bool {
-        if lhs.blockNumber != rhs.blockNumber {
-            return false
-        }
-        if lhs.confirmationTime != rhs.confirmationTime {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(blockNumber)
-        hasher.combine(confirmationTime)
-    }
-}
-
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -10741,16 +10648,13 @@ public struct ContinueFromBackup {
         self.continueCmd = continueCmd
         self.error = error
     }
+
+    
 }
 
 #if compiler(>=6)
 extension ContinueFromBackup: Sendable {}
 #endif
-
-
-
-
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -10802,16 +10706,13 @@ public struct ContinueFromDerive {
         self.continueCmd = continueCmd
         self.error = error
     }
+
+    
 }
 
 #if compiler(>=6)
 extension ContinueFromDerive: Sendable {}
 #endif
-
-
-
-
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -10861,16 +10762,13 @@ public struct ContinueFromInit {
         self.continueCmd = continueCmd
         self.error = error
     }
+
+    
 }
 
 #if compiler(>=6)
 extension ContinueFromInit: Sendable {}
 #endif
-
-
-
-
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -10906,7 +10804,7 @@ public func FfiConverterTypeContinueFromInit_lower(_ value: ContinueFromInit) ->
 }
 
 
-public struct DeriveInfo {
+public struct DeriveInfo: Equatable, Hashable {
     public var masterPubkey: Data
     public var pubkey: Data
     public var chainCode: Data
@@ -10922,46 +10820,13 @@ public struct DeriveInfo {
         self.path = path
         self.network = network
     }
+
+    
 }
 
 #if compiler(>=6)
 extension DeriveInfo: Sendable {}
 #endif
-
-
-
-
-
-extension DeriveInfo: Equatable, Hashable {
-    public static func ==(lhs: DeriveInfo, rhs: DeriveInfo) -> Bool {
-        if lhs.masterPubkey != rhs.masterPubkey {
-            return false
-        }
-        if lhs.pubkey != rhs.pubkey {
-            return false
-        }
-        if lhs.chainCode != rhs.chainCode {
-            return false
-        }
-        if lhs.path != rhs.path {
-            return false
-        }
-        if lhs.network != rhs.network {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(masterPubkey)
-        hasher.combine(pubkey)
-        hasher.combine(chainCode)
-        hasher.combine(path)
-        hasher.combine(network)
-    }
-}
-
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -11003,7 +10868,7 @@ public func FfiConverterTypeDeriveInfo_lower(_ value: DeriveInfo) -> RustBuffer 
 }
 
 
-public struct FeeResponse {
+public struct FeeResponse: Equatable, Hashable {
     public var fastestFee: Float
     public var halfHourFee: Float
     public var hourFee: Float
@@ -11019,46 +10884,13 @@ public struct FeeResponse {
         self.economyFee = economyFee
         self.minimumFee = minimumFee
     }
+
+    
 }
 
 #if compiler(>=6)
 extension FeeResponse: Sendable {}
 #endif
-
-
-
-
-
-extension FeeResponse: Equatable, Hashable {
-    public static func ==(lhs: FeeResponse, rhs: FeeResponse) -> Bool {
-        if lhs.fastestFee != rhs.fastestFee {
-            return false
-        }
-        if lhs.halfHourFee != rhs.halfHourFee {
-            return false
-        }
-        if lhs.hourFee != rhs.hourFee {
-            return false
-        }
-        if lhs.economyFee != rhs.economyFee {
-            return false
-        }
-        if lhs.minimumFee != rhs.minimumFee {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(fastestFee)
-        hasher.combine(halfHourFee)
-        hasher.combine(hourFee)
-        hasher.combine(economyFee)
-        hasher.combine(minimumFee)
-    }
-}
-
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -11100,7 +10932,7 @@ public func FfiConverterTypeFeeResponse_lower(_ value: FeeResponse) -> RustBuffe
 }
 
 
-public struct FiatAmount {
+public struct FiatAmount: Equatable, Hashable {
     public var amount: Double
     public var currency: FiatCurrency
 
@@ -11110,34 +10942,13 @@ public struct FiatAmount {
         self.amount = amount
         self.currency = currency
     }
+
+    
 }
 
 #if compiler(>=6)
 extension FiatAmount: Sendable {}
 #endif
-
-
-
-
-
-extension FiatAmount: Equatable, Hashable {
-    public static func ==(lhs: FiatAmount, rhs: FiatAmount) -> Bool {
-        if lhs.amount != rhs.amount {
-            return false
-        }
-        if lhs.currency != rhs.currency {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(amount)
-        hasher.combine(currency)
-    }
-}
-
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -11173,7 +10984,7 @@ public func FfiConverterTypeFiatAmount_lower(_ value: FiatAmount) -> RustBuffer 
 }
 
 
-public struct FoundAddress {
+public struct FoundAddress: Equatable, Hashable {
     public var type: WalletAddressType
     public var firstAddress: String
 
@@ -11183,34 +10994,13 @@ public struct FoundAddress {
         self.type = type
         self.firstAddress = firstAddress
     }
+
+    
 }
 
 #if compiler(>=6)
 extension FoundAddress: Sendable {}
 #endif
-
-
-
-
-
-extension FoundAddress: Equatable, Hashable {
-    public static func ==(lhs: FoundAddress, rhs: FoundAddress) -> Bool {
-        if lhs.type != rhs.type {
-            return false
-        }
-        if lhs.firstAddress != rhs.firstAddress {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(type)
-        hasher.combine(firstAddress)
-    }
-}
-
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -11246,7 +11036,7 @@ public func FfiConverterTypeFoundAddress_lower(_ value: FoundAddress) -> RustBuf
 }
 
 
-public struct GroupedWord {
+public struct GroupedWord: Equatable, Hashable {
     public var number: UInt8
     public var word: String
 
@@ -11256,34 +11046,13 @@ public struct GroupedWord {
         self.number = number
         self.word = word
     }
+
+    
 }
 
 #if compiler(>=6)
 extension GroupedWord: Sendable {}
 #endif
-
-
-
-
-
-extension GroupedWord: Equatable, Hashable {
-    public static func ==(lhs: GroupedWord, rhs: GroupedWord) -> Bool {
-        if lhs.number != rhs.number {
-            return false
-        }
-        if lhs.word != rhs.word {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(number)
-        hasher.combine(word)
-    }
-}
-
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -11323,7 +11092,7 @@ public func FfiConverterTypeGroupedWord_lower(_ value: GroupedWord) -> RustBuffe
  * A space-efficient version of HistoricalPrice where only USD is required
  * and other currencies are optional to save space when they aren't available
  */
-public struct HistoricalPriceRecord {
+public struct HistoricalPriceRecord: Equatable, Hashable {
     public var time: UInt64
     public var usd: Float
     public var eur: Float?
@@ -11345,58 +11114,13 @@ public struct HistoricalPriceRecord {
         self.aud = aud
         self.jpy = jpy
     }
+
+    
 }
 
 #if compiler(>=6)
 extension HistoricalPriceRecord: Sendable {}
 #endif
-
-
-
-
-
-extension HistoricalPriceRecord: Equatable, Hashable {
-    public static func ==(lhs: HistoricalPriceRecord, rhs: HistoricalPriceRecord) -> Bool {
-        if lhs.time != rhs.time {
-            return false
-        }
-        if lhs.usd != rhs.usd {
-            return false
-        }
-        if lhs.eur != rhs.eur {
-            return false
-        }
-        if lhs.gbp != rhs.gbp {
-            return false
-        }
-        if lhs.cad != rhs.cad {
-            return false
-        }
-        if lhs.chf != rhs.chf {
-            return false
-        }
-        if lhs.aud != rhs.aud {
-            return false
-        }
-        if lhs.jpy != rhs.jpy {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(time)
-        hasher.combine(usd)
-        hasher.combine(eur)
-        hasher.combine(gbp)
-        hasher.combine(cad)
-        hasher.combine(chf)
-        hasher.combine(aud)
-        hasher.combine(jpy)
-    }
-}
-
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -11444,32 +11168,19 @@ public func FfiConverterTypeHistoricalPriceRecord_lower(_ value: HistoricalPrice
 }
 
 
-public struct ImportWalletManagerState {
+public struct ImportWalletManagerState: Equatable, Hashable {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
     public init() {
     }
+
+    
 }
 
 #if compiler(>=6)
 extension ImportWalletManagerState: Sendable {}
 #endif
-
-
-
-
-
-extension ImportWalletManagerState: Equatable, Hashable {
-    public static func ==(lhs: ImportWalletManagerState, rhs: ImportWalletManagerState) -> Bool {
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-    }
-}
-
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -11500,7 +11211,7 @@ public func FfiConverterTypeImportWalletManagerState_lower(_ value: ImportWallet
 }
 
 
-public struct InternalOnlyMetadata {
+public struct InternalOnlyMetadata: Equatable, Hashable {
     public var addressIndex: AddressIndex?
     /**
      * this is the last time the wallet was scanned, this includes the initial scna, expanded scan, and incremental scan
@@ -11528,46 +11239,13 @@ public struct InternalOnlyMetadata {
         self.performedFullScanAt = performedFullScanAt
         self.storeType = storeType
     }
+
+    
 }
 
 #if compiler(>=6)
 extension InternalOnlyMetadata: Sendable {}
 #endif
-
-
-
-
-
-extension InternalOnlyMetadata: Equatable, Hashable {
-    public static func ==(lhs: InternalOnlyMetadata, rhs: InternalOnlyMetadata) -> Bool {
-        if lhs.addressIndex != rhs.addressIndex {
-            return false
-        }
-        if lhs.lastScanFinished != rhs.lastScanFinished {
-            return false
-        }
-        if lhs.lastHeightFetched != rhs.lastHeightFetched {
-            return false
-        }
-        if lhs.performedFullScanAt != rhs.performedFullScanAt {
-            return false
-        }
-        if lhs.storeType != rhs.storeType {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(addressIndex)
-        hasher.combine(lastScanFinished)
-        hasher.combine(lastHeightFetched)
-        hasher.combine(performedFullScanAt)
-        hasher.combine(storeType)
-    }
-}
-
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -11609,7 +11287,7 @@ public func FfiConverterTypeInternalOnlyMetadata_lower(_ value: InternalOnlyMeta
 }
 
 
-public struct Node {
+public struct Node: Equatable, Hashable {
     public var name: String
     public var network: Network
     public var apiType: ApiType
@@ -11623,42 +11301,13 @@ public struct Node {
         self.apiType = apiType
         self.url = url
     }
+
+    
 }
 
 #if compiler(>=6)
 extension Node: Sendable {}
 #endif
-
-
-
-
-
-extension Node: Equatable, Hashable {
-    public static func ==(lhs: Node, rhs: Node) -> Bool {
-        if lhs.name != rhs.name {
-            return false
-        }
-        if lhs.network != rhs.network {
-            return false
-        }
-        if lhs.apiType != rhs.apiType {
-            return false
-        }
-        if lhs.url != rhs.url {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(name)
-        hasher.combine(network)
-        hasher.combine(apiType)
-        hasher.combine(url)
-    }
-}
-
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -11698,7 +11347,7 @@ public func FfiConverterTypeNode_lower(_ value: Node) -> RustBuffer {
 }
 
 
-public struct PendingDetails {
+public struct PendingDetails: Equatable, Hashable {
     public var lastSeen: UInt64
 
     // Default memberwise initializers are never public by default, so we
@@ -11706,30 +11355,13 @@ public struct PendingDetails {
     public init(lastSeen: UInt64) {
         self.lastSeen = lastSeen
     }
+
+    
 }
 
 #if compiler(>=6)
 extension PendingDetails: Sendable {}
 #endif
-
-
-
-
-
-extension PendingDetails: Equatable, Hashable {
-    public static func ==(lhs: PendingDetails, rhs: PendingDetails) -> Bool {
-        if lhs.lastSeen != rhs.lastSeen {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(lastSeen)
-    }
-}
-
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -11773,16 +11405,13 @@ public struct PendingWalletManagerState {
         self.numberOfWords = numberOfWords
         self.wallet = wallet
     }
+
+    
 }
 
 #if compiler(>=6)
 extension PendingWalletManagerState: Sendable {}
 #endif
-
-
-
-
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -11830,16 +11459,13 @@ public struct Router {
         self.`default` = `default`
         self.routes = routes
     }
+
+    
 }
 
 #if compiler(>=6)
 extension Router: Sendable {}
 #endif
-
-
-
-
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -11877,7 +11503,7 @@ public func FfiConverterTypeRouter_lower(_ value: Router) -> RustBuffer {
 }
 
 
-public struct ScanningInfo {
+public struct ScanningInfo: Equatable, Hashable {
     public var addressType: WalletAddressType
     public var count: UInt32
 
@@ -11887,34 +11513,13 @@ public struct ScanningInfo {
         self.addressType = addressType
         self.count = count
     }
+
+    
 }
 
 #if compiler(>=6)
 extension ScanningInfo: Sendable {}
 #endif
-
-
-
-
-
-extension ScanningInfo: Equatable, Hashable {
-    public static func ==(lhs: ScanningInfo, rhs: ScanningInfo) -> Bool {
-        if lhs.addressType != rhs.addressType {
-            return false
-        }
-        if lhs.count != rhs.count {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(addressType)
-        hasher.combine(count)
-    }
-}
-
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -11960,16 +11565,13 @@ public struct SendFlowCoinControlMode {
         self.utxoList = utxoList
         self.isMaxSelected = isMaxSelected
     }
+
+    
 }
 
 #if compiler(>=6)
 extension SendFlowCoinControlMode: Sendable {}
 #endif
-
-
-
-
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -12019,16 +11621,13 @@ public struct SendRouteConfirmArgs {
         self.signedTransaction = signedTransaction
         self.signedPsbt = signedPsbt
     }
+
+    
 }
 
 #if compiler(>=6)
 extension SendRouteConfirmArgs: Sendable {}
 #endif
-
-
-
-
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -12084,16 +11683,13 @@ public struct TapSignerConfirmPinArgs {
         self.chainCode = chainCode
         self.action = action
     }
+
+    
 }
 
 #if compiler(>=6)
 extension TapSignerConfirmPinArgs: Sendable {}
 #endif
-
-
-
-
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -12149,16 +11745,13 @@ public struct TapSignerNewPinArgs {
         self.chainCode = chainCode
         self.action = action
     }
+
+    
 }
 
 #if compiler(>=6)
 extension TapSignerNewPinArgs: Sendable {}
 #endif
-
-
-
-
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -12198,7 +11791,7 @@ public func FfiConverterTypeTapSignerNewPinArgs_lower(_ value: TapSignerNewPinAr
 }
 
 
-public struct TapSignerSetupComplete {
+public struct TapSignerSetupComplete: Equatable, Hashable {
     public var backup: Data
     public var deriveInfo: DeriveInfo
 
@@ -12208,34 +11801,13 @@ public struct TapSignerSetupComplete {
         self.backup = backup
         self.deriveInfo = deriveInfo
     }
+
+    
 }
 
 #if compiler(>=6)
 extension TapSignerSetupComplete: Sendable {}
 #endif
-
-
-
-
-
-extension TapSignerSetupComplete: Equatable, Hashable {
-    public static func ==(lhs: TapSignerSetupComplete, rhs: TapSignerSetupComplete) -> Bool {
-        if lhs.backup != rhs.backup {
-            return false
-        }
-        if lhs.deriveInfo != rhs.deriveInfo {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(backup)
-        hasher.combine(deriveInfo)
-    }
-}
-
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -12327,16 +11899,13 @@ public struct WalletMetadata {
         self.showLabels = showLabels
         self.`internal` = `internal`
     }
+
+    
 }
 
 #if compiler(>=6)
 extension WalletMetadata: Sendable {}
 #endif
-
-
-
-
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -12414,7 +11983,10 @@ public enum AfterPinAction {
     case sign(Psbt
     )
 
+
+
 }
+
 #if compiler(>=6)
 extension AfterPinAction: Sendable {}
 #endif
@@ -12482,20 +12054,19 @@ public func FfiConverterTypeAfterPinAction_lower(_ value: AfterPinAction) -> Rus
 }
 
 
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum AmountOrMax {
     
-    case amt(Amount
+    case amount(Amount
     )
     case max
 
+
+
 }
+
 #if compiler(>=6)
 extension AmountOrMax: Sendable {}
 #endif
@@ -12510,7 +12081,7 @@ public struct FfiConverterTypeAmountOrMax: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
         
-        case 1: return .amt(try FfiConverterTypeAmount.read(from: &buf)
+        case 1: return .amount(try FfiConverterTypeAmount.read(from: &buf)
         )
         
         case 2: return .max
@@ -12523,7 +12094,7 @@ public struct FfiConverterTypeAmountOrMax: FfiConverterRustBuffer {
         switch value {
         
         
-        case let .amt(v1):
+        case let .amount(v1):
             writeInt(&buf, Int32(1))
             FfiConverterTypeAmount.write(v1, into: &buf)
             
@@ -12551,20 +12122,19 @@ public func FfiConverterTypeAmountOrMax_lower(_ value: AmountOrMax) -> RustBuffe
 }
 
 
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum ApiType {
+public enum ApiType: Equatable, Hashable {
     
     case esplora
     case electrum
     case rpc
 
+
+
 }
+
 #if compiler(>=6)
 extension ApiType: Sendable {}
 #endif
@@ -12624,17 +12194,6 @@ public func FfiConverterTypeApiType_lower(_ value: ApiType) -> RustBuffer {
 }
 
 
-
-
-extension ApiType: Equatable, Hashable {}
-
-
-
-
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -12656,7 +12215,10 @@ public enum AppAction {
     case updateFees
     case acceptTerms
 
+
+
 }
+
 #if compiler(>=6)
 extension AppAction: Sendable {}
 #endif
@@ -12765,11 +12327,7 @@ public func FfiConverterTypeAppAction_lower(_ value: AppAction) -> RustBuffer {
 
 
 
-
-
-
-
-public enum AppError: Swift.Error {
+public enum AppError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -12777,8 +12335,19 @@ public enum AppError: Swift.Error {
     )
     case FeesError(String
     )
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension AppError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -12839,21 +12408,6 @@ public func FfiConverterTypeAppError_lower(_ value: AppError) -> RustBuffer {
     return FfiConverterTypeAppError.lower(value)
 }
 
-
-extension AppError: Equatable, Hashable {}
-
-
-
-
-extension AppError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -12882,7 +12436,10 @@ public enum AppStateReconcileMessage {
     )
     case acceptedTerms
 
+
+
 }
+
 #if compiler(>=6)
 extension AppStateReconcileMessage: Sendable {}
 #endif
@@ -13018,11 +12575,7 @@ public func FfiConverterTypeAppStateReconcileMessage_lower(_ value: AppStateReco
 
 
 
-
-
-
-
-public enum AuthError: Swift.Error {
+public enum AuthError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -13036,8 +12589,19 @@ public enum AuthError: Swift.Error {
     )
     case VerificationFailed(String
     )
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension AuthError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -13122,25 +12686,10 @@ public func FfiConverterTypeAuthError_lower(_ value: AuthError) -> RustBuffer {
     return FfiConverterTypeAuthError.lower(value)
 }
 
-
-extension AuthError: Equatable, Hashable {}
-
-
-
-
-extension AuthError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum AuthManagerAction {
+public enum AuthManagerAction: Equatable, Hashable {
     
     case updateAuthType(AuthType
     )
@@ -13152,7 +12701,10 @@ public enum AuthManagerAction {
     case disableWipeDataPin
     case disableDecoyPin
 
+
+
 }
+
 #if compiler(>=6)
 extension AuthManagerAction: Sendable {}
 #endif
@@ -13241,18 +12793,7 @@ public func FfiConverterTypeAuthManagerAction_lower(_ value: AuthManagerAction) 
 
 
 
-
-extension AuthManagerAction: Equatable, Hashable {}
-
-
-
-
-
-
-
-
-
-public enum AuthManagerError: Swift.Error {
+public enum AuthManagerError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -13262,8 +12803,19 @@ public enum AuthManagerError: Swift.Error {
     )
     case Database(DatabaseError
     )
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension AuthManagerError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -13332,32 +12884,20 @@ public func FfiConverterTypeAuthManagerError_lower(_ value: AuthManagerError) ->
     return FfiConverterTypeAuthManagerError.lower(value)
 }
 
-
-extension AuthManagerError: Equatable, Hashable {}
-
-
-
-
-extension AuthManagerError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum AuthManagerReconcileMessage {
+public enum AuthManagerReconcileMessage: Equatable, Hashable {
     
     case authTypeChanged(AuthType
     )
     case wipeDataPinChanged
     case decoyPinChanged
 
+
+
 }
+
 #if compiler(>=6)
 extension AuthManagerReconcileMessage: Sendable {}
 #endif
@@ -13419,28 +12959,20 @@ public func FfiConverterTypeAuthManagerReconcileMessage_lower(_ value: AuthManag
 }
 
 
-
-
-extension AuthManagerReconcileMessage: Equatable, Hashable {}
-
-
-
-
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum AuthType {
+public enum AuthType: Equatable, Hashable {
     
     case pin
     case biometric
     case both
     case none
 
+
+
 }
+
 #if compiler(>=6)
 extension AuthType: Sendable {}
 #endif
@@ -13507,18 +13039,7 @@ public func FfiConverterTypeAuthType_lower(_ value: AuthType) -> RustBuffer {
 
 
 
-
-extension AuthType: Equatable, Hashable {}
-
-
-
-
-
-
-
-
-
-public enum Bip39Error: Swift.Error {
+public enum Bip39Error: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -13530,8 +13051,19 @@ public enum Bip39Error: Swift.Error {
     )
     case InvalidChecksum
     case AmbiguousLanguages
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension Bip39Error: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -13611,22 +13143,7 @@ public func FfiConverterTypeBip39Error_lower(_ value: Bip39Error) -> RustBuffer 
 }
 
 
-extension Bip39Error: Equatable, Hashable {}
-
-
-
-
-extension Bip39Error: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
-
-
-public enum BitcoinTransactionError: Swift.Error {
+public enum BitcoinTransactionError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -13634,8 +13151,19 @@ public enum BitcoinTransactionError: Swift.Error {
     )
     case ParseTransactionError(String
     )
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension BitcoinTransactionError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -13696,31 +13224,19 @@ public func FfiConverterTypeBitcoinTransactionError_lower(_ value: BitcoinTransa
     return FfiConverterTypeBitcoinTransactionError.lower(value)
 }
 
-
-extension BitcoinTransactionError: Equatable, Hashable {}
-
-
-
-
-extension BitcoinTransactionError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum ButtonPresentation {
+public enum ButtonPresentation: Equatable, Hashable {
     
     case notSelected
     case selected(ListSortDirection
     )
 
+
+
 }
+
 #if compiler(>=6)
 extension ButtonPresentation: Sendable {}
 #endif
@@ -13777,24 +13293,24 @@ public func FfiConverterTypeButtonPresentation_lower(_ value: ButtonPresentation
 
 
 
-
-extension ButtonPresentation: Equatable, Hashable {}
-
-
-
-
-
-
-
-
-
-public enum ByteReaderError: Swift.Error {
+public enum ByteReaderError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
     case BufferTooSmall
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension ByteReaderError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -13845,22 +13361,7 @@ public func FfiConverterTypeByteReaderError_lower(_ value: ByteReaderError) -> R
 }
 
 
-extension ByteReaderError: Equatable, Hashable {}
-
-
-
-
-extension ByteReaderError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
-
-
-public enum CkTapError: Swift.Error {
+public enum CkTapError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -13875,8 +13376,19 @@ public enum CkTapError: Swift.Error {
     case BadCbor
     case BackupFirst
     case RateLimited
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension CkTapError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -13976,25 +13488,10 @@ public func FfiConverterTypeCkTapError_lower(_ value: CkTapError) -> RustBuffer 
     return FfiConverterTypeCkTapError.lower(value)
 }
 
-
-extension CkTapError: Equatable, Hashable {}
-
-
-
-
-extension CkTapError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum CoinControlListSort {
+public enum CoinControlListSort: Equatable, Hashable {
     
     case date(ListSortDirection
     )
@@ -14005,7 +13502,10 @@ public enum CoinControlListSort {
     case change(UtxoType
     )
 
+
+
 }
+
 #if compiler(>=6)
 extension CoinControlListSort: Sendable {}
 #endif
@@ -14079,28 +13579,20 @@ public func FfiConverterTypeCoinControlListSort_lower(_ value: CoinControlListSo
 }
 
 
-
-
-extension CoinControlListSort: Equatable, Hashable {}
-
-
-
-
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum CoinControlListSortKey {
+public enum CoinControlListSortKey: Equatable, Hashable {
     
     case date
     case name
     case amount
     case change
 
+
+
 }
+
 #if compiler(>=6)
 extension CoinControlListSortKey: Sendable {}
 #endif
@@ -14166,28 +13658,20 @@ public func FfiConverterTypeCoinControlListSortKey_lower(_ value: CoinControlLis
 }
 
 
-
-
-extension CoinControlListSortKey: Equatable, Hashable {}
-
-
-
-
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum CoinControlListSortState {
+public enum CoinControlListSortState: Equatable, Hashable {
     
     case active(CoinControlListSort
     )
     case inactive(CoinControlListSort
     )
 
+
+
 }
+
 #if compiler(>=6)
 extension CoinControlListSortState: Sendable {}
 #endif
@@ -14245,17 +13729,6 @@ public func FfiConverterTypeCoinControlListSortState_lower(_ value: CoinControlL
 }
 
 
-
-
-extension CoinControlListSortState: Equatable, Hashable {}
-
-
-
-
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -14271,7 +13744,10 @@ public enum CoinControlManagerAction {
     case notifySearchChanged(String
     )
 
+
+
 }
+
 #if compiler(>=6)
 extension CoinControlManagerAction: Sendable {}
 #endif
@@ -14355,10 +13831,6 @@ public func FfiConverterTypeCoinControlManagerAction_lower(_ value: CoinControlM
 }
 
 
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -14378,7 +13850,10 @@ public enum CoinControlManagerReconcileMessage {
     case updateUnit(BitcoinUnit
     )
 
+
+
 }
+
 #if compiler(>=6)
 extension CoinControlManagerReconcileMessage: Sendable {}
 #endif
@@ -14475,19 +13950,18 @@ public func FfiConverterTypeCoinControlManagerReconcileMessage_lower(_ value: Co
 }
 
 
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum CoinControlRoute {
+public enum CoinControlRoute: Equatable, Hashable {
     
     case list(WalletId
     )
 
+
+
 }
+
 #if compiler(>=6)
 extension CoinControlRoute: Sendable {}
 #endif
@@ -14537,25 +14011,17 @@ public func FfiConverterTypeCoinControlRoute_lower(_ value: CoinControlRoute) ->
 }
 
 
-
-
-extension CoinControlRoute: Equatable, Hashable {}
-
-
-
-
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum ColdWalletRoute {
+public enum ColdWalletRoute: Equatable, Hashable {
     
     case qrCode
 
+
+
 }
+
 #if compiler(>=6)
 extension ColdWalletRoute: Sendable {}
 #endif
@@ -14604,25 +14070,25 @@ public func FfiConverterTypeColdWalletRoute_lower(_ value: ColdWalletRoute) -> R
 
 
 
-
-extension ColdWalletRoute: Equatable, Hashable {}
-
-
-
-
-
-
-
-
-
-public enum ConverterError: Swift.Error {
+public enum ConverterError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
     case FiatAmountFromStringError(String
     )
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension ConverterError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -14676,22 +14142,7 @@ public func FfiConverterTypeConverterError_lower(_ value: ConverterError) -> Rus
 }
 
 
-extension ConverterError: Equatable, Hashable {}
-
-
-
-
-extension ConverterError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
-
-
-public enum DatabaseError: Swift.Error {
+public enum DatabaseError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -14713,8 +14164,19 @@ public enum DatabaseError: Swift.Error {
     )
     case Serialization(SerdeError
     )
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension DatabaseError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -14832,22 +14294,7 @@ public func FfiConverterTypeDatabaseError_lower(_ value: DatabaseError) -> RustB
 }
 
 
-extension DatabaseError: Equatable, Hashable {}
-
-
-
-
-extension DatabaseError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
-
-
-public enum DescriptorError: Swift.Error {
+public enum DescriptorError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -14872,8 +14319,19 @@ public enum DescriptorError: Swift.Error {
     case MasterXpub
     case KeyExpressionError(String
     )
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension DescriptorError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -15011,21 +14469,6 @@ public func FfiConverterTypeDescriptorError_lower(_ value: DescriptorError) -> R
     return FfiConverterTypeDescriptorError.lower(value)
 }
 
-
-extension DescriptorError: Equatable, Hashable {}
-
-
-
-
-extension DescriptorError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -15042,7 +14485,10 @@ public enum DiscoveryState {
     case noneFound
     case choseAdressType
 
+
+
 }
+
 #if compiler(>=6)
 extension DiscoveryState: Sendable {}
 #endif
@@ -15134,11 +14580,7 @@ public func FfiConverterTypeDiscoveryState_lower(_ value: DiscoveryState) -> Rus
 
 
 
-
-
-
-
-public enum FiatAmountError: Swift.Error {
+public enum FiatAmountError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -15147,8 +14589,19 @@ public enum FiatAmountError: Swift.Error {
      */
     case PricesUnavailable(String
     )
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension FiatAmountError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -15201,25 +14654,10 @@ public func FfiConverterTypeFiatAmountError_lower(_ value: FiatAmountError) -> R
     return FfiConverterTypeFiatAmountError.lower(value)
 }
 
-
-extension FiatAmountError: Equatable, Hashable {}
-
-
-
-
-extension FiatAmountError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum FiatCurrency {
+public enum FiatCurrency: Equatable, Hashable {
     
     case usd
     case cad
@@ -15229,7 +14667,10 @@ public enum FiatCurrency {
     case chf
     case jpy
 
+
+
 }
+
 #if compiler(>=6)
 extension FiatCurrency: Sendable {}
 #endif
@@ -15313,26 +14754,18 @@ public func FfiConverterTypeFiatCurrency_lower(_ value: FiatCurrency) -> RustBuf
 }
 
 
-
-
-extension FiatCurrency: Equatable, Hashable {}
-
-
-
-
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum FiatOrBtc {
+public enum FiatOrBtc: Equatable, Hashable {
     
     case btc
     case fiat
 
+
+
 }
+
 #if compiler(>=6)
 extension FiatOrBtc: Sendable {}
 #endif
@@ -15387,18 +14820,7 @@ public func FfiConverterTypeFiatOrBtc_lower(_ value: FiatOrBtc) -> RustBuffer {
 
 
 
-
-extension FiatOrBtc: Equatable, Hashable {}
-
-
-
-
-
-
-
-
-
-public enum FileHandlerError: Swift.Error {
+public enum FileHandlerError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -15409,8 +14831,19 @@ public enum FileHandlerError: Swift.Error {
     )
     case NotRecognizedFormat(MultiFormatError
     )
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension FileHandlerError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -15485,28 +14918,24 @@ public func FfiConverterTypeFileHandlerError_lower(_ value: FileHandlerError) ->
 }
 
 
-extension FileHandlerError: Equatable, Hashable {}
-
-
-
-
-extension FileHandlerError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
-
-
-public enum FingerprintError: Swift.Error {
+public enum FingerprintError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
     case WalletNotFound
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension FingerprintError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -15557,22 +14986,7 @@ public func FfiConverterTypeFingerprintError_lower(_ value: FingerprintError) ->
 }
 
 
-extension FingerprintError: Equatable, Hashable {}
-
-
-
-
-extension FingerprintError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
-
-
-public enum GlobalCacheTableError: Swift.Error {
+public enum GlobalCacheTableError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -15580,8 +14994,19 @@ public enum GlobalCacheTableError: Swift.Error {
     )
     case Read(String
     )
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension GlobalCacheTableError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -15642,25 +15067,10 @@ public func FfiConverterTypeGlobalCacheTableError_lower(_ value: GlobalCacheTabl
     return FfiConverterTypeGlobalCacheTableError.lower(value)
 }
 
-
-extension GlobalCacheTableError: Equatable, Hashable {}
-
-
-
-
-extension GlobalCacheTableError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum GlobalConfigKey {
+public enum GlobalConfigKey: Equatable, Hashable {
     
     case selectedWalletId
     case selectedNetwork
@@ -15677,7 +15087,10 @@ public enum GlobalConfigKey {
     case decoySelectedWalletId
     case lockedAt
 
+
+
 }
+
 #if compiler(>=6)
 extension GlobalConfigKey: Sendable {}
 #endif
@@ -15800,18 +15213,7 @@ public func FfiConverterTypeGlobalConfigKey_lower(_ value: GlobalConfigKey) -> R
 
 
 
-
-extension GlobalConfigKey: Equatable, Hashable {}
-
-
-
-
-
-
-
-
-
-public enum GlobalConfigTableError: Swift.Error {
+public enum GlobalConfigTableError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -15820,8 +15222,19 @@ public enum GlobalConfigTableError: Swift.Error {
     case Read(String
     )
     case PinCodeMustBeHashed
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension GlobalConfigTableError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -15887,30 +15300,18 @@ public func FfiConverterTypeGlobalConfigTableError_lower(_ value: GlobalConfigTa
     return FfiConverterTypeGlobalConfigTableError.lower(value)
 }
 
-
-extension GlobalConfigTableError: Equatable, Hashable {}
-
-
-
-
-extension GlobalConfigTableError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum GlobalFlagKey {
+public enum GlobalFlagKey: Equatable, Hashable {
     
     case completedOnboarding
     case acceptedTerms
 
+
+
 }
+
 #if compiler(>=6)
 extension GlobalFlagKey: Sendable {}
 #endif
@@ -15965,18 +15366,7 @@ public func FfiConverterTypeGlobalFlagKey_lower(_ value: GlobalFlagKey) -> RustB
 
 
 
-
-extension GlobalFlagKey: Equatable, Hashable {}
-
-
-
-
-
-
-
-
-
-public enum GlobalFlagTableError: Swift.Error {
+public enum GlobalFlagTableError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -15984,8 +15374,19 @@ public enum GlobalFlagTableError: Swift.Error {
     )
     case Read(String
     )
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension GlobalFlagTableError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -16046,30 +15447,18 @@ public func FfiConverterTypeGlobalFlagTableError_lower(_ value: GlobalFlagTableE
     return FfiConverterTypeGlobalFlagTableError.lower(value)
 }
 
-
-extension GlobalFlagTableError: Equatable, Hashable {}
-
-
-
-
-extension GlobalFlagTableError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum HardwareWalletMetadata {
     
-    case tapSignerCard(TapSigner
+    case tapSigner(TapSigner
     )
 
+
+
 }
+
 #if compiler(>=6)
 extension HardwareWalletMetadata: Sendable {}
 #endif
@@ -16084,7 +15473,7 @@ public struct FfiConverterTypeHardwareWalletMetadata: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
         
-        case 1: return .tapSignerCard(try FfiConverterTypeTapSigner.read(from: &buf)
+        case 1: return .tapSigner(try FfiConverterTypeTapSigner.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -16095,7 +15484,7 @@ public struct FfiConverterTypeHardwareWalletMetadata: FfiConverterRustBuffer {
         switch value {
         
         
-        case let .tapSignerCard(v1):
+        case let .tapSigner(v1):
             writeInt(&buf, Int32(1))
             FfiConverterTypeTapSigner.write(v1, into: &buf)
             
@@ -16120,21 +15509,28 @@ public func FfiConverterTypeHardwareWalletMetadata_lower(_ value: HardwareWallet
 
 
 
-
-
-
-
 /**
  * Error type for HistoricalPriceRecord
  */
-public enum HistoricalPriceRecordError: Swift.Error {
+public enum HistoricalPriceRecordError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
     case ConversionError(ByteReaderError
     )
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension HistoricalPriceRecordError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -16188,22 +15584,7 @@ public func FfiConverterTypeHistoricalPriceRecordError_lower(_ value: Historical
 }
 
 
-extension HistoricalPriceRecordError: Equatable, Hashable {}
-
-
-
-
-extension HistoricalPriceRecordError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
-
-
-public enum HistoricalPriceTableError: Swift.Error {
+public enum HistoricalPriceTableError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -16212,8 +15593,19 @@ public enum HistoricalPriceTableError: Swift.Error {
     case Read(String
     )
     case NoRecordFound
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension HistoricalPriceTableError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -16279,25 +15671,10 @@ public func FfiConverterTypeHistoricalPriceTableError_lower(_ value: HistoricalP
     return FfiConverterTypeHistoricalPriceTableError.lower(value)
 }
 
-
-extension HistoricalPriceTableError: Equatable, Hashable {}
-
-
-
-
-extension HistoricalPriceTableError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum HotWalletRoute {
+public enum HotWalletRoute: Equatable, Hashable {
     
     case select
     case create(NumberOfBip39Words
@@ -16307,7 +15684,10 @@ public enum HotWalletRoute {
     case verifyWords(WalletId
     )
 
+
+
 }
+
 #if compiler(>=6)
 extension HotWalletRoute: Sendable {}
 #endif
@@ -16380,27 +15760,19 @@ public func FfiConverterTypeHotWalletRoute_lower(_ value: HotWalletRoute) -> Rus
 }
 
 
-
-
-extension HotWalletRoute: Equatable, Hashable {}
-
-
-
-
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum ImportType {
+public enum ImportType: Equatable, Hashable {
     
     case manual
     case nfc
     case qr
 
+
+
 }
+
 #if compiler(>=6)
 extension ImportType: Sendable {}
 #endif
@@ -16461,18 +15833,7 @@ public func FfiConverterTypeImportType_lower(_ value: ImportType) -> RustBuffer 
 
 
 
-
-extension ImportType: Equatable, Hashable {}
-
-
-
-
-
-
-
-
-
-public enum ImportWalletError: Swift.Error {
+public enum ImportWalletError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -16488,8 +15849,19 @@ public enum ImportWalletError: Swift.Error {
     )
     case BdkError(String
     )
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension ImportWalletError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -16582,29 +15954,17 @@ public func FfiConverterTypeImportWalletError_lower(_ value: ImportWalletError) 
     return FfiConverterTypeImportWalletError.lower(value)
 }
 
-
-extension ImportWalletError: Equatable, Hashable {}
-
-
-
-
-extension ImportWalletError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum ImportWalletManagerAction {
+public enum ImportWalletManagerAction: Equatable, Hashable {
     
     case noOp
 
+
+
 }
+
 #if compiler(>=6)
 extension ImportWalletManagerAction: Sendable {}
 #endif
@@ -16652,25 +16012,17 @@ public func FfiConverterTypeImportWalletManagerAction_lower(_ value: ImportWalle
 }
 
 
-
-
-extension ImportWalletManagerAction: Equatable, Hashable {}
-
-
-
-
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum ImportWalletManagerReconcileMessage {
+public enum ImportWalletManagerReconcileMessage: Equatable, Hashable {
     
     case noOp
 
+
+
 }
+
 #if compiler(>=6)
 extension ImportWalletManagerReconcileMessage: Sendable {}
 #endif
@@ -16718,28 +16070,20 @@ public func FfiConverterTypeImportWalletManagerReconcileMessage_lower(_ value: I
 }
 
 
-
-
-extension ImportWalletManagerReconcileMessage: Equatable, Hashable {}
-
-
-
-
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum InsertOrUpdate {
+public enum InsertOrUpdate: Equatable, Hashable {
     
     case insert(Timestamp
     )
     case update(Timestamp
     )
 
+
+
 }
+
 #if compiler(>=6)
 extension InsertOrUpdate: Sendable {}
 #endif
@@ -16798,18 +16142,7 @@ public func FfiConverterTypeInsertOrUpdate_lower(_ value: InsertOrUpdate) -> Rus
 
 
 
-
-extension InsertOrUpdate: Equatable, Hashable {}
-
-
-
-
-
-
-
-
-
-public enum LabelDbError: Swift.Error {
+public enum LabelDbError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -16817,8 +16150,19 @@ public enum LabelDbError: Swift.Error {
     )
     case UnsupportedLabelType(String
     )
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension LabelDbError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -16880,22 +16224,7 @@ public func FfiConverterTypeLabelDbError_lower(_ value: LabelDbError) -> RustBuf
 }
 
 
-extension LabelDbError: Equatable, Hashable {}
-
-
-
-
-extension LabelDbError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
-
-
-public enum LabelManagerError: Swift.Error {
+public enum LabelManagerError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -16919,8 +16248,19 @@ public enum LabelManagerError: Swift.Error {
     )
     case SaveAddressLabels(String
     )
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension LabelManagerError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -17045,30 +16385,18 @@ public func FfiConverterTypeLabelManagerError_lower(_ value: LabelManagerError) 
     return FfiConverterTypeLabelManagerError.lower(value)
 }
 
-
-extension LabelManagerError: Equatable, Hashable {}
-
-
-
-
-extension LabelManagerError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum ListSortDirection {
+public enum ListSortDirection: Equatable, Hashable {
     
     case ascending
     case descending
 
+
+
 }
+
 #if compiler(>=6)
 extension ListSortDirection: Sendable {}
 #endif
@@ -17123,18 +16451,7 @@ public func FfiConverterTypeListSortDirection_lower(_ value: ListSortDirection) 
 
 
 
-
-extension ListSortDirection: Equatable, Hashable {}
-
-
-
-
-
-
-
-
-
-public enum MnemonicError: Swift.Error {
+public enum MnemonicError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -17142,8 +16459,19 @@ public enum MnemonicError: Swift.Error {
     )
     case NotAvailable(WalletId
     )
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension MnemonicError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -17205,29 +16533,25 @@ public func FfiConverterTypeMnemonicError_lower(_ value: MnemonicError) -> RustB
 }
 
 
-extension MnemonicError: Equatable, Hashable {}
-
-
-
-
-extension MnemonicError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
-
-
-public enum MnemonicParseError: Swift.Error {
+public enum MnemonicParseError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
     case InvalidMnemonic(String,String
     )
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension MnemonicParseError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -17282,21 +16606,6 @@ public func FfiConverterTypeMnemonicParseError_lower(_ value: MnemonicParseError
     return FfiConverterTypeMnemonicParseError.lower(value)
 }
 
-
-extension MnemonicParseError: Equatable, Hashable {}
-
-
-
-
-extension MnemonicParseError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -17304,13 +16613,13 @@ public enum MultiFormat {
     
     case address(AddressWithNetwork
     )
-    case hardware(HardwareExport
+    case hardwareExport(HardwareExport
     )
-    case mnem(Mnemonic
+    case mnemonic(Mnemonic
     )
     case transaction(BitcoinTransaction
     )
-    case labels(Bip329Labels
+    case bip329Labels(Bip329Labels
     )
     /**
      * TAPSIGNER has not been initialized yet
@@ -17323,7 +16632,10 @@ public enum MultiFormat {
     case tapSignerUnused(TapSigner
     )
 
+
+
 }
+
 #if compiler(>=6)
 extension MultiFormat: Sendable {}
 #endif
@@ -17341,16 +16653,16 @@ public struct FfiConverterTypeMultiFormat: FfiConverterRustBuffer {
         case 1: return .address(try FfiConverterTypeAddressWithNetwork.read(from: &buf)
         )
         
-        case 2: return .hardware(try FfiConverterTypeHardwareExport.read(from: &buf)
+        case 2: return .hardwareExport(try FfiConverterTypeHardwareExport.read(from: &buf)
         )
         
-        case 3: return .mnem(try FfiConverterTypeMnemonic.read(from: &buf)
+        case 3: return .mnemonic(try FfiConverterTypeMnemonic.read(from: &buf)
         )
         
         case 4: return .transaction(try FfiConverterTypeBitcoinTransaction.read(from: &buf)
         )
         
-        case 5: return .labels(try FfiConverterTypeBip329Labels.read(from: &buf)
+        case 5: return .bip329Labels(try FfiConverterTypeBip329Labels.read(from: &buf)
         )
         
         case 6: return .tapSignerReady(try FfiConverterTypeTapSigner.read(from: &buf)
@@ -17372,12 +16684,12 @@ public struct FfiConverterTypeMultiFormat: FfiConverterRustBuffer {
             FfiConverterTypeAddressWithNetwork.write(v1, into: &buf)
             
         
-        case let .hardware(v1):
+        case let .hardwareExport(v1):
             writeInt(&buf, Int32(2))
             FfiConverterTypeHardwareExport.write(v1, into: &buf)
             
         
-        case let .mnem(v1):
+        case let .mnemonic(v1):
             writeInt(&buf, Int32(3))
             FfiConverterTypeMnemonic.write(v1, into: &buf)
             
@@ -17387,7 +16699,7 @@ public struct FfiConverterTypeMultiFormat: FfiConverterRustBuffer {
             FfiConverterTypeBitcoinTransaction.write(v1, into: &buf)
             
         
-        case let .labels(v1):
+        case let .bip329Labels(v1):
             writeInt(&buf, Int32(5))
             FfiConverterTypeBip329Labels.write(v1, into: &buf)
             
@@ -17422,11 +16734,7 @@ public func FfiConverterTypeMultiFormat_lower(_ value: MultiFormat) -> RustBuffe
 
 
 
-
-
-
-
-public enum MultiFormatError: Swift.Error {
+public enum MultiFormatError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -17437,8 +16745,19 @@ public enum MultiFormatError: Swift.Error {
     case UrFormatNotSupported
     case InvalidTapSigner(TapCardParseError
     )
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension MultiFormatError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -17515,22 +16834,7 @@ public func FfiConverterTypeMultiFormatError_lower(_ value: MultiFormatError) ->
 }
 
 
-extension MultiFormatError: Equatable, Hashable {}
-
-
-
-
-extension MultiFormatError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
-
-
-public enum MultiQrError: Swift.Error {
+public enum MultiQrError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -17547,8 +16851,19 @@ public enum MultiQrError: Swift.Error {
     )
     case InvalidPlainTextQr(String
     )
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension MultiQrError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -17650,27 +16965,12 @@ public func FfiConverterTypeMultiQrError_lower(_ value: MultiQrError) -> RustBuf
     return FfiConverterTypeMultiQrError.lower(value)
 }
 
-
-extension MultiQrError: Equatable, Hashable {}
-
-
-
-
-extension MultiQrError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum MultiQrScanResult {
     
-    case seed(SeedQr
+    case seedQr(SeedQr
     )
     case single(String
     )
@@ -17679,7 +16979,10 @@ public enum MultiQrScanResult {
     case inProgressBBqr(UInt32
     )
 
+
+
 }
+
 #if compiler(>=6)
 extension MultiQrScanResult: Sendable {}
 #endif
@@ -17694,7 +16997,7 @@ public struct FfiConverterTypeMultiQrScanResult: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
         
-        case 1: return .seed(try FfiConverterTypeSeedQr.read(from: &buf)
+        case 1: return .seedQr(try FfiConverterTypeSeedQr.read(from: &buf)
         )
         
         case 2: return .single(try FfiConverterString.read(from: &buf)
@@ -17714,7 +17017,7 @@ public struct FfiConverterTypeMultiQrScanResult: FfiConverterRustBuffer {
         switch value {
         
         
-        case let .seed(v1):
+        case let .seedQr(v1):
             writeInt(&buf, Int32(1))
             FfiConverterTypeSeedQr.write(v1, into: &buf)
             
@@ -17753,14 +17056,10 @@ public func FfiConverterTypeMultiQrScanResult_lower(_ value: MultiQrScanResult) 
 }
 
 
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum NewWalletRoute {
+public enum NewWalletRoute: Equatable, Hashable {
     
     case select
     case hotWallet(HotWalletRoute
@@ -17768,7 +17067,10 @@ public enum NewWalletRoute {
     case coldWallet(ColdWalletRoute
     )
 
+
+
 }
+
 #if compiler(>=6)
 extension NewWalletRoute: Sendable {}
 #endif
@@ -17832,28 +17134,20 @@ public func FfiConverterTypeNewWalletRoute_lower(_ value: NewWalletRoute) -> Rus
 }
 
 
-
-
-extension NewWalletRoute: Equatable, Hashable {}
-
-
-
-
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum NodeSelection {
+public enum NodeSelection: Equatable, Hashable {
     
     case preset(Node
     )
     case custom(Node
     )
 
+
+
 }
+
 #if compiler(>=6)
 extension NodeSelection: Sendable {}
 #endif
@@ -17912,18 +17206,7 @@ public func FfiConverterTypeNodeSelection_lower(_ value: NodeSelection) -> RustB
 
 
 
-
-extension NodeSelection: Equatable, Hashable {}
-
-
-
-
-
-
-
-
-
-public enum NodeSelectorError: Swift.Error {
+public enum NodeSelectorError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -17935,8 +17218,19 @@ public enum NodeSelectorError: Swift.Error {
     )
     case ParseNodeUrlError(String
     )
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension NodeSelectorError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -18013,30 +17307,18 @@ public func FfiConverterTypeNodeSelectorError_lower(_ value: NodeSelectorError) 
     return FfiConverterTypeNodeSelectorError.lower(value)
 }
 
-
-extension NodeSelectorError: Equatable, Hashable {}
-
-
-
-
-extension NodeSelectorError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum NumberOfBip39Words {
+public enum NumberOfBip39Words: Equatable, Hashable {
     
     case twelve
     case twentyFour
 
+
+
 }
+
 #if compiler(>=6)
 extension NumberOfBip39Words: Sendable {}
 #endif
@@ -18090,28 +17372,20 @@ public func FfiConverterTypeNumberOfBip39Words_lower(_ value: NumberOfBip39Words
 }
 
 
-
-
-extension NumberOfBip39Words: Equatable, Hashable {}
-
-
-
-
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum PendingOrConfirmed {
+public enum PendingOrConfirmed: Equatable, Hashable {
     
     case pending(PendingDetails
     )
     case confirmed(ConfirmedDetails
     )
 
+
+
 }
+
 #if compiler(>=6)
 extension PendingOrConfirmed: Sendable {}
 #endif
@@ -18169,26 +17443,18 @@ public func FfiConverterTypePendingOrConfirmed_lower(_ value: PendingOrConfirmed
 }
 
 
-
-
-extension PendingOrConfirmed: Equatable, Hashable {}
-
-
-
-
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum PendingWalletManagerAction {
+public enum PendingWalletManagerAction: Equatable, Hashable {
     
     case updateWords(NumberOfBip39Words
     )
 
+
+
 }
+
 #if compiler(>=6)
 extension PendingWalletManagerAction: Sendable {}
 #endif
@@ -18239,18 +17505,7 @@ public func FfiConverterTypePendingWalletManagerAction_lower(_ value: PendingWal
 
 
 
-
-extension PendingWalletManagerAction: Equatable, Hashable {}
-
-
-
-
-
-
-
-
-
-public enum PendingWalletManagerError: Swift.Error {
+public enum PendingWalletManagerError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -18258,8 +17513,19 @@ public enum PendingWalletManagerError: Swift.Error {
     )
     case Creation(WalletCreationError
     )
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension PendingWalletManagerError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -18320,30 +17586,18 @@ public func FfiConverterTypePendingWalletManagerError_lower(_ value: PendingWall
     return FfiConverterTypePendingWalletManagerError.lower(value)
 }
 
-
-extension PendingWalletManagerError: Equatable, Hashable {}
-
-
-
-
-extension PendingWalletManagerError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum PendingWalletManagerReconcileMessage {
+public enum PendingWalletManagerReconcileMessage: Equatable, Hashable {
     
     case words(NumberOfBip39Words
     )
 
+
+
 }
+
 #if compiler(>=6)
 extension PendingWalletManagerReconcileMessage: Sendable {}
 #endif
@@ -18393,17 +17647,6 @@ public func FfiConverterTypePendingWalletManagerReconcileMessage_lower(_ value: 
 }
 
 
-
-
-extension PendingWalletManagerReconcileMessage: Equatable, Hashable {}
-
-
-
-
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -18420,14 +17663,17 @@ public enum Route {
     )
     case secretWords(WalletId
     )
-    case txDetails(id: WalletId, details: TransactionDetails
+    case transactionDetails(id: WalletId, details: TransactionDetails
     )
     case send(SendRoute
     )
     case coinControl(CoinControlRoute
     )
 
+
+
 }
+
 #if compiler(>=6)
 extension Route: Sendable {}
 #endif
@@ -18459,7 +17705,7 @@ public struct FfiConverterTypeRoute: FfiConverterRustBuffer {
         case 6: return .secretWords(try FfiConverterTypeWalletId.read(from: &buf)
         )
         
-        case 7: return .txDetails(id: try FfiConverterTypeWalletId.read(from: &buf), details: try FfiConverterTypeTransactionDetails.read(from: &buf)
+        case 7: return .transactionDetails(id: try FfiConverterTypeWalletId.read(from: &buf), details: try FfiConverterTypeTransactionDetails.read(from: &buf)
         )
         
         case 8: return .send(try FfiConverterTypeSendRoute.read(from: &buf)
@@ -18506,7 +17752,7 @@ public struct FfiConverterTypeRoute: FfiConverterRustBuffer {
             FfiConverterTypeWalletId.write(v1, into: &buf)
             
         
-        case let .txDetails(id,details):
+        case let .transactionDetails(id,details):
             writeInt(&buf, Int32(7))
             FfiConverterTypeWalletId.write(id, into: &buf)
             FfiConverterTypeTransactionDetails.write(details, into: &buf)
@@ -18541,21 +17787,20 @@ public func FfiConverterTypeRoute_lower(_ value: Route) -> RustBuffer {
 }
 
 
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum ScanState {
+public enum ScanState: Equatable, Hashable {
     
     case notStarted
     case scanning(ScanningInfo
     )
     case completed
 
+
+
 }
+
 #if compiler(>=6)
 extension ScanState: Sendable {}
 #endif
@@ -18617,27 +17862,19 @@ public func FfiConverterTypeScanState_lower(_ value: ScanState) -> RustBuffer {
 }
 
 
-
-
-extension ScanState: Equatable, Hashable {}
-
-
-
-
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum ScannerResponse {
+public enum ScannerResponse: Equatable, Hashable {
     
     case foundAddresses([FoundAddress]
     )
     case noneFound
 
+
+
 }
+
 #if compiler(>=6)
 extension ScannerResponse: Sendable {}
 #endif
@@ -18694,18 +17931,7 @@ public func FfiConverterTypeScannerResponse_lower(_ value: ScannerResponse) -> R
 
 
 
-
-extension ScannerResponse: Equatable, Hashable {}
-
-
-
-
-
-
-
-
-
-public enum SeedQrError: Swift.Error {
+public enum SeedQrError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -18716,8 +17942,19 @@ public enum SeedQrError: Swift.Error {
     )
     case InvalidMnemonic(Bip39Error
     )
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension SeedQrError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -18791,32 +18028,20 @@ public func FfiConverterTypeSeedQrError_lower(_ value: SeedQrError) -> RustBuffe
     return FfiConverterTypeSeedQrError.lower(value)
 }
 
-
-extension SeedQrError: Equatable, Hashable {}
-
-
-
-
-extension SeedQrError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum SendFlowAlertState {
+public enum SendFlowAlertState: Equatable, Hashable {
     
     case error(SendFlowError
     )
     case general(title: String, message: String
     )
 
+
+
 }
+
 #if compiler(>=6)
 extension SendFlowAlertState: Sendable {}
 #endif
@@ -18875,17 +18100,6 @@ public func FfiConverterTypeSendFlowAlertState_lower(_ value: SendFlowAlertState
 }
 
 
-
-
-extension SendFlowAlertState: Equatable, Hashable {}
-
-
-
-
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -18895,7 +18109,10 @@ public enum SendFlowEnterMode {
     case coinControl(SendFlowCoinControlMode
     )
 
+
+
 }
+
 #if compiler(>=6)
 extension SendFlowEnterMode: Sendable {}
 #endif
@@ -18952,11 +18169,7 @@ public func FfiConverterTypeSendFlowEnterMode_lower(_ value: SendFlowEnterMode) 
 
 
 
-
-
-
-
-public enum SendFlowError: Swift.Error {
+public enum SendFlowError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -18981,8 +18194,19 @@ public enum SendFlowError: Swift.Error {
     )
     case UnableToGetFeeDetails(String
     )
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension SendFlowError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -19122,32 +18346,20 @@ public func FfiConverterTypeSendFlowError_lower(_ value: SendFlowError) -> RustB
     return FfiConverterTypeSendFlowError.lower(value)
 }
 
-
-extension SendFlowError: Equatable, Hashable {}
-
-
-
-
-extension SendFlowError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum SendFlowErrorAlert {
+public enum SendFlowErrorAlert: Equatable, Hashable {
     
     case signAndBroadcast(String
     )
     case confirmDetails(String
     )
 
+
+
 }
+
 #if compiler(>=6)
 extension SendFlowErrorAlert: Sendable {}
 #endif
@@ -19205,28 +18417,20 @@ public func FfiConverterTypeSendFlowErrorAlert_lower(_ value: SendFlowErrorAlert
 }
 
 
-
-
-extension SendFlowErrorAlert: Equatable, Hashable {}
-
-
-
-
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum SendFlowFiatOnChangeError {
+public enum SendFlowFiatOnChangeError: Equatable, Hashable {
     
     case invalidFiatAmount(error: String, input: String
     )
     case converter(ConverterError
     )
 
+
+
 }
+
 #if compiler(>=6)
 extension SendFlowFiatOnChangeError: Sendable {}
 #endif
@@ -19285,17 +18489,6 @@ public func FfiConverterTypeSendFlowFiatOnChangeError_lower(_ value: SendFlowFia
 }
 
 
-
-
-extension SendFlowFiatOnChangeError: Equatable, Hashable {}
-
-
-
-
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -19341,7 +18534,10 @@ public enum SendFlowManagerAction {
     )
     case finalizeAndGoToNextScreen
 
+
+
 }
+
 #if compiler(>=6)
 extension SendFlowManagerAction: Sendable {}
 #endif
@@ -19554,10 +18750,6 @@ public func FfiConverterTypeSendFlowManagerAction_lower(_ value: SendFlowManager
 }
 
 
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -19589,7 +18781,10 @@ public enum SendFlowManagerReconcileMessage {
     )
     case clearAlert
 
+
+
 }
+
 #if compiler(>=6)
 extension SendFlowManagerReconcileMessage: Sendable {}
 #endif
@@ -19737,10 +18932,6 @@ public func FfiConverterTypeSendFlowManagerReconcileMessage_lower(_ value: SendF
 }
 
 
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -19755,7 +18946,10 @@ public enum SendRoute {
     case confirm(SendRouteConfirmArgs
     )
 
+
+
 }
+
 #if compiler(>=6)
 extension SendRoute: Sendable {}
 #endif
@@ -19834,11 +19028,7 @@ public func FfiConverterTypeSendRoute_lower(_ value: SendRoute) -> RustBuffer {
 
 
 
-
-
-
-
-public enum SerdeError: Swift.Error {
+public enum SerdeError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -19846,8 +19036,19 @@ public enum SerdeError: Swift.Error {
     )
     case DeserializationError(String
     )
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension SerdeError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -19908,30 +19109,18 @@ public func FfiConverterTypeSerdeError_lower(_ value: SerdeError) -> RustBuffer 
     return FfiConverterTypeSerdeError.lower(value)
 }
 
-
-extension SerdeError: Equatable, Hashable {}
-
-
-
-
-extension SerdeError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum SetAmountFocusField {
+public enum SetAmountFocusField: Equatable, Hashable {
     
     case amount
     case address
 
+
+
 }
+
 #if compiler(>=6)
 extension SetAmountFocusField: Sendable {}
 #endif
@@ -19985,21 +19174,10 @@ public func FfiConverterTypeSetAmountFocusField_lower(_ value: SetAmountFocusFie
 }
 
 
-
-
-extension SetAmountFocusField: Equatable, Hashable {}
-
-
-
-
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum SettingsRoute {
+public enum SettingsRoute: Equatable, Hashable {
     
     case main
     case network
@@ -20010,7 +19188,10 @@ public enum SettingsRoute {
     )
     case allWallets
 
+
+
 }
+
 #if compiler(>=6)
 extension SettingsRoute: Sendable {}
 #endif
@@ -20097,32 +19278,24 @@ public func FfiConverterTypeSettingsRoute_lower(_ value: SettingsRoute) -> RustB
 }
 
 
-
-
-extension SettingsRoute: Equatable, Hashable {}
-
-
-
-
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum SetupCmdResponse {
     
-    case `init`(ContinueFromInit
+    case continueFromInit(ContinueFromInit
     )
-    case backup(ContinueFromBackup
+    case continueFromBackup(ContinueFromBackup
     )
-    case derive(ContinueFromDerive
+    case continueFromDerive(ContinueFromDerive
     )
     case complete(TapSignerSetupComplete
     )
 
+
+
 }
+
 #if compiler(>=6)
 extension SetupCmdResponse: Sendable {}
 #endif
@@ -20137,13 +19310,13 @@ public struct FfiConverterTypeSetupCmdResponse: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
         
-        case 1: return .`init`(try FfiConverterTypeContinueFromInit.read(from: &buf)
+        case 1: return .continueFromInit(try FfiConverterTypeContinueFromInit.read(from: &buf)
         )
         
-        case 2: return .backup(try FfiConverterTypeContinueFromBackup.read(from: &buf)
+        case 2: return .continueFromBackup(try FfiConverterTypeContinueFromBackup.read(from: &buf)
         )
         
-        case 3: return .derive(try FfiConverterTypeContinueFromDerive.read(from: &buf)
+        case 3: return .continueFromDerive(try FfiConverterTypeContinueFromDerive.read(from: &buf)
         )
         
         case 4: return .complete(try FfiConverterTypeTapSignerSetupComplete.read(from: &buf)
@@ -20157,17 +19330,17 @@ public struct FfiConverterTypeSetupCmdResponse: FfiConverterRustBuffer {
         switch value {
         
         
-        case let .`init`(v1):
+        case let .continueFromInit(v1):
             writeInt(&buf, Int32(1))
             FfiConverterTypeContinueFromInit.write(v1, into: &buf)
             
         
-        case let .backup(v1):
+        case let .continueFromBackup(v1):
             writeInt(&buf, Int32(2))
             FfiConverterTypeContinueFromBackup.write(v1, into: &buf)
             
         
-        case let .derive(v1):
+        case let .continueFromDerive(v1):
             writeInt(&buf, Int32(3))
             FfiConverterTypeContinueFromDerive.write(v1, into: &buf)
             
@@ -20196,19 +19369,18 @@ public func FfiConverterTypeSetupCmdResponse_lower(_ value: SetupCmdResponse) ->
 }
 
 
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum StoreType {
+public enum StoreType: Equatable, Hashable {
     
     case sqlite
     case fileStore
 
+
+
 }
+
 #if compiler(>=6)
 extension StoreType: Sendable {}
 #endif
@@ -20262,31 +19434,23 @@ public func FfiConverterTypeStoreType_lower(_ value: StoreType) -> RustBuffer {
 }
 
 
-
-
-extension StoreType: Equatable, Hashable {}
-
-
-
-
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
  * A string or data, could be a string or data (bytes)
  */
 
-public enum StringOrData {
+public enum StringOrData: Equatable, Hashable {
     
     case string(String
     )
     case data(Data
     )
 
+
+
 }
+
 #if compiler(>=6)
 extension StringOrData: Sendable {}
 #endif
@@ -20344,17 +19508,6 @@ public func FfiConverterTypeStringOrData_lower(_ value: StringOrData) -> RustBuf
 }
 
 
-
-
-extension StringOrData: Equatable, Hashable {}
-
-
-
-
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -20371,7 +19524,10 @@ public enum TapSignerCmd {
     case sign(psbt: Psbt, pin: String
     )
 
+
+
 }
+
 #if compiler(>=6)
 extension TapSignerCmd: Sendable {}
 #endif
@@ -20455,10 +19611,6 @@ public func FfiConverterTypeTapSignerCmd_lower(_ value: TapSignerCmd) -> RustBuf
 }
 
 
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
@@ -20466,12 +19618,15 @@ public func FfiConverterTypeTapSignerCmd_lower(_ value: TapSignerCmd) -> RustBuf
  * or changing the PIN on an existing one
  */
 
-public enum TapSignerPinAction {
+public enum TapSignerPinAction: Equatable, Hashable {
     
     case setup
     case change
 
+
+
 }
+
 #if compiler(>=6)
 extension TapSignerPinAction: Sendable {}
 #endif
@@ -20526,18 +19681,7 @@ public func FfiConverterTypeTapSignerPinAction_lower(_ value: TapSignerPinAction
 
 
 
-
-extension TapSignerPinAction: Equatable, Hashable {}
-
-
-
-
-
-
-
-
-
-public enum TapSignerReaderError: Swift.Error {
+public enum TapSignerReaderError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -20559,8 +19703,19 @@ public enum TapSignerReaderError: Swift.Error {
     )
     case Unknown(String
     )
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension TapSignerReaderError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -20679,21 +19834,6 @@ public func FfiConverterTypeTapSignerReaderError_lower(_ value: TapSignerReaderE
     return FfiConverterTypeTapSignerReaderError.lower(value)
 }
 
-
-extension TapSignerReaderError: Equatable, Hashable {}
-
-
-
-
-extension TapSignerReaderError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -20709,7 +19849,10 @@ public enum TapSignerResponse {
     case sign(Psbt
     )
 
+
+
 }
+
 #if compiler(>=6)
 extension TapSignerResponse: Sendable {}
 #endif
@@ -20789,10 +19932,6 @@ public func FfiConverterTypeTapSignerResponse_lower(_ value: TapSignerResponse) 
 }
 
 
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -20819,7 +19958,10 @@ public enum TapSignerRoute {
     case enterPin(tapSigner: TapSigner, action: AfterPinAction
     )
 
+
+
 }
+
 #if compiler(>=6)
 extension TapSignerRoute: Sendable {}
 #endif
@@ -20946,10 +20088,6 @@ public func FfiConverterTypeTapSignerRoute_lower(_ value: TapSignerRoute) -> Rus
 }
 
 
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -20960,7 +20098,10 @@ public enum Transaction {
     case unconfirmed(UnconfirmedTransaction
     )
 
+
+
 }
+
 #if compiler(>=6)
 extension Transaction: Sendable {}
 #endif
@@ -21019,11 +20160,7 @@ public func FfiConverterTypeTransaction_lower(_ value: Transaction) -> RustBuffe
 
 
 
-
-
-
-
-public enum TransactionDetailError: Swift.Error {
+public enum TransactionDetailError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -21037,8 +20174,19 @@ public enum TransactionDetailError: Swift.Error {
     )
     case ChangeAddress(String
     )
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension TransactionDetailError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -21123,30 +20271,18 @@ public func FfiConverterTypeTransactionDetailError_lower(_ value: TransactionDet
     return FfiConverterTypeTransactionDetailError.lower(value)
 }
 
-
-extension TransactionDetailError: Equatable, Hashable {}
-
-
-
-
-extension TransactionDetailError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum TransactionState {
+public enum TransactionState: Equatable, Hashable {
     
     case pending
     case confirmed
 
+
+
 }
+
 #if compiler(>=6)
 extension TransactionState: Sendable {}
 #endif
@@ -21201,18 +20337,7 @@ public func FfiConverterTypeTransactionState_lower(_ value: TransactionState) ->
 
 
 
-
-extension TransactionState: Equatable, Hashable {}
-
-
-
-
-
-
-
-
-
-public enum TransportError: Swift.Error {
+public enum TransportError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -21230,8 +20355,19 @@ public enum TransportError: Swift.Error {
     )
     case UnknownError(String
     )
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension TransportError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -21333,22 +20469,7 @@ public func FfiConverterTypeTransportError_lower(_ value: TransportError) -> Rus
 }
 
 
-extension TransportError: Equatable, Hashable {}
-
-
-
-
-extension TransportError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
-
-
-public enum TrickPinError: Swift.Error {
+public enum TrickPinError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -21368,8 +20489,19 @@ public enum TrickPinError: Swift.Error {
      * Unable to set trick PIN, because biometrics is enabled
      */
     case BiometricsEnabled
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension TrickPinError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -21435,22 +20567,7 @@ public func FfiConverterTypeTrickPinError_lower(_ value: TrickPinError) -> RustB
 }
 
 
-extension TrickPinError: Equatable, Hashable {}
-
-
-
-
-extension TrickPinError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
-
-
-public enum UnsignedTransactionsTableError: Swift.Error {
+public enum UnsignedTransactionsTableError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -21459,8 +20576,19 @@ public enum UnsignedTransactionsTableError: Swift.Error {
     case Read(String
     )
     case NoRecordFound
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension UnsignedTransactionsTableError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -21526,31 +20654,19 @@ public func FfiConverterTypeUnsignedTransactionsTableError_lower(_ value: Unsign
     return FfiConverterTypeUnsignedTransactionsTableError.lower(value)
 }
 
-
-extension UnsignedTransactionsTableError: Equatable, Hashable {}
-
-
-
-
-extension UnsignedTransactionsTableError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum WalletAddressType {
+public enum WalletAddressType: Equatable, Hashable {
     
     case nativeSegwit
     case wrappedSegwit
     case legacy
 
+
+
 }
+
 #if compiler(>=6)
 extension WalletAddressType: Sendable {}
 #endif
@@ -21610,21 +20726,10 @@ public func FfiConverterTypeWalletAddressType_lower(_ value: WalletAddressType) 
 }
 
 
-
-
-extension WalletAddressType: Equatable, Hashable {}
-
-
-
-
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum WalletColor {
+public enum WalletColor: Equatable, Hashable {
     
     case red
     case blue
@@ -21647,7 +20752,10 @@ public enum WalletColor {
     case wPastelTeal
     case wLightPastelYellow
 
+
+
 }
+
 #if compiler(>=6)
 extension WalletColor: Sendable {}
 #endif
@@ -21808,18 +20916,7 @@ public func FfiConverterTypeWalletColor_lower(_ value: WalletColor) -> RustBuffe
 
 
 
-
-extension WalletColor: Equatable, Hashable {}
-
-
-
-
-
-
-
-
-
-public enum WalletCreationError: Swift.Error {
+public enum WalletCreationError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -21835,8 +20932,19 @@ public enum WalletCreationError: Swift.Error {
     )
     case MultiFormat(MultiFormatError
     )
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension WalletCreationError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -21930,22 +21038,7 @@ public func FfiConverterTypeWalletCreationError_lower(_ value: WalletCreationErr
 }
 
 
-extension WalletCreationError: Equatable, Hashable {}
-
-
-
-
-extension WalletCreationError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
-
-
-public enum WalletDataError: Swift.Error {
+public enum WalletDataError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -21957,8 +21050,19 @@ public enum WalletDataError: Swift.Error {
     )
     case Save(String
     )
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension WalletDataError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -22039,30 +21143,18 @@ public func FfiConverterTypeWalletDataError_lower(_ value: WalletDataError) -> R
     return FfiConverterTypeWalletDataError.lower(value)
 }
 
-
-extension WalletDataError: Equatable, Hashable {}
-
-
-
-
-extension WalletDataError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum WalletDataKey {
+public enum WalletDataKey: Equatable, Hashable {
     
     case scanState(WalletAddressType
     )
 
+
+
 }
+
 #if compiler(>=6)
 extension WalletDataKey: Sendable {}
 #endif
@@ -22113,18 +21205,7 @@ public func FfiConverterTypeWalletDataKey_lower(_ value: WalletDataKey) -> RustB
 
 
 
-
-extension WalletDataKey: Equatable, Hashable {}
-
-
-
-
-
-
-
-
-
-public enum WalletError: Swift.Error {
+public enum WalletError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -22150,8 +21231,19 @@ public enum WalletError: Swift.Error {
     )
     case DescriptorKeyParseError(String
     )
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension WalletError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -22286,31 +21378,19 @@ public func FfiConverterTypeWalletError_lower(_ value: WalletError) -> RustBuffe
     return FfiConverterTypeWalletError.lower(value)
 }
 
-
-extension WalletError: Equatable, Hashable {}
-
-
-
-
-extension WalletError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum WalletErrorAlert {
+public enum WalletErrorAlert: Equatable, Hashable {
     
     case nodeConnectionFailed(String
     )
     case noBalance
 
+
+
 }
+
 #if compiler(>=6)
 extension WalletErrorAlert: Sendable {}
 #endif
@@ -22366,17 +21446,6 @@ public func FfiConverterTypeWalletErrorAlert_lower(_ value: WalletErrorAlert) ->
 }
 
 
-
-
-extension WalletErrorAlert: Equatable, Hashable {}
-
-
-
-
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -22388,7 +21457,10 @@ public enum WalletLoadState {
     case loaded([Transaction]
     )
 
+
+
 }
+
 #if compiler(>=6)
 extension WalletLoadState: Sendable {}
 #endif
@@ -22452,10 +21524,6 @@ public func FfiConverterTypeWalletLoadState_lower(_ value: WalletLoadState) -> R
 }
 
 
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -22481,7 +21549,10 @@ public enum WalletManagerAction {
     case startTransactionWatcher(TxId
     )
 
+
+
 }
+
 #if compiler(>=6)
 extension WalletManagerAction: Sendable {}
 #endif
@@ -22614,11 +21685,7 @@ public func FfiConverterTypeWalletManagerAction_lower(_ value: WalletManagerActi
 
 
 
-
-
-
-
-public enum WalletManagerError: Swift.Error {
+public enum WalletManagerError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -22671,8 +21738,19 @@ public enum WalletManagerError: Swift.Error {
     )
     case AddUtxosError(String
     )
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension WalletManagerError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -22918,21 +21996,6 @@ public func FfiConverterTypeWalletManagerError_lower(_ value: WalletManagerError
     return FfiConverterTypeWalletManagerError.lower(value)
 }
 
-
-extension WalletManagerError: Equatable, Hashable {}
-
-
-
-
-extension WalletManagerError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -22963,7 +22026,10 @@ public enum WalletManagerReconcileMessage {
     case sendFlowError(SendFlowErrorAlert
     )
 
+
+
 }
+
 #if compiler(>=6)
 extension WalletManagerReconcileMessage: Sendable {}
 #endif
@@ -23105,19 +22171,18 @@ public func FfiConverterTypeWalletManagerReconcileMessage_lower(_ value: WalletM
 }
 
 
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum WalletMode {
+public enum WalletMode: Equatable, Hashable {
     
     case main
     case decoy
 
+
+
 }
+
 #if compiler(>=6)
 extension WalletMode: Sendable {}
 #endif
@@ -23172,18 +22237,7 @@ public func FfiConverterTypeWalletMode_lower(_ value: WalletMode) -> RustBuffer 
 
 
 
-
-extension WalletMode: Equatable, Hashable {}
-
-
-
-
-
-
-
-
-
-public enum WalletScannerError: Swift.Error {
+public enum WalletScannerError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -23192,8 +22246,19 @@ public enum WalletScannerError: Swift.Error {
     )
     case NoMnemonicAvailable(WalletId
     )
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension WalletScannerError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -23259,30 +22324,18 @@ public func FfiConverterTypeWalletScannerError_lower(_ value: WalletScannerError
     return FfiConverterTypeWalletScannerError.lower(value)
 }
 
-
-extension WalletScannerError: Equatable, Hashable {}
-
-
-
-
-extension WalletScannerError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum WalletSettingsRoute {
+public enum WalletSettingsRoute: Equatable, Hashable {
     
     case main
     case changeName
 
+
+
 }
+
 #if compiler(>=6)
 extension WalletSettingsRoute: Sendable {}
 #endif
@@ -23337,18 +22390,7 @@ public func FfiConverterTypeWalletSettingsRoute_lower(_ value: WalletSettingsRou
 
 
 
-
-extension WalletSettingsRoute: Equatable, Hashable {}
-
-
-
-
-
-
-
-
-
-public enum WalletTableError: Swift.Error {
+public enum WalletTableError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -23357,8 +22399,19 @@ public enum WalletTableError: Swift.Error {
     case ReadError(String
     )
     case WalletAlreadyExists
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension WalletTableError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -23424,25 +22477,10 @@ public func FfiConverterTypeWalletTableError_lower(_ value: WalletTableError) ->
     return FfiConverterTypeWalletTableError.lower(value)
 }
 
-
-extension WalletTableError: Equatable, Hashable {}
-
-
-
-
-extension WalletTableError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum WalletType {
+public enum WalletType: Equatable, Hashable {
     
     case hot
     case cold
@@ -23452,7 +22490,10 @@ public enum WalletType {
      */
     case watchOnly
 
+
+
 }
+
 #if compiler(>=6)
 extension WalletType: Sendable {}
 #endif
@@ -23519,18 +22560,7 @@ public func FfiConverterTypeWalletType_lower(_ value: WalletType) -> RustBuffer 
 
 
 
-
-extension WalletType: Equatable, Hashable {}
-
-
-
-
-
-
-
-
-
-public enum XpubError: Swift.Error {
+public enum XpubError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -23544,8 +22574,19 @@ public enum XpubError: Swift.Error {
     )
     case InvalidXpub(String
     )
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension XpubError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -23631,21 +22672,6 @@ public func FfiConverterTypeXpubError_lift(_ buf: RustBuffer) throws -> XpubErro
 public func FfiConverterTypeXpubError_lower(_ value: XpubError) -> RustBuffer {
     return FfiConverterTypeXpubError.lower(value)
 }
-
-
-extension XpubError: Equatable, Hashable {}
-
-
-
-
-extension XpubError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
 
 
 

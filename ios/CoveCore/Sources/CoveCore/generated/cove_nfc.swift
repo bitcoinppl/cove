@@ -671,6 +671,8 @@ open func stringFromRecord(record: NdefRecord) -> String?  {
 })
 }
     
+
+    
 }
 
 
@@ -698,9 +700,6 @@ public struct FfiConverterTypeFfiNfcReader: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -801,6 +800,8 @@ open func type() -> String?  {
 })
 }
     
+
+    
 }
 
 
@@ -828,9 +829,6 @@ public struct FfiConverterTypeNdefRecordReader: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -940,6 +938,8 @@ open func totalBytesPerChunk() -> UInt16  {
 })
 }
     
+
+    
 }
 
 
@@ -967,9 +967,6 @@ public struct FfiConverterTypeNfcConst: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -1077,6 +1074,8 @@ open func string() -> String?  {
 })
 }
     
+
+    
 }
 
 
@@ -1106,9 +1105,6 @@ public struct FfiConverterTypeNfcMessage: FfiConverter {
 }
 
 
-
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -1126,7 +1122,7 @@ public func FfiConverterTypeNfcMessage_lower(_ value: NfcMessage) -> UInt64 {
 
 
 
-public struct MessageInfo {
+public struct MessageInfo: Equatable, Hashable {
     /**
      * The payload length of the message, including the header info
      */
@@ -1150,34 +1146,13 @@ public struct MessageInfo {
         self.fullMessageLength = fullMessageLength
         self.payloadLength = payloadLength
     }
+
+    
 }
 
 #if compiler(>=6)
 extension MessageInfo: Sendable {}
 #endif
-
-
-
-
-
-extension MessageInfo: Equatable, Hashable {
-    public static func ==(lhs: MessageInfo, rhs: MessageInfo) -> Bool {
-        if lhs.fullMessageLength != rhs.fullMessageLength {
-            return false
-        }
-        if lhs.payloadLength != rhs.payloadLength {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(fullMessageLength)
-        hasher.combine(payloadLength)
-    }
-}
-
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -1213,7 +1188,7 @@ public func FfiConverterTypeMessageInfo_lower(_ value: MessageInfo) -> RustBuffe
 }
 
 
-public struct NdefHeader {
+public struct NdefHeader: Equatable, Hashable {
     public var messageBegin: Bool
     public var messageEnd: Bool
     public var chunked: Bool
@@ -1237,62 +1212,13 @@ public struct NdefHeader {
         self.payloadLength = payloadLength
         self.idLength = idLength
     }
+
+    
 }
 
 #if compiler(>=6)
 extension NdefHeader: Sendable {}
 #endif
-
-
-
-
-
-extension NdefHeader: Equatable, Hashable {
-    public static func ==(lhs: NdefHeader, rhs: NdefHeader) -> Bool {
-        if lhs.messageBegin != rhs.messageBegin {
-            return false
-        }
-        if lhs.messageEnd != rhs.messageEnd {
-            return false
-        }
-        if lhs.chunked != rhs.chunked {
-            return false
-        }
-        if lhs.shortRecord != rhs.shortRecord {
-            return false
-        }
-        if lhs.hasIdLength != rhs.hasIdLength {
-            return false
-        }
-        if lhs.typeNameFormat != rhs.typeNameFormat {
-            return false
-        }
-        if lhs.typeLength != rhs.typeLength {
-            return false
-        }
-        if lhs.payloadLength != rhs.payloadLength {
-            return false
-        }
-        if lhs.idLength != rhs.idLength {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(messageBegin)
-        hasher.combine(messageEnd)
-        hasher.combine(chunked)
-        hasher.combine(shortRecord)
-        hasher.combine(hasIdLength)
-        hasher.combine(typeNameFormat)
-        hasher.combine(typeLength)
-        hasher.combine(payloadLength)
-        hasher.combine(idLength)
-    }
-}
-
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -1342,7 +1268,7 @@ public func FfiConverterTypeNdefHeader_lower(_ value: NdefHeader) -> RustBuffer 
 }
 
 
-public struct NdefRecord {
+public struct NdefRecord: Equatable, Hashable {
     public var header: NdefHeader
     public var type: Data
     public var id: Data?
@@ -1356,42 +1282,13 @@ public struct NdefRecord {
         self.id = id
         self.payload = payload
     }
+
+    
 }
 
 #if compiler(>=6)
 extension NdefRecord: Sendable {}
 #endif
-
-
-
-
-
-extension NdefRecord: Equatable, Hashable {
-    public static func ==(lhs: NdefRecord, rhs: NdefRecord) -> Bool {
-        if lhs.header != rhs.header {
-            return false
-        }
-        if lhs.type != rhs.type {
-            return false
-        }
-        if lhs.id != rhs.id {
-            return false
-        }
-        if lhs.payload != rhs.payload {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(header)
-        hasher.combine(type)
-        hasher.combine(id)
-        hasher.combine(payload)
-    }
-}
-
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -1431,7 +1328,7 @@ public func FfiConverterTypeNdefRecord_lower(_ value: NdefRecord) -> RustBuffer 
 }
 
 
-public struct ParsingContext {
+public struct ParsingContext: Equatable, Hashable {
     public var messageInfo: MessageInfo
     public var needed: UInt16
     public var firstBlockHash: String?
@@ -1443,38 +1340,13 @@ public struct ParsingContext {
         self.needed = needed
         self.firstBlockHash = firstBlockHash
     }
+
+    
 }
 
 #if compiler(>=6)
 extension ParsingContext: Sendable {}
 #endif
-
-
-
-
-
-extension ParsingContext: Equatable, Hashable {
-    public static func ==(lhs: ParsingContext, rhs: ParsingContext) -> Bool {
-        if lhs.messageInfo != rhs.messageInfo {
-            return false
-        }
-        if lhs.needed != rhs.needed {
-            return false
-        }
-        if lhs.firstBlockHash != rhs.firstBlockHash {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(messageInfo)
-        hasher.combine(needed)
-        hasher.combine(firstBlockHash)
-    }
-}
-
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -1512,7 +1384,7 @@ public func FfiConverterTypeParsingContext_lower(_ value: ParsingContext) -> Rus
 }
 
 
-public struct ParsingMessage {
+public struct ParsingMessage: Equatable, Hashable {
     public var messageInfo: MessageInfo
     public var leftOverBytes: Data
 
@@ -1522,34 +1394,13 @@ public struct ParsingMessage {
         self.messageInfo = messageInfo
         self.leftOverBytes = leftOverBytes
     }
+
+    
 }
 
 #if compiler(>=6)
 extension ParsingMessage: Sendable {}
 #endif
-
-
-
-
-
-extension ParsingMessage: Equatable, Hashable {
-    public static func ==(lhs: ParsingMessage, rhs: ParsingMessage) -> Bool {
-        if lhs.messageInfo != rhs.messageInfo {
-            return false
-        }
-        if lhs.leftOverBytes != rhs.leftOverBytes {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(messageInfo)
-        hasher.combine(leftOverBytes)
-    }
-}
-
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -1585,7 +1436,7 @@ public func FfiConverterTypeParsingMessage_lower(_ value: ParsingMessage) -> Rus
 }
 
 
-public struct TextPayload {
+public struct TextPayload: Equatable, Hashable {
     public var format: TextPayloadFormat
     public var language: String
     public var text: String
@@ -1597,38 +1448,13 @@ public struct TextPayload {
         self.language = language
         self.text = text
     }
+
+    
 }
 
 #if compiler(>=6)
 extension TextPayload: Sendable {}
 #endif
-
-
-
-
-
-extension TextPayload: Equatable, Hashable {
-    public static func ==(lhs: TextPayload, rhs: TextPayload) -> Bool {
-        if lhs.format != rhs.format {
-            return false
-        }
-        if lhs.language != rhs.language {
-            return false
-        }
-        if lhs.text != rhs.text {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(format)
-        hasher.combine(language)
-        hasher.combine(text)
-    }
-}
-
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -1668,14 +1494,17 @@ public func FfiConverterTypeTextPayload_lower(_ value: TextPayload) -> RustBuffe
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum NdefPayload {
+public enum NdefPayload: Equatable, Hashable {
     
     case text(TextPayload
     )
     case data(Data
     )
 
+
+
 }
+
 #if compiler(>=6)
 extension NdefPayload: Sendable {}
 #endif
@@ -1733,21 +1562,10 @@ public func FfiConverterTypeNdefPayload_lower(_ value: NdefPayload) -> RustBuffe
 }
 
 
-
-
-extension NdefPayload: Equatable, Hashable {}
-
-
-
-
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum NdefType {
+public enum NdefType: Equatable, Hashable {
     
     case empty
     case wellKnown
@@ -1758,7 +1576,10 @@ public enum NdefType {
     case unchanged
     case reserved
 
+
+
 }
+
 #if compiler(>=6)
 extension NdefType: Sendable {}
 #endif
@@ -1849,24 +1670,24 @@ public func FfiConverterTypeNdefType_lower(_ value: NdefType) -> RustBuffer {
 
 
 
-
-extension NdefType: Equatable, Hashable {}
-
-
-
-
-
-
-
-
-
-public enum NfcMessageError: Swift.Error {
+public enum NfcMessageError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
     case NoStringNorData
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension NfcMessageError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -1917,22 +1738,7 @@ public func FfiConverterTypeNfcMessageError_lower(_ value: NfcMessageError) -> R
 }
 
 
-extension NfcMessageError: Equatable, Hashable {}
-
-
-
-
-extension NfcMessageError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
-
-
-public enum NfcReaderError: Swift.Error {
+public enum NfcReaderError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -1940,8 +1746,19 @@ public enum NfcReaderError: Swift.Error {
     )
     case NotEnoughData
     case AlreadyParsed
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension NfcReaderError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -2004,25 +1821,10 @@ public func FfiConverterTypeNfcReaderError_lower(_ value: NfcReaderError) -> Rus
     return FfiConverterTypeNfcReaderError.lower(value)
 }
 
-
-extension NfcReaderError: Equatable, Hashable {}
-
-
-
-
-extension NfcReaderError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum ParseResult {
+public enum ParseResult: Equatable, Hashable {
     
     /**
      * Completed The message is a NDEF message
@@ -2035,7 +1837,10 @@ public enum ParseResult {
     case incomplete(ParsingMessage
     )
 
+
+
 }
+
 #if compiler(>=6)
 extension ParseResult: Sendable {}
 #endif
@@ -2094,28 +1899,20 @@ public func FfiConverterTypeParseResult_lower(_ value: ParseResult) -> RustBuffe
 }
 
 
-
-
-extension ParseResult: Equatable, Hashable {}
-
-
-
-
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum ParserState {
+public enum ParserState: Equatable, Hashable {
     
     case notStarted
     case parsing(ParsingContext
     )
     case complete
 
+
+
 }
+
 #if compiler(>=6)
 extension ParserState: Sendable {}
 #endif
@@ -2178,18 +1975,7 @@ public func FfiConverterTypeParserState_lower(_ value: ParserState) -> RustBuffe
 
 
 
-
-extension ParserState: Equatable, Hashable {}
-
-
-
-
-
-
-
-
-
-public enum ResumeError: Swift.Error {
+public enum ResumeError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -2209,8 +1995,19 @@ public enum ResumeError: Swift.Error {
     case BlockSizeMismatch(expected: UInt16, actual: UInt16
     )
     case UnableToGetFirstBlockHash
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension ResumeError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -2288,30 +2085,18 @@ public func FfiConverterTypeResumeError_lower(_ value: ResumeError) -> RustBuffe
     return FfiConverterTypeResumeError.lower(value)
 }
 
-
-extension ResumeError: Equatable, Hashable {}
-
-
-
-
-extension ResumeError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum TextPayloadFormat {
+public enum TextPayloadFormat: Equatable, Hashable {
     
     case utf8
     case utf16
 
+
+
 }
+
 #if compiler(>=6)
 extension TextPayloadFormat: Sendable {}
 #endif
@@ -2363,17 +2148,6 @@ public func FfiConverterTypeTextPayloadFormat_lift(_ buf: RustBuffer) throws -> 
 public func FfiConverterTypeTextPayloadFormat_lower(_ value: TextPayloadFormat) -> RustBuffer {
     return FfiConverterTypeTextPayloadFormat.lower(value)
 }
-
-
-
-
-extension TextPayloadFormat: Equatable, Hashable {}
-
-
-
-
-
-
 
 
 #if swift(>=5.8)

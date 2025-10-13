@@ -186,7 +186,7 @@ struct SendFlowHardwareScreen: View {
 
                     Divider()
 
-                    if case let .tapSignerCard(ts) = metadata.hardwareMetadata {
+                    if case let .tapSigner(ts) = metadata.hardwareMetadata {
                         SignTapSignerTransactionSection(ts)
                     } else {
                         SignTransactionSection

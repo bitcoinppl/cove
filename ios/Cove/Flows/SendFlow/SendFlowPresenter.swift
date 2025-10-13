@@ -62,7 +62,7 @@ import SwiftUI
         }
     }
 
-    public func setDisappearing() {
+    func setDisappearing() {
         self.disappearing = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             self.disappearing = false
@@ -82,7 +82,7 @@ import SwiftUI
             "Unable to get max send"
         case .UnableToSaveUnsignedTransaction:
             "Unable to Save Unsigned Transaction"
-        case .WalletManagerError:
+        case .WalletManager:
             "Error"
         case .UnableToGetFeeDetails:
             "Fee Details Error"
@@ -119,7 +119,7 @@ import SwiftUI
             "Send amount is too low. Please send atleast 5000 sats"
         case .UnableToGetFeeRate:
             "Are you connected to the internet?"
-        case let .WalletManagerError(msg):
+        case let .WalletManager(msg):
             msg.describe
         case let .UnableToGetFeeDetails(msg):
             msg
@@ -155,7 +155,7 @@ import SwiftUI
                 self.alertState = .none
                 self.app.popRoute()
             }
-        case .InvalidNumber, .InsufficientFunds, .SendAmountToLow, .ZeroAmount, .WalletManagerError, .UnableToGetFeeDetails:
+        case .InvalidNumber, .InsufficientFunds, .SendAmountToLow, .ZeroAmount, .WalletManager, .UnableToGetFeeDetails:
             Button("OK") {
                 self.focusField = .amount
                 self.alertState = .none

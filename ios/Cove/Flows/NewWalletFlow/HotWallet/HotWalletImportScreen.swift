@@ -191,9 +191,9 @@ struct HotWalletImportScreen: View {
                 alertState = .init(.duplicateWallet(walletId))
             case let .WalletImportError(error):
                 Log.error("Import error: \(error)")
-            case let .KeychainError(keychainError):
+            case let .Keychain(keychainError):
                 Log.error("Unable to save wallet to keychain: \(keychainError)")
-            case let .DatabaseError(databaseError):
+            case let .Database(databaseError):
                 Log.error("Unable to save wallet metadata to database: \(databaseError)")
             case let .BdkError(error):
                 Log.error("Unable to import wallet: \(error)")

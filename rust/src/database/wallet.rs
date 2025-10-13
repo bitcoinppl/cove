@@ -280,7 +280,7 @@ impl WalletsTable {
                 .hardware_metadata
                 .as_ref()
                 .map(|hw| match hw {
-                    HardwareWalletMetadata::TapSignerCard(t) => t.card_ident == ident,
+                    HardwareWalletMetadata::TapSigner(t) => t.card_ident == ident,
                 })
                 .unwrap_or(false)
         });

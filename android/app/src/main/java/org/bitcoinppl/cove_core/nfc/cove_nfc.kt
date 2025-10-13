@@ -59,7 +59,7 @@ open class RustBuffer : Structure() {
     companion object {
         internal fun alloc(size: ULong = 0UL) = uniffiRustCall() { status ->
             // Note: need to convert the size to a `Long` value to make this work with JVM.
-            UniffiLib.INSTANCE.ffi_cove_nfc_rustbuffer_alloc(size.toLong(), status)
+            UniffiLib.ffi_cove_nfc_rustbuffer_alloc(size.toLong(), status)
         }.also {
             if(it.data == null) {
                throw RuntimeException("RustBuffer.alloc() returned null data pointer (size=${size})")
@@ -75,7 +75,7 @@ open class RustBuffer : Structure() {
         }
 
         internal fun free(buf: RustBuffer.ByValue) = uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.ffi_cove_nfc_rustbuffer_free(buf, status)
+            UniffiLib.ffi_cove_nfc_rustbuffer_free(buf, status)
         }
     }
 
@@ -84,40 +84,6 @@ open class RustBuffer : Structure() {
         this.data?.getByteBuffer(0, this.len.toLong())?.also {
             it.order(ByteOrder.BIG_ENDIAN)
         }
-}
-
-/**
- * The equivalent of the `*mut RustBuffer` type.
- * Required for callbacks taking in an out pointer.
- *
- * Size is the sum of all values in the struct.
- *
- * @suppress
- */
-class RustBufferByReference : ByReference(16) {
-    /**
-     * Set the pointed-to `RustBuffer` to the given value.
-     */
-    fun setValue(value: RustBuffer.ByValue) {
-        // NOTE: The offsets are as they are in the C-like struct.
-        val pointer = getPointer()
-        pointer.setLong(0, value.capacity)
-        pointer.setLong(8, value.len)
-        pointer.setPointer(16, value.data)
-    }
-
-    /**
-     * Get a `RustBuffer.ByValue` from this reference.
-     */
-    fun getValue(): RustBuffer.ByValue {
-        val pointer = getPointer()
-        val value = RustBuffer.ByValue()
-        value.writeField("capacity", pointer.getLong(0))
-        value.writeField("len", pointer.getLong(8))
-        value.writeField("data", pointer.getLong(16))
-
-        return value
-    }
 }
 
 // This is a helper for safely passing byte references into the rust code.
@@ -390,12 +356,6 @@ private fun findLibraryName(componentName: String): String {
     return "coveffi"
 }
 
-private inline fun <reified Lib : Library> loadIndirect(
-    componentName: String
-): Lib {
-    return Native.load<Lib>(findLibraryName(componentName), Lib::class.java)
-}
-
 // Define FFI callback types
 internal interface UniffiRustFutureContinuationCallback : com.sun.jna.Callback {
     fun callback(`data`: Long,`pollResult`: Byte,)
@@ -652,263 +612,240 @@ internal interface UniffiForeignFutureCompleteVoid : com.sun.jna.Callback {
     fun callback(`callbackData`: Long,`result`: UniffiForeignFutureResultVoid.UniffiByValue,)
 }
 
+// A JNA Library to expose the extern-C FFI definitions.
+// This is an implementation detail which will be called internally by the public API.
+
 // For large crates we prevent `MethodTooLargeException` (see #2340)
-// N.B. the name of the extension is very misleading, since it is 
-// rather `InterfaceTooLargeException`, caused by too many methods 
+// N.B. the name of the extension is very misleading, since it is
+// rather `InterfaceTooLargeException`, caused by too many methods
 // in the interface for large crates.
 //
 // By splitting the otherwise huge interface into two parts
-// * UniffiLib 
-// * IntegrityCheckingUniffiLib (this)
+// * UniffiLib (this)
+// * IntegrityCheckingUniffiLib
+// And all checksum methods are put into `IntegrityCheckingUniffiLib`
 // we allow for ~2x as many methods in the UniffiLib interface.
-// 
-// The `ffi_uniffi_contract_version` method and all checksum methods are put 
-// into `IntegrityCheckingUniffiLib` and these methods are called only once,
-// when the library is loaded.
-internal interface IntegrityCheckingUniffiLib : Library {
-    // Integrity check functions only
-    fun uniffi_cove_nfc_checksum_func_nfc_message_is_equal(
-): Short
-fun uniffi_cove_nfc_checksum_method_ffinfcreader_data_from_records(
-): Short
-fun uniffi_cove_nfc_checksum_method_ffinfcreader_is_resumeable(
-): Short
-fun uniffi_cove_nfc_checksum_method_ffinfcreader_is_started(
-): Short
-fun uniffi_cove_nfc_checksum_method_ffinfcreader_message_info(
-): Short
-fun uniffi_cove_nfc_checksum_method_ffinfcreader_parse(
-): Short
-fun uniffi_cove_nfc_checksum_method_ffinfcreader_string_from_record(
-): Short
-fun uniffi_cove_nfc_checksum_method_ndefrecordreader_id(
-): Short
-fun uniffi_cove_nfc_checksum_method_ndefrecordreader_type_(
-): Short
-fun uniffi_cove_nfc_checksum_method_nfcconst_bytes_per_block(
-): Short
-fun uniffi_cove_nfc_checksum_method_nfcconst_number_of_blocks_per_chunk(
-): Short
-fun uniffi_cove_nfc_checksum_method_nfcconst_total_bytes_per_chunk(
-): Short
-fun uniffi_cove_nfc_checksum_method_nfcmessage_data(
-): Short
-fun uniffi_cove_nfc_checksum_method_nfcmessage_string(
-): Short
-fun uniffi_cove_nfc_checksum_constructor_ffinfcreader_new(
-): Short
-fun uniffi_cove_nfc_checksum_constructor_ndefrecordreader_new(
-): Short
-fun uniffi_cove_nfc_checksum_constructor_nfcconst_new(
-): Short
-fun uniffi_cove_nfc_checksum_constructor_nfcmessage_try_new(
-): Short
-fun ffi_cove_nfc_uniffi_contract_version(
-): Int
-
+//
+// Note: above all written when we used JNA's `loadIndirect` etc.
+// We now use JNA's "direct mapping" - unclear if same considerations apply exactly.
+internal object IntegrityCheckingUniffiLib {
+    init {
+        Native.register(IntegrityCheckingUniffiLib::class.java, findLibraryName(componentName = "cove_nfc"))
+        uniffiCheckContractApiVersion(this)
+        uniffiCheckApiChecksums(this)
+    }
+    external fun uniffi_cove_nfc_checksum_func_nfc_message_is_equal(
+    ): Short
+    external fun uniffi_cove_nfc_checksum_method_ffinfcreader_data_from_records(
+    ): Short
+    external fun uniffi_cove_nfc_checksum_method_ffinfcreader_is_resumeable(
+    ): Short
+    external fun uniffi_cove_nfc_checksum_method_ffinfcreader_is_started(
+    ): Short
+    external fun uniffi_cove_nfc_checksum_method_ffinfcreader_message_info(
+    ): Short
+    external fun uniffi_cove_nfc_checksum_method_ffinfcreader_parse(
+    ): Short
+    external fun uniffi_cove_nfc_checksum_method_ffinfcreader_string_from_record(
+    ): Short
+    external fun uniffi_cove_nfc_checksum_method_ndefrecordreader_id(
+    ): Short
+    external fun uniffi_cove_nfc_checksum_method_ndefrecordreader_type_(
+    ): Short
+    external fun uniffi_cove_nfc_checksum_method_nfcconst_bytes_per_block(
+    ): Short
+    external fun uniffi_cove_nfc_checksum_method_nfcconst_number_of_blocks_per_chunk(
+    ): Short
+    external fun uniffi_cove_nfc_checksum_method_nfcconst_total_bytes_per_chunk(
+    ): Short
+    external fun uniffi_cove_nfc_checksum_method_nfcmessage_data(
+    ): Short
+    external fun uniffi_cove_nfc_checksum_method_nfcmessage_string(
+    ): Short
+    external fun uniffi_cove_nfc_checksum_constructor_ffinfcreader_new(
+    ): Short
+    external fun uniffi_cove_nfc_checksum_constructor_ndefrecordreader_new(
+    ): Short
+    external fun uniffi_cove_nfc_checksum_constructor_nfcconst_new(
+    ): Short
+    external fun uniffi_cove_nfc_checksum_constructor_nfcmessage_try_new(
+    ): Short
+    external fun ffi_cove_nfc_uniffi_contract_version(
+    ): Int
+    
+        
 }
 
-// A JNA Library to expose the extern-C FFI definitions.
-// This is an implementation detail which will be called internally by the public API.
-internal interface UniffiLib : Library {
-    companion object {
-        internal val INSTANCE: UniffiLib by lazy {
-            val componentName = "cove_nfc"
-            // For large crates we prevent `MethodTooLargeException` (see #2340)
-            // N.B. the name of the extension is very misleading, since it is 
-            // rather `InterfaceTooLargeException`, caused by too many methods 
-            // in the interface for large crates.
-            //
-            // By splitting the otherwise huge interface into two parts
-            // * UniffiLib (this)
-            // * IntegrityCheckingUniffiLib
-            // And all checksum methods are put into `IntegrityCheckingUniffiLib`
-            // we allow for ~2x as many methods in the UniffiLib interface.
-            // 
-            // Thus we first load the library with `loadIndirect` as `IntegrityCheckingUniffiLib`
-            // so that we can (optionally!) call `uniffiCheckApiChecksums`...
-            loadIndirect<IntegrityCheckingUniffiLib>(componentName)
-                .also { lib: IntegrityCheckingUniffiLib ->
-                    uniffiCheckContractApiVersion(lib)
-                    uniffiCheckApiChecksums(lib)
-                }
-            // ... and then we load the library as `UniffiLib`
-            // N.B. we cannot use `loadIndirect` once and then try to cast it to `UniffiLib`
-            // => results in `java.lang.ClassCastException: com.sun.proxy.$Proxy cannot be cast to ...`
-            // error. So we must call `loadIndirect` twice. For crates large enough
-            // to trigger this issue, the performance impact is negligible, running on
-            // a macOS M1 machine the `loadIndirect` call takes ~50ms.
-            val lib = loadIndirect<UniffiLib>(componentName)
-            // No need to check the contract version and checksums, since 
-            // we already did that with `IntegrityCheckingUniffiLib` above.
-            // Loading of library with integrity check done.
-            lib
-        }
-        
-        // The Cleaner for the whole library
-        internal val CLEANER: UniffiCleaner by lazy {
-            UniffiCleaner.create()
-        }
+internal object UniffiLib {
+    
+    // The Cleaner for the whole library
+    internal val CLEANER: UniffiCleaner by lazy {
+        UniffiCleaner.create()
     }
+    
 
-    // FFI functions
-    fun uniffi_cove_nfc_fn_clone_ffinfcreader(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-fun uniffi_cove_nfc_fn_free_ffinfcreader(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Unit
-fun uniffi_cove_nfc_fn_constructor_ffinfcreader_new(uniffi_out_err: UniffiRustCallStatus, 
-): Long
-fun uniffi_cove_nfc_fn_method_ffinfcreader_data_from_records(`ptr`: Long,`records`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-fun uniffi_cove_nfc_fn_method_ffinfcreader_is_resumeable(`ptr`: Long,`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): Unit
-fun uniffi_cove_nfc_fn_method_ffinfcreader_is_started(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Byte
-fun uniffi_cove_nfc_fn_method_ffinfcreader_message_info(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-fun uniffi_cove_nfc_fn_method_ffinfcreader_parse(`ptr`: Long,`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-fun uniffi_cove_nfc_fn_method_ffinfcreader_string_from_record(`ptr`: Long,`record`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-fun uniffi_cove_nfc_fn_clone_ndefrecordreader(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-fun uniffi_cove_nfc_fn_free_ndefrecordreader(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Unit
-fun uniffi_cove_nfc_fn_constructor_ndefrecordreader_new(`record`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-fun uniffi_cove_nfc_fn_method_ndefrecordreader_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-fun uniffi_cove_nfc_fn_method_ndefrecordreader_type_(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-fun uniffi_cove_nfc_fn_clone_nfcconst(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-fun uniffi_cove_nfc_fn_free_nfcconst(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Unit
-fun uniffi_cove_nfc_fn_constructor_nfcconst_new(uniffi_out_err: UniffiRustCallStatus, 
-): Long
-fun uniffi_cove_nfc_fn_method_nfcconst_bytes_per_block(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Short
-fun uniffi_cove_nfc_fn_method_nfcconst_number_of_blocks_per_chunk(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Short
-fun uniffi_cove_nfc_fn_method_nfcconst_total_bytes_per_chunk(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Short
-fun uniffi_cove_nfc_fn_clone_nfcmessage(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-fun uniffi_cove_nfc_fn_free_nfcmessage(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Unit
-fun uniffi_cove_nfc_fn_constructor_nfcmessage_try_new(`string`: RustBuffer.ByValue,`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-fun uniffi_cove_nfc_fn_method_nfcmessage_data(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-fun uniffi_cove_nfc_fn_method_nfcmessage_string(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-fun uniffi_cove_nfc_fn_func_nfc_message_is_equal(`lhs`: Long,`rhs`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Byte
-fun ffi_cove_nfc_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-fun ffi_cove_nfc_rustbuffer_from_bytes(`bytes`: ForeignBytes.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-fun ffi_cove_nfc_rustbuffer_free(`buf`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): Unit
-fun ffi_cove_nfc_rustbuffer_reserve(`buf`: RustBuffer.ByValue,`additional`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-fun ffi_cove_nfc_rust_future_poll_u8(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
-): Unit
-fun ffi_cove_nfc_rust_future_cancel_u8(`handle`: Long,
-): Unit
-fun ffi_cove_nfc_rust_future_free_u8(`handle`: Long,
-): Unit
-fun ffi_cove_nfc_rust_future_complete_u8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Byte
-fun ffi_cove_nfc_rust_future_poll_i8(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
-): Unit
-fun ffi_cove_nfc_rust_future_cancel_i8(`handle`: Long,
-): Unit
-fun ffi_cove_nfc_rust_future_free_i8(`handle`: Long,
-): Unit
-fun ffi_cove_nfc_rust_future_complete_i8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Byte
-fun ffi_cove_nfc_rust_future_poll_u16(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
-): Unit
-fun ffi_cove_nfc_rust_future_cancel_u16(`handle`: Long,
-): Unit
-fun ffi_cove_nfc_rust_future_free_u16(`handle`: Long,
-): Unit
-fun ffi_cove_nfc_rust_future_complete_u16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Short
-fun ffi_cove_nfc_rust_future_poll_i16(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
-): Unit
-fun ffi_cove_nfc_rust_future_cancel_i16(`handle`: Long,
-): Unit
-fun ffi_cove_nfc_rust_future_free_i16(`handle`: Long,
-): Unit
-fun ffi_cove_nfc_rust_future_complete_i16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Short
-fun ffi_cove_nfc_rust_future_poll_u32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
-): Unit
-fun ffi_cove_nfc_rust_future_cancel_u32(`handle`: Long,
-): Unit
-fun ffi_cove_nfc_rust_future_free_u32(`handle`: Long,
-): Unit
-fun ffi_cove_nfc_rust_future_complete_u32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Int
-fun ffi_cove_nfc_rust_future_poll_i32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
-): Unit
-fun ffi_cove_nfc_rust_future_cancel_i32(`handle`: Long,
-): Unit
-fun ffi_cove_nfc_rust_future_free_i32(`handle`: Long,
-): Unit
-fun ffi_cove_nfc_rust_future_complete_i32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Int
-fun ffi_cove_nfc_rust_future_poll_u64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
-): Unit
-fun ffi_cove_nfc_rust_future_cancel_u64(`handle`: Long,
-): Unit
-fun ffi_cove_nfc_rust_future_free_u64(`handle`: Long,
-): Unit
-fun ffi_cove_nfc_rust_future_complete_u64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-fun ffi_cove_nfc_rust_future_poll_i64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
-): Unit
-fun ffi_cove_nfc_rust_future_cancel_i64(`handle`: Long,
-): Unit
-fun ffi_cove_nfc_rust_future_free_i64(`handle`: Long,
-): Unit
-fun ffi_cove_nfc_rust_future_complete_i64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-fun ffi_cove_nfc_rust_future_poll_f32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
-): Unit
-fun ffi_cove_nfc_rust_future_cancel_f32(`handle`: Long,
-): Unit
-fun ffi_cove_nfc_rust_future_free_f32(`handle`: Long,
-): Unit
-fun ffi_cove_nfc_rust_future_complete_f32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Float
-fun ffi_cove_nfc_rust_future_poll_f64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
-): Unit
-fun ffi_cove_nfc_rust_future_cancel_f64(`handle`: Long,
-): Unit
-fun ffi_cove_nfc_rust_future_free_f64(`handle`: Long,
-): Unit
-fun ffi_cove_nfc_rust_future_complete_f64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Double
-fun ffi_cove_nfc_rust_future_poll_rust_buffer(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
-): Unit
-fun ffi_cove_nfc_rust_future_cancel_rust_buffer(`handle`: Long,
-): Unit
-fun ffi_cove_nfc_rust_future_free_rust_buffer(`handle`: Long,
-): Unit
-fun ffi_cove_nfc_rust_future_complete_rust_buffer(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-fun ffi_cove_nfc_rust_future_poll_void(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
-): Unit
-fun ffi_cove_nfc_rust_future_cancel_void(`handle`: Long,
-): Unit
-fun ffi_cove_nfc_rust_future_free_void(`handle`: Long,
-): Unit
-fun ffi_cove_nfc_rust_future_complete_void(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Unit
-
+    init {
+        Native.register(UniffiLib::class.java, findLibraryName(componentName = "cove_nfc"))
+        
+    }
+    external fun uniffi_cove_nfc_fn_clone_ffinfcreader(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_nfc_fn_free_ffinfcreader(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_cove_nfc_fn_constructor_ffinfcreader_new(uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_nfc_fn_method_ffinfcreader_data_from_records(`ptr`: Long,`records`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_nfc_fn_method_ffinfcreader_is_resumeable(`ptr`: Long,`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_cove_nfc_fn_method_ffinfcreader_is_started(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
+    external fun uniffi_cove_nfc_fn_method_ffinfcreader_message_info(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_nfc_fn_method_ffinfcreader_parse(`ptr`: Long,`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_nfc_fn_method_ffinfcreader_string_from_record(`ptr`: Long,`record`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_nfc_fn_clone_ndefrecordreader(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_nfc_fn_free_ndefrecordreader(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_cove_nfc_fn_constructor_ndefrecordreader_new(`record`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_nfc_fn_method_ndefrecordreader_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_nfc_fn_method_ndefrecordreader_type_(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_nfc_fn_clone_nfcconst(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_nfc_fn_free_nfcconst(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_cove_nfc_fn_constructor_nfcconst_new(uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_nfc_fn_method_nfcconst_bytes_per_block(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Short
+    external fun uniffi_cove_nfc_fn_method_nfcconst_number_of_blocks_per_chunk(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Short
+    external fun uniffi_cove_nfc_fn_method_nfcconst_total_bytes_per_chunk(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Short
+    external fun uniffi_cove_nfc_fn_clone_nfcmessage(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_nfc_fn_free_nfcmessage(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_cove_nfc_fn_constructor_nfcmessage_try_new(`string`: RustBuffer.ByValue,`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_nfc_fn_method_nfcmessage_data(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_nfc_fn_method_nfcmessage_string(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_nfc_fn_func_nfc_message_is_equal(`lhs`: Long,`rhs`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
+    external fun ffi_cove_nfc_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun ffi_cove_nfc_rustbuffer_from_bytes(`bytes`: ForeignBytes.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun ffi_cove_nfc_rustbuffer_free(`buf`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun ffi_cove_nfc_rustbuffer_reserve(`buf`: RustBuffer.ByValue,`additional`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun ffi_cove_nfc_rust_future_poll_u8(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+    ): Unit
+    external fun ffi_cove_nfc_rust_future_cancel_u8(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_nfc_rust_future_free_u8(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_nfc_rust_future_complete_u8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
+    external fun ffi_cove_nfc_rust_future_poll_i8(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+    ): Unit
+    external fun ffi_cove_nfc_rust_future_cancel_i8(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_nfc_rust_future_free_i8(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_nfc_rust_future_complete_i8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
+    external fun ffi_cove_nfc_rust_future_poll_u16(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+    ): Unit
+    external fun ffi_cove_nfc_rust_future_cancel_u16(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_nfc_rust_future_free_u16(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_nfc_rust_future_complete_u16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Short
+    external fun ffi_cove_nfc_rust_future_poll_i16(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+    ): Unit
+    external fun ffi_cove_nfc_rust_future_cancel_i16(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_nfc_rust_future_free_i16(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_nfc_rust_future_complete_i16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Short
+    external fun ffi_cove_nfc_rust_future_poll_u32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+    ): Unit
+    external fun ffi_cove_nfc_rust_future_cancel_u32(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_nfc_rust_future_free_u32(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_nfc_rust_future_complete_u32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Int
+    external fun ffi_cove_nfc_rust_future_poll_i32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+    ): Unit
+    external fun ffi_cove_nfc_rust_future_cancel_i32(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_nfc_rust_future_free_i32(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_nfc_rust_future_complete_i32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Int
+    external fun ffi_cove_nfc_rust_future_poll_u64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+    ): Unit
+    external fun ffi_cove_nfc_rust_future_cancel_u64(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_nfc_rust_future_free_u64(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_nfc_rust_future_complete_u64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun ffi_cove_nfc_rust_future_poll_i64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+    ): Unit
+    external fun ffi_cove_nfc_rust_future_cancel_i64(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_nfc_rust_future_free_i64(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_nfc_rust_future_complete_i64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun ffi_cove_nfc_rust_future_poll_f32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+    ): Unit
+    external fun ffi_cove_nfc_rust_future_cancel_f32(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_nfc_rust_future_free_f32(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_nfc_rust_future_complete_f32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Float
+    external fun ffi_cove_nfc_rust_future_poll_f64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+    ): Unit
+    external fun ffi_cove_nfc_rust_future_cancel_f64(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_nfc_rust_future_free_f64(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_nfc_rust_future_complete_f64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Double
+    external fun ffi_cove_nfc_rust_future_poll_rust_buffer(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+    ): Unit
+    external fun ffi_cove_nfc_rust_future_cancel_rust_buffer(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_nfc_rust_future_free_rust_buffer(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_nfc_rust_future_complete_rust_buffer(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun ffi_cove_nfc_rust_future_poll_void(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+    ): Unit
+    external fun ffi_cove_nfc_rust_future_cancel_void(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_nfc_rust_future_free_void(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_nfc_rust_future_complete_void(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    
+        
 }
 
 private fun uniffiCheckContractApiVersion(lib: IntegrityCheckingUniffiLib) {
@@ -982,7 +919,10 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
  * @suppress
  */
 public fun uniffiEnsureInitialized() {
-    UniffiLib.INSTANCE
+    IntegrityCheckingUniffiLib
+    // UniffiLib() initialized as objects are used, but we still need to explicitly
+    // reference it so initialization across crates works as expected.
+    UniffiLib
 }
 
 // Async support
@@ -1439,7 +1379,7 @@ open class FfiNfcReader: Disposable, AutoCloseable, FfiNfcReaderInterface
     constructor() :
         this(UniffiWithHandle, 
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_nfc_fn_constructor_ffinfcreader_new(
+    UniffiLib.uniffi_cove_nfc_fn_constructor_ffinfcreader_new(
     
         _status)
 }
@@ -1499,7 +1439,7 @@ open class FfiNfcReader: Disposable, AutoCloseable, FfiNfcReaderInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_nfc_fn_free_ffinfcreader(handle, status)
+                UniffiLib.uniffi_cove_nfc_fn_free_ffinfcreader(handle, status)
             }
         }
     }
@@ -1512,7 +1452,7 @@ open class FfiNfcReader: Disposable, AutoCloseable, FfiNfcReaderInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_nfc_fn_clone_ffinfcreader(handle, status)
+            UniffiLib.uniffi_cove_nfc_fn_clone_ffinfcreader(handle, status)
         }
     }
 
@@ -1520,7 +1460,7 @@ open class FfiNfcReader: Disposable, AutoCloseable, FfiNfcReaderInterface
             return FfiConverterByteArray.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_nfc_fn_method_ffinfcreader_data_from_records(
+    UniffiLib.uniffi_cove_nfc_fn_method_ffinfcreader_data_from_records(
         it,
         FfiConverterSequenceTypeNdefRecord.lower(`records`),_status)
 }
@@ -1534,7 +1474,7 @@ open class FfiNfcReader: Disposable, AutoCloseable, FfiNfcReaderInterface
         = 
     callWithHandle {
     uniffiRustCallWithError(ResumeException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_nfc_fn_method_ffinfcreader_is_resumeable(
+    UniffiLib.uniffi_cove_nfc_fn_method_ffinfcreader_is_resumeable(
         it,
         FfiConverterByteArray.lower(`data`),_status)
 }
@@ -1546,7 +1486,7 @@ open class FfiNfcReader: Disposable, AutoCloseable, FfiNfcReaderInterface
             return FfiConverterBoolean.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_nfc_fn_method_ffinfcreader_is_started(
+    UniffiLib.uniffi_cove_nfc_fn_method_ffinfcreader_is_started(
         it,
         _status)
 }
@@ -1559,7 +1499,7 @@ open class FfiNfcReader: Disposable, AutoCloseable, FfiNfcReaderInterface
             return FfiConverterOptionalTypeMessageInfo.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_nfc_fn_method_ffinfcreader_message_info(
+    UniffiLib.uniffi_cove_nfc_fn_method_ffinfcreader_message_info(
         it,
         _status)
 }
@@ -1573,7 +1513,7 @@ open class FfiNfcReader: Disposable, AutoCloseable, FfiNfcReaderInterface
             return FfiConverterTypeParseResult.lift(
     callWithHandle {
     uniffiRustCallWithError(NfcReaderException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_nfc_fn_method_ffinfcreader_parse(
+    UniffiLib.uniffi_cove_nfc_fn_method_ffinfcreader_parse(
         it,
         FfiConverterByteArray.lower(`data`),_status)
 }
@@ -1586,7 +1526,7 @@ open class FfiNfcReader: Disposable, AutoCloseable, FfiNfcReaderInterface
             return FfiConverterOptionalString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_nfc_fn_method_ffinfcreader_string_from_record(
+    UniffiLib.uniffi_cove_nfc_fn_method_ffinfcreader_string_from_record(
         it,
         FfiConverterTypeNdefRecord.lower(`record`),_status)
 }
@@ -1766,7 +1706,7 @@ open class NdefRecordReader: Disposable, AutoCloseable, NdefRecordReaderInterfac
     constructor(`record`: NdefRecord) :
         this(UniffiWithHandle, 
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_nfc_fn_constructor_ndefrecordreader_new(
+    UniffiLib.uniffi_cove_nfc_fn_constructor_ndefrecordreader_new(
     
         FfiConverterTypeNdefRecord.lower(`record`),_status)
 }
@@ -1826,7 +1766,7 @@ open class NdefRecordReader: Disposable, AutoCloseable, NdefRecordReaderInterfac
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_nfc_fn_free_ndefrecordreader(handle, status)
+                UniffiLib.uniffi_cove_nfc_fn_free_ndefrecordreader(handle, status)
             }
         }
     }
@@ -1839,7 +1779,7 @@ open class NdefRecordReader: Disposable, AutoCloseable, NdefRecordReaderInterfac
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_nfc_fn_clone_ndefrecordreader(handle, status)
+            UniffiLib.uniffi_cove_nfc_fn_clone_ndefrecordreader(handle, status)
         }
     }
 
@@ -1847,7 +1787,7 @@ open class NdefRecordReader: Disposable, AutoCloseable, NdefRecordReaderInterfac
             return FfiConverterOptionalString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_nfc_fn_method_ndefrecordreader_id(
+    UniffiLib.uniffi_cove_nfc_fn_method_ndefrecordreader_id(
         it,
         _status)
 }
@@ -1860,7 +1800,7 @@ open class NdefRecordReader: Disposable, AutoCloseable, NdefRecordReaderInterfac
             return FfiConverterOptionalString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_nfc_fn_method_ndefrecordreader_type_(
+    UniffiLib.uniffi_cove_nfc_fn_method_ndefrecordreader_type_(
         it,
         _status)
 }
@@ -2042,7 +1982,7 @@ open class NfcConst: Disposable, AutoCloseable, NfcConstInterface
     constructor() :
         this(UniffiWithHandle, 
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_nfc_fn_constructor_nfcconst_new(
+    UniffiLib.uniffi_cove_nfc_fn_constructor_nfcconst_new(
     
         _status)
 }
@@ -2102,7 +2042,7 @@ open class NfcConst: Disposable, AutoCloseable, NfcConstInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_nfc_fn_free_nfcconst(handle, status)
+                UniffiLib.uniffi_cove_nfc_fn_free_nfcconst(handle, status)
             }
         }
     }
@@ -2115,7 +2055,7 @@ open class NfcConst: Disposable, AutoCloseable, NfcConstInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_nfc_fn_clone_nfcconst(handle, status)
+            UniffiLib.uniffi_cove_nfc_fn_clone_nfcconst(handle, status)
         }
     }
 
@@ -2123,7 +2063,7 @@ open class NfcConst: Disposable, AutoCloseable, NfcConstInterface
             return FfiConverterUShort.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_nfc_fn_method_nfcconst_bytes_per_block(
+    UniffiLib.uniffi_cove_nfc_fn_method_nfcconst_bytes_per_block(
         it,
         _status)
 }
@@ -2136,7 +2076,7 @@ open class NfcConst: Disposable, AutoCloseable, NfcConstInterface
             return FfiConverterUShort.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_nfc_fn_method_nfcconst_number_of_blocks_per_chunk(
+    UniffiLib.uniffi_cove_nfc_fn_method_nfcconst_number_of_blocks_per_chunk(
         it,
         _status)
 }
@@ -2149,7 +2089,7 @@ open class NfcConst: Disposable, AutoCloseable, NfcConstInterface
             return FfiConverterUShort.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_nfc_fn_method_nfcconst_total_bytes_per_chunk(
+    UniffiLib.uniffi_cove_nfc_fn_method_nfcconst_total_bytes_per_chunk(
         it,
         _status)
 }
@@ -2387,7 +2327,7 @@ open class NfcMessage: Disposable, AutoCloseable, NfcMessageInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_nfc_fn_free_nfcmessage(handle, status)
+                UniffiLib.uniffi_cove_nfc_fn_free_nfcmessage(handle, status)
             }
         }
     }
@@ -2400,7 +2340,7 @@ open class NfcMessage: Disposable, AutoCloseable, NfcMessageInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_nfc_fn_clone_nfcmessage(handle, status)
+            UniffiLib.uniffi_cove_nfc_fn_clone_nfcmessage(handle, status)
         }
     }
 
@@ -2408,7 +2348,7 @@ open class NfcMessage: Disposable, AutoCloseable, NfcMessageInterface
             return FfiConverterOptionalByteArray.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_nfc_fn_method_nfcmessage_data(
+    UniffiLib.uniffi_cove_nfc_fn_method_nfcmessage_data(
         it,
         _status)
 }
@@ -2421,7 +2361,7 @@ open class NfcMessage: Disposable, AutoCloseable, NfcMessageInterface
             return FfiConverterOptionalString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_nfc_fn_method_nfcmessage_string(
+    UniffiLib.uniffi_cove_nfc_fn_method_nfcmessage_string(
         it,
         _status)
 }
@@ -2441,7 +2381,7 @@ open class NfcMessage: Disposable, AutoCloseable, NfcMessageInterface
     @Throws(NfcMessageException::class) fun `tryNew`(`string`: kotlin.String? = null, `data`: kotlin.ByteArray? = null): NfcMessage {
             return FfiConverterTypeNfcMessage.lift(
     uniffiRustCallWithError(NfcMessageException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_nfc_fn_constructor_nfcmessage_try_new(
+    UniffiLib.uniffi_cove_nfc_fn_constructor_nfcmessage_try_new(
     
         FfiConverterOptionalString.lower(`string`),FfiConverterOptionalByteArray.lower(`data`),_status)
 }
@@ -2761,7 +2701,7 @@ public object FfiConverterTypeTextPayload: FfiConverterRustBuffer<TextPayload> {
 sealed class NdefPayload {
     
     data class Text(
-        val v1: TextPayload) : NdefPayload()
+        val v1: org.bitcoinppl.cove_core.nfc.TextPayload) : NdefPayload()
         
     {
         
@@ -3020,8 +2960,8 @@ sealed class ParseResult {
      * Completed The message is a NDEF message
      */
     data class Complete(
-        val v1: MessageInfo, 
-        val v2: List<NdefRecord>) : ParseResult()
+        val v1: org.bitcoinppl.cove_core.nfc.MessageInfo, 
+        val v2: List<org.bitcoinppl.cove_core.nfc.NdefRecord>) : ParseResult()
         
     {
         
@@ -3033,7 +2973,7 @@ sealed class ParseResult {
      * Incomplete, need more data to parse the message
      */
     data class Incomplete(
-        val v1: ParsingMessage) : ParseResult()
+        val v1: org.bitcoinppl.cove_core.nfc.ParsingMessage) : ParseResult()
         
     {
         
@@ -3108,7 +3048,7 @@ sealed class ParserState {
     
     
     data class Parsing(
-        val v1: ParsingContext) : ParserState()
+        val v1: org.bitcoinppl.cove_core.nfc.ParsingContext) : ParserState()
         
     {
         
@@ -3508,7 +3448,7 @@ public object FfiConverterSequenceTypeNdefRecord: FfiConverterRustBuffer<List<Nd
 } fun `nfcMessageIsEqual`(`lhs`: NfcMessage, `rhs`: NfcMessage): kotlin.Boolean {
             return FfiConverterBoolean.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_nfc_fn_func_nfc_message_is_equal(
+    UniffiLib.uniffi_cove_nfc_fn_func_nfc_message_is_equal(
     
         FfiConverterTypeNfcMessage.lower(`lhs`),FfiConverterTypeNfcMessage.lower(`rhs`),_status)
 }

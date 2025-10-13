@@ -168,7 +168,7 @@ open class RustBuffer : Structure() {
     companion object {
         internal fun alloc(size: ULong = 0UL) = uniffiRustCall() { status ->
             // Note: need to convert the size to a `Long` value to make this work with JVM.
-            UniffiLib.INSTANCE.ffi_cove_rustbuffer_alloc(size.toLong(), status)
+            UniffiLib.ffi_cove_rustbuffer_alloc(size.toLong(), status)
         }.also {
             if(it.data == null) {
                throw RuntimeException("RustBuffer.alloc() returned null data pointer (size=${size})")
@@ -184,7 +184,7 @@ open class RustBuffer : Structure() {
         }
 
         internal fun free(buf: RustBuffer.ByValue) = uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.ffi_cove_rustbuffer_free(buf, status)
+            UniffiLib.ffi_cove_rustbuffer_free(buf, status)
         }
     }
 
@@ -193,40 +193,6 @@ open class RustBuffer : Structure() {
         this.data?.getByteBuffer(0, this.len.toLong())?.also {
             it.order(ByteOrder.BIG_ENDIAN)
         }
-}
-
-/**
- * The equivalent of the `*mut RustBuffer` type.
- * Required for callbacks taking in an out pointer.
- *
- * Size is the sum of all values in the struct.
- *
- * @suppress
- */
-class RustBufferByReference : ByReference(16) {
-    /**
-     * Set the pointed-to `RustBuffer` to the given value.
-     */
-    fun setValue(value: RustBuffer.ByValue) {
-        // NOTE: The offsets are as they are in the C-like struct.
-        val pointer = getPointer()
-        pointer.setLong(0, value.capacity)
-        pointer.setLong(8, value.len)
-        pointer.setPointer(16, value.data)
-    }
-
-    /**
-     * Get a `RustBuffer.ByValue` from this reference.
-     */
-    fun getValue(): RustBuffer.ByValue {
-        val pointer = getPointer()
-        val value = RustBuffer.ByValue()
-        value.writeField("capacity", pointer.getLong(0))
-        value.writeField("len", pointer.getLong(8))
-        value.writeField("data", pointer.getLong(16))
-
-        return value
-    }
 }
 
 // This is a helper for safely passing byte references into the rust code.
@@ -497,12 +463,6 @@ private fun findLibraryName(componentName: String): String {
         return libOverride
     }
     return "coveffi"
-}
-
-private inline fun <reified Lib : Library> loadIndirect(
-    componentName: String
-): Lib {
-    return Native.load<Lib>(findLibraryName(componentName), Lib::class.java)
 }
 
 // Define FFI callback types
@@ -995,2068 +955,2045 @@ internal open class UniffiVTableCallbackInterfaceAutoComplete(
 
 }
 
+// A JNA Library to expose the extern-C FFI definitions.
+// This is an implementation detail which will be called internally by the public API.
+
 // For large crates we prevent `MethodTooLargeException` (see #2340)
-// N.B. the name of the extension is very misleading, since it is 
-// rather `InterfaceTooLargeException`, caused by too many methods 
+// N.B. the name of the extension is very misleading, since it is
+// rather `InterfaceTooLargeException`, caused by too many methods
 // in the interface for large crates.
 //
 // By splitting the otherwise huge interface into two parts
-// * UniffiLib 
-// * IntegrityCheckingUniffiLib (this)
+// * UniffiLib (this)
+// * IntegrityCheckingUniffiLib
+// And all checksum methods are put into `IntegrityCheckingUniffiLib`
 // we allow for ~2x as many methods in the UniffiLib interface.
-// 
-// The `ffi_uniffi_contract_version` method and all checksum methods are put 
-// into `IntegrityCheckingUniffiLib` and these methods are called only once,
-// when the library is loaded.
-internal interface IntegrityCheckingUniffiLib : Library {
-    // Integrity check functions only
-    fun uniffi_cove_checksum_func_address_error_to_alert_state(
+//
+// Note: above all written when we used JNA's `loadIndirect` etc.
+// We now use JNA's "direct mapping" - unclear if same considerations apply exactly.
+internal object IntegrityCheckingUniffiLib {
+    init {
+        Native.register(IntegrityCheckingUniffiLib::class.java, findLibraryName(componentName = "cove"))
+        uniffiCheckContractApiVersion(this)
+        uniffiCheckApiChecksums(this)
+    }
+    external fun uniffi_cove_checksum_func_address_error_to_alert_state(
 ): Short
-fun uniffi_cove_checksum_func_after_pin_action_user_message(
+external fun uniffi_cove_checksum_func_after_pin_action_user_message(
 ): Short
-fun uniffi_cove_checksum_func_all_fiat_currencies(
+external fun uniffi_cove_checksum_func_all_fiat_currencies(
 ): Short
-fun uniffi_cove_checksum_func_coin_control_list_sort_key_to_string(
+external fun uniffi_cove_checksum_func_coin_control_list_sort_key_to_string(
 ): Short
-fun uniffi_cove_checksum_func_create_transport_error_from_code(
+external fun uniffi_cove_checksum_func_create_transport_error_from_code(
 ): Short
-fun uniffi_cove_checksum_func_default_node_selection(
+external fun uniffi_cove_checksum_func_default_node_selection(
 ): Short
-fun uniffi_cove_checksum_func_default_wallet_colors(
+external fun uniffi_cove_checksum_func_default_wallet_colors(
 ): Short
-fun uniffi_cove_checksum_func_describe_auth_manager_error(
+external fun uniffi_cove_checksum_func_describe_auth_manager_error(
 ): Short
-fun uniffi_cove_checksum_func_describe_multi_format_error(
+external fun uniffi_cove_checksum_func_describe_multi_format_error(
 ): Short
-fun uniffi_cove_checksum_func_describe_send_flow_error(
+external fun uniffi_cove_checksum_func_describe_send_flow_error(
 ): Short
-fun uniffi_cove_checksum_func_describe_send_flow_fiat_on_change_error(
+external fun uniffi_cove_checksum_func_describe_send_flow_fiat_on_change_error(
 ): Short
-fun uniffi_cove_checksum_func_describe_tap_signer_reader_error(
+external fun uniffi_cove_checksum_func_describe_tap_signer_reader_error(
 ): Short
-fun uniffi_cove_checksum_func_describe_transport_error(
+external fun uniffi_cove_checksum_func_describe_transport_error(
 ): Short
-fun uniffi_cove_checksum_func_describe_wallet_error(
+external fun uniffi_cove_checksum_func_describe_wallet_error(
 ): Short
-fun uniffi_cove_checksum_func_describe_wallet_manager_error(
+external fun uniffi_cove_checksum_func_describe_wallet_manager_error(
 ): Short
-fun uniffi_cove_checksum_func_discovery_state_is_equal(
+external fun uniffi_cove_checksum_func_discovery_state_is_equal(
 ): Short
-fun uniffi_cove_checksum_func_ffi_min_send_amount(
+external fun uniffi_cove_checksum_func_ffi_min_send_amount(
 ): Short
-fun uniffi_cove_checksum_func_ffi_min_send_sats(
+external fun uniffi_cove_checksum_func_ffi_min_send_sats(
 ): Short
-fun uniffi_cove_checksum_func_fiat_amount_preview_new(
+external fun uniffi_cove_checksum_func_fiat_amount_preview_new(
 ): Short
-fun uniffi_cove_checksum_func_fiat_currency_emoji(
+external fun uniffi_cove_checksum_func_fiat_currency_emoji(
 ): Short
-fun uniffi_cove_checksum_func_fiat_currency_suffix(
+external fun uniffi_cove_checksum_func_fiat_currency_suffix(
 ): Short
-fun uniffi_cove_checksum_func_fiat_currency_symbol(
+external fun uniffi_cove_checksum_func_fiat_currency_symbol(
 ): Short
-fun uniffi_cove_checksum_func_fiat_currency_to_string(
+external fun uniffi_cove_checksum_func_fiat_currency_to_string(
 ): Short
-fun uniffi_cove_checksum_func_grouped_plain_words_of(
+external fun uniffi_cove_checksum_func_grouped_plain_words_of(
 ): Short
-fun uniffi_cove_checksum_func_hardware_wallet_is_tap_signer(
+external fun uniffi_cove_checksum_func_hardware_wallet_is_tap_signer(
 ): Short
-fun uniffi_cove_checksum_func_hash_route(
+external fun uniffi_cove_checksum_func_hash_route(
 ): Short
-fun uniffi_cove_checksum_func_is_fiat_currency_symbol(
+external fun uniffi_cove_checksum_func_is_fiat_currency_symbol(
 ): Short
-fun uniffi_cove_checksum_func_is_route_equal(
+external fun uniffi_cove_checksum_func_is_route_equal(
 ): Short
-fun uniffi_cove_checksum_func_is_tap_signer_route_equal(
+external fun uniffi_cove_checksum_func_is_tap_signer_route_equal(
 ): Short
-fun uniffi_cove_checksum_func_is_valid_chain_code(
+external fun uniffi_cove_checksum_func_is_valid_chain_code(
 ): Short
-fun uniffi_cove_checksum_func_multi_format_try_from_nfc_message(
+external fun uniffi_cove_checksum_func_multi_format_try_from_nfc_message(
 ): Short
-fun uniffi_cove_checksum_func_node_selection_to_node(
+external fun uniffi_cove_checksum_func_node_selection_to_node(
 ): Short
-fun uniffi_cove_checksum_func_number_of_words_in_groups(
+external fun uniffi_cove_checksum_func_number_of_words_in_groups(
 ): Short
-fun uniffi_cove_checksum_func_number_of_words_to_word_count(
+external fun uniffi_cove_checksum_func_number_of_words_to_word_count(
 ): Short
-fun uniffi_cove_checksum_func_preview_new_legacy_found_address(
+external fun uniffi_cove_checksum_func_preview_new_legacy_found_address(
 ): Short
-fun uniffi_cove_checksum_func_preview_new_wrapped_found_address(
+external fun uniffi_cove_checksum_func_preview_new_wrapped_found_address(
 ): Short
-fun uniffi_cove_checksum_func_prices_are_equal(
+external fun uniffi_cove_checksum_func_prices_are_equal(
 ): Short
-fun uniffi_cove_checksum_func_string_or_data_try_into_multi_format(
+external fun uniffi_cove_checksum_func_string_or_data_try_into_multi_format(
 ): Short
-fun uniffi_cove_checksum_func_tap_signer_confirm_pin_args_new_from_new_pin(
+external fun uniffi_cove_checksum_func_tap_signer_confirm_pin_args_new_from_new_pin(
 ): Short
-fun uniffi_cove_checksum_func_tap_signer_error_is_auth_error(
+external fun uniffi_cove_checksum_func_tap_signer_error_is_auth_error(
 ): Short
-fun uniffi_cove_checksum_func_tap_signer_error_is_no_backup_error(
+external fun uniffi_cove_checksum_func_tap_signer_error_is_no_backup_error(
 ): Short
-fun uniffi_cove_checksum_func_tap_signer_response_backup_response(
+external fun uniffi_cove_checksum_func_tap_signer_response_backup_response(
 ): Short
-fun uniffi_cove_checksum_func_tap_signer_response_change_response(
+external fun uniffi_cove_checksum_func_tap_signer_response_change_response(
 ): Short
-fun uniffi_cove_checksum_func_tap_signer_response_derive_response(
+external fun uniffi_cove_checksum_func_tap_signer_response_derive_response(
 ): Short
-fun uniffi_cove_checksum_func_tap_signer_response_setup_response(
+external fun uniffi_cove_checksum_func_tap_signer_response_setup_response(
 ): Short
-fun uniffi_cove_checksum_func_tap_signer_response_sign_response(
+external fun uniffi_cove_checksum_func_tap_signer_response_sign_response(
 ): Short
-fun uniffi_cove_checksum_func_tap_signer_setup_complete_new(
+external fun uniffi_cove_checksum_func_tap_signer_setup_complete_new(
 ): Short
-fun uniffi_cove_checksum_func_tap_signer_setup_retry_continue_cmd(
+external fun uniffi_cove_checksum_func_tap_signer_setup_retry_continue_cmd(
 ): Short
-fun uniffi_cove_checksum_func_transaction_preview_confirmed_new(
+external fun uniffi_cove_checksum_func_transaction_preview_confirmed_new(
 ): Short
-fun uniffi_cove_checksum_func_transaction_preview_unconfirmed_new(
+external fun uniffi_cove_checksum_func_transaction_preview_unconfirmed_new(
 ): Short
-fun uniffi_cove_checksum_func_transactions_preview_new(
+external fun uniffi_cove_checksum_func_transactions_preview_new(
 ): Short
-fun uniffi_cove_checksum_func_update_prices_if_needed(
+external fun uniffi_cove_checksum_func_update_prices_if_needed(
 ): Short
-fun uniffi_cove_checksum_func_wallet_address_type_less_than(
+external fun uniffi_cove_checksum_func_wallet_address_type_less_than(
 ): Short
-fun uniffi_cove_checksum_func_wallet_address_type_to_string(
+external fun uniffi_cove_checksum_func_wallet_address_type_to_string(
 ): Short
-fun uniffi_cove_checksum_func_wallet_metadata_hash(
+external fun uniffi_cove_checksum_func_wallet_metadata_hash(
 ): Short
-fun uniffi_cove_checksum_func_wallet_metadata_is_equal(
+external fun uniffi_cove_checksum_func_wallet_metadata_is_equal(
 ): Short
-fun uniffi_cove_checksum_func_wallet_metadata_preview(
+external fun uniffi_cove_checksum_func_wallet_metadata_preview(
 ): Short
-fun uniffi_cove_checksum_func_wallet_state_is_equal(
+external fun uniffi_cove_checksum_func_wallet_state_is_equal(
 ): Short
-fun uniffi_cove_checksum_func_wallet_type_to_string(
+external fun uniffi_cove_checksum_func_wallet_type_to_string(
 ): Short
-fun uniffi_cove_checksum_method_authpin_check(
+external fun uniffi_cove_checksum_method_authpin_check(
 ): Short
-fun uniffi_cove_checksum_method_autocomplete_autocomplete(
+external fun uniffi_cove_checksum_method_autocomplete_autocomplete(
 ): Short
-fun uniffi_cove_checksum_method_autocomplete_is_valid_word(
+external fun uniffi_cove_checksum_method_autocomplete_is_valid_word(
 ): Short
-fun uniffi_cove_checksum_method_balance_spendable(
+external fun uniffi_cove_checksum_method_balance_spendable(
 ): Short
-fun uniffi_cove_checksum_method_bbqrjoinresult_final_result(
+external fun uniffi_cove_checksum_method_bbqrjoinresult_final_result(
 ): Short
-fun uniffi_cove_checksum_method_bbqrjoinresult_is_complete(
+external fun uniffi_cove_checksum_method_bbqrjoinresult_is_complete(
 ): Short
-fun uniffi_cove_checksum_method_bbqrjoinresult_parts_left(
+external fun uniffi_cove_checksum_method_bbqrjoinresult_parts_left(
 ): Short
-fun uniffi_cove_checksum_method_bbqrjoined_get_grouped_words(
+external fun uniffi_cove_checksum_method_bbqrjoined_get_grouped_words(
 ): Short
-fun uniffi_cove_checksum_method_bbqrjoined_get_seed_words(
+external fun uniffi_cove_checksum_method_bbqrjoined_get_seed_words(
 ): Short
-fun uniffi_cove_checksum_method_bip39autocomplete_autocomplete(
+external fun uniffi_cove_checksum_method_bip39autocomplete_autocomplete(
 ): Short
-fun uniffi_cove_checksum_method_bip39autocomplete_is_valid_word(
+external fun uniffi_cove_checksum_method_bip39autocomplete_is_valid_word(
 ): Short
-fun uniffi_cove_checksum_method_bip39autocomplete_next_field_number(
+external fun uniffi_cove_checksum_method_bip39autocomplete_next_field_number(
 ): Short
-fun uniffi_cove_checksum_method_bip39wordspecificautocomplete_autocomplete(
+external fun uniffi_cove_checksum_method_bip39wordspecificautocomplete_autocomplete(
 ): Short
-fun uniffi_cove_checksum_method_bip39wordspecificautocomplete_is_bip39_word(
+external fun uniffi_cove_checksum_method_bip39wordspecificautocomplete_is_bip39_word(
 ): Short
-fun uniffi_cove_checksum_method_bip39wordspecificautocomplete_is_valid_word(
+external fun uniffi_cove_checksum_method_bip39wordspecificautocomplete_is_valid_word(
 ): Short
-fun uniffi_cove_checksum_method_bip39wordspecificautocomplete_next_field_number(
+external fun uniffi_cove_checksum_method_bip39wordspecificautocomplete_next_field_number(
 ): Short
-fun uniffi_cove_checksum_method_bitcointransaction_normalize_tx_id(
+external fun uniffi_cove_checksum_method_bitcointransaction_normalize_tx_id(
 ): Short
-fun uniffi_cove_checksum_method_bitcointransaction_tx_id(
+external fun uniffi_cove_checksum_method_bitcointransaction_tx_id(
 ): Short
-fun uniffi_cove_checksum_method_bitcointransaction_tx_id_hash(
+external fun uniffi_cove_checksum_method_bitcointransaction_tx_id_hash(
 ): Short
-fun uniffi_cove_checksum_method_boxedroute_route(
+external fun uniffi_cove_checksum_method_boxedroute_route(
 ): Short
-fun uniffi_cove_checksum_method_confirmedtransaction_block_height(
+external fun uniffi_cove_checksum_method_confirmedtransaction_block_height(
 ): Short
-fun uniffi_cove_checksum_method_confirmedtransaction_block_height_fmt(
+external fun uniffi_cove_checksum_method_confirmedtransaction_block_height_fmt(
 ): Short
-fun uniffi_cove_checksum_method_confirmedtransaction_confirmed_at(
+external fun uniffi_cove_checksum_method_confirmedtransaction_confirmed_at(
 ): Short
-fun uniffi_cove_checksum_method_confirmedtransaction_confirmed_at_fmt(
+external fun uniffi_cove_checksum_method_confirmedtransaction_confirmed_at_fmt(
 ): Short
-fun uniffi_cove_checksum_method_confirmedtransaction_confirmed_at_fmt_with_time(
+external fun uniffi_cove_checksum_method_confirmedtransaction_confirmed_at_fmt_with_time(
 ): Short
-fun uniffi_cove_checksum_method_confirmedtransaction_fiat_amount(
+external fun uniffi_cove_checksum_method_confirmedtransaction_fiat_amount(
 ): Short
-fun uniffi_cove_checksum_method_confirmedtransaction_id(
+external fun uniffi_cove_checksum_method_confirmedtransaction_id(
 ): Short
-fun uniffi_cove_checksum_method_confirmedtransaction_label(
+external fun uniffi_cove_checksum_method_confirmedtransaction_label(
 ): Short
-fun uniffi_cove_checksum_method_confirmedtransaction_label_opt(
+external fun uniffi_cove_checksum_method_confirmedtransaction_label_opt(
 ): Short
-fun uniffi_cove_checksum_method_confirmedtransaction_sent_and_received(
+external fun uniffi_cove_checksum_method_confirmedtransaction_sent_and_received(
 ): Short
-fun uniffi_cove_checksum_method_converter_parse_fiat_str(
+external fun uniffi_cove_checksum_method_converter_parse_fiat_str(
 ): Short
-fun uniffi_cove_checksum_method_converter_remove_fiat_suffix(
+external fun uniffi_cove_checksum_method_converter_remove_fiat_suffix(
 ): Short
-fun uniffi_cove_checksum_method_database_dangerous_reset_all_data(
+external fun uniffi_cove_checksum_method_database_dangerous_reset_all_data(
 ): Short
-fun uniffi_cove_checksum_method_database_global_config(
+external fun uniffi_cove_checksum_method_database_global_config(
 ): Short
-fun uniffi_cove_checksum_method_database_global_flag(
+external fun uniffi_cove_checksum_method_database_global_flag(
 ): Short
-fun uniffi_cove_checksum_method_database_historical_prices(
+external fun uniffi_cove_checksum_method_database_historical_prices(
 ): Short
-fun uniffi_cove_checksum_method_database_unsigned_transactions(
+external fun uniffi_cove_checksum_method_database_unsigned_transactions(
 ): Short
-fun uniffi_cove_checksum_method_database_wallets(
+external fun uniffi_cove_checksum_method_database_wallets(
 ): Short
-fun uniffi_cove_checksum_method_ffiapp_auth_type(
+external fun uniffi_cove_checksum_method_ffiapp_auth_type(
 ): Short
-fun uniffi_cove_checksum_method_ffiapp_dangerous_wipe_all_data(
+external fun uniffi_cove_checksum_method_ffiapp_dangerous_wipe_all_data(
 ): Short
-fun uniffi_cove_checksum_method_ffiapp_debug_or_release(
+external fun uniffi_cove_checksum_method_ffiapp_debug_or_release(
 ): Short
-fun uniffi_cove_checksum_method_ffiapp_dispatch(
+external fun uniffi_cove_checksum_method_ffiapp_dispatch(
 ): Short
-fun uniffi_cove_checksum_method_ffiapp_email_mailto(
+external fun uniffi_cove_checksum_method_ffiapp_email_mailto(
 ): Short
-fun uniffi_cove_checksum_method_ffiapp_fees(
+external fun uniffi_cove_checksum_method_ffiapp_fees(
 ): Short
-fun uniffi_cove_checksum_method_ffiapp_find_tap_signer_wallet(
+external fun uniffi_cove_checksum_method_ffiapp_find_tap_signer_wallet(
 ): Short
-fun uniffi_cove_checksum_method_ffiapp_get_tap_signer_backup(
+external fun uniffi_cove_checksum_method_ffiapp_get_tap_signer_backup(
 ): Short
-fun uniffi_cove_checksum_method_ffiapp_git_short_hash(
+external fun uniffi_cove_checksum_method_ffiapp_git_short_hash(
 ): Short
-fun uniffi_cove_checksum_method_ffiapp_go_to_selected_wallet(
+external fun uniffi_cove_checksum_method_ffiapp_go_to_selected_wallet(
 ): Short
-fun uniffi_cove_checksum_method_ffiapp_has_wallets(
+external fun uniffi_cove_checksum_method_ffiapp_has_wallets(
 ): Short
-fun uniffi_cove_checksum_method_ffiapp_init_on_start(
+external fun uniffi_cove_checksum_method_ffiapp_init_on_start(
 ): Short
-fun uniffi_cove_checksum_method_ffiapp_listen_for_updates(
+external fun uniffi_cove_checksum_method_ffiapp_listen_for_updates(
 ): Short
-fun uniffi_cove_checksum_method_ffiapp_load_and_reset_default_route(
+external fun uniffi_cove_checksum_method_ffiapp_load_and_reset_default_route(
 ): Short
-fun uniffi_cove_checksum_method_ffiapp_load_and_reset_default_route_after(
+external fun uniffi_cove_checksum_method_ffiapp_load_and_reset_default_route_after(
 ): Short
-fun uniffi_cove_checksum_method_ffiapp_network(
+external fun uniffi_cove_checksum_method_ffiapp_network(
 ): Short
-fun uniffi_cove_checksum_method_ffiapp_num_wallets(
+external fun uniffi_cove_checksum_method_ffiapp_num_wallets(
 ): Short
-fun uniffi_cove_checksum_method_ffiapp_prices(
+external fun uniffi_cove_checksum_method_ffiapp_prices(
 ): Short
-fun uniffi_cove_checksum_method_ffiapp_reset_default_route_to(
+external fun uniffi_cove_checksum_method_ffiapp_reset_default_route_to(
 ): Short
-fun uniffi_cove_checksum_method_ffiapp_reset_nested_routes_to(
+external fun uniffi_cove_checksum_method_ffiapp_reset_nested_routes_to(
 ): Short
-fun uniffi_cove_checksum_method_ffiapp_save_tap_signer_backup(
+external fun uniffi_cove_checksum_method_ffiapp_save_tap_signer_backup(
 ): Short
-fun uniffi_cove_checksum_method_ffiapp_select_wallet(
+external fun uniffi_cove_checksum_method_ffiapp_select_wallet(
 ): Short
-fun uniffi_cove_checksum_method_ffiapp_state(
+external fun uniffi_cove_checksum_method_ffiapp_state(
 ): Short
-fun uniffi_cove_checksum_method_ffiapp_unverified_wallet_ids(
+external fun uniffi_cove_checksum_method_ffiapp_unverified_wallet_ids(
 ): Short
-fun uniffi_cove_checksum_method_ffiapp_version(
+external fun uniffi_cove_checksum_method_ffiapp_version(
 ): Short
-fun uniffi_cove_checksum_method_filehandler_read(
+external fun uniffi_cove_checksum_method_filehandler_read(
 ): Short
-fun uniffi_cove_checksum_method_fingerprint_as_lowercase(
+external fun uniffi_cove_checksum_method_fingerprint_as_lowercase(
 ): Short
-fun uniffi_cove_checksum_method_fingerprint_as_uppercase(
+external fun uniffi_cove_checksum_method_fingerprint_as_uppercase(
 ): Short
-fun uniffi_cove_checksum_method_globalconfigtable_authtype(
+external fun uniffi_cove_checksum_method_globalconfigtable_authtype(
 ): Short
-fun uniffi_cove_checksum_method_globalconfigtable_clear_selected_wallet(
+external fun uniffi_cove_checksum_method_globalconfigtable_clear_selected_wallet(
 ): Short
-fun uniffi_cove_checksum_method_globalconfigtable_colorscheme(
+external fun uniffi_cove_checksum_method_globalconfigtable_colorscheme(
 ): Short
-fun uniffi_cove_checksum_method_globalconfigtable_delete(
+external fun uniffi_cove_checksum_method_globalconfigtable_delete(
 ): Short
-fun uniffi_cove_checksum_method_globalconfigtable_delete_hashed_pin_code(
+external fun uniffi_cove_checksum_method_globalconfigtable_delete_hashed_pin_code(
 ): Short
-fun uniffi_cove_checksum_method_globalconfigtable_get(
+external fun uniffi_cove_checksum_method_globalconfigtable_get(
 ): Short
-fun uniffi_cove_checksum_method_globalconfigtable_hashed_pin_code(
+external fun uniffi_cove_checksum_method_globalconfigtable_hashed_pin_code(
 ): Short
-fun uniffi_cove_checksum_method_globalconfigtable_is_in_decoy_mode(
+external fun uniffi_cove_checksum_method_globalconfigtable_is_in_decoy_mode(
 ): Short
-fun uniffi_cove_checksum_method_globalconfigtable_is_in_main_mode(
+external fun uniffi_cove_checksum_method_globalconfigtable_is_in_main_mode(
 ): Short
-fun uniffi_cove_checksum_method_globalconfigtable_select_wallet(
+external fun uniffi_cove_checksum_method_globalconfigtable_select_wallet(
 ): Short
-fun uniffi_cove_checksum_method_globalconfigtable_selectedfiatcurrency(
+external fun uniffi_cove_checksum_method_globalconfigtable_selectedfiatcurrency(
 ): Short
-fun uniffi_cove_checksum_method_globalconfigtable_selected_network(
+external fun uniffi_cove_checksum_method_globalconfigtable_selected_network(
 ): Short
-fun uniffi_cove_checksum_method_globalconfigtable_selected_node(
+external fun uniffi_cove_checksum_method_globalconfigtable_selected_node(
 ): Short
-fun uniffi_cove_checksum_method_globalconfigtable_selected_wallet(
+external fun uniffi_cove_checksum_method_globalconfigtable_selected_wallet(
 ): Short
-fun uniffi_cove_checksum_method_globalconfigtable_set(
+external fun uniffi_cove_checksum_method_globalconfigtable_set(
 ): Short
-fun uniffi_cove_checksum_method_globalconfigtable_setcolorscheme(
+external fun uniffi_cove_checksum_method_globalconfigtable_setcolorscheme(
 ): Short
-fun uniffi_cove_checksum_method_globalconfigtable_set_hashed_pin_code(
+external fun uniffi_cove_checksum_method_globalconfigtable_set_hashed_pin_code(
 ): Short
-fun uniffi_cove_checksum_method_globalconfigtable_set_selected_network(
+external fun uniffi_cove_checksum_method_globalconfigtable_set_selected_network(
 ): Short
-fun uniffi_cove_checksum_method_globalconfigtable_set_selected_node(
+external fun uniffi_cove_checksum_method_globalconfigtable_set_selected_node(
 ): Short
-fun uniffi_cove_checksum_method_globalconfigtable_wallet_mode(
+external fun uniffi_cove_checksum_method_globalconfigtable_wallet_mode(
 ): Short
-fun uniffi_cove_checksum_method_globalflagtable_get(
+external fun uniffi_cove_checksum_method_globalflagtable_get(
 ): Short
-fun uniffi_cove_checksum_method_globalflagtable_get_bool_config(
+external fun uniffi_cove_checksum_method_globalflagtable_get_bool_config(
 ): Short
-fun uniffi_cove_checksum_method_globalflagtable_is_terms_accepted(
+external fun uniffi_cove_checksum_method_globalflagtable_is_terms_accepted(
 ): Short
-fun uniffi_cove_checksum_method_globalflagtable_set(
+external fun uniffi_cove_checksum_method_globalflagtable_set(
 ): Short
-fun uniffi_cove_checksum_method_globalflagtable_set_bool_config(
+external fun uniffi_cove_checksum_method_globalflagtable_set_bool_config(
 ): Short
-fun uniffi_cove_checksum_method_globalflagtable_toggle_bool_config(
+external fun uniffi_cove_checksum_method_globalflagtable_toggle_bool_config(
 ): Short
-fun uniffi_cove_checksum_method_headericonpresenter_background_color(
+external fun uniffi_cove_checksum_method_headericonpresenter_background_color(
 ): Short
-fun uniffi_cove_checksum_method_headericonpresenter_icon_color(
+external fun uniffi_cove_checksum_method_headericonpresenter_icon_color(
 ): Short
-fun uniffi_cove_checksum_method_headericonpresenter_ring_color(
+external fun uniffi_cove_checksum_method_headericonpresenter_ring_color(
 ): Short
-fun uniffi_cove_checksum_method_labelmanager_delete_labels_for_txn(
+external fun uniffi_cove_checksum_method_labelmanager_delete_labels_for_txn(
 ): Short
-fun uniffi_cove_checksum_method_labelmanager_export(
+external fun uniffi_cove_checksum_method_labelmanager_export(
 ): Short
-fun uniffi_cove_checksum_method_labelmanager_export_default_file_name(
+external fun uniffi_cove_checksum_method_labelmanager_export_default_file_name(
 ): Short
-fun uniffi_cove_checksum_method_labelmanager_has_labels(
+external fun uniffi_cove_checksum_method_labelmanager_has_labels(
 ): Short
-fun uniffi_cove_checksum_method_labelmanager_import(
+external fun uniffi_cove_checksum_method_labelmanager_import(
 ): Short
-fun uniffi_cove_checksum_method_labelmanager_importlabels(
+external fun uniffi_cove_checksum_method_labelmanager_importlabels(
 ): Short
-fun uniffi_cove_checksum_method_labelmanager_insert_or_update_labels_for_txn(
+external fun uniffi_cove_checksum_method_labelmanager_insert_or_update_labels_for_txn(
 ): Short
-fun uniffi_cove_checksum_method_labelmanager_transaction_label(
+external fun uniffi_cove_checksum_method_labelmanager_transaction_label(
 ): Short
-fun uniffi_cove_checksum_method_mnemonic_all_words(
+external fun uniffi_cove_checksum_method_mnemonic_all_words(
 ): Short
-fun uniffi_cove_checksum_method_mnemonic_words(
+external fun uniffi_cove_checksum_method_mnemonic_words(
 ): Short
-fun uniffi_cove_checksum_method_multiqr_add_part(
+external fun uniffi_cove_checksum_method_multiqr_add_part(
 ): Short
-fun uniffi_cove_checksum_method_multiqr_get_grouped_words(
+external fun uniffi_cove_checksum_method_multiqr_get_grouped_words(
 ): Short
-fun uniffi_cove_checksum_method_multiqr_handle_scan_result(
+external fun uniffi_cove_checksum_method_multiqr_handle_scan_result(
 ): Short
-fun uniffi_cove_checksum_method_multiqr_is_bbqr(
+external fun uniffi_cove_checksum_method_multiqr_is_bbqr(
 ): Short
-fun uniffi_cove_checksum_method_multiqr_is_seed_qr(
+external fun uniffi_cove_checksum_method_multiqr_is_seed_qr(
 ): Short
-fun uniffi_cove_checksum_method_multiqr_total_parts(
+external fun uniffi_cove_checksum_method_multiqr_total_parts(
 ): Short
-fun uniffi_cove_checksum_method_nodeselector_check_and_save_node(
+external fun uniffi_cove_checksum_method_nodeselector_check_and_save_node(
 ): Short
-fun uniffi_cove_checksum_method_nodeselector_check_selected_node(
+external fun uniffi_cove_checksum_method_nodeselector_check_selected_node(
 ): Short
-fun uniffi_cove_checksum_method_nodeselector_node_list(
+external fun uniffi_cove_checksum_method_nodeselector_node_list(
 ): Short
-fun uniffi_cove_checksum_method_nodeselector_parse_custom_node(
+external fun uniffi_cove_checksum_method_nodeselector_parse_custom_node(
 ): Short
-fun uniffi_cove_checksum_method_nodeselector_select_preset_node(
+external fun uniffi_cove_checksum_method_nodeselector_select_preset_node(
 ): Short
-fun uniffi_cove_checksum_method_nodeselector_selected_node(
+external fun uniffi_cove_checksum_method_nodeselector_selected_node(
 ): Short
-fun uniffi_cove_checksum_method_priceresponse_get(
+external fun uniffi_cove_checksum_method_priceresponse_get(
 ): Short
-fun uniffi_cove_checksum_method_priceresponse_get_for_currency(
+external fun uniffi_cove_checksum_method_priceresponse_get_for_currency(
 ): Short
-fun uniffi_cove_checksum_method_routefactory_coin_control_send(
+external fun uniffi_cove_checksum_method_routefactory_coin_control_send(
 ): Short
-fun uniffi_cove_checksum_method_routefactory_cold_wallet_import(
+external fun uniffi_cove_checksum_method_routefactory_cold_wallet_import(
 ): Short
-fun uniffi_cove_checksum_method_routefactory_hot_wallet(
+external fun uniffi_cove_checksum_method_routefactory_hot_wallet(
 ): Short
-fun uniffi_cove_checksum_method_routefactory_hot_wallet_import_from_scan(
+external fun uniffi_cove_checksum_method_routefactory_hot_wallet_import_from_scan(
 ): Short
-fun uniffi_cove_checksum_method_routefactory_is_same_parent_route(
+external fun uniffi_cove_checksum_method_routefactory_is_same_parent_route(
 ): Short
-fun uniffi_cove_checksum_method_routefactory_load_and_reset_nested_to(
+external fun uniffi_cove_checksum_method_routefactory_load_and_reset_nested_to(
 ): Short
-fun uniffi_cove_checksum_method_routefactory_load_and_reset_to(
+external fun uniffi_cove_checksum_method_routefactory_load_and_reset_to(
 ): Short
-fun uniffi_cove_checksum_method_routefactory_load_and_reset_to_after(
+external fun uniffi_cove_checksum_method_routefactory_load_and_reset_to_after(
 ): Short
-fun uniffi_cove_checksum_method_routefactory_main_wallet_settings(
+external fun uniffi_cove_checksum_method_routefactory_main_wallet_settings(
 ): Short
-fun uniffi_cove_checksum_method_routefactory_nested_settings(
+external fun uniffi_cove_checksum_method_routefactory_nested_settings(
 ): Short
-fun uniffi_cove_checksum_method_routefactory_nested_wallet_settings(
+external fun uniffi_cove_checksum_method_routefactory_nested_wallet_settings(
 ): Short
-fun uniffi_cove_checksum_method_routefactory_new_hot_wallet(
+external fun uniffi_cove_checksum_method_routefactory_new_hot_wallet(
 ): Short
-fun uniffi_cove_checksum_method_routefactory_new_wallet_select(
+external fun uniffi_cove_checksum_method_routefactory_new_wallet_select(
 ): Short
-fun uniffi_cove_checksum_method_routefactory_qr_import(
+external fun uniffi_cove_checksum_method_routefactory_qr_import(
 ): Short
-fun uniffi_cove_checksum_method_routefactory_secret_words(
+external fun uniffi_cove_checksum_method_routefactory_secret_words(
 ): Short
-fun uniffi_cove_checksum_method_routefactory_send(
+external fun uniffi_cove_checksum_method_routefactory_send(
 ): Short
-fun uniffi_cove_checksum_method_routefactory_send_confirm(
+external fun uniffi_cove_checksum_method_routefactory_send_confirm(
 ): Short
-fun uniffi_cove_checksum_method_routefactory_send_hardware_export(
+external fun uniffi_cove_checksum_method_routefactory_send_hardware_export(
 ): Short
-fun uniffi_cove_checksum_method_routefactory_send_set_amount(
+external fun uniffi_cove_checksum_method_routefactory_send_set_amount(
 ): Short
-fun uniffi_cove_checksum_method_routefactory_wallet_settings(
+external fun uniffi_cove_checksum_method_routefactory_wallet_settings(
 ): Short
-fun uniffi_cove_checksum_method_rustauthmanager_auth_type(
+external fun uniffi_cove_checksum_method_rustauthmanager_auth_type(
 ): Short
-fun uniffi_cove_checksum_method_rustauthmanager_checkdecoypin(
+external fun uniffi_cove_checksum_method_rustauthmanager_checkdecoypin(
 ): Short
-fun uniffi_cove_checksum_method_rustauthmanager_checkwipedatapin(
+external fun uniffi_cove_checksum_method_rustauthmanager_checkwipedatapin(
 ): Short
-fun uniffi_cove_checksum_method_rustauthmanager_delete_decoy_pin(
+external fun uniffi_cove_checksum_method_rustauthmanager_delete_decoy_pin(
 ): Short
-fun uniffi_cove_checksum_method_rustauthmanager_delete_wipe_data_pin(
+external fun uniffi_cove_checksum_method_rustauthmanager_delete_wipe_data_pin(
 ): Short
-fun uniffi_cove_checksum_method_rustauthmanager_dispatch(
+external fun uniffi_cove_checksum_method_rustauthmanager_dispatch(
 ): Short
-fun uniffi_cove_checksum_method_rustauthmanager_is_decoy_pin_enabled(
+external fun uniffi_cove_checksum_method_rustauthmanager_is_decoy_pin_enabled(
 ): Short
-fun uniffi_cove_checksum_method_rustauthmanager_is_in_decoy_mode(
+external fun uniffi_cove_checksum_method_rustauthmanager_is_in_decoy_mode(
 ): Short
-fun uniffi_cove_checksum_method_rustauthmanager_is_wipe_data_pin_enabled(
+external fun uniffi_cove_checksum_method_rustauthmanager_is_wipe_data_pin_enabled(
 ): Short
-fun uniffi_cove_checksum_method_rustauthmanager_listen_for_updates(
+external fun uniffi_cove_checksum_method_rustauthmanager_listen_for_updates(
 ): Short
-fun uniffi_cove_checksum_method_rustauthmanager_locked_at(
+external fun uniffi_cove_checksum_method_rustauthmanager_locked_at(
 ): Short
-fun uniffi_cove_checksum_method_rustauthmanager_send(
+external fun uniffi_cove_checksum_method_rustauthmanager_send(
 ): Short
-fun uniffi_cove_checksum_method_rustauthmanager_set_auth_type(
+external fun uniffi_cove_checksum_method_rustauthmanager_set_auth_type(
 ): Short
-fun uniffi_cove_checksum_method_rustauthmanager_set_decoy_pin(
+external fun uniffi_cove_checksum_method_rustauthmanager_set_decoy_pin(
 ): Short
-fun uniffi_cove_checksum_method_rustauthmanager_set_locked_at(
+external fun uniffi_cove_checksum_method_rustauthmanager_set_locked_at(
 ): Short
-fun uniffi_cove_checksum_method_rustauthmanager_set_wipe_data_pin(
+external fun uniffi_cove_checksum_method_rustauthmanager_set_wipe_data_pin(
 ): Short
-fun uniffi_cove_checksum_method_rustauthmanager_switch_to_decoy_mode(
+external fun uniffi_cove_checksum_method_rustauthmanager_switch_to_decoy_mode(
 ): Short
-fun uniffi_cove_checksum_method_rustauthmanager_switch_to_main_mode(
+external fun uniffi_cove_checksum_method_rustauthmanager_switch_to_main_mode(
 ): Short
-fun uniffi_cove_checksum_method_rustauthmanager_validate_pin_settings(
+external fun uniffi_cove_checksum_method_rustauthmanager_validate_pin_settings(
 ): Short
-fun uniffi_cove_checksum_method_rustcoincontrolmanager_button_presentation(
+external fun uniffi_cove_checksum_method_rustcoincontrolmanager_button_presentation(
 ): Short
-fun uniffi_cove_checksum_method_rustcoincontrolmanager_dispatch(
+external fun uniffi_cove_checksum_method_rustcoincontrolmanager_dispatch(
 ): Short
-fun uniffi_cove_checksum_method_rustcoincontrolmanager_id(
+external fun uniffi_cove_checksum_method_rustcoincontrolmanager_id(
 ): Short
-fun uniffi_cove_checksum_method_rustcoincontrolmanager_listen_for_updates(
+external fun uniffi_cove_checksum_method_rustcoincontrolmanager_listen_for_updates(
 ): Short
-fun uniffi_cove_checksum_method_rustcoincontrolmanager_reload_labels(
+external fun uniffi_cove_checksum_method_rustcoincontrolmanager_reload_labels(
 ): Short
-fun uniffi_cove_checksum_method_rustcoincontrolmanager_selected_utxos(
+external fun uniffi_cove_checksum_method_rustcoincontrolmanager_selected_utxos(
 ): Short
-fun uniffi_cove_checksum_method_rustcoincontrolmanager_unit(
+external fun uniffi_cove_checksum_method_rustcoincontrolmanager_unit(
 ): Short
-fun uniffi_cove_checksum_method_rustcoincontrolmanager_utxos(
+external fun uniffi_cove_checksum_method_rustcoincontrolmanager_utxos(
 ): Short
-fun uniffi_cove_checksum_method_rustimportwalletmanager_dispatch(
+external fun uniffi_cove_checksum_method_rustimportwalletmanager_dispatch(
 ): Short
-fun uniffi_cove_checksum_method_rustimportwalletmanager_import_wallet(
+external fun uniffi_cove_checksum_method_rustimportwalletmanager_import_wallet(
 ): Short
-fun uniffi_cove_checksum_method_rustimportwalletmanager_listen_for_updates(
+external fun uniffi_cove_checksum_method_rustimportwalletmanager_listen_for_updates(
 ): Short
-fun uniffi_cove_checksum_method_rustpendingwalletmanager_bip_39_words(
+external fun uniffi_cove_checksum_method_rustpendingwalletmanager_bip_39_words(
 ): Short
-fun uniffi_cove_checksum_method_rustpendingwalletmanager_bip_39_words_grouped(
+external fun uniffi_cove_checksum_method_rustpendingwalletmanager_bip_39_words_grouped(
 ): Short
-fun uniffi_cove_checksum_method_rustpendingwalletmanager_card_indexes(
+external fun uniffi_cove_checksum_method_rustpendingwalletmanager_card_indexes(
 ): Short
-fun uniffi_cove_checksum_method_rustpendingwalletmanager_dispatch(
+external fun uniffi_cove_checksum_method_rustpendingwalletmanager_dispatch(
 ): Short
-fun uniffi_cove_checksum_method_rustpendingwalletmanager_get_state(
+external fun uniffi_cove_checksum_method_rustpendingwalletmanager_get_state(
 ): Short
-fun uniffi_cove_checksum_method_rustpendingwalletmanager_listen_for_updates(
+external fun uniffi_cove_checksum_method_rustpendingwalletmanager_listen_for_updates(
 ): Short
-fun uniffi_cove_checksum_method_rustpendingwalletmanager_number_of_words_count(
+external fun uniffi_cove_checksum_method_rustpendingwalletmanager_number_of_words_count(
 ): Short
-fun uniffi_cove_checksum_method_rustpendingwalletmanager_save_wallet(
+external fun uniffi_cove_checksum_method_rustpendingwalletmanager_save_wallet(
 ): Short
-fun uniffi_cove_checksum_method_rustsendflowmanager_amount(
+external fun uniffi_cove_checksum_method_rustsendflowmanager_amount(
 ): Short
-fun uniffi_cove_checksum_method_rustsendflowmanager_amount_sats(
+external fun uniffi_cove_checksum_method_rustsendflowmanager_amount_sats(
 ): Short
-fun uniffi_cove_checksum_method_rustsendflowmanager_dispatch(
+external fun uniffi_cove_checksum_method_rustsendflowmanager_dispatch(
 ): Short
-fun uniffi_cove_checksum_method_rustsendflowmanager_display_fiat_amount(
+external fun uniffi_cove_checksum_method_rustsendflowmanager_display_fiat_amount(
 ): Short
-fun uniffi_cove_checksum_method_rustsendflowmanager_entering_fiat_amount(
+external fun uniffi_cove_checksum_method_rustsendflowmanager_entering_fiat_amount(
 ): Short
-fun uniffi_cove_checksum_method_rustsendflowmanager_get_custom_fee_option(
+external fun uniffi_cove_checksum_method_rustsendflowmanager_get_custom_fee_option(
 ): Short
-fun uniffi_cove_checksum_method_rustsendflowmanager_listen_for_updates(
+external fun uniffi_cove_checksum_method_rustsendflowmanager_listen_for_updates(
 ): Short
-fun uniffi_cove_checksum_method_rustsendflowmanager_maxsendminusfees(
+external fun uniffi_cove_checksum_method_rustsendflowmanager_maxsendminusfees(
 ): Short
-fun uniffi_cove_checksum_method_rustsendflowmanager_maxsendminusfeesandsmallutxo(
+external fun uniffi_cove_checksum_method_rustsendflowmanager_maxsendminusfeesandsmallutxo(
 ): Short
-fun uniffi_cove_checksum_method_rustsendflowmanager_sanitize_btc_entering_amount(
+external fun uniffi_cove_checksum_method_rustsendflowmanager_sanitize_btc_entering_amount(
 ): Short
-fun uniffi_cove_checksum_method_rustsendflowmanager_sanitize_fiat_entering_amount(
+external fun uniffi_cove_checksum_method_rustsendflowmanager_sanitize_fiat_entering_amount(
 ): Short
-fun uniffi_cove_checksum_method_rustsendflowmanager_send_amount_btc(
+external fun uniffi_cove_checksum_method_rustsendflowmanager_send_amount_btc(
 ): Short
-fun uniffi_cove_checksum_method_rustsendflowmanager_send_amount_fiat(
+external fun uniffi_cove_checksum_method_rustsendflowmanager_send_amount_fiat(
 ): Short
-fun uniffi_cove_checksum_method_rustsendflowmanager_total_fee_string(
+external fun uniffi_cove_checksum_method_rustsendflowmanager_total_fee_string(
 ): Short
-fun uniffi_cove_checksum_method_rustsendflowmanager_total_spent_in_btc(
+external fun uniffi_cove_checksum_method_rustsendflowmanager_total_spent_in_btc(
 ): Short
-fun uniffi_cove_checksum_method_rustsendflowmanager_total_spent_in_fiat(
+external fun uniffi_cove_checksum_method_rustsendflowmanager_total_spent_in_fiat(
 ): Short
-fun uniffi_cove_checksum_method_rustsendflowmanager_utxos(
+external fun uniffi_cove_checksum_method_rustsendflowmanager_utxos(
 ): Short
-fun uniffi_cove_checksum_method_rustsendflowmanager_validate_address(
+external fun uniffi_cove_checksum_method_rustsendflowmanager_validate_address(
 ): Short
-fun uniffi_cove_checksum_method_rustsendflowmanager_validate_amount(
+external fun uniffi_cove_checksum_method_rustsendflowmanager_validate_amount(
 ): Short
-fun uniffi_cove_checksum_method_rustsendflowmanager_validate_fee_percentage(
+external fun uniffi_cove_checksum_method_rustsendflowmanager_validate_fee_percentage(
 ): Short
-fun uniffi_cove_checksum_method_rustsendflowmanager_wait_for_init(
+external fun uniffi_cove_checksum_method_rustsendflowmanager_wait_for_init(
 ): Short
-fun uniffi_cove_checksum_method_rustsendflowmanager_wallet_id(
+external fun uniffi_cove_checksum_method_rustsendflowmanager_wallet_id(
 ): Short
-fun uniffi_cove_checksum_method_rustwalletmanager_address_at(
+external fun uniffi_cove_checksum_method_rustwalletmanager_address_at(
 ): Short
-fun uniffi_cove_checksum_method_rustwalletmanager_amount_in_fiat(
+external fun uniffi_cove_checksum_method_rustwalletmanager_amount_in_fiat(
 ): Short
-fun uniffi_cove_checksum_method_rustwalletmanager_balance(
+external fun uniffi_cove_checksum_method_rustwalletmanager_balance(
 ): Short
-fun uniffi_cove_checksum_method_rustwalletmanager_balance_in_fiat(
+external fun uniffi_cove_checksum_method_rustwalletmanager_balance_in_fiat(
 ): Short
-fun uniffi_cove_checksum_method_rustwalletmanager_broadcast_transaction(
+external fun uniffi_cove_checksum_method_rustwalletmanager_broadcast_transaction(
 ): Short
-fun uniffi_cove_checksum_method_rustwalletmanager_convert_and_display_fiat(
+external fun uniffi_cove_checksum_method_rustwalletmanager_convert_and_display_fiat(
 ): Short
-fun uniffi_cove_checksum_method_rustwalletmanager_convert_from_fiat_string(
+external fun uniffi_cove_checksum_method_rustwalletmanager_convert_from_fiat_string(
 ): Short
-fun uniffi_cove_checksum_method_rustwalletmanager_convert_to_fiat(
+external fun uniffi_cove_checksum_method_rustwalletmanager_convert_to_fiat(
 ): Short
-fun uniffi_cove_checksum_method_rustwalletmanager_create_transactions_with_fiat_export(
+external fun uniffi_cove_checksum_method_rustwalletmanager_create_transactions_with_fiat_export(
 ): Short
-fun uniffi_cove_checksum_method_rustwalletmanager_current_block_height(
+external fun uniffi_cove_checksum_method_rustwalletmanager_current_block_height(
 ): Short
-fun uniffi_cove_checksum_method_rustwalletmanager_delete_unsigned_transaction(
+external fun uniffi_cove_checksum_method_rustwalletmanager_delete_unsigned_transaction(
 ): Short
-fun uniffi_cove_checksum_method_rustwalletmanager_delete_wallet(
+external fun uniffi_cove_checksum_method_rustwalletmanager_delete_wallet(
 ): Short
-fun uniffi_cove_checksum_method_rustwalletmanager_dispatch(
+external fun uniffi_cove_checksum_method_rustwalletmanager_dispatch(
 ): Short
-fun uniffi_cove_checksum_method_rustwalletmanager_display_amount(
+external fun uniffi_cove_checksum_method_rustwalletmanager_display_amount(
 ): Short
-fun uniffi_cove_checksum_method_rustwalletmanager_display_fiat_amount(
+external fun uniffi_cove_checksum_method_rustwalletmanager_display_fiat_amount(
 ): Short
-fun uniffi_cove_checksum_method_rustwalletmanager_display_sent_and_received_amount(
+external fun uniffi_cove_checksum_method_rustwalletmanager_display_sent_and_received_amount(
 ): Short
-fun uniffi_cove_checksum_method_rustwalletmanager_fee_rate_options(
+external fun uniffi_cove_checksum_method_rustwalletmanager_fee_rate_options(
 ): Short
-fun uniffi_cove_checksum_method_rustwalletmanager_fees(
+external fun uniffi_cove_checksum_method_rustwalletmanager_fees(
 ): Short
-fun uniffi_cove_checksum_method_rustwalletmanager_finalize_psbt(
+external fun uniffi_cove_checksum_method_rustwalletmanager_finalize_psbt(
 ): Short
-fun uniffi_cove_checksum_method_rustwalletmanager_first_address(
+external fun uniffi_cove_checksum_method_rustwalletmanager_first_address(
 ): Short
-fun uniffi_cove_checksum_method_rustwalletmanager_force_update_height(
+external fun uniffi_cove_checksum_method_rustwalletmanager_force_update_height(
 ): Short
-fun uniffi_cove_checksum_method_rustwalletmanager_force_wallet_scan(
+external fun uniffi_cove_checksum_method_rustwalletmanager_force_wallet_scan(
 ): Short
-fun uniffi_cove_checksum_method_rustwalletmanager_get_fee_options(
+external fun uniffi_cove_checksum_method_rustwalletmanager_get_fee_options(
 ): Short
-fun uniffi_cove_checksum_method_rustwalletmanager_get_transactions(
+external fun uniffi_cove_checksum_method_rustwalletmanager_get_transactions(
 ): Short
-fun uniffi_cove_checksum_method_rustwalletmanager_get_unsigned_transactions(
+external fun uniffi_cove_checksum_method_rustwalletmanager_get_unsigned_transactions(
 ): Short
-fun uniffi_cove_checksum_method_rustwalletmanager_label_manager(
+external fun uniffi_cove_checksum_method_rustwalletmanager_label_manager(
 ): Short
-fun uniffi_cove_checksum_method_rustwalletmanager_listen_for_updates(
+external fun uniffi_cove_checksum_method_rustwalletmanager_listen_for_updates(
 ): Short
-fun uniffi_cove_checksum_method_rustwalletmanager_mark_wallet_as_verified(
+external fun uniffi_cove_checksum_method_rustwalletmanager_mark_wallet_as_verified(
 ): Short
-fun uniffi_cove_checksum_method_rustwalletmanager_master_fingerprint(
+external fun uniffi_cove_checksum_method_rustwalletmanager_master_fingerprint(
 ): Short
-fun uniffi_cove_checksum_method_rustwalletmanager_new_coin_control_manager(
+external fun uniffi_cove_checksum_method_rustwalletmanager_new_coin_control_manager(
 ): Short
-fun uniffi_cove_checksum_method_rustwalletmanager_new_send_flow_manager(
+external fun uniffi_cove_checksum_method_rustwalletmanager_new_send_flow_manager(
 ): Short
-fun uniffi_cove_checksum_method_rustwalletmanager_next_address(
+external fun uniffi_cove_checksum_method_rustwalletmanager_next_address(
 ): Short
-fun uniffi_cove_checksum_method_rustwalletmanager_number_of_confirmations(
+external fun uniffi_cove_checksum_method_rustwalletmanager_number_of_confirmations(
 ): Short
-fun uniffi_cove_checksum_method_rustwalletmanager_number_of_confirmations_fmt(
+external fun uniffi_cove_checksum_method_rustwalletmanager_number_of_confirmations_fmt(
 ): Short
-fun uniffi_cove_checksum_method_rustwalletmanager_save_unsigned_transaction(
+external fun uniffi_cove_checksum_method_rustwalletmanager_save_unsigned_transaction(
 ): Short
-fun uniffi_cove_checksum_method_rustwalletmanager_selected_fiat_currency(
+external fun uniffi_cove_checksum_method_rustwalletmanager_selected_fiat_currency(
 ): Short
-fun uniffi_cove_checksum_method_rustwalletmanager_sent_and_received_fiat(
+external fun uniffi_cove_checksum_method_rustwalletmanager_sent_and_received_fiat(
 ): Short
-fun uniffi_cove_checksum_method_rustwalletmanager_set_wallet_metadata(
+external fun uniffi_cove_checksum_method_rustwalletmanager_set_wallet_metadata(
 ): Short
-fun uniffi_cove_checksum_method_rustwalletmanager_sign_and_broadcast_transaction(
+external fun uniffi_cove_checksum_method_rustwalletmanager_sign_and_broadcast_transaction(
 ): Short
-fun uniffi_cove_checksum_method_rustwalletmanager_split_transaction_outputs(
+external fun uniffi_cove_checksum_method_rustwalletmanager_split_transaction_outputs(
 ): Short
-fun uniffi_cove_checksum_method_rustwalletmanager_start_wallet_scan(
+external fun uniffi_cove_checksum_method_rustwalletmanager_start_wallet_scan(
 ): Short
-fun uniffi_cove_checksum_method_rustwalletmanager_switch_to_different_wallet_address_type(
+external fun uniffi_cove_checksum_method_rustwalletmanager_switch_to_different_wallet_address_type(
 ): Short
-fun uniffi_cove_checksum_method_rustwalletmanager_transaction_details(
+external fun uniffi_cove_checksum_method_rustwalletmanager_transaction_details(
 ): Short
-fun uniffi_cove_checksum_method_rustwalletmanager_validate_metadata(
+external fun uniffi_cove_checksum_method_rustwalletmanager_validate_metadata(
 ): Short
-fun uniffi_cove_checksum_method_rustwalletmanager_wallet_metadata(
+external fun uniffi_cove_checksum_method_rustwalletmanager_wallet_metadata(
 ): Short
-fun uniffi_cove_checksum_method_rustwalletmanager_word_validator(
+external fun uniffi_cove_checksum_method_rustwalletmanager_word_validator(
 ): Short
-fun uniffi_cove_checksum_method_seedqr_get_words(
+external fun uniffi_cove_checksum_method_seedqr_get_words(
 ): Short
-fun uniffi_cove_checksum_method_seedqr_grouped_plain_words(
+external fun uniffi_cove_checksum_method_seedqr_grouped_plain_words(
 ): Short
-fun uniffi_cove_checksum_method_tapsignerreader_continue_setup(
+external fun uniffi_cove_checksum_method_tapsignerreader_continue_setup(
 ): Short
-fun uniffi_cove_checksum_method_tapsignerreader_last_response(
+external fun uniffi_cove_checksum_method_tapsignerreader_last_response(
 ): Short
-fun uniffi_cove_checksum_method_tapsignerreader_run(
+external fun uniffi_cove_checksum_method_tapsignerreader_run(
 ): Short
-fun uniffi_cove_checksum_method_tapsignerreader_setup(
+external fun uniffi_cove_checksum_method_tapsignerreader_setup(
 ): Short
-fun uniffi_cove_checksum_method_tapsignerreader_sign(
+external fun uniffi_cove_checksum_method_tapsignerreader_sign(
 ): Short
-fun uniffi_cove_checksum_method_transactiondetails_address(
+external fun uniffi_cove_checksum_method_transactiondetails_address(
 ): Short
-fun uniffi_cove_checksum_method_transactiondetails_address_spaced_out(
+external fun uniffi_cove_checksum_method_transactiondetails_address_spaced_out(
 ): Short
-fun uniffi_cove_checksum_method_transactiondetails_amount(
+external fun uniffi_cove_checksum_method_transactiondetails_amount(
 ): Short
-fun uniffi_cove_checksum_method_transactiondetails_amount_fiat(
+external fun uniffi_cove_checksum_method_transactiondetails_amount_fiat(
 ): Short
-fun uniffi_cove_checksum_method_transactiondetails_amount_fiat_fmt(
+external fun uniffi_cove_checksum_method_transactiondetails_amount_fiat_fmt(
 ): Short
-fun uniffi_cove_checksum_method_transactiondetails_amount_fmt(
+external fun uniffi_cove_checksum_method_transactiondetails_amount_fmt(
 ): Short
-fun uniffi_cove_checksum_method_transactiondetails_block_number(
+external fun uniffi_cove_checksum_method_transactiondetails_block_number(
 ): Short
-fun uniffi_cove_checksum_method_transactiondetails_block_number_fmt(
+external fun uniffi_cove_checksum_method_transactiondetails_block_number_fmt(
 ): Short
-fun uniffi_cove_checksum_method_transactiondetails_confirmation_date_time(
+external fun uniffi_cove_checksum_method_transactiondetails_confirmation_date_time(
 ): Short
-fun uniffi_cove_checksum_method_transactiondetails_fee_fiat_fmt(
+external fun uniffi_cove_checksum_method_transactiondetails_fee_fiat_fmt(
 ): Short
-fun uniffi_cove_checksum_method_transactiondetails_fee_fmt(
+external fun uniffi_cove_checksum_method_transactiondetails_fee_fmt(
 ): Short
-fun uniffi_cove_checksum_method_transactiondetails_is_confirmed(
+external fun uniffi_cove_checksum_method_transactiondetails_is_confirmed(
 ): Short
-fun uniffi_cove_checksum_method_transactiondetails_is_received(
+external fun uniffi_cove_checksum_method_transactiondetails_is_received(
 ): Short
-fun uniffi_cove_checksum_method_transactiondetails_is_sent(
+external fun uniffi_cove_checksum_method_transactiondetails_is_sent(
 ): Short
-fun uniffi_cove_checksum_method_transactiondetails_sent_sans_fee_fiat_fmt(
+external fun uniffi_cove_checksum_method_transactiondetails_sent_sans_fee_fiat_fmt(
 ): Short
-fun uniffi_cove_checksum_method_transactiondetails_sent_sans_fee_fmt(
+external fun uniffi_cove_checksum_method_transactiondetails_sent_sans_fee_fmt(
 ): Short
-fun uniffi_cove_checksum_method_transactiondetails_transaction_label(
+external fun uniffi_cove_checksum_method_transactiondetails_transaction_label(
 ): Short
-fun uniffi_cove_checksum_method_transactiondetails_transaction_url(
+external fun uniffi_cove_checksum_method_transactiondetails_transaction_url(
 ): Short
-fun uniffi_cove_checksum_method_transactiondetails_tx_id(
+external fun uniffi_cove_checksum_method_transactiondetails_tx_id(
 ): Short
-fun uniffi_cove_checksum_method_unconfirmedtransaction_fiat_amount(
+external fun uniffi_cove_checksum_method_unconfirmedtransaction_fiat_amount(
 ): Short
-fun uniffi_cove_checksum_method_unconfirmedtransaction_id(
+external fun uniffi_cove_checksum_method_unconfirmedtransaction_id(
 ): Short
-fun uniffi_cove_checksum_method_unconfirmedtransaction_label(
+external fun uniffi_cove_checksum_method_unconfirmedtransaction_label(
 ): Short
-fun uniffi_cove_checksum_method_unconfirmedtransaction_last_seen(
+external fun uniffi_cove_checksum_method_unconfirmedtransaction_last_seen(
 ): Short
-fun uniffi_cove_checksum_method_unconfirmedtransaction_sent_and_received(
+external fun uniffi_cove_checksum_method_unconfirmedtransaction_sent_and_received(
 ): Short
-fun uniffi_cove_checksum_method_unsignedtransaction_details(
+external fun uniffi_cove_checksum_method_unsignedtransaction_details(
 ): Short
-fun uniffi_cove_checksum_method_unsignedtransaction_id(
+external fun uniffi_cove_checksum_method_unsignedtransaction_id(
 ): Short
-fun uniffi_cove_checksum_method_unsignedtransaction_label(
+external fun uniffi_cove_checksum_method_unsignedtransaction_label(
 ): Short
-fun uniffi_cove_checksum_method_unsignedtransaction_sending_amount(
+external fun uniffi_cove_checksum_method_unsignedtransaction_sending_amount(
 ): Short
-fun uniffi_cove_checksum_method_unsignedtransaction_spending_amount(
+external fun uniffi_cove_checksum_method_unsignedtransaction_spending_amount(
 ): Short
-fun uniffi_cove_checksum_method_unsignedtransactionrecord_confirm_details(
+external fun uniffi_cove_checksum_method_unsignedtransactionrecord_confirm_details(
 ): Short
-fun uniffi_cove_checksum_method_unsignedtransactionrecord_created_at(
+external fun uniffi_cove_checksum_method_unsignedtransactionrecord_created_at(
 ): Short
-fun uniffi_cove_checksum_method_unsignedtransactionrecord_tx_id(
+external fun uniffi_cove_checksum_method_unsignedtransactionrecord_tx_id(
 ): Short
-fun uniffi_cove_checksum_method_unsignedtransactionrecord_wallet_id(
+external fun uniffi_cove_checksum_method_unsignedtransactionrecord_wallet_id(
 ): Short
-fun uniffi_cove_checksum_method_unsignedtransactionstable_gettx(
+external fun uniffi_cove_checksum_method_unsignedtransactionstable_gettx(
 ): Short
-fun uniffi_cove_checksum_method_unsignedtransactionstable_gettxthrow(
+external fun uniffi_cove_checksum_method_unsignedtransactionstable_gettxthrow(
 ): Short
-fun uniffi_cove_checksum_method_wallet_id(
+external fun uniffi_cove_checksum_method_wallet_id(
 ): Short
-fun uniffi_cove_checksum_method_walletstable_all(
+external fun uniffi_cove_checksum_method_walletstable_all(
 ): Short
-fun uniffi_cove_checksum_method_walletstable_all_sorted_active(
+external fun uniffi_cove_checksum_method_walletstable_all_sorted_active(
 ): Short
-fun uniffi_cove_checksum_method_walletstable_is_empty(
+external fun uniffi_cove_checksum_method_walletstable_is_empty(
 ): Short
-fun uniffi_cove_checksum_method_walletstable_len(
+external fun uniffi_cove_checksum_method_walletstable_len(
 ): Short
-fun uniffi_cove_checksum_method_wordvalidator_is_complete(
+external fun uniffi_cove_checksum_method_wordvalidator_is_complete(
 ): Short
-fun uniffi_cove_checksum_method_wordvalidator_is_word_correct(
+external fun uniffi_cove_checksum_method_wordvalidator_is_word_correct(
 ): Short
-fun uniffi_cove_checksum_method_wordvalidator_possible_words(
+external fun uniffi_cove_checksum_method_wordvalidator_possible_words(
 ): Short
-fun uniffi_cove_checksum_constructor_addressargs_new(
+external fun uniffi_cove_checksum_constructor_addressargs_new(
 ): Short
-fun uniffi_cove_checksum_constructor_authpin_new(
+external fun uniffi_cove_checksum_constructor_authpin_new(
 ): Short
-fun uniffi_cove_checksum_constructor_balance_zero(
+external fun uniffi_cove_checksum_constructor_balance_zero(
 ): Short
-fun uniffi_cove_checksum_constructor_bip39autocomplete_new(
+external fun uniffi_cove_checksum_constructor_bip39autocomplete_new(
 ): Short
-fun uniffi_cove_checksum_constructor_bip39wordspecificautocomplete_new(
+external fun uniffi_cove_checksum_constructor_bip39wordspecificautocomplete_new(
 ): Short
-fun uniffi_cove_checksum_constructor_bitcointransaction_new(
+external fun uniffi_cove_checksum_constructor_bitcointransaction_new(
 ): Short
-fun uniffi_cove_checksum_constructor_bitcointransaction_tryfromdata(
+external fun uniffi_cove_checksum_constructor_bitcointransaction_tryfromdata(
 ): Short
-fun uniffi_cove_checksum_constructor_bitcointransaction_tryfromnfcmessage(
+external fun uniffi_cove_checksum_constructor_bitcointransaction_tryfromnfcmessage(
 ): Short
-fun uniffi_cove_checksum_constructor_bitcointransaction_tryfromstringordata(
+external fun uniffi_cove_checksum_constructor_bitcointransaction_tryfromstringordata(
 ): Short
-fun uniffi_cove_checksum_constructor_boxedroute_new(
+external fun uniffi_cove_checksum_constructor_boxedroute_new(
 ): Short
-fun uniffi_cove_checksum_constructor_coincontrolmanagerstate_preview_new(
+external fun uniffi_cove_checksum_constructor_coincontrolmanagerstate_preview_new(
 ): Short
-fun uniffi_cove_checksum_constructor_converter_new(
+external fun uniffi_cove_checksum_constructor_converter_new(
 ): Short
-fun uniffi_cove_checksum_constructor_database_new(
+external fun uniffi_cove_checksum_constructor_database_new(
 ): Short
-fun uniffi_cove_checksum_constructor_ffiapp_new(
+external fun uniffi_cove_checksum_constructor_ffiapp_new(
 ): Short
-fun uniffi_cove_checksum_constructor_filehandler_new(
+external fun uniffi_cove_checksum_constructor_filehandler_new(
 ): Short
-fun uniffi_cove_checksum_constructor_fingerprint_new(
+external fun uniffi_cove_checksum_constructor_fingerprint_new(
 ): Short
-fun uniffi_cove_checksum_constructor_headericonpresenter_new(
+external fun uniffi_cove_checksum_constructor_headericonpresenter_new(
 ): Short
-fun uniffi_cove_checksum_constructor_labelmanager_new(
+external fun uniffi_cove_checksum_constructor_labelmanager_new(
 ): Short
-fun uniffi_cove_checksum_constructor_mnemonic_new(
+external fun uniffi_cove_checksum_constructor_mnemonic_new(
 ): Short
-fun uniffi_cove_checksum_constructor_mnemonic_preview(
+external fun uniffi_cove_checksum_constructor_mnemonic_preview(
 ): Short
-fun uniffi_cove_checksum_constructor_multiqr_new_from_string(
+external fun uniffi_cove_checksum_constructor_multiqr_new_from_string(
 ): Short
-fun uniffi_cove_checksum_constructor_multiqr_try_new(
+external fun uniffi_cove_checksum_constructor_multiqr_try_new(
 ): Short
-fun uniffi_cove_checksum_constructor_multiqr_try_new_from_data(
+external fun uniffi_cove_checksum_constructor_multiqr_try_new_from_data(
 ): Short
-fun uniffi_cove_checksum_constructor_nodeselector_new(
+external fun uniffi_cove_checksum_constructor_nodeselector_new(
 ): Short
-fun uniffi_cove_checksum_constructor_routefactory_new(
+external fun uniffi_cove_checksum_constructor_routefactory_new(
 ): Short
-fun uniffi_cove_checksum_constructor_rustauthmanager_new(
+external fun uniffi_cove_checksum_constructor_rustauthmanager_new(
 ): Short
-fun uniffi_cove_checksum_constructor_rustcoincontrolmanager_preview_new(
+external fun uniffi_cove_checksum_constructor_rustcoincontrolmanager_preview_new(
 ): Short
-fun uniffi_cove_checksum_constructor_rustimportwalletmanager_new(
+external fun uniffi_cove_checksum_constructor_rustimportwalletmanager_new(
 ): Short
-fun uniffi_cove_checksum_constructor_rustpendingwalletmanager_new(
+external fun uniffi_cove_checksum_constructor_rustpendingwalletmanager_new(
 ): Short
-fun uniffi_cove_checksum_constructor_rustwalletmanager_new(
+external fun uniffi_cove_checksum_constructor_rustwalletmanager_new(
 ): Short
-fun uniffi_cove_checksum_constructor_rustwalletmanager_preview_new_wallet(
+external fun uniffi_cove_checksum_constructor_rustwalletmanager_preview_new_wallet(
 ): Short
-fun uniffi_cove_checksum_constructor_rustwalletmanager_preview_new_wallet_with_metadata(
+external fun uniffi_cove_checksum_constructor_rustwalletmanager_preview_new_wallet_with_metadata(
 ): Short
-fun uniffi_cove_checksum_constructor_rustwalletmanager_try_new_from_tap_signer(
+external fun uniffi_cove_checksum_constructor_rustwalletmanager_try_new_from_tap_signer(
 ): Short
-fun uniffi_cove_checksum_constructor_rustwalletmanager_try_new_from_xpub(
+external fun uniffi_cove_checksum_constructor_rustwalletmanager_try_new_from_xpub(
 ): Short
-fun uniffi_cove_checksum_constructor_seedqr_new_from_data(
+external fun uniffi_cove_checksum_constructor_seedqr_new_from_data(
 ): Short
-fun uniffi_cove_checksum_constructor_seedqr_new_from_str(
+external fun uniffi_cove_checksum_constructor_seedqr_new_from_str(
 ): Short
-fun uniffi_cove_checksum_constructor_setupcmd_try_new(
+external fun uniffi_cove_checksum_constructor_setupcmd_try_new(
 ): Short
-fun uniffi_cove_checksum_constructor_tapsignerreader_new(
+external fun uniffi_cove_checksum_constructor_tapsignerreader_new(
 ): Short
-fun uniffi_cove_checksum_constructor_transactiondetails_preview_confirmed_received(
+external fun uniffi_cove_checksum_constructor_transactiondetails_preview_confirmed_received(
 ): Short
-fun uniffi_cove_checksum_constructor_transactiondetails_preview_confirmed_sent(
+external fun uniffi_cove_checksum_constructor_transactiondetails_preview_confirmed_sent(
 ): Short
-fun uniffi_cove_checksum_constructor_transactiondetails_preview_new_confirmed(
+external fun uniffi_cove_checksum_constructor_transactiondetails_preview_new_confirmed(
 ): Short
-fun uniffi_cove_checksum_constructor_transactiondetails_preview_new_with_label(
+external fun uniffi_cove_checksum_constructor_transactiondetails_preview_new_with_label(
 ): Short
-fun uniffi_cove_checksum_constructor_transactiondetails_preview_pending_received(
+external fun uniffi_cove_checksum_constructor_transactiondetails_preview_pending_received(
 ): Short
-fun uniffi_cove_checksum_constructor_transactiondetails_preview_pending_sent(
+external fun uniffi_cove_checksum_constructor_transactiondetails_preview_pending_sent(
 ): Short
-fun uniffi_cove_checksum_constructor_unsignedtransaction_preview_new(
+external fun uniffi_cove_checksum_constructor_unsignedtransaction_preview_new(
 ): Short
-fun uniffi_cove_checksum_constructor_wallet_new_from_export(
+external fun uniffi_cove_checksum_constructor_wallet_new_from_export(
 ): Short
-fun uniffi_cove_checksum_constructor_wallet_new_from_xpub(
+external fun uniffi_cove_checksum_constructor_wallet_new_from_xpub(
 ): Short
-fun uniffi_cove_checksum_constructor_wallet_previewnewwallet(
+external fun uniffi_cove_checksum_constructor_wallet_previewnewwallet(
 ): Short
-fun uniffi_cove_checksum_constructor_wordvalidator_preview(
+external fun uniffi_cove_checksum_constructor_wordvalidator_preview(
 ): Short
-fun uniffi_cove_checksum_method_authmanagerreconciler_reconcile(
+external fun uniffi_cove_checksum_method_authmanagerreconciler_reconcile(
 ): Short
-fun uniffi_cove_checksum_method_coincontrolmanagerreconciler_reconcile(
+external fun uniffi_cove_checksum_method_coincontrolmanagerreconciler_reconcile(
 ): Short
-fun uniffi_cove_checksum_method_coincontrolmanagerreconciler_reconcile_many(
+external fun uniffi_cove_checksum_method_coincontrolmanagerreconciler_reconcile_many(
 ): Short
-fun uniffi_cove_checksum_method_ffireconcile_reconcile(
+external fun uniffi_cove_checksum_method_ffireconcile_reconcile(
 ): Short
-fun uniffi_cove_checksum_method_importwalletmanagerreconciler_reconcile(
+external fun uniffi_cove_checksum_method_importwalletmanagerreconciler_reconcile(
 ): Short
-fun uniffi_cove_checksum_method_pendingwalletmanagerreconciler_reconcile(
+external fun uniffi_cove_checksum_method_pendingwalletmanagerreconciler_reconcile(
 ): Short
-fun uniffi_cove_checksum_method_sendflowmanagerreconciler_reconcile(
+external fun uniffi_cove_checksum_method_sendflowmanagerreconciler_reconcile(
 ): Short
-fun uniffi_cove_checksum_method_sendflowmanagerreconciler_reconcile_many(
+external fun uniffi_cove_checksum_method_sendflowmanagerreconciler_reconcile_many(
 ): Short
-fun uniffi_cove_checksum_method_tapcardtransportprotocol_set_message(
+external fun uniffi_cove_checksum_method_tapcardtransportprotocol_set_message(
 ): Short
-fun uniffi_cove_checksum_method_tapcardtransportprotocol_append_message(
+external fun uniffi_cove_checksum_method_tapcardtransportprotocol_append_message(
 ): Short
-fun uniffi_cove_checksum_method_tapcardtransportprotocol_transmit_apdu(
+external fun uniffi_cove_checksum_method_tapcardtransportprotocol_transmit_apdu(
 ): Short
-fun uniffi_cove_checksum_method_walletmanagerreconciler_reconcile(
+external fun uniffi_cove_checksum_method_walletmanagerreconciler_reconcile(
 ): Short
-fun uniffi_cove_checksum_method_walletmanagerreconciler_reconcile_many(
+external fun uniffi_cove_checksum_method_walletmanagerreconciler_reconcile_many(
 ): Short
-fun ffi_cove_uniffi_contract_version(
+external fun ffi_cove_uniffi_contract_version(
 ): Int
 
+    
 }
 
-// A JNA Library to expose the extern-C FFI definitions.
-// This is an implementation detail which will be called internally by the public API.
-internal interface UniffiLib : Library {
-    companion object {
-        internal val INSTANCE: UniffiLib by lazy {
-            val componentName = "cove"
-            // For large crates we prevent `MethodTooLargeException` (see #2340)
-            // N.B. the name of the extension is very misleading, since it is 
-            // rather `InterfaceTooLargeException`, caused by too many methods 
-            // in the interface for large crates.
-            //
-            // By splitting the otherwise huge interface into two parts
-            // * UniffiLib (this)
-            // * IntegrityCheckingUniffiLib
-            // And all checksum methods are put into `IntegrityCheckingUniffiLib`
-            // we allow for ~2x as many methods in the UniffiLib interface.
-            // 
-            // Thus we first load the library with `loadIndirect` as `IntegrityCheckingUniffiLib`
-            // so that we can (optionally!) call `uniffiCheckApiChecksums`...
-            loadIndirect<IntegrityCheckingUniffiLib>(componentName)
-                .also { lib: IntegrityCheckingUniffiLib ->
-                    uniffiCheckContractApiVersion(lib)
-                    uniffiCheckApiChecksums(lib)
-                }
-            // ... and then we load the library as `UniffiLib`
-            // N.B. we cannot use `loadIndirect` once and then try to cast it to `UniffiLib`
-            // => results in `java.lang.ClassCastException: com.sun.proxy.$Proxy cannot be cast to ...`
-            // error. So we must call `loadIndirect` twice. For crates large enough
-            // to trigger this issue, the performance impact is negligible, running on
-            // a macOS M1 machine the `loadIndirect` call takes ~50ms.
-            val lib = loadIndirect<UniffiLib>(componentName)
-            // No need to check the contract version and checksums, since 
-            // we already did that with `IntegrityCheckingUniffiLib` above.
-            uniffiCallbackInterfaceAutoComplete.register(lib)
-            uniffiCallbackInterfaceAuthManagerReconciler.register(lib)
-            uniffiCallbackInterfaceCoinControlManagerReconciler.register(lib)
-            uniffiCallbackInterfaceFfiReconcile.register(lib)
-            uniffiCallbackInterfaceImportWalletManagerReconciler.register(lib)
-            uniffiCallbackInterfacePendingWalletManagerReconciler.register(lib)
-            uniffiCallbackInterfaceSendFlowManagerReconciler.register(lib)
-            uniffiCallbackInterfaceTapcardTransportProtocol.register(lib)
-            uniffiCallbackInterfaceWalletManagerReconciler.register(lib)
-            org.bitcoinppl.cove_core.types.uniffiEnsureInitialized()
-            org.bitcoinppl.cove_core.tapcard.uniffiEnsureInitialized()
-            org.bitcoinppl.cove_core.device.uniffiEnsureInitialized()
-            org.bitcoinppl.cove_core.nfc.uniffiEnsureInitialized()
-            // Loading of library with integrity check done.
-            lib
-        }
-        
-        // The Cleaner for the whole library
-        internal val CLEANER: UniffiCleaner by lazy {
-            UniffiCleaner.create()
-        }
+internal object UniffiLib {
+    
+    // The Cleaner for the whole library
+    internal val CLEANER: UniffiCleaner by lazy {
+        UniffiCleaner.create()
     }
+    
 
-    // FFI functions
-    fun uniffi_cove_fn_clone_addressargs(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    init {
+        Native.register(UniffiLib::class.java, findLibraryName(componentName = "cove"))
+        uniffiCallbackInterfaceAutoComplete.register(this)
+        uniffiCallbackInterfaceAuthManagerReconciler.register(this)
+        uniffiCallbackInterfaceCoinControlManagerReconciler.register(this)
+        uniffiCallbackInterfaceFfiReconcile.register(this)
+        uniffiCallbackInterfaceImportWalletManagerReconciler.register(this)
+        uniffiCallbackInterfacePendingWalletManagerReconciler.register(this)
+        uniffiCallbackInterfaceSendFlowManagerReconciler.register(this)
+        uniffiCallbackInterfaceTapcardTransportProtocol.register(this)
+        uniffiCallbackInterfaceWalletManagerReconciler.register(this)
+        org.bitcoinppl.cove_core.tapcard.uniffiEnsureInitialized()
+        org.bitcoinppl.cove_core.nfc.uniffiEnsureInitialized()
+        org.bitcoinppl.cove_core.types.uniffiEnsureInitialized()
+        org.bitcoinppl.cove_core.device.uniffiEnsureInitialized()
+        
+    }
+    external fun uniffi_cove_fn_clone_addressargs(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_addressargs(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_addressargs(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_constructor_addressargs_new(`address`: Long,`changeAddress`: RustBuffer.ByValue,`direction`: RustBufferTransactionDirection.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_constructor_addressargs_new(`address`: Long,`changeAddress`: RustBuffer.ByValue,`direction`: RustBufferTransactionDirection.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_clone_authpin(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_authpin(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_authpin(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_authpin(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_constructor_authpin_new(uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_constructor_authpin_new(uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_authpin_check(`ptr`: Long,`pin`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_authpin_check(`ptr`: Long,`pin`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_fn_clone_autocomplete(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_autocomplete(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_autocomplete(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_autocomplete(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_init_callback_vtable_autocomplete(`vtable`: UniffiVTableCallbackInterfaceAutoComplete,
+external fun uniffi_cove_fn_init_callback_vtable_autocomplete(`vtable`: UniffiVTableCallbackInterfaceAutoComplete,
 ): Unit
-fun uniffi_cove_fn_method_autocomplete_autocomplete(`ptr`: Long,`word`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_autocomplete_autocomplete(`ptr`: Long,`word`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_autocomplete_is_valid_word(`ptr`: Long,`word`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_autocomplete_is_valid_word(`ptr`: Long,`word`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_fn_clone_balance(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_balance(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_balance(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_balance(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_constructor_balance_zero(uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_constructor_balance_zero(uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_balance_spendable(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_balance_spendable(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_clone_bbqrjoinresult(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_bbqrjoinresult(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_bbqrjoinresult(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_bbqrjoinresult(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_bbqrjoinresult_final_result(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_bbqrjoinresult_final_result(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_bbqrjoinresult_is_complete(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_bbqrjoinresult_is_complete(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_fn_method_bbqrjoinresult_parts_left(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_bbqrjoinresult_parts_left(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Int
-fun uniffi_cove_fn_clone_bbqrjoined(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_bbqrjoined(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_bbqrjoined(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_bbqrjoined(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_bbqrjoined_get_grouped_words(`ptr`: Long,`chunks`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_bbqrjoined_get_grouped_words(`ptr`: Long,`chunks`: Byte,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_bbqrjoined_get_seed_words(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_bbqrjoined_get_seed_words(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_clone_bip329labels(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_bip329labels(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_bip329labels(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_bip329labels(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_clone_bip39autocomplete(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_bip39autocomplete(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_bip39autocomplete(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_bip39autocomplete(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_constructor_bip39autocomplete_new(uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_constructor_bip39autocomplete_new(uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_bip39autocomplete_autocomplete(`ptr`: Long,`word`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_bip39autocomplete_autocomplete(`ptr`: Long,`word`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_bip39autocomplete_is_valid_word(`ptr`: Long,`word`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_bip39autocomplete_is_valid_word(`ptr`: Long,`word`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_fn_method_bip39autocomplete_next_field_number(`ptr`: Long,`currentFieldNumber`: Byte,`enteredWords`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_bip39autocomplete_next_field_number(`ptr`: Long,`currentFieldNumber`: Byte,`enteredWords`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_fn_clone_bip39wordspecificautocomplete(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_bip39wordspecificautocomplete(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_bip39wordspecificautocomplete(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_bip39wordspecificautocomplete(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_constructor_bip39wordspecificautocomplete_new(`wordNumber`: Short,`numberOfWords`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_constructor_bip39wordspecificautocomplete_new(`wordNumber`: Short,`numberOfWords`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_bip39wordspecificautocomplete_autocomplete(`ptr`: Long,`word`: RustBuffer.ByValue,`allWords`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_bip39wordspecificautocomplete_autocomplete(`ptr`: Long,`word`: RustBuffer.ByValue,`allWords`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_bip39wordspecificautocomplete_is_bip39_word(`ptr`: Long,`word`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_bip39wordspecificautocomplete_is_bip39_word(`ptr`: Long,`word`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_fn_method_bip39wordspecificautocomplete_is_valid_word(`ptr`: Long,`word`: RustBuffer.ByValue,`allWords`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_bip39wordspecificautocomplete_is_valid_word(`ptr`: Long,`word`: RustBuffer.ByValue,`allWords`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_fn_method_bip39wordspecificautocomplete_next_field_number(`ptr`: Long,`currentFieldNumber`: Byte,`enteredWords`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_bip39wordspecificautocomplete_next_field_number(`ptr`: Long,`currentFieldNumber`: Byte,`enteredWords`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_fn_clone_bitcointransaction(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_bitcointransaction(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_bitcointransaction(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_bitcointransaction(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_constructor_bitcointransaction_new(`txHex`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_constructor_bitcointransaction_new(`txHex`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_constructor_bitcointransaction_tryfromdata(`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_constructor_bitcointransaction_tryfromdata(`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_constructor_bitcointransaction_tryfromnfcmessage(`nfcMessage`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_constructor_bitcointransaction_tryfromnfcmessage(`nfcMessage`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_constructor_bitcointransaction_tryfromstringordata(`stringOrData`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_constructor_bitcointransaction_tryfromstringordata(`stringOrData`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_bitcointransaction_normalize_tx_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_bitcointransaction_normalize_tx_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_bitcointransaction_tx_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_bitcointransaction_tx_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_bitcointransaction_tx_id_hash(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_bitcointransaction_tx_id_hash(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_clone_boxedroute(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_boxedroute(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_boxedroute(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_boxedroute(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_constructor_boxedroute_new(`route`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_constructor_boxedroute_new(`route`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_boxedroute_route(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_boxedroute_route(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_clone_coincontrolmanagerstate(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_coincontrolmanagerstate(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_coincontrolmanagerstate(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_coincontrolmanagerstate(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_constructor_coincontrolmanagerstate_preview_new(`outputCount`: Byte,`changeCount`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_constructor_coincontrolmanagerstate_preview_new(`outputCount`: Byte,`changeCount`: Byte,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_clone_confirmedtransaction(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_confirmedtransaction(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_confirmedtransaction(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_confirmedtransaction(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_confirmedtransaction_block_height(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_confirmedtransaction_block_height(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Int
-fun uniffi_cove_fn_method_confirmedtransaction_block_height_fmt(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_confirmedtransaction_block_height_fmt(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_confirmedtransaction_confirmed_at(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_confirmedtransaction_confirmed_at(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_confirmedtransaction_confirmed_at_fmt(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_confirmedtransaction_confirmed_at_fmt(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_confirmedtransaction_confirmed_at_fmt_with_time(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_confirmedtransaction_confirmed_at_fmt_with_time(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_confirmedtransaction_fiat_amount(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_confirmedtransaction_fiat_amount(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_confirmedtransaction_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_confirmedtransaction_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_confirmedtransaction_label(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_confirmedtransaction_label(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_confirmedtransaction_label_opt(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_confirmedtransaction_label_opt(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_confirmedtransaction_sent_and_received(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_confirmedtransaction_sent_and_received(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_clone_converter(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_converter(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_converter(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_converter(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_constructor_converter_new(uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_constructor_converter_new(uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_converter_parse_fiat_str(`ptr`: Long,`fiatAmount`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_converter_parse_fiat_str(`ptr`: Long,`fiatAmount`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Double
-fun uniffi_cove_fn_method_converter_remove_fiat_suffix(`ptr`: Long,`fiatAmount`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_converter_remove_fiat_suffix(`ptr`: Long,`fiatAmount`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_clone_database(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_database(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_database(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_database(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_constructor_database_new(uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_constructor_database_new(uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_database_dangerous_reset_all_data(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_database_dangerous_reset_all_data(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_database_global_config(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_database_global_config(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_database_global_flag(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_database_global_flag(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_database_historical_prices(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_database_historical_prices(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_database_unsigned_transactions(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_database_unsigned_transactions(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_database_wallets(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_database_wallets(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_clone_ffiapp(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_ffiapp(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_ffiapp(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_ffiapp(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_constructor_ffiapp_new(uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_constructor_ffiapp_new(uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_ffiapp_auth_type(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_ffiapp_auth_type(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_ffiapp_dangerous_wipe_all_data(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_ffiapp_dangerous_wipe_all_data(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_ffiapp_debug_or_release(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_ffiapp_debug_or_release(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_ffiapp_dispatch(`ptr`: Long,`action`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_ffiapp_dispatch(`ptr`: Long,`action`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_ffiapp_email_mailto(`ptr`: Long,`ios`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_ffiapp_email_mailto(`ptr`: Long,`ios`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_ffiapp_fees(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_ffiapp_fees(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_ffiapp_find_tap_signer_wallet(`ptr`: Long,`tapSigner`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_ffiapp_find_tap_signer_wallet(`ptr`: Long,`tapSigner`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_ffiapp_get_tap_signer_backup(`ptr`: Long,`tapSigner`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_ffiapp_get_tap_signer_backup(`ptr`: Long,`tapSigner`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_ffiapp_git_short_hash(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_ffiapp_git_short_hash(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_ffiapp_go_to_selected_wallet(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_ffiapp_go_to_selected_wallet(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_ffiapp_has_wallets(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_ffiapp_has_wallets(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_fn_method_ffiapp_init_on_start(`ptr`: Long,
+external fun uniffi_cove_fn_method_ffiapp_init_on_start(`ptr`: Long,
 ): Long
-fun uniffi_cove_fn_method_ffiapp_listen_for_updates(`ptr`: Long,`updater`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_ffiapp_listen_for_updates(`ptr`: Long,`updater`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_ffiapp_load_and_reset_default_route(`ptr`: Long,`route`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_ffiapp_load_and_reset_default_route(`ptr`: Long,`route`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_ffiapp_load_and_reset_default_route_after(`ptr`: Long,`route`: RustBuffer.ByValue,`afterMillis`: Int,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_ffiapp_load_and_reset_default_route_after(`ptr`: Long,`route`: RustBuffer.ByValue,`afterMillis`: Int,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_ffiapp_network(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_ffiapp_network(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBufferNetwork.ByValue
-fun uniffi_cove_fn_method_ffiapp_num_wallets(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_ffiapp_num_wallets(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Short
-fun uniffi_cove_fn_method_ffiapp_prices(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_ffiapp_prices(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_ffiapp_reset_default_route_to(`ptr`: Long,`route`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_ffiapp_reset_default_route_to(`ptr`: Long,`route`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_ffiapp_reset_nested_routes_to(`ptr`: Long,`defaultRoute`: RustBuffer.ByValue,`nestedRoutes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_ffiapp_reset_nested_routes_to(`ptr`: Long,`defaultRoute`: RustBuffer.ByValue,`nestedRoutes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_ffiapp_save_tap_signer_backup(`ptr`: Long,`tapSigner`: Long,`backup`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_ffiapp_save_tap_signer_backup(`ptr`: Long,`tapSigner`: Long,`backup`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_fn_method_ffiapp_select_wallet(`ptr`: Long,`id`: RustBufferWalletId.ByValue,`nextRoute`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_ffiapp_select_wallet(`ptr`: Long,`id`: RustBufferWalletId.ByValue,`nextRoute`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_ffiapp_state(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_ffiapp_state(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_ffiapp_unverified_wallet_ids(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_ffiapp_unverified_wallet_ids(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_ffiapp_version(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_ffiapp_version(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_clone_fiatclient(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_fiatclient(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_fiatclient(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_fiatclient(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_clone_filehandler(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_filehandler(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_filehandler(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_filehandler(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_constructor_filehandler_new(`filePath`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_constructor_filehandler_new(`filePath`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_filehandler_read(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_filehandler_read(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_clone_filteredutxos(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_filteredutxos(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_filteredutxos(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_filteredutxos(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_clone_fingerprint(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_fingerprint(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_fingerprint(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_fingerprint(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_constructor_fingerprint_new(`id`: RustBufferWalletId.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_constructor_fingerprint_new(`id`: RustBufferWalletId.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_fingerprint_as_lowercase(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_fingerprint_as_lowercase(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_fingerprint_as_uppercase(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_fingerprint_as_uppercase(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_clone_foundjson(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_foundjson(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_foundjson(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_foundjson(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_clone_globalconfigtable(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_globalconfigtable(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_globalconfigtable(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_globalconfigtable(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_globalconfigtable_authtype(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_globalconfigtable_authtype(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_globalconfigtable_clear_selected_wallet(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_globalconfigtable_clear_selected_wallet(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_globalconfigtable_colorscheme(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_globalconfigtable_colorscheme(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBufferColorSchemeSelection.ByValue
-fun uniffi_cove_fn_method_globalconfigtable_delete(`ptr`: Long,`key`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_globalconfigtable_delete(`ptr`: Long,`key`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_globalconfigtable_delete_hashed_pin_code(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_globalconfigtable_delete_hashed_pin_code(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_globalconfigtable_get(`ptr`: Long,`key`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_globalconfigtable_get(`ptr`: Long,`key`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_globalconfigtable_hashed_pin_code(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_globalconfigtable_hashed_pin_code(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_globalconfigtable_is_in_decoy_mode(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_globalconfigtable_is_in_decoy_mode(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_fn_method_globalconfigtable_is_in_main_mode(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_globalconfigtable_is_in_main_mode(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_fn_method_globalconfigtable_select_wallet(`ptr`: Long,`id`: RustBufferWalletId.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_globalconfigtable_select_wallet(`ptr`: Long,`id`: RustBufferWalletId.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_globalconfigtable_selectedfiatcurrency(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_globalconfigtable_selectedfiatcurrency(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_globalconfigtable_selected_network(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_globalconfigtable_selected_network(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBufferNetwork.ByValue
-fun uniffi_cove_fn_method_globalconfigtable_selected_node(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_globalconfigtable_selected_node(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_globalconfigtable_selected_wallet(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_globalconfigtable_selected_wallet(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_globalconfigtable_set(`ptr`: Long,`key`: RustBuffer.ByValue,`value`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_globalconfigtable_set(`ptr`: Long,`key`: RustBuffer.ByValue,`value`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_globalconfigtable_setcolorscheme(`ptr`: Long,`colorScheme`: RustBufferColorSchemeSelection.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_globalconfigtable_setcolorscheme(`ptr`: Long,`colorScheme`: RustBufferColorSchemeSelection.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_globalconfigtable_set_hashed_pin_code(`ptr`: Long,`hashedPinCode`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_globalconfigtable_set_hashed_pin_code(`ptr`: Long,`hashedPinCode`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_globalconfigtable_set_selected_network(`ptr`: Long,`network`: RustBufferNetwork.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_globalconfigtable_set_selected_network(`ptr`: Long,`network`: RustBufferNetwork.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_globalconfigtable_set_selected_node(`ptr`: Long,`node`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_globalconfigtable_set_selected_node(`ptr`: Long,`node`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_globalconfigtable_wallet_mode(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_globalconfigtable_wallet_mode(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_clone_globalflagtable(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_globalflagtable(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_globalflagtable(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_globalflagtable(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_globalflagtable_get(`ptr`: Long,`key`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_globalflagtable_get(`ptr`: Long,`key`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_fn_method_globalflagtable_get_bool_config(`ptr`: Long,`key`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_globalflagtable_get_bool_config(`ptr`: Long,`key`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_fn_method_globalflagtable_is_terms_accepted(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_globalflagtable_is_terms_accepted(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_fn_method_globalflagtable_set(`ptr`: Long,`key`: RustBuffer.ByValue,`value`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_globalflagtable_set(`ptr`: Long,`key`: RustBuffer.ByValue,`value`: Byte,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_globalflagtable_set_bool_config(`ptr`: Long,`key`: RustBuffer.ByValue,`value`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_globalflagtable_set_bool_config(`ptr`: Long,`key`: RustBuffer.ByValue,`value`: Byte,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_globalflagtable_toggle_bool_config(`ptr`: Long,`key`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_globalflagtable_toggle_bool_config(`ptr`: Long,`key`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_clone_hardwareexport(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_hardwareexport(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_hardwareexport(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_hardwareexport(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_clone_headericonpresenter(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_headericonpresenter(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_headericonpresenter(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_headericonpresenter(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_constructor_headericonpresenter_new(uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_constructor_headericonpresenter_new(uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_headericonpresenter_background_color(`ptr`: Long,`state`: RustBuffer.ByValue,`direction`: RustBufferTransactionDirection.ByValue,`colorScheme`: RustBufferFfiColorScheme.ByValue,`confirmationCount`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_headericonpresenter_background_color(`ptr`: Long,`state`: RustBuffer.ByValue,`direction`: RustBufferTransactionDirection.ByValue,`colorScheme`: RustBufferFfiColorScheme.ByValue,`confirmationCount`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBufferFfiColor.ByValue
-fun uniffi_cove_fn_method_headericonpresenter_icon_color(`ptr`: Long,`state`: RustBuffer.ByValue,`direction`: RustBufferTransactionDirection.ByValue,`colorScheme`: RustBufferFfiColorScheme.ByValue,`confirmationCount`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_headericonpresenter_icon_color(`ptr`: Long,`state`: RustBuffer.ByValue,`direction`: RustBufferTransactionDirection.ByValue,`colorScheme`: RustBufferFfiColorScheme.ByValue,`confirmationCount`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBufferFfiColor.ByValue
-fun uniffi_cove_fn_method_headericonpresenter_ring_color(`ptr`: Long,`state`: RustBuffer.ByValue,`colorScheme`: RustBufferFfiColorScheme.ByValue,`direction`: RustBufferTransactionDirection.ByValue,`confirmations`: Long,`ringNumber`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_headericonpresenter_ring_color(`ptr`: Long,`state`: RustBuffer.ByValue,`colorScheme`: RustBufferFfiColorScheme.ByValue,`direction`: RustBufferTransactionDirection.ByValue,`confirmations`: Long,`ringNumber`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBufferFfiColor.ByValue
-fun uniffi_cove_fn_clone_historicalpricetable(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_historicalpricetable(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_historicalpricetable(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_historicalpricetable(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_clone_historicalpricesresponse(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_historicalpricesresponse(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_historicalpricesresponse(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_historicalpricesresponse(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_clone_labelmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_labelmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_labelmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_labelmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_constructor_labelmanager_new(`id`: RustBufferWalletId.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_constructor_labelmanager_new(`id`: RustBufferWalletId.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_labelmanager_delete_labels_for_txn(`ptr`: Long,`txId`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_labelmanager_delete_labels_for_txn(`ptr`: Long,`txId`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_labelmanager_export(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_labelmanager_export(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_labelmanager_export_default_file_name(`ptr`: Long,`name`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_labelmanager_export_default_file_name(`ptr`: Long,`name`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_labelmanager_has_labels(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_labelmanager_has_labels(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_fn_method_labelmanager_import(`ptr`: Long,`jsonl`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_labelmanager_import(`ptr`: Long,`jsonl`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_labelmanager_importlabels(`ptr`: Long,`labels`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_labelmanager_importlabels(`ptr`: Long,`labels`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_labelmanager_insert_or_update_labels_for_txn(`ptr`: Long,`details`: Long,`label`: RustBuffer.ByValue,`origin`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_labelmanager_insert_or_update_labels_for_txn(`ptr`: Long,`details`: Long,`label`: RustBuffer.ByValue,`origin`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_labelmanager_transaction_label(`ptr`: Long,`txId`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_labelmanager_transaction_label(`ptr`: Long,`txId`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_clone_labelstable(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_labelstable(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_labelstable(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_labelstable(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_clone_mnemonic(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_mnemonic(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_mnemonic(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_mnemonic(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_constructor_mnemonic_new(`id`: RustBufferWalletId.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_constructor_mnemonic_new(`id`: RustBufferWalletId.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_constructor_mnemonic_preview(`numberOfBip39Words`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_constructor_mnemonic_preview(`numberOfBip39Words`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_mnemonic_all_words(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_mnemonic_all_words(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_mnemonic_words(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_mnemonic_words(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_clone_multiqr(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_multiqr(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_multiqr(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_multiqr(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_constructor_multiqr_new_from_string(`qr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_constructor_multiqr_new_from_string(`qr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_constructor_multiqr_try_new(`qr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_constructor_multiqr_try_new(`qr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_constructor_multiqr_try_new_from_data(`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_constructor_multiqr_try_new_from_data(`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_multiqr_add_part(`ptr`: Long,`qr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_multiqr_add_part(`ptr`: Long,`qr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_multiqr_get_grouped_words(`ptr`: Long,`qr`: RustBuffer.ByValue,`groupsOf`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_multiqr_get_grouped_words(`ptr`: Long,`qr`: RustBuffer.ByValue,`groupsOf`: Byte,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_multiqr_handle_scan_result(`ptr`: Long,`qr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_multiqr_handle_scan_result(`ptr`: Long,`qr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_multiqr_is_bbqr(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_multiqr_is_bbqr(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_fn_method_multiqr_is_seed_qr(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_multiqr_is_seed_qr(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_fn_method_multiqr_total_parts(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_multiqr_total_parts(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Int
-fun uniffi_cove_fn_clone_nodeselector(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_nodeselector(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_nodeselector(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_nodeselector(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_constructor_nodeselector_new(uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_constructor_nodeselector_new(uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_nodeselector_check_and_save_node(`ptr`: Long,`node`: RustBuffer.ByValue,
+external fun uniffi_cove_fn_method_nodeselector_check_and_save_node(`ptr`: Long,`node`: RustBuffer.ByValue,
 ): Long
-fun uniffi_cove_fn_method_nodeselector_check_selected_node(`ptr`: Long,`node`: RustBuffer.ByValue,
+external fun uniffi_cove_fn_method_nodeselector_check_selected_node(`ptr`: Long,`node`: RustBuffer.ByValue,
 ): Long
-fun uniffi_cove_fn_method_nodeselector_node_list(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_nodeselector_node_list(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_nodeselector_parse_custom_node(`ptr`: Long,`url`: RustBuffer.ByValue,`name`: RustBuffer.ByValue,`enteredName`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_nodeselector_parse_custom_node(`ptr`: Long,`url`: RustBuffer.ByValue,`name`: RustBuffer.ByValue,`enteredName`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_nodeselector_select_preset_node(`ptr`: Long,`name`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_nodeselector_select_preset_node(`ptr`: Long,`name`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_nodeselector_selected_node(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_nodeselector_selected_node(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_clone_pendingwallet(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_pendingwallet(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_pendingwallet(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_pendingwallet(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_clone_priceresponse(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_priceresponse(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_priceresponse(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_priceresponse(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_priceresponse_get(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_priceresponse_get(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_priceresponse_get_for_currency(`ptr`: Long,`currency`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_priceresponse_get_for_currency(`ptr`: Long,`currency`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_clone_pushtx(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_pushtx(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_pushtx(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_pushtx(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_clone_routefactory(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_routefactory(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_routefactory(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_routefactory(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_constructor_routefactory_new(uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_constructor_routefactory_new(uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_routefactory_coin_control_send(`ptr`: Long,`id`: RustBufferWalletId.ByValue,`utxos`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_routefactory_coin_control_send(`ptr`: Long,`id`: RustBufferWalletId.ByValue,`utxos`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_routefactory_cold_wallet_import(`ptr`: Long,`route`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_routefactory_cold_wallet_import(`ptr`: Long,`route`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_routefactory_hot_wallet(`ptr`: Long,`route`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_routefactory_hot_wallet(`ptr`: Long,`route`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_routefactory_hot_wallet_import_from_scan(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_routefactory_hot_wallet_import_from_scan(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_routefactory_is_same_parent_route(`ptr`: Long,`route`: RustBuffer.ByValue,`routeToCheck`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_routefactory_is_same_parent_route(`ptr`: Long,`route`: RustBuffer.ByValue,`routeToCheck`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_fn_method_routefactory_load_and_reset_nested_to(`ptr`: Long,`defaultRoute`: RustBuffer.ByValue,`nestedRoutes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_routefactory_load_and_reset_nested_to(`ptr`: Long,`defaultRoute`: RustBuffer.ByValue,`nestedRoutes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_routefactory_load_and_reset_to(`ptr`: Long,`resetTo`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_routefactory_load_and_reset_to(`ptr`: Long,`resetTo`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_routefactory_load_and_reset_to_after(`ptr`: Long,`resetTo`: RustBuffer.ByValue,`time`: Int,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_routefactory_load_and_reset_to_after(`ptr`: Long,`resetTo`: RustBuffer.ByValue,`time`: Int,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_routefactory_main_wallet_settings(`ptr`: Long,`id`: RustBufferWalletId.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_routefactory_main_wallet_settings(`ptr`: Long,`id`: RustBufferWalletId.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_routefactory_nested_settings(`ptr`: Long,`route`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_routefactory_nested_settings(`ptr`: Long,`route`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_routefactory_nested_wallet_settings(`ptr`: Long,`id`: RustBufferWalletId.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_routefactory_nested_wallet_settings(`ptr`: Long,`id`: RustBufferWalletId.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_routefactory_new_hot_wallet(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_routefactory_new_hot_wallet(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_routefactory_new_wallet_select(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_routefactory_new_wallet_select(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_routefactory_qr_import(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_routefactory_qr_import(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_routefactory_secret_words(`ptr`: Long,`walletId`: RustBufferWalletId.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_routefactory_secret_words(`ptr`: Long,`walletId`: RustBufferWalletId.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_routefactory_send(`ptr`: Long,`send`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_routefactory_send(`ptr`: Long,`send`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_routefactory_send_confirm(`ptr`: Long,`id`: RustBufferWalletId.ByValue,`details`: Long,`signedTransaction`: RustBuffer.ByValue,`signedPsbt`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_routefactory_send_confirm(`ptr`: Long,`id`: RustBufferWalletId.ByValue,`details`: Long,`signedTransaction`: RustBuffer.ByValue,`signedPsbt`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_routefactory_send_hardware_export(`ptr`: Long,`id`: RustBufferWalletId.ByValue,`details`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_routefactory_send_hardware_export(`ptr`: Long,`id`: RustBufferWalletId.ByValue,`details`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_routefactory_send_set_amount(`ptr`: Long,`id`: RustBufferWalletId.ByValue,`address`: RustBuffer.ByValue,`amount`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_routefactory_send_set_amount(`ptr`: Long,`id`: RustBufferWalletId.ByValue,`address`: RustBuffer.ByValue,`amount`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_routefactory_wallet_settings(`ptr`: Long,`id`: RustBufferWalletId.ByValue,`route`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_routefactory_wallet_settings(`ptr`: Long,`id`: RustBufferWalletId.ByValue,`route`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_clone_rustauthmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_rustauthmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_rustauthmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_rustauthmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_constructor_rustauthmanager_new(uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_constructor_rustauthmanager_new(uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_rustauthmanager_auth_type(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustauthmanager_auth_type(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_rustauthmanager_checkdecoypin(`ptr`: Long,`pin`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustauthmanager_checkdecoypin(`ptr`: Long,`pin`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_fn_method_rustauthmanager_checkwipedatapin(`ptr`: Long,`pin`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustauthmanager_checkwipedatapin(`ptr`: Long,`pin`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_fn_method_rustauthmanager_delete_decoy_pin(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustauthmanager_delete_decoy_pin(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_rustauthmanager_delete_wipe_data_pin(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustauthmanager_delete_wipe_data_pin(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_rustauthmanager_dispatch(`ptr`: Long,`action`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustauthmanager_dispatch(`ptr`: Long,`action`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_rustauthmanager_is_decoy_pin_enabled(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustauthmanager_is_decoy_pin_enabled(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_fn_method_rustauthmanager_is_in_decoy_mode(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustauthmanager_is_in_decoy_mode(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_fn_method_rustauthmanager_is_wipe_data_pin_enabled(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustauthmanager_is_wipe_data_pin_enabled(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_fn_method_rustauthmanager_listen_for_updates(`ptr`: Long,`reconciler`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustauthmanager_listen_for_updates(`ptr`: Long,`reconciler`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_rustauthmanager_locked_at(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustauthmanager_locked_at(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_rustauthmanager_send(`ptr`: Long,`message`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustauthmanager_send(`ptr`: Long,`message`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_rustauthmanager_set_auth_type(`ptr`: Long,`authType`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustauthmanager_set_auth_type(`ptr`: Long,`authType`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_rustauthmanager_set_decoy_pin(`ptr`: Long,`pin`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustauthmanager_set_decoy_pin(`ptr`: Long,`pin`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_rustauthmanager_set_locked_at(`ptr`: Long,`lockedAt`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustauthmanager_set_locked_at(`ptr`: Long,`lockedAt`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_rustauthmanager_set_wipe_data_pin(`ptr`: Long,`pin`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustauthmanager_set_wipe_data_pin(`ptr`: Long,`pin`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_rustauthmanager_switch_to_decoy_mode(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustauthmanager_switch_to_decoy_mode(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_rustauthmanager_switch_to_main_mode(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustauthmanager_switch_to_main_mode(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_rustauthmanager_validate_pin_settings(`ptr`: Long,`pin`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustauthmanager_validate_pin_settings(`ptr`: Long,`pin`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_clone_rustcoincontrolmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_rustcoincontrolmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_rustcoincontrolmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_rustcoincontrolmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_constructor_rustcoincontrolmanager_preview_new(`outputCount`: Byte,`changeCount`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_constructor_rustcoincontrolmanager_preview_new(`outputCount`: Byte,`changeCount`: Byte,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_rustcoincontrolmanager_button_presentation(`ptr`: Long,`button`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustcoincontrolmanager_button_presentation(`ptr`: Long,`button`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_rustcoincontrolmanager_dispatch(`ptr`: Long,`action`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustcoincontrolmanager_dispatch(`ptr`: Long,`action`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_rustcoincontrolmanager_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustcoincontrolmanager_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBufferWalletId.ByValue
-fun uniffi_cove_fn_method_rustcoincontrolmanager_listen_for_updates(`ptr`: Long,`reconciler`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustcoincontrolmanager_listen_for_updates(`ptr`: Long,`reconciler`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_rustcoincontrolmanager_reload_labels(`ptr`: Long,
+external fun uniffi_cove_fn_method_rustcoincontrolmanager_reload_labels(`ptr`: Long,
 ): Long
-fun uniffi_cove_fn_method_rustcoincontrolmanager_selected_utxos(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustcoincontrolmanager_selected_utxos(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_rustcoincontrolmanager_unit(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustcoincontrolmanager_unit(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBufferBitcoinUnit.ByValue
-fun uniffi_cove_fn_method_rustcoincontrolmanager_utxos(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustcoincontrolmanager_utxos(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_clone_rustimportwalletmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_rustimportwalletmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_rustimportwalletmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_rustimportwalletmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_constructor_rustimportwalletmanager_new(uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_constructor_rustimportwalletmanager_new(uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_rustimportwalletmanager_dispatch(`ptr`: Long,`action`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustimportwalletmanager_dispatch(`ptr`: Long,`action`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_rustimportwalletmanager_import_wallet(`ptr`: Long,`enteredWords`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustimportwalletmanager_import_wallet(`ptr`: Long,`enteredWords`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_rustimportwalletmanager_listen_for_updates(`ptr`: Long,`reconciler`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustimportwalletmanager_listen_for_updates(`ptr`: Long,`reconciler`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_clone_rustpendingwalletmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_rustpendingwalletmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_rustpendingwalletmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_rustpendingwalletmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_constructor_rustpendingwalletmanager_new(`numberOfWords`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_constructor_rustpendingwalletmanager_new(`numberOfWords`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_rustpendingwalletmanager_bip_39_words(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustpendingwalletmanager_bip_39_words(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_rustpendingwalletmanager_bip_39_words_grouped(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustpendingwalletmanager_bip_39_words_grouped(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_rustpendingwalletmanager_card_indexes(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustpendingwalletmanager_card_indexes(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_fn_method_rustpendingwalletmanager_dispatch(`ptr`: Long,`action`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustpendingwalletmanager_dispatch(`ptr`: Long,`action`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_rustpendingwalletmanager_get_state(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustpendingwalletmanager_get_state(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_rustpendingwalletmanager_listen_for_updates(`ptr`: Long,`reconciler`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustpendingwalletmanager_listen_for_updates(`ptr`: Long,`reconciler`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_rustpendingwalletmanager_number_of_words_count(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustpendingwalletmanager_number_of_words_count(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_fn_method_rustpendingwalletmanager_save_wallet(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustpendingwalletmanager_save_wallet(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_clone_rustsendflowmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_rustsendflowmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_rustsendflowmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_rustsendflowmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_rustsendflowmanager_amount(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustsendflowmanager_amount(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_rustsendflowmanager_amount_sats(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustsendflowmanager_amount_sats(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_rustsendflowmanager_dispatch(`ptr`: Long,`action`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustsendflowmanager_dispatch(`ptr`: Long,`action`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_rustsendflowmanager_display_fiat_amount(`ptr`: Long,`amount`: Double,`withSuffix`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustsendflowmanager_display_fiat_amount(`ptr`: Long,`amount`: Double,`withSuffix`: Byte,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_rustsendflowmanager_entering_fiat_amount(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustsendflowmanager_entering_fiat_amount(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_rustsendflowmanager_get_custom_fee_option(`ptr`: Long,`feeRate`: Long,`feeSpeed`: RustBufferFeeSpeed.ByValue,
+external fun uniffi_cove_fn_method_rustsendflowmanager_get_custom_fee_option(`ptr`: Long,`feeRate`: Long,`feeSpeed`: RustBufferFeeSpeed.ByValue,
 ): Long
-fun uniffi_cove_fn_method_rustsendflowmanager_listen_for_updates(`ptr`: Long,`reconciler`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustsendflowmanager_listen_for_updates(`ptr`: Long,`reconciler`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_rustsendflowmanager_maxsendminusfees(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustsendflowmanager_maxsendminusfees(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_rustsendflowmanager_maxsendminusfeesandsmallutxo(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustsendflowmanager_maxsendminusfeesandsmallutxo(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_rustsendflowmanager_sanitize_btc_entering_amount(`ptr`: Long,`oldValue`: RustBuffer.ByValue,`newValue`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustsendflowmanager_sanitize_btc_entering_amount(`ptr`: Long,`oldValue`: RustBuffer.ByValue,`newValue`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_rustsendflowmanager_sanitize_fiat_entering_amount(`ptr`: Long,`oldValue`: RustBuffer.ByValue,`newValue`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustsendflowmanager_sanitize_fiat_entering_amount(`ptr`: Long,`oldValue`: RustBuffer.ByValue,`newValue`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_rustsendflowmanager_send_amount_btc(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustsendflowmanager_send_amount_btc(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_rustsendflowmanager_send_amount_fiat(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustsendflowmanager_send_amount_fiat(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_rustsendflowmanager_total_fee_string(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustsendflowmanager_total_fee_string(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_rustsendflowmanager_total_spent_in_btc(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustsendflowmanager_total_spent_in_btc(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_rustsendflowmanager_total_spent_in_fiat(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustsendflowmanager_total_spent_in_fiat(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_rustsendflowmanager_utxos(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustsendflowmanager_utxos(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_rustsendflowmanager_validate_address(`ptr`: Long,`displayAlert`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustsendflowmanager_validate_address(`ptr`: Long,`displayAlert`: Byte,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_fn_method_rustsendflowmanager_validate_amount(`ptr`: Long,`displayAlert`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustsendflowmanager_validate_amount(`ptr`: Long,`displayAlert`: Byte,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_fn_method_rustsendflowmanager_validate_fee_percentage(`ptr`: Long,`displayAlert`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustsendflowmanager_validate_fee_percentage(`ptr`: Long,`displayAlert`: Byte,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_fn_method_rustsendflowmanager_wait_for_init(`ptr`: Long,
+external fun uniffi_cove_fn_method_rustsendflowmanager_wait_for_init(`ptr`: Long,
 ): Long
-fun uniffi_cove_fn_method_rustsendflowmanager_wallet_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustsendflowmanager_wallet_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBufferWalletId.ByValue
-fun uniffi_cove_fn_clone_rustwalletmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_rustwalletmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_rustwalletmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_rustwalletmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_constructor_rustwalletmanager_new(`id`: RustBufferWalletId.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_constructor_rustwalletmanager_new(`id`: RustBufferWalletId.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_constructor_rustwalletmanager_preview_new_wallet(uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_constructor_rustwalletmanager_preview_new_wallet(uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_constructor_rustwalletmanager_preview_new_wallet_with_metadata(`metadata`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_constructor_rustwalletmanager_preview_new_wallet_with_metadata(`metadata`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_constructor_rustwalletmanager_try_new_from_tap_signer(`tapSigner`: Long,`deriveInfo`: RustBuffer.ByValue,`backup`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_constructor_rustwalletmanager_try_new_from_tap_signer(`tapSigner`: Long,`deriveInfo`: RustBuffer.ByValue,`backup`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_constructor_rustwalletmanager_try_new_from_xpub(`xpub`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_constructor_rustwalletmanager_try_new_from_xpub(`xpub`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_rustwalletmanager_address_at(`ptr`: Long,`index`: Int,
+external fun uniffi_cove_fn_method_rustwalletmanager_address_at(`ptr`: Long,`index`: Int,
 ): Long
-fun uniffi_cove_fn_method_rustwalletmanager_amount_in_fiat(`ptr`: Long,`amount`: Long,
+external fun uniffi_cove_fn_method_rustwalletmanager_amount_in_fiat(`ptr`: Long,`amount`: Long,
 ): Long
-fun uniffi_cove_fn_method_rustwalletmanager_balance(`ptr`: Long,
+external fun uniffi_cove_fn_method_rustwalletmanager_balance(`ptr`: Long,
 ): Long
-fun uniffi_cove_fn_method_rustwalletmanager_balance_in_fiat(`ptr`: Long,
+external fun uniffi_cove_fn_method_rustwalletmanager_balance_in_fiat(`ptr`: Long,
 ): Long
-fun uniffi_cove_fn_method_rustwalletmanager_broadcast_transaction(`ptr`: Long,`signedTransaction`: Long,
+external fun uniffi_cove_fn_method_rustwalletmanager_broadcast_transaction(`ptr`: Long,`signedTransaction`: Long,
 ): Long
-fun uniffi_cove_fn_method_rustwalletmanager_convert_and_display_fiat(`ptr`: Long,`amount`: Long,`prices`: Long,`withSuffix`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustwalletmanager_convert_and_display_fiat(`ptr`: Long,`amount`: Long,`prices`: Long,`withSuffix`: Byte,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_rustwalletmanager_convert_from_fiat_string(`ptr`: Long,`fiatAmount`: RustBuffer.ByValue,`prices`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustwalletmanager_convert_from_fiat_string(`ptr`: Long,`fiatAmount`: RustBuffer.ByValue,`prices`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_rustwalletmanager_convert_to_fiat(`ptr`: Long,`amount`: Long,`prices`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustwalletmanager_convert_to_fiat(`ptr`: Long,`amount`: Long,`prices`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Double
-fun uniffi_cove_fn_method_rustwalletmanager_create_transactions_with_fiat_export(`ptr`: Long,
+external fun uniffi_cove_fn_method_rustwalletmanager_create_transactions_with_fiat_export(`ptr`: Long,
 ): Long
-fun uniffi_cove_fn_method_rustwalletmanager_current_block_height(`ptr`: Long,
+external fun uniffi_cove_fn_method_rustwalletmanager_current_block_height(`ptr`: Long,
 ): Long
-fun uniffi_cove_fn_method_rustwalletmanager_delete_unsigned_transaction(`ptr`: Long,`txId`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustwalletmanager_delete_unsigned_transaction(`ptr`: Long,`txId`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_rustwalletmanager_delete_wallet(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustwalletmanager_delete_wallet(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_rustwalletmanager_dispatch(`ptr`: Long,`action`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustwalletmanager_dispatch(`ptr`: Long,`action`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_rustwalletmanager_display_amount(`ptr`: Long,`amount`: Long,`showUnit`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustwalletmanager_display_amount(`ptr`: Long,`amount`: Long,`showUnit`: Byte,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_rustwalletmanager_display_fiat_amount(`ptr`: Long,`amount`: Double,`withSuffix`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustwalletmanager_display_fiat_amount(`ptr`: Long,`amount`: Double,`withSuffix`: Byte,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_rustwalletmanager_display_sent_and_received_amount(`ptr`: Long,`sentAndReceived`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustwalletmanager_display_sent_and_received_amount(`ptr`: Long,`sentAndReceived`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_rustwalletmanager_fee_rate_options(`ptr`: Long,
+external fun uniffi_cove_fn_method_rustwalletmanager_fee_rate_options(`ptr`: Long,
 ): Long
-fun uniffi_cove_fn_method_rustwalletmanager_fees(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustwalletmanager_fees(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_rustwalletmanager_finalize_psbt(`ptr`: Long,`psbt`: Long,
+external fun uniffi_cove_fn_method_rustwalletmanager_finalize_psbt(`ptr`: Long,`psbt`: Long,
 ): Long
-fun uniffi_cove_fn_method_rustwalletmanager_first_address(`ptr`: Long,
+external fun uniffi_cove_fn_method_rustwalletmanager_first_address(`ptr`: Long,
 ): Long
-fun uniffi_cove_fn_method_rustwalletmanager_force_update_height(`ptr`: Long,
+external fun uniffi_cove_fn_method_rustwalletmanager_force_update_height(`ptr`: Long,
 ): Long
-fun uniffi_cove_fn_method_rustwalletmanager_force_wallet_scan(`ptr`: Long,
+external fun uniffi_cove_fn_method_rustwalletmanager_force_wallet_scan(`ptr`: Long,
 ): Long
-fun uniffi_cove_fn_method_rustwalletmanager_get_fee_options(`ptr`: Long,
+external fun uniffi_cove_fn_method_rustwalletmanager_get_fee_options(`ptr`: Long,
 ): Long
-fun uniffi_cove_fn_method_rustwalletmanager_get_transactions(`ptr`: Long,
+external fun uniffi_cove_fn_method_rustwalletmanager_get_transactions(`ptr`: Long,
 ): Long
-fun uniffi_cove_fn_method_rustwalletmanager_get_unsigned_transactions(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustwalletmanager_get_unsigned_transactions(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_rustwalletmanager_label_manager(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustwalletmanager_label_manager(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_rustwalletmanager_listen_for_updates(`ptr`: Long,`reconciler`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustwalletmanager_listen_for_updates(`ptr`: Long,`reconciler`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_rustwalletmanager_mark_wallet_as_verified(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustwalletmanager_mark_wallet_as_verified(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_rustwalletmanager_master_fingerprint(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustwalletmanager_master_fingerprint(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_rustwalletmanager_new_coin_control_manager(`ptr`: Long,
+external fun uniffi_cove_fn_method_rustwalletmanager_new_coin_control_manager(`ptr`: Long,
 ): Long
-fun uniffi_cove_fn_method_rustwalletmanager_new_send_flow_manager(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustwalletmanager_new_send_flow_manager(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_rustwalletmanager_next_address(`ptr`: Long,
+external fun uniffi_cove_fn_method_rustwalletmanager_next_address(`ptr`: Long,
 ): Long
-fun uniffi_cove_fn_method_rustwalletmanager_number_of_confirmations(`ptr`: Long,`blockHeight`: Int,
+external fun uniffi_cove_fn_method_rustwalletmanager_number_of_confirmations(`ptr`: Long,`blockHeight`: Int,
 ): Long
-fun uniffi_cove_fn_method_rustwalletmanager_number_of_confirmations_fmt(`ptr`: Long,`blockHeight`: Int,
+external fun uniffi_cove_fn_method_rustwalletmanager_number_of_confirmations_fmt(`ptr`: Long,`blockHeight`: Int,
 ): Long
-fun uniffi_cove_fn_method_rustwalletmanager_save_unsigned_transaction(`ptr`: Long,`details`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustwalletmanager_save_unsigned_transaction(`ptr`: Long,`details`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_rustwalletmanager_selected_fiat_currency(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustwalletmanager_selected_fiat_currency(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_rustwalletmanager_sent_and_received_fiat(`ptr`: Long,`sentAndReceived`: Long,
+external fun uniffi_cove_fn_method_rustwalletmanager_sent_and_received_fiat(`ptr`: Long,`sentAndReceived`: Long,
 ): Long
-fun uniffi_cove_fn_method_rustwalletmanager_set_wallet_metadata(`ptr`: Long,`metadata`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustwalletmanager_set_wallet_metadata(`ptr`: Long,`metadata`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_rustwalletmanager_sign_and_broadcast_transaction(`ptr`: Long,`psbt`: Long,
+external fun uniffi_cove_fn_method_rustwalletmanager_sign_and_broadcast_transaction(`ptr`: Long,`psbt`: Long,
 ): Long
-fun uniffi_cove_fn_method_rustwalletmanager_split_transaction_outputs(`ptr`: Long,`outputs`: RustBuffer.ByValue,
+external fun uniffi_cove_fn_method_rustwalletmanager_split_transaction_outputs(`ptr`: Long,`outputs`: RustBuffer.ByValue,
 ): Long
-fun uniffi_cove_fn_method_rustwalletmanager_start_wallet_scan(`ptr`: Long,
+external fun uniffi_cove_fn_method_rustwalletmanager_start_wallet_scan(`ptr`: Long,
 ): Long
-fun uniffi_cove_fn_method_rustwalletmanager_switch_to_different_wallet_address_type(`ptr`: Long,`walletAddressType`: RustBuffer.ByValue,
+external fun uniffi_cove_fn_method_rustwalletmanager_switch_to_different_wallet_address_type(`ptr`: Long,`walletAddressType`: RustBuffer.ByValue,
 ): Long
-fun uniffi_cove_fn_method_rustwalletmanager_transaction_details(`ptr`: Long,`txId`: Long,
+external fun uniffi_cove_fn_method_rustwalletmanager_transaction_details(`ptr`: Long,`txId`: Long,
 ): Long
-fun uniffi_cove_fn_method_rustwalletmanager_validate_metadata(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustwalletmanager_validate_metadata(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_rustwalletmanager_wallet_metadata(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustwalletmanager_wallet_metadata(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_rustwalletmanager_word_validator(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustwalletmanager_word_validator(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_clone_seedqr(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_seedqr(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_seedqr(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_seedqr(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_constructor_seedqr_new_from_data(`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_constructor_seedqr_new_from_data(`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_constructor_seedqr_new_from_str(`qr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_constructor_seedqr_new_from_str(`qr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_seedqr_get_words(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_seedqr_get_words(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_seedqr_grouped_plain_words(`ptr`: Long,`groupsOf`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_seedqr_grouped_plain_words(`ptr`: Long,`groupsOf`: Byte,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_clone_sendflowmanagerstate(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_sendflowmanagerstate(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_sendflowmanagerstate(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_sendflowmanagerstate(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_clone_setupcmd(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_setupcmd(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_setupcmd(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_setupcmd(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_constructor_setupcmd_try_new(`factoryPin`: RustBuffer.ByValue,`newPin`: RustBuffer.ByValue,`chainCode`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_constructor_setupcmd_try_new(`factoryPin`: RustBuffer.ByValue,`newPin`: RustBuffer.ByValue,`chainCode`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_clone_tapsignerreader(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_tapsignerreader(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_tapsignerreader(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_tapsignerreader(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_constructor_tapsignerreader_new(`transport`: Long,`cmd`: RustBuffer.ByValue,
+external fun uniffi_cove_fn_constructor_tapsignerreader_new(`transport`: Long,`cmd`: RustBuffer.ByValue,
 ): Long
-fun uniffi_cove_fn_method_tapsignerreader_continue_setup(`ptr`: Long,`response`: RustBuffer.ByValue,
+external fun uniffi_cove_fn_method_tapsignerreader_continue_setup(`ptr`: Long,`response`: RustBuffer.ByValue,
 ): Long
-fun uniffi_cove_fn_method_tapsignerreader_last_response(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_tapsignerreader_last_response(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_tapsignerreader_run(`ptr`: Long,
+external fun uniffi_cove_fn_method_tapsignerreader_run(`ptr`: Long,
 ): Long
-fun uniffi_cove_fn_method_tapsignerreader_setup(`ptr`: Long,`cmd`: Long,
+external fun uniffi_cove_fn_method_tapsignerreader_setup(`ptr`: Long,`cmd`: Long,
 ): Long
-fun uniffi_cove_fn_method_tapsignerreader_sign(`ptr`: Long,`psbt`: Long,`pin`: RustBuffer.ByValue,
+external fun uniffi_cove_fn_method_tapsignerreader_sign(`ptr`: Long,`psbt`: Long,`pin`: RustBuffer.ByValue,
 ): Long
-fun uniffi_cove_fn_clone_transactiondetails(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_transactiondetails(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_transactiondetails(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_transactiondetails(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_constructor_transactiondetails_preview_confirmed_received(uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_constructor_transactiondetails_preview_confirmed_received(uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_constructor_transactiondetails_preview_confirmed_sent(uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_constructor_transactiondetails_preview_confirmed_sent(uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_constructor_transactiondetails_preview_new_confirmed(uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_constructor_transactiondetails_preview_new_confirmed(uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_constructor_transactiondetails_preview_new_with_label(`label`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_constructor_transactiondetails_preview_new_with_label(`label`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_constructor_transactiondetails_preview_pending_received(uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_constructor_transactiondetails_preview_pending_received(uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_constructor_transactiondetails_preview_pending_sent(uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_constructor_transactiondetails_preview_pending_sent(uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_transactiondetails_address(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_transactiondetails_address(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_transactiondetails_address_spaced_out(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_transactiondetails_address_spaced_out(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_transactiondetails_amount(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_transactiondetails_amount(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_transactiondetails_amount_fiat(`ptr`: Long,
+external fun uniffi_cove_fn_method_transactiondetails_amount_fiat(`ptr`: Long,
 ): Long
-fun uniffi_cove_fn_method_transactiondetails_amount_fiat_fmt(`ptr`: Long,
+external fun uniffi_cove_fn_method_transactiondetails_amount_fiat_fmt(`ptr`: Long,
 ): Long
-fun uniffi_cove_fn_method_transactiondetails_amount_fmt(`ptr`: Long,`unit`: RustBufferBitcoinUnit.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_transactiondetails_amount_fmt(`ptr`: Long,`unit`: RustBufferBitcoinUnit.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_transactiondetails_block_number(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_transactiondetails_block_number(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_transactiondetails_block_number_fmt(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_transactiondetails_block_number_fmt(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_transactiondetails_confirmation_date_time(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_transactiondetails_confirmation_date_time(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_transactiondetails_fee_fiat_fmt(`ptr`: Long,
+external fun uniffi_cove_fn_method_transactiondetails_fee_fiat_fmt(`ptr`: Long,
 ): Long
-fun uniffi_cove_fn_method_transactiondetails_fee_fmt(`ptr`: Long,`unit`: RustBufferBitcoinUnit.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_transactiondetails_fee_fmt(`ptr`: Long,`unit`: RustBufferBitcoinUnit.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_transactiondetails_is_confirmed(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_transactiondetails_is_confirmed(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_fn_method_transactiondetails_is_received(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_transactiondetails_is_received(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_fn_method_transactiondetails_is_sent(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_transactiondetails_is_sent(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_fn_method_transactiondetails_sent_sans_fee_fiat_fmt(`ptr`: Long,
+external fun uniffi_cove_fn_method_transactiondetails_sent_sans_fee_fiat_fmt(`ptr`: Long,
 ): Long
-fun uniffi_cove_fn_method_transactiondetails_sent_sans_fee_fmt(`ptr`: Long,`unit`: RustBufferBitcoinUnit.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_transactiondetails_sent_sans_fee_fmt(`ptr`: Long,`unit`: RustBufferBitcoinUnit.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_transactiondetails_transaction_label(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_transactiondetails_transaction_label(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_transactiondetails_transaction_url(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_transactiondetails_transaction_url(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_transactiondetails_tx_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_transactiondetails_tx_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_clone_unconfirmedtransaction(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_unconfirmedtransaction(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_unconfirmedtransaction(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_unconfirmedtransaction(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_unconfirmedtransaction_fiat_amount(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_unconfirmedtransaction_fiat_amount(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_unconfirmedtransaction_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_unconfirmedtransaction_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_unconfirmedtransaction_label(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_unconfirmedtransaction_label(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_unconfirmedtransaction_last_seen(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_unconfirmedtransaction_last_seen(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_unconfirmedtransaction_sent_and_received(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_unconfirmedtransaction_sent_and_received(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_clone_unsignedtransaction(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_unsignedtransaction(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_unsignedtransaction(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_unsignedtransaction(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_constructor_unsignedtransaction_preview_new(uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_constructor_unsignedtransaction_preview_new(uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_unsignedtransaction_details(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_unsignedtransaction_details(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_unsignedtransaction_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_unsignedtransaction_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_unsignedtransaction_label(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_unsignedtransaction_label(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_unsignedtransaction_sending_amount(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_unsignedtransaction_sending_amount(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_unsignedtransaction_spending_amount(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_unsignedtransaction_spending_amount(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_clone_unsignedtransactionrecord(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_unsignedtransactionrecord(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_unsignedtransactionrecord(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_unsignedtransactionrecord(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_unsignedtransactionrecord_confirm_details(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_unsignedtransactionrecord_confirm_details(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_unsignedtransactionrecord_created_at(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_unsignedtransactionrecord_created_at(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_unsignedtransactionrecord_tx_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_unsignedtransactionrecord_tx_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_unsignedtransactionrecord_wallet_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_unsignedtransactionrecord_wallet_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBufferWalletId.ByValue
-fun uniffi_cove_fn_clone_unsignedtransactionstable(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_unsignedtransactionstable(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_unsignedtransactionstable(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_unsignedtransactionstable(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_unsignedtransactionstable_gettx(`ptr`: Long,`txId`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_unsignedtransactionstable_gettx(`ptr`: Long,`txId`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_unsignedtransactionstable_gettxthrow(`ptr`: Long,`txId`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_unsignedtransactionstable_gettxthrow(`ptr`: Long,`txId`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_clone_wallet(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_wallet(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_wallet(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_wallet(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_constructor_wallet_new_from_export(`export`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_constructor_wallet_new_from_export(`export`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_constructor_wallet_new_from_xpub(`xpub`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_constructor_wallet_new_from_xpub(`xpub`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_constructor_wallet_previewnewwallet(uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_constructor_wallet_previewnewwallet(uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_wallet_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_wallet_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBufferWalletId.ByValue
-fun uniffi_cove_fn_clone_walletdatadb(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_walletdatadb(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_walletdatadb(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_walletdatadb(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_clone_walletkey(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_walletkey(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_walletkey(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_walletkey(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_clone_walletstable(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_walletstable(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_walletstable(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_walletstable(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_method_walletstable_all(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_walletstable_all(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_walletstable_all_sorted_active(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_walletstable_all_sorted_active(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_method_walletstable_is_empty(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_walletstable_is_empty(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_fn_method_walletstable_len(`ptr`: Long,`network`: RustBufferNetwork.ByValue,`mode`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_walletstable_len(`ptr`: Long,`network`: RustBufferNetwork.ByValue,`mode`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Short
-fun uniffi_cove_fn_clone_wordvalidator(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_clone_wordvalidator(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_free_wordvalidator(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_free_wordvalidator(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_cove_fn_constructor_wordvalidator_preview(`preview`: Byte,`numberOfWords`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_constructor_wordvalidator_preview(`preview`: Byte,`numberOfWords`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_method_wordvalidator_is_complete(`ptr`: Long,`wordNumber`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_wordvalidator_is_complete(`ptr`: Long,`wordNumber`: Byte,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_fn_method_wordvalidator_is_word_correct(`ptr`: Long,`word`: RustBuffer.ByValue,`for`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_wordvalidator_is_word_correct(`ptr`: Long,`word`: RustBuffer.ByValue,`for`: Byte,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_fn_method_wordvalidator_possible_words(`ptr`: Long,`for`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_wordvalidator_possible_words(`ptr`: Long,`for`: Byte,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_init_callback_vtable_authmanagerreconciler(`vtable`: UniffiVTableCallbackInterfaceAuthManagerReconciler,
+external fun uniffi_cove_fn_init_callback_vtable_authmanagerreconciler(`vtable`: UniffiVTableCallbackInterfaceAuthManagerReconciler,
 ): Unit
-fun uniffi_cove_fn_init_callback_vtable_coincontrolmanagerreconciler(`vtable`: UniffiVTableCallbackInterfaceCoinControlManagerReconciler,
+external fun uniffi_cove_fn_init_callback_vtable_coincontrolmanagerreconciler(`vtable`: UniffiVTableCallbackInterfaceCoinControlManagerReconciler,
 ): Unit
-fun uniffi_cove_fn_init_callback_vtable_ffireconcile(`vtable`: UniffiVTableCallbackInterfaceFfiReconcile,
+external fun uniffi_cove_fn_init_callback_vtable_ffireconcile(`vtable`: UniffiVTableCallbackInterfaceFfiReconcile,
 ): Unit
-fun uniffi_cove_fn_init_callback_vtable_importwalletmanagerreconciler(`vtable`: UniffiVTableCallbackInterfaceImportWalletManagerReconciler,
+external fun uniffi_cove_fn_init_callback_vtable_importwalletmanagerreconciler(`vtable`: UniffiVTableCallbackInterfaceImportWalletManagerReconciler,
 ): Unit
-fun uniffi_cove_fn_init_callback_vtable_pendingwalletmanagerreconciler(`vtable`: UniffiVTableCallbackInterfacePendingWalletManagerReconciler,
+external fun uniffi_cove_fn_init_callback_vtable_pendingwalletmanagerreconciler(`vtable`: UniffiVTableCallbackInterfacePendingWalletManagerReconciler,
 ): Unit
-fun uniffi_cove_fn_init_callback_vtable_sendflowmanagerreconciler(`vtable`: UniffiVTableCallbackInterfaceSendFlowManagerReconciler,
+external fun uniffi_cove_fn_init_callback_vtable_sendflowmanagerreconciler(`vtable`: UniffiVTableCallbackInterfaceSendFlowManagerReconciler,
 ): Unit
-fun uniffi_cove_fn_init_callback_vtable_tapcardtransportprotocol(`vtable`: UniffiVTableCallbackInterfaceTapcardTransportProtocol,
+external fun uniffi_cove_fn_init_callback_vtable_tapcardtransportprotocol(`vtable`: UniffiVTableCallbackInterfaceTapcardTransportProtocol,
 ): Unit
-fun uniffi_cove_fn_init_callback_vtable_walletmanagerreconciler(`vtable`: UniffiVTableCallbackInterfaceWalletManagerReconciler,
+external fun uniffi_cove_fn_init_callback_vtable_walletmanagerreconciler(`vtable`: UniffiVTableCallbackInterfaceWalletManagerReconciler,
 ): Unit
-fun uniffi_cove_fn_func_address_error_to_alert_state(`error`: RustBufferAddressError.ByValue,`address`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_address_error_to_alert_state(`error`: RustBufferAddressError.ByValue,`address`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_func_after_pin_action_user_message(`action`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_after_pin_action_user_message(`action`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_func_all_fiat_currencies(uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_all_fiat_currencies(uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_func_coin_control_list_sort_key_to_string(`key`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_coin_control_list_sort_key_to_string(`key`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_func_create_transport_error_from_code(`code`: Short,`message`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_create_transport_error_from_code(`code`: Short,`message`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_func_default_node_selection(uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_default_node_selection(uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_func_default_wallet_colors(uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_default_wallet_colors(uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_func_describe_auth_manager_error(`error`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_describe_auth_manager_error(`error`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_func_describe_multi_format_error(`error`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_describe_multi_format_error(`error`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_func_describe_send_flow_error(`error`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_describe_send_flow_error(`error`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_func_describe_send_flow_fiat_on_change_error(`error`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_describe_send_flow_fiat_on_change_error(`error`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_func_describe_tap_signer_reader_error(`error`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_describe_tap_signer_reader_error(`error`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_func_describe_transport_error(`error`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_describe_transport_error(`error`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_func_describe_wallet_error(`error`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_describe_wallet_error(`error`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_func_describe_wallet_manager_error(`error`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_describe_wallet_manager_error(`error`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_func_discovery_state_is_equal(`lhs`: RustBuffer.ByValue,`rhs`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_discovery_state_is_equal(`lhs`: RustBuffer.ByValue,`rhs`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_fn_func_ffi_min_send_amount(uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_ffi_min_send_amount(uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_func_ffi_min_send_sats(uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_ffi_min_send_sats(uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_func_fiat_amount_preview_new(uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_fiat_amount_preview_new(uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_func_fiat_currency_emoji(`fiatCurrency`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_fiat_currency_emoji(`fiatCurrency`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_func_fiat_currency_suffix(`fiatCurrency`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_fiat_currency_suffix(`fiatCurrency`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_func_fiat_currency_symbol(`fiatCurrency`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_fiat_currency_symbol(`fiatCurrency`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_func_fiat_currency_to_string(`fiatCurrency`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_fiat_currency_to_string(`fiatCurrency`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_func_grouped_plain_words_of(`mnemonic`: RustBuffer.ByValue,`groups`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_grouped_plain_words_of(`mnemonic`: RustBuffer.ByValue,`groups`: Byte,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_func_hardware_wallet_is_tap_signer(`hardwareWallet`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_hardware_wallet_is_tap_signer(`hardwareWallet`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_fn_func_hash_route(`route`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_hash_route(`route`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_func_is_fiat_currency_symbol(`symbol`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_is_fiat_currency_symbol(`symbol`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_fn_func_is_route_equal(`route`: RustBuffer.ByValue,`routeToCheck`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_is_route_equal(`route`: RustBuffer.ByValue,`routeToCheck`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_fn_func_is_tap_signer_route_equal(`lhs`: RustBuffer.ByValue,`rhs`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_is_tap_signer_route_equal(`lhs`: RustBuffer.ByValue,`rhs`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_fn_func_is_valid_chain_code(`chainCode`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_is_valid_chain_code(`chainCode`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_fn_func_multi_format_try_from_nfc_message(`nfcMessage`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_multi_format_try_from_nfc_message(`nfcMessage`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_func_node_selection_to_node(`node`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_node_selection_to_node(`node`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_func_number_of_words_in_groups(`me`: RustBuffer.ByValue,`of`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_number_of_words_in_groups(`me`: RustBuffer.ByValue,`of`: Byte,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_func_number_of_words_to_word_count(`me`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_number_of_words_to_word_count(`me`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_fn_func_preview_new_legacy_found_address(uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_preview_new_legacy_found_address(uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_func_preview_new_wrapped_found_address(uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_preview_new_wrapped_found_address(uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_func_prices_are_equal(`lhs`: Long,`rhs`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_prices_are_equal(`lhs`: Long,`rhs`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_fn_func_string_or_data_try_into_multi_format(`stringOrData`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_string_or_data_try_into_multi_format(`stringOrData`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_func_tap_signer_confirm_pin_args_new_from_new_pin(`args`: RustBuffer.ByValue,`newPin`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_tap_signer_confirm_pin_args_new_from_new_pin(`args`: RustBuffer.ByValue,`newPin`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_func_tap_signer_error_is_auth_error(`error`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_tap_signer_error_is_auth_error(`error`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_fn_func_tap_signer_error_is_no_backup_error(`error`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_tap_signer_error_is_no_backup_error(`error`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_fn_func_tap_signer_response_backup_response(`response`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_tap_signer_response_backup_response(`response`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_func_tap_signer_response_change_response(`response`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_tap_signer_response_change_response(`response`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_fn_func_tap_signer_response_derive_response(`response`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_tap_signer_response_derive_response(`response`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_func_tap_signer_response_setup_response(`response`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_tap_signer_response_setup_response(`response`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_func_tap_signer_response_sign_response(`response`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_tap_signer_response_sign_response(`response`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_func_tap_signer_setup_complete_new(`preview`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_tap_signer_setup_complete_new(`preview`: Byte,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_func_tap_signer_setup_retry_continue_cmd(`preview`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_tap_signer_setup_retry_continue_cmd(`preview`: Byte,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_func_transaction_preview_confirmed_new(uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_transaction_preview_confirmed_new(uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_func_transaction_preview_unconfirmed_new(uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_transaction_preview_unconfirmed_new(uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_func_transactions_preview_new(`confirmed`: Byte,`unconfirmed`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_transactions_preview_new(`confirmed`: Byte,`unconfirmed`: Byte,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_func_update_prices_if_needed(
+external fun uniffi_cove_fn_func_update_prices_if_needed(
 ): Long
-fun uniffi_cove_fn_func_wallet_address_type_less_than(`lhs`: RustBuffer.ByValue,`rhs`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_wallet_address_type_less_than(`lhs`: RustBuffer.ByValue,`rhs`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_fn_func_wallet_address_type_to_string(`walletAddressType`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_wallet_address_type_to_string(`walletAddressType`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_func_wallet_metadata_hash(`metadata`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_wallet_metadata_hash(`metadata`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun uniffi_cove_fn_func_wallet_metadata_is_equal(`lhs`: RustBuffer.ByValue,`rhs`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_wallet_metadata_is_equal(`lhs`: RustBuffer.ByValue,`rhs`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_fn_func_wallet_metadata_preview(uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_wallet_metadata_preview(uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_cove_fn_func_wallet_state_is_equal(`lhs`: RustBuffer.ByValue,`rhs`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_wallet_state_is_equal(`lhs`: RustBuffer.ByValue,`rhs`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun uniffi_cove_fn_func_wallet_type_to_string(`walletType`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_wallet_type_to_string(`walletType`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun ffi_cove_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun ffi_cove_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun ffi_cove_rustbuffer_from_bytes(`bytes`: ForeignBytes.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun ffi_cove_rustbuffer_from_bytes(`bytes`: ForeignBytes.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun ffi_cove_rustbuffer_free(`buf`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun ffi_cove_rustbuffer_free(`buf`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun ffi_cove_rustbuffer_reserve(`buf`: RustBuffer.ByValue,`additional`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun ffi_cove_rustbuffer_reserve(`buf`: RustBuffer.ByValue,`additional`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun ffi_cove_rust_future_poll_u8(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+external fun ffi_cove_rust_future_poll_u8(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
 ): Unit
-fun ffi_cove_rust_future_cancel_u8(`handle`: Long,
+external fun ffi_cove_rust_future_cancel_u8(`handle`: Long,
 ): Unit
-fun ffi_cove_rust_future_free_u8(`handle`: Long,
+external fun ffi_cove_rust_future_free_u8(`handle`: Long,
 ): Unit
-fun ffi_cove_rust_future_complete_u8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun ffi_cove_rust_future_complete_u8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun ffi_cove_rust_future_poll_i8(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+external fun ffi_cove_rust_future_poll_i8(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
 ): Unit
-fun ffi_cove_rust_future_cancel_i8(`handle`: Long,
+external fun ffi_cove_rust_future_cancel_i8(`handle`: Long,
 ): Unit
-fun ffi_cove_rust_future_free_i8(`handle`: Long,
+external fun ffi_cove_rust_future_free_i8(`handle`: Long,
 ): Unit
-fun ffi_cove_rust_future_complete_i8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun ffi_cove_rust_future_complete_i8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun ffi_cove_rust_future_poll_u16(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+external fun ffi_cove_rust_future_poll_u16(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
 ): Unit
-fun ffi_cove_rust_future_cancel_u16(`handle`: Long,
+external fun ffi_cove_rust_future_cancel_u16(`handle`: Long,
 ): Unit
-fun ffi_cove_rust_future_free_u16(`handle`: Long,
+external fun ffi_cove_rust_future_free_u16(`handle`: Long,
 ): Unit
-fun ffi_cove_rust_future_complete_u16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun ffi_cove_rust_future_complete_u16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Short
-fun ffi_cove_rust_future_poll_i16(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+external fun ffi_cove_rust_future_poll_i16(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
 ): Unit
-fun ffi_cove_rust_future_cancel_i16(`handle`: Long,
+external fun ffi_cove_rust_future_cancel_i16(`handle`: Long,
 ): Unit
-fun ffi_cove_rust_future_free_i16(`handle`: Long,
+external fun ffi_cove_rust_future_free_i16(`handle`: Long,
 ): Unit
-fun ffi_cove_rust_future_complete_i16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun ffi_cove_rust_future_complete_i16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Short
-fun ffi_cove_rust_future_poll_u32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+external fun ffi_cove_rust_future_poll_u32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
 ): Unit
-fun ffi_cove_rust_future_cancel_u32(`handle`: Long,
+external fun ffi_cove_rust_future_cancel_u32(`handle`: Long,
 ): Unit
-fun ffi_cove_rust_future_free_u32(`handle`: Long,
+external fun ffi_cove_rust_future_free_u32(`handle`: Long,
 ): Unit
-fun ffi_cove_rust_future_complete_u32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun ffi_cove_rust_future_complete_u32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Int
-fun ffi_cove_rust_future_poll_i32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+external fun ffi_cove_rust_future_poll_i32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
 ): Unit
-fun ffi_cove_rust_future_cancel_i32(`handle`: Long,
+external fun ffi_cove_rust_future_cancel_i32(`handle`: Long,
 ): Unit
-fun ffi_cove_rust_future_free_i32(`handle`: Long,
+external fun ffi_cove_rust_future_free_i32(`handle`: Long,
 ): Unit
-fun ffi_cove_rust_future_complete_i32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun ffi_cove_rust_future_complete_i32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Int
-fun ffi_cove_rust_future_poll_u64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+external fun ffi_cove_rust_future_poll_u64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
 ): Unit
-fun ffi_cove_rust_future_cancel_u64(`handle`: Long,
+external fun ffi_cove_rust_future_cancel_u64(`handle`: Long,
 ): Unit
-fun ffi_cove_rust_future_free_u64(`handle`: Long,
+external fun ffi_cove_rust_future_free_u64(`handle`: Long,
 ): Unit
-fun ffi_cove_rust_future_complete_u64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun ffi_cove_rust_future_complete_u64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun ffi_cove_rust_future_poll_i64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+external fun ffi_cove_rust_future_poll_i64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
 ): Unit
-fun ffi_cove_rust_future_cancel_i64(`handle`: Long,
+external fun ffi_cove_rust_future_cancel_i64(`handle`: Long,
 ): Unit
-fun ffi_cove_rust_future_free_i64(`handle`: Long,
+external fun ffi_cove_rust_future_free_i64(`handle`: Long,
 ): Unit
-fun ffi_cove_rust_future_complete_i64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun ffi_cove_rust_future_complete_i64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun ffi_cove_rust_future_poll_f32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+external fun ffi_cove_rust_future_poll_f32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
 ): Unit
-fun ffi_cove_rust_future_cancel_f32(`handle`: Long,
+external fun ffi_cove_rust_future_cancel_f32(`handle`: Long,
 ): Unit
-fun ffi_cove_rust_future_free_f32(`handle`: Long,
+external fun ffi_cove_rust_future_free_f32(`handle`: Long,
 ): Unit
-fun ffi_cove_rust_future_complete_f32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun ffi_cove_rust_future_complete_f32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Float
-fun ffi_cove_rust_future_poll_f64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+external fun ffi_cove_rust_future_poll_f64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
 ): Unit
-fun ffi_cove_rust_future_cancel_f64(`handle`: Long,
+external fun ffi_cove_rust_future_cancel_f64(`handle`: Long,
 ): Unit
-fun ffi_cove_rust_future_free_f64(`handle`: Long,
+external fun ffi_cove_rust_future_free_f64(`handle`: Long,
 ): Unit
-fun ffi_cove_rust_future_complete_f64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun ffi_cove_rust_future_complete_f64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Double
-fun ffi_cove_rust_future_poll_rust_buffer(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+external fun ffi_cove_rust_future_poll_rust_buffer(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
 ): Unit
-fun ffi_cove_rust_future_cancel_rust_buffer(`handle`: Long,
+external fun ffi_cove_rust_future_cancel_rust_buffer(`handle`: Long,
 ): Unit
-fun ffi_cove_rust_future_free_rust_buffer(`handle`: Long,
+external fun ffi_cove_rust_future_free_rust_buffer(`handle`: Long,
 ): Unit
-fun ffi_cove_rust_future_complete_rust_buffer(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun ffi_cove_rust_future_complete_rust_buffer(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun ffi_cove_rust_future_poll_void(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+external fun ffi_cove_rust_future_poll_void(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
 ): Unit
-fun ffi_cove_rust_future_cancel_void(`handle`: Long,
+external fun ffi_cove_rust_future_cancel_void(`handle`: Long,
 ): Unit
-fun ffi_cove_rust_future_free_void(`handle`: Long,
+external fun ffi_cove_rust_future_free_void(`handle`: Long,
 ): Unit
-fun ffi_cove_rust_future_complete_void(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun ffi_cove_rust_future_complete_void(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
 
+    
 }
 
 private fun uniffiCheckContractApiVersion(lib: IntegrityCheckingUniffiLib) {
@@ -4324,7 +4261,10 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
  * @suppress
  */
 public fun uniffiEnsureInitialized() {
-    UniffiLib.INSTANCE
+    IntegrityCheckingUniffiLib
+    // UniffiLib() initialized as objects are used, but we still need to explicitly
+    // reference it so initialization across crates works as expected.
+    UniffiLib
 }
 
 // Async support
@@ -5048,7 +4988,7 @@ open class AddressArgs: Disposable, AutoCloseable, AddressArgsInterface
     constructor(`address`: Address, `changeAddress`: Address?, `direction`: TransactionDirection) :
         this(UniffiWithHandle, 
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_constructor_addressargs_new(
+    UniffiLib.uniffi_cove_fn_constructor_addressargs_new(
     
         FfiConverterTypeAddress.lower(`address`),FfiConverterOptionalTypeAddress.lower(`changeAddress`),FfiConverterTypeTransactionDirection.lower(`direction`),_status)
 }
@@ -5108,7 +5048,7 @@ open class AddressArgs: Disposable, AutoCloseable, AddressArgsInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_addressargs(handle, status)
+                UniffiLib.uniffi_cove_fn_free_addressargs(handle, status)
             }
         }
     }
@@ -5121,7 +5061,7 @@ open class AddressArgs: Disposable, AutoCloseable, AddressArgsInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_addressargs(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_addressargs(handle, status)
         }
     }
 
@@ -5294,7 +5234,7 @@ open class AuthPin: Disposable, AutoCloseable, AuthPinInterface
     constructor() :
         this(UniffiWithHandle, 
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_constructor_authpin_new(
+    UniffiLib.uniffi_cove_fn_constructor_authpin_new(
     
         _status)
 }
@@ -5354,7 +5294,7 @@ open class AuthPin: Disposable, AutoCloseable, AuthPinInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_authpin(handle, status)
+                UniffiLib.uniffi_cove_fn_free_authpin(handle, status)
             }
         }
     }
@@ -5367,7 +5307,7 @@ open class AuthPin: Disposable, AutoCloseable, AuthPinInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_authpin(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_authpin(handle, status)
         }
     }
 
@@ -5375,7 +5315,7 @@ open class AuthPin: Disposable, AutoCloseable, AuthPinInterface
             return FfiConverterBoolean.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_authpin_check(
+    UniffiLib.uniffi_cove_fn_method_authpin_check(
         it,
         FfiConverterString.lower(`pin`),_status)
 }
@@ -5607,7 +5547,7 @@ open class AutoCompleteImpl: Disposable, AutoCloseable, AutoComplete
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_autocomplete(handle, status)
+                UniffiLib.uniffi_cove_fn_free_autocomplete(handle, status)
             }
         }
     }
@@ -5620,7 +5560,7 @@ open class AutoCompleteImpl: Disposable, AutoCloseable, AutoComplete
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_autocomplete(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_autocomplete(handle, status)
         }
     }
 
@@ -5628,7 +5568,7 @@ open class AutoCompleteImpl: Disposable, AutoCloseable, AutoComplete
             return FfiConverterSequenceString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_autocomplete_autocomplete(
+    UniffiLib.uniffi_cove_fn_method_autocomplete_autocomplete(
         it,
         FfiConverterString.lower(`word`),_status)
 }
@@ -5641,7 +5581,7 @@ open class AutoCompleteImpl: Disposable, AutoCloseable, AutoComplete
             return FfiConverterBoolean.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_autocomplete_is_valid_word(
+    UniffiLib.uniffi_cove_fn_method_autocomplete_is_valid_word(
         it,
         FfiConverterString.lower(`word`),_status)
 }
@@ -5940,7 +5880,7 @@ open class Balance: Disposable, AutoCloseable, BalanceInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_balance(handle, status)
+                UniffiLib.uniffi_cove_fn_free_balance(handle, status)
             }
         }
     }
@@ -5953,7 +5893,7 @@ open class Balance: Disposable, AutoCloseable, BalanceInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_balance(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_balance(handle, status)
         }
     }
 
@@ -5961,7 +5901,7 @@ open class Balance: Disposable, AutoCloseable, BalanceInterface
             return FfiConverterTypeAmount.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_balance_spendable(
+    UniffiLib.uniffi_cove_fn_method_balance_spendable(
         it,
         _status)
 }
@@ -5980,7 +5920,7 @@ open class Balance: Disposable, AutoCloseable, BalanceInterface
          fun `zero`(): Balance {
             return FfiConverterTypeBalance.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_constructor_balance_zero(
+    UniffiLib.uniffi_cove_fn_constructor_balance_zero(
     
         _status)
 }
@@ -6204,7 +6144,7 @@ open class BbqrJoinResult: Disposable, AutoCloseable, BbqrJoinResultInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_bbqrjoinresult(handle, status)
+                UniffiLib.uniffi_cove_fn_free_bbqrjoinresult(handle, status)
             }
         }
     }
@@ -6217,7 +6157,7 @@ open class BbqrJoinResult: Disposable, AutoCloseable, BbqrJoinResultInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_bbqrjoinresult(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_bbqrjoinresult(handle, status)
         }
     }
 
@@ -6226,7 +6166,7 @@ open class BbqrJoinResult: Disposable, AutoCloseable, BbqrJoinResultInterface
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCallWithError(MultiQrException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_bbqrjoinresult_final_result(
+    UniffiLib.uniffi_cove_fn_method_bbqrjoinresult_final_result(
         it,
         _status)
 }
@@ -6239,7 +6179,7 @@ open class BbqrJoinResult: Disposable, AutoCloseable, BbqrJoinResultInterface
             return FfiConverterBoolean.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_bbqrjoinresult_is_complete(
+    UniffiLib.uniffi_cove_fn_method_bbqrjoinresult_is_complete(
         it,
         _status)
 }
@@ -6252,7 +6192,7 @@ open class BbqrJoinResult: Disposable, AutoCloseable, BbqrJoinResultInterface
             return FfiConverterUInt.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_bbqrjoinresult_parts_left(
+    UniffiLib.uniffi_cove_fn_method_bbqrjoinresult_parts_left(
         it,
         _status)
 }
@@ -6484,7 +6424,7 @@ open class BbqrJoined: Disposable, AutoCloseable, BbqrJoinedInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_bbqrjoined(handle, status)
+                UniffiLib.uniffi_cove_fn_free_bbqrjoined(handle, status)
             }
         }
     }
@@ -6497,7 +6437,7 @@ open class BbqrJoined: Disposable, AutoCloseable, BbqrJoinedInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_bbqrjoined(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_bbqrjoined(handle, status)
         }
     }
 
@@ -6506,7 +6446,7 @@ open class BbqrJoined: Disposable, AutoCloseable, BbqrJoinedInterface
             return FfiConverterSequenceSequenceString.lift(
     callWithHandle {
     uniffiRustCallWithError(MultiQrException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_bbqrjoined_get_grouped_words(
+    UniffiLib.uniffi_cove_fn_method_bbqrjoined_get_grouped_words(
         it,
         FfiConverterUByte.lower(`chunks`),_status)
 }
@@ -6520,7 +6460,7 @@ open class BbqrJoined: Disposable, AutoCloseable, BbqrJoinedInterface
             return FfiConverterSequenceString.lift(
     callWithHandle {
     uniffiRustCallWithError(MultiQrException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_bbqrjoined_get_seed_words(
+    UniffiLib.uniffi_cove_fn_method_bbqrjoined_get_seed_words(
         it,
         _status)
 }
@@ -6748,7 +6688,7 @@ open class Bip329Labels: Disposable, AutoCloseable, Bip329LabelsInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_bip329labels(handle, status)
+                UniffiLib.uniffi_cove_fn_free_bip329labels(handle, status)
             }
         }
     }
@@ -6761,7 +6701,7 @@ open class Bip329Labels: Disposable, AutoCloseable, Bip329LabelsInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_bip329labels(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_bip329labels(handle, status)
         }
     }
 
@@ -6943,7 +6883,7 @@ open class Bip39AutoComplete: Disposable, AutoCloseable, Bip39AutoCompleteInterf
     constructor() :
         this(UniffiWithHandle, 
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_constructor_bip39autocomplete_new(
+    UniffiLib.uniffi_cove_fn_constructor_bip39autocomplete_new(
     
         _status)
 }
@@ -7003,7 +6943,7 @@ open class Bip39AutoComplete: Disposable, AutoCloseable, Bip39AutoCompleteInterf
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_bip39autocomplete(handle, status)
+                UniffiLib.uniffi_cove_fn_free_bip39autocomplete(handle, status)
             }
         }
     }
@@ -7016,7 +6956,7 @@ open class Bip39AutoComplete: Disposable, AutoCloseable, Bip39AutoCompleteInterf
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_bip39autocomplete(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_bip39autocomplete(handle, status)
         }
     }
 
@@ -7024,7 +6964,7 @@ open class Bip39AutoComplete: Disposable, AutoCloseable, Bip39AutoCompleteInterf
             return FfiConverterSequenceString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_bip39autocomplete_autocomplete(
+    UniffiLib.uniffi_cove_fn_method_bip39autocomplete_autocomplete(
         it,
         FfiConverterString.lower(`word`),_status)
 }
@@ -7037,7 +6977,7 @@ open class Bip39AutoComplete: Disposable, AutoCloseable, Bip39AutoCompleteInterf
             return FfiConverterBoolean.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_bip39autocomplete_is_valid_word(
+    UniffiLib.uniffi_cove_fn_method_bip39autocomplete_is_valid_word(
         it,
         FfiConverterString.lower(`word`),_status)
 }
@@ -7053,7 +6993,7 @@ open class Bip39AutoComplete: Disposable, AutoCloseable, Bip39AutoCompleteInterf
             return FfiConverterUByte.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_bip39autocomplete_next_field_number(
+    UniffiLib.uniffi_cove_fn_method_bip39autocomplete_next_field_number(
         it,
         FfiConverterUByte.lower(`currentFieldNumber`),FfiConverterSequenceString.lower(`enteredWords`),_status)
 }
@@ -7237,7 +7177,7 @@ open class Bip39WordSpecificAutocomplete: Disposable, AutoCloseable, Bip39WordSp
     constructor(`wordNumber`: kotlin.UShort, `numberOfWords`: NumberOfBip39Words) :
         this(UniffiWithHandle, 
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_constructor_bip39wordspecificautocomplete_new(
+    UniffiLib.uniffi_cove_fn_constructor_bip39wordspecificautocomplete_new(
     
         FfiConverterUShort.lower(`wordNumber`),FfiConverterTypeNumberOfBip39Words.lower(`numberOfWords`),_status)
 }
@@ -7297,7 +7237,7 @@ open class Bip39WordSpecificAutocomplete: Disposable, AutoCloseable, Bip39WordSp
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_bip39wordspecificautocomplete(handle, status)
+                UniffiLib.uniffi_cove_fn_free_bip39wordspecificautocomplete(handle, status)
             }
         }
     }
@@ -7310,7 +7250,7 @@ open class Bip39WordSpecificAutocomplete: Disposable, AutoCloseable, Bip39WordSp
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_bip39wordspecificautocomplete(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_bip39wordspecificautocomplete(handle, status)
         }
     }
 
@@ -7318,7 +7258,7 @@ open class Bip39WordSpecificAutocomplete: Disposable, AutoCloseable, Bip39WordSp
             return FfiConverterSequenceString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_bip39wordspecificautocomplete_autocomplete(
+    UniffiLib.uniffi_cove_fn_method_bip39wordspecificautocomplete_autocomplete(
         it,
         FfiConverterString.lower(`word`),FfiConverterSequenceSequenceString.lower(`allWords`),_status)
 }
@@ -7331,7 +7271,7 @@ open class Bip39WordSpecificAutocomplete: Disposable, AutoCloseable, Bip39WordSp
             return FfiConverterBoolean.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_bip39wordspecificautocomplete_is_bip39_word(
+    UniffiLib.uniffi_cove_fn_method_bip39wordspecificautocomplete_is_bip39_word(
         it,
         FfiConverterString.lower(`word`),_status)
 }
@@ -7344,7 +7284,7 @@ open class Bip39WordSpecificAutocomplete: Disposable, AutoCloseable, Bip39WordSp
             return FfiConverterBoolean.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_bip39wordspecificautocomplete_is_valid_word(
+    UniffiLib.uniffi_cove_fn_method_bip39wordspecificautocomplete_is_valid_word(
         it,
         FfiConverterString.lower(`word`),FfiConverterSequenceSequenceString.lower(`allWords`),_status)
 }
@@ -7357,7 +7297,7 @@ open class Bip39WordSpecificAutocomplete: Disposable, AutoCloseable, Bip39WordSp
             return FfiConverterUByte.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_bip39wordspecificautocomplete_next_field_number(
+    UniffiLib.uniffi_cove_fn_method_bip39wordspecificautocomplete_next_field_number(
         it,
         FfiConverterUByte.lower(`currentFieldNumber`),FfiConverterSequenceString.lower(`enteredWords`),_status)
 }
@@ -7539,7 +7479,7 @@ open class BitcoinTransaction: Disposable, AutoCloseable, BitcoinTransactionInte
     constructor(`txHex`: kotlin.String) :
         this(UniffiWithHandle, 
     uniffiRustCallWithError(BitcoinTransactionException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_constructor_bitcointransaction_new(
+    UniffiLib.uniffi_cove_fn_constructor_bitcointransaction_new(
     
         FfiConverterString.lower(`txHex`),_status)
 }
@@ -7599,7 +7539,7 @@ open class BitcoinTransaction: Disposable, AutoCloseable, BitcoinTransactionInte
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_bitcointransaction(handle, status)
+                UniffiLib.uniffi_cove_fn_free_bitcointransaction(handle, status)
             }
         }
     }
@@ -7612,7 +7552,7 @@ open class BitcoinTransaction: Disposable, AutoCloseable, BitcoinTransactionInte
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_bitcointransaction(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_bitcointransaction(handle, status)
         }
     }
 
@@ -7620,7 +7560,7 @@ open class BitcoinTransaction: Disposable, AutoCloseable, BitcoinTransactionInte
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_bitcointransaction_normalize_tx_id(
+    UniffiLib.uniffi_cove_fn_method_bitcointransaction_normalize_tx_id(
         it,
         _status)
 }
@@ -7633,7 +7573,7 @@ open class BitcoinTransaction: Disposable, AutoCloseable, BitcoinTransactionInte
             return FfiConverterTypeTxId.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_bitcointransaction_tx_id(
+    UniffiLib.uniffi_cove_fn_method_bitcointransaction_tx_id(
         it,
         _status)
 }
@@ -7646,7 +7586,7 @@ open class BitcoinTransaction: Disposable, AutoCloseable, BitcoinTransactionInte
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_bitcointransaction_tx_id_hash(
+    UniffiLib.uniffi_cove_fn_method_bitcointransaction_tx_id_hash(
         it,
         _status)
 }
@@ -7666,7 +7606,7 @@ open class BitcoinTransaction: Disposable, AutoCloseable, BitcoinTransactionInte
     @Throws(BitcoinTransactionException::class) fun `tryFromData`(`data`: kotlin.ByteArray): BitcoinTransaction {
             return FfiConverterTypeBitcoinTransaction.lift(
     uniffiRustCallWithError(BitcoinTransactionException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_constructor_bitcointransaction_tryfromdata(
+    UniffiLib.uniffi_cove_fn_constructor_bitcointransaction_tryfromdata(
     
         FfiConverterByteArray.lower(`data`),_status)
 }
@@ -7678,7 +7618,7 @@ open class BitcoinTransaction: Disposable, AutoCloseable, BitcoinTransactionInte
     @Throws(BitcoinTransactionException::class) fun `tryFromNfcMessage`(`nfcMessage`: NfcMessage): BitcoinTransaction {
             return FfiConverterTypeBitcoinTransaction.lift(
     uniffiRustCallWithError(BitcoinTransactionException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_constructor_bitcointransaction_tryfromnfcmessage(
+    UniffiLib.uniffi_cove_fn_constructor_bitcointransaction_tryfromnfcmessage(
     
         FfiConverterTypeNfcMessage.lower(`nfcMessage`),_status)
 }
@@ -7690,7 +7630,7 @@ open class BitcoinTransaction: Disposable, AutoCloseable, BitcoinTransactionInte
     @Throws(BitcoinTransactionException::class) fun `tryFromStringOrData`(`stringOrData`: StringOrData): BitcoinTransaction {
             return FfiConverterTypeBitcoinTransaction.lift(
     uniffiRustCallWithError(BitcoinTransactionException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_constructor_bitcointransaction_tryfromstringordata(
+    UniffiLib.uniffi_cove_fn_constructor_bitcointransaction_tryfromstringordata(
     
         FfiConverterTypeStringOrData.lower(`stringOrData`),_status)
 }
@@ -7858,7 +7798,7 @@ open class BoxedRoute: Disposable, AutoCloseable, BoxedRouteInterface
     constructor(`route`: Route) :
         this(UniffiWithHandle, 
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_constructor_boxedroute_new(
+    UniffiLib.uniffi_cove_fn_constructor_boxedroute_new(
     
         FfiConverterTypeRoute.lower(`route`),_status)
 }
@@ -7918,7 +7858,7 @@ open class BoxedRoute: Disposable, AutoCloseable, BoxedRouteInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_boxedroute(handle, status)
+                UniffiLib.uniffi_cove_fn_free_boxedroute(handle, status)
             }
         }
     }
@@ -7931,7 +7871,7 @@ open class BoxedRoute: Disposable, AutoCloseable, BoxedRouteInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_boxedroute(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_boxedroute(handle, status)
         }
     }
 
@@ -7939,7 +7879,7 @@ open class BoxedRoute: Disposable, AutoCloseable, BoxedRouteInterface
             return FfiConverterTypeRoute.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_boxedroute_route(
+    UniffiLib.uniffi_cove_fn_method_boxedroute_route(
         it,
         _status)
 }
@@ -8167,7 +8107,7 @@ open class CoinControlManagerState: Disposable, AutoCloseable, CoinControlManage
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_coincontrolmanagerstate(handle, status)
+                UniffiLib.uniffi_cove_fn_free_coincontrolmanagerstate(handle, status)
             }
         }
     }
@@ -8180,7 +8120,7 @@ open class CoinControlManagerState: Disposable, AutoCloseable, CoinControlManage
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_coincontrolmanagerstate(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_coincontrolmanagerstate(handle, status)
         }
     }
 
@@ -8194,7 +8134,7 @@ open class CoinControlManagerState: Disposable, AutoCloseable, CoinControlManage
          fun `previewNew`(`outputCount`: kotlin.UByte = 20u, `changeCount`: kotlin.UByte = 4u): CoinControlManagerState {
             return FfiConverterTypeCoinControlManagerState.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_constructor_coincontrolmanagerstate_preview_new(
+    UniffiLib.uniffi_cove_fn_constructor_coincontrolmanagerstate_preview_new(
     
         FfiConverterUByte.lower(`outputCount`),FfiConverterUByte.lower(`changeCount`),_status)
 }
@@ -8432,7 +8372,7 @@ open class ConfirmedTransaction: Disposable, AutoCloseable, ConfirmedTransaction
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_confirmedtransaction(handle, status)
+                UniffiLib.uniffi_cove_fn_free_confirmedtransaction(handle, status)
             }
         }
     }
@@ -8445,7 +8385,7 @@ open class ConfirmedTransaction: Disposable, AutoCloseable, ConfirmedTransaction
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_confirmedtransaction(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_confirmedtransaction(handle, status)
         }
     }
 
@@ -8453,7 +8393,7 @@ open class ConfirmedTransaction: Disposable, AutoCloseable, ConfirmedTransaction
             return FfiConverterUInt.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_confirmedtransaction_block_height(
+    UniffiLib.uniffi_cove_fn_method_confirmedtransaction_block_height(
         it,
         _status)
 }
@@ -8466,7 +8406,7 @@ open class ConfirmedTransaction: Disposable, AutoCloseable, ConfirmedTransaction
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_confirmedtransaction_block_height_fmt(
+    UniffiLib.uniffi_cove_fn_method_confirmedtransaction_block_height_fmt(
         it,
         _status)
 }
@@ -8479,7 +8419,7 @@ open class ConfirmedTransaction: Disposable, AutoCloseable, ConfirmedTransaction
             return FfiConverterULong.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_confirmedtransaction_confirmed_at(
+    UniffiLib.uniffi_cove_fn_method_confirmedtransaction_confirmed_at(
         it,
         _status)
 }
@@ -8492,7 +8432,7 @@ open class ConfirmedTransaction: Disposable, AutoCloseable, ConfirmedTransaction
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_confirmedtransaction_confirmed_at_fmt(
+    UniffiLib.uniffi_cove_fn_method_confirmedtransaction_confirmed_at_fmt(
         it,
         _status)
 }
@@ -8505,7 +8445,7 @@ open class ConfirmedTransaction: Disposable, AutoCloseable, ConfirmedTransaction
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_confirmedtransaction_confirmed_at_fmt_with_time(
+    UniffiLib.uniffi_cove_fn_method_confirmedtransaction_confirmed_at_fmt_with_time(
         it,
         _status)
 }
@@ -8518,7 +8458,7 @@ open class ConfirmedTransaction: Disposable, AutoCloseable, ConfirmedTransaction
             return FfiConverterOptionalTypeFiatAmount.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_confirmedtransaction_fiat_amount(
+    UniffiLib.uniffi_cove_fn_method_confirmedtransaction_fiat_amount(
         it,
         _status)
 }
@@ -8531,7 +8471,7 @@ open class ConfirmedTransaction: Disposable, AutoCloseable, ConfirmedTransaction
             return FfiConverterTypeTxId.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_confirmedtransaction_id(
+    UniffiLib.uniffi_cove_fn_method_confirmedtransaction_id(
         it,
         _status)
 }
@@ -8544,7 +8484,7 @@ open class ConfirmedTransaction: Disposable, AutoCloseable, ConfirmedTransaction
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_confirmedtransaction_label(
+    UniffiLib.uniffi_cove_fn_method_confirmedtransaction_label(
         it,
         _status)
 }
@@ -8557,7 +8497,7 @@ open class ConfirmedTransaction: Disposable, AutoCloseable, ConfirmedTransaction
             return FfiConverterOptionalString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_confirmedtransaction_label_opt(
+    UniffiLib.uniffi_cove_fn_method_confirmedtransaction_label_opt(
         it,
         _status)
 }
@@ -8570,7 +8510,7 @@ open class ConfirmedTransaction: Disposable, AutoCloseable, ConfirmedTransaction
             return FfiConverterTypeSentAndReceived.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_confirmedtransaction_sent_and_received(
+    UniffiLib.uniffi_cove_fn_method_confirmedtransaction_sent_and_received(
         it,
         _status)
 }
@@ -8750,7 +8690,7 @@ open class Converter: Disposable, AutoCloseable, ConverterInterface
     constructor() :
         this(UniffiWithHandle, 
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_constructor_converter_new(
+    UniffiLib.uniffi_cove_fn_constructor_converter_new(
     
         _status)
 }
@@ -8810,7 +8750,7 @@ open class Converter: Disposable, AutoCloseable, ConverterInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_converter(handle, status)
+                UniffiLib.uniffi_cove_fn_free_converter(handle, status)
             }
         }
     }
@@ -8823,7 +8763,7 @@ open class Converter: Disposable, AutoCloseable, ConverterInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_converter(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_converter(handle, status)
         }
     }
 
@@ -8832,7 +8772,7 @@ open class Converter: Disposable, AutoCloseable, ConverterInterface
             return FfiConverterDouble.lift(
     callWithHandle {
     uniffiRustCallWithError(ConverterException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_converter_parse_fiat_str(
+    UniffiLib.uniffi_cove_fn_method_converter_parse_fiat_str(
         it,
         FfiConverterString.lower(`fiatAmount`),_status)
 }
@@ -8845,7 +8785,7 @@ open class Converter: Disposable, AutoCloseable, ConverterInterface
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_converter_remove_fiat_suffix(
+    UniffiLib.uniffi_cove_fn_method_converter_remove_fiat_suffix(
         it,
         FfiConverterString.lower(`fiatAmount`),_status)
 }
@@ -9033,7 +8973,7 @@ open class Database: Disposable, AutoCloseable, DatabaseInterface
     constructor() :
         this(UniffiWithHandle, 
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_constructor_database_new(
+    UniffiLib.uniffi_cove_fn_constructor_database_new(
     
         _status)
 }
@@ -9093,7 +9033,7 @@ open class Database: Disposable, AutoCloseable, DatabaseInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_database(handle, status)
+                UniffiLib.uniffi_cove_fn_free_database(handle, status)
             }
         }
     }
@@ -9106,7 +9046,7 @@ open class Database: Disposable, AutoCloseable, DatabaseInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_database(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_database(handle, status)
         }
     }
 
@@ -9114,7 +9054,7 @@ open class Database: Disposable, AutoCloseable, DatabaseInterface
         = 
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_database_dangerous_reset_all_data(
+    UniffiLib.uniffi_cove_fn_method_database_dangerous_reset_all_data(
         it,
         _status)
 }
@@ -9126,7 +9066,7 @@ open class Database: Disposable, AutoCloseable, DatabaseInterface
             return FfiConverterTypeGlobalConfigTable.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_database_global_config(
+    UniffiLib.uniffi_cove_fn_method_database_global_config(
         it,
         _status)
 }
@@ -9139,7 +9079,7 @@ open class Database: Disposable, AutoCloseable, DatabaseInterface
             return FfiConverterTypeGlobalFlagTable.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_database_global_flag(
+    UniffiLib.uniffi_cove_fn_method_database_global_flag(
         it,
         _status)
 }
@@ -9152,7 +9092,7 @@ open class Database: Disposable, AutoCloseable, DatabaseInterface
             return FfiConverterTypeHistoricalPriceTable.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_database_historical_prices(
+    UniffiLib.uniffi_cove_fn_method_database_historical_prices(
         it,
         _status)
 }
@@ -9165,7 +9105,7 @@ open class Database: Disposable, AutoCloseable, DatabaseInterface
             return FfiConverterTypeUnsignedTransactionsTable.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_database_unsigned_transactions(
+    UniffiLib.uniffi_cove_fn_method_database_unsigned_transactions(
         it,
         _status)
 }
@@ -9178,7 +9118,7 @@ open class Database: Disposable, AutoCloseable, DatabaseInterface
             return FfiConverterTypeWalletsTable.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_database_wallets(
+    UniffiLib.uniffi_cove_fn_method_database_wallets(
         it,
         _status)
 }
@@ -9463,7 +9403,7 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
     constructor() :
         this(UniffiWithHandle, 
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_constructor_ffiapp_new(
+    UniffiLib.uniffi_cove_fn_constructor_ffiapp_new(
     
         _status)
 }
@@ -9523,7 +9463,7 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_ffiapp(handle, status)
+                UniffiLib.uniffi_cove_fn_free_ffiapp(handle, status)
             }
         }
     }
@@ -9536,7 +9476,7 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_ffiapp(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_ffiapp(handle, status)
         }
     }
 
@@ -9547,7 +9487,7 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
             return FfiConverterTypeAuthType.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_ffiapp_auth_type(
+    UniffiLib.uniffi_cove_fn_method_ffiapp_auth_type(
         it,
         _status)
 }
@@ -9563,7 +9503,7 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
         = 
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_ffiapp_dangerous_wipe_all_data(
+    UniffiLib.uniffi_cove_fn_method_ffiapp_dangerous_wipe_all_data(
         it,
         _status)
 }
@@ -9575,7 +9515,7 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_ffiapp_debug_or_release(
+    UniffiLib.uniffi_cove_fn_method_ffiapp_debug_or_release(
         it,
         _status)
 }
@@ -9591,7 +9531,7 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
         = 
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_ffiapp_dispatch(
+    UniffiLib.uniffi_cove_fn_method_ffiapp_dispatch(
         it,
         FfiConverterTypeAppAction.lower(`action`),_status)
 }
@@ -9603,7 +9543,7 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_ffiapp_email_mailto(
+    UniffiLib.uniffi_cove_fn_method_ffiapp_email_mailto(
         it,
         FfiConverterString.lower(`ios`),_status)
 }
@@ -9617,7 +9557,7 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
             return FfiConverterTypeFeeResponse.lift(
     callWithHandle {
     uniffiRustCallWithError(AppException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_ffiapp_fees(
+    UniffiLib.uniffi_cove_fn_method_ffiapp_fees(
         it,
         _status)
 }
@@ -9634,7 +9574,7 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
             return FfiConverterOptionalTypeWalletMetadata.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_ffiapp_find_tap_signer_wallet(
+    UniffiLib.uniffi_cove_fn_method_ffiapp_find_tap_signer_wallet(
         it,
         FfiConverterTypeTapSigner.lower(`tapSigner`),_status)
 }
@@ -9650,7 +9590,7 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
             return FfiConverterOptionalByteArray.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_ffiapp_get_tap_signer_backup(
+    UniffiLib.uniffi_cove_fn_method_ffiapp_get_tap_signer_backup(
         it,
         FfiConverterTypeTapSigner.lower(`tapSigner`),_status)
 }
@@ -9663,7 +9603,7 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_ffiapp_git_short_hash(
+    UniffiLib.uniffi_cove_fn_method_ffiapp_git_short_hash(
         it,
         _status)
 }
@@ -9679,7 +9619,7 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
             return FfiConverterOptionalTypeWalletId.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_ffiapp_go_to_selected_wallet(
+    UniffiLib.uniffi_cove_fn_method_ffiapp_go_to_selected_wallet(
         it,
         _status)
 }
@@ -9695,7 +9635,7 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
             return FfiConverterBoolean.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_ffiapp_has_wallets(
+    UniffiLib.uniffi_cove_fn_method_ffiapp_has_wallets(
         it,
         _status)
 }
@@ -9712,14 +9652,14 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
     override suspend fun `initOnStart`() {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_method_ffiapp_init_on_start(
+            UniffiLib.uniffi_cove_fn_method_ffiapp_init_on_start(
                 uniffiHandle,
                 
             )
         },
-        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_poll_void(future, callback, continuation) },
-        { future, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_complete_void(future, continuation) },
-        { future -> UniffiLib.INSTANCE.ffi_cove_rust_future_free_void(future) },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_void(future) },
         // lift function
         { Unit },
         
@@ -9732,7 +9672,7 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
         = 
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_ffiapp_listen_for_updates(
+    UniffiLib.uniffi_cove_fn_method_ffiapp_listen_for_updates(
         it,
         FfiConverterTypeFfiReconcile.lower(`updater`),_status)
 }
@@ -9747,7 +9687,7 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
         = 
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_ffiapp_load_and_reset_default_route(
+    UniffiLib.uniffi_cove_fn_method_ffiapp_load_and_reset_default_route(
         it,
         FfiConverterTypeRoute.lower(`route`),_status)
 }
@@ -9763,7 +9703,7 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
         = 
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_ffiapp_load_and_reset_default_route_after(
+    UniffiLib.uniffi_cove_fn_method_ffiapp_load_and_reset_default_route_after(
         it,
         FfiConverterTypeRoute.lower(`route`),FfiConverterUInt.lower(`afterMillis`),_status)
 }
@@ -9775,7 +9715,7 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
             return FfiConverterTypeNetwork.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_ffiapp_network(
+    UniffiLib.uniffi_cove_fn_method_ffiapp_network(
         it,
         _status)
 }
@@ -9791,7 +9731,7 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
             return FfiConverterUShort.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_ffiapp_num_wallets(
+    UniffiLib.uniffi_cove_fn_method_ffiapp_num_wallets(
         it,
         _status)
 }
@@ -9805,7 +9745,7 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
             return FfiConverterTypePriceResponse.lift(
     callWithHandle {
     uniffiRustCallWithError(AppException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_ffiapp_prices(
+    UniffiLib.uniffi_cove_fn_method_ffiapp_prices(
         it,
         _status)
 }
@@ -9821,7 +9761,7 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
         = 
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_ffiapp_reset_default_route_to(
+    UniffiLib.uniffi_cove_fn_method_ffiapp_reset_default_route_to(
         it,
         FfiConverterTypeRoute.lower(`route`),_status)
 }
@@ -9836,7 +9776,7 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
         = 
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_ffiapp_reset_nested_routes_to(
+    UniffiLib.uniffi_cove_fn_method_ffiapp_reset_nested_routes_to(
         it,
         FfiConverterTypeRoute.lower(`defaultRoute`),FfiConverterSequenceTypeRoute.lower(`nestedRoutes`),_status)
 }
@@ -9851,7 +9791,7 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
             return FfiConverterBoolean.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_ffiapp_save_tap_signer_backup(
+    UniffiLib.uniffi_cove_fn_method_ffiapp_save_tap_signer_backup(
         it,
         FfiConverterTypeTapSigner.lower(`tapSigner`),FfiConverterByteArray.lower(`backup`),_status)
 }
@@ -9868,7 +9808,7 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
         = 
     callWithHandle {
     uniffiRustCallWithError(DatabaseException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_ffiapp_select_wallet(
+    UniffiLib.uniffi_cove_fn_method_ffiapp_select_wallet(
         it,
         FfiConverterTypeWalletId.lower(`id`),FfiConverterOptionalTypeRoute.lower(`nextRoute`),_status)
 }
@@ -9880,7 +9820,7 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
             return FfiConverterTypeAppState.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_ffiapp_state(
+    UniffiLib.uniffi_cove_fn_method_ffiapp_state(
         it,
         _status)
 }
@@ -9896,7 +9836,7 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
             return FfiConverterSequenceTypeWalletId.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_ffiapp_unverified_wallet_ids(
+    UniffiLib.uniffi_cove_fn_method_ffiapp_unverified_wallet_ids(
         it,
         _status)
 }
@@ -9909,7 +9849,7 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_ffiapp_version(
+    UniffiLib.uniffi_cove_fn_method_ffiapp_version(
         it,
         _status)
 }
@@ -10137,7 +10077,7 @@ open class FiatClient: Disposable, AutoCloseable, FiatClientInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_fiatclient(handle, status)
+                UniffiLib.uniffi_cove_fn_free_fiatclient(handle, status)
             }
         }
     }
@@ -10150,7 +10090,7 @@ open class FiatClient: Disposable, AutoCloseable, FiatClientInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_fiatclient(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_fiatclient(handle, status)
         }
     }
 
@@ -10323,7 +10263,7 @@ open class FileHandler: Disposable, AutoCloseable, FileHandlerInterface
     constructor(`filePath`: kotlin.String) :
         this(UniffiWithHandle, 
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_constructor_filehandler_new(
+    UniffiLib.uniffi_cove_fn_constructor_filehandler_new(
     
         FfiConverterString.lower(`filePath`),_status)
 }
@@ -10383,7 +10323,7 @@ open class FileHandler: Disposable, AutoCloseable, FileHandlerInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_filehandler(handle, status)
+                UniffiLib.uniffi_cove_fn_free_filehandler(handle, status)
             }
         }
     }
@@ -10396,7 +10336,7 @@ open class FileHandler: Disposable, AutoCloseable, FileHandlerInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_filehandler(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_filehandler(handle, status)
         }
     }
 
@@ -10405,7 +10345,7 @@ open class FileHandler: Disposable, AutoCloseable, FileHandlerInterface
             return FfiConverterTypeMultiFormat.lift(
     callWithHandle {
     uniffiRustCallWithError(FileHandlerException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_filehandler_read(
+    UniffiLib.uniffi_cove_fn_method_filehandler_read(
         it,
         _status)
 }
@@ -10633,7 +10573,7 @@ open class FilteredUtxos: Disposable, AutoCloseable, FilteredUtxosInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_filteredutxos(handle, status)
+                UniffiLib.uniffi_cove_fn_free_filteredutxos(handle, status)
             }
         }
     }
@@ -10646,7 +10586,7 @@ open class FilteredUtxos: Disposable, AutoCloseable, FilteredUtxosInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_filteredutxos(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_filteredutxos(handle, status)
         }
     }
 
@@ -10821,7 +10761,7 @@ open class Fingerprint: Disposable, AutoCloseable, FingerprintInterface
     constructor(`id`: WalletId) :
         this(UniffiWithHandle, 
     uniffiRustCallWithError(FingerprintException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_constructor_fingerprint_new(
+    UniffiLib.uniffi_cove_fn_constructor_fingerprint_new(
     
         FfiConverterTypeWalletId.lower(`id`),_status)
 }
@@ -10881,7 +10821,7 @@ open class Fingerprint: Disposable, AutoCloseable, FingerprintInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_fingerprint(handle, status)
+                UniffiLib.uniffi_cove_fn_free_fingerprint(handle, status)
             }
         }
     }
@@ -10894,7 +10834,7 @@ open class Fingerprint: Disposable, AutoCloseable, FingerprintInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_fingerprint(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_fingerprint(handle, status)
         }
     }
 
@@ -10902,7 +10842,7 @@ open class Fingerprint: Disposable, AutoCloseable, FingerprintInterface
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_fingerprint_as_lowercase(
+    UniffiLib.uniffi_cove_fn_method_fingerprint_as_lowercase(
         it,
         _status)
 }
@@ -10915,7 +10855,7 @@ open class Fingerprint: Disposable, AutoCloseable, FingerprintInterface
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_fingerprint_as_uppercase(
+    UniffiLib.uniffi_cove_fn_method_fingerprint_as_uppercase(
         it,
         _status)
 }
@@ -11143,7 +11083,7 @@ open class FoundJson: Disposable, AutoCloseable, FoundJsonInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_foundjson(handle, status)
+                UniffiLib.uniffi_cove_fn_free_foundjson(handle, status)
             }
         }
     }
@@ -11156,7 +11096,7 @@ open class FoundJson: Disposable, AutoCloseable, FoundJsonInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_foundjson(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_foundjson(handle, status)
         }
     }
 
@@ -11419,7 +11359,7 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_globalconfigtable(handle, status)
+                UniffiLib.uniffi_cove_fn_free_globalconfigtable(handle, status)
             }
         }
     }
@@ -11432,7 +11372,7 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_globalconfigtable(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_globalconfigtable(handle, status)
         }
     }
 
@@ -11440,7 +11380,7 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
             return FfiConverterTypeAuthType.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_globalconfigtable_authtype(
+    UniffiLib.uniffi_cove_fn_method_globalconfigtable_authtype(
         it,
         _status)
 }
@@ -11454,7 +11394,7 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
         = 
     callWithHandle {
     uniffiRustCallWithError(DatabaseException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_globalconfigtable_clear_selected_wallet(
+    UniffiLib.uniffi_cove_fn_method_globalconfigtable_clear_selected_wallet(
         it,
         _status)
 }
@@ -11466,7 +11406,7 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
             return FfiConverterTypeColorSchemeSelection.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_globalconfigtable_colorscheme(
+    UniffiLib.uniffi_cove_fn_method_globalconfigtable_colorscheme(
         it,
         _status)
 }
@@ -11480,7 +11420,7 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
         = 
     callWithHandle {
     uniffiRustCallWithError(DatabaseException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_globalconfigtable_delete(
+    UniffiLib.uniffi_cove_fn_method_globalconfigtable_delete(
         it,
         FfiConverterTypeGlobalConfigKey.lower(`key`),_status)
 }
@@ -11493,7 +11433,7 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
         = 
     callWithHandle {
     uniffiRustCallWithError(DatabaseException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_globalconfigtable_delete_hashed_pin_code(
+    UniffiLib.uniffi_cove_fn_method_globalconfigtable_delete_hashed_pin_code(
         it,
         _status)
 }
@@ -11506,7 +11446,7 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
             return FfiConverterOptionalString.lift(
     callWithHandle {
     uniffiRustCallWithError(DatabaseException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_globalconfigtable_get(
+    UniffiLib.uniffi_cove_fn_method_globalconfigtable_get(
         it,
         FfiConverterTypeGlobalConfigKey.lower(`key`),_status)
 }
@@ -11520,7 +11460,7 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCallWithError(DatabaseException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_globalconfigtable_hashed_pin_code(
+    UniffiLib.uniffi_cove_fn_method_globalconfigtable_hashed_pin_code(
         it,
         _status)
 }
@@ -11533,7 +11473,7 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
             return FfiConverterBoolean.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_globalconfigtable_is_in_decoy_mode(
+    UniffiLib.uniffi_cove_fn_method_globalconfigtable_is_in_decoy_mode(
         it,
         _status)
 }
@@ -11546,7 +11486,7 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
             return FfiConverterBoolean.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_globalconfigtable_is_in_main_mode(
+    UniffiLib.uniffi_cove_fn_method_globalconfigtable_is_in_main_mode(
         it,
         _status)
 }
@@ -11560,7 +11500,7 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
         = 
     callWithHandle {
     uniffiRustCallWithError(DatabaseException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_globalconfigtable_select_wallet(
+    UniffiLib.uniffi_cove_fn_method_globalconfigtable_select_wallet(
         it,
         FfiConverterTypeWalletId.lower(`id`),_status)
 }
@@ -11572,7 +11512,7 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
             return FfiConverterTypeFiatCurrency.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_globalconfigtable_selectedfiatcurrency(
+    UniffiLib.uniffi_cove_fn_method_globalconfigtable_selectedfiatcurrency(
         it,
         _status)
 }
@@ -11585,7 +11525,7 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
             return FfiConverterTypeNetwork.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_globalconfigtable_selected_network(
+    UniffiLib.uniffi_cove_fn_method_globalconfigtable_selected_network(
         it,
         _status)
 }
@@ -11598,7 +11538,7 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
             return FfiConverterTypeNode.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_globalconfigtable_selected_node(
+    UniffiLib.uniffi_cove_fn_method_globalconfigtable_selected_node(
         it,
         _status)
 }
@@ -11611,7 +11551,7 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
             return FfiConverterOptionalTypeWalletId.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_globalconfigtable_selected_wallet(
+    UniffiLib.uniffi_cove_fn_method_globalconfigtable_selected_wallet(
         it,
         _status)
 }
@@ -11625,7 +11565,7 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
         = 
     callWithHandle {
     uniffiRustCallWithError(DatabaseException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_globalconfigtable_set(
+    UniffiLib.uniffi_cove_fn_method_globalconfigtable_set(
         it,
         FfiConverterTypeGlobalConfigKey.lower(`key`),FfiConverterString.lower(`value`),_status)
 }
@@ -11638,7 +11578,7 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
         = 
     callWithHandle {
     uniffiRustCallWithError(DatabaseException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_globalconfigtable_setcolorscheme(
+    UniffiLib.uniffi_cove_fn_method_globalconfigtable_setcolorscheme(
         it,
         FfiConverterTypeColorSchemeSelection.lower(`colorScheme`),_status)
 }
@@ -11651,7 +11591,7 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
         = 
     callWithHandle {
     uniffiRustCallWithError(DatabaseException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_globalconfigtable_set_hashed_pin_code(
+    UniffiLib.uniffi_cove_fn_method_globalconfigtable_set_hashed_pin_code(
         it,
         FfiConverterString.lower(`hashedPinCode`),_status)
 }
@@ -11664,7 +11604,7 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
         = 
     callWithHandle {
     uniffiRustCallWithError(DatabaseException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_globalconfigtable_set_selected_network(
+    UniffiLib.uniffi_cove_fn_method_globalconfigtable_set_selected_network(
         it,
         FfiConverterTypeNetwork.lower(`network`),_status)
 }
@@ -11677,7 +11617,7 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
         = 
     callWithHandle {
     uniffiRustCallWithError(DatabaseException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_globalconfigtable_set_selected_node(
+    UniffiLib.uniffi_cove_fn_method_globalconfigtable_set_selected_node(
         it,
         FfiConverterTypeNode.lower(`node`),_status)
 }
@@ -11689,7 +11629,7 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
             return FfiConverterTypeWalletMode.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_globalconfigtable_wallet_mode(
+    UniffiLib.uniffi_cove_fn_method_globalconfigtable_wallet_mode(
         it,
         _status)
 }
@@ -11929,7 +11869,7 @@ open class GlobalFlagTable: Disposable, AutoCloseable, GlobalFlagTableInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_globalflagtable(handle, status)
+                UniffiLib.uniffi_cove_fn_free_globalflagtable(handle, status)
             }
         }
     }
@@ -11942,7 +11882,7 @@ open class GlobalFlagTable: Disposable, AutoCloseable, GlobalFlagTableInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_globalflagtable(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_globalflagtable(handle, status)
         }
     }
 
@@ -11951,7 +11891,7 @@ open class GlobalFlagTable: Disposable, AutoCloseable, GlobalFlagTableInterface
             return FfiConverterBoolean.lift(
     callWithHandle {
     uniffiRustCallWithError(DatabaseException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_globalflagtable_get(
+    UniffiLib.uniffi_cove_fn_method_globalflagtable_get(
         it,
         FfiConverterTypeGlobalFlagKey.lower(`key`),_status)
 }
@@ -11964,7 +11904,7 @@ open class GlobalFlagTable: Disposable, AutoCloseable, GlobalFlagTableInterface
             return FfiConverterBoolean.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_globalflagtable_get_bool_config(
+    UniffiLib.uniffi_cove_fn_method_globalflagtable_get_bool_config(
         it,
         FfiConverterTypeGlobalFlagKey.lower(`key`),_status)
 }
@@ -11977,7 +11917,7 @@ open class GlobalFlagTable: Disposable, AutoCloseable, GlobalFlagTableInterface
             return FfiConverterBoolean.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_globalflagtable_is_terms_accepted(
+    UniffiLib.uniffi_cove_fn_method_globalflagtable_is_terms_accepted(
         it,
         _status)
 }
@@ -11991,7 +11931,7 @@ open class GlobalFlagTable: Disposable, AutoCloseable, GlobalFlagTableInterface
         = 
     callWithHandle {
     uniffiRustCallWithError(DatabaseException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_globalflagtable_set(
+    UniffiLib.uniffi_cove_fn_method_globalflagtable_set(
         it,
         FfiConverterTypeGlobalFlagKey.lower(`key`),FfiConverterBoolean.lower(`value`),_status)
 }
@@ -12004,7 +11944,7 @@ open class GlobalFlagTable: Disposable, AutoCloseable, GlobalFlagTableInterface
         = 
     callWithHandle {
     uniffiRustCallWithError(DatabaseException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_globalflagtable_set_bool_config(
+    UniffiLib.uniffi_cove_fn_method_globalflagtable_set_bool_config(
         it,
         FfiConverterTypeGlobalFlagKey.lower(`key`),FfiConverterBoolean.lower(`value`),_status)
 }
@@ -12017,7 +11957,7 @@ open class GlobalFlagTable: Disposable, AutoCloseable, GlobalFlagTableInterface
         = 
     callWithHandle {
     uniffiRustCallWithError(DatabaseException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_globalflagtable_toggle_bool_config(
+    UniffiLib.uniffi_cove_fn_method_globalflagtable_toggle_bool_config(
         it,
         FfiConverterTypeGlobalFlagKey.lower(`key`),_status)
 }
@@ -12244,7 +12184,7 @@ open class HardwareExport: Disposable, AutoCloseable, HardwareExportInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_hardwareexport(handle, status)
+                UniffiLib.uniffi_cove_fn_free_hardwareexport(handle, status)
             }
         }
     }
@@ -12257,7 +12197,7 @@ open class HardwareExport: Disposable, AutoCloseable, HardwareExportInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_hardwareexport(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_hardwareexport(handle, status)
         }
     }
 
@@ -12434,7 +12374,7 @@ open class HeaderIconPresenter: Disposable, AutoCloseable, HeaderIconPresenterIn
     constructor() :
         this(UniffiWithHandle, 
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_constructor_headericonpresenter_new(
+    UniffiLib.uniffi_cove_fn_constructor_headericonpresenter_new(
     
         _status)
 }
@@ -12494,7 +12434,7 @@ open class HeaderIconPresenter: Disposable, AutoCloseable, HeaderIconPresenterIn
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_headericonpresenter(handle, status)
+                UniffiLib.uniffi_cove_fn_free_headericonpresenter(handle, status)
             }
         }
     }
@@ -12507,7 +12447,7 @@ open class HeaderIconPresenter: Disposable, AutoCloseable, HeaderIconPresenterIn
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_headericonpresenter(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_headericonpresenter(handle, status)
         }
     }
 
@@ -12515,7 +12455,7 @@ open class HeaderIconPresenter: Disposable, AutoCloseable, HeaderIconPresenterIn
             return FfiConverterTypeFfiColor.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_headericonpresenter_background_color(
+    UniffiLib.uniffi_cove_fn_method_headericonpresenter_background_color(
         it,
         FfiConverterTypeTransactionState.lower(`state`),FfiConverterTypeTransactionDirection.lower(`direction`),FfiConverterTypeFfiColorScheme.lower(`colorScheme`),FfiConverterLong.lower(`confirmationCount`),_status)
 }
@@ -12528,7 +12468,7 @@ open class HeaderIconPresenter: Disposable, AutoCloseable, HeaderIconPresenterIn
             return FfiConverterTypeFfiColor.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_headericonpresenter_icon_color(
+    UniffiLib.uniffi_cove_fn_method_headericonpresenter_icon_color(
         it,
         FfiConverterTypeTransactionState.lower(`state`),FfiConverterTypeTransactionDirection.lower(`direction`),FfiConverterTypeFfiColorScheme.lower(`colorScheme`),FfiConverterLong.lower(`confirmationCount`),_status)
 }
@@ -12541,7 +12481,7 @@ open class HeaderIconPresenter: Disposable, AutoCloseable, HeaderIconPresenterIn
             return FfiConverterTypeFfiColor.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_headericonpresenter_ring_color(
+    UniffiLib.uniffi_cove_fn_method_headericonpresenter_ring_color(
         it,
         FfiConverterTypeTransactionState.lower(`state`),FfiConverterTypeFfiColorScheme.lower(`colorScheme`),FfiConverterTypeTransactionDirection.lower(`direction`),FfiConverterLong.lower(`confirmations`),FfiConverterLong.lower(`ringNumber`),_status)
 }
@@ -12769,7 +12709,7 @@ open class HistoricalPriceTable: Disposable, AutoCloseable, HistoricalPriceTable
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_historicalpricetable(handle, status)
+                UniffiLib.uniffi_cove_fn_free_historicalpricetable(handle, status)
             }
         }
     }
@@ -12782,7 +12722,7 @@ open class HistoricalPriceTable: Disposable, AutoCloseable, HistoricalPriceTable
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_historicalpricetable(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_historicalpricetable(handle, status)
         }
     }
 
@@ -13005,7 +12945,7 @@ open class HistoricalPricesResponse: Disposable, AutoCloseable, HistoricalPrices
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_historicalpricesresponse(handle, status)
+                UniffiLib.uniffi_cove_fn_free_historicalpricesresponse(handle, status)
             }
         }
     }
@@ -13018,7 +12958,7 @@ open class HistoricalPricesResponse: Disposable, AutoCloseable, HistoricalPrices
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_historicalpricesresponse(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_historicalpricesresponse(handle, status)
         }
     }
 
@@ -13205,7 +13145,7 @@ open class LabelManager: Disposable, AutoCloseable, LabelManagerInterface
     constructor(`id`: WalletId) :
         this(UniffiWithHandle, 
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_constructor_labelmanager_new(
+    UniffiLib.uniffi_cove_fn_constructor_labelmanager_new(
     
         FfiConverterTypeWalletId.lower(`id`),_status)
 }
@@ -13265,7 +13205,7 @@ open class LabelManager: Disposable, AutoCloseable, LabelManagerInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_labelmanager(handle, status)
+                UniffiLib.uniffi_cove_fn_free_labelmanager(handle, status)
             }
         }
     }
@@ -13278,7 +13218,7 @@ open class LabelManager: Disposable, AutoCloseable, LabelManagerInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_labelmanager(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_labelmanager(handle, status)
         }
     }
 
@@ -13287,7 +13227,7 @@ open class LabelManager: Disposable, AutoCloseable, LabelManagerInterface
         = 
     callWithHandle {
     uniffiRustCallWithError(LabelManagerException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_labelmanager_delete_labels_for_txn(
+    UniffiLib.uniffi_cove_fn_method_labelmanager_delete_labels_for_txn(
         it,
         FfiConverterTypeTxId.lower(`txId`),_status)
 }
@@ -13300,7 +13240,7 @@ open class LabelManager: Disposable, AutoCloseable, LabelManagerInterface
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCallWithError(LabelManagerException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_labelmanager_export(
+    UniffiLib.uniffi_cove_fn_method_labelmanager_export(
         it,
         _status)
 }
@@ -13313,7 +13253,7 @@ open class LabelManager: Disposable, AutoCloseable, LabelManagerInterface
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_labelmanager_export_default_file_name(
+    UniffiLib.uniffi_cove_fn_method_labelmanager_export_default_file_name(
         it,
         FfiConverterString.lower(`name`),_status)
 }
@@ -13326,7 +13266,7 @@ open class LabelManager: Disposable, AutoCloseable, LabelManagerInterface
             return FfiConverterBoolean.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_labelmanager_has_labels(
+    UniffiLib.uniffi_cove_fn_method_labelmanager_has_labels(
         it,
         _status)
 }
@@ -13340,7 +13280,7 @@ open class LabelManager: Disposable, AutoCloseable, LabelManagerInterface
         = 
     callWithHandle {
     uniffiRustCallWithError(LabelManagerException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_labelmanager_import(
+    UniffiLib.uniffi_cove_fn_method_labelmanager_import(
         it,
         FfiConverterString.lower(`jsonl`),_status)
 }
@@ -13353,7 +13293,7 @@ open class LabelManager: Disposable, AutoCloseable, LabelManagerInterface
         = 
     callWithHandle {
     uniffiRustCallWithError(LabelManagerException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_labelmanager_importlabels(
+    UniffiLib.uniffi_cove_fn_method_labelmanager_importlabels(
         it,
         FfiConverterTypeBip329Labels.lower(`labels`),_status)
 }
@@ -13366,7 +13306,7 @@ open class LabelManager: Disposable, AutoCloseable, LabelManagerInterface
         = 
     callWithHandle {
     uniffiRustCallWithError(LabelManagerException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_labelmanager_insert_or_update_labels_for_txn(
+    UniffiLib.uniffi_cove_fn_method_labelmanager_insert_or_update_labels_for_txn(
         it,
         FfiConverterTypeTransactionDetails.lower(`details`),FfiConverterString.lower(`label`),FfiConverterOptionalString.lower(`origin`),_status)
 }
@@ -13378,7 +13318,7 @@ open class LabelManager: Disposable, AutoCloseable, LabelManagerInterface
             return FfiConverterOptionalString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_labelmanager_transaction_label(
+    UniffiLib.uniffi_cove_fn_method_labelmanager_transaction_label(
         it,
         FfiConverterTypeTxId.lower(`txId`),_status)
 }
@@ -13606,7 +13546,7 @@ open class LabelsTable: Disposable, AutoCloseable, LabelsTableInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_labelstable(handle, status)
+                UniffiLib.uniffi_cove_fn_free_labelstable(handle, status)
             }
         }
     }
@@ -13619,7 +13559,7 @@ open class LabelsTable: Disposable, AutoCloseable, LabelsTableInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_labelstable(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_labelstable(handle, status)
         }
     }
 
@@ -13794,7 +13734,7 @@ open class Mnemonic: Disposable, AutoCloseable, MnemonicInterface
     constructor(`id`: WalletId) :
         this(UniffiWithHandle, 
     uniffiRustCallWithError(MnemonicException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_constructor_mnemonic_new(
+    UniffiLib.uniffi_cove_fn_constructor_mnemonic_new(
     
         FfiConverterTypeWalletId.lower(`id`),_status)
 }
@@ -13854,7 +13794,7 @@ open class Mnemonic: Disposable, AutoCloseable, MnemonicInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_mnemonic(handle, status)
+                UniffiLib.uniffi_cove_fn_free_mnemonic(handle, status)
             }
         }
     }
@@ -13867,7 +13807,7 @@ open class Mnemonic: Disposable, AutoCloseable, MnemonicInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_mnemonic(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_mnemonic(handle, status)
         }
     }
 
@@ -13875,7 +13815,7 @@ open class Mnemonic: Disposable, AutoCloseable, MnemonicInterface
             return FfiConverterSequenceTypeGroupedWord.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_mnemonic_all_words(
+    UniffiLib.uniffi_cove_fn_method_mnemonic_all_words(
         it,
         _status)
 }
@@ -13888,7 +13828,7 @@ open class Mnemonic: Disposable, AutoCloseable, MnemonicInterface
             return FfiConverterSequenceString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_mnemonic_words(
+    UniffiLib.uniffi_cove_fn_method_mnemonic_words(
         it,
         _status)
 }
@@ -13907,7 +13847,7 @@ open class Mnemonic: Disposable, AutoCloseable, MnemonicInterface
          fun `preview`(`numberOfBip39Words`: NumberOfBip39Words): Mnemonic {
             return FfiConverterTypeMnemonic.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_constructor_mnemonic_preview(
+    UniffiLib.uniffi_cove_fn_constructor_mnemonic_preview(
     
         FfiConverterTypeNumberOfBip39Words.lower(`numberOfBip39Words`),_status)
 }
@@ -14137,7 +14077,7 @@ open class MultiQr: Disposable, AutoCloseable, MultiQrInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_multiqr(handle, status)
+                UniffiLib.uniffi_cove_fn_free_multiqr(handle, status)
             }
         }
     }
@@ -14150,7 +14090,7 @@ open class MultiQr: Disposable, AutoCloseable, MultiQrInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_multiqr(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_multiqr(handle, status)
         }
     }
 
@@ -14159,7 +14099,7 @@ open class MultiQr: Disposable, AutoCloseable, MultiQrInterface
             return FfiConverterTypeBbqrJoinResult.lift(
     callWithHandle {
     uniffiRustCallWithError(MultiQrException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_multiqr_add_part(
+    UniffiLib.uniffi_cove_fn_method_multiqr_add_part(
         it,
         FfiConverterString.lower(`qr`),_status)
 }
@@ -14173,7 +14113,7 @@ open class MultiQr: Disposable, AutoCloseable, MultiQrInterface
             return FfiConverterOptionalSequenceSequenceString.lift(
     callWithHandle {
     uniffiRustCallWithError(MultiQrException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_multiqr_get_grouped_words(
+    UniffiLib.uniffi_cove_fn_method_multiqr_get_grouped_words(
         it,
         FfiConverterTypeStringOrData.lower(`qr`),FfiConverterUByte.lower(`groupsOf`),_status)
 }
@@ -14187,7 +14127,7 @@ open class MultiQr: Disposable, AutoCloseable, MultiQrInterface
             return FfiConverterTypeMultiQrScanResult.lift(
     callWithHandle {
     uniffiRustCallWithError(MultiQrException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_multiqr_handle_scan_result(
+    UniffiLib.uniffi_cove_fn_method_multiqr_handle_scan_result(
         it,
         FfiConverterTypeStringOrData.lower(`qr`),_status)
 }
@@ -14200,7 +14140,7 @@ open class MultiQr: Disposable, AutoCloseable, MultiQrInterface
             return FfiConverterBoolean.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_multiqr_is_bbqr(
+    UniffiLib.uniffi_cove_fn_method_multiqr_is_bbqr(
         it,
         _status)
 }
@@ -14213,7 +14153,7 @@ open class MultiQr: Disposable, AutoCloseable, MultiQrInterface
             return FfiConverterBoolean.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_multiqr_is_seed_qr(
+    UniffiLib.uniffi_cove_fn_method_multiqr_is_seed_qr(
         it,
         _status)
 }
@@ -14226,7 +14166,7 @@ open class MultiQr: Disposable, AutoCloseable, MultiQrInterface
             return FfiConverterUInt.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_multiqr_total_parts(
+    UniffiLib.uniffi_cove_fn_method_multiqr_total_parts(
         it,
         _status)
 }
@@ -14245,7 +14185,7 @@ open class MultiQr: Disposable, AutoCloseable, MultiQrInterface
          fun `newFromString`(`qr`: kotlin.String): MultiQr {
             return FfiConverterTypeMultiQr.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_constructor_multiqr_new_from_string(
+    UniffiLib.uniffi_cove_fn_constructor_multiqr_new_from_string(
     
         FfiConverterString.lower(`qr`),_status)
 }
@@ -14257,7 +14197,7 @@ open class MultiQr: Disposable, AutoCloseable, MultiQrInterface
     @Throws(MultiQrException::class) fun `tryNew`(`qr`: StringOrData): MultiQr {
             return FfiConverterTypeMultiQr.lift(
     uniffiRustCallWithError(MultiQrException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_constructor_multiqr_try_new(
+    UniffiLib.uniffi_cove_fn_constructor_multiqr_try_new(
     
         FfiConverterTypeStringOrData.lower(`qr`),_status)
 }
@@ -14269,7 +14209,7 @@ open class MultiQr: Disposable, AutoCloseable, MultiQrInterface
     @Throws(MultiQrException::class) fun `tryNewFromData`(`data`: kotlin.ByteArray): MultiQr {
             return FfiConverterTypeMultiQr.lift(
     uniffiRustCallWithError(MultiQrException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_constructor_multiqr_try_new_from_data(
+    UniffiLib.uniffi_cove_fn_constructor_multiqr_try_new_from_data(
     
         FfiConverterByteArray.lower(`data`),_status)
 }
@@ -14453,7 +14393,7 @@ open class NodeSelector: Disposable, AutoCloseable, NodeSelectorInterface
     constructor() :
         this(UniffiWithHandle, 
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_constructor_nodeselector_new(
+    UniffiLib.uniffi_cove_fn_constructor_nodeselector_new(
     
         _status)
 }
@@ -14513,7 +14453,7 @@ open class NodeSelector: Disposable, AutoCloseable, NodeSelectorInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_nodeselector(handle, status)
+                UniffiLib.uniffi_cove_fn_free_nodeselector(handle, status)
             }
         }
     }
@@ -14526,7 +14466,7 @@ open class NodeSelector: Disposable, AutoCloseable, NodeSelectorInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_nodeselector(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_nodeselector(handle, status)
         }
     }
 
@@ -14539,14 +14479,14 @@ open class NodeSelector: Disposable, AutoCloseable, NodeSelectorInterface
     override suspend fun `checkAndSaveNode`(`node`: Node) {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_method_nodeselector_check_and_save_node(
+            UniffiLib.uniffi_cove_fn_method_nodeselector_check_and_save_node(
                 uniffiHandle,
                 FfiConverterTypeNode.lower(`node`),
             )
         },
-        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_poll_void(future, callback, continuation) },
-        { future, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_complete_void(future, continuation) },
-        { future -> UniffiLib.INSTANCE.ffi_cove_rust_future_free_void(future) },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_void(future) },
         // lift function
         { Unit },
         
@@ -14561,14 +14501,14 @@ open class NodeSelector: Disposable, AutoCloseable, NodeSelectorInterface
     override suspend fun `checkSelectedNode`(`node`: Node) {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_method_nodeselector_check_selected_node(
+            UniffiLib.uniffi_cove_fn_method_nodeselector_check_selected_node(
                 uniffiHandle,
                 FfiConverterTypeNode.lower(`node`),
             )
         },
-        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_poll_void(future, callback, continuation) },
-        { future, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_complete_void(future, continuation) },
-        { future -> UniffiLib.INSTANCE.ffi_cove_rust_future_free_void(future) },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_void(future) },
         // lift function
         { Unit },
         
@@ -14581,7 +14521,7 @@ open class NodeSelector: Disposable, AutoCloseable, NodeSelectorInterface
             return FfiConverterSequenceTypeNodeSelection.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_nodeselector_node_list(
+    UniffiLib.uniffi_cove_fn_method_nodeselector_node_list(
         it,
         _status)
 }
@@ -14598,7 +14538,7 @@ open class NodeSelector: Disposable, AutoCloseable, NodeSelectorInterface
             return FfiConverterTypeNode.lift(
     callWithHandle {
     uniffiRustCallWithError(NodeSelectorException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_nodeselector_parse_custom_node(
+    UniffiLib.uniffi_cove_fn_method_nodeselector_parse_custom_node(
         it,
         FfiConverterString.lower(`url`),FfiConverterString.lower(`name`),FfiConverterString.lower(`enteredName`),_status)
 }
@@ -14612,7 +14552,7 @@ open class NodeSelector: Disposable, AutoCloseable, NodeSelectorInterface
             return FfiConverterTypeNode.lift(
     callWithHandle {
     uniffiRustCallWithError(NodeSelectorException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_nodeselector_select_preset_node(
+    UniffiLib.uniffi_cove_fn_method_nodeselector_select_preset_node(
         it,
         FfiConverterString.lower(`name`),_status)
 }
@@ -14625,7 +14565,7 @@ open class NodeSelector: Disposable, AutoCloseable, NodeSelectorInterface
             return FfiConverterTypeNodeSelection.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_nodeselector_selected_node(
+    UniffiLib.uniffi_cove_fn_method_nodeselector_selected_node(
         it,
         _status)
 }
@@ -14853,7 +14793,7 @@ open class PendingWallet: Disposable, AutoCloseable, PendingWalletInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_pendingwallet(handle, status)
+                UniffiLib.uniffi_cove_fn_free_pendingwallet(handle, status)
             }
         }
     }
@@ -14866,7 +14806,7 @@ open class PendingWallet: Disposable, AutoCloseable, PendingWalletInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_pendingwallet(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_pendingwallet(handle, status)
         }
     }
 
@@ -15093,7 +15033,7 @@ open class PriceResponse: Disposable, AutoCloseable, PriceResponseInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_priceresponse(handle, status)
+                UniffiLib.uniffi_cove_fn_free_priceresponse(handle, status)
             }
         }
     }
@@ -15106,7 +15046,7 @@ open class PriceResponse: Disposable, AutoCloseable, PriceResponseInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_priceresponse(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_priceresponse(handle, status)
         }
     }
 
@@ -15114,7 +15054,7 @@ open class PriceResponse: Disposable, AutoCloseable, PriceResponseInterface
             return FfiConverterULong.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_priceresponse_get(
+    UniffiLib.uniffi_cove_fn_method_priceresponse_get(
         it,
         _status)
 }
@@ -15127,7 +15067,7 @@ open class PriceResponse: Disposable, AutoCloseable, PriceResponseInterface
             return FfiConverterULong.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_priceresponse_get_for_currency(
+    UniffiLib.uniffi_cove_fn_method_priceresponse_get_for_currency(
         it,
         FfiConverterTypeFiatCurrency.lower(`currency`),_status)
 }
@@ -15355,7 +15295,7 @@ open class PushTx: Disposable, AutoCloseable, PushTxInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_pushtx(handle, status)
+                UniffiLib.uniffi_cove_fn_free_pushtx(handle, status)
             }
         }
     }
@@ -15368,7 +15308,7 @@ open class PushTx: Disposable, AutoCloseable, PushTxInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_pushtx(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_pushtx(handle, status)
         }
     }
 
@@ -15579,7 +15519,7 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
     constructor() :
         this(UniffiWithHandle, 
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_constructor_routefactory_new(
+    UniffiLib.uniffi_cove_fn_constructor_routefactory_new(
     
         _status)
 }
@@ -15639,7 +15579,7 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_routefactory(handle, status)
+                UniffiLib.uniffi_cove_fn_free_routefactory(handle, status)
             }
         }
     }
@@ -15652,7 +15592,7 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_routefactory(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_routefactory(handle, status)
         }
     }
 
@@ -15660,7 +15600,7 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
             return FfiConverterTypeRoute.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_routefactory_coin_control_send(
+    UniffiLib.uniffi_cove_fn_method_routefactory_coin_control_send(
         it,
         FfiConverterTypeWalletId.lower(`id`),FfiConverterSequenceTypeUtxo.lower(`utxos`),_status)
 }
@@ -15673,7 +15613,7 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
             return FfiConverterTypeRoute.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_routefactory_cold_wallet_import(
+    UniffiLib.uniffi_cove_fn_method_routefactory_cold_wallet_import(
         it,
         FfiConverterTypeColdWalletRoute.lower(`route`),_status)
 }
@@ -15686,7 +15626,7 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
             return FfiConverterTypeRoute.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_routefactory_hot_wallet(
+    UniffiLib.uniffi_cove_fn_method_routefactory_hot_wallet(
         it,
         FfiConverterTypeHotWalletRoute.lower(`route`),_status)
 }
@@ -15699,7 +15639,7 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
             return FfiConverterTypeRoute.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_routefactory_hot_wallet_import_from_scan(
+    UniffiLib.uniffi_cove_fn_method_routefactory_hot_wallet_import_from_scan(
         it,
         _status)
 }
@@ -15712,7 +15652,7 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
             return FfiConverterBoolean.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_routefactory_is_same_parent_route(
+    UniffiLib.uniffi_cove_fn_method_routefactory_is_same_parent_route(
         it,
         FfiConverterTypeRoute.lower(`route`),FfiConverterTypeRoute.lower(`routeToCheck`),_status)
 }
@@ -15725,7 +15665,7 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
             return FfiConverterTypeRoute.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_routefactory_load_and_reset_nested_to(
+    UniffiLib.uniffi_cove_fn_method_routefactory_load_and_reset_nested_to(
         it,
         FfiConverterTypeRoute.lower(`defaultRoute`),FfiConverterSequenceTypeRoute.lower(`nestedRoutes`),_status)
 }
@@ -15738,7 +15678,7 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
             return FfiConverterTypeRoute.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_routefactory_load_and_reset_to(
+    UniffiLib.uniffi_cove_fn_method_routefactory_load_and_reset_to(
         it,
         FfiConverterTypeRoute.lower(`resetTo`),_status)
 }
@@ -15751,7 +15691,7 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
             return FfiConverterTypeRoute.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_routefactory_load_and_reset_to_after(
+    UniffiLib.uniffi_cove_fn_method_routefactory_load_and_reset_to_after(
         it,
         FfiConverterTypeRoute.lower(`resetTo`),FfiConverterUInt.lower(`time`),_status)
 }
@@ -15764,7 +15704,7 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
             return FfiConverterTypeRoute.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_routefactory_main_wallet_settings(
+    UniffiLib.uniffi_cove_fn_method_routefactory_main_wallet_settings(
         it,
         FfiConverterTypeWalletId.lower(`id`),_status)
 }
@@ -15777,7 +15717,7 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
             return FfiConverterSequenceTypeRoute.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_routefactory_nested_settings(
+    UniffiLib.uniffi_cove_fn_method_routefactory_nested_settings(
         it,
         FfiConverterTypeSettingsRoute.lower(`route`),_status)
 }
@@ -15790,7 +15730,7 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
             return FfiConverterSequenceTypeRoute.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_routefactory_nested_wallet_settings(
+    UniffiLib.uniffi_cove_fn_method_routefactory_nested_wallet_settings(
         it,
         FfiConverterTypeWalletId.lower(`id`),_status)
 }
@@ -15803,7 +15743,7 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
             return FfiConverterTypeRoute.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_routefactory_new_hot_wallet(
+    UniffiLib.uniffi_cove_fn_method_routefactory_new_hot_wallet(
         it,
         _status)
 }
@@ -15816,7 +15756,7 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
             return FfiConverterTypeRoute.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_routefactory_new_wallet_select(
+    UniffiLib.uniffi_cove_fn_method_routefactory_new_wallet_select(
         it,
         _status)
 }
@@ -15829,7 +15769,7 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
             return FfiConverterTypeRoute.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_routefactory_qr_import(
+    UniffiLib.uniffi_cove_fn_method_routefactory_qr_import(
         it,
         _status)
 }
@@ -15842,7 +15782,7 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
             return FfiConverterTypeRoute.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_routefactory_secret_words(
+    UniffiLib.uniffi_cove_fn_method_routefactory_secret_words(
         it,
         FfiConverterTypeWalletId.lower(`walletId`),_status)
 }
@@ -15855,7 +15795,7 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
             return FfiConverterTypeRoute.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_routefactory_send(
+    UniffiLib.uniffi_cove_fn_method_routefactory_send(
         it,
         FfiConverterTypeSendRoute.lower(`send`),_status)
 }
@@ -15868,7 +15808,7 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
             return FfiConverterTypeRoute.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_routefactory_send_confirm(
+    UniffiLib.uniffi_cove_fn_method_routefactory_send_confirm(
         it,
         FfiConverterTypeWalletId.lower(`id`),FfiConverterTypeConfirmDetails.lower(`details`),FfiConverterOptionalTypeBitcoinTransaction.lower(`signedTransaction`),FfiConverterOptionalTypePsbt.lower(`signedPsbt`),_status)
 }
@@ -15881,7 +15821,7 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
             return FfiConverterTypeRoute.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_routefactory_send_hardware_export(
+    UniffiLib.uniffi_cove_fn_method_routefactory_send_hardware_export(
         it,
         FfiConverterTypeWalletId.lower(`id`),FfiConverterTypeConfirmDetails.lower(`details`),_status)
 }
@@ -15894,7 +15834,7 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
             return FfiConverterTypeRoute.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_routefactory_send_set_amount(
+    UniffiLib.uniffi_cove_fn_method_routefactory_send_set_amount(
         it,
         FfiConverterTypeWalletId.lower(`id`),FfiConverterOptionalTypeAddress.lower(`address`),FfiConverterOptionalTypeAmount.lower(`amount`),_status)
 }
@@ -15907,7 +15847,7 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
             return FfiConverterTypeRoute.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_routefactory_wallet_settings(
+    UniffiLib.uniffi_cove_fn_method_routefactory_wallet_settings(
         it,
         FfiConverterTypeWalletId.lower(`id`),FfiConverterTypeWalletSettingsRoute.lower(`route`),_status)
 }
@@ -16163,7 +16103,7 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
     constructor() :
         this(UniffiWithHandle, 
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_constructor_rustauthmanager_new(
+    UniffiLib.uniffi_cove_fn_constructor_rustauthmanager_new(
     
         _status)
 }
@@ -16223,7 +16163,7 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_rustauthmanager(handle, status)
+                UniffiLib.uniffi_cove_fn_free_rustauthmanager(handle, status)
             }
         }
     }
@@ -16236,7 +16176,7 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_rustauthmanager(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_rustauthmanager(handle, status)
         }
     }
 
@@ -16247,7 +16187,7 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
             return FfiConverterTypeAuthType.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustauthmanager_auth_type(
+    UniffiLib.uniffi_cove_fn_method_rustauthmanager_auth_type(
         it,
         _status)
 }
@@ -16263,7 +16203,7 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
             return FfiConverterBoolean.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustauthmanager_checkdecoypin(
+    UniffiLib.uniffi_cove_fn_method_rustauthmanager_checkdecoypin(
         it,
         FfiConverterString.lower(`pin`),_status)
 }
@@ -16279,7 +16219,7 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
             return FfiConverterBoolean.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustauthmanager_checkwipedatapin(
+    UniffiLib.uniffi_cove_fn_method_rustauthmanager_checkwipedatapin(
         it,
         FfiConverterString.lower(`pin`),_status)
 }
@@ -16295,7 +16235,7 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
         = 
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustauthmanager_delete_decoy_pin(
+    UniffiLib.uniffi_cove_fn_method_rustauthmanager_delete_decoy_pin(
         it,
         _status)
 }
@@ -16310,7 +16250,7 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
         = 
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustauthmanager_delete_wipe_data_pin(
+    UniffiLib.uniffi_cove_fn_method_rustauthmanager_delete_wipe_data_pin(
         it,
         _status)
 }
@@ -16325,7 +16265,7 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
         = 
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustauthmanager_dispatch(
+    UniffiLib.uniffi_cove_fn_method_rustauthmanager_dispatch(
         it,
         FfiConverterTypeAuthManagerAction.lower(`action`),_status)
 }
@@ -16340,7 +16280,7 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
             return FfiConverterBoolean.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustauthmanager_is_decoy_pin_enabled(
+    UniffiLib.uniffi_cove_fn_method_rustauthmanager_is_decoy_pin_enabled(
         it,
         _status)
 }
@@ -16356,7 +16296,7 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
             return FfiConverterBoolean.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustauthmanager_is_in_decoy_mode(
+    UniffiLib.uniffi_cove_fn_method_rustauthmanager_is_in_decoy_mode(
         it,
         _status)
 }
@@ -16372,7 +16312,7 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
             return FfiConverterBoolean.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustauthmanager_is_wipe_data_pin_enabled(
+    UniffiLib.uniffi_cove_fn_method_rustauthmanager_is_wipe_data_pin_enabled(
         it,
         _status)
 }
@@ -16385,7 +16325,7 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
         = 
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustauthmanager_listen_for_updates(
+    UniffiLib.uniffi_cove_fn_method_rustauthmanager_listen_for_updates(
         it,
         FfiConverterTypeAuthManagerReconciler.lower(`reconciler`),_status)
 }
@@ -16397,7 +16337,7 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
             return FfiConverterOptionalULong.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustauthmanager_locked_at(
+    UniffiLib.uniffi_cove_fn_method_rustauthmanager_locked_at(
         it,
         _status)
 }
@@ -16410,7 +16350,7 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
         = 
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustauthmanager_send(
+    UniffiLib.uniffi_cove_fn_method_rustauthmanager_send(
         it,
         FfiConverterTypeAuthManagerReconcileMessage.lower(`message`),_status)
 }
@@ -16422,7 +16362,7 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
         = 
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustauthmanager_set_auth_type(
+    UniffiLib.uniffi_cove_fn_method_rustauthmanager_set_auth_type(
         it,
         FfiConverterTypeAuthType.lower(`authType`),_status)
 }
@@ -16438,7 +16378,7 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
         = 
     callWithHandle {
     uniffiRustCallWithError(AuthManagerException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustauthmanager_set_decoy_pin(
+    UniffiLib.uniffi_cove_fn_method_rustauthmanager_set_decoy_pin(
         it,
         FfiConverterString.lower(`pin`),_status)
 }
@@ -16451,7 +16391,7 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
         = 
     callWithHandle {
     uniffiRustCallWithError(AuthManagerException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustauthmanager_set_locked_at(
+    UniffiLib.uniffi_cove_fn_method_rustauthmanager_set_locked_at(
         it,
         FfiConverterULong.lower(`lockedAt`),_status)
 }
@@ -16467,7 +16407,7 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
         = 
     callWithHandle {
     uniffiRustCallWithError(AuthManagerException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustauthmanager_set_wipe_data_pin(
+    UniffiLib.uniffi_cove_fn_method_rustauthmanager_set_wipe_data_pin(
         it,
         FfiConverterString.lower(`pin`),_status)
 }
@@ -16482,7 +16422,7 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
         = 
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustauthmanager_switch_to_decoy_mode(
+    UniffiLib.uniffi_cove_fn_method_rustauthmanager_switch_to_decoy_mode(
         it,
         _status)
 }
@@ -16497,7 +16437,7 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
         = 
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustauthmanager_switch_to_main_mode(
+    UniffiLib.uniffi_cove_fn_method_rustauthmanager_switch_to_main_mode(
         it,
         _status)
 }
@@ -16513,7 +16453,7 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
         = 
     callWithHandle {
     uniffiRustCallWithError(TrickPinException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustauthmanager_validate_pin_settings(
+    UniffiLib.uniffi_cove_fn_method_rustauthmanager_validate_pin_settings(
         it,
         FfiConverterString.lower(`pin`),_status)
 }
@@ -16759,7 +16699,7 @@ open class RustCoinControlManager: Disposable, AutoCloseable, RustCoinControlMan
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_rustcoincontrolmanager(handle, status)
+                UniffiLib.uniffi_cove_fn_free_rustcoincontrolmanager(handle, status)
             }
         }
     }
@@ -16772,7 +16712,7 @@ open class RustCoinControlManager: Disposable, AutoCloseable, RustCoinControlMan
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_rustcoincontrolmanager(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_rustcoincontrolmanager(handle, status)
         }
     }
 
@@ -16780,7 +16720,7 @@ open class RustCoinControlManager: Disposable, AutoCloseable, RustCoinControlMan
             return FfiConverterTypeButtonPresentation.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustcoincontrolmanager_button_presentation(
+    UniffiLib.uniffi_cove_fn_method_rustcoincontrolmanager_button_presentation(
         it,
         FfiConverterTypeCoinControlListSortKey.lower(`button`),_status)
 }
@@ -16796,7 +16736,7 @@ open class RustCoinControlManager: Disposable, AutoCloseable, RustCoinControlMan
         = 
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustcoincontrolmanager_dispatch(
+    UniffiLib.uniffi_cove_fn_method_rustcoincontrolmanager_dispatch(
         it,
         FfiConverterTypeCoinControlManagerAction.lower(`action`),_status)
 }
@@ -16808,7 +16748,7 @@ open class RustCoinControlManager: Disposable, AutoCloseable, RustCoinControlMan
             return FfiConverterTypeWalletId.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustcoincontrolmanager_id(
+    UniffiLib.uniffi_cove_fn_method_rustcoincontrolmanager_id(
         it,
         _status)
 }
@@ -16821,7 +16761,7 @@ open class RustCoinControlManager: Disposable, AutoCloseable, RustCoinControlMan
         = 
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustcoincontrolmanager_listen_for_updates(
+    UniffiLib.uniffi_cove_fn_method_rustcoincontrolmanager_listen_for_updates(
         it,
         FfiConverterTypeCoinControlManagerReconciler.lower(`reconciler`),_status)
 }
@@ -16834,14 +16774,14 @@ open class RustCoinControlManager: Disposable, AutoCloseable, RustCoinControlMan
     override suspend fun `reloadLabels`() {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_method_rustcoincontrolmanager_reload_labels(
+            UniffiLib.uniffi_cove_fn_method_rustcoincontrolmanager_reload_labels(
                 uniffiHandle,
                 
             )
         },
-        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_poll_void(future, callback, continuation) },
-        { future, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_complete_void(future, continuation) },
-        { future -> UniffiLib.INSTANCE.ffi_cove_rust_future_free_void(future) },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_void(future) },
         // lift function
         { Unit },
         
@@ -16854,7 +16794,7 @@ open class RustCoinControlManager: Disposable, AutoCloseable, RustCoinControlMan
             return FfiConverterSequenceTypeUtxo.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustcoincontrolmanager_selected_utxos(
+    UniffiLib.uniffi_cove_fn_method_rustcoincontrolmanager_selected_utxos(
         it,
         _status)
 }
@@ -16867,7 +16807,7 @@ open class RustCoinControlManager: Disposable, AutoCloseable, RustCoinControlMan
             return FfiConverterTypeBitcoinUnit.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustcoincontrolmanager_unit(
+    UniffiLib.uniffi_cove_fn_method_rustcoincontrolmanager_unit(
         it,
         _status)
 }
@@ -16880,7 +16820,7 @@ open class RustCoinControlManager: Disposable, AutoCloseable, RustCoinControlMan
             return FfiConverterSequenceTypeUtxo.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustcoincontrolmanager_utxos(
+    UniffiLib.uniffi_cove_fn_method_rustcoincontrolmanager_utxos(
         it,
         _status)
 }
@@ -16899,7 +16839,7 @@ open class RustCoinControlManager: Disposable, AutoCloseable, RustCoinControlMan
          fun `previewNew`(`outputCount`: kotlin.UByte = 20u, `changeCount`: kotlin.UByte = 4u): RustCoinControlManager {
             return FfiConverterTypeRustCoinControlManager.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_constructor_rustcoincontrolmanager_preview_new(
+    UniffiLib.uniffi_cove_fn_constructor_rustcoincontrolmanager_preview_new(
     
         FfiConverterUByte.lower(`outputCount`),FfiConverterUByte.lower(`changeCount`),_status)
 }
@@ -17077,7 +17017,7 @@ open class RustImportWalletManager: Disposable, AutoCloseable, RustImportWalletM
     constructor() :
         this(UniffiWithHandle, 
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_constructor_rustimportwalletmanager_new(
+    UniffiLib.uniffi_cove_fn_constructor_rustimportwalletmanager_new(
     
         _status)
 }
@@ -17137,7 +17077,7 @@ open class RustImportWalletManager: Disposable, AutoCloseable, RustImportWalletM
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_rustimportwalletmanager(handle, status)
+                UniffiLib.uniffi_cove_fn_free_rustimportwalletmanager(handle, status)
             }
         }
     }
@@ -17150,7 +17090,7 @@ open class RustImportWalletManager: Disposable, AutoCloseable, RustImportWalletM
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_rustimportwalletmanager(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_rustimportwalletmanager(handle, status)
         }
     }
 
@@ -17161,7 +17101,7 @@ open class RustImportWalletManager: Disposable, AutoCloseable, RustImportWalletM
         = 
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustimportwalletmanager_dispatch(
+    UniffiLib.uniffi_cove_fn_method_rustimportwalletmanager_dispatch(
         it,
         FfiConverterTypeImportWalletManagerAction.lower(`action`),_status)
 }
@@ -17177,7 +17117,7 @@ open class RustImportWalletManager: Disposable, AutoCloseable, RustImportWalletM
             return FfiConverterTypeWalletMetadata.lift(
     callWithHandle {
     uniffiRustCallWithError(ImportWalletException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustimportwalletmanager_import_wallet(
+    UniffiLib.uniffi_cove_fn_method_rustimportwalletmanager_import_wallet(
         it,
         FfiConverterSequenceSequenceString.lower(`enteredWords`),_status)
 }
@@ -17190,7 +17130,7 @@ open class RustImportWalletManager: Disposable, AutoCloseable, RustImportWalletM
         = 
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustimportwalletmanager_listen_for_updates(
+    UniffiLib.uniffi_cove_fn_method_rustimportwalletmanager_listen_for_updates(
         it,
         FfiConverterTypeImportWalletManagerReconciler.lower(`reconciler`),_status)
 }
@@ -17384,7 +17324,7 @@ open class RustPendingWalletManager: Disposable, AutoCloseable, RustPendingWalle
     constructor(`numberOfWords`: NumberOfBip39Words) :
         this(UniffiWithHandle, 
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_constructor_rustpendingwalletmanager_new(
+    UniffiLib.uniffi_cove_fn_constructor_rustpendingwalletmanager_new(
     
         FfiConverterTypeNumberOfBip39Words.lower(`numberOfWords`),_status)
 }
@@ -17444,7 +17384,7 @@ open class RustPendingWalletManager: Disposable, AutoCloseable, RustPendingWalle
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_rustpendingwalletmanager(handle, status)
+                UniffiLib.uniffi_cove_fn_free_rustpendingwalletmanager(handle, status)
             }
         }
     }
@@ -17457,7 +17397,7 @@ open class RustPendingWalletManager: Disposable, AutoCloseable, RustPendingWalle
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_rustpendingwalletmanager(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_rustpendingwalletmanager(handle, status)
         }
     }
 
@@ -17465,7 +17405,7 @@ open class RustPendingWalletManager: Disposable, AutoCloseable, RustPendingWalle
             return FfiConverterSequenceString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustpendingwalletmanager_bip_39_words(
+    UniffiLib.uniffi_cove_fn_method_rustpendingwalletmanager_bip_39_words(
         it,
         _status)
 }
@@ -17478,7 +17418,7 @@ open class RustPendingWalletManager: Disposable, AutoCloseable, RustPendingWalle
             return FfiConverterSequenceSequenceTypeGroupedWord.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustpendingwalletmanager_bip_39_words_grouped(
+    UniffiLib.uniffi_cove_fn_method_rustpendingwalletmanager_bip_39_words_grouped(
         it,
         _status)
 }
@@ -17491,7 +17431,7 @@ open class RustPendingWalletManager: Disposable, AutoCloseable, RustPendingWalle
             return FfiConverterUByte.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustpendingwalletmanager_card_indexes(
+    UniffiLib.uniffi_cove_fn_method_rustpendingwalletmanager_card_indexes(
         it,
         _status)
 }
@@ -17507,7 +17447,7 @@ open class RustPendingWalletManager: Disposable, AutoCloseable, RustPendingWalle
         = 
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustpendingwalletmanager_dispatch(
+    UniffiLib.uniffi_cove_fn_method_rustpendingwalletmanager_dispatch(
         it,
         FfiConverterTypePendingWalletManagerAction.lower(`action`),_status)
 }
@@ -17519,7 +17459,7 @@ open class RustPendingWalletManager: Disposable, AutoCloseable, RustPendingWalle
             return FfiConverterTypePendingWalletManagerState.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustpendingwalletmanager_get_state(
+    UniffiLib.uniffi_cove_fn_method_rustpendingwalletmanager_get_state(
         it,
         _status)
 }
@@ -17532,7 +17472,7 @@ open class RustPendingWalletManager: Disposable, AutoCloseable, RustPendingWalle
         = 
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustpendingwalletmanager_listen_for_updates(
+    UniffiLib.uniffi_cove_fn_method_rustpendingwalletmanager_listen_for_updates(
         it,
         FfiConverterTypePendingWalletManagerReconciler.lower(`reconciler`),_status)
 }
@@ -17544,7 +17484,7 @@ open class RustPendingWalletManager: Disposable, AutoCloseable, RustPendingWalle
             return FfiConverterUByte.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustpendingwalletmanager_number_of_words_count(
+    UniffiLib.uniffi_cove_fn_method_rustpendingwalletmanager_number_of_words_count(
         it,
         _status)
 }
@@ -17558,7 +17498,7 @@ open class RustPendingWalletManager: Disposable, AutoCloseable, RustPendingWalle
             return FfiConverterTypeWalletMetadata.lift(
     callWithHandle {
     uniffiRustCallWithError(PendingWalletManagerException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustpendingwalletmanager_save_wallet(
+    UniffiLib.uniffi_cove_fn_method_rustpendingwalletmanager_save_wallet(
         it,
         _status)
 }
@@ -17836,7 +17776,7 @@ open class RustSendFlowManager: Disposable, AutoCloseable, RustSendFlowManagerIn
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_rustsendflowmanager(handle, status)
+                UniffiLib.uniffi_cove_fn_free_rustsendflowmanager(handle, status)
             }
         }
     }
@@ -17849,7 +17789,7 @@ open class RustSendFlowManager: Disposable, AutoCloseable, RustSendFlowManagerIn
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_rustsendflowmanager(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_rustsendflowmanager(handle, status)
         }
     }
 
@@ -17857,7 +17797,7 @@ open class RustSendFlowManager: Disposable, AutoCloseable, RustSendFlowManagerIn
             return FfiConverterTypeAmount.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustsendflowmanager_amount(
+    UniffiLib.uniffi_cove_fn_method_rustsendflowmanager_amount(
         it,
         _status)
 }
@@ -17870,7 +17810,7 @@ open class RustSendFlowManager: Disposable, AutoCloseable, RustSendFlowManagerIn
             return FfiConverterULong.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustsendflowmanager_amount_sats(
+    UniffiLib.uniffi_cove_fn_method_rustsendflowmanager_amount_sats(
         it,
         _status)
 }
@@ -17886,7 +17826,7 @@ open class RustSendFlowManager: Disposable, AutoCloseable, RustSendFlowManagerIn
         = 
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustsendflowmanager_dispatch(
+    UniffiLib.uniffi_cove_fn_method_rustsendflowmanager_dispatch(
         it,
         FfiConverterTypeSendFlowManagerAction.lower(`action`),_status)
 }
@@ -17898,7 +17838,7 @@ open class RustSendFlowManager: Disposable, AutoCloseable, RustSendFlowManagerIn
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustsendflowmanager_display_fiat_amount(
+    UniffiLib.uniffi_cove_fn_method_rustsendflowmanager_display_fiat_amount(
         it,
         FfiConverterDouble.lower(`amount`),FfiConverterBoolean.lower(`withSuffix`),_status)
 }
@@ -17911,7 +17851,7 @@ open class RustSendFlowManager: Disposable, AutoCloseable, RustSendFlowManagerIn
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustsendflowmanager_entering_fiat_amount(
+    UniffiLib.uniffi_cove_fn_method_rustsendflowmanager_entering_fiat_amount(
         it,
         _status)
 }
@@ -17929,14 +17869,14 @@ open class RustSendFlowManager: Disposable, AutoCloseable, RustSendFlowManagerIn
     override suspend fun `getCustomFeeOption`(`feeRate`: FeeRate, `feeSpeed`: FeeSpeed) : FeeRateOptionWithTotalFee {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_method_rustsendflowmanager_get_custom_fee_option(
+            UniffiLib.uniffi_cove_fn_method_rustsendflowmanager_get_custom_fee_option(
                 uniffiHandle,
                 FfiConverterTypeFeeRate.lower(`feeRate`),FfiConverterTypeFeeSpeed.lower(`feeSpeed`),
             )
         },
-        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_poll_u64(future, callback, continuation) },
-        { future, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_complete_u64(future, continuation) },
-        { future -> UniffiLib.INSTANCE.ffi_cove_rust_future_free_u64(future) },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_u64(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_u64(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_u64(future) },
         // lift function
         { FfiConverterTypeFeeRateOptionWithTotalFee.lift(it) },
         // Error FFI converter
@@ -17948,7 +17888,7 @@ open class RustSendFlowManager: Disposable, AutoCloseable, RustSendFlowManagerIn
         = 
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustsendflowmanager_listen_for_updates(
+    UniffiLib.uniffi_cove_fn_method_rustsendflowmanager_listen_for_updates(
         it,
         FfiConverterTypeSendFlowManagerReconciler.lower(`reconciler`),_status)
 }
@@ -17960,7 +17900,7 @@ open class RustSendFlowManager: Disposable, AutoCloseable, RustSendFlowManagerIn
             return FfiConverterOptionalTypeAmount.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustsendflowmanager_maxsendminusfees(
+    UniffiLib.uniffi_cove_fn_method_rustsendflowmanager_maxsendminusfees(
         it,
         _status)
 }
@@ -17973,7 +17913,7 @@ open class RustSendFlowManager: Disposable, AutoCloseable, RustSendFlowManagerIn
             return FfiConverterOptionalTypeAmount.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustsendflowmanager_maxsendminusfeesandsmallutxo(
+    UniffiLib.uniffi_cove_fn_method_rustsendflowmanager_maxsendminusfeesandsmallutxo(
         it,
         _status)
 }
@@ -17986,7 +17926,7 @@ open class RustSendFlowManager: Disposable, AutoCloseable, RustSendFlowManagerIn
             return FfiConverterOptionalString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustsendflowmanager_sanitize_btc_entering_amount(
+    UniffiLib.uniffi_cove_fn_method_rustsendflowmanager_sanitize_btc_entering_amount(
         it,
         FfiConverterString.lower(`oldValue`),FfiConverterString.lower(`newValue`),_status)
 }
@@ -17999,7 +17939,7 @@ open class RustSendFlowManager: Disposable, AutoCloseable, RustSendFlowManagerIn
             return FfiConverterOptionalString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustsendflowmanager_sanitize_fiat_entering_amount(
+    UniffiLib.uniffi_cove_fn_method_rustsendflowmanager_sanitize_fiat_entering_amount(
         it,
         FfiConverterString.lower(`oldValue`),FfiConverterString.lower(`newValue`),_status)
 }
@@ -18012,7 +17952,7 @@ open class RustSendFlowManager: Disposable, AutoCloseable, RustSendFlowManagerIn
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustsendflowmanager_send_amount_btc(
+    UniffiLib.uniffi_cove_fn_method_rustsendflowmanager_send_amount_btc(
         it,
         _status)
 }
@@ -18025,7 +17965,7 @@ open class RustSendFlowManager: Disposable, AutoCloseable, RustSendFlowManagerIn
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustsendflowmanager_send_amount_fiat(
+    UniffiLib.uniffi_cove_fn_method_rustsendflowmanager_send_amount_fiat(
         it,
         _status)
 }
@@ -18038,7 +17978,7 @@ open class RustSendFlowManager: Disposable, AutoCloseable, RustSendFlowManagerIn
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustsendflowmanager_total_fee_string(
+    UniffiLib.uniffi_cove_fn_method_rustsendflowmanager_total_fee_string(
         it,
         _status)
 }
@@ -18051,7 +17991,7 @@ open class RustSendFlowManager: Disposable, AutoCloseable, RustSendFlowManagerIn
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustsendflowmanager_total_spent_in_btc(
+    UniffiLib.uniffi_cove_fn_method_rustsendflowmanager_total_spent_in_btc(
         it,
         _status)
 }
@@ -18064,7 +18004,7 @@ open class RustSendFlowManager: Disposable, AutoCloseable, RustSendFlowManagerIn
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustsendflowmanager_total_spent_in_fiat(
+    UniffiLib.uniffi_cove_fn_method_rustsendflowmanager_total_spent_in_fiat(
         it,
         _status)
 }
@@ -18077,7 +18017,7 @@ open class RustSendFlowManager: Disposable, AutoCloseable, RustSendFlowManagerIn
             return FfiConverterOptionalSequenceTypeUtxo.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustsendflowmanager_utxos(
+    UniffiLib.uniffi_cove_fn_method_rustsendflowmanager_utxos(
         it,
         _status)
 }
@@ -18090,7 +18030,7 @@ open class RustSendFlowManager: Disposable, AutoCloseable, RustSendFlowManagerIn
             return FfiConverterBoolean.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustsendflowmanager_validate_address(
+    UniffiLib.uniffi_cove_fn_method_rustsendflowmanager_validate_address(
         it,
         FfiConverterBoolean.lower(`displayAlert`),_status)
 }
@@ -18103,7 +18043,7 @@ open class RustSendFlowManager: Disposable, AutoCloseable, RustSendFlowManagerIn
             return FfiConverterBoolean.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustsendflowmanager_validate_amount(
+    UniffiLib.uniffi_cove_fn_method_rustsendflowmanager_validate_amount(
         it,
         FfiConverterBoolean.lower(`displayAlert`),_status)
 }
@@ -18116,7 +18056,7 @@ open class RustSendFlowManager: Disposable, AutoCloseable, RustSendFlowManagerIn
             return FfiConverterBoolean.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustsendflowmanager_validate_fee_percentage(
+    UniffiLib.uniffi_cove_fn_method_rustsendflowmanager_validate_fee_percentage(
         it,
         FfiConverterBoolean.lower(`displayAlert`),_status)
 }
@@ -18130,14 +18070,14 @@ open class RustSendFlowManager: Disposable, AutoCloseable, RustSendFlowManagerIn
     override suspend fun `waitForInit`() {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_method_rustsendflowmanager_wait_for_init(
+            UniffiLib.uniffi_cove_fn_method_rustsendflowmanager_wait_for_init(
                 uniffiHandle,
                 
             )
         },
-        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_poll_void(future, callback, continuation) },
-        { future, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_complete_void(future, continuation) },
-        { future -> UniffiLib.INSTANCE.ffi_cove_rust_future_free_void(future) },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_void(future) },
         // lift function
         { Unit },
         
@@ -18150,7 +18090,7 @@ open class RustSendFlowManager: Disposable, AutoCloseable, RustSendFlowManagerIn
             return FfiConverterTypeWalletId.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustsendflowmanager_wallet_id(
+    UniffiLib.uniffi_cove_fn_method_rustsendflowmanager_wallet_id(
         it,
         _status)
 }
@@ -18433,7 +18373,7 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     constructor(`id`: WalletId) :
         this(UniffiWithHandle, 
     uniffiRustCallWithError(WalletManagerException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_constructor_rustwalletmanager_new(
+    UniffiLib.uniffi_cove_fn_constructor_rustwalletmanager_new(
     
         FfiConverterTypeWalletId.lower(`id`),_status)
 }
@@ -18493,7 +18433,7 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_rustwalletmanager(handle, status)
+                UniffiLib.uniffi_cove_fn_free_rustwalletmanager(handle, status)
             }
         }
     }
@@ -18506,7 +18446,7 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_rustwalletmanager(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_rustwalletmanager(handle, status)
         }
     }
 
@@ -18519,14 +18459,14 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     override suspend fun `addressAt`(`index`: kotlin.UInt) : AddressInfo {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletmanager_address_at(
+            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_address_at(
                 uniffiHandle,
                 FfiConverterUInt.lower(`index`),
             )
         },
-        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_poll_u64(future, callback, continuation) },
-        { future, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_complete_u64(future, continuation) },
-        { future -> UniffiLib.INSTANCE.ffi_cove_rust_future_free_u64(future) },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_u64(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_u64(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_u64(future) },
         // lift function
         { FfiConverterTypeAddressInfo.lift(it) },
         // Error FFI converter
@@ -18540,14 +18480,14 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     override suspend fun `amountInFiat`(`amount`: Amount) : kotlin.Double {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletmanager_amount_in_fiat(
+            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_amount_in_fiat(
                 uniffiHandle,
                 FfiConverterTypeAmount.lower(`amount`),
             )
         },
-        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_poll_f64(future, callback, continuation) },
-        { future, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_complete_f64(future, continuation) },
-        { future -> UniffiLib.INSTANCE.ffi_cove_rust_future_free_f64(future) },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_f64(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_f64(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_f64(future) },
         // lift function
         { FfiConverterDouble.lift(it) },
         // Error FFI converter
@@ -18560,14 +18500,14 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     override suspend fun `balance`() : Balance {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletmanager_balance(
+            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_balance(
                 uniffiHandle,
                 
             )
         },
-        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_poll_u64(future, callback, continuation) },
-        { future, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_complete_u64(future, continuation) },
-        { future -> UniffiLib.INSTANCE.ffi_cove_rust_future_free_u64(future) },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_u64(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_u64(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_u64(future) },
         // lift function
         { FfiConverterTypeBalance.lift(it) },
         // Error FFI converter
@@ -18581,14 +18521,14 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     override suspend fun `balanceInFiat`() : kotlin.Double {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletmanager_balance_in_fiat(
+            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_balance_in_fiat(
                 uniffiHandle,
                 
             )
         },
-        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_poll_f64(future, callback, continuation) },
-        { future, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_complete_f64(future, continuation) },
-        { future -> UniffiLib.INSTANCE.ffi_cove_rust_future_free_f64(future) },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_f64(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_f64(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_f64(future) },
         // lift function
         { FfiConverterDouble.lift(it) },
         // Error FFI converter
@@ -18602,14 +18542,14 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     override suspend fun `broadcastTransaction`(`signedTransaction`: BitcoinTransaction) {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletmanager_broadcast_transaction(
+            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_broadcast_transaction(
                 uniffiHandle,
                 FfiConverterTypeBitcoinTransaction.lower(`signedTransaction`),
             )
         },
-        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_poll_void(future, callback, continuation) },
-        { future, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_complete_void(future, continuation) },
-        { future -> UniffiLib.INSTANCE.ffi_cove_rust_future_free_void(future) },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_void(future) },
         // lift function
         { Unit },
         
@@ -18622,7 +18562,7 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletmanager_convert_and_display_fiat(
+    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_convert_and_display_fiat(
         it,
         FfiConverterTypeAmount.lower(`amount`),FfiConverterTypePriceResponse.lower(`prices`),FfiConverterBoolean.lower(`withSuffix`),_status)
 }
@@ -18635,7 +18575,7 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
             return FfiConverterTypeAmount.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletmanager_convert_from_fiat_string(
+    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_convert_from_fiat_string(
         it,
         FfiConverterString.lower(`fiatAmount`),FfiConverterTypePriceResponse.lower(`prices`),_status)
 }
@@ -18648,7 +18588,7 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
             return FfiConverterDouble.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletmanager_convert_to_fiat(
+    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_convert_to_fiat(
         it,
         FfiConverterTypeAmount.lower(`amount`),FfiConverterTypePriceResponse.lower(`prices`),_status)
 }
@@ -18663,14 +18603,14 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     override suspend fun `createTransactionsWithFiatExport`() : kotlin.String {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletmanager_create_transactions_with_fiat_export(
+            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_create_transactions_with_fiat_export(
                 uniffiHandle,
                 
             )
         },
-        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
-        { future, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
-        { future -> UniffiLib.INSTANCE.ffi_cove_rust_future_free_rust_buffer(future) },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
         // lift function
         { FfiConverterString.lift(it) },
         // Error FFI converter
@@ -18684,14 +18624,14 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     override suspend fun `currentBlockHeight`() : kotlin.UInt {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletmanager_current_block_height(
+            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_current_block_height(
                 uniffiHandle,
                 
             )
         },
-        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_poll_u32(future, callback, continuation) },
-        { future, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_complete_u32(future, continuation) },
-        { future -> UniffiLib.INSTANCE.ffi_cove_rust_future_free_u32(future) },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_u32(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_u32(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_u32(future) },
         // lift function
         { FfiConverterUInt.lift(it) },
         // Error FFI converter
@@ -18704,7 +18644,7 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
         = 
     callWithHandle {
     uniffiRustCallWithError(WalletManagerException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletmanager_delete_unsigned_transaction(
+    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_delete_unsigned_transaction(
         it,
         FfiConverterTypeTxId.lower(`txId`),_status)
 }
@@ -18717,7 +18657,7 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
         = 
     callWithHandle {
     uniffiRustCallWithError(WalletManagerException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletmanager_delete_wallet(
+    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_delete_wallet(
         it,
         _status)
 }
@@ -18732,7 +18672,7 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
         = 
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletmanager_dispatch(
+    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_dispatch(
         it,
         FfiConverterTypeWalletManagerAction.lower(`action`),_status)
 }
@@ -18744,7 +18684,7 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletmanager_display_amount(
+    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_display_amount(
         it,
         FfiConverterTypeAmount.lower(`amount`),FfiConverterBoolean.lower(`showUnit`),_status)
 }
@@ -18757,7 +18697,7 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletmanager_display_fiat_amount(
+    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_display_fiat_amount(
         it,
         FfiConverterDouble.lower(`amount`),FfiConverterBoolean.lower(`withSuffix`),_status)
 }
@@ -18770,7 +18710,7 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletmanager_display_sent_and_received_amount(
+    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_display_sent_and_received_amount(
         it,
         FfiConverterTypeSentAndReceived.lower(`sentAndReceived`),_status)
 }
@@ -18785,14 +18725,14 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     override suspend fun `feeRateOptions`() : FeeRateOptions {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletmanager_fee_rate_options(
+            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_fee_rate_options(
                 uniffiHandle,
                 
             )
         },
-        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_poll_u64(future, callback, continuation) },
-        { future, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_complete_u64(future, continuation) },
-        { future -> UniffiLib.INSTANCE.ffi_cove_rust_future_free_u64(future) },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_u64(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_u64(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_u64(future) },
         // lift function
         { FfiConverterTypeFeeRateOptions.lift(it) },
         // Error FFI converter
@@ -18804,7 +18744,7 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
             return FfiConverterOptionalTypeFeeResponse.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletmanager_fees(
+    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_fees(
         it,
         _status)
 }
@@ -18822,14 +18762,14 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     override suspend fun `finalizePsbt`(`psbt`: Psbt) : BitcoinTransaction {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletmanager_finalize_psbt(
+            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_finalize_psbt(
                 uniffiHandle,
                 FfiConverterTypePsbt.lower(`psbt`),
             )
         },
-        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_poll_u64(future, callback, continuation) },
-        { future, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_complete_u64(future, continuation) },
-        { future -> UniffiLib.INSTANCE.ffi_cove_rust_future_free_u64(future) },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_u64(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_u64(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_u64(future) },
         // lift function
         { FfiConverterTypeBitcoinTransaction.lift(it) },
         // Error FFI converter
@@ -18843,14 +18783,14 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     override suspend fun `firstAddress`() : AddressInfo {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletmanager_first_address(
+            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_first_address(
                 uniffiHandle,
                 
             )
         },
-        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_poll_u64(future, callback, continuation) },
-        { future, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_complete_u64(future, continuation) },
-        { future -> UniffiLib.INSTANCE.ffi_cove_rust_future_free_u64(future) },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_u64(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_u64(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_u64(future) },
         // lift function
         { FfiConverterTypeAddressInfo.lift(it) },
         // Error FFI converter
@@ -18864,14 +18804,14 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     override suspend fun `forceUpdateHeight`() : kotlin.UInt {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletmanager_force_update_height(
+            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_force_update_height(
                 uniffiHandle,
                 
             )
         },
-        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_poll_u32(future, callback, continuation) },
-        { future, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_complete_u32(future, continuation) },
-        { future -> UniffiLib.INSTANCE.ffi_cove_rust_future_free_u32(future) },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_u32(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_u32(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_u32(future) },
         // lift function
         { FfiConverterUInt.lift(it) },
         // Error FFI converter
@@ -18884,14 +18824,14 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     override suspend fun `forceWalletScan`() {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletmanager_force_wallet_scan(
+            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_force_wallet_scan(
                 uniffiHandle,
                 
             )
         },
-        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_poll_void(future, callback, continuation) },
-        { future, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_complete_void(future, continuation) },
-        { future -> UniffiLib.INSTANCE.ffi_cove_rust_future_free_void(future) },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_void(future) },
         // lift function
         { Unit },
         
@@ -18906,14 +18846,14 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     override suspend fun `getFeeOptions`() : FeeRateOptions {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletmanager_get_fee_options(
+            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_get_fee_options(
                 uniffiHandle,
                 
             )
         },
-        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_poll_u64(future, callback, continuation) },
-        { future, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_complete_u64(future, continuation) },
-        { future -> UniffiLib.INSTANCE.ffi_cove_rust_future_free_u64(future) },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_u64(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_u64(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_u64(future) },
         // lift function
         { FfiConverterTypeFeeRateOptions.lift(it) },
         // Error FFI converter
@@ -18929,14 +18869,14 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     override suspend fun `getTransactions`() {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletmanager_get_transactions(
+            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_get_transactions(
                 uniffiHandle,
                 
             )
         },
-        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_poll_void(future, callback, continuation) },
-        { future, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_complete_void(future, continuation) },
-        { future -> UniffiLib.INSTANCE.ffi_cove_rust_future_free_void(future) },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_void(future) },
         // lift function
         { Unit },
         
@@ -18950,7 +18890,7 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
             return FfiConverterSequenceTypeUnsignedTransaction.lift(
     callWithHandle {
     uniffiRustCallWithError(WalletManagerException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletmanager_get_unsigned_transactions(
+    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_get_unsigned_transactions(
         it,
         _status)
 }
@@ -18963,7 +18903,7 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
             return FfiConverterTypeLabelManager.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletmanager_label_manager(
+    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_label_manager(
         it,
         _status)
 }
@@ -18976,7 +18916,7 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
         = 
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletmanager_listen_for_updates(
+    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_listen_for_updates(
         it,
         FfiConverterTypeWalletManagerReconciler.lower(`reconciler`),_status)
 }
@@ -18989,7 +18929,7 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
         = 
     callWithHandle {
     uniffiRustCallWithError(WalletManagerException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletmanager_mark_wallet_as_verified(
+    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_mark_wallet_as_verified(
         it,
         _status)
 }
@@ -19001,7 +18941,7 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
             return FfiConverterOptionalString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletmanager_master_fingerprint(
+    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_master_fingerprint(
         it,
         _status)
 }
@@ -19015,14 +18955,14 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     override suspend fun `newCoinControlManager`() : RustCoinControlManager {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletmanager_new_coin_control_manager(
+            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_new_coin_control_manager(
                 uniffiHandle,
                 
             )
         },
-        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_poll_u64(future, callback, continuation) },
-        { future, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_complete_u64(future, continuation) },
-        { future -> UniffiLib.INSTANCE.ffi_cove_rust_future_free_u64(future) },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_u64(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_u64(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_u64(future) },
         // lift function
         { FfiConverterTypeRustCoinControlManager.lift(it) },
         // Error FFI converter
@@ -19034,7 +18974,7 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
             return FfiConverterTypeRustSendFlowManager.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletmanager_new_send_flow_manager(
+    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_new_send_flow_manager(
         it,
         _status)
 }
@@ -19052,14 +18992,14 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     override suspend fun `nextAddress`() : AddressInfoWithDerivation {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletmanager_next_address(
+            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_next_address(
                 uniffiHandle,
                 
             )
         },
-        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_poll_u64(future, callback, continuation) },
-        { future, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_complete_u64(future, continuation) },
-        { future -> UniffiLib.INSTANCE.ffi_cove_rust_future_free_u64(future) },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_u64(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_u64(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_u64(future) },
         // lift function
         { FfiConverterTypeAddressInfoWithDerivation.lift(it) },
         // Error FFI converter
@@ -19073,14 +19013,14 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     override suspend fun `numberOfConfirmations`(`blockHeight`: kotlin.UInt) : kotlin.UInt {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletmanager_number_of_confirmations(
+            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_number_of_confirmations(
                 uniffiHandle,
                 FfiConverterUInt.lower(`blockHeight`),
             )
         },
-        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_poll_u32(future, callback, continuation) },
-        { future, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_complete_u32(future, continuation) },
-        { future -> UniffiLib.INSTANCE.ffi_cove_rust_future_free_u32(future) },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_u32(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_u32(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_u32(future) },
         // lift function
         { FfiConverterUInt.lift(it) },
         // Error FFI converter
@@ -19094,14 +19034,14 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     override suspend fun `numberOfConfirmationsFmt`(`blockHeight`: kotlin.UInt) : kotlin.String {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletmanager_number_of_confirmations_fmt(
+            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_number_of_confirmations_fmt(
                 uniffiHandle,
                 FfiConverterUInt.lower(`blockHeight`),
             )
         },
-        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
-        { future, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
-        { future -> UniffiLib.INSTANCE.ffi_cove_rust_future_free_rust_buffer(future) },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
         // lift function
         { FfiConverterString.lift(it) },
         // Error FFI converter
@@ -19114,7 +19054,7 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
         = 
     callWithHandle {
     uniffiRustCallWithError(WalletManagerException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletmanager_save_unsigned_transaction(
+    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_save_unsigned_transaction(
         it,
         FfiConverterTypeConfirmDetails.lower(`details`),_status)
 }
@@ -19126,7 +19066,7 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
             return FfiConverterTypeFiatCurrency.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletmanager_selected_fiat_currency(
+    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_selected_fiat_currency(
         it,
         _status)
 }
@@ -19141,14 +19081,14 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     override suspend fun `sentAndReceivedFiat`(`sentAndReceived`: SentAndReceived) : kotlin.Double {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletmanager_sent_and_received_fiat(
+            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_sent_and_received_fiat(
                 uniffiHandle,
                 FfiConverterTypeSentAndReceived.lower(`sentAndReceived`),
             )
         },
-        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_poll_f64(future, callback, continuation) },
-        { future, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_complete_f64(future, continuation) },
-        { future -> UniffiLib.INSTANCE.ffi_cove_rust_future_free_f64(future) },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_f64(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_f64(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_f64(future) },
         // lift function
         { FfiConverterDouble.lift(it) },
         // Error FFI converter
@@ -19160,7 +19100,7 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
         = 
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletmanager_set_wallet_metadata(
+    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_set_wallet_metadata(
         it,
         FfiConverterTypeWalletMetadata.lower(`metadata`),_status)
 }
@@ -19174,14 +19114,14 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     override suspend fun `signAndBroadcastTransaction`(`psbt`: Psbt) {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletmanager_sign_and_broadcast_transaction(
+            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_sign_and_broadcast_transaction(
                 uniffiHandle,
                 FfiConverterTypePsbt.lower(`psbt`),
             )
         },
-        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_poll_void(future, callback, continuation) },
-        { future, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_complete_void(future, continuation) },
-        { future -> UniffiLib.INSTANCE.ffi_cove_rust_future_free_void(future) },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_void(future) },
         // lift function
         { Unit },
         
@@ -19196,14 +19136,14 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     override suspend fun `splitTransactionOutputs`(`outputs`: List<AddressAndAmount>) : SplitOutput {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletmanager_split_transaction_outputs(
+            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_split_transaction_outputs(
                 uniffiHandle,
                 FfiConverterSequenceTypeAddressAndAmount.lower(`outputs`),
             )
         },
-        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
-        { future, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_complete_rust_buffer(future, continuation).let { RustBufferSplitOutput.create(it.capacity.toULong(), it.len.toULong(), it.data) } },
-        { future -> UniffiLib.INSTANCE.ffi_cove_rust_future_free_rust_buffer(future) },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_rust_buffer(future, continuation).let { RustBufferSplitOutput.create(it.capacity.toULong(), it.len.toULong(), it.data) } },
+        { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
         // lift function
         { FfiConverterTypeSplitOutput.lift(it) },
         // Error FFI converter
@@ -19217,14 +19157,14 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     override suspend fun `startWalletScan`() {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletmanager_start_wallet_scan(
+            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_start_wallet_scan(
                 uniffiHandle,
                 
             )
         },
-        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_poll_void(future, callback, continuation) },
-        { future, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_complete_void(future, continuation) },
-        { future -> UniffiLib.INSTANCE.ffi_cove_rust_future_free_void(future) },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_void(future) },
         // lift function
         { Unit },
         
@@ -19239,14 +19179,14 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     override suspend fun `switchToDifferentWalletAddressType`(`walletAddressType`: WalletAddressType) {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletmanager_switch_to_different_wallet_address_type(
+            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_switch_to_different_wallet_address_type(
                 uniffiHandle,
                 FfiConverterTypeWalletAddressType.lower(`walletAddressType`),
             )
         },
-        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_poll_void(future, callback, continuation) },
-        { future, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_complete_void(future, continuation) },
-        { future -> UniffiLib.INSTANCE.ffi_cove_rust_future_free_void(future) },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_void(future) },
         // lift function
         { Unit },
         
@@ -19261,14 +19201,14 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     override suspend fun `transactionDetails`(`txId`: TxId) : TransactionDetails {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletmanager_transaction_details(
+            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_transaction_details(
                 uniffiHandle,
                 FfiConverterTypeTxId.lower(`txId`),
             )
         },
-        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_poll_u64(future, callback, continuation) },
-        { future, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_complete_u64(future, continuation) },
-        { future -> UniffiLib.INSTANCE.ffi_cove_rust_future_free_u64(future) },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_u64(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_u64(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_u64(future) },
         // lift function
         { FfiConverterTypeTransactionDetails.lift(it) },
         // Error FFI converter
@@ -19280,7 +19220,7 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
         = 
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletmanager_validate_metadata(
+    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_validate_metadata(
         it,
         _status)
 }
@@ -19292,7 +19232,7 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
             return FfiConverterTypeWalletMetadata.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletmanager_wallet_metadata(
+    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_wallet_metadata(
         it,
         _status)
 }
@@ -19306,7 +19246,7 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
             return FfiConverterTypeWordValidator.lift(
     callWithHandle {
     uniffiRustCallWithError(WalletManagerException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletmanager_word_validator(
+    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_word_validator(
         it,
         _status)
 }
@@ -19325,7 +19265,7 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
          fun `previewNewWallet`(): RustWalletManager {
             return FfiConverterTypeRustWalletManager.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_constructor_rustwalletmanager_preview_new_wallet(
+    UniffiLib.uniffi_cove_fn_constructor_rustwalletmanager_preview_new_wallet(
     
         _status)
 }
@@ -19336,7 +19276,7 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
          fun `previewNewWalletWithMetadata`(`metadata`: WalletMetadata): RustWalletManager {
             return FfiConverterTypeRustWalletManager.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_constructor_rustwalletmanager_preview_new_wallet_with_metadata(
+    UniffiLib.uniffi_cove_fn_constructor_rustwalletmanager_preview_new_wallet_with_metadata(
     
         FfiConverterTypeWalletMetadata.lower(`metadata`),_status)
 }
@@ -19348,7 +19288,7 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     @Throws(WalletManagerException::class) fun `tryNewFromTapSigner`(`tapSigner`: TapSigner, `deriveInfo`: DeriveInfo, `backup`: kotlin.ByteArray? = null): RustWalletManager {
             return FfiConverterTypeRustWalletManager.lift(
     uniffiRustCallWithError(WalletManagerException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_constructor_rustwalletmanager_try_new_from_tap_signer(
+    UniffiLib.uniffi_cove_fn_constructor_rustwalletmanager_try_new_from_tap_signer(
     
         FfiConverterTypeTapSigner.lower(`tapSigner`),FfiConverterTypeDeriveInfo.lower(`deriveInfo`),FfiConverterOptionalByteArray.lower(`backup`),_status)
 }
@@ -19360,7 +19300,7 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     @Throws(WalletManagerException::class) fun `tryNewFromXpub`(`xpub`: kotlin.String): RustWalletManager {
             return FfiConverterTypeRustWalletManager.lift(
     uniffiRustCallWithError(WalletManagerException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_constructor_rustwalletmanager_try_new_from_xpub(
+    UniffiLib.uniffi_cove_fn_constructor_rustwalletmanager_try_new_from_xpub(
     
         FfiConverterString.lower(`xpub`),_status)
 }
@@ -19582,7 +19522,7 @@ open class SeedQr: Disposable, AutoCloseable, SeedQrInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_seedqr(handle, status)
+                UniffiLib.uniffi_cove_fn_free_seedqr(handle, status)
             }
         }
     }
@@ -19595,7 +19535,7 @@ open class SeedQr: Disposable, AutoCloseable, SeedQrInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_seedqr(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_seedqr(handle, status)
         }
     }
 
@@ -19603,7 +19543,7 @@ open class SeedQr: Disposable, AutoCloseable, SeedQrInterface
             return FfiConverterSequenceString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_seedqr_get_words(
+    UniffiLib.uniffi_cove_fn_method_seedqr_get_words(
         it,
         _status)
 }
@@ -19616,7 +19556,7 @@ open class SeedQr: Disposable, AutoCloseable, SeedQrInterface
             return FfiConverterSequenceSequenceString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_seedqr_grouped_plain_words(
+    UniffiLib.uniffi_cove_fn_method_seedqr_grouped_plain_words(
         it,
         FfiConverterUByte.lower(`groupsOf`),_status)
 }
@@ -19636,7 +19576,7 @@ open class SeedQr: Disposable, AutoCloseable, SeedQrInterface
     @Throws(SeedQrException::class) fun `newFromData`(`data`: kotlin.ByteArray): SeedQr {
             return FfiConverterTypeSeedQr.lift(
     uniffiRustCallWithError(SeedQrException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_constructor_seedqr_new_from_data(
+    UniffiLib.uniffi_cove_fn_constructor_seedqr_new_from_data(
     
         FfiConverterByteArray.lower(`data`),_status)
 }
@@ -19648,7 +19588,7 @@ open class SeedQr: Disposable, AutoCloseable, SeedQrInterface
     @Throws(SeedQrException::class) fun `newFromStr`(`qr`: kotlin.String): SeedQr {
             return FfiConverterTypeSeedQr.lift(
     uniffiRustCallWithError(SeedQrException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_constructor_seedqr_new_from_str(
+    UniffiLib.uniffi_cove_fn_constructor_seedqr_new_from_str(
     
         FfiConverterString.lower(`qr`),_status)
 }
@@ -19866,7 +19806,7 @@ open class SendFlowManagerState: Disposable, AutoCloseable, SendFlowManagerState
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_sendflowmanagerstate(handle, status)
+                UniffiLib.uniffi_cove_fn_free_sendflowmanagerstate(handle, status)
             }
         }
     }
@@ -19879,7 +19819,7 @@ open class SendFlowManagerState: Disposable, AutoCloseable, SendFlowManagerState
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_sendflowmanagerstate(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_sendflowmanagerstate(handle, status)
         }
     }
 
@@ -20102,7 +20042,7 @@ open class SetupCmd: Disposable, AutoCloseable, SetupCmdInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_setupcmd(handle, status)
+                UniffiLib.uniffi_cove_fn_free_setupcmd(handle, status)
             }
         }
     }
@@ -20115,7 +20055,7 @@ open class SetupCmd: Disposable, AutoCloseable, SetupCmdInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_setupcmd(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_setupcmd(handle, status)
         }
     }
 
@@ -20130,7 +20070,7 @@ open class SetupCmd: Disposable, AutoCloseable, SetupCmdInterface
     @Throws(TapSignerReaderException::class) fun `tryNew`(`factoryPin`: kotlin.String, `newPin`: kotlin.String, `chainCode`: kotlin.ByteArray? = null): SetupCmd {
             return FfiConverterTypeSetupCmd.lift(
     uniffiRustCallWithError(TapSignerReaderException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_constructor_setupcmd_try_new(
+    UniffiLib.uniffi_cove_fn_constructor_setupcmd_try_new(
     
         FfiConverterString.lower(`factoryPin`),FfiConverterString.lower(`newPin`),FfiConverterOptionalByteArray.lower(`chainCode`),_status)
 }
@@ -20368,7 +20308,7 @@ open class TapSignerReader: Disposable, AutoCloseable, TapSignerReaderInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_tapsignerreader(handle, status)
+                UniffiLib.uniffi_cove_fn_free_tapsignerreader(handle, status)
             }
         }
     }
@@ -20381,7 +20321,7 @@ open class TapSignerReader: Disposable, AutoCloseable, TapSignerReaderInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_tapsignerreader(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_tapsignerreader(handle, status)
         }
     }
 
@@ -20394,14 +20334,14 @@ open class TapSignerReader: Disposable, AutoCloseable, TapSignerReaderInterface
     override suspend fun `continueSetup`(`response`: SetupCmdResponse) : SetupCmdResponse {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_method_tapsignerreader_continue_setup(
+            UniffiLib.uniffi_cove_fn_method_tapsignerreader_continue_setup(
                 uniffiHandle,
                 FfiConverterTypeSetupCmdResponse.lower(`response`),
             )
         },
-        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
-        { future, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
-        { future -> UniffiLib.INSTANCE.ffi_cove_rust_future_free_rust_buffer(future) },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
         // lift function
         { FfiConverterTypeSetupCmdResponse.lift(it) },
         // Error FFI converter
@@ -20416,7 +20356,7 @@ open class TapSignerReader: Disposable, AutoCloseable, TapSignerReaderInterface
             return FfiConverterOptionalTypeTapSignerResponse.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_tapsignerreader_last_response(
+    UniffiLib.uniffi_cove_fn_method_tapsignerreader_last_response(
         it,
         _status)
 }
@@ -20431,14 +20371,14 @@ open class TapSignerReader: Disposable, AutoCloseable, TapSignerReaderInterface
     override suspend fun `run`() : TapSignerResponse {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_method_tapsignerreader_run(
+            UniffiLib.uniffi_cove_fn_method_tapsignerreader_run(
                 uniffiHandle,
                 
             )
         },
-        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
-        { future, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
-        { future -> UniffiLib.INSTANCE.ffi_cove_rust_future_free_rust_buffer(future) },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
         // lift function
         { FfiConverterTypeTapSignerResponse.lift(it) },
         // Error FFI converter
@@ -20455,14 +20395,14 @@ open class TapSignerReader: Disposable, AutoCloseable, TapSignerReaderInterface
     override suspend fun `setup`(`cmd`: SetupCmd) : SetupCmdResponse {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_method_tapsignerreader_setup(
+            UniffiLib.uniffi_cove_fn_method_tapsignerreader_setup(
                 uniffiHandle,
                 FfiConverterTypeSetupCmd.lower(`cmd`),
             )
         },
-        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
-        { future, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
-        { future -> UniffiLib.INSTANCE.ffi_cove_rust_future_free_rust_buffer(future) },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
         // lift function
         { FfiConverterTypeSetupCmdResponse.lift(it) },
         // Error FFI converter
@@ -20476,14 +20416,14 @@ open class TapSignerReader: Disposable, AutoCloseable, TapSignerReaderInterface
     override suspend fun `sign`(`psbt`: Psbt, `pin`: kotlin.String) : Psbt {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_method_tapsignerreader_sign(
+            UniffiLib.uniffi_cove_fn_method_tapsignerreader_sign(
                 uniffiHandle,
                 FfiConverterTypePsbt.lower(`psbt`),FfiConverterString.lower(`pin`),
             )
         },
-        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_poll_u64(future, callback, continuation) },
-        { future, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_complete_u64(future, continuation) },
-        { future -> UniffiLib.INSTANCE.ffi_cove_rust_future_free_u64(future) },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_u64(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_u64(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_u64(future) },
         // lift function
         { FfiConverterTypePsbt.lift(it) },
         // Error FFI converter
@@ -20748,7 +20688,7 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_transactiondetails(handle, status)
+                UniffiLib.uniffi_cove_fn_free_transactiondetails(handle, status)
             }
         }
     }
@@ -20761,7 +20701,7 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_transactiondetails(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_transactiondetails(handle, status)
         }
     }
 
@@ -20769,7 +20709,7 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
             return FfiConverterTypeAddress.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_transactiondetails_address(
+    UniffiLib.uniffi_cove_fn_method_transactiondetails_address(
         it,
         _status)
 }
@@ -20782,7 +20722,7 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_transactiondetails_address_spaced_out(
+    UniffiLib.uniffi_cove_fn_method_transactiondetails_address_spaced_out(
         it,
         _status)
 }
@@ -20795,7 +20735,7 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
             return FfiConverterTypeAmount.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_transactiondetails_amount(
+    UniffiLib.uniffi_cove_fn_method_transactiondetails_amount(
         it,
         _status)
 }
@@ -20810,14 +20750,14 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
     override suspend fun `amountFiat`() : kotlin.Double {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_method_transactiondetails_amount_fiat(
+            UniffiLib.uniffi_cove_fn_method_transactiondetails_amount_fiat(
                 uniffiHandle,
                 
             )
         },
-        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_poll_f64(future, callback, continuation) },
-        { future, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_complete_f64(future, continuation) },
-        { future -> UniffiLib.INSTANCE.ffi_cove_rust_future_free_f64(future) },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_f64(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_f64(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_f64(future) },
         // lift function
         { FfiConverterDouble.lift(it) },
         // Error FFI converter
@@ -20831,14 +20771,14 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
     override suspend fun `amountFiatFmt`() : kotlin.String {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_method_transactiondetails_amount_fiat_fmt(
+            UniffiLib.uniffi_cove_fn_method_transactiondetails_amount_fiat_fmt(
                 uniffiHandle,
                 
             )
         },
-        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
-        { future, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
-        { future -> UniffiLib.INSTANCE.ffi_cove_rust_future_free_rust_buffer(future) },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
         // lift function
         { FfiConverterString.lift(it) },
         // Error FFI converter
@@ -20850,7 +20790,7 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_transactiondetails_amount_fmt(
+    UniffiLib.uniffi_cove_fn_method_transactiondetails_amount_fmt(
         it,
         FfiConverterTypeBitcoinUnit.lower(`unit`),_status)
 }
@@ -20863,7 +20803,7 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
             return FfiConverterOptionalUInt.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_transactiondetails_block_number(
+    UniffiLib.uniffi_cove_fn_method_transactiondetails_block_number(
         it,
         _status)
 }
@@ -20876,7 +20816,7 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
             return FfiConverterOptionalString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_transactiondetails_block_number_fmt(
+    UniffiLib.uniffi_cove_fn_method_transactiondetails_block_number_fmt(
         it,
         _status)
 }
@@ -20889,7 +20829,7 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
             return FfiConverterOptionalString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_transactiondetails_confirmation_date_time(
+    UniffiLib.uniffi_cove_fn_method_transactiondetails_confirmation_date_time(
         it,
         _status)
 }
@@ -20904,14 +20844,14 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
     override suspend fun `feeFiatFmt`() : kotlin.String {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_method_transactiondetails_fee_fiat_fmt(
+            UniffiLib.uniffi_cove_fn_method_transactiondetails_fee_fiat_fmt(
                 uniffiHandle,
                 
             )
         },
-        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
-        { future, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
-        { future -> UniffiLib.INSTANCE.ffi_cove_rust_future_free_rust_buffer(future) },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
         // lift function
         { FfiConverterString.lift(it) },
         // Error FFI converter
@@ -20923,7 +20863,7 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
             return FfiConverterOptionalString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_transactiondetails_fee_fmt(
+    UniffiLib.uniffi_cove_fn_method_transactiondetails_fee_fmt(
         it,
         FfiConverterTypeBitcoinUnit.lower(`unit`),_status)
 }
@@ -20936,7 +20876,7 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
             return FfiConverterBoolean.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_transactiondetails_is_confirmed(
+    UniffiLib.uniffi_cove_fn_method_transactiondetails_is_confirmed(
         it,
         _status)
 }
@@ -20949,7 +20889,7 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
             return FfiConverterBoolean.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_transactiondetails_is_received(
+    UniffiLib.uniffi_cove_fn_method_transactiondetails_is_received(
         it,
         _status)
 }
@@ -20962,7 +20902,7 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
             return FfiConverterBoolean.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_transactiondetails_is_sent(
+    UniffiLib.uniffi_cove_fn_method_transactiondetails_is_sent(
         it,
         _status)
 }
@@ -20977,14 +20917,14 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
     override suspend fun `sentSansFeeFiatFmt`() : kotlin.String {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_method_transactiondetails_sent_sans_fee_fiat_fmt(
+            UniffiLib.uniffi_cove_fn_method_transactiondetails_sent_sans_fee_fiat_fmt(
                 uniffiHandle,
                 
             )
         },
-        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
-        { future, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
-        { future -> UniffiLib.INSTANCE.ffi_cove_rust_future_free_rust_buffer(future) },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
         // lift function
         { FfiConverterString.lift(it) },
         // Error FFI converter
@@ -20996,7 +20936,7 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
             return FfiConverterOptionalString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_transactiondetails_sent_sans_fee_fmt(
+    UniffiLib.uniffi_cove_fn_method_transactiondetails_sent_sans_fee_fmt(
         it,
         FfiConverterTypeBitcoinUnit.lower(`unit`),_status)
 }
@@ -21009,7 +20949,7 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
             return FfiConverterOptionalString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_transactiondetails_transaction_label(
+    UniffiLib.uniffi_cove_fn_method_transactiondetails_transaction_label(
         it,
         _status)
 }
@@ -21022,7 +20962,7 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_transactiondetails_transaction_url(
+    UniffiLib.uniffi_cove_fn_method_transactiondetails_transaction_url(
         it,
         _status)
 }
@@ -21035,7 +20975,7 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
             return FfiConverterTypeTxId.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_transactiondetails_tx_id(
+    UniffiLib.uniffi_cove_fn_method_transactiondetails_tx_id(
         it,
         _status)
 }
@@ -21054,7 +20994,7 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
          fun `previewConfirmedReceived`(): TransactionDetails {
             return FfiConverterTypeTransactionDetails.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_constructor_transactiondetails_preview_confirmed_received(
+    UniffiLib.uniffi_cove_fn_constructor_transactiondetails_preview_confirmed_received(
     
         _status)
 }
@@ -21065,7 +21005,7 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
          fun `previewConfirmedSent`(): TransactionDetails {
             return FfiConverterTypeTransactionDetails.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_constructor_transactiondetails_preview_confirmed_sent(
+    UniffiLib.uniffi_cove_fn_constructor_transactiondetails_preview_confirmed_sent(
     
         _status)
 }
@@ -21076,7 +21016,7 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
          fun `previewNewConfirmed`(): TransactionDetails {
             return FfiConverterTypeTransactionDetails.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_constructor_transactiondetails_preview_new_confirmed(
+    UniffiLib.uniffi_cove_fn_constructor_transactiondetails_preview_new_confirmed(
     
         _status)
 }
@@ -21087,7 +21027,7 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
          fun `previewNewWithLabel`(`label`: kotlin.String = "bike payment"): TransactionDetails {
             return FfiConverterTypeTransactionDetails.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_constructor_transactiondetails_preview_new_with_label(
+    UniffiLib.uniffi_cove_fn_constructor_transactiondetails_preview_new_with_label(
     
         FfiConverterString.lower(`label`),_status)
 }
@@ -21098,7 +21038,7 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
          fun `previewPendingReceived`(): TransactionDetails {
             return FfiConverterTypeTransactionDetails.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_constructor_transactiondetails_preview_pending_received(
+    UniffiLib.uniffi_cove_fn_constructor_transactiondetails_preview_pending_received(
     
         _status)
 }
@@ -21109,7 +21049,7 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
          fun `previewPendingSent`(): TransactionDetails {
             return FfiConverterTypeTransactionDetails.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_constructor_transactiondetails_preview_pending_sent(
+    UniffiLib.uniffi_cove_fn_constructor_transactiondetails_preview_pending_sent(
     
         _status)
 }
@@ -21337,7 +21277,7 @@ open class UnconfirmedTransaction: Disposable, AutoCloseable, UnconfirmedTransac
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_unconfirmedtransaction(handle, status)
+                UniffiLib.uniffi_cove_fn_free_unconfirmedtransaction(handle, status)
             }
         }
     }
@@ -21350,7 +21290,7 @@ open class UnconfirmedTransaction: Disposable, AutoCloseable, UnconfirmedTransac
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_unconfirmedtransaction(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_unconfirmedtransaction(handle, status)
         }
     }
 
@@ -21358,7 +21298,7 @@ open class UnconfirmedTransaction: Disposable, AutoCloseable, UnconfirmedTransac
             return FfiConverterOptionalTypeFiatAmount.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_unconfirmedtransaction_fiat_amount(
+    UniffiLib.uniffi_cove_fn_method_unconfirmedtransaction_fiat_amount(
         it,
         _status)
 }
@@ -21371,7 +21311,7 @@ open class UnconfirmedTransaction: Disposable, AutoCloseable, UnconfirmedTransac
             return FfiConverterTypeTxId.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_unconfirmedtransaction_id(
+    UniffiLib.uniffi_cove_fn_method_unconfirmedtransaction_id(
         it,
         _status)
 }
@@ -21384,7 +21324,7 @@ open class UnconfirmedTransaction: Disposable, AutoCloseable, UnconfirmedTransac
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_unconfirmedtransaction_label(
+    UniffiLib.uniffi_cove_fn_method_unconfirmedtransaction_label(
         it,
         _status)
 }
@@ -21397,7 +21337,7 @@ open class UnconfirmedTransaction: Disposable, AutoCloseable, UnconfirmedTransac
             return FfiConverterULong.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_unconfirmedtransaction_last_seen(
+    UniffiLib.uniffi_cove_fn_method_unconfirmedtransaction_last_seen(
         it,
         _status)
 }
@@ -21410,7 +21350,7 @@ open class UnconfirmedTransaction: Disposable, AutoCloseable, UnconfirmedTransac
             return FfiConverterTypeSentAndReceived.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_unconfirmedtransaction_sent_and_received(
+    UniffiLib.uniffi_cove_fn_method_unconfirmedtransaction_sent_and_received(
         it,
         _status)
 }
@@ -21648,7 +21588,7 @@ open class UnsignedTransaction: Disposable, AutoCloseable, UnsignedTransactionIn
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_unsignedtransaction(handle, status)
+                UniffiLib.uniffi_cove_fn_free_unsignedtransaction(handle, status)
             }
         }
     }
@@ -21661,7 +21601,7 @@ open class UnsignedTransaction: Disposable, AutoCloseable, UnsignedTransactionIn
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_unsignedtransaction(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_unsignedtransaction(handle, status)
         }
     }
 
@@ -21669,7 +21609,7 @@ open class UnsignedTransaction: Disposable, AutoCloseable, UnsignedTransactionIn
             return FfiConverterTypeConfirmDetails.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_unsignedtransaction_details(
+    UniffiLib.uniffi_cove_fn_method_unsignedtransaction_details(
         it,
         _status)
 }
@@ -21682,7 +21622,7 @@ open class UnsignedTransaction: Disposable, AutoCloseable, UnsignedTransactionIn
             return FfiConverterTypeTxId.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_unsignedtransaction_id(
+    UniffiLib.uniffi_cove_fn_method_unsignedtransaction_id(
         it,
         _status)
 }
@@ -21695,7 +21635,7 @@ open class UnsignedTransaction: Disposable, AutoCloseable, UnsignedTransactionIn
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_unsignedtransaction_label(
+    UniffiLib.uniffi_cove_fn_method_unsignedtransaction_label(
         it,
         _status)
 }
@@ -21708,7 +21648,7 @@ open class UnsignedTransaction: Disposable, AutoCloseable, UnsignedTransactionIn
             return FfiConverterTypeAmount.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_unsignedtransaction_sending_amount(
+    UniffiLib.uniffi_cove_fn_method_unsignedtransaction_sending_amount(
         it,
         _status)
 }
@@ -21721,7 +21661,7 @@ open class UnsignedTransaction: Disposable, AutoCloseable, UnsignedTransactionIn
             return FfiConverterTypeAmount.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_unsignedtransaction_spending_amount(
+    UniffiLib.uniffi_cove_fn_method_unsignedtransaction_spending_amount(
         it,
         _status)
 }
@@ -21740,7 +21680,7 @@ open class UnsignedTransaction: Disposable, AutoCloseable, UnsignedTransactionIn
          fun `previewNew`(): UnsignedTransaction {
             return FfiConverterTypeUnsignedTransaction.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_constructor_unsignedtransaction_preview_new(
+    UniffiLib.uniffi_cove_fn_constructor_unsignedtransaction_preview_new(
     
         _status)
 }
@@ -21966,7 +21906,7 @@ open class UnsignedTransactionRecord: Disposable, AutoCloseable, UnsignedTransac
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_unsignedtransactionrecord(handle, status)
+                UniffiLib.uniffi_cove_fn_free_unsignedtransactionrecord(handle, status)
             }
         }
     }
@@ -21979,7 +21919,7 @@ open class UnsignedTransactionRecord: Disposable, AutoCloseable, UnsignedTransac
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_unsignedtransactionrecord(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_unsignedtransactionrecord(handle, status)
         }
     }
 
@@ -21987,7 +21927,7 @@ open class UnsignedTransactionRecord: Disposable, AutoCloseable, UnsignedTransac
             return FfiConverterTypeConfirmDetails.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_unsignedtransactionrecord_confirm_details(
+    UniffiLib.uniffi_cove_fn_method_unsignedtransactionrecord_confirm_details(
         it,
         _status)
 }
@@ -22000,7 +21940,7 @@ open class UnsignedTransactionRecord: Disposable, AutoCloseable, UnsignedTransac
             return FfiConverterULong.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_unsignedtransactionrecord_created_at(
+    UniffiLib.uniffi_cove_fn_method_unsignedtransactionrecord_created_at(
         it,
         _status)
 }
@@ -22013,7 +21953,7 @@ open class UnsignedTransactionRecord: Disposable, AutoCloseable, UnsignedTransac
             return FfiConverterTypeTxId.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_unsignedtransactionrecord_tx_id(
+    UniffiLib.uniffi_cove_fn_method_unsignedtransactionrecord_tx_id(
         it,
         _status)
 }
@@ -22026,7 +21966,7 @@ open class UnsignedTransactionRecord: Disposable, AutoCloseable, UnsignedTransac
             return FfiConverterTypeWalletId.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_unsignedtransactionrecord_wallet_id(
+    UniffiLib.uniffi_cove_fn_method_unsignedtransactionrecord_wallet_id(
         it,
         _status)
 }
@@ -22258,7 +22198,7 @@ open class UnsignedTransactionsTable: Disposable, AutoCloseable, UnsignedTransac
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_unsignedtransactionstable(handle, status)
+                UniffiLib.uniffi_cove_fn_free_unsignedtransactionstable(handle, status)
             }
         }
     }
@@ -22271,7 +22211,7 @@ open class UnsignedTransactionsTable: Disposable, AutoCloseable, UnsignedTransac
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_unsignedtransactionstable(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_unsignedtransactionstable(handle, status)
         }
     }
 
@@ -22279,7 +22219,7 @@ open class UnsignedTransactionsTable: Disposable, AutoCloseable, UnsignedTransac
             return FfiConverterOptionalTypeUnsignedTransactionRecord.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_unsignedtransactionstable_gettx(
+    UniffiLib.uniffi_cove_fn_method_unsignedtransactionstable_gettx(
         it,
         FfiConverterTypeTxId.lower(`txId`),_status)
 }
@@ -22293,7 +22233,7 @@ open class UnsignedTransactionsTable: Disposable, AutoCloseable, UnsignedTransac
             return FfiConverterTypeUnsignedTransactionRecord.lift(
     callWithHandle {
     uniffiRustCallWithError(UnsignedTransactionsTableException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_unsignedtransactionstable_gettxthrow(
+    UniffiLib.uniffi_cove_fn_method_unsignedtransactionstable_gettxthrow(
         it,
         FfiConverterTypeTxId.lower(`txId`),_status)
 }
@@ -22523,7 +22463,7 @@ open class Wallet: Disposable, AutoCloseable, WalletInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_wallet(handle, status)
+                UniffiLib.uniffi_cove_fn_free_wallet(handle, status)
             }
         }
     }
@@ -22536,7 +22476,7 @@ open class Wallet: Disposable, AutoCloseable, WalletInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_wallet(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_wallet(handle, status)
         }
     }
 
@@ -22544,7 +22484,7 @@ open class Wallet: Disposable, AutoCloseable, WalletInterface
             return FfiConverterTypeWalletId.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_wallet_id(
+    UniffiLib.uniffi_cove_fn_method_wallet_id(
         it,
         _status)
 }
@@ -22564,7 +22504,7 @@ open class Wallet: Disposable, AutoCloseable, WalletInterface
     @Throws(WalletException::class) fun `newFromExport`(`export`: HardwareExport): Wallet {
             return FfiConverterTypeWallet.lift(
     uniffiRustCallWithError(WalletException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_constructor_wallet_new_from_export(
+    UniffiLib.uniffi_cove_fn_constructor_wallet_new_from_export(
     
         FfiConverterTypeHardwareExport.lower(`export`),_status)
 }
@@ -22576,7 +22516,7 @@ open class Wallet: Disposable, AutoCloseable, WalletInterface
     @Throws(WalletException::class) fun `newFromXpub`(`xpub`: kotlin.String): Wallet {
             return FfiConverterTypeWallet.lift(
     uniffiRustCallWithError(WalletException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_constructor_wallet_new_from_xpub(
+    UniffiLib.uniffi_cove_fn_constructor_wallet_new_from_xpub(
     
         FfiConverterString.lower(`xpub`),_status)
 }
@@ -22587,7 +22527,7 @@ open class Wallet: Disposable, AutoCloseable, WalletInterface
          fun `previewNewWallet`(): Wallet {
             return FfiConverterTypeWallet.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_constructor_wallet_previewnewwallet(
+    UniffiLib.uniffi_cove_fn_constructor_wallet_previewnewwallet(
     
         _status)
 }
@@ -22805,7 +22745,7 @@ open class WalletDataDb: Disposable, AutoCloseable, WalletDataDbInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_walletdatadb(handle, status)
+                UniffiLib.uniffi_cove_fn_free_walletdatadb(handle, status)
             }
         }
     }
@@ -22818,7 +22758,7 @@ open class WalletDataDb: Disposable, AutoCloseable, WalletDataDbInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_walletdatadb(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_walletdatadb(handle, status)
         }
     }
 
@@ -23041,7 +22981,7 @@ open class WalletKey: Disposable, AutoCloseable, WalletKeyInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_walletkey(handle, status)
+                UniffiLib.uniffi_cove_fn_free_walletkey(handle, status)
             }
         }
     }
@@ -23054,7 +22994,7 @@ open class WalletKey: Disposable, AutoCloseable, WalletKeyInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_walletkey(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_walletkey(handle, status)
         }
     }
 
@@ -23285,7 +23225,7 @@ open class WalletsTable: Disposable, AutoCloseable, WalletsTableInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_walletstable(handle, status)
+                UniffiLib.uniffi_cove_fn_free_walletstable(handle, status)
             }
         }
     }
@@ -23298,7 +23238,7 @@ open class WalletsTable: Disposable, AutoCloseable, WalletsTableInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_walletstable(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_walletstable(handle, status)
         }
     }
 
@@ -23307,7 +23247,7 @@ open class WalletsTable: Disposable, AutoCloseable, WalletsTableInterface
             return FfiConverterSequenceTypeWalletMetadata.lift(
     callWithHandle {
     uniffiRustCallWithError(DatabaseException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_walletstable_all(
+    UniffiLib.uniffi_cove_fn_method_walletstable_all(
         it,
         _status)
 }
@@ -23321,7 +23261,7 @@ open class WalletsTable: Disposable, AutoCloseable, WalletsTableInterface
             return FfiConverterSequenceTypeWalletMetadata.lift(
     callWithHandle {
     uniffiRustCallWithError(DatabaseException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_walletstable_all_sorted_active(
+    UniffiLib.uniffi_cove_fn_method_walletstable_all_sorted_active(
         it,
         _status)
 }
@@ -23335,7 +23275,7 @@ open class WalletsTable: Disposable, AutoCloseable, WalletsTableInterface
             return FfiConverterBoolean.lift(
     callWithHandle {
     uniffiRustCallWithError(DatabaseException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_walletstable_is_empty(
+    UniffiLib.uniffi_cove_fn_method_walletstable_is_empty(
         it,
         _status)
 }
@@ -23349,7 +23289,7 @@ open class WalletsTable: Disposable, AutoCloseable, WalletsTableInterface
             return FfiConverterUShort.lift(
     callWithHandle {
     uniffiRustCallWithError(DatabaseException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_walletstable_len(
+    UniffiLib.uniffi_cove_fn_method_walletstable_len(
         it,
         FfiConverterTypeNetwork.lower(`network`),FfiConverterTypeWalletMode.lower(`mode`),_status)
 }
@@ -23583,7 +23523,7 @@ open class WordValidator: Disposable, AutoCloseable, WordValidatorInterface
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_free_wordvalidator(handle, status)
+                UniffiLib.uniffi_cove_fn_free_wordvalidator(handle, status)
             }
         }
     }
@@ -23596,7 +23536,7 @@ open class WordValidator: Disposable, AutoCloseable, WordValidatorInterface
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_wordvalidator(handle, status)
+            UniffiLib.uniffi_cove_fn_clone_wordvalidator(handle, status)
         }
     }
 
@@ -23604,7 +23544,7 @@ open class WordValidator: Disposable, AutoCloseable, WordValidatorInterface
             return FfiConverterBoolean.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_wordvalidator_is_complete(
+    UniffiLib.uniffi_cove_fn_method_wordvalidator_is_complete(
         it,
         FfiConverterUByte.lower(`wordNumber`),_status)
 }
@@ -23617,7 +23557,7 @@ open class WordValidator: Disposable, AutoCloseable, WordValidatorInterface
             return FfiConverterBoolean.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_wordvalidator_is_word_correct(
+    UniffiLib.uniffi_cove_fn_method_wordvalidator_is_word_correct(
         it,
         FfiConverterString.lower(`word`),FfiConverterUByte.lower(`for`),_status)
 }
@@ -23630,7 +23570,7 @@ open class WordValidator: Disposable, AutoCloseable, WordValidatorInterface
             return FfiConverterSequenceString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_method_wordvalidator_possible_words(
+    UniffiLib.uniffi_cove_fn_method_wordvalidator_possible_words(
         it,
         FfiConverterUByte.lower(`for`),_status)
 }
@@ -23649,7 +23589,7 @@ open class WordValidator: Disposable, AutoCloseable, WordValidatorInterface
          fun `preview`(`preview`: kotlin.Boolean, `numberOfWords`: NumberOfBip39Words? = null): WordValidator {
             return FfiConverterTypeWordValidator.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_constructor_wordvalidator_preview(
+    UniffiLib.uniffi_cove_fn_constructor_wordvalidator_preview(
     
         FfiConverterBoolean.lower(`preview`),FfiConverterOptionalTypeNumberOfBip39Words.lower(`numberOfWords`),_status)
 }
@@ -24936,7 +24876,7 @@ sealed class AfterPinAction: Disposable  {
     
     
     data class Sign(
-        val v1: Psbt) : AfterPinAction()
+        val v1: org.bitcoinppl.cove_core.types.Psbt) : AfterPinAction()
         
     {
         
@@ -25041,8 +24981,8 @@ public object FfiConverterTypeAfterPinAction : FfiConverterRustBuffer<AfterPinAc
 
 sealed class AmountOrMax: Disposable  {
     
-    data class Amt(
-        val v1: Amount) : AmountOrMax()
+    data class Amount(
+        val v1: org.bitcoinppl.cove_core.types.Amount) : AmountOrMax()
         
     {
         
@@ -25058,7 +24998,7 @@ sealed class AmountOrMax: Disposable  {
     @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
     override fun destroy() {
         when(this) {
-            is AmountOrMax.Amt -> {
+            is AmountOrMax.Amount -> {
                 
     Disposable.destroy(
         this.v1
@@ -25079,7 +25019,7 @@ sealed class AmountOrMax: Disposable  {
 public object FfiConverterTypeAmountOrMax : FfiConverterRustBuffer<AmountOrMax>{
     override fun read(buf: ByteBuffer): AmountOrMax {
         return when(buf.getInt()) {
-            1 -> AmountOrMax.Amt(
+            1 -> AmountOrMax.Amount(
                 FfiConverterTypeAmount.read(buf),
                 )
             2 -> AmountOrMax.Max
@@ -25088,7 +25028,7 @@ public object FfiConverterTypeAmountOrMax : FfiConverterRustBuffer<AmountOrMax>{
     }
 
     override fun allocationSize(value: AmountOrMax) = when(value) {
-        is AmountOrMax.Amt -> {
+        is AmountOrMax.Amount -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
@@ -25105,7 +25045,7 @@ public object FfiConverterTypeAmountOrMax : FfiConverterRustBuffer<AmountOrMax>{
 
     override fun write(value: AmountOrMax, buf: ByteBuffer) {
         when(value) {
-            is AmountOrMax.Amt -> {
+            is AmountOrMax.Amount -> {
                 buf.putInt(1)
                 FfiConverterTypeAmount.write(value.v1, buf)
                 Unit
@@ -25156,7 +25096,7 @@ public object FfiConverterTypeApiType: FfiConverterRustBuffer<ApiType> {
 sealed class AppAction: Disposable  {
     
     data class UpdateRoute(
-        val `routes`: List<Route>) : AppAction()
+        val `routes`: List<org.bitcoinppl.cove_core.Route>) : AppAction()
         
     {
         
@@ -25165,7 +25105,7 @@ sealed class AppAction: Disposable  {
     }
     
     data class PushRoute(
-        val v1: Route) : AppAction()
+        val v1: org.bitcoinppl.cove_core.Route) : AppAction()
         
     {
         
@@ -25174,7 +25114,7 @@ sealed class AppAction: Disposable  {
     }
     
     data class ChangeNetwork(
-        val `network`: Network) : AppAction()
+        val `network`: org.bitcoinppl.cove_core.types.Network) : AppAction()
         
     {
         
@@ -25183,7 +25123,7 @@ sealed class AppAction: Disposable  {
     }
     
     data class ChangeColorScheme(
-        val v1: ColorSchemeSelection) : AppAction()
+        val v1: org.bitcoinppl.cove_core.types.ColorSchemeSelection) : AppAction()
         
     {
         
@@ -25192,7 +25132,7 @@ sealed class AppAction: Disposable  {
     }
     
     data class ChangeFiatCurrency(
-        val v1: FiatCurrency) : AppAction()
+        val v1: org.bitcoinppl.cove_core.FiatCurrency) : AppAction()
         
     {
         
@@ -25201,7 +25141,7 @@ sealed class AppAction: Disposable  {
     }
     
     data class SetSelectedNode(
-        val v1: Node) : AppAction()
+        val v1: org.bitcoinppl.cove_core.Node) : AppAction()
         
     {
         
@@ -25506,8 +25446,8 @@ public object FfiConverterTypeAppError : FfiConverterRustBuffer<AppException> {
 sealed class AppStateReconcileMessage: Disposable  {
     
     data class DefaultRouteChanged(
-        val v1: Route, 
-        val v2: List<Route>) : AppStateReconcileMessage()
+        val v1: org.bitcoinppl.cove_core.Route, 
+        val v2: List<org.bitcoinppl.cove_core.Route>) : AppStateReconcileMessage()
         
     {
         
@@ -25516,7 +25456,7 @@ sealed class AppStateReconcileMessage: Disposable  {
     }
     
     data class RouteUpdated(
-        val v1: List<Route>) : AppStateReconcileMessage()
+        val v1: List<org.bitcoinppl.cove_core.Route>) : AppStateReconcileMessage()
         
     {
         
@@ -25528,7 +25468,7 @@ sealed class AppStateReconcileMessage: Disposable  {
     
     
     data class ColorSchemeChanged(
-        val v1: ColorSchemeSelection) : AppStateReconcileMessage()
+        val v1: org.bitcoinppl.cove_core.types.ColorSchemeSelection) : AppStateReconcileMessage()
         
     {
         
@@ -25537,7 +25477,7 @@ sealed class AppStateReconcileMessage: Disposable  {
     }
     
     data class SelectedNodeChanged(
-        val v1: Node) : AppStateReconcileMessage()
+        val v1: org.bitcoinppl.cove_core.Node) : AppStateReconcileMessage()
         
     {
         
@@ -25546,7 +25486,7 @@ sealed class AppStateReconcileMessage: Disposable  {
     }
     
     data class SelectedNetworkChanged(
-        val v1: Network) : AppStateReconcileMessage()
+        val v1: org.bitcoinppl.cove_core.types.Network) : AppStateReconcileMessage()
         
     {
         
@@ -25555,7 +25495,7 @@ sealed class AppStateReconcileMessage: Disposable  {
     }
     
     data class FiatPricesChanged(
-        val v1: PriceResponse) : AppStateReconcileMessage()
+        val v1: org.bitcoinppl.cove_core.PriceResponse) : AppStateReconcileMessage()
         
     {
         
@@ -25564,7 +25504,7 @@ sealed class AppStateReconcileMessage: Disposable  {
     }
     
     data class FeesChanged(
-        val v1: FeeResponse) : AppStateReconcileMessage()
+        val v1: org.bitcoinppl.cove_core.FeeResponse) : AppStateReconcileMessage()
         
     {
         
@@ -25573,7 +25513,7 @@ sealed class AppStateReconcileMessage: Disposable  {
     }
     
     data class FiatCurrencyChanged(
-        val v1: FiatCurrency) : AppStateReconcileMessage()
+        val v1: org.bitcoinppl.cove_core.FiatCurrency) : AppStateReconcileMessage()
         
     {
         
@@ -25582,7 +25522,7 @@ sealed class AppStateReconcileMessage: Disposable  {
     }
     
     data class WalletModeChanged(
-        val v1: WalletMode) : AppStateReconcileMessage()
+        val v1: org.bitcoinppl.cove_core.WalletMode) : AppStateReconcileMessage()
         
     {
         
@@ -25591,7 +25531,7 @@ sealed class AppStateReconcileMessage: Disposable  {
     }
     
     data class PushedRoute(
-        val v1: Route) : AppStateReconcileMessage()
+        val v1: org.bitcoinppl.cove_core.Route) : AppStateReconcileMessage()
         
     {
         
@@ -26032,7 +25972,7 @@ public object FfiConverterTypeAuthError : FfiConverterRustBuffer<AuthException> 
 sealed class AuthManagerAction {
     
     data class UpdateAuthType(
-        val v1: AuthType) : AuthManagerAction()
+        val v1: org.bitcoinppl.cove_core.AuthType) : AuthManagerAction()
         
     {
         
@@ -26281,7 +26221,7 @@ public object FfiConverterTypeAuthManagerError : FfiConverterRustBuffer<AuthMana
 sealed class AuthManagerReconcileMessage {
     
     data class AuthTypeChanged(
-        val v1: AuthType) : AuthManagerReconcileMessage()
+        val v1: org.bitcoinppl.cove_core.AuthType) : AuthManagerReconcileMessage()
         
     {
         
@@ -26609,7 +26549,7 @@ sealed class ButtonPresentation {
     
     
     data class Selected(
-        val v1: ListSortDirection) : ButtonPresentation()
+        val v1: org.bitcoinppl.cove_core.ListSortDirection) : ButtonPresentation()
         
     {
         
@@ -26930,7 +26870,7 @@ public object FfiConverterTypeCkTapError : FfiConverterRustBuffer<CkTapException
 sealed class CoinControlListSort {
     
     data class Date(
-        val v1: ListSortDirection) : CoinControlListSort()
+        val v1: org.bitcoinppl.cove_core.ListSortDirection) : CoinControlListSort()
         
     {
         
@@ -26939,7 +26879,7 @@ sealed class CoinControlListSort {
     }
     
     data class Name(
-        val v1: ListSortDirection) : CoinControlListSort()
+        val v1: org.bitcoinppl.cove_core.ListSortDirection) : CoinControlListSort()
         
     {
         
@@ -26948,7 +26888,7 @@ sealed class CoinControlListSort {
     }
     
     data class Amount(
-        val v1: ListSortDirection) : CoinControlListSort()
+        val v1: org.bitcoinppl.cove_core.ListSortDirection) : CoinControlListSort()
         
     {
         
@@ -26957,7 +26897,7 @@ sealed class CoinControlListSort {
     }
     
     data class Change(
-        val v1: UtxoType) : CoinControlListSort()
+        val v1: org.bitcoinppl.cove_core.types.UtxoType) : CoinControlListSort()
         
     {
         
@@ -27088,7 +27028,7 @@ public object FfiConverterTypeCoinControlListSortKey: FfiConverterRustBuffer<Coi
 sealed class CoinControlListSortState {
     
     data class Active(
-        val v1: CoinControlListSort) : CoinControlListSortState()
+        val v1: org.bitcoinppl.cove_core.CoinControlListSort) : CoinControlListSortState()
         
     {
         
@@ -27097,7 +27037,7 @@ sealed class CoinControlListSortState {
     }
     
     data class Inactive(
-        val v1: CoinControlListSort) : CoinControlListSortState()
+        val v1: org.bitcoinppl.cove_core.CoinControlListSort) : CoinControlListSortState()
         
     {
         
@@ -27166,7 +27106,7 @@ public object FfiConverterTypeCoinControlListSortState : FfiConverterRustBuffer<
 sealed class CoinControlManagerAction: Disposable  {
     
     data class ChangeSort(
-        val v1: CoinControlListSortKey) : CoinControlManagerAction()
+        val v1: org.bitcoinppl.cove_core.CoinControlListSortKey) : CoinControlManagerAction()
         
     {
         
@@ -27184,7 +27124,7 @@ sealed class CoinControlManagerAction: Disposable  {
     
     
     data class NotifySelectedUtxosChanged(
-        val v1: List<OutPoint>) : CoinControlManagerAction()
+        val v1: List<org.bitcoinppl.cove_core.types.OutPoint>) : CoinControlManagerAction()
         
     {
         
@@ -27346,7 +27286,7 @@ sealed class CoinControlManagerReconcileMessage: Disposable  {
     
     
     data class UpdateSort(
-        val v1: CoinControlListSort) : CoinControlManagerReconcileMessage()
+        val v1: org.bitcoinppl.cove_core.CoinControlListSort) : CoinControlManagerReconcileMessage()
         
     {
         
@@ -27355,7 +27295,7 @@ sealed class CoinControlManagerReconcileMessage: Disposable  {
     }
     
     data class UpdateUtxos(
-        val v1: List<Utxo>) : CoinControlManagerReconcileMessage()
+        val v1: List<org.bitcoinppl.cove_core.types.Utxo>) : CoinControlManagerReconcileMessage()
         
     {
         
@@ -27373,8 +27313,8 @@ sealed class CoinControlManagerReconcileMessage: Disposable  {
     }
     
     data class UpdateSelectedUtxos(
-        val `utxos`: List<OutPoint>, 
-        val `totalValue`: Amount) : CoinControlManagerReconcileMessage()
+        val `utxos`: List<org.bitcoinppl.cove_core.types.OutPoint>, 
+        val `totalValue`: org.bitcoinppl.cove_core.types.Amount) : CoinControlManagerReconcileMessage()
         
     {
         
@@ -27383,7 +27323,7 @@ sealed class CoinControlManagerReconcileMessage: Disposable  {
     }
     
     data class UpdateTotalSelectedAmount(
-        val v1: Amount) : CoinControlManagerReconcileMessage()
+        val v1: org.bitcoinppl.cove_core.types.Amount) : CoinControlManagerReconcileMessage()
         
     {
         
@@ -27392,7 +27332,7 @@ sealed class CoinControlManagerReconcileMessage: Disposable  {
     }
     
     data class UpdateUnit(
-        val v1: BitcoinUnit) : CoinControlManagerReconcileMessage()
+        val v1: org.bitcoinppl.cove_core.types.BitcoinUnit) : CoinControlManagerReconcileMessage()
         
     {
         
@@ -27586,7 +27526,7 @@ public object FfiConverterTypeCoinControlManagerReconcileMessage : FfiConverterR
 sealed class CoinControlRoute {
     
     data class List(
-        val v1: WalletId) : CoinControlRoute()
+        val v1: org.bitcoinppl.cove_core.types.WalletId) : CoinControlRoute()
         
     {
         
@@ -28257,7 +28197,7 @@ sealed class DiscoveryState: Disposable  {
     
     
     data class StartedJson(
-        val v1: FoundJson) : DiscoveryState()
+        val v1: org.bitcoinppl.cove_core.FoundJson) : DiscoveryState()
         
     {
         
@@ -28269,8 +28209,8 @@ sealed class DiscoveryState: Disposable  {
     
     
     data class FoundAddressesFromJson(
-        val v1: List<FoundAddress>, 
-        val v2: FoundJson) : DiscoveryState()
+        val v1: List<org.bitcoinppl.cove_core.FoundAddress>, 
+        val v2: org.bitcoinppl.cove_core.FoundJson) : DiscoveryState()
         
     {
         
@@ -28279,7 +28219,7 @@ sealed class DiscoveryState: Disposable  {
     }
     
     data class FoundAddressesFromMnemonic(
-        val v1: List<FoundAddress>) : DiscoveryState()
+        val v1: List<org.bitcoinppl.cove_core.FoundAddress>) : DiscoveryState()
         
     {
         
@@ -28837,7 +28777,7 @@ sealed class GlobalConfigKey {
     
     
     data class SelectedNode(
-        val v1: Network) : GlobalConfigKey()
+        val v1: org.bitcoinppl.cove_core.types.Network) : GlobalConfigKey()
         
     {
         
@@ -29255,7 +29195,7 @@ public object FfiConverterTypeGlobalFlagTableError : FfiConverterRustBuffer<Glob
 sealed class HardwareWalletMetadata: Disposable  {
     
     data class TapSignerCard(
-        val v1: TapSigner) : HardwareWalletMetadata()
+        val v1: org.bitcoinppl.cove_core.tapcard.TapSigner) : HardwareWalletMetadata()
         
     {
         
@@ -29482,7 +29422,7 @@ sealed class HotWalletRoute {
     
     
     data class Create(
-        val v1: NumberOfBip39Words) : HotWalletRoute()
+        val v1: org.bitcoinppl.cove_core.NumberOfBip39Words) : HotWalletRoute()
         
     {
         
@@ -29491,8 +29431,8 @@ sealed class HotWalletRoute {
     }
     
     data class Import(
-        val v1: NumberOfBip39Words, 
-        val v2: ImportType) : HotWalletRoute()
+        val v1: org.bitcoinppl.cove_core.NumberOfBip39Words, 
+        val v2: org.bitcoinppl.cove_core.ImportType) : HotWalletRoute()
         
     {
         
@@ -29501,7 +29441,7 @@ sealed class HotWalletRoute {
     }
     
     data class VerifyWords(
-        val v1: WalletId) : HotWalletRoute()
+        val v1: org.bitcoinppl.cove_core.types.WalletId) : HotWalletRoute()
         
     {
         
@@ -29852,7 +29792,7 @@ public object FfiConverterTypeImportWalletManagerReconcileMessage: FfiConverterR
 sealed class InsertOrUpdate {
     
     data class Insert(
-        val v1: Timestamp) : InsertOrUpdate()
+        val v1: org.bitcoinppl.cove_core.Timestamp) : InsertOrUpdate()
         
     {
         
@@ -29861,7 +29801,7 @@ sealed class InsertOrUpdate {
     }
     
     data class Update(
-        val v1: Timestamp) : InsertOrUpdate()
+        val v1: org.bitcoinppl.cove_core.Timestamp) : InsertOrUpdate()
         
     {
         
@@ -30432,7 +30372,7 @@ public object FfiConverterTypeMnemonicParseError : FfiConverterRustBuffer<Mnemon
 sealed class MultiFormat: Disposable  {
     
     data class Address(
-        val v1: AddressWithNetwork) : MultiFormat()
+        val v1: org.bitcoinppl.cove_core.types.AddressWithNetwork) : MultiFormat()
         
     {
         
@@ -30441,7 +30381,7 @@ sealed class MultiFormat: Disposable  {
     }
     
     data class Hardware(
-        val v1: HardwareExport) : MultiFormat()
+        val v1: org.bitcoinppl.cove_core.HardwareExport) : MultiFormat()
         
     {
         
@@ -30450,7 +30390,7 @@ sealed class MultiFormat: Disposable  {
     }
     
     data class Mnem(
-        val v1: Mnemonic) : MultiFormat()
+        val v1: org.bitcoinppl.cove_core.Mnemonic) : MultiFormat()
         
     {
         
@@ -30459,7 +30399,7 @@ sealed class MultiFormat: Disposable  {
     }
     
     data class Transaction(
-        val v1: BitcoinTransaction) : MultiFormat()
+        val v1: org.bitcoinppl.cove_core.BitcoinTransaction) : MultiFormat()
         
     {
         
@@ -30468,7 +30408,7 @@ sealed class MultiFormat: Disposable  {
     }
     
     data class Labels(
-        val v1: Bip329Labels) : MultiFormat()
+        val v1: org.bitcoinppl.cove_core.Bip329Labels) : MultiFormat()
         
     {
         
@@ -30480,7 +30420,7 @@ sealed class MultiFormat: Disposable  {
      * TAPSIGNER has not been initialized yet
      */
     data class TapSignerReady(
-        val v1: TapSigner) : MultiFormat()
+        val v1: org.bitcoinppl.cove_core.tapcard.TapSigner) : MultiFormat()
         
     {
         
@@ -30492,7 +30432,7 @@ sealed class MultiFormat: Disposable  {
      * TAPSIGNER has not been initialized yet
      */
     data class TapSignerUnused(
-        val v1: TapSigner) : MultiFormat()
+        val v1: org.bitcoinppl.cove_core.tapcard.TapSigner) : MultiFormat()
         
     {
         
@@ -31013,7 +30953,7 @@ public object FfiConverterTypeMultiQrError : FfiConverterRustBuffer<MultiQrExcep
 sealed class MultiQrScanResult: Disposable  {
     
     data class Seed(
-        val v1: SeedQr) : MultiQrScanResult()
+        val v1: org.bitcoinppl.cove_core.SeedQr) : MultiQrScanResult()
         
     {
         
@@ -31031,7 +30971,7 @@ sealed class MultiQrScanResult: Disposable  {
     }
     
     data class CompletedBBqr(
-        val v1: BbqrJoined) : MultiQrScanResult()
+        val v1: org.bitcoinppl.cove_core.BbqrJoined) : MultiQrScanResult()
         
     {
         
@@ -31176,7 +31116,7 @@ sealed class NewWalletRoute {
     
     
     data class HotWallet(
-        val v1: HotWalletRoute) : NewWalletRoute()
+        val v1: org.bitcoinppl.cove_core.HotWalletRoute) : NewWalletRoute()
         
     {
         
@@ -31185,7 +31125,7 @@ sealed class NewWalletRoute {
     }
     
     data class ColdWallet(
-        val v1: ColdWalletRoute) : NewWalletRoute()
+        val v1: org.bitcoinppl.cove_core.ColdWalletRoute) : NewWalletRoute()
         
     {
         
@@ -31265,7 +31205,7 @@ public object FfiConverterTypeNewWalletRoute : FfiConverterRustBuffer<NewWalletR
 sealed class NodeSelection {
     
     data class Preset(
-        val v1: Node) : NodeSelection()
+        val v1: org.bitcoinppl.cove_core.Node) : NodeSelection()
         
     {
         
@@ -31274,7 +31214,7 @@ sealed class NodeSelection {
     }
     
     data class Custom(
-        val v1: Node) : NodeSelection()
+        val v1: org.bitcoinppl.cove_core.Node) : NodeSelection()
         
     {
         
@@ -31495,7 +31435,7 @@ public object FfiConverterTypeNumberOfBip39Words: FfiConverterRustBuffer<NumberO
 sealed class PendingOrConfirmed {
     
     data class Pending(
-        val v1: PendingDetails) : PendingOrConfirmed()
+        val v1: org.bitcoinppl.cove_core.PendingDetails) : PendingOrConfirmed()
         
     {
         
@@ -31504,7 +31444,7 @@ sealed class PendingOrConfirmed {
     }
     
     data class Confirmed(
-        val v1: ConfirmedDetails) : PendingOrConfirmed()
+        val v1: org.bitcoinppl.cove_core.ConfirmedDetails) : PendingOrConfirmed()
         
     {
         
@@ -31573,7 +31513,7 @@ public object FfiConverterTypePendingOrConfirmed : FfiConverterRustBuffer<Pendin
 sealed class PendingWalletManagerAction {
     
     data class UpdateWords(
-        val v1: NumberOfBip39Words) : PendingWalletManagerAction()
+        val v1: org.bitcoinppl.cove_core.NumberOfBip39Words) : PendingWalletManagerAction()
         
     {
         
@@ -31707,7 +31647,7 @@ public object FfiConverterTypePendingWalletManagerError : FfiConverterRustBuffer
 sealed class PendingWalletManagerReconcileMessage {
     
     data class Words(
-        val v1: NumberOfBip39Words) : PendingWalletManagerReconcileMessage()
+        val v1: org.bitcoinppl.cove_core.NumberOfBip39Words) : PendingWalletManagerReconcileMessage()
         
     {
         
@@ -31761,7 +31701,7 @@ public object FfiConverterTypePendingWalletManagerReconcileMessage : FfiConverte
 sealed class Route: Disposable  {
     
     data class LoadAndReset(
-        val `resetTo`: List<BoxedRoute>, 
+        val `resetTo`: List<org.bitcoinppl.cove_core.BoxedRoute>, 
         val `afterMillis`: kotlin.UInt) : Route()
         
     {
@@ -31774,7 +31714,7 @@ sealed class Route: Disposable  {
     
     
     data class SelectedWallet(
-        val v1: WalletId) : Route()
+        val v1: org.bitcoinppl.cove_core.types.WalletId) : Route()
         
     {
         
@@ -31783,7 +31723,7 @@ sealed class Route: Disposable  {
     }
     
     data class NewWallet(
-        val v1: NewWalletRoute) : Route()
+        val v1: org.bitcoinppl.cove_core.NewWalletRoute) : Route()
         
     {
         
@@ -31792,7 +31732,7 @@ sealed class Route: Disposable  {
     }
     
     data class Settings(
-        val v1: SettingsRoute) : Route()
+        val v1: org.bitcoinppl.cove_core.SettingsRoute) : Route()
         
     {
         
@@ -31801,7 +31741,7 @@ sealed class Route: Disposable  {
     }
     
     data class SecretWords(
-        val v1: WalletId) : Route()
+        val v1: org.bitcoinppl.cove_core.types.WalletId) : Route()
         
     {
         
@@ -31810,8 +31750,8 @@ sealed class Route: Disposable  {
     }
     
     data class TxDetails(
-        val `id`: WalletId, 
-        val `details`: TransactionDetails) : Route()
+        val `id`: org.bitcoinppl.cove_core.types.WalletId, 
+        val `details`: org.bitcoinppl.cove_core.TransactionDetails) : Route()
         
     {
         
@@ -31820,7 +31760,7 @@ sealed class Route: Disposable  {
     }
     
     data class Send(
-        val v1: SendRoute) : Route()
+        val v1: org.bitcoinppl.cove_core.SendRoute) : Route()
         
     {
         
@@ -31829,7 +31769,7 @@ sealed class Route: Disposable  {
     }
     
     data class CoinControl(
-        val v1: CoinControlRoute) : Route()
+        val v1: org.bitcoinppl.cove_core.CoinControlRoute) : Route()
         
     {
         
@@ -32074,7 +32014,7 @@ sealed class ScanState {
     
     
     data class Scanning(
-        val v1: ScanningInfo) : ScanState()
+        val v1: org.bitcoinppl.cove_core.ScanningInfo) : ScanState()
         
     {
         
@@ -32153,7 +32093,7 @@ public object FfiConverterTypeScanState : FfiConverterRustBuffer<ScanState>{
 sealed class ScannerResponse {
     
     data class FoundAddresses(
-        val v1: List<FoundAddress>) : ScannerResponse()
+        val v1: List<org.bitcoinppl.cove_core.FoundAddress>) : ScannerResponse()
         
     {
         
@@ -32337,7 +32277,7 @@ public object FfiConverterTypeSeedQrError : FfiConverterRustBuffer<SeedQrExcepti
 sealed class SendFlowAlertState {
     
     data class Error(
-        val v1: SendFlowException) : SendFlowAlertState()
+        val v1: org.bitcoinppl.cove_core.SendFlowException) : SendFlowAlertState()
         
     {
         
@@ -32422,7 +32362,7 @@ sealed class SendFlowEnterMode: Disposable  {
     
     
     data class CoinControl(
-        val v1: SendFlowCoinControlMode) : SendFlowEnterMode()
+        val v1: org.bitcoinppl.cove_core.SendFlowCoinControlMode) : SendFlowEnterMode()
         
     {
         
@@ -32890,7 +32830,7 @@ sealed class SendFlowFiatOnChangeError {
     }
     
     data class Converter(
-        val v1: ConverterException) : SendFlowFiatOnChangeError()
+        val v1: org.bitcoinppl.cove_core.ConverterException) : SendFlowFiatOnChangeError()
         
     {
         
@@ -32971,7 +32911,7 @@ sealed class SendFlowManagerAction: Disposable  {
     }
     
     data class ChangeSetAmountFocusField(
-        val v1: SetAmountFocusField?) : SendFlowManagerAction()
+        val v1: org.bitcoinppl.cove_core.SetAmountFocusField?) : SendFlowManagerAction()
         
     {
         
@@ -32989,7 +32929,7 @@ sealed class SendFlowManagerAction: Disposable  {
     
     
     data class SetCoinControlMode(
-        val v1: List<Utxo>) : SendFlowManagerAction()
+        val v1: List<org.bitcoinppl.cove_core.types.Utxo>) : SendFlowManagerAction()
         
     {
         
@@ -33001,7 +32941,7 @@ sealed class SendFlowManagerAction: Disposable  {
     
     
     data class SelectFeeRate(
-        val v1: FeeRateOptionWithTotalFee) : SendFlowManagerAction()
+        val v1: org.bitcoinppl.cove_core.types.FeeRateOptionWithTotalFee) : SendFlowManagerAction()
         
     {
         
@@ -33037,8 +32977,8 @@ sealed class SendFlowManagerAction: Disposable  {
     }
     
     data class NotifySelectedUnitedChanged(
-        val `old`: BitcoinUnit, 
-        val `new`: BitcoinUnit) : SendFlowManagerAction()
+        val `old`: org.bitcoinppl.cove_core.types.BitcoinUnit, 
+        val `new`: org.bitcoinppl.cove_core.types.BitcoinUnit) : SendFlowManagerAction()
         
     {
         
@@ -33047,8 +32987,8 @@ sealed class SendFlowManagerAction: Disposable  {
     }
     
     data class NotifyBtcOrFiatChanged(
-        val `old`: FiatOrBtc, 
-        val `new`: FiatOrBtc) : SendFlowManagerAction()
+        val `old`: org.bitcoinppl.cove_core.FiatOrBtc, 
+        val `new`: org.bitcoinppl.cove_core.FiatOrBtc) : SendFlowManagerAction()
         
     {
         
@@ -33067,7 +33007,7 @@ sealed class SendFlowManagerAction: Disposable  {
     }
     
     data class NotifyPricesChanged(
-        val v1: PriceResponse) : SendFlowManagerAction()
+        val v1: org.bitcoinppl.cove_core.PriceResponse) : SendFlowManagerAction()
         
     {
         
@@ -33076,8 +33016,8 @@ sealed class SendFlowManagerAction: Disposable  {
     }
     
     data class NotifyFocusFieldChanged(
-        val `old`: SetAmountFocusField?, 
-        val `new`: SetAmountFocusField?) : SendFlowManagerAction()
+        val `old`: org.bitcoinppl.cove_core.SetAmountFocusField?, 
+        val `new`: org.bitcoinppl.cove_core.SetAmountFocusField?) : SendFlowManagerAction()
         
     {
         
@@ -33086,7 +33026,7 @@ sealed class SendFlowManagerAction: Disposable  {
     }
     
     data class NotifyAddressChanged(
-        val v1: Address) : SendFlowManagerAction()
+        val v1: org.bitcoinppl.cove_core.types.Address) : SendFlowManagerAction()
         
     {
         
@@ -33095,7 +33035,7 @@ sealed class SendFlowManagerAction: Disposable  {
     }
     
     data class NotifyAmountChanged(
-        val v1: Amount) : SendFlowManagerAction()
+        val v1: org.bitcoinppl.cove_core.types.Amount) : SendFlowManagerAction()
         
     {
         
@@ -33123,7 +33063,7 @@ sealed class SendFlowManagerAction: Disposable  {
     }
     
     data class ChangeFeeRateOptions(
-        val v1: FeeRateOptionsWithTotalFee) : SendFlowManagerAction()
+        val v1: org.bitcoinppl.cove_core.types.FeeRateOptionsWithTotalFee) : SendFlowManagerAction()
         
     {
         
@@ -33657,7 +33597,7 @@ sealed class SendFlowManagerReconcileMessage: Disposable  {
     }
     
     data class UpdateAddress(
-        val v1: Address?) : SendFlowManagerReconcileMessage()
+        val v1: org.bitcoinppl.cove_core.types.Address?) : SendFlowManagerReconcileMessage()
         
     {
         
@@ -33666,7 +33606,7 @@ sealed class SendFlowManagerReconcileMessage: Disposable  {
     }
     
     data class SetMaxSelected(
-        val v1: Amount) : SendFlowManagerReconcileMessage()
+        val v1: org.bitcoinppl.cove_core.types.Amount) : SendFlowManagerReconcileMessage()
         
     {
         
@@ -33696,7 +33636,7 @@ sealed class SendFlowManagerReconcileMessage: Disposable  {
     }
     
     data class UpdateFocusField(
-        val v1: SetAmountFocusField?) : SendFlowManagerReconcileMessage()
+        val v1: org.bitcoinppl.cove_core.SetAmountFocusField?) : SendFlowManagerReconcileMessage()
         
     {
         
@@ -33705,7 +33645,7 @@ sealed class SendFlowManagerReconcileMessage: Disposable  {
     }
     
     data class UpdateSelectedFeeRate(
-        val v1: FeeRateOptionWithTotalFee) : SendFlowManagerReconcileMessage()
+        val v1: org.bitcoinppl.cove_core.types.FeeRateOptionWithTotalFee) : SendFlowManagerReconcileMessage()
         
     {
         
@@ -33714,7 +33654,7 @@ sealed class SendFlowManagerReconcileMessage: Disposable  {
     }
     
     data class UpdateFeeRateOptions(
-        val v1: FeeRateOptionsWithTotalFee) : SendFlowManagerReconcileMessage()
+        val v1: org.bitcoinppl.cove_core.types.FeeRateOptionsWithTotalFee) : SendFlowManagerReconcileMessage()
         
     {
         
@@ -33726,7 +33666,7 @@ sealed class SendFlowManagerReconcileMessage: Disposable  {
     
     
     data class SetAlert(
-        val v1: SendFlowAlertState) : SendFlowManagerReconcileMessage()
+        val v1: org.bitcoinppl.cove_core.SendFlowAlertState) : SendFlowManagerReconcileMessage()
         
     {
         
@@ -34055,9 +33995,9 @@ public object FfiConverterTypeSendFlowManagerReconcileMessage : FfiConverterRust
 sealed class SendRoute: Disposable  {
     
     data class SetAmount(
-        val `id`: WalletId, 
-        val `address`: Address?, 
-        val `amount`: Amount?) : SendRoute()
+        val `id`: org.bitcoinppl.cove_core.types.WalletId, 
+        val `address`: org.bitcoinppl.cove_core.types.Address?, 
+        val `amount`: org.bitcoinppl.cove_core.types.Amount?) : SendRoute()
         
     {
         
@@ -34066,8 +34006,8 @@ sealed class SendRoute: Disposable  {
     }
     
     data class CoinControlSetAmount(
-        val `id`: WalletId, 
-        val `utxos`: List<Utxo>) : SendRoute()
+        val `id`: org.bitcoinppl.cove_core.types.WalletId, 
+        val `utxos`: List<org.bitcoinppl.cove_core.types.Utxo>) : SendRoute()
         
     {
         
@@ -34076,8 +34016,8 @@ sealed class SendRoute: Disposable  {
     }
     
     data class HardwareExport(
-        val `id`: WalletId, 
-        val `details`: ConfirmDetails) : SendRoute()
+        val `id`: org.bitcoinppl.cove_core.types.WalletId, 
+        val `details`: org.bitcoinppl.cove_core.types.ConfirmDetails) : SendRoute()
         
     {
         
@@ -34086,7 +34026,7 @@ sealed class SendRoute: Disposable  {
     }
     
     data class Confirm(
-        val v1: SendRouteConfirmArgs) : SendRoute()
+        val v1: org.bitcoinppl.cove_core.SendRouteConfirmArgs) : SendRoute()
         
     {
         
@@ -34360,8 +34300,8 @@ sealed class SettingsRoute {
     
     
     data class Wallet(
-        val `id`: WalletId, 
-        val `route`: WalletSettingsRoute) : SettingsRoute()
+        val `id`: org.bitcoinppl.cove_core.types.WalletId, 
+        val `route`: org.bitcoinppl.cove_core.WalletSettingsRoute) : SettingsRoute()
         
     {
         
@@ -34487,7 +34427,7 @@ public object FfiConverterTypeSettingsRoute : FfiConverterRustBuffer<SettingsRou
 sealed class SetupCmdResponse: Disposable  {
     
     data class Init(
-        val v1: ContinueFromInit) : SetupCmdResponse()
+        val v1: org.bitcoinppl.cove_core.ContinueFromInit) : SetupCmdResponse()
         
     {
         
@@ -34496,7 +34436,7 @@ sealed class SetupCmdResponse: Disposable  {
     }
     
     data class Backup(
-        val v1: ContinueFromBackup) : SetupCmdResponse()
+        val v1: org.bitcoinppl.cove_core.ContinueFromBackup) : SetupCmdResponse()
         
     {
         
@@ -34505,7 +34445,7 @@ sealed class SetupCmdResponse: Disposable  {
     }
     
     data class Derive(
-        val v1: ContinueFromDerive) : SetupCmdResponse()
+        val v1: org.bitcoinppl.cove_core.ContinueFromDerive) : SetupCmdResponse()
         
     {
         
@@ -34514,7 +34454,7 @@ sealed class SetupCmdResponse: Disposable  {
     }
     
     data class Complete(
-        val v1: TapSignerSetupComplete) : SetupCmdResponse()
+        val v1: org.bitcoinppl.cove_core.TapSignerSetupComplete) : SetupCmdResponse()
         
     {
         
@@ -34758,7 +34698,7 @@ public object FfiConverterTypeStringOrData : FfiConverterRustBuffer<StringOrData
 sealed class TapSignerCmd: Disposable  {
     
     data class Setup(
-        val v1: SetupCmd) : TapSignerCmd()
+        val v1: org.bitcoinppl.cove_core.SetupCmd) : TapSignerCmd()
         
     {
         
@@ -34795,7 +34735,7 @@ sealed class TapSignerCmd: Disposable  {
     }
     
     data class Sign(
-        val `psbt`: Psbt, 
+        val `psbt`: org.bitcoinppl.cove_core.types.Psbt, 
         val `pin`: kotlin.String) : TapSignerCmd()
         
     {
@@ -35229,7 +35169,7 @@ public object FfiConverterTypeTapSignerReaderError : FfiConverterRustBuffer<TapS
 sealed class TapSignerResponse: Disposable  {
     
     data class Setup(
-        val v1: SetupCmdResponse) : TapSignerResponse()
+        val v1: org.bitcoinppl.cove_core.SetupCmdResponse) : TapSignerResponse()
         
     {
         
@@ -35247,7 +35187,7 @@ sealed class TapSignerResponse: Disposable  {
     }
     
     data class Import(
-        val v1: DeriveInfo) : TapSignerResponse()
+        val v1: org.bitcoinppl.cove_core.DeriveInfo) : TapSignerResponse()
         
     {
         
@@ -35259,7 +35199,7 @@ sealed class TapSignerResponse: Disposable  {
     
     
     data class Sign(
-        val v1: Psbt) : TapSignerResponse()
+        val v1: org.bitcoinppl.cove_core.types.Psbt) : TapSignerResponse()
         
     {
         
@@ -35405,7 +35345,7 @@ public object FfiConverterTypeTapSignerResponse : FfiConverterRustBuffer<TapSign
 sealed class TapSignerRoute: Disposable  {
     
     data class InitSelect(
-        val v1: TapSigner) : TapSignerRoute()
+        val v1: org.bitcoinppl.cove_core.tapcard.TapSigner) : TapSignerRoute()
         
     {
         
@@ -35414,7 +35354,7 @@ sealed class TapSignerRoute: Disposable  {
     }
     
     data class InitAdvanced(
-        val v1: TapSigner) : TapSignerRoute()
+        val v1: org.bitcoinppl.cove_core.tapcard.TapSigner) : TapSignerRoute()
         
     {
         
@@ -35423,7 +35363,7 @@ sealed class TapSignerRoute: Disposable  {
     }
     
     data class StartingPin(
-        val `tapSigner`: TapSigner, 
+        val `tapSigner`: org.bitcoinppl.cove_core.tapcard.TapSigner, 
         val `chainCode`: kotlin.String?) : TapSignerRoute()
         
     {
@@ -35433,7 +35373,7 @@ sealed class TapSignerRoute: Disposable  {
     }
     
     data class NewPin(
-        val v1: TapSignerNewPinArgs) : TapSignerRoute()
+        val v1: org.bitcoinppl.cove_core.TapSignerNewPinArgs) : TapSignerRoute()
         
     {
         
@@ -35442,7 +35382,7 @@ sealed class TapSignerRoute: Disposable  {
     }
     
     data class ConfirmPin(
-        val v1: TapSignerConfirmPinArgs) : TapSignerRoute()
+        val v1: org.bitcoinppl.cove_core.TapSignerConfirmPinArgs) : TapSignerRoute()
         
     {
         
@@ -35451,8 +35391,8 @@ sealed class TapSignerRoute: Disposable  {
     }
     
     data class SetupSuccess(
-        val v1: TapSigner, 
-        val v2: TapSignerSetupComplete) : TapSignerRoute()
+        val v1: org.bitcoinppl.cove_core.tapcard.TapSigner, 
+        val v2: org.bitcoinppl.cove_core.TapSignerSetupComplete) : TapSignerRoute()
         
     {
         
@@ -35461,8 +35401,8 @@ sealed class TapSignerRoute: Disposable  {
     }
     
     data class SetupRetry(
-        val v1: TapSigner, 
-        val v2: SetupCmdResponse) : TapSignerRoute()
+        val v1: org.bitcoinppl.cove_core.tapcard.TapSigner, 
+        val v2: org.bitcoinppl.cove_core.SetupCmdResponse) : TapSignerRoute()
         
     {
         
@@ -35471,8 +35411,8 @@ sealed class TapSignerRoute: Disposable  {
     }
     
     data class ImportSuccess(
-        val v1: TapSigner, 
-        val v2: DeriveInfo) : TapSignerRoute()
+        val v1: org.bitcoinppl.cove_core.tapcard.TapSigner, 
+        val v2: org.bitcoinppl.cove_core.DeriveInfo) : TapSignerRoute()
         
     {
         
@@ -35481,7 +35421,7 @@ sealed class TapSignerRoute: Disposable  {
     }
     
     data class ImportRetry(
-        val v1: TapSigner) : TapSignerRoute()
+        val v1: org.bitcoinppl.cove_core.tapcard.TapSigner) : TapSignerRoute()
         
     {
         
@@ -35490,8 +35430,8 @@ sealed class TapSignerRoute: Disposable  {
     }
     
     data class EnterPin(
-        val `tapSigner`: TapSigner, 
-        val `action`: AfterPinAction) : TapSignerRoute()
+        val `tapSigner`: org.bitcoinppl.cove_core.tapcard.TapSigner, 
+        val `action`: org.bitcoinppl.cove_core.AfterPinAction) : TapSignerRoute()
         
     {
         
@@ -35776,7 +35716,7 @@ public object FfiConverterTypeTapSignerRoute : FfiConverterRustBuffer<TapSignerR
 sealed class Transaction: Disposable  {
     
     data class Confirmed(
-        val v1: ConfirmedTransaction) : Transaction()
+        val v1: org.bitcoinppl.cove_core.ConfirmedTransaction) : Transaction()
         
     {
         
@@ -35785,7 +35725,7 @@ sealed class Transaction: Disposable  {
     }
     
     data class Unconfirmed(
-        val v1: UnconfirmedTransaction) : Transaction()
+        val v1: org.bitcoinppl.cove_core.UnconfirmedTransaction) : Transaction()
         
     {
         
@@ -37078,7 +37018,7 @@ public object FfiConverterTypeWalletDataError : FfiConverterRustBuffer<WalletDat
 sealed class WalletDataKey {
     
     data class ScanState(
-        val v1: WalletAddressType) : WalletDataKey()
+        val v1: org.bitcoinppl.cove_core.WalletAddressType) : WalletDataKey()
         
     {
         
@@ -37481,7 +37421,7 @@ sealed class WalletLoadState: Disposable  {
     
     
     data class Scanning(
-        val v1: List<Transaction>) : WalletLoadState()
+        val v1: List<org.bitcoinppl.cove_core.Transaction>) : WalletLoadState()
         
     {
         
@@ -37490,7 +37430,7 @@ sealed class WalletLoadState: Disposable  {
     }
     
     data class Loaded(
-        val v1: List<Transaction>) : WalletLoadState()
+        val v1: List<org.bitcoinppl.cove_core.Transaction>) : WalletLoadState()
         
     {
         
@@ -37601,7 +37541,7 @@ sealed class WalletManagerAction: Disposable  {
     }
     
     data class UpdateColor(
-        val v1: WalletColor) : WalletManagerAction()
+        val v1: org.bitcoinppl.cove_core.WalletColor) : WalletManagerAction()
         
     {
         
@@ -37610,7 +37550,7 @@ sealed class WalletManagerAction: Disposable  {
     }
     
     data class UpdateUnit(
-        val v1: BitcoinUnit) : WalletManagerAction()
+        val v1: org.bitcoinppl.cove_core.types.BitcoinUnit) : WalletManagerAction()
         
     {
         
@@ -37619,7 +37559,7 @@ sealed class WalletManagerAction: Disposable  {
     }
     
     data class UpdateFiatOrBtc(
-        val v1: FiatOrBtc) : WalletManagerAction()
+        val v1: org.bitcoinppl.cove_core.FiatOrBtc) : WalletManagerAction()
         
     {
         
@@ -37646,7 +37586,7 @@ sealed class WalletManagerAction: Disposable  {
     
     
     data class SelectDifferentWalletAddressType(
-        val v1: WalletAddressType) : WalletManagerAction()
+        val v1: org.bitcoinppl.cove_core.WalletAddressType) : WalletManagerAction()
         
     {
         
@@ -37658,7 +37598,7 @@ sealed class WalletManagerAction: Disposable  {
     
     
     data class StartTransactionWatcher(
-        val v1: TxId) : WalletManagerAction()
+        val v1: org.bitcoinppl.cove_core.types.TxId) : WalletManagerAction()
         
     {
         
@@ -38500,7 +38440,7 @@ sealed class WalletManagerReconcileMessage: Disposable  {
     
     
     data class StartedExpandedFullScan(
-        val v1: List<Transaction>) : WalletManagerReconcileMessage()
+        val v1: List<org.bitcoinppl.cove_core.Transaction>) : WalletManagerReconcileMessage()
         
     {
         
@@ -38509,7 +38449,7 @@ sealed class WalletManagerReconcileMessage: Disposable  {
     }
     
     data class AvailableTransactions(
-        val v1: List<Transaction>) : WalletManagerReconcileMessage()
+        val v1: List<org.bitcoinppl.cove_core.Transaction>) : WalletManagerReconcileMessage()
         
     {
         
@@ -38518,7 +38458,7 @@ sealed class WalletManagerReconcileMessage: Disposable  {
     }
     
     data class ScanComplete(
-        val v1: List<Transaction>) : WalletManagerReconcileMessage()
+        val v1: List<org.bitcoinppl.cove_core.Transaction>) : WalletManagerReconcileMessage()
         
     {
         
@@ -38527,7 +38467,7 @@ sealed class WalletManagerReconcileMessage: Disposable  {
     }
     
     data class UpdatedTransactions(
-        val v1: List<Transaction>) : WalletManagerReconcileMessage()
+        val v1: List<org.bitcoinppl.cove_core.Transaction>) : WalletManagerReconcileMessage()
         
     {
         
@@ -38545,7 +38485,7 @@ sealed class WalletManagerReconcileMessage: Disposable  {
     }
     
     data class WalletMetadataChanged(
-        val v1: WalletMetadata) : WalletManagerReconcileMessage()
+        val v1: org.bitcoinppl.cove_core.WalletMetadata) : WalletManagerReconcileMessage()
         
     {
         
@@ -38554,7 +38494,7 @@ sealed class WalletManagerReconcileMessage: Disposable  {
     }
     
     data class WalletBalanceChanged(
-        val v1: Balance) : WalletManagerReconcileMessage()
+        val v1: org.bitcoinppl.cove_core.Balance) : WalletManagerReconcileMessage()
         
     {
         
@@ -38563,7 +38503,7 @@ sealed class WalletManagerReconcileMessage: Disposable  {
     }
     
     data class WalletException(
-        val v1: WalletManagerException) : WalletManagerReconcileMessage()
+        val v1: org.bitcoinppl.cove_core.WalletManagerException) : WalletManagerReconcileMessage()
         
     {
         
@@ -38581,7 +38521,7 @@ sealed class WalletManagerReconcileMessage: Disposable  {
     }
     
     data class WalletScannerResponse(
-        val v1: ScannerResponse) : WalletManagerReconcileMessage()
+        val v1: org.bitcoinppl.cove_core.ScannerResponse) : WalletManagerReconcileMessage()
         
     {
         
@@ -38593,7 +38533,7 @@ sealed class WalletManagerReconcileMessage: Disposable  {
     
     
     data class SendFlowException(
-        val v1: SendFlowErrorAlert) : WalletManagerReconcileMessage()
+        val v1: org.bitcoinppl.cove_core.SendFlowErrorAlert) : WalletManagerReconcileMessage()
         
     {
         
@@ -41537,7 +41477,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `addressErrorToAlertState`(`error`: AddressException, `address`: kotlin.String): SendFlowAlertState {
             return FfiConverterTypeSendFlowAlertState.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_address_error_to_alert_state(
+    UniffiLib.uniffi_cove_fn_func_address_error_to_alert_state(
     
         FfiConverterTypeAddressError.lower(`error`),FfiConverterString.lower(`address`),_status)
 }
@@ -41547,7 +41487,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `afterPinActionUserMessage`(`action`: AfterPinAction): kotlin.String {
             return FfiConverterString.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_after_pin_action_user_message(
+    UniffiLib.uniffi_cove_fn_func_after_pin_action_user_message(
     
         FfiConverterTypeAfterPinAction.lower(`action`),_status)
 }
@@ -41557,7 +41497,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `allFiatCurrencies`(): List<FiatCurrency> {
             return FfiConverterSequenceTypeFiatCurrency.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_all_fiat_currencies(
+    UniffiLib.uniffi_cove_fn_func_all_fiat_currencies(
     
         _status)
 }
@@ -41567,7 +41507,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `coinControlListSortKeyToString`(`key`: CoinControlListSortKey): kotlin.String {
             return FfiConverterString.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_coin_control_list_sort_key_to_string(
+    UniffiLib.uniffi_cove_fn_func_coin_control_list_sort_key_to_string(
     
         FfiConverterTypeCoinControlListSortKey.lower(`key`),_status)
 }
@@ -41577,7 +41517,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `createTransportErrorFromCode`(`code`: kotlin.UShort, `message`: kotlin.String): TransportException {
             return FfiConverterTypeTransportError.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_create_transport_error_from_code(
+    UniffiLib.uniffi_cove_fn_func_create_transport_error_from_code(
     
         FfiConverterUShort.lower(`code`),FfiConverterString.lower(`message`),_status)
 }
@@ -41587,7 +41527,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `defaultNodeSelection`(): NodeSelection {
             return FfiConverterTypeNodeSelection.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_default_node_selection(
+    UniffiLib.uniffi_cove_fn_func_default_node_selection(
     
         _status)
 }
@@ -41597,7 +41537,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `defaultWalletColors`(): List<WalletColor> {
             return FfiConverterSequenceTypeWalletColor.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_default_wallet_colors(
+    UniffiLib.uniffi_cove_fn_func_default_wallet_colors(
     
         _status)
 }
@@ -41607,7 +41547,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `describeAuthManagerError`(`error`: AuthManagerException): kotlin.String {
             return FfiConverterString.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_describe_auth_manager_error(
+    UniffiLib.uniffi_cove_fn_func_describe_auth_manager_error(
     
         FfiConverterTypeAuthManagerError.lower(`error`),_status)
 }
@@ -41617,7 +41557,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `describeMultiFormatError`(`error`: MultiFormatException): kotlin.String {
             return FfiConverterString.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_describe_multi_format_error(
+    UniffiLib.uniffi_cove_fn_func_describe_multi_format_error(
     
         FfiConverterTypeMultiFormatError.lower(`error`),_status)
 }
@@ -41627,7 +41567,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `describeSendFlowError`(`error`: SendFlowException): kotlin.String {
             return FfiConverterString.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_describe_send_flow_error(
+    UniffiLib.uniffi_cove_fn_func_describe_send_flow_error(
     
         FfiConverterTypeSendFlowError.lower(`error`),_status)
 }
@@ -41637,7 +41577,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `describeSendFlowFiatOnChangeError`(`error`: SendFlowFiatOnChangeError): kotlin.String {
             return FfiConverterString.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_describe_send_flow_fiat_on_change_error(
+    UniffiLib.uniffi_cove_fn_func_describe_send_flow_fiat_on_change_error(
     
         FfiConverterTypeSendFlowFiatOnChangeError.lower(`error`),_status)
 }
@@ -41647,7 +41587,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `describeTapSignerReaderError`(`error`: TapSignerReaderException): kotlin.String {
             return FfiConverterString.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_describe_tap_signer_reader_error(
+    UniffiLib.uniffi_cove_fn_func_describe_tap_signer_reader_error(
     
         FfiConverterTypeTapSignerReaderError.lower(`error`),_status)
 }
@@ -41657,7 +41597,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `describeTransportError`(`error`: TransportException): kotlin.String {
             return FfiConverterString.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_describe_transport_error(
+    UniffiLib.uniffi_cove_fn_func_describe_transport_error(
     
         FfiConverterTypeTransportError.lower(`error`),_status)
 }
@@ -41667,7 +41607,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `describeWalletError`(`error`: WalletException): kotlin.String {
             return FfiConverterString.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_describe_wallet_error(
+    UniffiLib.uniffi_cove_fn_func_describe_wallet_error(
     
         FfiConverterTypeWalletError.lower(`error`),_status)
 }
@@ -41677,7 +41617,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `describeWalletManagerError`(`error`: WalletManagerException): kotlin.String {
             return FfiConverterString.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_describe_wallet_manager_error(
+    UniffiLib.uniffi_cove_fn_func_describe_wallet_manager_error(
     
         FfiConverterTypeWalletManagerError.lower(`error`),_status)
 }
@@ -41687,7 +41627,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `discoveryStateIsEqual`(`lhs`: DiscoveryState, `rhs`: DiscoveryState): kotlin.Boolean {
             return FfiConverterBoolean.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_discovery_state_is_equal(
+    UniffiLib.uniffi_cove_fn_func_discovery_state_is_equal(
     
         FfiConverterTypeDiscoveryState.lower(`lhs`),FfiConverterTypeDiscoveryState.lower(`rhs`),_status)
 }
@@ -41697,7 +41637,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `ffiMinSendAmount`(): Amount {
             return FfiConverterTypeAmount.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_ffi_min_send_amount(
+    UniffiLib.uniffi_cove_fn_func_ffi_min_send_amount(
     
         _status)
 }
@@ -41707,7 +41647,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `ffiMinSendSats`(): kotlin.ULong {
             return FfiConverterULong.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_ffi_min_send_sats(
+    UniffiLib.uniffi_cove_fn_func_ffi_min_send_sats(
     
         _status)
 }
@@ -41717,7 +41657,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `fiatAmountPreviewNew`(): FiatAmount {
             return FfiConverterTypeFiatAmount.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_fiat_amount_preview_new(
+    UniffiLib.uniffi_cove_fn_func_fiat_amount_preview_new(
     
         _status)
 }
@@ -41727,7 +41667,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `fiatCurrencyEmoji`(`fiatCurrency`: FiatCurrency): kotlin.String {
             return FfiConverterString.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_fiat_currency_emoji(
+    UniffiLib.uniffi_cove_fn_func_fiat_currency_emoji(
     
         FfiConverterTypeFiatCurrency.lower(`fiatCurrency`),_status)
 }
@@ -41737,7 +41677,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `fiatCurrencySuffix`(`fiatCurrency`: FiatCurrency): kotlin.String {
             return FfiConverterString.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_fiat_currency_suffix(
+    UniffiLib.uniffi_cove_fn_func_fiat_currency_suffix(
     
         FfiConverterTypeFiatCurrency.lower(`fiatCurrency`),_status)
 }
@@ -41747,7 +41687,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `fiatCurrencySymbol`(`fiatCurrency`: FiatCurrency): kotlin.String {
             return FfiConverterString.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_fiat_currency_symbol(
+    UniffiLib.uniffi_cove_fn_func_fiat_currency_symbol(
     
         FfiConverterTypeFiatCurrency.lower(`fiatCurrency`),_status)
 }
@@ -41757,7 +41697,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `fiatCurrencyToString`(`fiatCurrency`: FiatCurrency): kotlin.String {
             return FfiConverterString.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_fiat_currency_to_string(
+    UniffiLib.uniffi_cove_fn_func_fiat_currency_to_string(
     
         FfiConverterTypeFiatCurrency.lower(`fiatCurrency`),_status)
 }
@@ -41768,7 +41708,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
     @Throws(MnemonicParseException::class) fun `groupedPlainWordsOf`(`mnemonic`: kotlin.String, `groups`: kotlin.UByte): List<List<kotlin.String>> {
             return FfiConverterSequenceSequenceString.lift(
     uniffiRustCallWithError(MnemonicParseException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_grouped_plain_words_of(
+    UniffiLib.uniffi_cove_fn_func_grouped_plain_words_of(
     
         FfiConverterString.lower(`mnemonic`),FfiConverterUByte.lower(`groups`),_status)
 }
@@ -41778,7 +41718,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `hardwareWalletIsTapSigner`(`hardwareWallet`: HardwareWalletMetadata): kotlin.Boolean {
             return FfiConverterBoolean.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_hardware_wallet_is_tap_signer(
+    UniffiLib.uniffi_cove_fn_func_hardware_wallet_is_tap_signer(
     
         FfiConverterTypeHardwareWalletMetadata.lower(`hardwareWallet`),_status)
 }
@@ -41788,7 +41728,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `hashRoute`(`route`: Route): kotlin.ULong {
             return FfiConverterULong.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_hash_route(
+    UniffiLib.uniffi_cove_fn_func_hash_route(
     
         FfiConverterTypeRoute.lower(`route`),_status)
 }
@@ -41798,7 +41738,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `isFiatCurrencySymbol`(`symbol`: kotlin.String): kotlin.Boolean {
             return FfiConverterBoolean.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_is_fiat_currency_symbol(
+    UniffiLib.uniffi_cove_fn_func_is_fiat_currency_symbol(
     
         FfiConverterString.lower(`symbol`),_status)
 }
@@ -41808,7 +41748,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `isRouteEqual`(`route`: Route, `routeToCheck`: Route): kotlin.Boolean {
             return FfiConverterBoolean.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_is_route_equal(
+    UniffiLib.uniffi_cove_fn_func_is_route_equal(
     
         FfiConverterTypeRoute.lower(`route`),FfiConverterTypeRoute.lower(`routeToCheck`),_status)
 }
@@ -41818,7 +41758,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `isTapSignerRouteEqual`(`lhs`: TapSignerRoute, `rhs`: TapSignerRoute): kotlin.Boolean {
             return FfiConverterBoolean.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_is_tap_signer_route_equal(
+    UniffiLib.uniffi_cove_fn_func_is_tap_signer_route_equal(
     
         FfiConverterTypeTapSignerRoute.lower(`lhs`),FfiConverterTypeTapSignerRoute.lower(`rhs`),_status)
 }
@@ -41828,7 +41768,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `isValidChainCode`(`chainCode`: kotlin.String): kotlin.Boolean {
             return FfiConverterBoolean.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_is_valid_chain_code(
+    UniffiLib.uniffi_cove_fn_func_is_valid_chain_code(
     
         FfiConverterString.lower(`chainCode`),_status)
 }
@@ -41839,7 +41779,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
     @Throws(MultiFormatException::class) fun `multiFormatTryFromNfcMessage`(`nfcMessage`: NfcMessage): MultiFormat {
             return FfiConverterTypeMultiFormat.lift(
     uniffiRustCallWithError(MultiFormatException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_multi_format_try_from_nfc_message(
+    UniffiLib.uniffi_cove_fn_func_multi_format_try_from_nfc_message(
     
         FfiConverterTypeNfcMessage.lower(`nfcMessage`),_status)
 }
@@ -41849,7 +41789,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `nodeSelectionToNode`(`node`: NodeSelection): Node {
             return FfiConverterTypeNode.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_node_selection_to_node(
+    UniffiLib.uniffi_cove_fn_func_node_selection_to_node(
     
         FfiConverterTypeNodeSelection.lower(`node`),_status)
 }
@@ -41859,7 +41799,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `numberOfWordsInGroups`(`me`: NumberOfBip39Words, `of`: kotlin.UByte): List<List<kotlin.String>> {
             return FfiConverterSequenceSequenceString.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_number_of_words_in_groups(
+    UniffiLib.uniffi_cove_fn_func_number_of_words_in_groups(
     
         FfiConverterTypeNumberOfBip39Words.lower(`me`),FfiConverterUByte.lower(`of`),_status)
 }
@@ -41869,7 +41809,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `numberOfWordsToWordCount`(`me`: NumberOfBip39Words): kotlin.UByte {
             return FfiConverterUByte.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_number_of_words_to_word_count(
+    UniffiLib.uniffi_cove_fn_func_number_of_words_to_word_count(
     
         FfiConverterTypeNumberOfBip39Words.lower(`me`),_status)
 }
@@ -41879,7 +41819,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `previewNewLegacyFoundAddress`(): FoundAddress {
             return FfiConverterTypeFoundAddress.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_preview_new_legacy_found_address(
+    UniffiLib.uniffi_cove_fn_func_preview_new_legacy_found_address(
     
         _status)
 }
@@ -41889,7 +41829,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `previewNewWrappedFoundAddress`(): FoundAddress {
             return FfiConverterTypeFoundAddress.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_preview_new_wrapped_found_address(
+    UniffiLib.uniffi_cove_fn_func_preview_new_wrapped_found_address(
     
         _status)
 }
@@ -41899,7 +41839,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `pricesAreEqual`(`lhs`: PriceResponse, `rhs`: PriceResponse): kotlin.Boolean {
             return FfiConverterBoolean.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_prices_are_equal(
+    UniffiLib.uniffi_cove_fn_func_prices_are_equal(
     
         FfiConverterTypePriceResponse.lower(`lhs`),FfiConverterTypePriceResponse.lower(`rhs`),_status)
 }
@@ -41910,7 +41850,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
     @Throws(MultiFormatException::class) fun `stringOrDataTryIntoMultiFormat`(`stringOrData`: StringOrData): MultiFormat {
             return FfiConverterTypeMultiFormat.lift(
     uniffiRustCallWithError(MultiFormatException) { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_string_or_data_try_into_multi_format(
+    UniffiLib.uniffi_cove_fn_func_string_or_data_try_into_multi_format(
     
         FfiConverterTypeStringOrData.lower(`stringOrData`),_status)
 }
@@ -41920,7 +41860,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `tapSignerConfirmPinArgsNewFromNewPin`(`args`: TapSignerNewPinArgs, `newPin`: kotlin.String): TapSignerConfirmPinArgs {
             return FfiConverterTypeTapSignerConfirmPinArgs.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_tap_signer_confirm_pin_args_new_from_new_pin(
+    UniffiLib.uniffi_cove_fn_func_tap_signer_confirm_pin_args_new_from_new_pin(
     
         FfiConverterTypeTapSignerNewPinArgs.lower(`args`),FfiConverterString.lower(`newPin`),_status)
 }
@@ -41930,7 +41870,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `tapSignerErrorIsAuthError`(`error`: TapSignerReaderException): kotlin.Boolean {
             return FfiConverterBoolean.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_tap_signer_error_is_auth_error(
+    UniffiLib.uniffi_cove_fn_func_tap_signer_error_is_auth_error(
     
         FfiConverterTypeTapSignerReaderError.lower(`error`),_status)
 }
@@ -41940,7 +41880,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `tapSignerErrorIsNoBackupError`(`error`: TapSignerReaderException): kotlin.Boolean {
             return FfiConverterBoolean.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_tap_signer_error_is_no_backup_error(
+    UniffiLib.uniffi_cove_fn_func_tap_signer_error_is_no_backup_error(
     
         FfiConverterTypeTapSignerReaderError.lower(`error`),_status)
 }
@@ -41950,7 +41890,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `tapSignerResponseBackupResponse`(`response`: TapSignerResponse): kotlin.ByteArray? {
             return FfiConverterOptionalByteArray.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_tap_signer_response_backup_response(
+    UniffiLib.uniffi_cove_fn_func_tap_signer_response_backup_response(
     
         FfiConverterTypeTapSignerResponse.lower(`response`),_status)
 }
@@ -41960,7 +41900,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `tapSignerResponseChangeResponse`(`response`: TapSignerResponse): kotlin.Boolean {
             return FfiConverterBoolean.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_tap_signer_response_change_response(
+    UniffiLib.uniffi_cove_fn_func_tap_signer_response_change_response(
     
         FfiConverterTypeTapSignerResponse.lower(`response`),_status)
 }
@@ -41970,7 +41910,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `tapSignerResponseDeriveResponse`(`response`: TapSignerResponse): DeriveInfo? {
             return FfiConverterOptionalTypeDeriveInfo.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_tap_signer_response_derive_response(
+    UniffiLib.uniffi_cove_fn_func_tap_signer_response_derive_response(
     
         FfiConverterTypeTapSignerResponse.lower(`response`),_status)
 }
@@ -41980,7 +41920,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `tapSignerResponseSetupResponse`(`response`: TapSignerResponse): SetupCmdResponse? {
             return FfiConverterOptionalTypeSetupCmdResponse.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_tap_signer_response_setup_response(
+    UniffiLib.uniffi_cove_fn_func_tap_signer_response_setup_response(
     
         FfiConverterTypeTapSignerResponse.lower(`response`),_status)
 }
@@ -41990,7 +41930,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `tapSignerResponseSignResponse`(`response`: TapSignerResponse): Psbt? {
             return FfiConverterOptionalTypePsbt.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_tap_signer_response_sign_response(
+    UniffiLib.uniffi_cove_fn_func_tap_signer_response_sign_response(
     
         FfiConverterTypeTapSignerResponse.lower(`response`),_status)
 }
@@ -42000,7 +41940,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `tapSignerSetupCompleteNew`(`preview`: kotlin.Boolean): TapSignerSetupComplete {
             return FfiConverterTypeTapSignerSetupComplete.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_tap_signer_setup_complete_new(
+    UniffiLib.uniffi_cove_fn_func_tap_signer_setup_complete_new(
     
         FfiConverterBoolean.lower(`preview`),_status)
 }
@@ -42010,7 +41950,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `tapSignerSetupRetryContinueCmd`(`preview`: kotlin.Boolean): SetupCmdResponse {
             return FfiConverterTypeSetupCmdResponse.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_tap_signer_setup_retry_continue_cmd(
+    UniffiLib.uniffi_cove_fn_func_tap_signer_setup_retry_continue_cmd(
     
         FfiConverterBoolean.lower(`preview`),_status)
 }
@@ -42020,7 +41960,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `transactionPreviewConfirmedNew`(): Transaction {
             return FfiConverterTypeTransaction.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_transaction_preview_confirmed_new(
+    UniffiLib.uniffi_cove_fn_func_transaction_preview_confirmed_new(
     
         _status)
 }
@@ -42030,7 +41970,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `transactionPreviewUnconfirmedNew`(): Transaction {
             return FfiConverterTypeTransaction.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_transaction_preview_unconfirmed_new(
+    UniffiLib.uniffi_cove_fn_func_transaction_preview_unconfirmed_new(
     
         _status)
 }
@@ -42040,7 +41980,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `transactionsPreviewNew`(`confirmed`: kotlin.UByte, `unconfirmed`: kotlin.UByte): List<Transaction> {
             return FfiConverterSequenceTypeTransaction.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_transactions_preview_new(
+    UniffiLib.uniffi_cove_fn_func_transactions_preview_new(
     
         FfiConverterUByte.lower(`confirmed`),FfiConverterUByte.lower(`unconfirmed`),_status)
 }
@@ -42051,10 +41991,10 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
      suspend fun `updatePricesIfNeeded`() {
         return uniffiRustCallAsync(
-        UniffiLib.INSTANCE.uniffi_cove_fn_func_update_prices_if_needed(),
-        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_poll_void(future, callback, continuation) },
-        { future, continuation -> UniffiLib.INSTANCE.ffi_cove_rust_future_complete_void(future, continuation) },
-        { future -> UniffiLib.INSTANCE.ffi_cove_rust_future_free_void(future) },
+        UniffiLib.uniffi_cove_fn_func_update_prices_if_needed(),
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_void(future) },
         // lift function
         { Unit },
         
@@ -42065,7 +42005,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `walletAddressTypeLessThan`(`lhs`: WalletAddressType, `rhs`: WalletAddressType): kotlin.Boolean {
             return FfiConverterBoolean.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_wallet_address_type_less_than(
+    UniffiLib.uniffi_cove_fn_func_wallet_address_type_less_than(
     
         FfiConverterTypeWalletAddressType.lower(`lhs`),FfiConverterTypeWalletAddressType.lower(`rhs`),_status)
 }
@@ -42075,7 +42015,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `walletAddressTypeToString`(`walletAddressType`: WalletAddressType): kotlin.String {
             return FfiConverterString.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_wallet_address_type_to_string(
+    UniffiLib.uniffi_cove_fn_func_wallet_address_type_to_string(
     
         FfiConverterTypeWalletAddressType.lower(`walletAddressType`),_status)
 }
@@ -42085,7 +42025,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `walletMetadataHash`(`metadata`: WalletMetadata): kotlin.ULong {
             return FfiConverterULong.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_wallet_metadata_hash(
+    UniffiLib.uniffi_cove_fn_func_wallet_metadata_hash(
     
         FfiConverterTypeWalletMetadata.lower(`metadata`),_status)
 }
@@ -42095,7 +42035,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `walletMetadataIsEqual`(`lhs`: WalletMetadata, `rhs`: WalletMetadata): kotlin.Boolean {
             return FfiConverterBoolean.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_wallet_metadata_is_equal(
+    UniffiLib.uniffi_cove_fn_func_wallet_metadata_is_equal(
     
         FfiConverterTypeWalletMetadata.lower(`lhs`),FfiConverterTypeWalletMetadata.lower(`rhs`),_status)
 }
@@ -42105,7 +42045,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `walletMetadataPreview`(): WalletMetadata {
             return FfiConverterTypeWalletMetadata.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_wallet_metadata_preview(
+    UniffiLib.uniffi_cove_fn_func_wallet_metadata_preview(
     
         _status)
 }
@@ -42115,7 +42055,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `walletStateIsEqual`(`lhs`: WalletLoadState, `rhs`: WalletLoadState): kotlin.Boolean {
             return FfiConverterBoolean.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_wallet_state_is_equal(
+    UniffiLib.uniffi_cove_fn_func_wallet_state_is_equal(
     
         FfiConverterTypeWalletLoadState.lower(`lhs`),FfiConverterTypeWalletLoadState.lower(`rhs`),_status)
 }
@@ -42125,7 +42065,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
  fun `walletTypeToString`(`walletType`: WalletType): kotlin.String {
             return FfiConverterString.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_cove_fn_func_wallet_type_to_string(
+    UniffiLib.uniffi_cove_fn_func_wallet_type_to_string(
     
         FfiConverterTypeWalletType.lower(`walletType`),_status)
 }

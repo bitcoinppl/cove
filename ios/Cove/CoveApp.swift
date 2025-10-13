@@ -81,7 +81,7 @@ struct CoveApp: App {
             case let .addressWrongNetwork(
                 address: address, network: network, currentNetwork: currentNetwork
             ):
-                "The address \(address.toString()) is on the wrong network. You are on \(currentNetwork), and the address was for \(network)."
+                "The address \(address.string()) is on the wrong network. You are on \(currentNetwork), and the address was for \(network)."
             case let .noWalletSelected(address),
                  let .foundAddress(address, _):
                 address.unformatted()
@@ -221,7 +221,7 @@ struct CoveApp: App {
         }
     }
 
-    public init() {
+    init() {
         // initialize keychain and device
         _ = Keychain(keychain: KeychainAccessor())
         _ = Device(device: DeviceAccesor())

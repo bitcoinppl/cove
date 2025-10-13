@@ -97,7 +97,7 @@ struct SendFlowCustomFeeRateView: View {
                     self.feeOptions = feeOptions
                     presenter.lastWorkingFeeRate = feeRate.satPerVb()
                 }
-            } catch let SendFlowError.WalletManagerError(.InsufficientFunds(error)) {
+            } catch let SendFlowError.WalletManager(.InsufficientFunds(error)) {
                 Log.error("Unable to get accurate total sats \(error), setting max fee rate to \(feeRate.satPerVb())")
                 let feeRate = feeRate.satPerVb()
 

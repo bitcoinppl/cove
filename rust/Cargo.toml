@@ -13,7 +13,7 @@ members = ["crates/*"]
 ## MARK: WORKSPACE DEPENDENCIES
 [workspace.dependencies]
 # bindings
-uniffi = { git = "https://github.com/mozilla/uniffi-rs", features = ["tokio"] }
+uniffi = { git = "https://github.com/praveenperera/uniffi-rs", branch = "kotlin-fqtn", features = ["tokio"] }
 
 # sync
 parking_lot = { version = "0.12.3" }

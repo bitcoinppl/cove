@@ -39,8 +39,8 @@ pub struct TapSigner {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, uniffi::Enum)]
 pub enum TapCard {
-    Sats(SatsCard),
-    Tap(Arc<TapSigner>),
+    SatsCard(SatsCard),
+    TapSigner(Arc<TapSigner>),
 }
 
 impl TapCard {

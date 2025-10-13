@@ -16,10 +16,10 @@ class TapSignerNFC {
 
     init(_ card: TapSigner) {
         Log.debug("Initializing TapSignerNFC")
-        nfc = TapCardNFC(tapcard: .tap(card))
+        nfc = TapCardNFC(tapcard: .tapSigner(card))
     }
 
-    public func setupTapSigner(factoryPin: String, newPin: String, chainCode: Data? = nil) async
+    func setupTapSigner(factoryPin: String, newPin: String, chainCode: Data? = nil) async
         -> Result<SetupCmdResponse, TapSignerReaderError>
     {
         do {
@@ -32,11 +32,11 @@ class TapSignerNFC {
         }
     }
 
-    public func derive(pin: String) async -> Result<DeriveInfo, TapSignerReaderError> {
+    func derive(pin: String) async -> Result<DeriveInfo, TapSignerReaderError> {
         await performTapSignerCmd(cmd: .derive(pin: pin)) { $0?.deriveResponse }
     }
 
-    public func changePin(currentPin: String, newPin: String) async -> Result<
+    func changePin(currentPin: String, newPin: String) async -> Result<
         Void, TapSignerReaderError
     > {
         await performTapSignerCmd(cmd: .change(currentPin: currentPin, newPin: newPin)) {
@@ -44,15 +44,15 @@ class TapSignerNFC {
         }.map { _ in () }
     }
 
-    public func backup(pin: String) async -> Result<Data, TapSignerReaderError> {
+    func backup(pin: String) async -> Result<Data, TapSignerReaderError> {
         await performTapSignerCmd(cmd: .backup(pin: pin)) { $0?.backupResponse }
     }
 
-    public func sign(psbt: Psbt, pin: String) async -> Result<Psbt, TapSignerReaderError> {
+    func sign(psbt: Psbt, pin: String) async -> Result<Psbt, TapSignerReaderError> {
         await performTapSignerCmd(cmd: .sign(psbt: psbt, pin: pin)) { $0?.signResponse }
     }
 
-    public func lastResponse() -> TapSignerResponse? {
+    func lastResponse() -> TapSignerResponse? {
         nfc.tapSignerReader?.lastResponse() ?? lastResponse_
     }
 
@@ -183,16 +183,16 @@ class TapSignerNFC {
         }
     }
 
-    public func continueSetup(_ response: SetupCmdResponse) async -> Result<
+    func continueSetup(_ response: SetupCmdResponse) async -> Result<
         SetupCmdResponse, TapSignerReaderError
     > {
         let cmd: SetupCmd? =
             switch response {
-            case let .init(c):
+            case let .continueFromInit(c):
                 c.continueCmd
-            case let .backup(c):
+            case let .continueFromBackup(c):
                 c.continueCmd
-            case let .derive(c):
+            case let .continueFromDerive(c):
                 c.continueCmd
             case .complete:
                 .none
@@ -245,14 +245,14 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
     private var transport: TapCardTransport?
 
     // public
-    public var session: NFCTagReaderSession?
-    public let tapcard: TapCard
-    public var isScanning: Bool = false
+    var session: NFCTagReaderSession?
+    let tapcard: TapCard
+    var isScanning: Bool = false
 
-    public var tapSignerReader: TapSignerReader? = nil
-    public var tapSignerCmd: TapSignerCmd? = nil
-    public var tapSignerResponse: TapSignerResponse? = nil
-    public var tapSignerError: TapSignerReaderError? = nil
+    var tapSignerReader: TapSignerReader? = nil
+    var tapSignerCmd: TapSignerCmd? = nil
+    var tapSignerResponse: TapSignerResponse? = nil
+    var tapSignerError: TapSignerReaderError? = nil
 
     // public var satsCardReader: SatsCardReader? = nil
     // public var satsCardCmd: SatsCardCmd? = nil
@@ -331,11 +331,11 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
         do {
             let transport = TapCardTransport(session: session, tag: tag)
             switch tapcard {
-            case .sats:
+            case .satsCard:
                 ( // TODO: Implement SatsCardReader
                 )
 
-            case .tap:
+            case .tapSigner:
                 let tapSignerReader = try await TapSignerReader(
                     transport: transport, cmd: tapSignerCmd
                 )

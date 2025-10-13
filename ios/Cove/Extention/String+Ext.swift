@@ -7,7 +7,7 @@
 
 import Foundation
 
-typealias Unit = CoveCore.Unit
+typealias Unit = CoveCore.BitcoinUnit
 
 extension String {
     init(_ unit: Unit) {

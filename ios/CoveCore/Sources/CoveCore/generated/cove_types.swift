@@ -724,6 +724,8 @@ open func unformatted() -> String  {
 })
 }
     
+
+    
 }
 
 
@@ -751,9 +753,6 @@ public struct FfiConverterTypeAddress: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -856,6 +855,8 @@ open func index() -> UInt32  {
 })
 }
     
+
+    
 }
 
 
@@ -883,9 +884,6 @@ public struct FfiConverterTypeAddressInfo: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -1008,6 +1006,8 @@ open func index() -> UInt32  {
 })
 }
     
+
+    
 }
 
 
@@ -1035,9 +1035,6 @@ public struct FfiConverterTypeAddressInfoWithDerivation: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -1159,6 +1156,8 @@ open func network() -> Network  {
 })
 }
     
+
+    
 }
 
 
@@ -1186,9 +1185,6 @@ public struct FfiConverterTypeAddressWithNetwork: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -1365,6 +1361,8 @@ open func satsStringWithUnit() -> String  {
 })
 }
     
+
+    
 }
 
 
@@ -1392,9 +1390,6 @@ public struct FfiConverterTypeAmount: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -1467,6 +1462,8 @@ open class ChainPosition: ChainPositionProtocol, @unchecked Sendable {
     
 
     
+
+    
 }
 
 
@@ -1494,9 +1491,6 @@ public struct FfiConverterTypeChainPosition: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -1727,6 +1721,8 @@ open func spendingAmount() -> Amount  {
 })
 }
     
+
+    
 }
 
 
@@ -1754,9 +1750,6 @@ public struct FfiConverterTypeConfirmDetails: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -1847,6 +1840,8 @@ open func satPerVb() -> Float  {
 })
 }
     
+
+    
 }
 
 
@@ -1874,9 +1869,6 @@ public struct FfiConverterTypeFeeRate: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -2009,6 +2001,8 @@ open func satPerVb() -> Float  {
 })
 }
     
+
+    
 }
 
 
@@ -2036,9 +2030,6 @@ public struct FfiConverterTypeFeeRateOption: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -2202,6 +2193,8 @@ open func totalFee() -> Amount  {
 })
 }
     
+
+    
 }
 
 
@@ -2229,9 +2222,6 @@ public struct FfiConverterTypeFeeRateOptionWithTotalFee: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -2341,6 +2331,8 @@ open func slow() -> FeeRateOption  {
 })
 }
     
+
+    
 }
 
 
@@ -2368,9 +2360,6 @@ public struct FfiConverterTypeFeeRateOptions: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -2553,6 +2542,8 @@ open func transactionSize() -> UInt64  {
 })
 }
     
+
+    
 }
 
 
@@ -2580,9 +2571,6 @@ public struct FfiConverterTypeFeeRateOptionsWithTotalFee: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -2655,6 +2643,8 @@ open class InputOutputDetails: InputOutputDetailsProtocol, @unchecked Sendable {
     
 
     
+
+    
 }
 
 
@@ -2682,9 +2672,6 @@ public struct FfiConverterTypeInputOutputDetails: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -2823,6 +2810,8 @@ open func txnLink() -> String  {
 })
 }
     
+
+    
 }
 
 
@@ -2850,9 +2839,6 @@ public struct FfiConverterTypeOutPoint: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -2997,6 +2983,8 @@ open func weight() -> UInt64  {
 })
 }
     
+
+    
 }
 
 
@@ -3024,9 +3012,6 @@ public struct FfiConverterTypePsbt: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -3170,6 +3155,8 @@ open func sent() -> Amount  {
 })
 }
     
+
+    
 }
 
 
@@ -3197,9 +3184,6 @@ public struct FfiConverterTypeSentAndReceived: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -3293,6 +3277,8 @@ open func isEqual(other: TxId) -> Bool  {
 })
 }
     
+
+    
 }
 
 
@@ -3320,9 +3306,6 @@ public struct FfiConverterTypeTxId: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -3395,6 +3378,8 @@ open class TxIn: TxInProtocol, @unchecked Sendable {
     
 
     
+
+    
 }
 
 
@@ -3422,9 +3407,6 @@ public struct FfiConverterTypeTxIn: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -3497,6 +3479,8 @@ open class TxOut: TxOutProtocol, @unchecked Sendable {
     
 
     
+
+    
 }
 
 
@@ -3524,9 +3508,6 @@ public struct FfiConverterTypeTxOut: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -3599,6 +3580,8 @@ open class UtxoList: UtxoListProtocol, @unchecked Sendable {
     
 
     
+
+    
 }
 
 
@@ -3626,9 +3609,6 @@ public struct FfiConverterTypeUtxoList: FfiConverter {
         writeInt(&buf, lower(value))
     }
 }
-
-
-
 
 
 #if swift(>=5.8)
@@ -3662,16 +3642,13 @@ public struct AddressAndAmount {
         self.address = address
         self.amount = amount
     }
+
+    
 }
 
 #if compiler(>=6)
 extension AddressAndAmount: Sendable {}
 #endif
-
-
-
-
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -3711,7 +3688,7 @@ public func FfiConverterTypeAddressAndAmount_lower(_ value: AddressAndAmount) ->
 }
 
 
-public struct AddressIndex {
+public struct AddressIndex: Equatable, Hashable {
     public var lastSeenIndex: UInt8
     public var addressListHash: UInt64
 
@@ -3721,34 +3698,13 @@ public struct AddressIndex {
         self.lastSeenIndex = lastSeenIndex
         self.addressListHash = addressListHash
     }
+
+    
 }
 
 #if compiler(>=6)
 extension AddressIndex: Sendable {}
 #endif
-
-
-
-
-
-extension AddressIndex: Equatable, Hashable {
-    public static func ==(lhs: AddressIndex, rhs: AddressIndex) -> Bool {
-        if lhs.lastSeenIndex != rhs.lastSeenIndex {
-            return false
-        }
-        if lhs.addressListHash != rhs.addressListHash {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(lastSeenIndex)
-        hasher.combine(addressListHash)
-    }
-}
-
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -3784,7 +3740,7 @@ public func FfiConverterTypeAddressIndex_lower(_ value: AddressIndex) -> RustBuf
 }
 
 
-public struct BlockSizeLast {
+public struct BlockSizeLast: Equatable, Hashable {
     public var blockHeight: UInt64
     public var lastSeen: TimeInterval
 
@@ -3794,34 +3750,13 @@ public struct BlockSizeLast {
         self.blockHeight = blockHeight
         self.lastSeen = lastSeen
     }
+
+    
 }
 
 #if compiler(>=6)
 extension BlockSizeLast: Sendable {}
 #endif
-
-
-
-
-
-extension BlockSizeLast: Equatable, Hashable {
-    public static func ==(lhs: BlockSizeLast, rhs: BlockSizeLast) -> Bool {
-        if lhs.blockHeight != rhs.blockHeight {
-            return false
-        }
-        if lhs.lastSeen != rhs.lastSeen {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(blockHeight)
-        hasher.combine(lastSeen)
-    }
-}
-
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -3857,7 +3792,7 @@ public func FfiConverterTypeBlockSizeLast_lower(_ value: BlockSizeLast) -> RustB
 }
 
 
-public struct Rgb {
+public struct Rgb: Equatable, Hashable {
     public var r: UInt8
     public var g: UInt8
     public var b: UInt8
@@ -3869,38 +3804,13 @@ public struct Rgb {
         self.g = g
         self.b = b
     }
+
+    
 }
 
 #if compiler(>=6)
 extension Rgb: Sendable {}
 #endif
-
-
-
-
-
-extension Rgb: Equatable, Hashable {
-    public static func ==(lhs: Rgb, rhs: Rgb) -> Bool {
-        if lhs.r != rhs.r {
-            return false
-        }
-        if lhs.g != rhs.g {
-            return false
-        }
-        if lhs.b != rhs.b {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(r)
-        hasher.combine(g)
-        hasher.combine(b)
-    }
-}
-
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -3948,16 +3858,13 @@ public struct SplitOutput {
         self.external = external
         self.`internal` = `internal`
     }
+
+    
 }
 
 #if compiler(>=6)
 extension SplitOutput: Sendable {}
 #endif
-
-
-
-
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -4015,16 +3922,13 @@ public struct Utxo {
         self.blockHeight = blockHeight
         self.type = type
     }
+
+    
 }
 
 #if compiler(>=6)
 extension Utxo: Sendable {}
 #endif
-
-
-
-
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -4072,7 +3976,7 @@ public func FfiConverterTypeUtxo_lower(_ value: Utxo) -> RustBuffer {
 }
 
 
-public enum AddressError: Swift.Error {
+public enum AddressError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -4084,8 +3988,19 @@ public enum AddressError: Swift.Error {
     case WrongNetwork(current: Network, validFor: Network
     )
     case EmptyAddress
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension AddressError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -4168,30 +4083,18 @@ public func FfiConverterTypeAddressError_lower(_ value: AddressError) -> RustBuf
     return FfiConverterTypeAddressError.lower(value)
 }
 
-
-extension AddressError: Equatable, Hashable {}
-
-
-
-
-extension AddressError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum BitcoinUnit {
+public enum BitcoinUnit: Equatable, Hashable {
     
     case btc
     case sat
 
+
+
 }
+
 #if compiler(>=6)
 extension BitcoinUnit: Sendable {}
 #endif
@@ -4245,27 +4148,19 @@ public func FfiConverterTypeBitcoinUnit_lower(_ value: BitcoinUnit) -> RustBuffe
 }
 
 
-
-
-extension BitcoinUnit: Equatable, Hashable {}
-
-
-
-
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum ColorSchemeSelection {
+public enum ColorSchemeSelection: Equatable, Hashable {
     
     case light
     case dark
     case system
 
+
+
 }
+
 #if compiler(>=6)
 extension ColorSchemeSelection: Sendable {}
 #endif
@@ -4326,25 +4221,25 @@ public func FfiConverterTypeColorSchemeSelection_lower(_ value: ColorSchemeSelec
 
 
 
-
-extension ColorSchemeSelection: Equatable, Hashable {}
-
-
-
-
-
-
-
-
-
-public enum ConfirmDetailsError: Swift.Error {
+public enum ConfirmDetailsError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
     case QrCodeCreation(String
     )
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension ConfirmDetailsError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -4397,25 +4292,10 @@ public func FfiConverterTypeConfirmDetailsError_lower(_ value: ConfirmDetailsErr
     return FfiConverterTypeConfirmDetailsError.lower(value)
 }
 
-
-extension ConfirmDetailsError: Equatable, Hashable {}
-
-
-
-
-extension ConfirmDetailsError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum FeeSpeed {
+public enum FeeSpeed: Equatable, Hashable {
     
     case fast
     case medium
@@ -4423,7 +4303,10 @@ public enum FeeSpeed {
     case custom(durationMins: UInt32
     )
 
+
+
 }
+
 #if compiler(>=6)
 extension FeeSpeed: Sendable {}
 #endif
@@ -4491,21 +4374,10 @@ public func FfiConverterTypeFeeSpeed_lower(_ value: FeeSpeed) -> RustBuffer {
 }
 
 
-
-
-extension FeeSpeed: Equatable, Hashable {}
-
-
-
-
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum FfiColor {
+public enum FfiColor: Equatable, Hashable {
     
     case red(FfiOpacity
     )
@@ -4532,7 +4404,10 @@ public enum FfiColor {
     case custom(Rgb,FfiOpacity
     )
 
+
+
 }
+
 #if compiler(>=6)
 extension FfiColor: Sendable {}
 #endif
@@ -4671,26 +4546,18 @@ public func FfiConverterTypeFfiColor_lower(_ value: FfiColor) -> RustBuffer {
 }
 
 
-
-
-extension FfiColor: Equatable, Hashable {}
-
-
-
-
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum FfiColorScheme {
+public enum FfiColorScheme: Equatable, Hashable {
     
     case light
     case dark
 
+
+
 }
+
 #if compiler(>=6)
 extension FfiColorScheme: Sendable {}
 #endif
@@ -4744,28 +4611,20 @@ public func FfiConverterTypeFfiColorScheme_lower(_ value: FfiColorScheme) -> Rus
 }
 
 
-
-
-extension FfiColorScheme: Equatable, Hashable {}
-
-
-
-
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum Network {
+public enum Network: Equatable, Hashable {
     
     case bitcoin
     case testnet
     case testnet4
     case signet
 
+
+
 }
+
 #if compiler(>=6)
 extension Network: Sendable {}
 #endif
@@ -4832,18 +4691,7 @@ public func FfiConverterTypeNetwork_lower(_ value: Network) -> RustBuffer {
 
 
 
-
-extension Network: Equatable, Hashable {}
-
-
-
-
-
-
-
-
-
-public enum PsbtError: Swift.Error {
+public enum PsbtError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -4852,8 +4700,19 @@ public enum PsbtError: Swift.Error {
     case FeeOverflow
     case Other(String
     )
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension PsbtError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -4921,30 +4780,18 @@ public func FfiConverterTypePsbtError_lower(_ value: PsbtError) -> RustBuffer {
     return FfiConverterTypePsbtError.lower(value)
 }
 
-
-extension PsbtError: Equatable, Hashable {}
-
-
-
-
-extension PsbtError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum TransactionDirection {
+public enum TransactionDirection: Equatable, Hashable {
     
     case incoming
     case outgoing
 
+
+
 }
+
 #if compiler(>=6)
 extension TransactionDirection: Sendable {}
 #endif
@@ -4998,26 +4845,18 @@ public func FfiConverterTypeTransactionDirection_lower(_ value: TransactionDirec
 }
 
 
-
-
-extension TransactionDirection: Equatable, Hashable {}
-
-
-
-
-
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum UtxoType {
+public enum UtxoType: Equatable, Hashable {
     
     case output
     case change
 
+
+
 }
+
 #if compiler(>=6)
 extension UtxoType: Sendable {}
 #endif
@@ -5069,17 +4908,6 @@ public func FfiConverterTypeUtxoType_lift(_ buf: RustBuffer) throws -> UtxoType 
 public func FfiConverterTypeUtxoType_lower(_ value: UtxoType) -> RustBuffer {
     return FfiConverterTypeUtxoType.lower(value)
 }
-
-
-
-
-extension UtxoType: Equatable, Hashable {}
-
-
-
-
-
-
 
 
 #if swift(>=5.8)

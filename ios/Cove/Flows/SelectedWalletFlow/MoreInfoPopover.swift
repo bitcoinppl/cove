@@ -125,7 +125,7 @@ struct MoreInfoPopover: View {
                 }
             }
 
-            if case let .tapSignerCard(t) = metadata.hardwareMetadata {
+            if case let .tapSigner(t) = metadata.hardwareMetadata {
                 ChangePinButton(t)
                 DownloadBackupButton(t)
             }
