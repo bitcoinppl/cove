@@ -145,6 +145,7 @@ pub struct RustWalletManager {
 
 pub type Error = WalletManagerError;
 #[derive(Debug, Clone, Eq, PartialEq, uniffi::Error, thiserror::Error)]
+#[uniffi::export(Display)]
 pub enum WalletManagerError {
     #[error("failed to get selected wallet: {0}")]
     GetSelectedWalletError(String),
@@ -1082,9 +1083,4 @@ impl Drop for RustWalletManager {
 #[uniffi::export]
 fn wallet_state_is_equal(lhs: WalletLoadState, rhs: WalletLoadState) -> bool {
     lhs == rhs
-}
-
-#[uniffi::export]
-fn describe_wallet_manager_error(error: WalletManagerError) -> String {
-    error.to_string()
 }

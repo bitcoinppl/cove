@@ -68,7 +68,7 @@ struct TapSignerImportRetry: View {
                         case let .success(deriveInfo):
                             manager.resetRoute(to: .importSuccess(tapSigner, deriveInfo))
                         case let .failure(error):
-                            app.alertState = .init(.tapSignerDeriveFailed(error.describe))
+                            app.alertState = .init(.tapSignerDeriveFailed(error.description))
                         }
                     }
                 }

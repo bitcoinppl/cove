@@ -37,6 +37,7 @@ pub type AddressWithNetwork = address::AddressWithNetwork;
 pub type AddressInfo = address::AddressInfo;
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Error, thiserror::Error)]
+#[uniffi::export(Display)]
 pub enum WalletError {
     #[error("failed to create wallet: {0}")]
     BdkError(String),
@@ -683,9 +684,4 @@ mod tests {
         let _ = delete_wallet_specific_data(&metadata.id);
         assert_eq!("73c5da0a", fingerprint.as_str());
     }
-}
-
-#[uniffi::export]
-fn describe_wallet_error(error: WalletError) -> String {
-    error.to_string()
 }

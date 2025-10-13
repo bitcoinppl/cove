@@ -51,7 +51,7 @@ struct TapSignerEnterPin: View {
                 manager.resetRoute(to: .importSuccess(tapSigner, deriveInfo))
             case let .failure(error):
                 if !error.isAuthError {
-                    app.alertState = .init(.tapSignerDeriveFailed(error.describe))
+                    app.alertState = .init(.tapSignerDeriveFailed(error.description))
                 }
             }
 
@@ -68,7 +68,7 @@ struct TapSignerEnterPin: View {
             case let .failure(error):
                 if !error.isAuthError {
                     app.alertState = .init(
-                        .general(title: "Backup Failed!", message: error.describe))
+                        .general(title: "Backup Failed!", message: error.description))
                 }
 
                 await MainActor.run { self.pin = "" }
@@ -108,7 +108,7 @@ struct TapSignerEnterPin: View {
             case let .failure(error):
                 if !error.isAuthError {
                     app.alertState = .init(
-                        .general(title: "Signing Failed!", message: error.describe))
+                        .general(title: "Signing Failed!", message: error.description))
 
                     app.sheetState = .none
                 }

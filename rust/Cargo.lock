@@ -3062,7 +3062,7 @@ dependencies = [
 [[package]]
 name = "uniffi"
 version = "0.30.0"
-source = "git+https://github.com/praveenperera/uniffi-rs?branch=kotlin-fqtn#62374671f3481bf765ffb9d735bae34122e79add"
+source = "git+https://github.com/praveenperera/uniffi-rs?branch=dev#492327cfb5a62a4d919998bcccbc0bc842e75a94"
 dependencies = [
  "anyhow",
  "camino",
@@ -3104,7 +3104,7 @@ dependencies = [
 [[package]]
 name = "uniffi_bindgen"
 version = "0.30.0"
-source = "git+https://github.com/praveenperera/uniffi-rs?branch=kotlin-fqtn#62374671f3481bf765ffb9d735bae34122e79add"
+source = "git+https://github.com/praveenperera/uniffi-rs?branch=dev#492327cfb5a62a4d919998bcccbc0bc842e75a94"
 dependencies = [
  "anyhow",
  "askama",
@@ -3141,7 +3141,7 @@ dependencies = [
 [[package]]
 name = "uniffi_build"
 version = "0.30.0"
-source = "git+https://github.com/praveenperera/uniffi-rs?branch=kotlin-fqtn#62374671f3481bf765ffb9d735bae34122e79add"
+source = "git+https://github.com/praveenperera/uniffi-rs?branch=dev#492327cfb5a62a4d919998bcccbc0bc842e75a94"
 dependencies = [
  "anyhow",
  "camino",
@@ -3170,7 +3170,7 @@ dependencies = [
 [[package]]
 name = "uniffi_core"
 version = "0.30.0"
-source = "git+https://github.com/praveenperera/uniffi-rs?branch=kotlin-fqtn#62374671f3481bf765ffb9d735bae34122e79add"
+source = "git+https://github.com/praveenperera/uniffi-rs?branch=dev#492327cfb5a62a4d919998bcccbc0bc842e75a94"
 dependencies = [
  "anyhow",
  "async-compat",
@@ -3195,7 +3195,7 @@ dependencies = [
 [[package]]
 name = "uniffi_internal_macros"
 version = "0.30.0"
-source = "git+https://github.com/praveenperera/uniffi-rs?branch=kotlin-fqtn#62374671f3481bf765ffb9d735bae34122e79add"
+source = "git+https://github.com/praveenperera/uniffi-rs?branch=dev#492327cfb5a62a4d919998bcccbc0bc842e75a94"
 dependencies = [
  "anyhow",
  "indexmap",
@@ -3224,7 +3224,7 @@ dependencies = [
 [[package]]
 name = "uniffi_macros"
 version = "0.30.0"
-source = "git+https://github.com/praveenperera/uniffi-rs?branch=kotlin-fqtn#62374671f3481bf765ffb9d735bae34122e79add"
+source = "git+https://github.com/praveenperera/uniffi-rs?branch=dev#492327cfb5a62a4d919998bcccbc0bc842e75a94"
 dependencies = [
  "camino",
  "fs-err",
@@ -3252,7 +3252,7 @@ dependencies = [
 [[package]]
 name = "uniffi_meta"
 version = "0.30.0"
-source = "git+https://github.com/praveenperera/uniffi-rs?branch=kotlin-fqtn#62374671f3481bf765ffb9d735bae34122e79add"
+source = "git+https://github.com/praveenperera/uniffi-rs?branch=dev#492327cfb5a62a4d919998bcccbc0bc842e75a94"
 dependencies = [
  "anyhow",
  "siphasher",
@@ -3276,7 +3276,7 @@ dependencies = [
 [[package]]
 name = "uniffi_pipeline"
 version = "0.30.0"
-source = "git+https://github.com/praveenperera/uniffi-rs?branch=kotlin-fqtn#62374671f3481bf765ffb9d735bae34122e79add"
+source = "git+https://github.com/praveenperera/uniffi-rs?branch=dev#492327cfb5a62a4d919998bcccbc0bc842e75a94"
 dependencies = [
  "anyhow",
  "heck",
@@ -3288,7 +3288,7 @@ dependencies = [
 [[package]]
 name = "uniffi_testing"
 version = "0.30.0"
-source = "git+https://github.com/praveenperera/uniffi-rs?branch=kotlin-fqtn#62374671f3481bf765ffb9d735bae34122e79add"
+source = "git+https://github.com/praveenperera/uniffi-rs?branch=dev#492327cfb5a62a4d919998bcccbc0bc842e75a94"
 dependencies = [
  "anyhow",
  "camino",
@@ -3312,12 +3312,12 @@ dependencies = [
 [[package]]
 name = "uniffi_udl"
 version = "0.30.0"
-source = "git+https://github.com/praveenperera/uniffi-rs?branch=kotlin-fqtn#62374671f3481bf765ffb9d735bae34122e79add"
+source = "git+https://github.com/praveenperera/uniffi-rs?branch=dev#492327cfb5a62a4d919998bcccbc0bc842e75a94"
 dependencies = [
  "anyhow",
  "textwrap",
  "uniffi_meta 0.30.0",
- "weedle2 5.0.0 (git+https://github.com/praveenperera/uniffi-rs?branch=kotlin-fqtn)",
+ "weedle2 5.0.0 (git+https://github.com/praveenperera/uniffi-rs?branch=dev)",
 ]
 
 [[package]]
@@ -3524,7 +3524,7 @@ dependencies = [
 [[package]]
 name = "weedle2"
 version = "5.0.0"
-source = "git+https://github.com/praveenperera/uniffi-rs?branch=kotlin-fqtn#62374671f3481bf765ffb9d735bae34122e79add"
+source = "git+https://github.com/praveenperera/uniffi-rs?branch=dev#492327cfb5a62a4d919998bcccbc0bc842e75a94"
 dependencies = [
  "nom",
 ]

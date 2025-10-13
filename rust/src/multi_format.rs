@@ -31,6 +31,7 @@ pub enum MultiFormat {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Error, thiserror::Error)]
+#[uniffi::export(Display)]
 pub enum MultiFormatError {
     #[error(transparent)]
     InvalidSeedQr(#[from] crate::seed_qr::SeedQrError),
@@ -183,11 +184,6 @@ fn string_or_data_try_into_multi_format(
     string_or_data: StringOrData,
 ) -> Result<MultiFormat, MultiFormatError> {
     string_or_data.try_into()
-}
-
-#[uniffi::export]
-fn describe_multi_format_error(error: MultiFormatError) -> String {
-    error.to_string()
 }
 
 #[derive(

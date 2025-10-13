@@ -146,7 +146,7 @@ struct QrCodeImportScreen: View {
                 try app.rust.selectWallet(id: id)
             } catch let WalletError.MultiFormat(error) {
                 app.popRoute()
-                self.alert = AlertItem(type: .error(error.describe, "Invalid Format"))
+                self.alert = AlertItem(type: .error(error.description, "Invalid Format"))
             } catch let WalletError.WalletAlreadyExists(id) {
                 self.alert = AlertItem(type: .success("Wallet already exists: \(id)"))
                 if (try? app.rust.selectWallet(id: id)) == nil {

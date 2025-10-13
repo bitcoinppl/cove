@@ -440,9 +440,9 @@ struct CoveApp: App {
             switch error {
             case let multiFormatError as MultiFormatError:
                 Log.error(
-                    "MultiFormat not recognized: \(multiFormatError): \(multiFormatError.describe)"
+                    "MultiFormat not recognized: \(multiFormatError): \(multiFormatError.description)"
                 )
-                app.alertState = TaggedItem(.invalidFormat(multiFormatError.describe))
+                app.alertState = TaggedItem(.invalidFormat(multiFormatError.description))
 
             default:
                 Log.error("Unable to handle scanned code, error: \(error)")
@@ -554,9 +554,9 @@ struct CoveApp: App {
             switch error {
             case let multiFormatError as MultiFormatError:
                 Log.error(
-                    "MultiFormat not recognized: \(multiFormatError): \(multiFormatError.describe)"
+                    "MultiFormat not recognized: \(multiFormatError): \(multiFormatError.description)"
                 )
-                app.alertState = TaggedItem(.invalidFormat(multiFormatError.describe))
+                app.alertState = TaggedItem(.invalidFormat(multiFormatError.description))
 
             default:
                 Log.error("Unable to handle scanned code, error: \(error)")
@@ -575,9 +575,9 @@ struct CoveApp: App {
             switch error {
             case let multiFormatError as MultiFormatError:
                 Log.error(
-                    "MultiFormat not recognized: \(multiFormatError): \(multiFormatError.describe)"
+                    "MultiFormat not recognized: \(multiFormatError): \(multiFormatError.description)"
                 )
-                app.alertState = TaggedItem(.invalidFormat(multiFormatError.describe))
+                app.alertState = TaggedItem(.invalidFormat(multiFormatError.description))
 
             default:
                 Log.error("Unable to handle scanned code, error: \(error)")

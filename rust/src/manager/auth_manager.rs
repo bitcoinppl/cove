@@ -53,6 +53,7 @@ type Result<T, E = Error> = std::result::Result<T, E>;
 type Error = AuthManagerError;
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
+#[uniffi::export(Display)]
 pub enum AuthManagerError {
     #[error("Unable to set the wipe data PIN, because {0}")]
     WipeDataSet(TrickPinError),
@@ -62,11 +63,6 @@ pub enum AuthManagerError {
 
     #[error("There was a database error: {0}")]
     Database(#[from] database::Error),
-}
-
-#[uniffi::export]
-fn describe_auth_manager_error(error: AuthManagerError) -> String {
-    error.to_string()
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]

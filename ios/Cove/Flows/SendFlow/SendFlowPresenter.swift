@@ -120,7 +120,7 @@ import SwiftUI
         case .UnableToGetFeeRate:
             "Are you connected to the internet?"
         case let .WalletManager(msg):
-            msg.describe
+            msg.description
         case let .UnableToGetFeeDetails(msg):
             msg
         case let .UnableToBuildTxn(msg):

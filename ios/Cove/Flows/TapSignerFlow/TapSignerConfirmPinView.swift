@@ -58,7 +58,7 @@ struct TapSignerConfirmPinView: View {
                     // failed to setup and can't continue from a screen, send back to home and ask them to restart the process
                     Log.error("Failed to setup TapSigner: \(error)")
                     app.sheetState = .none
-                    app.alertState = .init(.tapSignerSetupFailed(error.describe))
+                    app.alertState = .init(.tapSignerSetupFailed(error.description))
                 }
             }
         }
@@ -81,7 +81,7 @@ struct TapSignerConfirmPinView: View {
             case let .failure(error):
                 if error.isAuthError { return app.alertState = .init(.tapSignerInvalidAuth) }
                 if error.isNoBackupError { return app.alertState = .init(.tapSignerNoBackup(args.tapSigner)) }
-                app.alertState = .init(.general(title: "Error", message: error.describe))
+                app.alertState = .init(.general(title: "Error", message: error.description))
             }
         }
     }

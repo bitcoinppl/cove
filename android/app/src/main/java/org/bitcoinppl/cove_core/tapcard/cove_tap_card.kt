@@ -1406,6 +1406,8 @@ enum class Field {
     NONCE,
     SLOT_NUMBER,
     ADDRESS;
+
+
     companion object
 }
 
@@ -1437,6 +1439,8 @@ enum class SatsCardState {
     SEALED,
     UNSEALED,
     ERROR;
+
+
     companion object
 }
 
@@ -1462,9 +1466,9 @@ public object FfiConverterTypeSatsCardState: FfiConverterRustBuffer<SatsCardStat
 
 
 
-sealed class TapCard: Disposable  {
+sealed class TapCard :Disposable {
     
-    data class Sats(
+    data class SatsCard(
         val v1: org.bitcoinppl.cove_core.tapcard.SatsCard) : TapCard()
         
     {
@@ -1473,7 +1477,7 @@ sealed class TapCard: Disposable  {
         companion object
     }
     
-    data class Tap(
+    data class TapSigner(
         val v1: org.bitcoinppl.cove_core.tapcard.TapSigner) : TapCard()
         
     {
@@ -1487,14 +1491,14 @@ sealed class TapCard: Disposable  {
     @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
     override fun destroy() {
         when(this) {
-            is TapCard.Sats -> {
+            is TapCard.SatsCard -> {
                 
     Disposable.destroy(
         this.v1
     )
                 
             }
-            is TapCard.Tap -> {
+            is TapCard.TapSigner -> {
                 
     Disposable.destroy(
         this.v1
@@ -1504,6 +1508,8 @@ sealed class TapCard: Disposable  {
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
     
+
+
     companion object
 }
 
@@ -1513,10 +1519,10 @@ sealed class TapCard: Disposable  {
 public object FfiConverterTypeTapCard : FfiConverterRustBuffer<TapCard>{
     override fun read(buf: ByteBuffer): TapCard {
         return when(buf.getInt()) {
-            1 -> TapCard.Sats(
+            1 -> TapCard.SatsCard(
                 FfiConverterTypeSatsCard.read(buf),
                 )
-            2 -> TapCard.Tap(
+            2 -> TapCard.TapSigner(
                 FfiConverterTypeTapSigner.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -1524,14 +1530,14 @@ public object FfiConverterTypeTapCard : FfiConverterRustBuffer<TapCard>{
     }
 
     override fun allocationSize(value: TapCard) = when(value) {
-        is TapCard.Sats -> {
+        is TapCard.SatsCard -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
                 + FfiConverterTypeSatsCard.allocationSize(value.v1)
             )
         }
-        is TapCard.Tap -> {
+        is TapCard.TapSigner -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
@@ -1542,12 +1548,12 @@ public object FfiConverterTypeTapCard : FfiConverterRustBuffer<TapCard>{
 
     override fun write(value: TapCard, buf: ByteBuffer) {
         when(value) {
-            is TapCard.Sats -> {
+            is TapCard.SatsCard -> {
                 buf.putInt(1)
                 FfiConverterTypeSatsCard.write(value.v1, buf)
                 Unit
             }
-            is TapCard.Tap -> {
+            is TapCard.TapSigner -> {
                 buf.putInt(2)
                 FfiConverterTypeTapSigner.write(value.v1, buf)
                 Unit
@@ -1624,6 +1630,7 @@ sealed class TapCardParseException: kotlin.Exception() {
             get() = ""
     }
     
+
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<TapCardParseException> {
         override fun lift(error_buf: RustBuffer.ByValue): TapCardParseException = FfiConverterTypeTapCardParseError.lift(error_buf)
@@ -1760,6 +1767,8 @@ enum class TapSignerState {
     SEALED,
     UNUSED,
     ERROR;
+
+
     companion object
 }
 

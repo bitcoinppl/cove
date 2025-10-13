@@ -12805,6 +12805,16 @@ public enum AuthManagerError: Swift.Error, Equatable, Hashable, Foundation.Local
     )
 
     
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_authmanagererror_uniffi_trait_display(
+            FfiConverterTypeAuthManagerError_lower(self),$0
+    )
+}
+    )
+}
 
     
     public var errorDescription: String? {
@@ -16747,6 +16757,16 @@ public enum MultiFormatError: Swift.Error, Equatable, Hashable, Foundation.Local
     )
 
     
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_multiformaterror_uniffi_trait_display(
+            FfiConverterTypeMultiFormatError_lower(self),$0
+    )
+}
+    )
+}
 
     
     public var errorDescription: String? {
@@ -18196,6 +18216,16 @@ public enum SendFlowError: Swift.Error, Equatable, Hashable, Foundation.Localize
     )
 
     
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_sendflowerror_uniffi_trait_display(
+            FfiConverterTypeSendFlowError_lower(self),$0
+    )
+}
+    )
+}
 
     
     public var errorDescription: String? {
@@ -18417,18 +18447,33 @@ public func FfiConverterTypeSendFlowErrorAlert_lower(_ value: SendFlowErrorAlert
 }
 
 
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum SendFlowFiatOnChangeError: Equatable, Hashable {
+public enum SendFlowFiatOnChangeError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
+
     
-    case invalidFiatAmount(error: String, input: String
+    
+    case InvalidFiatAmount(error: String, input: String
     )
-    case converter(ConverterError
+    case Converter(ConverterError
     )
 
+    
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_sendflowfiatonchangeerror_uniffi_trait_display(
+            FfiConverterTypeSendFlowFiatOnChangeError_lower(self),$0
+    )
+}
+    )
+}
 
-
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
 #if compiler(>=6)
@@ -18444,28 +18489,36 @@ public struct FfiConverterTypeSendFlowFiatOnChangeError: FfiConverterRustBuffer 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SendFlowFiatOnChangeError {
         let variant: Int32 = try readInt(&buf)
         switch variant {
+
         
-        case 1: return .invalidFiatAmount(error: try FfiConverterString.read(from: &buf), input: try FfiConverterString.read(from: &buf)
-        )
+
         
-        case 2: return .converter(try FfiConverterTypeConverterError.read(from: &buf)
-        )
-        
-        default: throw UniffiInternalError.unexpectedEnumCase
+        case 1: return .InvalidFiatAmount(
+            error: try FfiConverterString.read(from: &buf), 
+            input: try FfiConverterString.read(from: &buf)
+            )
+        case 2: return .Converter(
+            try FfiConverterTypeConverterError.read(from: &buf)
+            )
+
+         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: SendFlowFiatOnChangeError, into buf: inout [UInt8]) {
         switch value {
+
+        
+
         
         
-        case let .invalidFiatAmount(error,input):
+        case let .InvalidFiatAmount(error,input):
             writeInt(&buf, Int32(1))
             FfiConverterString.write(error, into: &buf)
             FfiConverterString.write(input, into: &buf)
             
         
-        case let .converter(v1):
+        case let .Converter(v1):
             writeInt(&buf, Int32(2))
             FfiConverterTypeConverterError.write(v1, into: &buf)
             
@@ -18487,7 +18540,6 @@ public func FfiConverterTypeSendFlowFiatOnChangeError_lift(_ buf: RustBuffer) th
 public func FfiConverterTypeSendFlowFiatOnChangeError_lower(_ value: SendFlowFiatOnChangeError) -> RustBuffer {
     return FfiConverterTypeSendFlowFiatOnChangeError.lower(value)
 }
-
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
@@ -19705,6 +19757,16 @@ public enum TapSignerReaderError: Swift.Error, Equatable, Hashable, Foundation.L
     )
 
     
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_tapsignerreadererror_uniffi_trait_display(
+            FfiConverterTypeTapSignerReaderError_lower(self),$0
+    )
+}
+    )
+}
 
     
     public var errorDescription: String? {
@@ -20357,6 +20419,16 @@ public enum TransportError: Swift.Error, Equatable, Hashable, Foundation.Localiz
     )
 
     
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_transporterror_uniffi_trait_display(
+            FfiConverterTypeTransportError_lower(self),$0
+    )
+}
+    )
+}
 
     
     public var errorDescription: String? {
@@ -21233,6 +21305,16 @@ public enum WalletError: Swift.Error, Equatable, Hashable, Foundation.LocalizedE
     )
 
     
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_walleterror_uniffi_trait_display(
+            FfiConverterTypeWalletError_lower(self),$0
+    )
+}
+    )
+}
 
     
     public var errorDescription: String? {
@@ -21740,6 +21822,16 @@ public enum WalletManagerError: Swift.Error, Equatable, Hashable, Foundation.Loc
     )
 
     
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_walletmanagererror_uniffi_trait_display(
+            FfiConverterTypeWalletManagerError_lower(self),$0
+    )
+}
+    )
+}
 
     
     public var errorDescription: String? {
@@ -25241,62 +25333,6 @@ public func defaultWalletColors() -> [WalletColor]  {
     )
 })
 }
-public func describeAuthManagerError(error: AuthManagerError) -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_cove_fn_func_describe_auth_manager_error(
-        FfiConverterTypeAuthManagerError_lower(error),$0
-    )
-})
-}
-public func describeMultiFormatError(error: MultiFormatError) -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_cove_fn_func_describe_multi_format_error(
-        FfiConverterTypeMultiFormatError_lower(error),$0
-    )
-})
-}
-public func describeSendFlowError(error: SendFlowError) -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_cove_fn_func_describe_send_flow_error(
-        FfiConverterTypeSendFlowError_lower(error),$0
-    )
-})
-}
-public func describeSendFlowFiatOnChangeError(error: SendFlowFiatOnChangeError) -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_cove_fn_func_describe_send_flow_fiat_on_change_error(
-        FfiConverterTypeSendFlowFiatOnChangeError_lower(error),$0
-    )
-})
-}
-public func describeTapSignerReaderError(error: TapSignerReaderError) -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_cove_fn_func_describe_tap_signer_reader_error(
-        FfiConverterTypeTapSignerReaderError_lower(error),$0
-    )
-})
-}
-public func describeTransportError(error: TransportError) -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_cove_fn_func_describe_transport_error(
-        FfiConverterTypeTransportError_lower(error),$0
-    )
-})
-}
-public func describeWalletError(error: WalletError) -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_cove_fn_func_describe_wallet_error(
-        FfiConverterTypeWalletError_lower(error),$0
-    )
-})
-}
-public func describeWalletManagerError(error: WalletManagerError) -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_cove_fn_func_describe_wallet_manager_error(
-        FfiConverterTypeWalletManagerError_lower(error),$0
-    )
-})
-}
 public func discoveryStateIsEqual(lhs: DiscoveryState, rhs: DiscoveryState) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
     uniffi_cove_fn_func_discovery_state_is_equal(
@@ -25651,30 +25687,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_default_wallet_colors() != 39034) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_func_describe_auth_manager_error() != 9186) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_func_describe_multi_format_error() != 25386) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_func_describe_send_flow_error() != 40406) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_func_describe_send_flow_fiat_on_change_error() != 38097) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_func_describe_tap_signer_reader_error() != 18001) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_func_describe_transport_error() != 49523) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_func_describe_wallet_error() != 7428) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_func_describe_wallet_manager_error() != 13784) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_discovery_state_is_equal() != 12390) {

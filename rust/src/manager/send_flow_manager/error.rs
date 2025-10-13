@@ -3,6 +3,7 @@ use cove_types::{Network, address::AddressError};
 use crate::manager::wallet_manager::WalletManagerError;
 
 #[derive(Debug, Clone, Eq, PartialEq, uniffi::Error, thiserror::Error)]
+#[uniffi::export(Display)]
 pub enum SendFlowError {
     #[error("empty address")]
     EmptyAddress,
@@ -59,9 +60,4 @@ impl SendFlowError {
             _ => Self::InvalidAddress(address),
         }
     }
-}
-
-#[uniffi::export]
-fn describe_send_flow_error(error: SendFlowError) -> String {
-    error.to_string()
 }
