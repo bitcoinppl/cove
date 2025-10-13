@@ -25,7 +25,13 @@ use bdk_wallet::{
     },
     error::CreateTxError,
 };
-use bdk_wallet::{KeychainKind, LocalOutput, SignOptions, TxOrdering};
+// Note: SignOptions is marked deprecated in bdk_wallet 2.2.0 with a misleading message
+// saying it moved to bitcoin::psbt, but no replacement exists there yet. bdk_wallet itself
+// uses #![allow(deprecated)] and still requires SignOptions in its API. This will be resolved
+// when bdk_wallet completes their signer refactoring.
+#[allow(deprecated)]
+use bdk_wallet::SignOptions;
+use bdk_wallet::{KeychainKind, LocalOutput, TxOrdering};
 use bitcoin::{Amount, FeeRate as BdkFeeRate, OutPoint, TxIn, Txid};
 use bitcoin::{Transaction as BdkTransaction, params::Params};
 use cove_bdk::coin_selection::CoveDefaultCoinSelection;
@@ -636,6 +642,7 @@ impl WalletActor {
     }
 
     #[into_actor_result]
+    #[allow(deprecated)] // SignOptions usage required by bdk_wallet API, no replacement yet
     pub async fn finalize_psbt(&mut self, psbt: Psbt) -> Result<bitcoin::Transaction, Error> {
         let mut psbt = psbt;
 
