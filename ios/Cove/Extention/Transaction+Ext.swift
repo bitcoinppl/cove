@@ -7,7 +7,7 @@
 
 import Foundation
 
-extension Transaction: Identifiable {
+extension Transaction: @retroactive Identifiable {
     public var id: TxId {
         switch self {
         case let .confirmed(confirmedTransaction):
@@ -24,15 +24,5 @@ extension Transaction: Identifiable {
         case let .unconfirmed(transaction):
             transaction.sentAndReceived()
         }
-    }
-}
-
-extension TxId: Hashable, Equatable {
-    public static func == (lhs: TxId, rhs: TxId) -> Bool {
-        lhs.isEqual(other: rhs)
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(asHashString())
     }
 }

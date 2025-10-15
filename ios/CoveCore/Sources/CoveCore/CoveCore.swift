@@ -1,18 +1,6 @@
 @_exported import cove_core_ffi
 import Foundation
 
-extension WalletAddressType: @retroactive Comparable {
-    public static func < (lhs: WalletAddressType, rhs: WalletAddressType) -> Bool {
-        walletAddressTypeLessThan(lhs: lhs, rhs: rhs)
-    }
-}
-
-extension DiscoveryState: @retroactive Equatable {
-    public static func == (lhs: DiscoveryState, rhs: DiscoveryState) -> Bool {
-        discoveryStateIsEqual(lhs: lhs, rhs: rhs)
-    }
-}
-
 public extension FeeSpeed {
     var string: String {
         feeSpeedToString(feeSpeed: self)
@@ -211,7 +199,7 @@ extension SendFlowAlertState {
     }
 }
 
-extension Utxo: @retroactive Identifiable, @retroactive Hashable, @retroactive Equatable {
+extension Utxo: @retroactive Identifiable {
     public typealias ID = OutPoint
 
     public var id: OutPoint {
@@ -224,14 +212,6 @@ extension Utxo: @retroactive Identifiable, @retroactive Hashable, @retroactive E
 
     public var date: String {
         utxoDate(utxo: self)
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(utxoHashToUint(utxo: self))
-    }
-
-    public static func == (lhs: Self, rhs: Self) -> Bool {
-        utxoIsEqual(lhs: lhs, rhs: rhs)
     }
 }
 

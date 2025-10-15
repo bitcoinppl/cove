@@ -441,6 +441,22 @@ fileprivate struct FfiConverterUInt8: FfiConverterPrimitive {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterInt8: FfiConverterPrimitive {
+    typealias FfiType = Int8
+    typealias SwiftType = Int8
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Int8 {
+        return try lift(readInt(&buf))
+    }
+
+    public static func write(_ value: Int8, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterUInt16: FfiConverterPrimitive {
     typealias FfiType = UInt16
     typealias SwiftType = UInt16
@@ -11843,7 +11859,7 @@ public func FfiConverterTypeTapSignerSetupComplete_lower(_ value: TapSignerSetup
 }
 
 
-public struct WalletMetadata {
+public struct WalletMetadata: Equatable, Hashable {
     public var id: WalletId
     public var name: String
     public var color: WalletColor
@@ -11901,6 +11917,28 @@ public struct WalletMetadata {
     }
 
     
+// The local Rust `Eq` implementation - only `eq` is used.
+public static func == (self: WalletMetadata, other: WalletMetadata) -> Bool {
+    return try!  FfiConverterBool.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_walletmetadata_uniffi_trait_eq_eq(
+            FfiConverterTypeWalletMetadata_lower(self),
+        FfiConverterTypeWalletMetadata_lower(other),$0
+    )
+}
+    )
+}
+// The local Rust `Hash` implementation
+public func hash(into hasher: inout Hasher) {
+    let val = try!  FfiConverterUInt64.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_walletmetadata_uniffi_trait_hash(
+            FfiConverterTypeWalletMetadata_lower(self),$0
+    )
+}
+    )
+    hasher.combine(val)
+}
 }
 
 #if compiler(>=6)
@@ -14482,7 +14520,7 @@ public func FfiConverterTypeDescriptorError_lower(_ value: DescriptorError) -> R
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum DiscoveryState {
+public enum DiscoveryState: Equatable, Hashable {
     
     case single
     case startedJson(FoundJson
@@ -14497,6 +14535,28 @@ public enum DiscoveryState {
 
 
 
+// The local Rust `Eq` implementation - only `eq` is used.
+public static func == (self: DiscoveryState, other: DiscoveryState) -> Bool {
+    return try!  FfiConverterBool.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_discoverystate_uniffi_trait_eq_eq(
+            FfiConverterTypeDiscoveryState_lower(self),
+        FfiConverterTypeDiscoveryState_lower(other),$0
+    )
+}
+    )
+}
+// The local Rust `Hash` implementation
+public func hash(into hasher: inout Hasher) {
+    let val = try!  FfiConverterUInt64.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_discoverystate_uniffi_trait_hash(
+            FfiConverterTypeDiscoveryState_lower(self),$0
+    )
+}
+    )
+    hasher.combine(val)
+}
 }
 
 #if compiler(>=6)
@@ -14667,7 +14727,7 @@ public func FfiConverterTypeFiatAmountError_lower(_ value: FiatAmountError) -> R
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum FiatCurrency: Equatable, Hashable {
+public enum FiatCurrency: Equatable, Hashable, CustomStringConvertible {
     
     case usd
     case cad
@@ -14679,6 +14739,16 @@ public enum FiatCurrency: Equatable, Hashable {
 
 
 
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_fiatcurrency_uniffi_trait_display(
+            FfiConverterTypeFiatCurrency_lower(self),$0
+    )
+}
+    )
+}
 }
 
 #if compiler(>=6)
@@ -20729,7 +20799,7 @@ public func FfiConverterTypeUnsignedTransactionsTableError_lower(_ value: Unsign
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum WalletAddressType: Equatable, Hashable {
+public enum WalletAddressType: Equatable, Hashable, Comparable, CustomStringConvertible {
     
     case nativeSegwit
     case wrappedSegwit
@@ -20737,6 +20807,27 @@ public enum WalletAddressType: Equatable, Hashable {
 
 
 
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_walletaddresstype_uniffi_trait_display(
+            FfiConverterTypeWalletAddressType_lower(self),$0
+    )
+}
+    )
+}
+// The local Rust `Ord` implementation
+public static func < (self: WalletAddressType, other: WalletAddressType) -> Bool {
+    return try!  FfiConverterInt8.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_walletaddresstype_uniffi_trait_ord_cmp(
+            FfiConverterTypeWalletAddressType_lower(self),
+        FfiConverterTypeWalletAddressType_lower(other),$0
+    )
+}
+    ) < 0
+}
 }
 
 #if compiler(>=6)
@@ -22572,7 +22663,7 @@ public func FfiConverterTypeWalletTableError_lower(_ value: WalletTableError) ->
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum WalletType: Equatable, Hashable {
+public enum WalletType: Equatable, Hashable, CustomStringConvertible {
     
     case hot
     case cold
@@ -22584,6 +22675,16 @@ public enum WalletType: Equatable, Hashable {
 
 
 
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_wallettype_uniffi_trait_display(
+            FfiConverterTypeWalletType_lower(self),$0
+    )
+}
+    )
+}
 }
 
 #if compiler(>=6)

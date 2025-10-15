@@ -3248,7 +3248,7 @@ public protocol TxIdProtocol: AnyObject, Sendable {
     func asHashString()  -> String
     
 }
-open class TxId: TxIdProtocol, @unchecked Sendable, Equatable, Hashable, Comparable, CustomStringConvertible {
+open class TxId: TxIdProtocol, @unchecked Sendable, Equatable, Hashable, Comparable {
     fileprivate let handle: UInt64
 
     /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
@@ -3306,16 +3306,6 @@ open func asHashString() -> String  {
     
 
     
-// The local Rust `Display` implementation.
-public var description: String {
-    return try!  FfiConverterString.lift(
-        try! rustCall() {
-    uniffi_cove_types_fn_method_txid_uniffi_trait_display(
-            self.uniffiCloneHandle(),$0
-    )
-}
-    )
-}
 // The local Rust `Eq` implementation - only `eq` is used.
 public static func == (self: TxId, other: TxId) -> Bool {
     return try!  FfiConverterBool.lift(
