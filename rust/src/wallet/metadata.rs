@@ -15,6 +15,7 @@ use cove_tap_card::TapSigner;
 pub use cove_types::{BlockSizeLast, WalletId};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq, uniffi::Record)]
+#[uniffi::export(Eq, Hash)]
 pub struct WalletMetadata {
     pub id: WalletId,
     pub name: String,
@@ -88,6 +89,7 @@ pub enum StoreType {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Hash, Eq, PartialEq, uniffi::Enum)]
+#[uniffi::export(Eq, Hash)]
 pub enum DiscoveryState {
     #[default]
     Single,
@@ -124,6 +126,7 @@ pub struct FoundJson(pub pubport::formats::Json);
 #[derive(
     Debug, Clone, Copy, Default, Serialize, Deserialize, Hash, Eq, PartialEq, uniffi::Enum, Display,
 )]
+#[uniffi::export(Display)]
 pub enum WalletType {
     #[default]
     Hot,

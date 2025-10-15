@@ -132,6 +132,7 @@ impl FeeRateOption {
 // MARK: FeeSpeed
 //
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, uniffi::Enum, Display)]
+#[uniffi::export(Display)]
 pub enum FeeSpeed {
     Fast,
     Medium,

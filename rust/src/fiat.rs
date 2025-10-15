@@ -23,6 +23,7 @@ pub type FiatAmount = amount::FiatAmount;
     strum::EnumIter,
 )]
 #[serde(rename_all = "UPPERCASE")]
+#[uniffi::export(Display)]
 pub enum FiatCurrency {
     #[default]
     Usd,

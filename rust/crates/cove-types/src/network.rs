@@ -18,6 +18,7 @@ use serde::{Deserialize, Serialize};
     Serialize,
     Deserialize,
 )]
+#[uniffi::export(Display)]
 pub enum Network {
     Bitcoin,
     Testnet,

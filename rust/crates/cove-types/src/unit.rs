@@ -4,6 +4,7 @@ use std::fmt::Display;
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, uniffi::Enum, strum::EnumIter,
 )]
+#[uniffi::export(Display)]
 pub enum BitcoinUnit {
     Btc,
     Sat,

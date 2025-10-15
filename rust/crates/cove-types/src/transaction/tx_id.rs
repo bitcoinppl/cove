@@ -1,4 +1,4 @@
-use std::{borrow::Borrow, cmp::Ordering, fmt, sync::Arc};
+use std::{borrow::Borrow, cmp::Ordering, fmt};
 
 use bitcoin::{
     Txid as BdkTxid,
@@ -22,6 +22,7 @@ use rand::random;
     serde::Deserialize,
 )]
 #[repr(transparent)]
+#[uniffi::export(Display, Eq, Hash, Ord)]
 pub struct TxId(pub BdkTxid);
 
 #[uniffi::export]
@@ -29,11 +30,6 @@ impl TxId {
     #[uniffi::method]
     pub fn as_hash_string(&self) -> String {
         self.0.to_raw_hash().to_string()
-    }
-
-    #[uniffi::method]
-    pub fn is_equal(&self, other: Arc<TxId>) -> bool {
-        self.0 == other.0
     }
 }
 

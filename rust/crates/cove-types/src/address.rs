@@ -33,6 +33,7 @@ use crate::{Network, amount::Amount, transaction::TransactionDirection};
     uniffi::Object,
     serde::Serialize,
 )]
+#[uniffi::export(Eq, Hash)]
 pub struct Address(BdkAddress);
 
 #[derive(
@@ -206,11 +207,6 @@ fn parse_bitcoin_uri(input: &str) -> Result<(String, Option<Amount>), Error> {
     });
 
     Ok((address, amount))
-}
-
-#[uniffi::export]
-fn address_is_equal(lhs: Arc<Address>, rhs: Arc<Address>) -> bool {
-    lhs == rhs
 }
 
 #[uniffi::export]
