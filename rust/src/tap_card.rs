@@ -5,6 +5,7 @@ use std::{fmt::Debug, sync::Arc};
 
 // Define error types
 #[derive(Debug, Clone, Hash, PartialEq, Eq, thiserror::Error, uniffi::Error)]
+#[uniffi::export(Display)]
 pub enum TransportError {
     #[error("CiborDe: {0}")]
     CiborDe(String),
@@ -179,9 +180,4 @@ pub fn create_transport_error_from_code(code: u16, message: String) -> Transport
 pub fn is_valid_chain_code(chain_code: String) -> bool {
     let Ok(chain_code) = hex::decode(chain_code) else { return false };
     chain_code.len() == 32
-}
-
-#[uniffi::export]
-fn describe_transport_error(error: TransportError) -> String {
-    error.to_string()
 }

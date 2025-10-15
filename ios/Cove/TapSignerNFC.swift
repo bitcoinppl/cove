@@ -77,12 +77,12 @@ class TapSignerNFC {
                                 self.nfc.session?.invalidate()
                             } else if let error = self.nfc.tapSignerError {
                                 continuation.resume(returning: .failure(error))
-                                self.nfc.session?.invalidate(errorMessage: error.describe)
+                                self.nfc.session?.invalidate(errorMessage: error.description)
                             } else {
                                 Log.error("Unknown error response: \(String(describing: self.nfc.tapSignerResponse)), error: \(String(describing: self.nfc.tapSignerError))")
                                 let error = TapSignerReaderError.Unknown("Unknown error occurred")
                                 continuation.resume(returning: .failure(error))
-                                self.nfc.session?.invalidate(errorMessage: error.describe)
+                                self.nfc.session?.invalidate(errorMessage: error.description)
                             }
                         }
                     }
@@ -92,7 +92,7 @@ class TapSignerNFC {
                 }
             }
         } catch let error as TapSignerReaderError {
-            self.nfc.session?.invalidate(errorMessage: error.describe)
+            self.nfc.session?.invalidate(errorMessage: error.description)
             return .failure(error)
         } catch {
             nfc.session?.invalidate(errorMessage: "Something went wrong!")
@@ -351,7 +351,7 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
             if case .TapSignerError(.CkTap(.BadAuth)) = error {
                 return session.invalidate(errorMessage: "Wrong PIN, please try again")
             }
-            session.invalidate(errorMessage: "TapSigner error: \(error.describe)")
+            session.invalidate(errorMessage: "TapSigner error: \(error.description)")
         } catch {
             logger.error("Error creating reader: \(error)")
             session.invalidate(errorMessage: "Error creating reader: \(error.localizedDescription)")

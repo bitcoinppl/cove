@@ -1674,6 +1674,7 @@ sealed class KeychainException: kotlin.Exception() {
     }
     
 
+
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<KeychainException> {
         override fun lift(error_buf: RustBuffer.ByValue): KeychainException = FfiConverterTypeKeychainError.lift(error_buf)
     }

@@ -2720,6 +2720,8 @@ sealed class NdefPayload {
     
 
     
+
+
     companion object
 }
 
@@ -2787,6 +2789,8 @@ enum class NdefType {
     UNKNOWN,
     UNCHANGED,
     RESERVED;
+
+
     companion object
 }
 
@@ -2822,6 +2826,7 @@ sealed class NfcMessageException: kotlin.Exception() {
             get() = ""
     }
     
+
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<NfcMessageException> {
         override fun lift(error_buf: RustBuffer.ByValue): NfcMessageException = FfiConverterTypeNfcMessageError.lift(error_buf)
@@ -2889,6 +2894,7 @@ sealed class NfcReaderException: kotlin.Exception() {
             get() = ""
     }
     
+
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<NfcReaderException> {
         override fun lift(error_buf: RustBuffer.ByValue): NfcReaderException = FfiConverterTypeNfcReaderError.lift(error_buf)
@@ -2983,6 +2989,8 @@ sealed class ParseResult {
     
 
     
+
+
     companion object
 }
 
@@ -3061,6 +3069,8 @@ sealed class ParserState {
     
 
     
+
+
     companion object
 }
 
@@ -3174,6 +3184,7 @@ sealed class ResumeException: kotlin.Exception() {
     }
     
 
+
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<ResumeException> {
         override fun lift(error_buf: RustBuffer.ByValue): ResumeException = FfiConverterTypeResumeError.lift(error_buf)
     }
@@ -3268,6 +3279,8 @@ enum class TextPayloadFormat {
     
     UTF8,
     UTF16;
+
+
     companion object
 }
 

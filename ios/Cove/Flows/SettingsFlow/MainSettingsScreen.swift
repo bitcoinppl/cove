@@ -647,7 +647,7 @@ struct MainSettingsScreen: View {
 
         do { try auth.rust.setWipeDataPin(pin: pin) } catch {
             let error = error as! AuthManagerError
-            alertState = .init(.extraSetPinError(error.describe))
+            alertState = .init(.extraSetPinError(error.description))
         }
     }
 
@@ -657,7 +657,7 @@ struct MainSettingsScreen: View {
 
         do { try auth.rust.setDecoyPin(pin: pin) } catch {
             let error = error as! AuthManagerError
-            alertState = .init(.extraSetPinError(error.describe))
+            alertState = .init(.extraSetPinError(error.description))
         }
     }
 }

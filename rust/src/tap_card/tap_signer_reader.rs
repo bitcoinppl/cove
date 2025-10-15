@@ -20,6 +20,7 @@ use cove_util::result_ext::ResultExt as _;
 use super::{CkTapError, TapcardTransport, TapcardTransportProtocol, TransportError};
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, thiserror::Error, uniffi::Error)]
+#[uniffi::export(Display)]
 pub enum TapSignerReaderError {
     #[error(transparent)]
     TapSignerError(#[from] TransportError),
@@ -581,11 +582,6 @@ mod ffi {
     #[uniffi::export]
     fn tap_signer_response_sign_response(response: TapSignerResponse) -> Option<Arc<Psbt>> {
         response.sign_response()
-    }
-
-    #[uniffi::export]
-    fn describe_tap_signer_reader_error(error: TapSignerReaderError) -> String {
-        error.to_string()
     }
 
     #[uniffi::export]

@@ -71,7 +71,7 @@ struct TapSignerSetupRetry: View {
                                 .tapSignerSetupFailed("Failed to setup TapSigner"))
                         case let .failure(error):
                             app.sheetState = nil
-                            app.alertState = .init(.tapSignerSetupFailed(error.describe))
+                            app.alertState = .init(.tapSignerSetupFailed(error.description))
                         }
                     }
                 }

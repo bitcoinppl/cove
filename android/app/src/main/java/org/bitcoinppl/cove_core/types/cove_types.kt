@@ -8605,6 +8605,7 @@ sealed class AddressException: kotlin.Exception() {
     }
     
 
+
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<AddressException> {
         override fun lift(error_buf: RustBuffer.ByValue): AddressException = FfiConverterTypeAddressError.lift(error_buf)
     }
@@ -8708,6 +8709,8 @@ enum class BitcoinUnit {
     
     BTC,
     SAT;
+
+
     companion object
 }
 
@@ -8739,6 +8742,8 @@ enum class ColorSchemeSelection {
     LIGHT,
     DARK,
     SYSTEM;
+
+
     companion object
 }
 
@@ -8776,6 +8781,7 @@ sealed class ConfirmDetailsException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
+
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<ConfirmDetailsException> {
         override fun lift(error_buf: RustBuffer.ByValue): ConfirmDetailsException = FfiConverterTypeConfirmDetailsError.lift(error_buf)
@@ -8845,6 +8851,8 @@ sealed class FeeSpeed {
     
 
     
+
+
     companion object
 }
 
@@ -9032,6 +9040,8 @@ sealed class FfiColor {
     
 
     
+
+
     companion object
 }
 
@@ -9246,6 +9256,8 @@ enum class FfiColorScheme {
     
     LIGHT,
     DARK;
+
+
     companion object
 }
 
@@ -9278,6 +9290,8 @@ enum class Network {
     TESTNET,
     TESTNET4,
     SIGNET;
+
+
     companion object
 }
 
@@ -9333,6 +9347,7 @@ sealed class PsbtException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
+
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<PsbtException> {
         override fun lift(error_buf: RustBuffer.ByValue): PsbtException = FfiConverterTypePsbtError.lift(error_buf)
@@ -9412,6 +9427,8 @@ enum class TransactionDirection {
     
     INCOMING,
     OUTGOING;
+
+
     companion object
 }
 
@@ -9442,6 +9459,8 @@ enum class UtxoType {
     
     OUTPUT,
     CHANGE;
+
+
     companion object
 }
 

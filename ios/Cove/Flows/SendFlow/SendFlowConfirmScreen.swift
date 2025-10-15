@@ -53,7 +53,7 @@ struct SendFlowConfirmScreen: View {
                     do {
                         signedTransaction = try await manager.rust.finalizePsbt(psbt: psbt)
                     } catch let error as WalletManagerError {
-                        app.alertState = .init(.general(title: "Unable to finalize transaction", message: error.describe))
+                        app.alertState = .init(.general(title: "Unable to finalize transaction", message: error.description))
                     } catch {
                         app.alertState = .init(.general(title: "Unknown error", message: error.localizedDescription))
                     }
@@ -177,7 +177,7 @@ struct SendFlowConfirmScreen: View {
                             isShowingAlert = true
                             auth.unlock()
                         } catch let error as WalletManagerError {
-                            sendState = .error(error.describe)
+                            sendState = .error(error.description)
                             isShowingErrorAlert = true
                         } catch {
                             sendState = .error(error.localizedDescription)

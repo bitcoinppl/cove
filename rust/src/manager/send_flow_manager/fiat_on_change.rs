@@ -40,7 +40,8 @@ impl Changeset {
 pub type Error = SendFlowFiatOnChangeError;
 type Result<T, E = Error> = std::result::Result<T, E>;
 
-#[derive(Debug, Clone, uniffi::Enum, thiserror::Error)]
+#[derive(Debug, Clone, uniffi::Error, thiserror::Error)]
+#[uniffi::export(Display)]
 pub enum SendFlowFiatOnChangeError {
     #[error("invalid fiat amount: {error} ({input})")]
     InvalidFiatAmount { error: String, input: String },
@@ -169,9 +170,4 @@ impl FiatOnChangeHandler {
 
         Ok(changes)
     }
-}
-
-#[uniffi::export]
-fn describe_send_flow_fiat_on_change_error(error: SendFlowFiatOnChangeError) -> String {
-    error.to_string()
 }

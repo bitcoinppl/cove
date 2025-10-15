@@ -991,22 +991,6 @@ external fun uniffi_cove_checksum_func_default_node_selection(
 ): Short
 external fun uniffi_cove_checksum_func_default_wallet_colors(
 ): Short
-external fun uniffi_cove_checksum_func_describe_auth_manager_error(
-): Short
-external fun uniffi_cove_checksum_func_describe_multi_format_error(
-): Short
-external fun uniffi_cove_checksum_func_describe_send_flow_error(
-): Short
-external fun uniffi_cove_checksum_func_describe_send_flow_fiat_on_change_error(
-): Short
-external fun uniffi_cove_checksum_func_describe_tap_signer_reader_error(
-): Short
-external fun uniffi_cove_checksum_func_describe_transport_error(
-): Short
-external fun uniffi_cove_checksum_func_describe_wallet_error(
-): Short
-external fun uniffi_cove_checksum_func_describe_wallet_manager_error(
-): Short
 external fun uniffi_cove_checksum_func_discovery_state_is_equal(
 ): Short
 external fun uniffi_cove_checksum_func_ffi_min_send_amount(
@@ -1834,10 +1818,10 @@ internal object UniffiLib {
         uniffiCallbackInterfaceSendFlowManagerReconciler.register(this)
         uniffiCallbackInterfaceTapcardTransportProtocol.register(this)
         uniffiCallbackInterfaceWalletManagerReconciler.register(this)
-        org.bitcoinppl.cove_core.tapcard.uniffiEnsureInitialized()
-        org.bitcoinppl.cove_core.nfc.uniffiEnsureInitialized()
         org.bitcoinppl.cove_core.types.uniffiEnsureInitialized()
+        org.bitcoinppl.cove_core.nfc.uniffiEnsureInitialized()
         org.bitcoinppl.cove_core.device.uniffiEnsureInitialized()
+        org.bitcoinppl.cove_core.tapcard.uniffiEnsureInitialized()
         
     }
     external fun uniffi_cove_fn_clone_addressargs(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -2770,6 +2754,22 @@ external fun uniffi_cove_fn_init_callback_vtable_tapcardtransportprotocol(`vtabl
 ): Unit
 external fun uniffi_cove_fn_init_callback_vtable_walletmanagerreconciler(`vtable`: UniffiVTableCallbackInterfaceWalletManagerReconciler,
 ): Unit
+external fun uniffi_cove_fn_method_authmanagererror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_multiformaterror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_sendflowerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_sendflowfiatonchangeerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_tapsignerreadererror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_transporterror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_walleterror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_walletmanagererror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
 external fun uniffi_cove_fn_func_address_error_to_alert_state(`error`: RustBufferAddressError.ByValue,`address`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_func_after_pin_action_user_message(`action`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -2783,22 +2783,6 @@ external fun uniffi_cove_fn_func_create_transport_error_from_code(`code`: Short,
 external fun uniffi_cove_fn_func_default_node_selection(uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_func_default_wallet_colors(uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_fn_func_describe_auth_manager_error(`error`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_fn_func_describe_multi_format_error(`error`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_fn_func_describe_send_flow_error(`error`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_fn_func_describe_send_flow_fiat_on_change_error(`error`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_fn_func_describe_tap_signer_reader_error(`error`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_fn_func_describe_transport_error(`error`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_fn_func_describe_wallet_error(`error`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_fn_func_describe_wallet_manager_error(`error`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_func_discovery_state_is_equal(`lhs`: RustBuffer.ByValue,`rhs`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
@@ -3026,30 +3010,6 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_default_wallet_colors() != 39034.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_func_describe_auth_manager_error() != 9186.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_func_describe_multi_format_error() != 25386.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_func_describe_send_flow_error() != 40406.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_func_describe_send_flow_fiat_on_change_error() != 38097.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_func_describe_tap_signer_reader_error() != 18001.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_func_describe_transport_error() != 49523.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_func_describe_wallet_error() != 7428.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_func_describe_wallet_manager_error() != 13784.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_discovery_state_is_equal() != 12390.toShort()) {
@@ -24864,7 +24824,7 @@ public object FfiConverterTypeWalletMetadata: FfiConverterRustBuffer<WalletMetad
 
 
 
-sealed class AfterPinAction: Disposable  {
+sealed class AfterPinAction :Disposable {
     
     object Derive : AfterPinAction()
     
@@ -24905,6 +24865,8 @@ sealed class AfterPinAction: Disposable  {
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
     
+
+
     companion object
 }
 
@@ -24979,7 +24941,7 @@ public object FfiConverterTypeAfterPinAction : FfiConverterRustBuffer<AfterPinAc
 
 
 
-sealed class AmountOrMax: Disposable  {
+sealed class AmountOrMax :Disposable {
     
     data class Amount(
         val v1: org.bitcoinppl.cove_core.types.Amount) : AmountOrMax()
@@ -25010,6 +24972,8 @@ sealed class AmountOrMax: Disposable  {
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
     
+
+
     companion object
 }
 
@@ -25068,6 +25032,8 @@ enum class ApiType {
     ESPLORA,
     ELECTRUM,
     RPC;
+
+
     companion object
 }
 
@@ -25093,7 +25059,7 @@ public object FfiConverterTypeApiType: FfiConverterRustBuffer<ApiType> {
 
 
 
-sealed class AppAction: Disposable  {
+sealed class AppAction :Disposable {
     
     data class UpdateRoute(
         val `routes`: List<org.bitcoinppl.cove_core.Route>) : AppAction()
@@ -25214,6 +25180,8 @@ sealed class AppAction: Disposable  {
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
     
+
+
     companion object
 }
 
@@ -25384,6 +25352,7 @@ sealed class AppException: kotlin.Exception() {
     }
     
 
+
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<AppException> {
         override fun lift(error_buf: RustBuffer.ByValue): AppException = FfiConverterTypeAppError.lift(error_buf)
     }
@@ -25443,7 +25412,7 @@ public object FfiConverterTypeAppError : FfiConverterRustBuffer<AppException> {
 
 
 
-sealed class AppStateReconcileMessage: Disposable  {
+sealed class AppStateReconcileMessage :Disposable {
     
     data class DefaultRouteChanged(
         val v1: org.bitcoinppl.cove_core.Route, 
@@ -25625,6 +25594,8 @@ sealed class AppStateReconcileMessage: Disposable  {
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
     
+
+
     companion object
 }
 
@@ -25871,6 +25842,7 @@ sealed class AuthException: kotlin.Exception() {
     }
     
 
+
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<AuthException> {
         override fun lift(error_buf: RustBuffer.ByValue): AuthException = FfiConverterTypeAuthError.lift(error_buf)
     }
@@ -26006,6 +25978,8 @@ sealed class AuthManagerAction {
     
 
     
+
+
     companion object
 }
 
@@ -26146,6 +26120,16 @@ sealed class AuthManagerException: kotlin.Exception() {
     }
     
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_authmanagererror_uniffi_trait_display(FfiConverterTypeAuthManagerError.lower(this),
+        _status)
+}
+    )
+    }
+
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<AuthManagerException> {
         override fun lift(error_buf: RustBuffer.ByValue): AuthManagerException = FfiConverterTypeAuthManagerError.lift(error_buf)
     }
@@ -26237,6 +26221,8 @@ sealed class AuthManagerReconcileMessage {
     
 
     
+
+
     companion object
 }
 
@@ -26307,6 +26293,8 @@ enum class AuthType {
     BIOMETRIC,
     BOTH,
     NONE;
+
+
     companion object
 }
 
@@ -26372,6 +26360,7 @@ sealed class Bip39Exception: kotlin.Exception() {
             get() = ""
     }
     
+
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<Bip39Exception> {
         override fun lift(error_buf: RustBuffer.ByValue): Bip39Exception = FfiConverterTypeBip39Error.lift(error_buf)
@@ -26484,6 +26473,7 @@ sealed class BitcoinTransactionException: kotlin.Exception() {
     }
     
 
+
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<BitcoinTransactionException> {
         override fun lift(error_buf: RustBuffer.ByValue): BitcoinTransactionException = FfiConverterTypeBitcoinTransactionError.lift(error_buf)
     }
@@ -26559,6 +26549,8 @@ sealed class ButtonPresentation {
     
 
     
+
+
     companion object
 }
 
@@ -26621,6 +26613,7 @@ sealed class ByteReaderException: kotlin.Exception() {
             get() = ""
     }
     
+
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<ByteReaderException> {
         override fun lift(error_buf: RustBuffer.ByValue): ByteReaderException = FfiConverterTypeByteReaderError.lift(error_buf)
@@ -26734,6 +26727,7 @@ sealed class CkTapException: kotlin.Exception() {
             get() = ""
     }
     
+
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<CkTapException> {
         override fun lift(error_buf: RustBuffer.ByValue): CkTapException = FfiConverterTypeCkTapError.lift(error_buf)
@@ -26907,6 +26901,8 @@ sealed class CoinControlListSort {
     
 
     
+
+
     companion object
 }
 
@@ -27000,6 +26996,8 @@ enum class CoinControlListSortKey {
     NAME,
     AMOUNT,
     CHANGE;
+
+
     companion object
 }
 
@@ -27047,6 +27045,8 @@ sealed class CoinControlListSortState {
     
 
     
+
+
     companion object
 }
 
@@ -27103,7 +27103,7 @@ public object FfiConverterTypeCoinControlListSortState : FfiConverterRustBuffer<
 
 
 
-sealed class CoinControlManagerAction: Disposable  {
+sealed class CoinControlManagerAction :Disposable {
     
     data class ChangeSort(
         val v1: org.bitcoinppl.cove_core.CoinControlListSortKey) : CoinControlManagerAction()
@@ -27176,6 +27176,8 @@ sealed class CoinControlManagerAction: Disposable  {
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
     
+
+
     companion object
 }
 
@@ -27280,7 +27282,7 @@ public object FfiConverterTypeCoinControlManagerAction : FfiConverterRustBuffer<
 
 
 
-sealed class CoinControlManagerReconcileMessage: Disposable  {
+sealed class CoinControlManagerReconcileMessage :Disposable {
     
     object ClearSort : CoinControlManagerReconcileMessage()
     
@@ -27393,6 +27395,8 @@ sealed class CoinControlManagerReconcileMessage: Disposable  {
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
     
+
+
     companion object
 }
 
@@ -27536,6 +27540,8 @@ sealed class CoinControlRoute {
     
 
     
+
+
     companion object
 }
 
@@ -27581,6 +27587,8 @@ public object FfiConverterTypeCoinControlRoute : FfiConverterRustBuffer<CoinCont
 enum class ColdWalletRoute {
     
     QR_CODE;
+
+
     companion object
 }
 
@@ -27618,6 +27626,7 @@ sealed class ConverterException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
+
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<ConverterException> {
         override fun lift(error_buf: RustBuffer.ByValue): ConverterException = FfiConverterTypeConverterError.lift(error_buf)
@@ -27741,6 +27750,7 @@ sealed class DatabaseException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
+
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<DatabaseException> {
         override fun lift(error_buf: RustBuffer.ByValue): DatabaseException = FfiConverterTypeDatabaseError.lift(error_buf)
@@ -27999,6 +28009,7 @@ sealed class DescriptorException: kotlin.Exception() {
     }
     
 
+
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<DescriptorException> {
         override fun lift(error_buf: RustBuffer.ByValue): DescriptorException = FfiConverterTypeDescriptorError.lift(error_buf)
     }
@@ -28191,7 +28202,7 @@ public object FfiConverterTypeDescriptorError : FfiConverterRustBuffer<Descripto
 
 
 
-sealed class DiscoveryState: Disposable  {
+sealed class DiscoveryState :Disposable {
     
     object Single : DiscoveryState()
     
@@ -28271,6 +28282,8 @@ sealed class DiscoveryState: Disposable  {
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
     
+
+
     companion object
 }
 
@@ -28405,6 +28418,7 @@ sealed class FiatAmountException: kotlin.Exception() {
     }
     
 
+
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<FiatAmountException> {
         override fun lift(error_buf: RustBuffer.ByValue): FiatAmountException = FfiConverterTypeFiatAmountError.lift(error_buf)
     }
@@ -28461,6 +28475,8 @@ enum class FiatCurrency {
     GBP,
     CHF,
     JPY;
+
+
     companion object
 }
 
@@ -28491,6 +28507,8 @@ enum class FiatOrBtc {
     
     BTC,
     FIAT;
+
+
     companion object
 }
 
@@ -28550,6 +28568,7 @@ sealed class FileHandlerException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
+
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<FileHandlerException> {
         override fun lift(error_buf: RustBuffer.ByValue): FileHandlerException = FfiConverterTypeFileHandlerError.lift(error_buf)
@@ -28643,6 +28662,7 @@ sealed class FingerprintException: kotlin.Exception() {
     }
     
 
+
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<FingerprintException> {
         override fun lift(error_buf: RustBuffer.ByValue): FingerprintException = FfiConverterTypeFingerprintError.lift(error_buf)
     }
@@ -28705,6 +28725,7 @@ sealed class GlobalCacheTableException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
+
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<GlobalCacheTableException> {
         override fun lift(error_buf: RustBuffer.ByValue): GlobalCacheTableException = FfiConverterTypeGlobalCacheTableError.lift(error_buf)
@@ -28814,6 +28835,8 @@ sealed class GlobalConfigKey {
     
 
     
+
+
     companion object
 }
 
@@ -29014,6 +29037,7 @@ sealed class GlobalConfigTableException: kotlin.Exception() {
     }
     
 
+
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<GlobalConfigTableException> {
         override fun lift(error_buf: RustBuffer.ByValue): GlobalConfigTableException = FfiConverterTypeGlobalConfigTableError.lift(error_buf)
     }
@@ -29087,6 +29111,8 @@ enum class GlobalFlagKey {
     
     COMPLETED_ONBOARDING,
     ACCEPTED_TERMS;
+
+
     companion object
 }
 
@@ -29132,6 +29158,7 @@ sealed class GlobalFlagTableException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
+
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<GlobalFlagTableException> {
         override fun lift(error_buf: RustBuffer.ByValue): GlobalFlagTableException = FfiConverterTypeGlobalFlagTableError.lift(error_buf)
@@ -29192,9 +29219,9 @@ public object FfiConverterTypeGlobalFlagTableError : FfiConverterRustBuffer<Glob
 
 
 
-sealed class HardwareWalletMetadata: Disposable  {
+sealed class HardwareWalletMetadata :Disposable {
     
-    data class TapSignerCard(
+    data class TapSigner(
         val v1: org.bitcoinppl.cove_core.tapcard.TapSigner) : HardwareWalletMetadata()
         
     {
@@ -29208,7 +29235,7 @@ sealed class HardwareWalletMetadata: Disposable  {
     @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
     override fun destroy() {
         when(this) {
-            is HardwareWalletMetadata.TapSignerCard -> {
+            is HardwareWalletMetadata.TapSigner -> {
                 
     Disposable.destroy(
         this.v1
@@ -29218,6 +29245,8 @@ sealed class HardwareWalletMetadata: Disposable  {
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
     
+
+
     companion object
 }
 
@@ -29227,7 +29256,7 @@ sealed class HardwareWalletMetadata: Disposable  {
 public object FfiConverterTypeHardwareWalletMetadata : FfiConverterRustBuffer<HardwareWalletMetadata>{
     override fun read(buf: ByteBuffer): HardwareWalletMetadata {
         return when(buf.getInt()) {
-            1 -> HardwareWalletMetadata.TapSignerCard(
+            1 -> HardwareWalletMetadata.TapSigner(
                 FfiConverterTypeTapSigner.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -29235,7 +29264,7 @@ public object FfiConverterTypeHardwareWalletMetadata : FfiConverterRustBuffer<Ha
     }
 
     override fun allocationSize(value: HardwareWalletMetadata) = when(value) {
-        is HardwareWalletMetadata.TapSignerCard -> {
+        is HardwareWalletMetadata.TapSigner -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
@@ -29246,7 +29275,7 @@ public object FfiConverterTypeHardwareWalletMetadata : FfiConverterRustBuffer<Ha
 
     override fun write(value: HardwareWalletMetadata, buf: ByteBuffer) {
         when(value) {
-            is HardwareWalletMetadata.TapSignerCard -> {
+            is HardwareWalletMetadata.TapSigner -> {
                 buf.putInt(1)
                 FfiConverterTypeTapSigner.write(value.v1, buf)
                 Unit
@@ -29274,6 +29303,7 @@ sealed class HistoricalPriceRecordException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
+
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<HistoricalPriceRecordException> {
         override fun lift(error_buf: RustBuffer.ByValue): HistoricalPriceRecordException = FfiConverterTypeHistoricalPriceRecordError.lift(error_buf)
@@ -29347,6 +29377,7 @@ sealed class HistoricalPriceTableException: kotlin.Exception() {
             get() = ""
     }
     
+
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<HistoricalPriceTableException> {
         override fun lift(error_buf: RustBuffer.ByValue): HistoricalPriceTableException = FfiConverterTypeHistoricalPriceTableError.lift(error_buf)
@@ -29451,6 +29482,8 @@ sealed class HotWalletRoute {
     
 
     
+
+
     companion object
 }
 
@@ -29542,6 +29575,8 @@ enum class ImportType {
     MANUAL,
     NFC,
     QR;
+
+
     companion object
 }
 
@@ -29619,6 +29654,7 @@ sealed class ImportWalletException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
+
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<ImportWalletException> {
         override fun lift(error_buf: RustBuffer.ByValue): ImportWalletException = FfiConverterTypeImportWalletError.lift(error_buf)
@@ -29735,6 +29771,8 @@ public object FfiConverterTypeImportWalletError : FfiConverterRustBuffer<ImportW
 enum class ImportWalletManagerAction {
     
     NO_OP;
+
+
     companion object
 }
 
@@ -29764,6 +29802,8 @@ public object FfiConverterTypeImportWalletManagerAction: FfiConverterRustBuffer<
 enum class ImportWalletManagerReconcileMessage {
     
     NO_OP;
+
+
     companion object
 }
 
@@ -29811,6 +29851,8 @@ sealed class InsertOrUpdate {
     
 
     
+
+
     companion object
 }
 
@@ -29887,6 +29929,7 @@ sealed class LabelDbException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
+
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<LabelDbException> {
         override fun lift(error_buf: RustBuffer.ByValue): LabelDbException = FfiConverterTypeLabelDbError.lift(error_buf)
@@ -30031,6 +30074,7 @@ sealed class LabelManagerException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
+
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<LabelManagerException> {
         override fun lift(error_buf: RustBuffer.ByValue): LabelManagerException = FfiConverterTypeLabelManagerError.lift(error_buf)
@@ -30200,6 +30244,8 @@ enum class ListSortDirection {
     
     ASCENDING,
     DESCENDING;
+
+
     companion object
 }
 
@@ -30245,6 +30291,7 @@ sealed class MnemonicException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
+
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<MnemonicException> {
         override fun lift(error_buf: RustBuffer.ByValue): MnemonicException = FfiConverterTypeMnemonicError.lift(error_buf)
@@ -30320,6 +30367,7 @@ sealed class MnemonicParseException: kotlin.Exception() {
     }
     
 
+
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<MnemonicParseException> {
         override fun lift(error_buf: RustBuffer.ByValue): MnemonicParseException = FfiConverterTypeMnemonicParseError.lift(error_buf)
     }
@@ -30369,7 +30417,7 @@ public object FfiConverterTypeMnemonicParseError : FfiConverterRustBuffer<Mnemon
 
 
 
-sealed class MultiFormat: Disposable  {
+sealed class MultiFormat :Disposable {
     
     data class Address(
         val v1: org.bitcoinppl.cove_core.types.AddressWithNetwork) : MultiFormat()
@@ -30380,7 +30428,7 @@ sealed class MultiFormat: Disposable  {
         companion object
     }
     
-    data class Hardware(
+    data class HardwareExport(
         val v1: org.bitcoinppl.cove_core.HardwareExport) : MultiFormat()
         
     {
@@ -30389,7 +30437,7 @@ sealed class MultiFormat: Disposable  {
         companion object
     }
     
-    data class Mnem(
+    data class Mnemonic(
         val v1: org.bitcoinppl.cove_core.Mnemonic) : MultiFormat()
         
     {
@@ -30407,7 +30455,7 @@ sealed class MultiFormat: Disposable  {
         companion object
     }
     
-    data class Labels(
+    data class Bip329Labels(
         val v1: org.bitcoinppl.cove_core.Bip329Labels) : MultiFormat()
         
     {
@@ -30452,14 +30500,14 @@ sealed class MultiFormat: Disposable  {
     )
                 
             }
-            is MultiFormat.Hardware -> {
+            is MultiFormat.HardwareExport -> {
                 
     Disposable.destroy(
         this.v1
     )
                 
             }
-            is MultiFormat.Mnem -> {
+            is MultiFormat.Mnemonic -> {
                 
     Disposable.destroy(
         this.v1
@@ -30473,7 +30521,7 @@ sealed class MultiFormat: Disposable  {
     )
                 
             }
-            is MultiFormat.Labels -> {
+            is MultiFormat.Bip329Labels -> {
                 
     Disposable.destroy(
         this.v1
@@ -30497,6 +30545,8 @@ sealed class MultiFormat: Disposable  {
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
     
+
+
     companion object
 }
 
@@ -30509,16 +30559,16 @@ public object FfiConverterTypeMultiFormat : FfiConverterRustBuffer<MultiFormat>{
             1 -> MultiFormat.Address(
                 FfiConverterTypeAddressWithNetwork.read(buf),
                 )
-            2 -> MultiFormat.Hardware(
+            2 -> MultiFormat.HardwareExport(
                 FfiConverterTypeHardwareExport.read(buf),
                 )
-            3 -> MultiFormat.Mnem(
+            3 -> MultiFormat.Mnemonic(
                 FfiConverterTypeMnemonic.read(buf),
                 )
             4 -> MultiFormat.Transaction(
                 FfiConverterTypeBitcoinTransaction.read(buf),
                 )
-            5 -> MultiFormat.Labels(
+            5 -> MultiFormat.Bip329Labels(
                 FfiConverterTypeBip329Labels.read(buf),
                 )
             6 -> MultiFormat.TapSignerReady(
@@ -30539,14 +30589,14 @@ public object FfiConverterTypeMultiFormat : FfiConverterRustBuffer<MultiFormat>{
                 + FfiConverterTypeAddressWithNetwork.allocationSize(value.v1)
             )
         }
-        is MultiFormat.Hardware -> {
+        is MultiFormat.HardwareExport -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
                 + FfiConverterTypeHardwareExport.allocationSize(value.v1)
             )
         }
-        is MultiFormat.Mnem -> {
+        is MultiFormat.Mnemonic -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
@@ -30560,7 +30610,7 @@ public object FfiConverterTypeMultiFormat : FfiConverterRustBuffer<MultiFormat>{
                 + FfiConverterTypeBitcoinTransaction.allocationSize(value.v1)
             )
         }
-        is MultiFormat.Labels -> {
+        is MultiFormat.Bip329Labels -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
@@ -30590,12 +30640,12 @@ public object FfiConverterTypeMultiFormat : FfiConverterRustBuffer<MultiFormat>{
                 FfiConverterTypeAddressWithNetwork.write(value.v1, buf)
                 Unit
             }
-            is MultiFormat.Hardware -> {
+            is MultiFormat.HardwareExport -> {
                 buf.putInt(2)
                 FfiConverterTypeHardwareExport.write(value.v1, buf)
                 Unit
             }
-            is MultiFormat.Mnem -> {
+            is MultiFormat.Mnemonic -> {
                 buf.putInt(3)
                 FfiConverterTypeMnemonic.write(value.v1, buf)
                 Unit
@@ -30605,7 +30655,7 @@ public object FfiConverterTypeMultiFormat : FfiConverterRustBuffer<MultiFormat>{
                 FfiConverterTypeBitcoinTransaction.write(value.v1, buf)
                 Unit
             }
-            is MultiFormat.Labels -> {
+            is MultiFormat.Bip329Labels -> {
                 buf.putInt(5)
                 FfiConverterTypeBip329Labels.write(value.v1, buf)
                 Unit
@@ -30666,6 +30716,16 @@ sealed class MultiFormatException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
+
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_multiformaterror_uniffi_trait_display(FfiConverterTypeMultiFormatError.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<MultiFormatException> {
         override fun lift(error_buf: RustBuffer.ByValue): MultiFormatException = FfiConverterTypeMultiFormatError.lift(error_buf)
@@ -30820,6 +30880,7 @@ sealed class MultiQrException: kotlin.Exception() {
     }
     
 
+
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<MultiQrException> {
         override fun lift(error_buf: RustBuffer.ByValue): MultiQrException = FfiConverterTypeMultiQrError.lift(error_buf)
     }
@@ -30950,9 +31011,9 @@ public object FfiConverterTypeMultiQrError : FfiConverterRustBuffer<MultiQrExcep
 
 
 
-sealed class MultiQrScanResult: Disposable  {
+sealed class MultiQrScanResult :Disposable {
     
-    data class Seed(
+    data class SeedQr(
         val v1: org.bitcoinppl.cove_core.SeedQr) : MultiQrScanResult()
         
     {
@@ -30993,7 +31054,7 @@ sealed class MultiQrScanResult: Disposable  {
     @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
     override fun destroy() {
         when(this) {
-            is MultiQrScanResult.Seed -> {
+            is MultiQrScanResult.SeedQr -> {
                 
     Disposable.destroy(
         this.v1
@@ -31024,6 +31085,8 @@ sealed class MultiQrScanResult: Disposable  {
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
     
+
+
     companion object
 }
 
@@ -31033,7 +31096,7 @@ sealed class MultiQrScanResult: Disposable  {
 public object FfiConverterTypeMultiQrScanResult : FfiConverterRustBuffer<MultiQrScanResult>{
     override fun read(buf: ByteBuffer): MultiQrScanResult {
         return when(buf.getInt()) {
-            1 -> MultiQrScanResult.Seed(
+            1 -> MultiQrScanResult.SeedQr(
                 FfiConverterTypeSeedQr.read(buf),
                 )
             2 -> MultiQrScanResult.Single(
@@ -31050,7 +31113,7 @@ public object FfiConverterTypeMultiQrScanResult : FfiConverterRustBuffer<MultiQr
     }
 
     override fun allocationSize(value: MultiQrScanResult) = when(value) {
-        is MultiQrScanResult.Seed -> {
+        is MultiQrScanResult.SeedQr -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
@@ -31082,7 +31145,7 @@ public object FfiConverterTypeMultiQrScanResult : FfiConverterRustBuffer<MultiQr
 
     override fun write(value: MultiQrScanResult, buf: ByteBuffer) {
         when(value) {
-            is MultiQrScanResult.Seed -> {
+            is MultiQrScanResult.SeedQr -> {
                 buf.putInt(1)
                 FfiConverterTypeSeedQr.write(value.v1, buf)
                 Unit
@@ -31135,6 +31198,8 @@ sealed class NewWalletRoute {
     
 
     
+
+
     companion object
 }
 
@@ -31224,6 +31289,8 @@ sealed class NodeSelection {
     
 
     
+
+
     companion object
 }
 
@@ -31317,6 +31384,7 @@ sealed class NodeSelectorException: kotlin.Exception() {
     }
     
 
+
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<NodeSelectorException> {
         override fun lift(error_buf: RustBuffer.ByValue): NodeSelectorException = FfiConverterTypeNodeSelectorError.lift(error_buf)
     }
@@ -31407,6 +31475,8 @@ enum class NumberOfBip39Words {
     
     TWELVE,
     TWENTY_FOUR;
+
+
     companion object
 }
 
@@ -31454,6 +31524,8 @@ sealed class PendingOrConfirmed {
     
 
     
+
+
     companion object
 }
 
@@ -31523,6 +31595,8 @@ sealed class PendingWalletManagerAction {
     
 
     
+
+
     companion object
 }
 
@@ -31584,6 +31658,7 @@ sealed class PendingWalletManagerException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
+
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<PendingWalletManagerException> {
         override fun lift(error_buf: RustBuffer.ByValue): PendingWalletManagerException = FfiConverterTypePendingWalletManagerError.lift(error_buf)
@@ -31657,6 +31732,8 @@ sealed class PendingWalletManagerReconcileMessage {
     
 
     
+
+
     companion object
 }
 
@@ -31698,7 +31775,7 @@ public object FfiConverterTypePendingWalletManagerReconcileMessage : FfiConverte
 
 
 
-sealed class Route: Disposable  {
+sealed class Route :Disposable {
     
     data class LoadAndReset(
         val `resetTo`: List<org.bitcoinppl.cove_core.BoxedRoute>, 
@@ -31749,7 +31826,7 @@ sealed class Route: Disposable  {
         companion object
     }
     
-    data class TxDetails(
+    data class TransactionDetails(
         val `id`: org.bitcoinppl.cove_core.types.WalletId, 
         val `details`: org.bitcoinppl.cove_core.TransactionDetails) : Route()
         
@@ -31820,7 +31897,7 @@ sealed class Route: Disposable  {
     )
                 
             }
-            is Route.TxDetails -> {
+            is Route.TransactionDetails -> {
                 
     Disposable.destroy(
         this.`id`,
@@ -31845,6 +31922,8 @@ sealed class Route: Disposable  {
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
     
+
+
     companion object
 }
 
@@ -31871,7 +31950,7 @@ public object FfiConverterTypeRoute : FfiConverterRustBuffer<Route>{
             6 -> Route.SecretWords(
                 FfiConverterTypeWalletId.read(buf),
                 )
-            7 -> Route.TxDetails(
+            7 -> Route.TransactionDetails(
                 FfiConverterTypeWalletId.read(buf),
                 FfiConverterTypeTransactionDetails.read(buf),
                 )
@@ -31928,7 +32007,7 @@ public object FfiConverterTypeRoute : FfiConverterRustBuffer<Route>{
                 + FfiConverterTypeWalletId.allocationSize(value.v1)
             )
         }
-        is Route.TxDetails -> {
+        is Route.TransactionDetails -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
@@ -31984,7 +32063,7 @@ public object FfiConverterTypeRoute : FfiConverterRustBuffer<Route>{
                 FfiConverterTypeWalletId.write(value.v1, buf)
                 Unit
             }
-            is Route.TxDetails -> {
+            is Route.TransactionDetails -> {
                 buf.putInt(7)
                 FfiConverterTypeWalletId.write(value.`id`, buf)
                 FfiConverterTypeTransactionDetails.write(value.`details`, buf)
@@ -32027,6 +32106,8 @@ sealed class ScanState {
     
 
     
+
+
     companion object
 }
 
@@ -32106,6 +32187,8 @@ sealed class ScannerResponse {
     
 
     
+
+
     companion object
 }
 
@@ -32192,6 +32275,7 @@ sealed class SeedQrException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
+
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<SeedQrException> {
         override fun lift(error_buf: RustBuffer.ByValue): SeedQrException = FfiConverterTypeSeedQrError.lift(error_buf)
@@ -32297,6 +32381,8 @@ sealed class SendFlowAlertState {
     
 
     
+
+
     companion object
 }
 
@@ -32356,7 +32442,7 @@ public object FfiConverterTypeSendFlowAlertState : FfiConverterRustBuffer<SendFl
 
 
 
-sealed class SendFlowEnterMode: Disposable  {
+sealed class SendFlowEnterMode :Disposable {
     
     object SetAmount : SendFlowEnterMode()
     
@@ -32387,6 +32473,8 @@ sealed class SendFlowEnterMode: Disposable  {
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
     
+
+
     companion object
 }
 
@@ -32545,6 +32633,16 @@ sealed class SendFlowException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
+
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_sendflowerror_uniffi_trait_display(FfiConverterTypeSendFlowError.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<SendFlowException> {
         override fun lift(error_buf: RustBuffer.ByValue): SendFlowException = FfiConverterTypeSendFlowError.lift(error_buf)
@@ -32761,6 +32859,8 @@ sealed class SendFlowErrorAlert {
     
 
     
+
+
     companion object
 }
 
@@ -32817,89 +32917,102 @@ public object FfiConverterTypeSendFlowErrorAlert : FfiConverterRustBuffer<SendFl
 
 
 
-sealed class SendFlowFiatOnChangeError {
+
+
+sealed class SendFlowFiatOnChangeException: kotlin.Exception() {
     
-    data class InvalidFiatAmount(
+    class InvalidFiatAmount(
+        
         val `error`: kotlin.String, 
-        val `input`: kotlin.String) : SendFlowFiatOnChangeError()
         
-    {
-        
-
-        companion object
+        val `input`: kotlin.String
+        ) : SendFlowFiatOnChangeException() {
+        override val message
+            get() = "error=${ `error` }, input=${ `input` }"
     }
     
-    data class Converter(
-        val v1: org.bitcoinppl.cove_core.ConverterException) : SendFlowFiatOnChangeError()
+    class Converter(
         
-    {
-        
-
-        companion object
+        val v1: ConverterException
+        ) : SendFlowFiatOnChangeException() {
+        override val message
+            get() = "v1=${ v1 }"
     }
     
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_sendflowfiatonchangeerror_uniffi_trait_display(FfiConverterTypeSendFlowFiatOnChangeError.lower(this),
+        _status)
+}
+    )
+    }
+
+    companion object ErrorHandler : UniffiRustCallStatusErrorHandler<SendFlowFiatOnChangeException> {
+        override fun lift(error_buf: RustBuffer.ByValue): SendFlowFiatOnChangeException = FfiConverterTypeSendFlowFiatOnChangeError.lift(error_buf)
+    }
+
     
-    companion object
 }
 
 /**
  * @suppress
  */
-public object FfiConverterTypeSendFlowFiatOnChangeError : FfiConverterRustBuffer<SendFlowFiatOnChangeError>{
-    override fun read(buf: ByteBuffer): SendFlowFiatOnChangeError {
+public object FfiConverterTypeSendFlowFiatOnChangeError : FfiConverterRustBuffer<SendFlowFiatOnChangeException> {
+    override fun read(buf: ByteBuffer): SendFlowFiatOnChangeException {
+        
+
         return when(buf.getInt()) {
-            1 -> SendFlowFiatOnChangeError.InvalidFiatAmount(
+            1 -> SendFlowFiatOnChangeException.InvalidFiatAmount(
                 FfiConverterString.read(buf),
                 FfiConverterString.read(buf),
                 )
-            2 -> SendFlowFiatOnChangeError.Converter(
+            2 -> SendFlowFiatOnChangeException.Converter(
                 FfiConverterTypeConverterError.read(buf),
                 )
-            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+            else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
 
-    override fun allocationSize(value: SendFlowFiatOnChangeError) = when(value) {
-        is SendFlowFiatOnChangeError.InvalidFiatAmount -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
+    override fun allocationSize(value: SendFlowFiatOnChangeException): ULong {
+        return when(value) {
+            is SendFlowFiatOnChangeException.InvalidFiatAmount -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
                 + FfiConverterString.allocationSize(value.`error`)
                 + FfiConverterString.allocationSize(value.`input`)
             )
-        }
-        is SendFlowFiatOnChangeError.Converter -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
+            is SendFlowFiatOnChangeException.Converter -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
                 + FfiConverterTypeConverterError.allocationSize(value.v1)
             )
         }
     }
 
-    override fun write(value: SendFlowFiatOnChangeError, buf: ByteBuffer) {
+    override fun write(value: SendFlowFiatOnChangeException, buf: ByteBuffer) {
         when(value) {
-            is SendFlowFiatOnChangeError.InvalidFiatAmount -> {
+            is SendFlowFiatOnChangeException.InvalidFiatAmount -> {
                 buf.putInt(1)
                 FfiConverterString.write(value.`error`, buf)
                 FfiConverterString.write(value.`input`, buf)
                 Unit
             }
-            is SendFlowFiatOnChangeError.Converter -> {
+            is SendFlowFiatOnChangeException.Converter -> {
                 buf.putInt(2)
                 FfiConverterTypeConverterError.write(value.v1, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
+
 }
 
 
 
-
-
-sealed class SendFlowManagerAction: Disposable  {
+sealed class SendFlowManagerAction :Disposable {
     
     data class ChangeEnteringAddress(
         val v1: kotlin.String) : SendFlowManagerAction()
@@ -33216,6 +33329,8 @@ sealed class SendFlowManagerAction: Disposable  {
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
     
+
+
     companion object
 }
 
@@ -33567,7 +33682,7 @@ public object FfiConverterTypeSendFlowManagerAction : FfiConverterRustBuffer<Sen
 
 
 
-sealed class SendFlowManagerReconcileMessage: Disposable  {
+sealed class SendFlowManagerReconcileMessage :Disposable {
     
     data class UpdateEnteringBtcAmount(
         val v1: kotlin.String) : SendFlowManagerReconcileMessage()
@@ -33768,6 +33883,8 @@ sealed class SendFlowManagerReconcileMessage: Disposable  {
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
     
+
+
     companion object
 }
 
@@ -33992,7 +34109,7 @@ public object FfiConverterTypeSendFlowManagerReconcileMessage : FfiConverterRust
 
 
 
-sealed class SendRoute: Disposable  {
+sealed class SendRoute :Disposable {
     
     data class SetAmount(
         val `id`: org.bitcoinppl.cove_core.types.WalletId, 
@@ -34074,6 +34191,8 @@ sealed class SendRoute: Disposable  {
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
     
+
+
     companion object
 }
 
@@ -34193,6 +34312,7 @@ sealed class SerdeException: kotlin.Exception() {
     }
     
 
+
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<SerdeException> {
         override fun lift(error_buf: RustBuffer.ByValue): SerdeException = FfiConverterTypeSerdeError.lift(error_buf)
     }
@@ -34257,6 +34377,8 @@ enum class SetAmountFocusField {
     
     AMOUNT,
     ADDRESS;
+
+
     companion object
 }
 
@@ -34314,6 +34436,8 @@ sealed class SettingsRoute {
     
 
     
+
+
     companion object
 }
 
@@ -34424,9 +34548,9 @@ public object FfiConverterTypeSettingsRoute : FfiConverterRustBuffer<SettingsRou
 
 
 
-sealed class SetupCmdResponse: Disposable  {
+sealed class SetupCmdResponse :Disposable {
     
-    data class Init(
+    data class ContinueFromInit(
         val v1: org.bitcoinppl.cove_core.ContinueFromInit) : SetupCmdResponse()
         
     {
@@ -34435,7 +34559,7 @@ sealed class SetupCmdResponse: Disposable  {
         companion object
     }
     
-    data class Backup(
+    data class ContinueFromBackup(
         val v1: org.bitcoinppl.cove_core.ContinueFromBackup) : SetupCmdResponse()
         
     {
@@ -34444,7 +34568,7 @@ sealed class SetupCmdResponse: Disposable  {
         companion object
     }
     
-    data class Derive(
+    data class ContinueFromDerive(
         val v1: org.bitcoinppl.cove_core.ContinueFromDerive) : SetupCmdResponse()
         
     {
@@ -34467,21 +34591,21 @@ sealed class SetupCmdResponse: Disposable  {
     @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
     override fun destroy() {
         when(this) {
-            is SetupCmdResponse.Init -> {
+            is SetupCmdResponse.ContinueFromInit -> {
                 
     Disposable.destroy(
         this.v1
     )
                 
             }
-            is SetupCmdResponse.Backup -> {
+            is SetupCmdResponse.ContinueFromBackup -> {
                 
     Disposable.destroy(
         this.v1
     )
                 
             }
-            is SetupCmdResponse.Derive -> {
+            is SetupCmdResponse.ContinueFromDerive -> {
                 
     Disposable.destroy(
         this.v1
@@ -34498,6 +34622,8 @@ sealed class SetupCmdResponse: Disposable  {
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
     
+
+
     companion object
 }
 
@@ -34507,13 +34633,13 @@ sealed class SetupCmdResponse: Disposable  {
 public object FfiConverterTypeSetupCmdResponse : FfiConverterRustBuffer<SetupCmdResponse>{
     override fun read(buf: ByteBuffer): SetupCmdResponse {
         return when(buf.getInt()) {
-            1 -> SetupCmdResponse.Init(
+            1 -> SetupCmdResponse.ContinueFromInit(
                 FfiConverterTypeContinueFromInit.read(buf),
                 )
-            2 -> SetupCmdResponse.Backup(
+            2 -> SetupCmdResponse.ContinueFromBackup(
                 FfiConverterTypeContinueFromBackup.read(buf),
                 )
-            3 -> SetupCmdResponse.Derive(
+            3 -> SetupCmdResponse.ContinueFromDerive(
                 FfiConverterTypeContinueFromDerive.read(buf),
                 )
             4 -> SetupCmdResponse.Complete(
@@ -34524,21 +34650,21 @@ public object FfiConverterTypeSetupCmdResponse : FfiConverterRustBuffer<SetupCmd
     }
 
     override fun allocationSize(value: SetupCmdResponse) = when(value) {
-        is SetupCmdResponse.Init -> {
+        is SetupCmdResponse.ContinueFromInit -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
                 + FfiConverterTypeContinueFromInit.allocationSize(value.v1)
             )
         }
-        is SetupCmdResponse.Backup -> {
+        is SetupCmdResponse.ContinueFromBackup -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
                 + FfiConverterTypeContinueFromBackup.allocationSize(value.v1)
             )
         }
-        is SetupCmdResponse.Derive -> {
+        is SetupCmdResponse.ContinueFromDerive -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
@@ -34556,17 +34682,17 @@ public object FfiConverterTypeSetupCmdResponse : FfiConverterRustBuffer<SetupCmd
 
     override fun write(value: SetupCmdResponse, buf: ByteBuffer) {
         when(value) {
-            is SetupCmdResponse.Init -> {
+            is SetupCmdResponse.ContinueFromInit -> {
                 buf.putInt(1)
                 FfiConverterTypeContinueFromInit.write(value.v1, buf)
                 Unit
             }
-            is SetupCmdResponse.Backup -> {
+            is SetupCmdResponse.ContinueFromBackup -> {
                 buf.putInt(2)
                 FfiConverterTypeContinueFromBackup.write(value.v1, buf)
                 Unit
             }
-            is SetupCmdResponse.Derive -> {
+            is SetupCmdResponse.ContinueFromDerive -> {
                 buf.putInt(3)
                 FfiConverterTypeContinueFromDerive.write(value.v1, buf)
                 Unit
@@ -34589,6 +34715,8 @@ enum class StoreType {
     
     SQLITE,
     FILE_STORE;
+
+
     companion object
 }
 
@@ -34639,6 +34767,8 @@ sealed class StringOrData {
     
 
     
+
+
     companion object
 }
 
@@ -34695,7 +34825,7 @@ public object FfiConverterTypeStringOrData : FfiConverterRustBuffer<StringOrData
 
 
 
-sealed class TapSignerCmd: Disposable  {
+sealed class TapSignerCmd :Disposable {
     
     data class Setup(
         val v1: org.bitcoinppl.cove_core.SetupCmd) : TapSignerCmd()
@@ -34789,6 +34919,8 @@ sealed class TapSignerCmd: Disposable  {
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
     
+
+
     companion object
 }
 
@@ -34905,6 +35037,8 @@ enum class TapSignerPinAction {
     
     SETUP,
     CHANGE;
+
+
     companion object
 }
 
@@ -35010,6 +35144,16 @@ sealed class TapSignerReaderException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
+
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_tapsignerreadererror_uniffi_trait_display(FfiConverterTypeTapSignerReaderError.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<TapSignerReaderException> {
         override fun lift(error_buf: RustBuffer.ByValue): TapSignerReaderException = FfiConverterTypeTapSignerReaderError.lift(error_buf)
@@ -35166,7 +35310,7 @@ public object FfiConverterTypeTapSignerReaderError : FfiConverterRustBuffer<TapS
 
 
 
-sealed class TapSignerResponse: Disposable  {
+sealed class TapSignerResponse :Disposable {
     
     data class Setup(
         val v1: org.bitcoinppl.cove_core.SetupCmdResponse) : TapSignerResponse()
@@ -35245,6 +35389,8 @@ sealed class TapSignerResponse: Disposable  {
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
     
+
+
     companion object
 }
 
@@ -35342,7 +35488,7 @@ public object FfiConverterTypeTapSignerResponse : FfiConverterRustBuffer<TapSign
 
 
 
-sealed class TapSignerRoute: Disposable  {
+sealed class TapSignerRoute :Disposable {
     
     data class InitSelect(
         val v1: org.bitcoinppl.cove_core.tapcard.TapSigner) : TapSignerRoute()
@@ -35522,6 +35668,8 @@ sealed class TapSignerRoute: Disposable  {
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
     
+
+
     companion object
 }
 
@@ -35713,7 +35861,7 @@ public object FfiConverterTypeTapSignerRoute : FfiConverterRustBuffer<TapSignerR
 
 
 
-sealed class Transaction: Disposable  {
+sealed class Transaction :Disposable {
     
     data class Confirmed(
         val v1: org.bitcoinppl.cove_core.ConfirmedTransaction) : Transaction()
@@ -35755,6 +35903,8 @@ sealed class Transaction: Disposable  {
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
     
+
+
     companion object
 }
 
@@ -35855,6 +36005,7 @@ sealed class TransactionDetailException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
+
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<TransactionDetailException> {
         override fun lift(error_buf: RustBuffer.ByValue): TransactionDetailException = FfiConverterTypeTransactionDetailError.lift(error_buf)
@@ -35959,6 +36110,8 @@ enum class TransactionState {
     
     PENDING,
     CONFIRMED;
+
+
     companion object
 }
 
@@ -36044,6 +36197,16 @@ sealed class TransportException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
+
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_transporterror_uniffi_trait_display(FfiConverterTypeTransportError.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<TransportException> {
         override fun lift(error_buf: RustBuffer.ByValue): TransportException = FfiConverterTypeTransportError.lift(error_buf)
@@ -36210,6 +36373,7 @@ sealed class TrickPinException: kotlin.Exception() {
     }
     
 
+
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<TrickPinException> {
         override fun lift(error_buf: RustBuffer.ByValue): TrickPinException = FfiConverterTypeTrickPinError.lift(error_buf)
     }
@@ -36306,6 +36470,7 @@ sealed class UnsignedTransactionsTableException: kotlin.Exception() {
     }
     
 
+
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<UnsignedTransactionsTableException> {
         override fun lift(error_buf: RustBuffer.ByValue): UnsignedTransactionsTableException = FfiConverterTypeUnsignedTransactionsTableError.lift(error_buf)
     }
@@ -36380,6 +36545,8 @@ enum class WalletAddressType {
     NATIVE_SEGWIT,
     WRAPPED_SEGWIT,
     LEGACY;
+
+
     companion object
 }
 
@@ -36474,6 +36641,8 @@ sealed class WalletColor {
     
 
     
+
+
     companion object
 }
 
@@ -36772,6 +36941,7 @@ sealed class WalletCreationException: kotlin.Exception() {
     }
     
 
+
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<WalletCreationException> {
         override fun lift(error_buf: RustBuffer.ByValue): WalletCreationException = FfiConverterTypeWalletCreationError.lift(error_buf)
     }
@@ -36924,6 +37094,7 @@ sealed class WalletDataException: kotlin.Exception() {
     }
     
 
+
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<WalletDataException> {
         override fun lift(error_buf: RustBuffer.ByValue): WalletDataException = FfiConverterTypeWalletDataError.lift(error_buf)
     }
@@ -37028,6 +37199,8 @@ sealed class WalletDataKey {
     
 
     
+
+
     companion object
 }
 
@@ -37165,6 +37338,16 @@ sealed class WalletException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
+
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_walleterror_uniffi_trait_display(FfiConverterTypeWalletError.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<WalletException> {
         override fun lift(error_buf: RustBuffer.ByValue): WalletException = FfiConverterTypeWalletError.lift(error_buf)
@@ -37363,6 +37546,8 @@ sealed class WalletErrorAlert {
     
 
     
+
+
     companion object
 }
 
@@ -37415,7 +37600,7 @@ public object FfiConverterTypeWalletErrorAlert : FfiConverterRustBuffer<WalletEr
 
 
 
-sealed class WalletLoadState: Disposable  {
+sealed class WalletLoadState :Disposable {
     
     object Loading : WalletLoadState()
     
@@ -37462,6 +37647,8 @@ sealed class WalletLoadState: Disposable  {
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
     
+
+
     companion object
 }
 
@@ -37529,7 +37716,7 @@ public object FfiConverterTypeWalletLoadState : FfiConverterRustBuffer<WalletLoa
 
 
 
-sealed class WalletManagerAction: Disposable  {
+sealed class WalletManagerAction :Disposable {
     
     data class UpdateName(
         val v1: kotlin.String) : WalletManagerAction()
@@ -37670,6 +37857,8 @@ sealed class WalletManagerAction: Disposable  {
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
     
+
+
     companion object
 }
 
@@ -38072,6 +38261,16 @@ sealed class WalletManagerException: kotlin.Exception() {
     }
     
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_walletmanagererror_uniffi_trait_display(FfiConverterTypeWalletManagerError.lower(this),
+        _status)
+}
+    )
+    }
+
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<WalletManagerException> {
         override fun lift(error_buf: RustBuffer.ByValue): WalletManagerException = FfiConverterTypeWalletManagerError.lift(error_buf)
     }
@@ -38434,7 +38633,7 @@ public object FfiConverterTypeWalletManagerError : FfiConverterRustBuffer<Wallet
 
 
 
-sealed class WalletManagerReconcileMessage: Disposable  {
+sealed class WalletManagerReconcileMessage :Disposable {
     
     object StartedInitialFullScan : WalletManagerReconcileMessage()
     
@@ -38630,6 +38829,8 @@ sealed class WalletManagerReconcileMessage: Disposable  {
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
     
+
+
     companion object
 }
 
@@ -38848,6 +39049,8 @@ enum class WalletMode {
     
     MAIN,
     DECOY;
+
+
     companion object
 }
 
@@ -38899,6 +39102,7 @@ sealed class WalletScannerException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
+
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<WalletScannerException> {
         override fun lift(error_buf: RustBuffer.ByValue): WalletScannerException = FfiConverterTypeWalletScannerError.lift(error_buf)
@@ -38973,6 +39177,8 @@ enum class WalletSettingsRoute {
     
     MAIN,
     CHANGE_NAME;
+
+
     companion object
 }
 
@@ -39024,6 +39230,7 @@ sealed class WalletTableException: kotlin.Exception() {
             get() = ""
     }
     
+
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<WalletTableException> {
         override fun lift(error_buf: RustBuffer.ByValue): WalletTableException = FfiConverterTypeWalletTableError.lift(error_buf)
@@ -39103,6 +39310,8 @@ enum class WalletType {
      * deprecated, use XpubOnly instead
      */
     WATCH_ONLY;
+
+
     companion object
 }
 
@@ -39176,6 +39385,7 @@ sealed class XpubException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
+
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<XpubException> {
         override fun lift(error_buf: RustBuffer.ByValue): XpubException = FfiConverterTypeXpubError.lift(error_buf)
@@ -41540,86 +41750,6 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
     UniffiLib.uniffi_cove_fn_func_default_wallet_colors(
     
         _status)
-}
-    )
-    }
-    
- fun `describeAuthManagerError`(`error`: AuthManagerException): kotlin.String {
-            return FfiConverterString.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_func_describe_auth_manager_error(
-    
-        FfiConverterTypeAuthManagerError.lower(`error`),_status)
-}
-    )
-    }
-    
- fun `describeMultiFormatError`(`error`: MultiFormatException): kotlin.String {
-            return FfiConverterString.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_func_describe_multi_format_error(
-    
-        FfiConverterTypeMultiFormatError.lower(`error`),_status)
-}
-    )
-    }
-    
- fun `describeSendFlowError`(`error`: SendFlowException): kotlin.String {
-            return FfiConverterString.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_func_describe_send_flow_error(
-    
-        FfiConverterTypeSendFlowError.lower(`error`),_status)
-}
-    )
-    }
-    
- fun `describeSendFlowFiatOnChangeError`(`error`: SendFlowFiatOnChangeError): kotlin.String {
-            return FfiConverterString.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_func_describe_send_flow_fiat_on_change_error(
-    
-        FfiConverterTypeSendFlowFiatOnChangeError.lower(`error`),_status)
-}
-    )
-    }
-    
- fun `describeTapSignerReaderError`(`error`: TapSignerReaderException): kotlin.String {
-            return FfiConverterString.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_func_describe_tap_signer_reader_error(
-    
-        FfiConverterTypeTapSignerReaderError.lower(`error`),_status)
-}
-    )
-    }
-    
- fun `describeTransportError`(`error`: TransportException): kotlin.String {
-            return FfiConverterString.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_func_describe_transport_error(
-    
-        FfiConverterTypeTransportError.lower(`error`),_status)
-}
-    )
-    }
-    
- fun `describeWalletError`(`error`: WalletException): kotlin.String {
-            return FfiConverterString.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_func_describe_wallet_error(
-    
-        FfiConverterTypeWalletError.lower(`error`),_status)
-}
-    )
-    }
-    
- fun `describeWalletManagerError`(`error`: WalletManagerException): kotlin.String {
-            return FfiConverterString.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_func_describe_wallet_manager_error(
-    
-        FfiConverterTypeWalletManagerError.lower(`error`),_status)
 }
     )
     }
