@@ -30,6 +30,7 @@ pub enum UtxoType {
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
+#[uniffi::export(Eq, Hash)]
 pub struct Utxo {
     pub outpoint: Arc<OutPoint>,
     pub label: Option<String>,

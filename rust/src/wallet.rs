@@ -101,6 +101,7 @@ pub struct Wallet {
     uniffi::Enum,
     strum::EnumIter,
 )]
+#[uniffi::export(Display, Ord)]
 pub enum WalletAddressType {
     #[default]
     NativeSegwit,

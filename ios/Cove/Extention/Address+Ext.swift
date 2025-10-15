@@ -7,13 +7,7 @@
 
 import CoveCore
 
-extension Address: @retroactive Equatable {
-    public static func == (lhs: Address, rhs: Address) -> Bool {
-        addressIsEqual(lhs: lhs, rhs: rhs)
-    }
-}
-
-extension Address: @retroactive Hashable {
+extension Address {
     static func checkValid(_ address: String, network: Network? = nil) -> Result<Void, AddressError> {
         if address.isEmpty { return .failure(AddressError.EmptyAddress) }
 
@@ -29,9 +23,5 @@ extension Address: @retroactive Hashable {
 
     static func isValid(_ address: String, network: Network? = nil) -> Bool {
         Address.checkValid(address, network: network).isSuccess()
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(self.hashToUint())
     }
 }

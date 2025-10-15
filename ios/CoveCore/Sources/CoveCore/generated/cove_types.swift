@@ -435,6 +435,22 @@ fileprivate struct FfiConverterUInt8: FfiConverterPrimitive {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterInt8: FfiConverterPrimitive {
+    typealias FfiType = Int8
+    typealias SwiftType = Int8
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Int8 {
+        return try lift(readInt(&buf))
+    }
+
+    public static func write(_ value: Int8, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterUInt32: FfiConverterPrimitive {
     typealias FfiType = UInt32
     typealias SwiftType = UInt32
@@ -621,7 +637,7 @@ public protocol AddressProtocol: AnyObject, Sendable {
     func unformatted()  -> String
     
 }
-open class Address: AddressProtocol, @unchecked Sendable {
+open class Address: AddressProtocol, @unchecked Sendable, Equatable, Hashable {
     fileprivate let handle: UInt64
 
     /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
@@ -726,6 +742,28 @@ open func unformatted() -> String  {
     
 
     
+// The local Rust `Eq` implementation - only `eq` is used.
+public static func == (self: Address, other: Address) -> Bool {
+    return try!  FfiConverterBool.lift(
+        try! rustCall() {
+    uniffi_cove_types_fn_method_address_uniffi_trait_eq_eq(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeAddress_lower(other),$0
+    )
+}
+    )
+}
+// The local Rust `Hash` implementation
+public func hash(into hasher: inout Hasher) {
+    let val = try!  FfiConverterUInt64.lift(
+        try! rustCall() {
+    uniffi_cove_types_fn_method_address_uniffi_trait_hash(
+            self.uniffiCloneHandle(),$0
+    )
+}
+    )
+    hasher.combine(val)
+}
 }
 
 
@@ -3209,10 +3247,8 @@ public protocol TxIdProtocol: AnyObject, Sendable {
     
     func asHashString()  -> String
     
-    func isEqual(other: TxId)  -> Bool
-    
 }
-open class TxId: TxIdProtocol, @unchecked Sendable {
+open class TxId: TxIdProtocol, @unchecked Sendable, Equatable, Hashable, Comparable {
     fileprivate let handle: UInt64
 
     /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
@@ -3268,17 +3304,41 @@ open func asHashString() -> String  {
 })
 }
     
-open func isEqual(other: TxId) -> Bool  {
-    return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_cove_types_fn_method_txid_is_equal(
+
+    
+// The local Rust `Eq` implementation - only `eq` is used.
+public static func == (self: TxId, other: TxId) -> Bool {
+    return try!  FfiConverterBool.lift(
+        try! rustCall() {
+    uniffi_cove_types_fn_method_txid_uniffi_trait_eq_eq(
             self.uniffiCloneHandle(),
         FfiConverterTypeTxId_lower(other),$0
     )
-})
 }
-    
-
-    
+    )
+}
+// The local Rust `Hash` implementation
+public func hash(into hasher: inout Hasher) {
+    let val = try!  FfiConverterUInt64.lift(
+        try! rustCall() {
+    uniffi_cove_types_fn_method_txid_uniffi_trait_hash(
+            self.uniffiCloneHandle(),$0
+    )
+}
+    )
+    hasher.combine(val)
+}
+// The local Rust `Ord` implementation
+public static func < (self: TxId, other: TxId) -> Bool {
+    return try!  FfiConverterInt8.lift(
+        try! rustCall() {
+    uniffi_cove_types_fn_method_txid_uniffi_trait_ord_cmp(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeTxId_lower(other),$0
+    )
+}
+    ) < 0
+}
 }
 
 
@@ -3900,7 +3960,7 @@ public func FfiConverterTypeSplitOutput_lower(_ value: SplitOutput) -> RustBuffe
 }
 
 
-public struct Utxo {
+public struct Utxo: Equatable, Hashable {
     public var outpoint: OutPoint
     public var label: String?
     public var datetime: UInt64
@@ -3924,6 +3984,28 @@ public struct Utxo {
     }
 
     
+// The local Rust `Eq` implementation - only `eq` is used.
+public static func == (self: Utxo, other: Utxo) -> Bool {
+    return try!  FfiConverterBool.lift(
+        try! rustCall() {
+    uniffi_cove_types_fn_method_utxo_uniffi_trait_eq_eq(
+            FfiConverterTypeUtxo_lower(self),
+        FfiConverterTypeUtxo_lower(other),$0
+    )
+}
+    )
+}
+// The local Rust `Hash` implementation
+public func hash(into hasher: inout Hasher) {
+    let val = try!  FfiConverterUInt64.lift(
+        try! rustCall() {
+    uniffi_cove_types_fn_method_utxo_uniffi_trait_hash(
+            FfiConverterTypeUtxo_lower(self),$0
+    )
+}
+    )
+    hasher.combine(val)
+}
 }
 
 #if compiler(>=6)
@@ -4086,13 +4168,23 @@ public func FfiConverterTypeAddressError_lower(_ value: AddressError) -> RustBuf
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum BitcoinUnit: Equatable, Hashable {
+public enum BitcoinUnit: Equatable, Hashable, CustomStringConvertible {
     
     case btc
     case sat
 
 
 
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_types_fn_method_bitcoinunit_uniffi_trait_display(
+            FfiConverterTypeBitcoinUnit_lower(self),$0
+    )
+}
+    )
+}
 }
 
 #if compiler(>=6)
@@ -4295,7 +4387,7 @@ public func FfiConverterTypeConfirmDetailsError_lower(_ value: ConfirmDetailsErr
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum FeeSpeed: Equatable, Hashable {
+public enum FeeSpeed: Equatable, Hashable, CustomStringConvertible {
     
     case fast
     case medium
@@ -4305,6 +4397,16 @@ public enum FeeSpeed: Equatable, Hashable {
 
 
 
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_types_fn_method_feespeed_uniffi_trait_display(
+            FfiConverterTypeFeeSpeed_lower(self),$0
+    )
+}
+    )
+}
 }
 
 #if compiler(>=6)
@@ -4614,7 +4716,7 @@ public func FfiConverterTypeFfiColorScheme_lower(_ value: FfiColorScheme) -> Rus
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum Network: Equatable, Hashable {
+public enum Network: Equatable, Hashable, CustomStringConvertible {
     
     case bitcoin
     case testnet
@@ -4623,6 +4725,16 @@ public enum Network: Equatable, Hashable {
 
 
 
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_types_fn_method_network_uniffi_trait_display(
+            FfiConverterTypeNetwork_lower(self),$0
+    )
+}
+    )
+}
 }
 
 #if compiler(>=6)
@@ -5243,14 +5355,6 @@ public func FfiConverterTypeWalletId_lower(_ value: WalletId) -> RustBuffer {
     return FfiConverterTypeWalletId.lower(value)
 }
 
-public func addressIsEqual(lhs: Address, rhs: Address) -> Bool  {
-    return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_cove_types_fn_func_address_is_equal(
-        FfiConverterTypeAddress_lower(lhs),
-        FfiConverterTypeAddress_lower(rhs),$0
-    )
-})
-}
 public func addressIsValid(address: String, network: Network)throws   {try rustCallWithError(FfiConverterTypeAddressError_lift) {
     uniffi_cove_types_fn_func_address_is_valid(
         FfiConverterString.lower(address),
@@ -5399,9 +5503,6 @@ private let initializationResult: InitializationResult = {
     let scaffolding_contract_version = ffi_cove_types_uniffi_contract_version()
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
-    }
-    if (uniffi_cove_types_checksum_func_address_is_equal() != 52493) {
-        return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_func_address_is_valid() != 14595) {
         return InitializationResult.apiChecksumMismatch
@@ -5707,9 +5808,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_txid_as_hash_string() != 46331) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_types_checksum_method_txid_is_equal() != 12412) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_constructor_address_from_string() != 25852) {
