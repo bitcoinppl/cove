@@ -1,230 +1,156 @@
-# iOS Baseline
+# Navigation Plan
 
-- `CoveApp` binds the SwiftUI `NavigationStack` to the Rust-backed router, so route pushes/pops always go through `app.rust` (`ios/Cove/CoveApp.swift:476`–`ios/Cove/CoveApp.swift:512`).
-- `RouteView` switches on the shared Rust `Route` enum to render screens (`ios/Cove/RouteView.swift:35`–`ios/Cove/RouteView.swift:58`).
-- `AppManager` owns the singleton `FfiApp`, caches the current `Router`, and implements `FfiReconcile` so Rust can broadcast router/auth updates (`ios/Cove/AppManager.swift:4`–`ios/Cove/AppManager.swift:199`).
-- `AuthManager` mirrors Rust auth state and wraps the navigation UI in lock/cover flows (`ios/Cove/AuthManager.swift:7`–`ios/Cove/AuthManager.swift:116`, `ios/Cove/CoveApp.swift:476`–`ios/Cove/CoveApp.swift:519`).
+This plan consolidates the iOS baseline work and the updated Android guidance into one Rust-first navigation reference.
 
-# Rust Core
+## Architecture Overview
 
-- All navigation types (`Route`, `Router`, helpers) live in Rust and are exported to every platform via uniffi (`rust/src/router.rs:17`–`rust/src/router.rs:195`).
-- `App` and `AppAction` mutate the router and emit `AppStateReconcileMessage` callbacks (`rust/src/app.rs:32`–`rust/src/app.rs:223`).
-- `FfiApp` exposes `reset_default_route_to`, `load_and_reset_default_route`, `listen_for_updates`, etc., bridging routing/auth decisions to Swift/Kotlin (`rust/src/app.rs:241`–`rust/src/app.rs:399`).
-- Callback plumbing (`FfiReconcile`) allows Rust threads to notify the UI layer safely (`rust/src/app/reconcile.rs:9`–`rust/src/app/reconcile.rs:60`).
+### Core Principles
+- Rust owns every navigation decision (`Route`, `Router`, `AppAction`); mobile layers mirror state.
+- `FfiReconcile` broadcasts router/auth/database changes; Swift/Kotlin react via immutable snapshots.
+- UI dispatches navigation intents (`push`, `reset`, `loadAndReset`) and waits for Rust to echo the resulting state.
+- Immutable data + structural equality policies prevent Compose/SwiftUI feedback loops.
 
-# Jetpack Compose Equivalent
+### Data Flow
 
-- Kotlin already has the generated bindings (`FfiApp`, `Route`, `FfiReconcile`) under `android/app/src/main/java/org/bitcoinppl/cove/cove.kt:9433`, `android/app/src/main/java/org/bitcoinppl/cove/cove.kt:24431`, `android/app/src/main/java/org/bitcoinppl/cove/cove.kt:31758`, `android/app/src/main/java/org/bitcoinppl/cove/cove.kt:39483`.
-- Mirror `AppManager` with an `AppCoordinator` that owns `FfiApp`, snapshots the initial router, listens for `AppStateReconcileMessage`, and exposes a `StateFlow`:
+```
+User Action → UI dispatch(AppAction) → Rust mutation → reconcile(message) → UI state update → Recompose
+     ↑                                                                                ↓
+     └──────────────────── System back / deep link / process restore ─────────────────┘
+```
+
+## Reference Implementations
+
+### iOS Baseline
+- `ios/Cove/CoveApp.swift:476-519` binds `NavigationStack(path:)` to `app.router.routes` so SwiftUI stays in sync with Rust.
+- `ios/Cove/RouteView.swift:35-121` renders screens via a `switch` on the shared `Route` enum.
+- `ios/Cove/AppManager.swift:4-279` owns the singleton `FfiApp`, caches the router, and implements `FfiReconcile`.
+- `ios/Cove/AuthManager.swift:7-161` mirrors Rust auth state, presents lock/cover flows, and triggers app resets.
+
+### Rust Core
+- Types exported through uniffi: `Route`, `Router`, helpers (`rust/src/router.rs:17-195`).
+- `App` + `AppAction` mutate the router and emit `AppStateReconcileMessage` (`rust/src/app.rs:32-223`).
+- `FfiApp` bridges UI commands (`dispatch`, `reset_default_route_to`, `listen_for_updates`) (`rust/src/app.rs:241-399`).
+- `FfiReconcile` plumbing keeps callbacks thread-safe (`rust/src/app/reconcile.rs:9-60`).
+
+## Android/Compose Strategy
+
+### Recommended: State-Driven `AppManager`
+- Implement an `@Stable` singleton that wraps `FfiApp`, exposes `router` via `mutableStateOf(..., structuralEqualityPolicy())`, and mirrors other reconciled state (database, color scheme, auth flags).
+- Always create new `Router` instances (`Router(ffiApp, default, routes.toList())`) inside `reconcile` so Compose detects changes.
 
 ```kotlin
-// android/app/src/main/java/org/bitcoinppl/cove/app/AppCoordinator.kt
-class AppCoordinator(
-    private val scope: CoroutineScope,
-    private val ffiApp: FfiApp = FfiApp(),
-) : FfiReconcile {
+// android/app/src/main/java/org/bitcoinppl/cove/app/AppManager.kt
+@Stable
+class AppManager private constructor() : FfiReconcile {
+    companion object { val shared by lazy { AppManager() } }
 
-    data class RouterState(val defaultRoute: Route, val stack: List<Route>)
+    private val ffiApp = FfiApp()
+    var router by mutableStateOf(ffiApp.state().router, structuralEqualityPolicy())
+        private set
+    var database by mutableStateOf(Database())
+        private set
+    var isTermsAccepted by mutableStateOf(Database().globalFlag().isTermsAccepted())
+        private set
 
-    private val _router = MutableStateFlow(
-        ffiApp.state().router.let { RouterState(it.`default`, it.routes) }
-    )
-    val router: StateFlow<RouterState> = _router.asStateFlow()
-
-    init {
-        ffiApp.listenForUpdates(this)
-    }
+    init { ffiApp.listenForUpdates(this) }
 
     override fun reconcile(message: AppStateReconcileMessage) {
-        scope.launch(Dispatchers.Main) {
-            when (message) {
-                is AppStateReconcileMessage.DefaultRouteChanged ->
-                    _router.value = RouterState(message.v0, message.v1)
-                is AppStateReconcileMessage.RouteUpdated ->
-                    _router.update { it.copy(stack = message.v0) }
-                is AppStateReconcileMessage.PushedRoute ->
-                    _router.update { it.copy(stack = it.stack + message.v0) }
-                AppStateReconcileMessage.AcceptedTerms -> { /* propagate */ }
-                else -> { /* handle other signals as needed */ }
-            }
+        when (message) {
+            is AppStateReconcileMessage.RouteUpdated ->
+                router = Router(ffiApp, router.`default`, message.v1.toList())
+            is AppStateReconcileMessage.PushedRoute ->
+                router = Router(ffiApp, router.`default`, router.routes + message.v1)
+            is AppStateReconcileMessage.DefaultRouteChanged ->
+                router = Router(ffiApp, message.v1, message.v2.toList())
+            is AppStateReconcileMessage.DatabaseUpdated ->
+                database = Database()
+            is AppStateReconcileMessage.AcceptedTerms ->
+                isTermsAccepted = true
+            // Handle color scheme, selected network, auth, etc.
         }
     }
 
-    fun push(route: Route) = ffiApp.dispatch(AppAction.PushRoute(route))
-    fun setRoutes(routes: List<Route>) =
-        ffiApp.dispatch(AppAction.UpdateRoute(routes))
+    fun pushRoute(route: Route) = ffiApp.dispatch(AppAction.PushRoute(route))
+    fun setRoutes(routes: List<Route>) = ffiApp.dispatch(AppAction.UpdateRoute(routes))
 }
 ```
 
-- Compose can mirror `RouteView` with a `when` expression on the top route:
+### Route → UI Mapping
+- Mirror `RouteView` with a `when` on `router.routes.lastOrNull() ?: router.default`.
+- Provide helpers such as `pushRoute`, `pushRoutes`, `resetRoute`, `loadAndReset` so screens can delegate navigation through Rust.
 
 ```kotlin
 @Composable
-fun CoveAppRoot(coordinator: AppCoordinator = rememberCoordinator()) {
-    val router by coordinator.router.collectAsState()
-    val current = router.stack.lastOrNull() ?: router.defaultRoute
+fun CoveAppRoot(app: AppManager = remember { AppManager.shared }) {
+    val router = app.router
+    val current = router.routes.lastOrNull() ?: router.`default`
 
     when (current) {
-        Route.ListWallets -> ListWalletsScreen(
-            onSelect = { coordinator.push(Route.SelectedWallet(it)) }
-        )
+        Route.ListWallets -> ListWalletsScreen(onWallet = { id ->
+            app.pushRoute(Route.SelectedWallet(id))
+        })
         is Route.SelectedWallet -> SelectedWalletScreen(current.v1)
-        is Route.NewWallet -> NewWalletFlow(current.v1, coordinator::push)
-        is Route.Settings -> SettingsContainer(current.v1, coordinator)
-        // Handle the remaining Route variants (SecretWords, Send, CoinControl, etc.)
+        is Route.NewWallet -> NewWalletFlow(current.v1, app::pushRoute)
+        is Route.Settings -> SettingsContainer(current.v1, app)
+        // Handle SecretWords, Send, CoinControl, TapSigner, etc.
     }
 }
 ```
 
-- Alternatively, map each `Route` to a `NavHost` destination and sync the back stack from `router.stack`.
-- Auth flow: wrap `CoveAppRoot` with a Compose lock surface backed by `RustAuthManager`, mirroring the Swift `LockView` behavior.
-- Suggested next steps:
-  1. Add `AppCoordinator` (and a matching `AuthCoordinator`) under `android/app/src/main/java/org/bitcoinppl/cove/app/`.
-  2. Update `MainActivity` to host the new Compose root rather than a single screen.
-  3. Flesh out each screen branch so routing parity with iOS is maintained (send flow, TapSigner, settings, etc.).
+### Auth & Cover Flow
+- Port `AuthManager` so biometric toggles, decoy/wipe pins, and lock state match Swift.
+- Wrap `CoveAppRoot` in a lock surface until terms are accepted and auth succeeds; call `ffiApp.initOnStart()` on launch.
+- Ensure `AppManager.reset()` clears cached managers (wallet, send flow) before dispatching `loadAndReset` routes.
 
-## EXTRA
+### Navigation Sync Guardrails
+- Only dispatch `AppAction.UpdateRoute` when the requested stack differs from `router.routes` to avoid Rust ↔ Compose ping-pong.
+- If you adopt `NavHostController`, keep reversible `routeToString` / `stringToRoute` helpers in one file and compare stacks before calling `navigate`/`popBackStack`.
+- Use `BackHandler` so hardware back emits a trimmed stack (`routes.dropLast(1)`) through Rust when Rust is authoritative.
+- Always copy lists (`toList()`) inside reconcile so Compose sees new references.
 
-Short answer: your architecture is solid and maps well from SwiftUI → Compose. A few fixes and upgrades will make it robust and “best-practice” for 2025-era Compose.
+### Deep Links, Process Death, Multi-Stack
+- On deep links or cold starts, normalize the initial Android back stack into `List<Route>` and dispatch it once so Rust matches what the user sees.
+- Persist the authoritative router snapshot (Rust) for process-death restoration and rehydrate before composing UI.
+- If tabs/sidebars require multiple stacks, extend `Router` with `selectedTab` and `tabStacks`, then reconcile using the same immutable snapshot approach.
 
-Corrections and improvements (most important first): 1. Prevent sync loops and do minimal diffs
-Your LaunchedEffect(nav) blocks as written will easily loop (Rust → Compose → Rust). Diff the stacks and apply the smallest change.
+### Optional: Navigation Compose Integration
+- Remember the controller (`rememberNavController()`) and key `LaunchedEffect` on primitive route lists.
+- Diff current vs. target stacks to calculate minimal pops/pushes:
 
-@Immutable
-sealed interface Route {
-data object ListWallets : Route
-data class SelectedWallet(val id: String) : Route
-// ...
-}
-
-fun routesEqual(a: List<Route>, b: List<Route>) = a == b
-
+```kotlin
 suspend fun syncNavigation(nav: NavHostController, target: List<Route>) {
-val current = nav.backQueue
-.mapNotNull { it.destination.route }
-.drop(1) // drop graph root
-val currentRoutes = current.map(::stringToRoute) // your reversible mapping
+    val currentRoutes = nav.backQueue
+        .mapNotNull { it.destination.route }
+        .drop(1)
+        .map(::stringToRoute)
+    if (currentRoutes == target) return
 
-    if (routesEqual(currentRoutes, target)) return
-
-    // Find LCP (longest common prefix) to avoid full reset
     var keep = 0
     while (keep < currentRoutes.size && keep < target.size && currentRoutes[keep] == target[keep]) keep++
-
-    // Pop back to the kept prefix
     repeat(currentRoutes.size - keep) { nav.popBackStack() }
-
-    // Push the remainder with singleTop
-    target.drop(keep).forEach { r ->
-        nav.navigate(routeToString(r)) {
-            launchSingleTop = true
-        }
-    }
-
+    target.drop(keep).forEach { nav.navigate(routeToString(it)) { launchSingleTop = true } }
 }
+```
 
-    2.	Collect nav changes correctly
+## Implementation Checklist
+- [ ] Land `AppManager.kt` and `AuthManager.kt` with complete `FfiReconcile` coverage.
+- [ ] Implement Compose `RouteView` parity (direct `when` or NavHost + diffed sync).
+- [ ] Wire managers to screens: wallet list, selected wallet, send flow, TapSigner, settings, coin control, secret words.
+- [ ] Build global alert/sheet plumbing (Compose analog to Swift `TaggedItem`).
+- [ ] Support deep links, process death restoration, and hardware back routing.
+- [ ] Add unit/integration tests for router sync, back handling, and send/wallet flows.
+- [ ] Document Android-specific requirements (permissions, NFC lifecycle, UX gaps).
 
-Use currentBackStackEntryFlow directly; don’t wrap it inside snapshotFlow. Also, don’t key the LaunchedEffect to currentBackStackEntry (that object changes identity unpredictably). Key to navController.
+## Next Steps
+1. Finalize Compose `AppManager`/`AuthManager` scaffolding and reset helpers.
+2. Replace the temporary Android entry point with `CoveAppRoot` gated by auth.
+3. Connect each Compose screen to real managers and verify Rust route parity end-to-end.
+4. Add regression tests (unit or instrumentation) that cover stack sync, deep links, and process restoration.
+5. Revisit NavHost vs. direct mapping once parity is stable and UX requirements (animations, deep links) are clear.
 
-@Composable
-fun CoveApp(app: AppManager = remember { AppManager.shared }) {
-val navController = rememberNavController()
+## Alternative Libraries (Future Exploration)
+- **Decompose**: Kotlin Multiplatform, pure-state back stacks; clean Rust-first mental model.
+- **Voyager**: Lightweight screen-based routing with minimal boilerplate.
+- **Molecule + custom reducer**: Full control if Compose Navigation proves limiting.
 
-    // Rust -> Compose
-    LaunchedEffect(app.router.routes) {
-        // Ensure routes list is immutable/structurally compared each update
-        syncNavigation(navController, app.router.routes)
-    }
-
-    // Compose -> Rust
-    LaunchedEffect(navController) {
-        navController.currentBackStackEntryFlow.collect { entry ->
-            val stack = navController.backQueue
-                .mapNotNull { it.destination.route }
-                .drop(1)
-                .map(::stringToRoute)
-            // Only dispatch if it differs from Rust's view
-            if (!routesEqual(stack, app.router.routes)) {
-                app.dispatch(AppAction.UpdateRoute(routes = stack))
-            }
-        }
-    }
-
-    NavHost(
-        navController = navController,
-        startDestination = routeToString(app.router.default)
-    ) {
-        composable("listWallets") { ListWalletsScreen() }
-        composable("selectedWallet/{id}") { backStack ->
-            SelectedWalletScreen(backStack.arguments?.getString("id")!!)
-        }
-        // ...
-    }
-
-    // Android system back -> Rust (optional if you want Rust to own it)
-    BackHandler {
-        val newStack = app.router.routes.dropLast(1)
-        app.dispatch(AppAction.UpdateRoute(routes = newStack))
-    }
-
-}
-
-    3.	Make the router state truly state-driven
-
-Use an immutable list for router.routes so Compose can diff it reliably (don’t mutate in place). Favor val router by mutableStateOf(initial, policy = structuralEqualityPolicy()).
-
-@Stable
-class AppManager : FfiReconcile {
-val rust = FfiApp()
-var router by mutableStateOf(rust.state().router, structuralEqualityPolicy())
-private set
-// ...
-override fun reconcile(msg: AppStateReconcileMessage) {
-when (msg) {
-is AppStateReconcileMessage.RouteUpdated ->
-router = router.copy(routes = msg.v1.toList()) // new instance
-is AppStateReconcileMessage.DefaultRouteChanged ->
-router = Router(rust, msg.v1, msg.v2.toList())
-// ...
-}
-}
-}
-
-    4.	Argument typing and route mapping
-
-Keep a single mapping pair to avoid drift:
-
-fun routeToString(r: Route): String = when (r) {
-Route.ListWallets -> "listWallets"
-is Route.SelectedWallet -> "selectedWallet/${Uri.encode(r.id)}"
-}
-fun stringToRoute(s: String): Route = when {
-s == "listWallets" -> Route.ListWallets
-s.startsWith("selectedWallet/") -> Route.SelectedWallet(Uri.decode(s.substringAfter('/')))
-else -> Route.ListWallets
-}
-
-    5.	Back stack ownership and system back
-
-If Rust is the source of truth, always reflect system back into Rust (as above). If you prefer Android to own physical back presses, allow navController.popBackStack() and have a listener push the updated stack back to Rust (your current flow already does this). 6. Process death and state restoration
-Compose Navigation restores destinations automatically; your Rust router must be rehydrated to match after app restart. On first render, do a one-time “authoritative” sync from Rust → Compose (or vice-versa) based on your product decision. Persist either a) Rust router snapshot, or b) the Compose back stack routes in SavedStateHandle and re-emit to Rust during init. 7. Multiple back stacks / bottom navigation (if relevant)
-Navigation Compose supports multiple back stacks. If you later add tabs, maintain one Rust route stack per tab and a Rust “selected tab”. Map them to NavHosts with navigation() graphs or multiple NavHostControllers. Keep the same diff/sync idea per stack. 8. Deep links and external intents
-When Android launches you into a deep destination, you’ll get an initial back stack from Navigation. Normalize it into your Route list and dispatch an initial UpdateRoute so Rust matches what Android displayed. 9. Performance and recomposition hygiene
-Key your effects narrowly, avoid rebuilding NavHostController, and ensure route lists are small immutable values. Use long descriptive names as you prefer for clarity in reconciliation code.
-
-Inline comparison update (yours is mostly right):
-
-Swift/SwiftUI Kotlin/Jetpack Compose
-NavigationStack(path: $routes) direct binding NavHostController + state diff (Rust routes → minimal nav ops)
-@Bindable two-way binding mutableStateOf + Flow listener (currentBackStackEntryFlow)
-.navigationDestination(for:) NavHost { composable(…) }
-Automatic back stack sync Manual diff + popBackStack/navigate, plus BackHandler if Rust owns back
-onChange(of: routes) LaunchedEffect(routes) + structural equality; ensure immutable lists
-
-Alternatives you may consider (you might like these):
-• Square’s Molecule + a lightweight back-stack model (your own stack reducer) if you want 100% control and no Nav library.
-• Ark Ivanov’s Decompose for a Kotlin-multiplatform, state-first router with back stacks as pure models (clean Rust-first mental model).
-• Voyager for simpler, model-driven screens if you want less boilerplate than Navigation Compose.
-
-Verdict: your proposed “Rust-first router + Compose Navigation with state-driven sync” is still a top-tier approach. The key is the minimal-diff sync, correct currentBackStackEntryFlow collection, immutable route lists, and a clear rule for who is authoritative on startup and back. Implement those tweaks and you’re in great shape.
+Stick with the direct Rust-first approach as the baseline and layer in alternatives only if product requirements demand them.
