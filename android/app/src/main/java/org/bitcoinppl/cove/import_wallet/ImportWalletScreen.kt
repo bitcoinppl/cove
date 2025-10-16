@@ -18,13 +18,9 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import org.bitcoinppl.cove.R
-import java.util.Locale
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.SolidColor
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.ImportWalletManager
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import java.util.Locale
 
@@ -147,14 +143,15 @@ fun ImportWalletScreen(
                         isImporting = true
                         try {
                             // convert words to the format expected by rust (list of pages)
-                            val enteredWords = if (totalWords == 24) {
-                                listOf(
-                                    words.subList(0, 12),
-                                    words.subList(12, 24)
-                                )
-                            } else {
-                                listOf(words)
-                            }
+                            val enteredWords =
+                                if (totalWords == 24) {
+                                    listOf(
+                                        words.subList(0, 12),
+                                        words.subList(12, 24),
+                                    )
+                                } else {
+                                    listOf(words)
+                                }
 
                             val wallet = manager.importWallet(enteredWords)
                             Log.d("ImportWalletScreen", "Successfully imported wallet: ${wallet.id}")
@@ -163,7 +160,7 @@ fun ImportWalletScreen(
                             Log.e("ImportWalletScreen", "Failed to import wallet", e)
                             snackbarHostState.showSnackbar(
                                 message = "Failed to import wallet: ${e.message}",
-                                duration = SnackbarDuration.Short
+                                duration = SnackbarDuration.Short,
                             )
                         } finally {
                             isImporting = false
@@ -171,9 +168,10 @@ fun ImportWalletScreen(
                     }
                 },
                 enabled = !isImporting && words.all { it.isNotBlank() },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(52.dp),
                 shape = RoundedCornerShape(8.dp),
                 colors =
                     ButtonDefaults.buttonColors(
@@ -184,7 +182,7 @@ fun ImportWalletScreen(
                 if (isImporting) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(24.dp),
-                        color = MaterialTheme.colorScheme.onPrimary
+                        color = MaterialTheme.colorScheme.onPrimary,
                     )
                 } else {
                     Text(

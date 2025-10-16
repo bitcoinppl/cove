@@ -24,7 +24,7 @@ class MainActivity : ComponentActivity() {
                     onImportSuccess = {
                         Log.d("MainActivity", "Import success")
                         // TODO: navigate to wallet screen
-                    }
+                    },
                 )
             }
         }
