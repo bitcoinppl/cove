@@ -1,4 +1,4 @@
-package com.example.cove
+package org.bitcoinppl.cove
 
 // import androidx.lifecycle.Manager
 

@@ -1,4 +1,4 @@
-package com.example.cove.ui.theme
+package org.bitcoinppl.cove.ui.theme
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle

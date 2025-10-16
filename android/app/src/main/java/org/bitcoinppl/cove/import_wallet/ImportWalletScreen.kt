@@ -1,5 +1,6 @@
 package org.bitcoinppl.cove.import_wallet
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -17,6 +18,8 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
+import org.bitcoinppl.cove.ImportWalletManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import java.util.Locale
@@ -38,13 +41,20 @@ private fun ImportWalletPreview24() {
 fun ImportWalletScreen(
     modifier: Modifier = Modifier,
     totalWords: Int = 12,
+    manager: ImportWalletManager = remember { ImportWalletManager() },
+    onBackClick: () -> Unit = {},
+    onImportSuccess: () -> Unit = {},
 ) {
+    val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+
     // Pagination setup: if there are 24 words, we render two pages of 12 fields; otherwise a single page.
     val pages = if (totalWords == 24) 2 else 1
     var tabIndex by remember { mutableIntStateOf(0) }
 
     // Backing state for all text fields, Compose TextField requires a state even without validation logic.
     var words by remember(totalWords) { mutableStateOf(List(totalWords) { "" }) }
+    var isImporting by remember { mutableStateOf(false) }
 
     // Compute the slice of fields to show on the current page, 12 per page.
     val pageSize = 12
@@ -53,6 +63,7 @@ fun ImportWalletScreen(
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = @Composable {
             CenterAlignedTopAppBar(
                 title = {
@@ -62,7 +73,7 @@ fun ImportWalletScreen(
                     )
                 },
                 navigationIcon = {
-                    IconButton(onClick = { /* TODO: navigate back */ }) {
+                    IconButton(onClick = onBackClick) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",
@@ -123,11 +134,40 @@ fun ImportWalletScreen(
             }
             Spacer(Modifier.height(32.dp))
             Button(
-                onClick = { /* TODO: import wallet */ },
                 modifier =
                     Modifier
                         .fillMaxWidth()
                         .height(52.dp),
+                onClick = {
+                    scope.launch {
+                        isImporting = true
+                        try {
+                            // convert words to the format expected by rust (list of pages)
+                            val enteredWords =
+                                if (totalWords == 24) {
+                                    listOf(
+                                        words.subList(0, 12),
+                                        words.subList(12, 24),
+                                    )
+                                } else {
+                                    listOf(words)
+                                }
+
+                            val wallet = manager.importWallet(enteredWords)
+                            Log.d("ImportWalletScreen", "Successfully imported wallet: ${wallet.id}")
+                            onImportSuccess()
+                        } catch (e: Exception) {
+                            Log.e("ImportWalletScreen", "Failed to import wallet", e)
+                            snackbarHostState.showSnackbar(
+                                message = "Failed to import wallet: $e",
+                                duration = SnackbarDuration.Short,
+                            )
+                        } finally {
+                            isImporting = false
+                        }
+                    }
+                },
+                enabled = !isImporting && words.all { it.isNotBlank() },
                 shape = RoundedCornerShape(8.dp),
                 colors =
                     ButtonDefaults.buttonColors(
@@ -135,10 +175,17 @@ fun ImportWalletScreen(
                         contentColor = MaterialTheme.colorScheme.onPrimary,
                     ),
             ) {
-                Text(
-                    stringResource(R.string.action_import_wallet),
-                    style = MaterialTheme.typography.labelLarge,
-                )
+                if (isImporting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = MaterialTheme.colorScheme.onPrimary,
+                    )
+                } else {
+                    Text(
+                        stringResource(R.string.action_import_wallet),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                }
             }
         }
     }

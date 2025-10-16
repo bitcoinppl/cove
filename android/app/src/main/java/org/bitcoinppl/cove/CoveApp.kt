@@ -8,7 +8,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.sp
-import com.example.cove.Manager
+import org.bitcoinppl.cove.Manager
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove_core.AutoComplete
 import org.bitcoinppl.cove_core.Bip39AutoComplete
