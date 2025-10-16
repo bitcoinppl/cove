@@ -159,7 +159,7 @@ fun ImportWalletScreen(
                         } catch (e: Exception) {
                             Log.e("ImportWalletScreen", "Failed to import wallet", e)
                             snackbarHostState.showSnackbar(
-                                message = "Failed to import wallet: ${e.message}",
+                                message = "Failed to import wallet: $e",
                                 duration = SnackbarDuration.Short,
                             )
                         } finally {
@@ -168,10 +168,6 @@ fun ImportWalletScreen(
                     }
                 },
                 enabled = !isImporting && words.all { it.isNotBlank() },
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .height(52.dp),
                 shape = RoundedCornerShape(8.dp),
                 colors =
                     ButtonDefaults.buttonColors(
