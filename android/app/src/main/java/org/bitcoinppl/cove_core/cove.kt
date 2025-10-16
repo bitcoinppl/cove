@@ -1819,8 +1819,8 @@ internal object UniffiLib {
         uniffiCallbackInterfaceTapcardTransportProtocol.register(this)
         uniffiCallbackInterfaceWalletManagerReconciler.register(this)
         org.bitcoinppl.cove_core.types.uniffiEnsureInitialized()
-        org.bitcoinppl.cove_core.nfc.uniffiEnsureInitialized()
         org.bitcoinppl.cove_core.device.uniffiEnsureInitialized()
+        org.bitcoinppl.cove_core.nfc.uniffiEnsureInitialized()
         org.bitcoinppl.cove_core.tapcard.uniffiEnsureInitialized()
         
     }
@@ -2756,6 +2756,14 @@ external fun uniffi_cove_fn_init_callback_vtable_walletmanagerreconciler(`vtable
 ): Unit
 external fun uniffi_cove_fn_method_authmanagererror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_discoverystate_uniffi_trait_eq_eq(`ptr`: RustBuffer.ByValue,`other`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Byte
+external fun uniffi_cove_fn_method_discoverystate_uniffi_trait_eq_ne(`ptr`: RustBuffer.ByValue,`other`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Byte
+external fun uniffi_cove_fn_method_discoverystate_uniffi_trait_hash(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Long
+external fun uniffi_cove_fn_method_fiatcurrency_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_multiformaterror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_sendflowerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -2766,10 +2774,22 @@ external fun uniffi_cove_fn_method_tapsignerreadererror_uniffi_trait_display(`pt
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_transporterror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_walletaddresstype_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_walletaddresstype_uniffi_trait_ord_cmp(`ptr`: RustBuffer.ByValue,`other`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Byte
 external fun uniffi_cove_fn_method_walleterror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_walletmanagererror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_wallettype_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_walletmetadata_uniffi_trait_eq_eq(`ptr`: RustBuffer.ByValue,`other`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Byte
+external fun uniffi_cove_fn_method_walletmetadata_uniffi_trait_eq_ne(`ptr`: RustBuffer.ByValue,`other`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Byte
+external fun uniffi_cove_fn_method_walletmetadata_uniffi_trait_hash(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Long
 external fun uniffi_cove_fn_func_address_error_to_alert_state(`error`: RustBufferAddressError.ByValue,`address`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_func_after_pin_action_user_message(`action`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -4538,6 +4558,29 @@ public object FfiConverterUByte: FfiConverter<UByte, Byte> {
 
     override fun write(value: UByte, buf: ByteBuffer) {
         buf.put(value.toByte())
+    }
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterByte: FfiConverter<Byte, Byte> {
+    override fun lift(value: Byte): Byte {
+        return value
+    }
+
+    override fun read(buf: ByteBuffer): Byte {
+        return buf.get()
+    }
+
+    override fun lower(value: Byte): Byte {
+        return value
+    }
+
+    override fun allocationSize(value: Byte) = 1UL
+
+    override fun write(value: Byte, buf: ByteBuffer) {
+        buf.put(value)
     }
 }
 
@@ -24723,6 +24766,25 @@ data class WalletMetadata (
 ): Disposable{
     
 
+    // The local Rust `Eq` implementation - only `eq` is used.
+    override fun equals(other: Any?): Boolean {
+        if (other !is WalletMetadata) return false
+        return FfiConverterBoolean.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_walletmetadata_uniffi_trait_eq_eq(FfiConverterTypeWalletMetadata.lower(this),
+        FfiConverterTypeWalletMetadata.lower(`other`),_status)
+}
+    )
+    }
+    // The local Rust `Hash` implementation
+    override fun hashCode(): Int {
+        return FfiConverterULong.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_walletmetadata_uniffi_trait_hash(FfiConverterTypeWalletMetadata.lower(this),
+        _status)
+}
+    ).toInt()
+    }
     
     @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
     override fun destroy() {
@@ -28213,6 +28275,25 @@ sealed class DiscoveryState :Disposable {
     {
         
 
+    // The local Rust `Eq` implementation - only `eq` is used.
+    override fun equals(other: Any?): Boolean {
+        if (other !is DiscoveryState) return false
+        return FfiConverterBoolean.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_discoverystate_uniffi_trait_eq_eq(FfiConverterTypeDiscoveryState.lower(this),
+        FfiConverterTypeDiscoveryState.lower(`other`),_status)
+}
+    )
+    }
+    // The local Rust `Hash` implementation
+    override fun hashCode(): Int {
+        return FfiConverterULong.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_discoverystate_uniffi_trait_hash(FfiConverterTypeDiscoveryState.lower(this),
+        _status)
+}
+    ).toInt()
+    }
         companion object
     }
     
@@ -28226,6 +28307,25 @@ sealed class DiscoveryState :Disposable {
     {
         
 
+    // The local Rust `Eq` implementation - only `eq` is used.
+    override fun equals(other: Any?): Boolean {
+        if (other !is DiscoveryState) return false
+        return FfiConverterBoolean.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_discoverystate_uniffi_trait_eq_eq(FfiConverterTypeDiscoveryState.lower(this),
+        FfiConverterTypeDiscoveryState.lower(`other`),_status)
+}
+    )
+    }
+    // The local Rust `Hash` implementation
+    override fun hashCode(): Int {
+        return FfiConverterULong.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_discoverystate_uniffi_trait_hash(FfiConverterTypeDiscoveryState.lower(this),
+        _status)
+}
+    ).toInt()
+    }
         companion object
     }
     
@@ -28235,6 +28335,25 @@ sealed class DiscoveryState :Disposable {
     {
         
 
+    // The local Rust `Eq` implementation - only `eq` is used.
+    override fun equals(other: Any?): Boolean {
+        if (other !is DiscoveryState) return false
+        return FfiConverterBoolean.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_discoverystate_uniffi_trait_eq_eq(FfiConverterTypeDiscoveryState.lower(this),
+        FfiConverterTypeDiscoveryState.lower(`other`),_status)
+}
+    )
+    }
+    // The local Rust `Hash` implementation
+    override fun hashCode(): Int {
+        return FfiConverterULong.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_discoverystate_uniffi_trait_hash(FfiConverterTypeDiscoveryState.lower(this),
+        _status)
+}
+    ).toInt()
+    }
         companion object
     }
     
@@ -28283,6 +28402,25 @@ sealed class DiscoveryState :Disposable {
     }
     
 
+    // The local Rust `Eq` implementation - only `eq` is used.
+    override fun equals(other: Any?): Boolean {
+        if (other !is DiscoveryState) return false
+        return FfiConverterBoolean.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_discoverystate_uniffi_trait_eq_eq(FfiConverterTypeDiscoveryState.lower(this),
+        FfiConverterTypeDiscoveryState.lower(`other`),_status)
+}
+    )
+    }
+    // The local Rust `Hash` implementation
+    override fun hashCode(): Int {
+        return FfiConverterULong.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_discoverystate_uniffi_trait_hash(FfiConverterTypeDiscoveryState.lower(this),
+        _status)
+}
+    ).toInt()
+    }
 
     companion object
 }
@@ -28476,6 +28614,15 @@ enum class FiatCurrency {
     CHF,
     JPY;
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_fiatcurrency_uniffi_trait_display(FfiConverterTypeFiatCurrency.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object
 }
@@ -36546,6 +36693,24 @@ enum class WalletAddressType {
     WRAPPED_SEGWIT,
     LEGACY;
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_walletaddresstype_uniffi_trait_display(FfiConverterTypeWalletAddressType.lower(this),
+        _status)
+}
+    )
+    }
+    // The local Rust `Ord` implementation
+    override fun compareTo(other: WalletAddressType): Int {
+        return FfiConverterByte.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_walletaddresstype_uniffi_trait_ord_cmp(FfiConverterTypeWalletAddressType.lower(this),
+        FfiConverterTypeWalletAddressType.lower(`other`),_status)
+}
+    ).toInt()
+    }
 
     companion object
 }
@@ -39311,6 +39476,15 @@ enum class WalletType {
      */
     WATCH_ONLY;
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_wallettype_uniffi_trait_display(FfiConverterTypeWalletType.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object
 }

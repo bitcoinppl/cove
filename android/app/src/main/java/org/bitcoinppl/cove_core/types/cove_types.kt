@@ -634,8 +634,6 @@ internal object IntegrityCheckingUniffiLib {
         uniffiCheckContractApiVersion(this)
         uniffiCheckApiChecksums(this)
     }
-    external fun uniffi_cove_types_checksum_func_address_is_equal(
-    ): Short
     external fun uniffi_cove_types_checksum_func_address_is_valid(
     ): Short
     external fun uniffi_cove_types_checksum_func_address_is_valid_for_network(
@@ -840,8 +838,6 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_types_checksum_method_txid_as_hash_string(
     ): Short
-    external fun uniffi_cove_types_checksum_method_txid_is_equal(
-    ): Short
     external fun uniffi_cove_types_checksum_constructor_address_from_string(
     ): Short
     external fun uniffi_cove_types_checksum_constructor_address_preview_new(
@@ -910,6 +906,12 @@ external fun uniffi_cove_types_fn_method_address_string(`ptr`: Long,uniffi_out_e
 ): RustBuffer.ByValue
 external fun uniffi_cove_types_fn_method_address_unformatted(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
+external fun uniffi_cove_types_fn_method_address_uniffi_trait_eq_eq(`ptr`: Long,`other`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Byte
+external fun uniffi_cove_types_fn_method_address_uniffi_trait_eq_ne(`ptr`: Long,`other`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Byte
+external fun uniffi_cove_types_fn_method_address_uniffi_trait_hash(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Long
 external fun uniffi_cove_types_fn_clone_addressinfo(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
 external fun uniffi_cove_types_fn_free_addressinfo(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -1158,7 +1160,15 @@ external fun uniffi_cove_types_fn_free_txid(`handle`: Long,uniffi_out_err: Uniff
 ): Unit
 external fun uniffi_cove_types_fn_method_txid_as_hash_string(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_method_txid_is_equal(`ptr`: Long,`other`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_txid_uniffi_trait_display(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_types_fn_method_txid_uniffi_trait_eq_eq(`ptr`: Long,`other`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Byte
+external fun uniffi_cove_types_fn_method_txid_uniffi_trait_eq_ne(`ptr`: Long,`other`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Byte
+external fun uniffi_cove_types_fn_method_txid_uniffi_trait_hash(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Long
+external fun uniffi_cove_types_fn_method_txid_uniffi_trait_ord_cmp(`ptr`: Long,`other`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
 external fun uniffi_cove_types_fn_clone_txin(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
@@ -1172,8 +1182,18 @@ external fun uniffi_cove_types_fn_clone_utxolist(`handle`: Long,uniffi_out_err: 
 ): Long
 external fun uniffi_cove_types_fn_free_utxolist(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-external fun uniffi_cove_types_fn_func_address_is_equal(`lhs`: Long,`rhs`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_method_bitcoinunit_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_types_fn_method_feespeed_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_types_fn_method_network_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_types_fn_method_utxo_uniffi_trait_eq_eq(`ptr`: RustBuffer.ByValue,`other`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
+external fun uniffi_cove_types_fn_method_utxo_uniffi_trait_eq_ne(`ptr`: RustBuffer.ByValue,`other`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Byte
+external fun uniffi_cove_types_fn_method_utxo_uniffi_trait_hash(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Long
 external fun uniffi_cove_types_fn_func_address_is_valid(`address`: RustBuffer.ByValue,`network`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
 external fun uniffi_cove_types_fn_func_address_is_valid_for_network(`address`: RustBuffer.ByValue,`network`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -1331,9 +1351,6 @@ private fun uniffiCheckContractApiVersion(lib: IntegrityCheckingUniffiLib) {
 }
 @Suppress("UNUSED_PARAMETER")
 private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
-    if (lib.uniffi_cove_types_checksum_func_address_is_equal() != 52493.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
     if (lib.uniffi_cove_types_checksum_func_address_is_valid() != 14595.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1640,9 +1657,6 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_types_checksum_method_txid_as_hash_string() != 46331.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_txid_is_equal() != 12412.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
     if (lib.uniffi_cove_types_checksum_constructor_address_from_string() != 25852.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1868,6 +1882,29 @@ public object FfiConverterUByte: FfiConverter<UByte, Byte> {
 
     override fun write(value: UByte, buf: ByteBuffer) {
         buf.put(value.toByte())
+    }
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterByte: FfiConverter<Byte, Byte> {
+    override fun lift(value: Byte): Byte {
+        return value
+    }
+
+    override fun read(buf: ByteBuffer): Byte {
+        return buf.get()
+    }
+
+    override fun lower(value: Byte): Byte {
+        return value
+    }
+
+    override fun allocationSize(value: Byte) = 1UL
+
+    override fun write(value: Byte, buf: ByteBuffer) {
+        buf.put(value)
     }
 }
 
@@ -2365,6 +2402,31 @@ open class Address: Disposable, AutoCloseable, AddressInterface
 
     
 
+    // The local Rust `Eq` implementation - only `eq` is used.
+    override fun equals(other: Any?): Boolean {
+        if (other !is Address) return false
+        return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_types_fn_method_address_uniffi_trait_eq_eq(
+        it,
+        FfiConverterTypeAddress.lower(`other`),_status)
+}
+    }
+    )
+    }
+    // The local Rust `Hash` implementation
+    override fun hashCode(): Int {
+        return FfiConverterULong.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_types_fn_method_address_uniffi_trait_hash(
+        it,
+        _status)
+}
+    }
+    ).toInt()
+    }
 
     
     companion object {
@@ -7387,12 +7449,11 @@ public interface TxIdInterface {
     
     fun `asHashString`(): kotlin.String
     
-    fun `isEqual`(`other`: TxId): kotlin.Boolean
-    
     companion object
 }
 
 open class TxId: Disposable, AutoCloseable, TxIdInterface
+, Comparable<TxId>
 {
 
     @Suppress("UNUSED_PARAMETER")
@@ -7501,23 +7562,59 @@ open class TxId: Disposable, AutoCloseable, TxIdInterface
     }
     
 
-    override fun `isEqual`(`other`: TxId): kotlin.Boolean {
-            return FfiConverterBoolean.lift(
+    
+
+    
+
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_types_fn_method_txid_is_equal(
+    UniffiLib.uniffi_cove_types_fn_method_txid_uniffi_trait_display(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    // The local Rust `Eq` implementation - only `eq` is used.
+    override fun equals(other: Any?): Boolean {
+        if (other !is TxId) return false
+        return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_types_fn_method_txid_uniffi_trait_eq_eq(
         it,
         FfiConverterTypeTxId.lower(`other`),_status)
 }
     }
     )
     }
-    
-
-    
-
-    
-
+    // The local Rust `Hash` implementation
+    override fun hashCode(): Int {
+        return FfiConverterULong.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_types_fn_method_txid_uniffi_trait_hash(
+        it,
+        _status)
+}
+    }
+    ).toInt()
+    }
+    // The local Rust `Ord` implementation
+    override fun compareTo(other: TxId): Int {
+        return FfiConverterByte.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_types_fn_method_txid_uniffi_trait_ord_cmp(
+        it,
+        FfiConverterTypeTxId.lower(`other`),_status)
+}
+    }
+    ).toInt()
+    }
 
     
     
@@ -8497,6 +8594,25 @@ data class Utxo (
 ): Disposable{
     
 
+    // The local Rust `Eq` implementation - only `eq` is used.
+    override fun equals(other: Any?): Boolean {
+        if (other !is Utxo) return false
+        return FfiConverterBoolean.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_types_fn_method_utxo_uniffi_trait_eq_eq(FfiConverterTypeUtxo.lower(this),
+        FfiConverterTypeUtxo.lower(`other`),_status)
+}
+    )
+    }
+    // The local Rust `Hash` implementation
+    override fun hashCode(): Int {
+        return FfiConverterULong.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_types_fn_method_utxo_uniffi_trait_hash(FfiConverterTypeUtxo.lower(this),
+        _status)
+}
+    ).toInt()
+    }
     
     @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
     override fun destroy() {
@@ -8710,6 +8826,15 @@ enum class BitcoinUnit {
     BTC,
     SAT;
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_types_fn_method_bitcoinunit_uniffi_trait_display(FfiConverterTypeBitcoinUnit.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object
 }
@@ -8846,12 +8971,30 @@ sealed class FeeSpeed {
     {
         
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_types_fn_method_feespeed_uniffi_trait_display(FfiConverterTypeFeeSpeed.lower(this),
+        _status)
+}
+    )
+    }
         companion object
     }
     
 
     
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_types_fn_method_feespeed_uniffi_trait_display(FfiConverterTypeFeeSpeed.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object
 }
@@ -9291,6 +9434,15 @@ enum class Network {
     TESTNET4,
     SIGNET;
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_types_fn_method_network_uniffi_trait_display(FfiConverterTypeNetwork.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object
 }
@@ -9798,17 +9950,7 @@ public typealias FfiConverterTypeFfiOpacity = FfiConverterUByte
  * It's also what we have an external type that references a custom type.
  */
 public typealias WalletId = kotlin.String
-public typealias FfiConverterTypeWalletId = FfiConverterString fun `addressIsEqual`(`lhs`: Address, `rhs`: Address): kotlin.Boolean {
-            return FfiConverterBoolean.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_types_fn_func_address_is_equal(
-    
-        FfiConverterTypeAddress.lower(`lhs`),FfiConverterTypeAddress.lower(`rhs`),_status)
-}
-    )
-    }
-    
-
+public typealias FfiConverterTypeWalletId = FfiConverterString
     @Throws(AddressException::class) fun `addressIsValid`(`address`: kotlin.String, `network`: Network)
         = 
     uniffiRustCallWithError(AddressException) { _status ->
