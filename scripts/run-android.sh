@@ -3,7 +3,7 @@ set -ex
 cd android
 
 # Variables
-PACKAGE_NAME="com.example.cove"
+PACKAGE_NAME="org.bitcoinppl.cove"
 ACTIVITY_NAME=".MainActivity"
 APK_PATH="app/build/outputs/apk/debug/app-debug.apk"
 
