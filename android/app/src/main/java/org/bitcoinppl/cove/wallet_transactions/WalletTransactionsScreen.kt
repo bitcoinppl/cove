@@ -2,6 +2,7 @@ package org.bitcoinppl.cove.wallet_transactions
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -89,17 +90,41 @@ private fun WalletTransactionsDarkPreview() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WalletTransactionsScreen(
-    onBack: () -> Unit,
-    onSend: () -> Unit,
-    onReceive: () -> Unit,
-    onQrCode: () -> Unit,
-    onMore: () -> Unit,
-    isDarkList: Boolean,
-    initialBalanceHidden: Boolean = false,
-    usdAmount: String = "$1,351.93",
-    satsAmount: String = "1,166,369 SATS",
+    app: AppManager,
+    manager: WalletManager,
+    modifier: Modifier = Modifier,
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
+    val walletMetadata = manager.walletMetadata ?: return
+    val isDarkList = true // TODO: get from app theme settings
+
+    // navigation callbacks
+    val onBack = { app.toggleSidebar() }
+    val onSend = {
+        app.pushRoute(RouteFactory().sendSetAmount(id = walletMetadata.id, address = null, amount = null))
+    }
+    val onReceive = {
+        // TODO: show receive sheet
+        android.util.Log.d("WalletTransactionsScreen", "Receive clicked")
+    }
+    val onQrCode = {
+        app.sheetState = TaggedItem(AppSheetState.Qr)
+    }
+    val onMore = {
+        app.pushRoute(RouteFactory().nestedWalletSettings(id = walletMetadata.id, route = WalletSettingsRoute.Main))
+    }
+
+    // balance formatting
+    val spendableBalance = manager.balance.spendable()
+    val usdAmount = manager.fiatBalance?.let { "$${"%.2f".format(it)}" } ?: "$0.00"
+    val satsAmount = manager.amountFmtUnit(spendableBalance)
+
+    // transactions from load state
+    val transactions = when (val state = manager.loadState) {
+        is WalletLoadState.LOADING -> emptyList()
+        is WalletLoadState.SCANNING -> state.txns
+        is WalletLoadState.LOADED -> state.txns
+    }
     val listBg = if (isDarkList) CoveColor.ListBackgroundDark else CoveColor.ListBackgroundLight
     val listCard = if (isDarkList) CoveColor.ListCardDark else CoveColor.ListCardAlternative
     val primaryText = if (isDarkList) CoveColor.TextPrimaryDark else CoveColor.TextPrimaryLight
@@ -118,7 +143,7 @@ fun WalletTransactionsScreen(
                 ),
                 title = {
                     Text(
-                        "Main",
+                        walletMetadata.name,
                         style = MaterialTheme.typography.titleMedium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -216,7 +241,7 @@ fun WalletTransactionsScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(1f)  // Fill remaining space
+                        .weight(1f)  // fill remaining space
                         .background(listBg)
                         .padding(horizontal = 20.dp, vertical = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -228,70 +253,63 @@ fun WalletTransactionsScreen(
                         fontWeight = FontWeight.SemiBold
                     )
 
-                    TransactionWidget(
-                        type = TransactionType.SENT,
-                        date = "June 16, 2025",
-                        amount = "-28,784 SATS",
-                        balanceAfter = "2,196,795",
-                        listCard = listCard,
-                        primaryText = primaryText,
-                        secondaryText = secondaryText
-                    )
-                    HorizontalDivider(color = dividerColor, thickness = 0.5.dp)
+                    if (transactions.isEmpty()) {
+                        // show empty state
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 48.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "No transactions yet",
+                                color = secondaryText,
+                                fontSize = 14.sp
+                            )
+                        }
+                    } else {
+                        transactions.forEachIndexed { index, txn ->
+                            val txType = when (txn.sentAndReceived) {
+                                is SentAndReceived.Sent -> TransactionType.SENT
+                                is SentAndReceived.Received -> TransactionType.RECEIVED
+                            }
 
-                    TransactionWidget(
-                        type = TransactionType.SENT,
-                        date = "June 15, 2025",
-                        amount = "-152,724 SATS",
-                        balanceAfter = "2,194,934",
-                        listCard = listCard,
-                        primaryText = primaryText,
-                        secondaryText = secondaryText
-                    )
-                    HorizontalDivider(color = dividerColor, thickness = 0.5.dp)
+                            val amount = when (val sar = txn.sentAndReceived) {
+                                is SentAndReceived.Sent -> manager.amountFmt(sar.sent)
+                                is SentAndReceived.Received -> manager.amountFmt(sar.received)
+                            }
 
-                    TransactionWidget(
-                        type = TransactionType.RECEIVED,
-                        date = "June 15, 2025",
-                        amount = "10,001 SATS",
-                        balanceAfter = "2,194,932",
-                        listCard = listCard,
-                        primaryText = primaryText,
-                        secondaryText = secondaryText
-                    )
-                    HorizontalDivider(color = dividerColor, thickness = 0.5.dp)
+                            val balanceAfter = manager.amountFmt(txn.balanceAfter)
 
-                    TransactionWidget(
-                        type = TransactionType.RECEIVED,
-                        date = "June 13, 2025",
-                        amount = "25,533 SATS",
-                        balanceAfter = "2,188,783",
-                        listCard = listCard,
-                        primaryText = primaryText,
-                        secondaryText = secondaryText
-                    )
-                    HorizontalDivider(color = dividerColor, thickness = 0.5.dp)
+                            // format date
+                            val date = try {
+                                java.text.SimpleDateFormat("MMM d, yyyy", java.util.Locale.US)
+                                    .format(java.util.Date(txn.confirmedAt.toLong() * 1000))
+                            } catch (e: Exception) {
+                                "Unknown"
+                            }
 
-                    TransactionWidget(
-                        type = TransactionType.RECEIVED,
-                        date = "June 10, 2025",
-                        amount = "10,000 SATS",
-                        balanceAfter = "2,180,942",
-                        listCard = listCard,
-                        primaryText = primaryText,
-                        secondaryText = secondaryText
-                    )
-                    HorizontalDivider(color = dividerColor, thickness = 0.5.dp)
+                            TransactionWidget(
+                                type = txType,
+                                date = date,
+                                amount = amount,
+                                balanceAfter = balanceAfter,
+                                listCard = listCard,
+                                primaryText = primaryText,
+                                secondaryText = secondaryText,
+                                onClick = {
+                                    app.pushRoute(RouteFactory().transactionDetails(
+                                        id = walletMetadata.id,
+                                        details = txn.details
+                                    ))
+                                }
+                            )
 
-                    TransactionWidget(
-                        type = TransactionType.SENT,
-                        date = "June 10, 2025",
-                        amount = "-20,141 SATS",
-                        balanceAfter = "2,180,939",
-                        listCard = listCard,
-                        primaryText = primaryText,
-                        secondaryText = secondaryText
-                    )
+                            if (index != transactions.lastIndex) {
+                                HorizontalDivider(color = dividerColor, thickness = 0.5.dp)
+                            }
+                        }
+                    }
 
                     Spacer(Modifier.height(12.dp))
                 }
@@ -309,6 +327,7 @@ private fun TransactionWidget(
     listCard: Color,
     primaryText: Color,
     secondaryText: Color,
+    onClick: () -> Unit = {},
 ) {
     val title = stringResource(
         when (type) {
@@ -320,6 +339,7 @@ private fun TransactionWidget(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clickable(onClick = onClick)
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

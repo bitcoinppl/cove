@@ -251,46 +251,125 @@ User presses back → BackHandler intercepts
 - ✅ Created helper components (`FullPageLoadingView.kt`, `WalletColorExt.kt`)
 - ✅ Implemented `ListWalletsScreen.kt` - Auto-selects first wallet or navigates to add wallet
 - ✅ Created `SelectedWalletContainer.kt` - Manages WalletManager lifecycle with loading, scanning, and error handling
-- ⏳ Remaining: Screen updates, containers for Send/CoinControl/Settings/NewWallet flows
+- ✅ Updated `WalletTransactionsScreen.kt` - Now uses WalletManager for real data (balance, transactions, wallet name)
+- ✅ Created `SendFlowContainer.kt` - Manages WalletManager + SendFlowManager lifecycle with zero balance check
+- ✅ Created `CoinControlContainer.kt` - Manages WalletManager + CoinControlManager lifecycle
+- ✅ Created `SettingsContainer.kt` - Lightweight router for all settings screens with background pattern
+- ✅ Created `NewWalletContainer.kt` - Simple router for new wallet flows (hot/cold/hardware)
+- ✅ Created `NewHotWalletContainer.kt` - Routes to hot wallet flow screens (select/create/import/verify)
+- ✅ Created `WalletSettingsContainer.kt` - Lazy loads WalletManager for wallet-specific settings
+- ✅ Updated `RouteView.kt` - All routes now use containers instead of placeholders
+- ⏳ Remaining: Update SendScreen.kt, UtxoListScreen.kt, MainSettingsScreen.kt to use manager state
 
-**Files Created (5 total so far):**
+**Files Created (11 total):**
 - `components/FullPageLoadingView.kt` - 20 lines - Reusable centered loading spinner
 - `utils/WalletColorExt.kt` - 18 lines - FFI WalletColor to Compose Color conversion
 - `ListWalletsScreen.kt` - 36 lines - Port of iOS ListWalletsScreen
 - `SelectedWalletContainer.kt` - 95 lines - Port of iOS SelectedWalletContainer with manager lifecycle
+- `SendFlowContainer.kt` - 145 lines - Port of iOS SendFlowContainer with manager initialization
+- `CoinControlContainer.kt` - 75 lines - Port of iOS CoinControlContainer with async initialization
+- `SettingsContainer.kt` - 80 lines - Port of iOS SettingsContainer as lightweight router
+- `NewWalletContainer.kt` - 60 lines - Port of iOS NewWalletContainer for new wallet flows
+- `NewHotWalletContainer.kt` - 55 lines - Port of iOS NewHotWalletContainer for hot wallet routes
+- `WalletSettingsContainer.kt` - 75 lines - Port of iOS WalletSettingsContainer with lazy loading
 
-**ListWalletsScreen Features:**
-- Shows FullPageLoadingView while checking database
-- Uses `Database().wallets().all()` to get wallet list
-- Auto-selects first wallet via `app.rust.selectWallet()`
-- Navigates to add wallet screen if no wallets exist
-- Error handling navigates to add wallet as fallback
+**Files Modified (2 total):**
+- `WalletTransactionsScreen.kt` - Updated to accept app + manager parameters, bind real data (~80 lines changed)
+- `RouteView.kt` - Replaced all placeholders with container calls, removed unused screens (~60 lines changed)
 
-**SelectedWalletContainer Features:**
-- Lazy loads WalletManager via `app.getWalletManager(id)`
-- Calls `manager.rust.getTransactions()` and `manager.rust.startWalletScan()` on appear
-- Updates balance after 500ms delay
-- Handles wallet not found → tries other wallet or navigates to add wallet
-- Dispatches `.SelectedWalletDisappeared` on cleanup via DisposableEffect
-- Updates `app.walletManager` when load state becomes LOADED
-- Currently renders WalletTransactionsScreen (needs update)
+**WalletTransactionsScreen Updates:**
+- Now accepts `app: AppManager` and `manager: WalletManager` parameters
+- Binds wallet name from `manager.walletMetadata.name`
+- Displays real balance: spendable amount and fiat conversion from `manager.balance` and `manager.fiatBalance`
+- Renders transaction list from `manager.loadState` (loading/scanning/loaded)
+- Formats amounts using `manager.amountFmt()` and `manager.amountFmtUnit()`
+- Navigation callbacks use RouteFactory: send → sendSetAmount, receive → TODO sheet, QR → app.sheetState, more → wallet settings
+- Transactions are clickable and navigate to transaction details
+- Shows empty state when no transactions exist
+- Formats dates using SimpleDateFormat
 
-**WalletColorExt Features:**
-- Converts all 13 FFI WalletColor variants to Compose Color
-- Uses iOS system color values for consistency
-- Extension function pattern: `walletColor.toComposeColor()`
+**SendFlowContainer Features:**
+- Lazy initializes WalletManager via `app.getWalletManager(id)`
+- Creates SendFlowPresenter and SendFlowManager via app helpers
+- Pre-populates address/amount from route parameters
+- Waits for `sendFlowManager.rust.waitForInit()` before showing content
+- Checks for zero balance and shows alert if needed
+- Routes to appropriate screen based on SendRoute type (SetAmount, CoinControlSetAmount, Confirm, HardwareExport)
+- Cleanup on disappear via DisposableEffect
+- Shows CircularProgressIndicator during initialization
 
-**Next Steps:**
-- Update WalletTransactionsScreen to accept manager parameters
-- Create SendFlowContainer, CoinControlContainer, NewWalletContainer, SettingsContainer
-- Update existing screens to bind to manager state
-- Wire all routes in RouteView.kt
-- Estimated remaining: ~15-20 files, ~1500-2000 lines
+**CoinControlContainer Features:**
+- Lazy initializes WalletManager via `app.getWalletManager(id)`
+- Creates CoinControlManager via `walletManager.rust.newCoinControlManager()`
+- Async initialization with suspend function
+- Error handling with app-level alert on failure
+- Routes to UtxoListScreen when ready
+- Shows CircularProgressIndicator during loading
 
-**Key Pattern Established:**
+**SettingsContainer Features:**
+- Lightweight router pattern (no manager initialization needed)
+- Routes to Main/Network/Appearance/Node/FiatCurrency/Wallet/AllWallets screens
+- Background with settings pattern image overlay
+- Delegates to WalletSettingsContainer for wallet-specific settings
+- All screens currently placeholders (TODO markers added)
+
+**NewWalletContainer Features:**
+- Simple router for new wallet flows
+- Routes to Select/HotWallet/ColdWallet/Hardware/Import screens
+- Delegates to NewHotWalletContainer for hot wallet sub-routes
+- All screens currently placeholders (TODO markers added)
+
+**NewHotWalletContainer Features:**
+- Routes to Select/Create/Import/VerifyWords screens
+- All screens currently placeholders (TODO markers added)
+- Follows iOS pattern exactly
+
+**WalletSettingsContainer Features:**
+- Lazy loads WalletManager for wallet-specific settings
+- Routes to Main/ChangeName/ChangeColor screens
+- Error handling with app-level alert
+- Shows CircularProgressIndicator during loading
+- All screens currently placeholders (TODO markers added)
+
+**RouteView Updates:**
+- ListWallets → uses existing ListWalletsScreen
+- SelectedWallet → uses SelectedWalletContainer (was placeholder)
+- NewWallet → uses NewWalletContainer (was placeholder with inline when)
+- Settings → uses SettingsContainer (was placeholder)
+- Send → uses SendFlowContainer (was placeholder)
+- CoinControl → uses CoinControlContainer (was placeholder)
+- SecretWords → still placeholder (TODO for Phase 5)
+- TransactionDetails → still placeholder (TODO for Phase 5)
+- LoadAndReset → uses existing LoadAndResetContainer
+
+**Key Architectural Patterns Established:**
 ```kotlin
 Container (loads manager) → Screen (renders UI) → Manager (provides state)
 ```
+
+**Container Types:**
+1. **Lifecycle Containers** (SendFlowContainer, CoinControlContainer, SelectedWalletContainer):
+   - Load managers lazily on appearance
+   - Handle initialization errors
+   - Show loading states
+   - Clean up on disappear
+
+2. **Router Containers** (SettingsContainer, NewWalletContainer, NewHotWalletContainer):
+   - Lightweight routing only
+   - No manager initialization
+   - Delegate to other containers for complex flows
+
+3. **Hybrid Containers** (WalletSettingsContainer):
+   - Lazy load manager
+   - Route to multiple screens based on state
+
+**Next Steps:**
+- Update SendScreen.kt to bind to SendFlowManager state
+- Update UtxoListScreen.kt to bind to CoinControlManager state
+- Update MainSettingsScreen.kt to use AppManager for navigation
+- Implement remaining placeholder screens as needed
+- Add sheet and alert rendering in CoveApp.kt
+- Estimated remaining: ~3-5 files need updates, ~300-500 lines
 
 ## TODO Items
 
