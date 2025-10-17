@@ -37,8 +37,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.cove.R
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.AppSheetState
 import org.bitcoinppl.cove.SendFlowManager
+import org.bitcoinppl.cove.SendFlowPresenter
+import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.WalletManager
+import org.bitcoinppl.cove.sheets.FeeRateSelectorSheet
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.views.ImageButton
 
@@ -48,6 +52,7 @@ fun SendScreen(
     app: AppManager,
     walletManager: WalletManager,
     sendFlowManager: SendFlowManager,
+    presenter: SendFlowPresenter,
     modifier: Modifier = Modifier,
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
@@ -60,8 +65,12 @@ fun SendScreen(
     val amountField = sendFlowManager.amountField
     val addressField = sendFlowManager.enteringAddress
     val selectedFeeRate = sendFlowManager.selectedFeeRate
+    val feeOptions = sendFlowManager.feeRateOptions
     val totalSpentBtc = sendFlowManager.totalSpentInBtc
     val totalSpentFiat = sendFlowManager.totalSpentInFiat
+
+    // local state for fee selector sheet
+    var showFeeSelector by remember { mutableStateOf(false) }
 
     // format balance
     val balanceFormatted = when (metadata.selectedUnit) {
@@ -141,7 +150,7 @@ fun SendScreen(
                             totalSpentBtc = totalSpentBtc,
                             totalSpentFiat = totalSpentFiat,
                             onChangeSpeed = {
-                                // TODO: show fee rate selector sheet
+                                showFeeSelector = true
                             }
                         )
                         Spacer(Modifier.weight(1f))
@@ -165,6 +174,44 @@ fun SendScreen(
                 }
             }
         }
+    }
+
+    // fee selector sheet
+    if (showFeeSelector && selectedFeeRate != null && feeOptions != null) {
+        FeeRateSelectorSheet(
+            app = app,
+            manager = walletManager,
+            presenter = presenter,
+            feeOptions = feeOptions,
+            selectedOption = selectedFeeRate,
+            onSelectFee = { newFeeRate ->
+                sendFlowManager.dispatch(
+                    org.bitcoinppl.cove.SendFlowAction.ChangeFeeRate(newFeeRate)
+                )
+                showFeeSelector = false
+            },
+            onDismiss = {
+                showFeeSelector = false
+            }
+        )
+    }
+
+    // send flow presenter alerts
+    presenter.alertState?.let { taggedAlert ->
+        AlertDialog(
+            onDismissRequest = { presenter.alertState = null },
+            title = { Text(presenter.alertTitle()) },
+            text = { Text(presenter.alertMessage()) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        presenter.alertButtonAction()?.invoke()
+                    }
+                ) {
+                    Text("OK")
+                }
+            }
+        )
     }
 }
 
@@ -320,7 +367,7 @@ private fun AddressWidget(
             }
             IconButton(
                 onClick = {
-                    // TODO: show QR scanner sheet
+                    app.sheetState = TaggedItem(AppSheetState.Qr)
                 },
                 modifier = Modifier.offset(x = 8.dp)
 

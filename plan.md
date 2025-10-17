@@ -27,10 +27,19 @@ Contains:
 **Historical reference only**
 
 Contains:
-- Phases 1-4 (all completed)
+- Phases 1-7 (all completed)
 - Implementation details
 - Lessons learned from each phase
 - Files created/modified
+
+### 4. [@ANDROID_DEVIATIONS_FROM_IOS.md](./@ANDROID_DEVIATIONS_FROM_IOS.md)
+**Platform differences reference**
+
+Contains:
+- Consolidated list of all Android deviations from iOS
+- Organized by category (UI, Architecture, Features, Technical)
+- Rationale for each deviation
+- Cross-references to implementation phases
 
 ---
 

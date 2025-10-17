@@ -1,6 +1,6 @@
 # Android Implementation TODO
 
-> **Status:** Phase 5B Complete ✅ | Ready for Phase 5C
+> **Status:** Phase 5C Complete ✅ | Ready for Phase 5D
 > **Last Updated:** 2025-10-17
 
 ## Completed Phases
@@ -11,22 +11,11 @@
 4. ✅ Wire Compose Screens to Real Managers and Routes
 5. ✅ Phase 5A: Hot Wallet Creation & Verification Flow
 6. ✅ Phase 5B: Settings Screens
+7. ✅ Phase 5C: Sheet & Alert System
 
 ---
 
 ## Remaining Phases
-
-### Phase 5C: Sheet & Alert System
-**Priority:** Required for Send flow completion and error handling
-**Status:** 🔜 NEXT
-
-**Implementation:**
-- Global sheet rendering in `CoveApp.kt` (QR scanner, fee selector)
-- Global alert rendering in `CoveApp.kt` (all AppAlertState types)
-- SendFlow-specific sheets and alerts
-
-**Components:** `CoveAlertDialog.kt`, `QrScannerSheet.kt`, `FeeRateSelectorSheet.kt`
-**Estimated:** ~300-400 lines
 
 ### Phase 5D: Transaction Details Screen
 **Priority:** Completes wallet transaction viewing

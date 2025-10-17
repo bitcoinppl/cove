@@ -15,7 +15,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import org.bitcoinppl.cove.sheets.QrScannerSheet
 import org.bitcoinppl.cove.ui.theme.CoveTheme
+import uniffi.cove_core_ffi.MultiFormat
 
 /**
  * root Compose application
@@ -72,9 +74,24 @@ fun CoveApp() {
 
             // global sheets
             app.sheetState?.let { taggedSheet ->
-                // TODO: implement sheet content based on state
-                // for now just clear it
-                app.sheetState = null
+                when (taggedSheet.item) {
+                    is AppSheetState.Qr -> {
+                        QrScannerSheet(
+                            app = app,
+                            onScanned = { scannedData ->
+                                app.sheetState = null
+                                handleMultiFormat(app, scannedData)
+                            },
+                            onDismiss = {
+                                app.sheetState = null
+                            }
+                        )
+                    }
+                    is AppSheetState.TapSigner -> {
+                        // TODO: implement TapSigner sheet in Phase 6
+                        app.sheetState = null
+                    }
+                }
             }
         }
     }
@@ -151,4 +168,86 @@ private fun getAlertMessage(alert: AppAlertState): String = when (alert) {
     is AppAlertState.UninitializedTapSigner -> "Would you like to setup this TAPSIGNER?"
     is AppAlertState.TapSignerWalletFound -> "Wallet found on TAPSIGNER"
     is AppAlertState.InitializedTapSigner -> "Would you like to import this TAPSIGNER?"
+}
+
+/**
+ * handle scanned QR code multiformat data
+ * ported from iOS CoveApp.swift handleMultiFormat
+ */
+private fun handleMultiFormat(app: AppManager, scannedData: uniffi.cove_core_ffi.StringOrData) {
+    try {
+        val multiFormat = scannedData.toMultiFormat()
+
+        when (multiFormat) {
+            is MultiFormat.Mnemonic -> {
+                // TODO: implement hot wallet import
+                android.util.Log.d("CoveApp", "Scanned mnemonic, import not yet implemented")
+                app.alertState = TaggedItem(
+                    AppAlertState.General(
+                        "Wallet Import",
+                        "Hot wallet import from QR not yet implemented"
+                    )
+                )
+            }
+            is MultiFormat.HardwareExport -> {
+                // TODO: implement hardware wallet import
+                android.util.Log.d("CoveApp", "Scanned hardware export, import not yet implemented")
+                app.alertState = TaggedItem(
+                    AppAlertState.General(
+                        "Hardware Wallet",
+                        "Hardware wallet import from QR not yet implemented"
+                    )
+                )
+            }
+            is MultiFormat.Address -> {
+                // handle address - show alert with send option if wallet selected
+                val addressWithNetwork = multiFormat.address
+                val address = addressWithNetwork.address()
+                val amount = addressWithNetwork.amount()
+
+                app.alertState = TaggedItem(
+                    AppAlertState.FoundAddress(address, amount)
+                )
+            }
+            is MultiFormat.Transaction -> {
+                // TODO: handle transaction
+                android.util.Log.d("CoveApp", "Scanned transaction, handling not yet implemented")
+                app.alertState = TaggedItem(
+                    AppAlertState.General(
+                        "Transaction",
+                        "Transaction handling from QR not yet implemented"
+                    )
+                )
+            }
+            is MultiFormat.TapSignerUnused -> {
+                app.alertState = TaggedItem(
+                    AppAlertState.UninitializedTapSigner(multiFormat.tapSigner)
+                )
+            }
+            is MultiFormat.TapSignerReady -> {
+                // TODO: check if wallet exists for this TapSigner
+                app.alertState = TaggedItem(
+                    AppAlertState.InitializedTapSigner(multiFormat.tapSigner)
+                )
+            }
+            is MultiFormat.Bip329Labels -> {
+                // TODO: implement label import
+                android.util.Log.d("CoveApp", "Scanned BIP329 labels, import not yet implemented")
+                app.alertState = TaggedItem(
+                    AppAlertState.General(
+                        "Labels",
+                        "Label import from QR not yet implemented"
+                    )
+                )
+            }
+        }
+    } catch (e: Exception) {
+        android.util.Log.e("CoveApp", "Error handling scanned QR: ${e.message}")
+        app.alertState = TaggedItem(
+            AppAlertState.General(
+                "QR Scan Error",
+                e.message ?: "Unknown error processing QR code"
+            )
+        )
+    }
 }

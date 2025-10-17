@@ -120,6 +120,7 @@ private fun SendFlowRouteToScreen(
                 app = app,
                 walletManager = walletManager,
                 sendFlowManager = sendFlowManager,
+                presenter = presenter,
                 modifier = modifier
             )
         }

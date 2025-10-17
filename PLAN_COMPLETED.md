@@ -574,3 +574,90 @@ Container (loads manager) → Screen (renders UI) → Manager (provides state)
 - Implement AllWallets settings list screen
 - Consider adding SF Symbol equivalents using Material Icons
 
+### 7. **Phase 5C: Sheet & Alert System** ✅ COMPLETED
+
+**Implementation Summary:**
+- Created QR scanner sheet with CameraX and ML Kit barcode scanning
+- Created fee rate selector and custom fee sheets for send flow
+- Wired global sheet rendering in CoveApp.kt
+- Connected SendScreen to show sheets and alerts
+- Implemented BBQr multi-part QR code scanning support
+
+**Files Created (3 total):**
+- `sheets/QrScannerSheet.kt` - 260 lines - Camera-based QR scanner with ML Kit and BBQr support
+- `sheets/FeeRateSelectorSheet.kt` - 260 lines - Fee option selector (Fast/Medium/Slow/Custom)
+- `sheets/CustomFeeRateSheet.kt` - 260 lines - Custom fee rate input with slider and real-time calculation
+
+**Files Modified (4 total):**
+- `build.gradle.kts` - Added camera and ML Kit dependencies (5 lines)
+- `CoveApp.kt` - Implemented global sheet rendering and MultiFormat handler (80 lines added)
+- `SendScreen.kt` - Wired QR scanner and fee selector buttons with presenter alerts (50 lines added)
+- `SendFlowContainer.kt` - Updated to pass presenter to SendScreen (1 line)
+
+**Key Features:**
+
+**QrScannerSheet:**
+- Camera permission handling with Accompanist permissions library
+- ML Kit barcode scanning for QR codes
+- BBQr multi-part QR support with progress indicator
+- MultiFormat parsing for addresses, mnemonics, hardware exports, transactions
+- Error handling and user-friendly alerts
+
+**FeeRateSelectorSheet:**
+- Displays Fast/Medium/Slow fee options with durations
+- Shows sats/vbyte rate and total fee in sats/fiat
+- Optional custom fee option display
+- "Customize Fee" button to open custom sheet
+- Material ModalBottomSheet with proper styling
+
+**CustomFeeRateSheet:**
+- Text input for sats/vbyte with decimal keyboard
+- Slider for fee rate adjustment (1 to 3x fast rate)
+- Real-time duration estimate based on fee speed
+- Debounced fee calculation (50ms) to avoid excessive calls
+- Total fee display with loading indicator
+- Fiat conversion display
+- Error handling for insufficient funds (max fee rate)
+
+**SendScreen Integration:**
+- QR button opens global QR scanner sheet
+- "Change Speed" button opens fee selector sheet
+- SendFlowPresenter alerts displayed in AlertDialog
+- Fee selection updates SendFlowManager state
+
+**Dependencies Added:**
+```gradle
+// Camera and QR scanning
+androidx.camera:camera-camera2:1.3.1
+androidx.camera:camera-lifecycle:1.3.1
+androidx.camera:camera-view:1.3.1
+com.google.accompanist:accompanist-permissions:0.34.0
+com.google.android.gms:play-services-mlkit-barcode-scanning:18.3.0
+```
+
+**Lessons Learned:**
+1. CameraX integration is straightforward with AndroidView in Compose
+2. ML Kit barcode scanning works seamlessly with CameraX ImageAnalysis
+3. BBQr multi-part QR scanning requires state management for totalParts/partsLeft
+4. Accompanist permissions library simplifies runtime permission requests
+5. Fee calculation debouncing (50ms) is crucial for responsive UI
+6. ModalBottomSheet requires proper state management (showSheet boolean)
+7. Custom fee slider needs max value constraint from presenter.erroredFeeRate
+8. MultiFormat handler centralizes QR code processing logic
+
+**Deviations from iOS:**
+1. **Camera Permissions** - Android uses Accompanist permissions vs iOS Info.plist
+2. **QR Scanner UI** - Android uses CameraX PreviewView vs iOS SwiftUI ScannerView
+3. **Barcode Scanning** - Android uses ML Kit vs iOS AVFoundation
+4. **Sheet Presentation** - Android uses ModalBottomSheet vs iOS .sheet modifier
+5. **MultiFormat Handling** - Partial implementation (addresses work, wallet import TODOs)
+6. **No NFC Support Yet** - TapSigner flows deferred to Phase 6
+
+**Follow-up Items:**
+- Complete MultiFormat handlers for mnemonic/hardware wallet import (currently show TODOs)
+- Add transaction MultiFormat handling (currently TODO)
+- Add BIP329 label import (currently TODO)
+- Implement TapSigner sheets in Phase 6
+- Add QR code generation for receive addresses
+- Consider adding torch/flashlight toggle for low-light scanning
+
