@@ -50,20 +50,24 @@ fun SettingsContainer(
                     )
                 }
                 is SettingsRoute.Network -> {
-                    // TODO: implement network settings picker
-                    androidx.compose.material3.Text("Network Settings - TODO")
+                    org.bitcoinppl.cove.settings.NetworkSettingsScreen(
+                        app = app
+                    )
                 }
                 is SettingsRoute.Appearance -> {
-                    // TODO: implement appearance settings picker
-                    androidx.compose.material3.Text("Appearance Settings - TODO")
+                    org.bitcoinppl.cove.settings.AppearanceSettingsScreen(
+                        app = app
+                    )
                 }
                 is SettingsRoute.Node -> {
-                    // TODO: implement node selection screen
-                    androidx.compose.material3.Text("Node Settings - TODO")
+                    org.bitcoinppl.cove.settings.NodeSettingsScreen(
+                        app = app
+                    )
                 }
                 is SettingsRoute.FiatCurrency -> {
-                    // TODO: implement fiat currency picker
-                    androidx.compose.material3.Text("Currency Settings - TODO")
+                    org.bitcoinppl.cove.settings.FiatCurrencySettingsScreen(
+                        app = app
+                    )
                 }
                 is SettingsRoute.Wallet -> {
                     // wallet settings container (nested)

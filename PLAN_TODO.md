@@ -1,6 +1,6 @@
 # Android Implementation TODO
 
-> **Status:** Phase 5A Complete ✅ | Ready for Phase 5B
+> **Status:** Phase 5B Complete ✅ | Ready for Phase 5C
 > **Last Updated:** 2025-10-17
 
 ## Completed Phases
@@ -10,29 +10,15 @@
 3. ✅ Setup Navigation (Rust-First)
 4. ✅ Wire Compose Screens to Real Managers and Routes
 5. ✅ Phase 5A: Hot Wallet Creation & Verification Flow
+6. ✅ Phase 5B: Settings Screens
 
 ---
 
 ## Remaining Phases
 
-### Phase 5B: Settings Screens
-**Priority:** User customization, relatively independent
-**Status:** 🔜 NEXT
-
-**Screens to Implement:**
-- `NetworkSettingsScreen.kt` - Network selection with warning dialog
-- `AppearanceSettingsScreen.kt` - Theme selection
-- `NodeSettingsScreen.kt` - Node configuration
-- `FiatCurrencySettingsScreen.kt` - Currency picker
-- `WalletSettingsMainScreen.kt` - Main wallet settings
-- `WalletChangeNameScreen.kt` - Rename wallet
-- `WalletChangeColorScreen.kt` - Change wallet color
-
-**Components:** Picker/Selector component (reusable)
-**Estimated:** 7 screens, ~500-700 lines
-
 ### Phase 5C: Sheet & Alert System
 **Priority:** Required for Send flow completion and error handling
+**Status:** 🔜 NEXT
 
 **Implementation:**
 - Global sheet rendering in `CoveApp.kt` (QR scanner, fee selector)

@@ -500,3 +500,77 @@ Container (loads manager) → Screen (renders UI) → Manager (provides state)
 - Add NFC scanning for import (deferred to Phase 6 with TapSigner)
 - Consider adding autocomplete suggestions display
 
+### 6. **Phase 5B: Settings Screens** ✅ COMPLETED
+
+**Implementation Summary:**
+- Created generic reusable SettingsPicker component for list-based settings
+- Implemented 4 settings screens: Network, Appearance, FiatCurrency, Node (placeholder)
+- Wired all screens to SettingsContainer router
+- Main settings already existed, just needed individual setting screens
+
+**Files Created (5 total):**
+- `settings/SettingsPicker.kt` - 120 lines - Generic reusable picker component for enum-based settings
+- `settings/NetworkSettingsScreen.kt` - 160 lines - Network selection with warning dialog
+- `settings/AppearanceSettingsScreen.kt` - 90 lines - Theme selection (Light/Dark/System)
+- `settings/FiatCurrencySettingsScreen.kt` - 90 lines - Currency picker for fiat display
+- `settings/NodeSettingsScreen.kt` - 90 lines - Placeholder for node configuration
+
+**Files Modified (1 total):**
+- `SettingsContainer.kt` - Wired all 4 new settings screens to their routes, removed TODOs
+
+**Key Features:**
+- **SettingsPicker component** - Type-safe generic picker for any list-based settings with checkmark UI
+- **Network change warnings** - Confirmation dialog prevents accidental network switches
+- **Theme selection** - Light/Dark/System with emoji icons
+- **Currency selection** - All fiat currencies with symbols
+- **Consistent navigation** - All screens use AppManager for back navigation and state updates
+
+**SettingsPicker Component:**
+- Generic `<T>` type parameter for type-safe reuse
+- Card-based Material Design UI with selection states
+- Checkmark icon for selected items
+- Optional symbol/emoji display per item
+- Scrollable list for long option lists
+
+**NetworkSettingsScreen:**
+- Bitcoin network selection (Mainnet, Testnet, Signet, Regtest)
+- Warning dialog when changing network
+- Confirmation flow before applying changes
+- Resets app to wallet list on network change (via `app.loadAndReset()`)
+- Prevents accidental back navigation when network changed
+
+**AppearanceSettingsScreen:**
+- Theme selection: Light, Dark, System
+- Emoji icons for visual clarity (☀️ 🌙 ⚙️)
+- Immediate state update via `AppAction.ChangeColorScheme`
+
+**FiatCurrencySettingsScreen:**
+- All FiatCurrency enum options
+- Displays "USD - $" format (name + symbol)
+- Immediate state update via `AppAction.ChangeFiatCurrency`
+
+**NodeSettingsScreen:**
+- Placeholder screen with TODO documentation
+- Lists planned features: preset nodes, custom Electrum/Esplora, connectivity testing
+- Clean UI explaining under development status
+
+**Lessons Learned:**
+1. Generic SettingsPicker component highly reusable - used for 3/4 screens
+2. Network change warning critical for user safety
+3. Wallet-specific settings (name, color) already existed in WalletSettingsScreen.kt
+4. Card-based picker more Android-idiomatic than iOS Form style
+5. Emoji symbols work well as simple icon replacements
+
+**Deviations from iOS:**
+1. **Simplified Node Settings** - iOS has full custom node URL input with validation; Android has placeholder (deferred for complexity)
+2. **No security settings** - iOS has PIN/FaceID/Decoy PIN settings in MainSettingsScreen; Android defers to future phase (requires AuthManager integration)
+3. **Card-based picker UI** - Android uses Material cards instead of iOS Form/List style (more idiomatic for Android)
+4. **Emoji symbols** - Used simple emojis instead of SF Symbols (platform constraint)
+5. **No wallet list settings** - iOS AllWallets route not implemented (TODO remains)
+
+**Follow-up Items:**
+- Implement full NodeSettingsScreen with custom Electrum/Esplora URL input and validation
+- Add security settings (PIN, biometric) when AuthManager Android integration is ready
+- Implement AllWallets settings list screen
+- Consider adding SF Symbol equivalents using Material Icons
+

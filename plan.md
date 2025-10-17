@@ -44,3 +44,33 @@ Contains:
 5. Update `PLAN_TODO.md` when done
 
 **Remember:** 75% of Android UI already exists. Always search first!
+
+---
+
+## 📝 Documentation Requirements
+
+**When completing ANY phase, ALWAYS document in PLAN_COMPLETED.md:**
+
+### Required Sections:
+1. **Implementation Summary** - What was built
+2. **Files Created** - List with line counts and descriptions
+3. **Files Modified** - List with what changed
+4. **Key Features** - Bullet points of main functionality
+5. **Lessons Learned** - What we discovered during implementation
+6. **Deviations from iOS** - CRITICAL: Document all differences from iOS implementation
+7. **Follow-up Items** - What was deferred or needs future work
+
+### Why "Deviations from iOS" is Critical:
+- Helps future developers understand intentional platform differences
+- Documents when we simplified or enhanced beyond iOS
+- Explains technical constraints (e.g., no direct SwiftUI equivalent)
+- Tracks features deferred to later phases
+- Prevents confusion about why implementations differ
+
+**Example Deviations:**
+- "No QR/NFC import in first pass (manual only)"
+- "Simpler field layout (no autocomplete suggestions above keyboard)"
+- "Focus management handled differently (FocusRequester vs @FocusState)"
+- "Used sealed classes instead of enums (more idiomatic Kotlin)"
+
+**✅ Always include this section even if there are no deviations (write "None - follows iOS exactly")**
