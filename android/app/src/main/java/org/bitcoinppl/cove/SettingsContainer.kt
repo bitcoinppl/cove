@@ -45,8 +45,9 @@ fun SettingsContainer(
         Box(modifier = Modifier.fillMaxSize().zIndex(2f)) {
             when (route) {
                 is SettingsRoute.Main -> {
-                    // TODO: implement MainSettingsScreen with app parameter
-                    androidx.compose.material3.Text("Main Settings - TODO")
+                    org.bitcoinppl.cove.settings.SettingsScreen(
+                        app = app
+                    )
                 }
                 is SettingsRoute.Network -> {
                     // TODO: implement network settings picker

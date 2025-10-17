@@ -33,9 +33,11 @@ import org.bitcoinppl.cove.views.CustomSpacer
 import org.bitcoinppl.cove.views.SettingsItem
 
 @OptIn(ExperimentalMaterial3Api::class)
-@Preview
 @Composable
-fun SettingsScreen() {
+fun SettingsScreen(
+    app: org.bitcoinppl.cove.AppManager,
+    modifier: Modifier = Modifier
+) {
     Scaffold(
         modifier = Modifier
             .fillMaxSize()
@@ -55,9 +57,7 @@ fun SettingsScreen() {
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = {
-                        //TODO:navigate back
-                    }) {
+                    IconButton(onClick = { app.popRoute() }) {
                         Icon(Icons.AutoMirrored.Default.ArrowBack, contentDescription = "Back")
                     }
                 },
@@ -83,28 +83,28 @@ fun SettingsScreen() {
                             stringResource(R.string.title_settings_network),
                             iconResId = R.drawable.icon_network,
                             onClick = {
-                                //TODO:Navigate to general Settings screen
+                                app.pushRoute(org.bitcoinppl.cove.RouteFactory().newSettingsRoute_network())
                             })
                         Spacer()
                         SettingsItem(
                             stringResource(R.string.title_settings_appearance),
                             iconResId = R.drawable.icon_appearance,
                             onClick = {
-                                //TODO:Navigate to appearance Settings screen
+                                app.pushRoute(org.bitcoinppl.cove.RouteFactory().newSettingsRoute_appearance())
                             })
                         Spacer()
                         SettingsItem(
                             stringResource(R.string.title_settings_node),
                             iconResId = R.drawable.icon_node,
                             onClick = {
-                                //TODO:Navigate to node Settings screen
+                                app.pushRoute(org.bitcoinppl.cove.RouteFactory().newSettingsRoute_node())
                             })
                         Spacer()
                         SettingsItem(
                             stringResource(R.string.title_settings_currency),
                             iconResId = R.drawable.icon_currency,
                             onClick = {
-                                //TODO:Navigate to currency Settings screen
+                                app.pushRoute(org.bitcoinppl.cove.RouteFactory().newSettingsRoute_fiatCurrency())
                             })
                     }
                 }

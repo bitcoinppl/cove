@@ -116,13 +116,12 @@ private fun SendFlowRouteToScreen(
 ) {
     when (sendRoute) {
         is SendRoute.SetAmount -> {
-            // TODO: implement SendScreen with manager parameters
-            Box(
-                modifier = modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                androidx.compose.material3.Text("Send Set Amount - TODO")
-            }
+            org.bitcoinppl.cove.send.SendScreen(
+                app = app,
+                walletManager = walletManager,
+                sendFlowManager = sendFlowManager,
+                modifier = modifier
+            )
         }
         is SendRoute.CoinControlSetAmount -> {
             // TODO: implement coin control set amount screen

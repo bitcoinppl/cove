@@ -36,57 +36,42 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.cove.R
+import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.SendFlowManager
+import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.views.ImageButton
-
-@Preview()
-@Composable
-private fun SendScreenPreview() {
-    val snack = remember { SnackbarHostState() }
-    SendScreen(
-        onBack = {},
-        onNext = {},
-        onScanQr = {},
-        onChangeSpeed = {},
-        onToggleBalanceVisibility = {},
-        isBalanceHidden = false,
-        balanceAmount = "1,166,369",
-        balanceDenomination = "sats",
-        amountText = "25,555",
-        amountDenomination = "sats",
-        dollarEquivalentText = "$28.87",
-        initialAddress = "tb1qt 5alnv 8pm66 hv2zd cdzxr kyqfn wpuh8 9zrey kx",
-        accountShort = "560072A4",
-        feeEta = "30 minutes",
-        feeAmount = "451 sats",
-        totalSpendingCrypto = "26,006 sats",
-        totalSpendingFiat = "≈ $29.38",
-        snackbarHostState = snack,
-    )
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SendScreen(
-    onBack: () -> Unit,
-    onNext: () -> Unit,
-    onScanQr: () -> Unit,
-    onChangeSpeed: () -> Unit,
-    onToggleBalanceVisibility: () -> Unit = {},
-    isBalanceHidden: Boolean = false,
-    balanceAmount: String,
-    balanceDenomination: String,
-    amountText: String,
-    amountDenomination: String,
-    dollarEquivalentText: String,
-    initialAddress: String,
-    accountShort: String,
-    feeEta: String,
-    feeAmount: String,
-    totalSpendingCrypto: String,
-    totalSpendingFiat: String,
+    app: AppManager,
+    walletManager: WalletManager,
+    sendFlowManager: SendFlowManager,
+    modifier: Modifier = Modifier,
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
+    // extract state from managers
+    val metadata = walletManager.walletMetadata
+    val balance = walletManager.balance.spendable()
+    val isBalanceHidden = walletManager.balanceVisibility
+
+    // send flow state
+    val amountField = sendFlowManager.amountField
+    val addressField = sendFlowManager.enteringAddress
+    val selectedFeeRate = sendFlowManager.selectedFeeRate
+    val totalSpentBtc = sendFlowManager.totalSpentInBtc
+    val totalSpentFiat = sendFlowManager.totalSpentInFiat
+
+    // format balance
+    val balanceFormatted = when (metadata.selectedUnit) {
+        org.bitcoinppl.cove.Unit.BTC -> balance.asBtc().toString()
+        org.bitcoinppl.cove.Unit.SAT -> balance.asSats().toString()
+    }
+    val balanceDenomination = when (metadata.selectedUnit) {
+        org.bitcoinppl.cove.Unit.BTC -> "BTC"
+        org.bitcoinppl.cove.Unit.SAT -> "sats"
+    }
     Scaffold(
         containerColor = CoveColor.BackgroundDark,
         topBar = {
@@ -98,13 +83,14 @@ fun SendScreen(
                 ),
                 title = { Text("") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = { app.popRoute() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
                     }
                 }
             )
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) }
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        modifier = modifier
     ) { padding ->
         Box(
             modifier = Modifier
@@ -123,10 +109,10 @@ fun SendScreen(
             )
             Column(modifier = Modifier.fillMaxSize()) {
                 BalanceWidget(
-                    amount = balanceAmount,
+                    amount = balanceFormatted,
                     denomination = balanceDenomination,
                     isHidden = isBalanceHidden,
-                    onToggleVisibility = onToggleBalanceVisibility
+                    onToggleVisibility = { walletManager.toggleBalanceVisibility() }
                 )
                 Column(
                     modifier = Modifier
@@ -138,36 +124,44 @@ fun SendScreen(
                         .padding(horizontal = 16.dp)
                 ) {
                     AmountWidget(
-                        initialAmount = amountText,
-                        denomination = amountDenomination,
-                        dollarText = dollarEquivalentText,
+                        sendFlowManager = sendFlowManager,
+                        metadata = metadata
                     )
                     HorizontalDivider(color = CoveColor.DividerLight, thickness = 1.dp)
                     AddressWidget(
-                        onScanQr = onScanQr,
-                        initialAddress = initialAddress
+                        sendFlowManager = sendFlowManager
                     )
                     HorizontalDivider(color = CoveColor.DividerLight, thickness = 1.dp)
-                    SpendingWidget(
-                        accountShort = accountShort,
-                        feeEta = feeEta,
-                        feeAmount = feeAmount,
-                        totalSpendingCrypto = totalSpendingCrypto,
-                        totalSpendingFiat = totalSpendingFiat,
-                        onChangeSpeed = onChangeSpeed,
-                    )
-                    Spacer(Modifier.weight(1f))
-                    ImageButton(
-                        text = stringResource(R.string.btn_next),
-                        onClick = onNext,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = CoveColor.BackgroundDark,
-                            contentColor = Color.White
-                        ),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 24.dp)
-                    )
+
+                    // only show spending section if fee rate is calculated
+                    selectedFeeRate?.let {
+                        SpendingWidget(
+                            metadata = metadata,
+                            selectedFeeRate = it,
+                            totalSpentBtc = totalSpentBtc,
+                            totalSpentFiat = totalSpentFiat,
+                            onChangeSpeed = {
+                                // TODO: show fee rate selector sheet
+                            }
+                        )
+                        Spacer(Modifier.weight(1f))
+                        ImageButton(
+                            text = stringResource(R.string.btn_next),
+                            onClick = {
+                                // validate and go to next screen
+                                if (sendFlowManager.validate(displayAlert = true)) {
+                                    sendFlowManager.dispatch(org.bitcoinppl.cove.SendFlowAction.FinalizeAndGoToNextScreen)
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = CoveColor.BackgroundDark,
+                                contentColor = Color.White
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 24.dp)
+                        )
+                    }
                 }
             }
         }
@@ -231,11 +225,17 @@ private fun BalanceWidget(
 
 @Composable
 private fun AmountWidget(
-    initialAmount: String,
-    denomination: String,
-    dollarText: String,
+    sendFlowManager: SendFlowManager,
+    metadata: org.bitcoinppl.cove.WalletMetadata
 ) {
-    var amount by remember { mutableStateOf(initialAmount) }
+    val amountField = sendFlowManager.amountField
+    val amountInFiat = sendFlowManager.sendAmountFiat
+
+    val denomination = when (metadata.selectedUnit) {
+        org.bitcoinppl.cove.Unit.BTC -> "BTC"
+        org.bitcoinppl.cove.Unit.SAT -> "sats"
+    }
+
     Column(modifier = Modifier.fillMaxWidth()) {
         Spacer(Modifier.height(20.dp))
         Text(
@@ -257,8 +257,10 @@ private fun AmountWidget(
         ) {
             Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
                 BasicTextField(
-                    value = amount,
-                    onValueChange = { amount = it },
+                    value = amountField,
+                    onValueChange = { newValue ->
+                        sendFlowManager.dispatch(org.bitcoinppl.cove.SendFlowAction.ChangeAmountField(newValue))
+                    },
                     textStyle = TextStyle(
                         color = CoveColor.TextPrimary,
                         fontSize = 48.sp,
@@ -283,7 +285,7 @@ private fun AmountWidget(
         }
         Spacer(Modifier.height(8.dp))
         Text(
-            dollarText,
+            amountInFiat,
             color = CoveColor.TextSecondary,
             fontSize = 16.sp,
             textAlign = TextAlign.Center,
@@ -295,10 +297,10 @@ private fun AmountWidget(
 
 @Composable
 private fun AddressWidget(
-    onScanQr: () -> Unit,
-    initialAddress: String,
+    sendFlowManager: SendFlowManager
 ) {
-    var address by remember { mutableStateOf(initialAddress) }
+    val addressField = sendFlowManager.enteringAddress
+
     Column(modifier = Modifier.fillMaxWidth()) {
         Spacer(Modifier.height(20.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -317,7 +319,9 @@ private fun AddressWidget(
                 )
             }
             IconButton(
-                onClick = onScanQr,
+                onClick = {
+                    // TODO: show QR scanner sheet
+                },
                 modifier = Modifier.offset(x = 8.dp)
 
             ) {
@@ -326,8 +330,10 @@ private fun AddressWidget(
         }
         Spacer(Modifier.height(10.dp))
         BasicTextField(
-            value = address,
-            onValueChange = { address = it },
+            value = addressField,
+            onValueChange = { newValue ->
+                sendFlowManager.dispatch(org.bitcoinppl.cove.SendFlowAction.ChangeEnteringAddress(newValue))
+            },
             textStyle = TextStyle(
                 color = CoveColor.TextPrimary,
                 fontSize = 15.sp,
@@ -342,13 +348,15 @@ private fun AddressWidget(
 
 @Composable
 private fun SpendingWidget(
-    accountShort: String,
-    feeEta: String,
-    feeAmount: String,
-    totalSpendingCrypto: String,
-    totalSpendingFiat: String,
+    metadata: org.bitcoinppl.cove.WalletMetadata,
+    selectedFeeRate: org.bitcoinppl.cove.FeeRateOptionWithTotalFee,
+    totalSpentBtc: String,
+    totalSpentFiat: String,
     onChangeSpeed: () -> Unit,
 ) {
+    // format account identifier (fingerprint or ident)
+    val accountShort = metadata.identOrFingerprint()
+
     Column(modifier = Modifier.fillMaxWidth()) {
         Spacer(Modifier.height(20.dp))
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -388,7 +396,7 @@ private fun SpendingWidget(
                 )
                 Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(feeEta, color = CoveColor.TextSecondary, fontSize = 12.sp)
+                    Text(selectedFeeRate.duration(), color = CoveColor.TextSecondary, fontSize = 12.sp)
                     Spacer(Modifier.size(4.dp))
                     Text(
                         stringResource(R.string.btn_change_speed),
@@ -400,7 +408,7 @@ private fun SpendingWidget(
                     )
                 }
             }
-            Text(feeAmount, color = CoveColor.TextSecondary, fontSize = 14.sp)
+            Text(selectedFeeRate.totalFeeString(), color = CoveColor.TextSecondary, fontSize = 14.sp)
         }
         Spacer(Modifier.height(24.dp))
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
@@ -413,14 +421,14 @@ private fun SpendingWidget(
             )
             Column(horizontalAlignment = Alignment.End) {
                 Text(
-                    totalSpendingCrypto,
+                    totalSpentBtc,
                     color = CoveColor.TextPrimary,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    totalSpendingFiat,
+                    totalSpentFiat,
                     color = CoveColor.TextSecondary,
                     fontSize = 12.sp,
                     textAlign = TextAlign.End
