@@ -148,25 +148,110 @@
 - Add preview constructors for Compose @Preview functions
 - Consider adding proper CoroutineScope management instead of GlobalScope
 
+### 3. **Setup Navigation (Rust-First)** ✅ COMPLETED
+
+**Implementation Summary:**
+- ✅ Updated `RouterManager.kt` - Added `structuralEqualityPolicy()` to prevent recomposition feedback loops
+- ✅ Enhanced `AppManager.kt` navigation methods - Added route comparison guards to prevent ping-pong
+- ✅ Implemented `LoadAndResetContainer` in `RouteView.kt` - Shows loading, delays, then executes route reset
+- ✅ Added hardware back button support in `CoveApp.kt` - `BackHandler` intercepts system back and routes through Rust
+- ✅ Improved reconciliation to use immutable copies - All route updates use `.toList()` so Compose detects changes
+
+**RouterManager Enhancements:**
+- Observable properties now use `structuralEqualityPolicy()` to avoid unnecessary recompositions
+- Prevents Compose ↔ Rust feedback loops when route objects are structurally equal
+```kotlin
+var default: Route by mutableStateOf(ffiRouter.default, structuralEqualityPolicy())
+var routes: List<Route> by mutableStateOf(ffiRouter.routes, structuralEqualityPolicy())
+```
+
+**AppManager Navigation Guardrails:**
+- All navigation methods (`pushRoute`, `popRoute`, `setRoute`, `pushRoutes`) now:
+  - Log navigation actions for debugging
+  - Compare new routes to current routes before dispatching
+  - Only dispatch `AppAction.UpdateRoute` if routes actually changed
+  - Use immutable copies in reconciliation (`.toList()`)
+- Prevents duplicate dispatches and unnecessary Rust operations
+
+**LoadAndResetContainer:**
+- Ported from iOS `LoadAndResetContainer.swift`
+- Shows `CircularProgressIndicator` during loading
+- Uses `LaunchedEffect` to delay for specified milliseconds
+- Handles both single route and nested route resets
+- Properly calls `app.resetRoute()` after delay
+
+**Hardware Back Button:**
+- `BackHandler` in `MainAppContent` intercepts system back
+- Enabled only when `router.routes.isNotEmpty()`
+- Calls `app.popRoute()` which dispatches through Rust
+- Maintains single source of truth (Rust owns navigation state)
+
+**Reconciliation Improvements:**
+- `RouteUpdated`: Creates immutable copy with `.toList()`
+- `PushedRoute`: Uses `+` operator then `.toList()` for immutability
+- `DefaultRouteChanged`: Creates immutable copy and logs new `routeId`
+- All route updates ensure Compose sees new list references
+
+**Key Architectural Decisions:**
+1. **Direct Mapping**: Continued with direct `when` statement in RouteView (no NavHostController needed)
+2. **Structural Equality**: Used `structuralEqualityPolicy()` as recommended by navigation_plan.md
+3. **Immutable Snapshots**: Always create new lists in reconciliation for Compose change detection
+4. **Back Button Routing**: Hardware back always goes through Rust to maintain consistency
+5. **Comparison Guards**: Navigation methods check if change is needed before dispatching
+
+**Files Modified (4 total):**
+- `RouterManager.kt` - Added structural equality policy (8 lines modified)
+- `AppManager.kt` - Enhanced navigation methods with logging and guards (85 lines modified)
+- `RouteView.kt` - Added LoadAndResetContainer implementation (30 lines added)
+- `CoveApp.kt` - Added BackHandler and improved loading screen (18 lines modified)
+
+**Navigation Flow:**
+```
+User Action → UI calls app.pushRoute()
+           → Compares with current routes
+           → Dispatches AppAction.UpdateRoute if different
+           → Rust updates router state
+           → Reconcile message updates RouterManager
+           → Immutable copy triggers Compose recomposition
+           → RouteView renders new screen
+```
+
+**Hardware Back Flow:**
+```
+User presses back → BackHandler intercepts
+                 → Calls app.popRoute()
+                 → Dispatches trimmed stack through Rust
+                 → Same reconciliation flow as above
+```
+
+**Lessons Learned:**
+1. `structuralEqualityPolicy()` is crucial for preventing feedback loops with FFI objects
+2. Route comparison before dispatch prevents unnecessary Rust operations
+3. Immutable copies (`.toList()`) are required for Compose to detect changes
+4. Hardware back must be explicitly handled in Compose with `BackHandler`
+5. LoadAndReset pattern is elegant with `LaunchedEffect` and `delay()`
+6. Logging navigation actions is invaluable for debugging
+7. Direct routing (no NavHostController) is simpler and more aligned with Rust-first architecture
+
+**Deviations from iOS:**
+1. No `NavigationStack` - using direct `when` statement instead
+2. `BackHandler` instead of SwiftUI's automatic back handling
+3. `LaunchedEffect` with `delay()` instead of Task.sleep
+4. No equivalent to SwiftUI's `.id(app.routeId)` - using Box with key parameter
+
+**Follow-up Items:**
+- Deep link handling deferred to Phase 4+
+- Process death restoration deferred to Phase 4+
+- Multi-stack tabs/sidebar deferred to Phase 4+
+- Consider NavHostController only if animations/transitions are needed
+
 ## TODO Items
 
 1. **Bootstrap Kotlin App Shell and Core Managers** ✅
 
 2. **Implement Kotlin Counterparts for Wallet & Send Managers** ✅
-   - Port `AppManager` from `ios/Cove/AppManager.swift`, mirroring its responsibilities: hold on to the shared `FfiApp`, cache the Rust-driven `Router` (default + stack), `prices`, `fees`, expose `alertState`/`sheetState`, manage `routeId` resets, and implement helpers such as `pushRoute`, `pushRoutes`, `resetRoute`, `loadAndReset`, `scanQr`, and `getWalletManager`. Kotlin also needs to lazily memoize `WalletManager`/`SendFlowManager` instances (see Swift `getWalletManager` / `getSendFlowManager`) and clear them on reset. Ensure the Kotlin `Router` wrapper stays in sync with reconcile messages (`AppStateReconcileMessage.routeUpdated`, `.defaultRouteChanged`, `.pushedRoute`) and propagates changes to Compose via immutable snapshots.
-   - Wrap the generated `Route`/`RouteFactory` types (`android/app/src/main/java/org/bitcoinppl/cove/cove.kt:31758+` & `15507+`) with friendly Kotlin helpers so navigation calls mirror Swift usage (e.g., `RouteFactory().newWalletSelect()`, `RouteFactory().nestedWalletSettings(id)`); define equality/hash helpers similar to Swift’s `RouteFactory.isSameParentRoute`.
-   - Implement Kotlin `AuthManager` based on `ios/Cove/AuthManager.swift` so Android respects lock-state, decoy/wipe pins, biometric toggles, and can trigger the same app reset flow (`AppManager.reset()`, load `RouteFactory().newWalletSelect()` when appropriate). Ensure it listens to `RustAuthManager` reconcile messages for auth type and wipe/decoy pin toggles.
-   - Replace the placeholder `ViewModel.kt` with a lifecycle-aware base (e.g., using `CoroutineScope` + `Job`) that managers can extend to subscribe to Rust callbacks and guarantee `dispose()` calls, similar to the Swift pattern using `WeakReconciler`.
-   - Rebuild `CoveApp` for Compose to mirror Swift’s `CoveApp.swift`: set up root state for `AppManager` and `AuthManager`, show `CoverView`/`LockView` analogs until terms are accepted and auth is satisfied, and mount a navigation host that renders the new Kotlin `RouteView`. Hook alerts and sheets by observing `AppManager.alertState`/`sheetState`, respect `AppManager.routeId` when recomposing, and call `ffiApp.initOnStart()` on launch.
-   - Update `MainActivity` to initialize the new Compose root, manage `EdgeToEdge`, request camera/NFC permissions where necessary, and drop the current hard-coded `ImportWalletScreen` placeholder.
 
-2. Setup navigation - See `navigation_plan.md` for the consolidated navigation plan.
-
-3. **Implement Kotlin Counterparts for Wallet & Send Managers**
-   - Port `WalletManager` from `ios/Cove/WalletManager.swift`, exposing real-time `walletMetadata`, `balance`, `fiatBalance`, `loadState`, `unsignedTransactions`, `foundAddresses`, `transactionDetails`, and `sendFlowErrorAlert`. Implement reconciliation handling for all `WalletManagerReconcileMessage` cases, including fiat updates triggered from `AppManager` on currency change.
-   - Port `SendFlowManager` and `SendFlowPresenter` to Kotlin so Android can drive the entire send flow: track entering amounts/addresses, selected fee rate, fee options, presenter focus/alerts/sheets, and dispatch validations (`notifyEnteringAddressChanged`, `notifyAmountChanged`, `finalizeAndGoToNextScreen`, etc.).
-   - Implement `CoinControlManager` and `PendingWalletManager` by porting the Swift files (`ios/CoinControlManager.swift`, `ios/Flows/NewWalletFlow/PendingWalletViewModel.swift`) to manage UTXO selection, search/sort bindings, `setCoinControlMode` synchronization with `SendFlowManager`, and pre-generated mnemonic words for the hot-wallet flow.
-   - Add Kotlin helpers around other Rust bridges referenced in Swift managers: `LabelManager` for label import/export, `TapSignerNFC` wrappers, `Database()` access for wallet lists and global config, and `NFCReader`/`NFCWriter` analogs (or stubs if platform-specific work is deferred).
+3. **Setup Navigation (Rust-First)** ✅
 
 4. **Wire Compose Screens to Real Managers and Routes**
    - Replace mock data in Compose screens with live manager state: `wallet_transactions/WalletTransactionsScreen.kt`, `transaction_details/TransactionDetailsScreen.kt`, `send/SendScreen.kt`, `send/send_confirmation/SendConfirmationScreen.kt`, `send/advanced_details/AdvancedDetailsBottomSheet.kt`, `send/network_fee/NetworkFeeBottomSheet.kt`, and `utxo_list/UtxoListScreen.kt` should all consume their corresponding Kotlin managers and emit actions via `dispatch`/`navigate`.

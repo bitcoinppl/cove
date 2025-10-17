@@ -3,6 +3,7 @@ package org.bitcoinppl.cove
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.structuralEqualityPolicy
 
 /**
  * wrapper around FFI Router to make it observable in Compose
@@ -11,11 +12,11 @@ import androidx.compose.runtime.setValue
 class RouterManager(
     internal var ffiRouter: Router
 ) {
-    // observable properties for Compose
-    var default: Route by mutableStateOf(ffiRouter.default)
+    // observable properties for Compose with structural equality to prevent feedback loops
+    var default: Route by mutableStateOf(ffiRouter.default, structuralEqualityPolicy())
         internal set
 
-    var routes: List<Route> by mutableStateOf(ffiRouter.routes)
+    var routes: List<Route> by mutableStateOf(ffiRouter.routes, structuralEqualityPolicy())
         internal set
 
     /**

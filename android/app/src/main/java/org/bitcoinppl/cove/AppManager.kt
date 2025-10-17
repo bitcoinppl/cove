@@ -207,26 +207,46 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     fun pushRoute(route: Route) {
+        logDebug("pushRoute: $route")
         isSidebarVisible = false
         val newRoutes = router.routes.toMutableList().apply { add(route) }
-        router.updateRoutes(newRoutes)
+
+        // only dispatch if routes actually changed
+        if (newRoutes != router.routes) {
+            dispatch(AppAction.UpdateRoute(newRoutes))
+        }
     }
 
     fun pushRoutes(routes: List<Route>) {
+        logDebug("pushRoutes: ${routes.size} routes")
         isSidebarVisible = false
         val newRoutes = router.routes.toMutableList().apply { addAll(routes) }
-        router.updateRoutes(newRoutes)
+
+        // only dispatch if routes actually changed
+        if (newRoutes != router.routes) {
+            dispatch(AppAction.UpdateRoute(newRoutes))
+        }
     }
 
     fun popRoute() {
+        logDebug("popRoute")
         if (router.routes.isNotEmpty()) {
-            val newRoutes = router.routes.toMutableList().apply { removeLast() }
-            router.updateRoutes(newRoutes)
+            val newRoutes = router.routes.dropLast(1)
+
+            // only dispatch if routes actually changed
+            if (newRoutes != router.routes) {
+                dispatch(AppAction.UpdateRoute(newRoutes))
+            }
         }
     }
 
     fun setRoute(routes: List<Route>) {
-        router.updateRoutes(routes)
+        logDebug("setRoute: ${routes.size} routes")
+
+        // only dispatch if routes actually changed
+        if (routes != router.routes) {
+            dispatch(AppAction.UpdateRoute(routes))
+        }
     }
 
     fun scanQr() {
@@ -259,15 +279,17 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     override fun reconcile(message: AppStateReconcileMessage) {
-        logDebug("Update: $message")
+        logDebug("Reconcile: $message")
 
         when (message) {
             is AppStateReconcileMessage.RouteUpdated -> {
-                router.updateRoutes(message.routes)
+                // create immutable copy so Compose detects change
+                router.updateRoutes(message.routes.toList())
             }
 
             is AppStateReconcileMessage.PushedRoute -> {
-                val newRoutes = router.routes.toMutableList().apply { add(message.route) }
+                // create immutable copy so Compose detects change
+                val newRoutes = (router.routes + message.route).toList()
                 router.updateRoutes(newRoutes)
             }
 
@@ -292,8 +314,10 @@ class AppManager private constructor() : FfiReconcile {
 
             is AppStateReconcileMessage.DefaultRouteChanged -> {
                 router.default = message.route
-                router.updateRoutes(message.nestedRoutes)
+                // create immutable copy so Compose detects change
+                router.updateRoutes(message.nestedRoutes.toList())
                 routeId = UUID.randomUUID().toString()
+                logDebug("Route ID changed to: $routeId")
             }
 
             is AppStateReconcileMessage.FiatPricesChanged -> {

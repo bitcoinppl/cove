@@ -2,10 +2,13 @@ package org.bitcoinppl.cove
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import kotlinx.coroutines.delay
 import org.bitcoinppl.cove.import_wallet.ImportWalletScreen
 
 /**
@@ -48,8 +51,11 @@ fun RouteView(app: AppManager, route: Route) {
         }
 
         is Route.LoadAndReset -> {
-            // this is handled by AppManager, show loading
-            LoadingPlaceholder()
+            LoadAndResetContainer(
+                app = app,
+                nextRoutes = route.resetTo.routes,
+                loadingTimeMs = route.afterMillis.toInt()
+            )
         }
     }
 }
@@ -138,6 +144,35 @@ private fun CoinControlScreen(app: AppManager, route: CoinControlRoute) {
 @Composable
 private fun LoadingPlaceholder() {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text("Loading...")
+        CircularProgressIndicator()
+    }
+}
+
+/**
+ * load and reset container - shows loading state then executes route reset
+ * ported from iOS LoadAndResetContainer
+ */
+@Composable
+private fun LoadAndResetContainer(
+    app: AppManager,
+    nextRoutes: List<Route>,
+    loadingTimeMs: Int
+) {
+    // show loading indicator
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        CircularProgressIndicator()
+    }
+
+    // execute reset after delay
+    LaunchedEffect(Unit) {
+        delay(loadingTimeMs.toLong())
+
+        if (nextRoutes.size > 1) {
+            // nested routes: first route is default, rest are nested
+            app.resetRoute(nextRoutes)
+        } else if (nextRoutes.isNotEmpty()) {
+            // single route becomes new default
+            app.resetRoute(nextRoutes[0])
+        }
     }
 }

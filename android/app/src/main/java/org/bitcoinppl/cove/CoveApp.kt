@@ -1,9 +1,11 @@
 package org.bitcoinppl.cove
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -11,6 +13,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 
@@ -79,7 +82,13 @@ fun CoveApp() {
 
 @Composable
 private fun MainAppContent(app: AppManager) {
+    // hardware back button handling - route through Rust
+    BackHandler(enabled = app.router.routes.isNotEmpty()) {
+        app.popRoute()
+    }
+
     // use routeId as key to force recomposition when route resets
+    // this ensures view lifecycle is properly reset when default route changes
     Box(modifier = Modifier.fillMaxSize(), key = app.routeId) {
         RouteView(app = app, route = app.currentRoute)
     }
@@ -105,9 +114,11 @@ private fun TermsScreen(onAccept: () -> Unit) {
 
 @Composable
 private fun LoadingScreen() {
-    Box(modifier = Modifier.fillMaxSize()) {
-        // TODO: implement proper loading screen
-        Text("Loading...")
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        CircularProgressIndicator()
     }
 }
 
