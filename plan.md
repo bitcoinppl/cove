@@ -65,9 +65,94 @@
 - Sheet content rendering not yet implemented (just clears state)
 - Most RouteView screens are placeholders - will wire in phase 4
 
+### 2. **Implement Kotlin Counterparts for Wallet & Send Managers** ✅ COMPLETED
+
+**Implementation Summary:**
+- ✅ Implemented full `WalletManager.kt` (313 lines) - Complete wallet state management with 13 reconciliation message types
+- ✅ Implemented `SendFlowPresenter.kt` (204 lines) - UI state management for send flow with alert/sheet handling
+- ✅ Implemented full `SendFlowManager.kt` (274 lines) - Send flow orchestration with validation and 11 reconciliation messages
+- ✅ Implemented `CoinControlManager.kt` (180 lines) - UTXO selection with search/sort and SendFlowManager integration
+- ✅ Implemented `PendingWalletManager.kt` (56 lines) - Hot wallet creation with mnemonic generation
+
+**WalletManager Features:**
+- Observable state: `walletMetadata`, `balance`, `fiatBalance`, `loadState` (loading/scanning/loaded), `foundAddresses`, `unsignedTransactions`, `errorAlert`, `sendFlowErrorAlert`
+- Computed properties: `unit`, `hasTransactions`, `isVerified`, `accentColor`
+- Methods: `forceWalletScan()`, `updateWalletBalance()`, `firstAddress()`, `amountFmt()`, `displayAmount()`, `transactionDetails()` with caching
+- Three constructors: from `WalletId`, from `xpub`, from `TapSigner`
+- 13 reconciliation messages handled: scan states, balance changes, metadata updates, address discovery, error handling
+
+**SendFlowManager Features:**
+- User input state: `enteringBtcAmount`, `enteringFiatAmount`, `enteringAddress` with auto-dispatch
+- Validated state: `address`, `amount`, `fiatAmount`
+- Fee state: `selectedFeeRate`, `feeRateOptions`, `maxSelected`
+- Presenter strings: `sendAmountFiat`, `sendAmountBtc`, `totalSpentInFiat`, `totalSpentInBtc`, `totalFeeString`
+- Validation methods: `validate()`, `validateAddress()`, `validateAmount()`, `validateFeePercentage()`
+- 11 reconciliation messages: amount updates, fee options, focus field, alerts, max mode
+- Debounced dispatch for high-frequency updates (66ms default)
+
+**SendFlowPresenter Features:**
+- UI-only state: `focusField`, `sheetState` (Qr, Fee), `alertState`
+- Alert handling: `alertTitle()`, `alertMessage()`, `alertButtonAction()`
+- Error mapping: Maps all `SendFlowError` types to user-friendly messages
+- Sheet states: QR scanner and fee selector
+- Disappearing state management for transitions
+
+**CoinControlManager Features:**
+- UTXO selection state: `search`, `selected`, `totalSelected`, `utxos`, `unit`, `sort`
+- UI helpers: `buttonColor()`, `buttonTextColor()`, `buttonArrow()` for sort buttons
+- SendFlowManager integration: `continuePressed()` applies selection, debounced updates (100ms)
+- 7 reconciliation messages: sort, search, UTXO list, selection, unit, total amount
+
+**PendingWalletManager Features:**
+- Simple wrapper around `RustPendingWalletManager`
+- Observable state: `numberOfWords`, `bip39Words`
+- 1 reconciliation message: word count changes trigger regeneration
+
+**Threading Model:**
+- All managers use `GlobalScope.launch(Dispatchers.IO)` for rust bridge
+- State updates on `Dispatchers.Main` via `withContext`
+- Consistent pattern across all managers
+
+**Key Implementation Notes:**
+1. All managers implement their respective `*Reconciler` interfaces from FFI
+2. Used `@Stable` annotation for Compose optimization
+3. Private `apply()` method for reconciliation logic, public `reconcile()` for interface
+4. Consistent logging with manager-specific tags
+5. Transaction details caching in WalletManager prevents redundant fetches
+6. Debouncing in SendFlowManager and CoinControlManager for responsive UI
+
+**Files Created (5 total):**
+- `WalletManager.kt` - 313 lines (replaced 24-line placeholder)
+- `SendFlowPresenter.kt` - 204 lines (new)
+- `SendFlowManager.kt` - 274 lines (replaced 28-line placeholder)
+- `CoinControlManager.kt` - 180 lines (new)
+- `PendingWalletManager.kt` - 56 lines (new)
+
+**Lessons Learned:**
+1. FFI reconciler interfaces work perfectly - no need to wrap or abstract
+2. Kotlin's `by mutableStateOf()` delegate is cleaner than manual getters/setters
+3. GlobalScope is acceptable for fire-and-forget rust bridge operations
+4. Debouncing is crucial for text input and UTXO selection to avoid excessive reconciliation
+5. SendFlowPresenter benefits from being separate - keeps UI concerns isolated from business logic
+6. Transaction details caching significantly reduces rust calls for frequently accessed data
+
+**Deviations from iOS:**
+1. Used `Set<String>` instead of `Set<Utxo.ID>` for UTXO selection (simpler in Kotlin)
+2. Color conversion from `WalletColor` to Compose `Color` not yet implemented (TODO marker added)
+3. No preview constructors yet (will add when needed for Compose previews)
+4. Alert button actions return nullable lambda instead of SwiftUI ViewBuilder
+
+**Follow-up Items:**
+- Need to implement `WalletColor` to Compose `Color` conversion
+- Phase 4 will wire these managers to actual Compose screens
+- Add preview constructors for Compose @Preview functions
+- Consider adding proper CoroutineScope management instead of GlobalScope
+
 ## TODO Items
 
 1. **Bootstrap Kotlin App Shell and Core Managers** ✅
+
+2. **Implement Kotlin Counterparts for Wallet & Send Managers** ✅
    - Port `AppManager` from `ios/Cove/AppManager.swift`, mirroring its responsibilities: hold on to the shared `FfiApp`, cache the Rust-driven `Router` (default + stack), `prices`, `fees`, expose `alertState`/`sheetState`, manage `routeId` resets, and implement helpers such as `pushRoute`, `pushRoutes`, `resetRoute`, `loadAndReset`, `scanQr`, and `getWalletManager`. Kotlin also needs to lazily memoize `WalletManager`/`SendFlowManager` instances (see Swift `getWalletManager` / `getSendFlowManager`) and clear them on reset. Ensure the Kotlin `Router` wrapper stays in sync with reconcile messages (`AppStateReconcileMessage.routeUpdated`, `.defaultRouteChanged`, `.pushedRoute`) and propagates changes to Compose via immutable snapshots.
    - Wrap the generated `Route`/`RouteFactory` types (`android/app/src/main/java/org/bitcoinppl/cove/cove.kt:31758+` & `15507+`) with friendly Kotlin helpers so navigation calls mirror Swift usage (e.g., `RouteFactory().newWalletSelect()`, `RouteFactory().nestedWalletSettings(id)`); define equality/hash helpers similar to Swift’s `RouteFactory.isSameParentRoute`.
    - Implement Kotlin `AuthManager` based on `ios/Cove/AuthManager.swift` so Android respects lock-state, decoy/wipe pins, biometric toggles, and can trigger the same app reset flow (`AppManager.reset()`, load `RouteFactory().newWalletSelect()` when appropriate). Ensure it listens to `RustAuthManager` reconcile messages for auth type and wipe/decoy pin toggles.
