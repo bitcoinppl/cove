@@ -1,6 +1,73 @@
 # TODO Plan
 
-1. **Bootstrap Kotlin App Shell and Core Managers**
+## Completed Items
+
+### 1. **Bootstrap Kotlin App Shell and Core Managers** ✅ COMPLETED
+
+**Implementation Summary:**
+- ✅ Created `BaseManager.kt` - Foundation class with coroutine scope and lifecycle management
+- ✅ Created `RouterManager.kt` - Wrapper around FFI Router with Compose state management
+- ✅ Created `RouteHelpers.kt` - Extension functions for RouteFactory (integrated in RouterManager.kt)
+- ✅ Created `AppManager.kt` - Central singleton managing app state, router, prices, fees, and cached managers
+- ✅ Created `AuthManager.kt` - Singleton managing lock state, PIN validation, and decoy/wipe flows
+- ✅ Created `TaggedItem.kt` - Generic wrapper for identifiable items (alerts/sheets)
+- ✅ Created `AppAlertState.kt` - Sealed class hierarchy for all app-level alerts
+- ✅ Created `AppSheetState.kt` - Sealed class hierarchy for global bottom sheets
+- ✅ Created placeholder `WalletManager.kt` and `SendFlowManager.kt` (full implementation in phase 2)
+- ✅ Updated `ViewModel.kt` - Fixed package and renamed to `Manager` to match Swift conventions
+- ✅ Created `CoveApp.kt` - Root Compose application with auth/terms/loading/navigation flow
+- ✅ Created `RouteView.kt` - Route-to-screen mapper with placeholders for all route types
+- ✅ Updated `MainActivity.kt` - Cleaned up to use new CoveApp shell
+
+**Key Architectural Decisions:**
+1. **Singleton Pattern**: Used `object` declaration pattern with double-checked locking for AppManager and AuthManager
+2. **State Management**: Used Compose `mutableStateOf()` for observable properties instead of Swift's `@Observable`
+3. **Reconciliation**: Followed existing `ImportWalletManager` pattern - managers implement reconciler interfaces
+4. **Coroutines**: Used Kotlin coroutines with `Dispatchers.Main` and `Dispatchers.IO` instead of Swift's DispatchQueue
+5. **Naming**: Kept "Manager" suffix for ViewModels to match Swift naming conventions per user request
+6. **Memory Management**: No weak references needed in Kotlin (GC handles it), but avoided circular refs
+7. **Router State**: Created `RouterManager` wrapper to make FFI Router observable in Compose with `mutableStateOf`
+
+**Deviations from iOS:**
+1. No `nfcReader`/`nfcWriter` in AppManager yet (will add when implementing NFC flows)
+2. Used sealed classes instead of enums for alert/sheet states (more idiomatic Kotlin)
+3. Global accessors `App` and `Auth` instead of `.shared` static property
+4. `viewModelScope` from AndroidX lifecycle instead of custom scope management
+
+**Files Created (13 total):**
+- `BaseManager.kt` - 39 lines
+- `RouterManager.kt` - 140 lines
+- `TaggedItem.kt` - 18 lines
+- `AppAlertState.kt` - 74 lines
+- `AppSheetState.kt` - 11 lines
+- `AppManager.kt` - 319 lines
+- `AuthManager.kt` - 220 lines
+- `WalletManager.kt` - 24 lines (placeholder)
+- `SendFlowManager.kt` - 28 lines (placeholder)
+- `CoveApp.kt` - 144 lines
+- `RouteView.kt` - 120 lines
+
+**Files Modified (2 total):**
+- `ViewModel.kt` - Updated package and renamed to `Manager`
+- `MainActivity.kt` - Simplified to use CoveApp()
+
+**Lessons Learned:**
+1. FFI bindings are complete and working - `RouteFactory`, `FfiApp`, `RustAuthManager`, etc. all available
+2. Kotlin sealed classes are excellent for modeling Swift enums with associated values
+3. Compose's `key()` parameter is crucial for forcing recomposition on `routeId` changes
+4. `remember { getInstance() }` ensures singleton managers survive recomposition
+5. Need to be careful with `GlobalScope` - only use for fire-and-forget operations, otherwise use proper coroutine scope
+
+**Follow-up Items:**
+- Phase 2 will implement full `WalletManager` and `SendFlowManager`
+- Need to implement actual Lock/Terms screens (currently placeholders)
+- Camera/NFC permissions not yet requested in MainActivity
+- Sheet content rendering not yet implemented (just clears state)
+- Most RouteView screens are placeholders - will wire in phase 4
+
+## TODO Items
+
+1. **Bootstrap Kotlin App Shell and Core Managers** ✅
    - Port `AppManager` from `ios/Cove/AppManager.swift`, mirroring its responsibilities: hold on to the shared `FfiApp`, cache the Rust-driven `Router` (default + stack), `prices`, `fees`, expose `alertState`/`sheetState`, manage `routeId` resets, and implement helpers such as `pushRoute`, `pushRoutes`, `resetRoute`, `loadAndReset`, `scanQr`, and `getWalletManager`. Kotlin also needs to lazily memoize `WalletManager`/`SendFlowManager` instances (see Swift `getWalletManager` / `getSendFlowManager`) and clear them on reset. Ensure the Kotlin `Router` wrapper stays in sync with reconcile messages (`AppStateReconcileMessage.routeUpdated`, `.defaultRouteChanged`, `.pushedRoute`) and propagates changes to Compose via immutable snapshots.
    - Wrap the generated `Route`/`RouteFactory` types (`android/app/src/main/java/org/bitcoinppl/cove/cove.kt:31758+` & `15507+`) with friendly Kotlin helpers so navigation calls mirror Swift usage (e.g., `RouteFactory().newWalletSelect()`, `RouteFactory().nestedWalletSettings(id)`); define equality/hash helpers similar to Swift’s `RouteFactory.isSameParentRoute`.
    - Implement Kotlin `AuthManager` based on `ios/Cove/AuthManager.swift` so Android respects lock-state, decoy/wipe pins, biometric toggles, and can trigger the same app reset flow (`AppManager.reset()`, load `RouteFactory().newWalletSelect()` when appropriate). Ensure it listens to `RustAuthManager` reconcile messages for auth type and wipe/decoy pin toggles.

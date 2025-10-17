@@ -1,0 +1,75 @@
+package org.bitcoinppl.cove
+
+/**
+ * alert states that can be shown globally in the app
+ * ported from iOS AppAlertState.swift
+ */
+sealed class AppAlertState {
+    // success
+    data object ImportedSuccessfully : AppAlertState()
+    data object ImportedLabelsSuccessfully : AppAlertState()
+
+    // warn
+    data class DuplicateWallet(val walletId: WalletId) : AppAlertState()
+
+    // errors
+    data object InvalidWordGroup : AppAlertState()
+    data class ErrorImportingHotWallet(val error: String) : AppAlertState()
+    data class AddressWrongNetwork(
+        val address: Address,
+        val network: Network,
+        val currentNetwork: Network
+    ) : AppAlertState()
+    data class FoundAddress(val address: Address, val amount: Amount?) : AppAlertState()
+    data object UnableToSelectWallet : AppAlertState()
+    data class ErrorImportingHardwareWallet(val error: String) : AppAlertState()
+    data class InvalidFileFormat(val format: String) : AppAlertState()
+    data class NoWalletSelected(val address: Address) : AppAlertState()
+    data class InvalidFormat(val format: String) : AppAlertState()
+    data class NoUnsignedTransactionFound(val txId: TxId) : AppAlertState()
+    data class UnableToGetAddress(val error: String) : AppAlertState()
+    data object NoCameraPermission : AppAlertState()
+    data class FailedToScanQr(val error: String) : AppAlertState()
+    data object CantSendOnWatchOnlyWallet : AppAlertState()
+    data class TapSignerSetupFailed(val error: String) : AppAlertState()
+    data class TapSignerDeriveFailed(val error: String) : AppAlertState()
+    data object TapSignerInvalidAuth : AppAlertState()
+    data class TapSignerNoBackup(val tapSigner: TapSigner) : AppAlertState()
+
+    // generic message or error
+    data class General(val title: String, val message: String) : AppAlertState()
+
+    // action
+    data class UninitializedTapSigner(val tapSigner: TapSigner) : AppAlertState()
+    data class TapSignerWalletFound(val walletId: WalletId) : AppAlertState()
+    data class InitializedTapSigner(val tapSigner: TapSigner) : AppAlertState()
+
+    /**
+     * get the alert title for display
+     */
+    fun title(): String = when (this) {
+        is InvalidWordGroup -> "Words Not Valid"
+        is DuplicateWallet -> "Duplicate Wallet"
+        is ErrorImportingHotWallet -> "Error"
+        is ImportedSuccessfully, is ImportedLabelsSuccessfully -> "Success"
+        is UnableToSelectWallet -> "Error"
+        is ErrorImportingHardwareWallet -> "Error Importing Hardware Wallet"
+        is InvalidFileFormat -> "Invalid File Format"
+        is InvalidFormat -> "Invalid Format"
+        is AddressWrongNetwork -> "Wrong Network"
+        is NoWalletSelected, is FoundAddress -> "Found Address"
+        is NoCameraPermission -> "Camera Access is Required"
+        is FailedToScanQr -> "Failed to Scan QR"
+        is NoUnsignedTransactionFound -> "No Unsigned Transaction Found"
+        is UnableToGetAddress -> "Unable to Get Address"
+        is CantSendOnWatchOnlyWallet -> "Watch Only Wallet"
+        is UninitializedTapSigner -> "Setup TAPSIGNER?"
+        is TapSignerSetupFailed -> "Setup Failed"
+        is TapSignerDeriveFailed -> "TAPSIGNER Import Failed"
+        is TapSignerInvalidAuth -> "Wrong PIN"
+        is TapSignerWalletFound -> "Wallet Found"
+        is InitializedTapSigner -> "Import TAPSIGNER?"
+        is TapSignerNoBackup -> "No Backup Found"
+        is General -> title
+    }
+}
