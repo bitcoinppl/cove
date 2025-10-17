@@ -430,3 +430,73 @@ Container (loads manager) → Screen (renders UI) → Manager (provides state)
 - Phase 6: Transaction details screen
 - Phase 6: Wallet settings screens (change name, change color)
 
+### 5. **Phase 5A: Hot Wallet Creation & Verification Flow** ✅ COMPLETED
+
+**Implementation Summary:**
+- Created 3 new screens: HotWalletImportScreen, VerificationCompleteScreen, VerifyWordsContainer
+- Modified 2 existing screens: HotWalletSelectScreen, HotWalletCreateScreen
+- Wired NewHotWalletContainer with proper lifecycle management
+- Implemented two complete flows: Create (with verification) and Import (direct)
+
+**Files Created (3 total):**
+- `flow/new_wallet/hot_wallet/HotWalletImportScreen.kt` - 450 lines - Full mnemonic import with BIP-39 validation
+- `flow/new_wallet/hot_wallet/VerificationCompleteScreen.kt` - 150 lines - Success screen after verification
+- `flow/new_wallet/hot_wallet/VerifyWordsContainer.kt` - 90 lines - Lifecycle container for verify words flow
+
+**Files Modified (3 total):**
+- `flow/new_wallet/hot_wallet/HotWalletSelectScreen.kt` - Added modal sheet, AppManager integration, RouteFactory navigation
+- `flow/new_wallet/hot_wallet/HotWalletCreateScreen.kt` - Added HorizontalPager, save wallet functionality
+- `NewHotWalletContainer.kt` - Complete route wiring with lifecycle containers (Select/Create/Import/VerifyWords)
+
+**Key Features:**
+- Word-by-word BIP-39 validation with real-time feedback
+- Auto-advance on valid word entry
+- Color-coded validation states (green=valid, red=invalid)
+- Error handling for invalid words and duplicate wallets
+- Proper manager lifecycle with loading/error states
+- Two complete flows: Create (with verification) and Import (direct to wallet)
+
+**Flows Implemented:**
+1. **Create Flow:** Select → Create (display recovery words) → Verify Words → Complete → Wallet
+2. **Import Flow:** Select → Import (enter words) → Wallet (direct, no verification needed)
+
+**HotWalletImportScreen Features:**
+- 12 or 24 word mnemonic input in grid layout
+- BIP-39 word validation using `Bip39WordSpecificAutocomplete` from FFI
+- Real-time validation with color feedback per field
+- Auto-advance when valid word entered
+- Error alerts for invalid words or duplicate wallet detection
+- Direct navigation to wallet on successful import
+
+**VerificationCompleteScreen Features:**
+- Large success checkmark icon
+- "You're all set!" messaging
+- Progress indicator (step 4 of 5)
+- "Go To Wallet" button
+- Calls `manager.rust.markWalletAsVerified()` before navigation
+
+**VerifyWordsContainer Features:**
+- Manages WalletManager and WordValidator lifecycle
+- Shows VerifyWordsScreen or VerificationCompleteScreen based on state
+- Handles loading/error states
+- Proper cleanup via DisposableEffect
+
+**Lessons Learned:**
+1. 75% of expected screens already existed - always search first before creating
+2. BIP-39 validation via FFI `Bip39WordSpecificAutocomplete` works seamlessly
+3. Lifecycle containers are essential for proper manager cleanup
+4. Import flow intentionally skips verification (users already have words)
+5. Create flow requires full verification to ensure users backed up words
+6. Container pattern (PendingWalletContainer, ImportWalletContainer) keeps code clean
+7. Auto-advance on valid word improves UX significantly
+
+**Deviations from iOS:**
+1. No QR/NFC import in first pass (manual only)
+2. Simpler field layout (no autocomplete suggestions above keyboard)
+3. Focus management handled differently (FocusRequester vs @FocusState)
+
+**Follow-up Items:**
+- Add QR code scanning for import (deferred to Phase 5C with global sheets)
+- Add NFC scanning for import (deferred to Phase 6 with TapSigner)
+- Consider adding autocomplete suggestions display
+
