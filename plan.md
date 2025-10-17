@@ -245,6 +245,53 @@ User presses back → BackHandler intercepts
 - Multi-stack tabs/sidebar deferred to Phase 4+
 - Consider NavHostController only if animations/transitions are needed
 
+### 4. **Wire Compose Screens to Real Managers and Routes** 🚧 IN PROGRESS
+
+**Phase 4 Progress Summary:**
+- ✅ Created helper components (`FullPageLoadingView.kt`, `WalletColorExt.kt`)
+- ✅ Implemented `ListWalletsScreen.kt` - Auto-selects first wallet or navigates to add wallet
+- ✅ Created `SelectedWalletContainer.kt` - Manages WalletManager lifecycle with loading, scanning, and error handling
+- ⏳ Remaining: Screen updates, containers for Send/CoinControl/Settings/NewWallet flows
+
+**Files Created (5 total so far):**
+- `components/FullPageLoadingView.kt` - 20 lines - Reusable centered loading spinner
+- `utils/WalletColorExt.kt` - 18 lines - FFI WalletColor to Compose Color conversion
+- `ListWalletsScreen.kt` - 36 lines - Port of iOS ListWalletsScreen
+- `SelectedWalletContainer.kt` - 95 lines - Port of iOS SelectedWalletContainer with manager lifecycle
+
+**ListWalletsScreen Features:**
+- Shows FullPageLoadingView while checking database
+- Uses `Database().wallets().all()` to get wallet list
+- Auto-selects first wallet via `app.rust.selectWallet()`
+- Navigates to add wallet screen if no wallets exist
+- Error handling navigates to add wallet as fallback
+
+**SelectedWalletContainer Features:**
+- Lazy loads WalletManager via `app.getWalletManager(id)`
+- Calls `manager.rust.getTransactions()` and `manager.rust.startWalletScan()` on appear
+- Updates balance after 500ms delay
+- Handles wallet not found → tries other wallet or navigates to add wallet
+- Dispatches `.SelectedWalletDisappeared` on cleanup via DisposableEffect
+- Updates `app.walletManager` when load state becomes LOADED
+- Currently renders WalletTransactionsScreen (needs update)
+
+**WalletColorExt Features:**
+- Converts all 13 FFI WalletColor variants to Compose Color
+- Uses iOS system color values for consistency
+- Extension function pattern: `walletColor.toComposeColor()`
+
+**Next Steps:**
+- Update WalletTransactionsScreen to accept manager parameters
+- Create SendFlowContainer, CoinControlContainer, NewWalletContainer, SettingsContainer
+- Update existing screens to bind to manager state
+- Wire all routes in RouteView.kt
+- Estimated remaining: ~15-20 files, ~1500-2000 lines
+
+**Key Pattern Established:**
+```kotlin
+Container (loads manager) → Screen (renders UI) → Manager (provides state)
+```
+
 ## TODO Items
 
 1. **Bootstrap Kotlin App Shell and Core Managers** ✅
@@ -253,7 +300,7 @@ User presses back → BackHandler intercepts
 
 3. **Setup Navigation (Rust-First)** ✅
 
-4. **Wire Compose Screens to Real Managers and Routes**
+4. **Wire Compose Screens to Real Managers and Routes** 🚧 IN PROGRESS
    - Replace mock data in Compose screens with live manager state: `wallet_transactions/WalletTransactionsScreen.kt`, `transaction_details/TransactionDetailsScreen.kt`, `send/SendScreen.kt`, `send/send_confirmation/SendConfirmationScreen.kt`, `send/advanced_details/AdvancedDetailsBottomSheet.kt`, `send/network_fee/NetworkFeeBottomSheet.kt`, and `utxo_list/UtxoListScreen.kt` should all consume their corresponding Kotlin managers and emit actions via `dispatch`/`navigate`.
    - Build a Kotlin `RouteView` (and supporting `RememberedRouteState`) that matches `ios/Cove/RouteView.swift`: handle `.loadAndReset`, `.settings`, `.listWallets`, `.newWallet`, `.selectedWallet`, `.secretWords`, `.transactionDetails`, `.send`, and `.coinControl` by returning the appropriate Compose screens and injecting required `AppManager`/manager instances through composition locals. Respect `AppManager.routeId` when recomposing (force `key(routeId)` so nested stacks reset like Swift).
    - Implement a thin Kotlin `RouterObserver` that listens to the Kotlin `AppManager.router` and updates `NavigationStack` state; handle nested route resets (`Route.loadAndReset`) by calling into Rust via the new `AppManager.resetRoute` helpers, mirroring Swift’s `LoadAndResetContainer`.
