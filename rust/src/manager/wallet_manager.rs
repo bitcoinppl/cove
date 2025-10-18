@@ -31,7 +31,7 @@ use crate::{
     tap_card::tap_signer_reader::DeriveInfo,
     task::{self, spawn_actor},
     transaction::{
-        Amount, FeeRate, SentAndReceived, Transaction, TransactionDetails, TxId, Unit,
+        Amount, BitcoinUnit, FeeRate, SentAndReceived, Transaction, TransactionDetails, TxId,
         ffi::BitcoinTransaction, unsigned_transaction::UnsignedTransaction,
     },
     wallet::{
@@ -87,7 +87,7 @@ pub enum WalletManagerReconcileMessage {
 pub enum WalletManagerAction {
     UpdateName(String),
     UpdateColor(WalletColor),
-    UpdateUnit(Unit),
+    UpdateUnit(BitcoinUnit),
     UpdateFiatOrBtc(FiatOrBtc),
     ToggleSensitiveVisibility,
     ToggleDetailsExpanded,
@@ -939,10 +939,10 @@ impl RustWalletManager {
 
             Action::ToggleFiatBtcPrimarySecondary => {
                 let order = [
-                    (FiatOrBtc::Btc, Unit::Btc),
-                    (FiatOrBtc::Fiat, Unit::Btc),
-                    (FiatOrBtc::Btc, Unit::Sat),
-                    (FiatOrBtc::Fiat, Unit::Sat),
+                    (FiatOrBtc::Btc, BitcoinUnit::Btc),
+                    (FiatOrBtc::Fiat, BitcoinUnit::Btc),
+                    (FiatOrBtc::Btc, BitcoinUnit::Sat),
+                    (FiatOrBtc::Fiat, BitcoinUnit::Sat),
                 ];
 
                 let current =

@@ -1,9 +1,5 @@
 import SwiftUI
 
-enum UnlockMode {
-    case main, decoy, wipe, locked
-}
-
 @Observable final class AuthManager: AuthManagerReconciler {
     static let shared = AuthManager()
 

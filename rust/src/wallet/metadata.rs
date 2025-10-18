@@ -8,7 +8,7 @@ use derive_more::Display;
 use serde::{Deserialize, Serialize};
 
 use super::{AddressInfo, WalletAddressType, fingerprint::Fingerprint};
-use crate::transaction::Unit;
+use crate::transaction::BitcoinUnit;
 use crate::{database::Database, network::Network};
 use cove_tap_card::TapSigner;
 
@@ -25,7 +25,7 @@ pub struct WalletMetadata {
     #[serde(default)]
     pub master_fingerprint: Option<Arc<Fingerprint>>,
     #[serde(default)]
-    pub selected_unit: Unit,
+    pub selected_unit: BitcoinUnit,
     #[serde(default = "default_true")]
     pub sensitive_visible: bool,
     #[serde(default = "default_false")]
@@ -171,7 +171,7 @@ impl WalletMetadata {
             verified: false,
             network,
             fiat_or_btc: FiatOrBtc::Btc,
-            selected_unit: Unit::default(),
+            selected_unit: BitcoinUnit::default(),
             sensitive_visible: true,
             details_expanded: false,
             address_type: WalletAddressType::default(),
@@ -216,7 +216,7 @@ impl WalletMetadata {
             network: Network::Bitcoin,
             fiat_or_btc: FiatOrBtc::Btc,
             address_type: WalletAddressType::default(),
-            selected_unit: Unit::default(),
+            selected_unit: BitcoinUnit::default(),
             sensitive_visible: true,
             details_expanded: false,
             hardware_metadata: None,

@@ -9,13 +9,6 @@ import kotlinx.coroutines.withContext
 import java.util.Date
 
 /**
- * unlock modes for PIN authentication
- */
-enum class UnlockMode {
-    MAIN, DECOY, WIPE, LOCKED
-}
-
-/**
  * authentication manager (singleton)
  * handles lock state, biometric auth, and PIN validation
  * ported from iOS AuthManager.swift

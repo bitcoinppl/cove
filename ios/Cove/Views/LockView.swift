@@ -21,10 +21,6 @@ private enum Screen {
     case biometric, pin
 }
 
-enum LockState: Equatable {
-    case locked, unlocked
-}
-
 struct LockView<Content: View>: View {
     @Environment(AppManager.self) var app
     @Environment(AuthManager.self) var auth

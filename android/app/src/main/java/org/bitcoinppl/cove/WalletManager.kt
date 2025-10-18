@@ -49,8 +49,8 @@ class WalletManager : WalletManagerReconciler {
     // computed properties
     val unit: String
         get() = when (walletMetadata?.selectedUnit) {
-            Unit.BTC -> "btc"
-            Unit.SAT -> "sats"
+            BitcoinUnit.BTC -> "btc"
+            BitcoinUnit.SAT -> "sats"
             else -> "sats"
         }
 
@@ -71,53 +71,49 @@ class WalletManager : WalletManagerReconciler {
             Color.Blue
         } ?: Color.Blue
 
-    // primary constructor
-    constructor(id: WalletId) {
+    // private constructor
+    private constructor(
+        id: WalletId,
+        rust: RustWalletManager,
+        metadata: WalletMetadata,
+        shouldListenForUpdates: Boolean = true
+    ) {
         this.id = id
-        val rust = RustWalletManager(id)
         this.rust = rust
-
-        walletMetadata = rust.walletMetadata()
-        unsignedTransactions = runCatching { rust.getUnsignedTransactions() }.getOrElse { emptyList() }
+        this.walletMetadata = metadata
+        this.unsignedTransactions = runCatching { rust.getUnsignedTransactions() }.getOrElse { emptyList() }
 
         // start fiat balance update
         kotlinx.coroutines.GlobalScope.launch {
             updateFiatBalance()
         }
 
-        rust.listenForUpdates(this)
-        logDebug("Initialized WalletManager for $id")
+        if (shouldListenForUpdates) {
+            rust.listenForUpdates(this)
+        }
     }
 
-    // constructor from xpub
-    constructor(xpub: String) {
-        val rust = RustWalletManager.tryNewFromXpub(xpub)
-        val metadata = rust.walletMetadata()
-
-        this.rust = rust
-        this.walletMetadata = metadata
-        this.id = metadata.id
-
-        // start fiat balance update
-        kotlinx.coroutines.GlobalScope.launch {
-            updateFiatBalance()
+    companion object {
+        // factory method from id
+        operator fun invoke(id: WalletId): WalletManager {
+            val rust = RustWalletManager(id)
+            val metadata = rust.walletMetadata()
+            return WalletManager(id, rust, metadata)
         }
 
-        rust.listenForUpdates(this)
-        logDebug("Initialized WalletManager from xpub")
-    }
+        // factory method from xpub
+        fun fromXpub(xpub: String): WalletManager {
+            val rust = RustWalletManager.tryNewFromXpub(xpub)
+            val metadata = rust.walletMetadata()
+            return WalletManager(metadata.id, rust, metadata)
+        }
 
-    // constructor from TapSigner
-    constructor(tapSigner: TapSigner, deriveInfo: DeriveInfo, backup: ByteArray? = null) {
-        val rust = RustWalletManager.tryNewFromTapSigner(tapSigner, deriveInfo, backup)
-        val metadata = rust.walletMetadata()
-
-        this.rust = rust
-        this.walletMetadata = metadata
-        this.id = metadata.id
-
-        rust.listenForUpdates(this)
-        logDebug("Initialized WalletManager from TapSigner")
+        // factory method from TapSigner
+        fun fromTapSigner(tapSigner: TapSigner, deriveInfo: DeriveInfo, backup: ByteArray? = null): WalletManager {
+            val rust = RustWalletManager.tryNewFromTapSigner(tapSigner, deriveInfo, backup)
+            val metadata = rust.walletMetadata()
+            return WalletManager(metadata.id, rust, metadata, shouldListenForUpdates = true)
+        }
     }
 
     private fun logDebug(message: String) {
@@ -146,8 +142,8 @@ class WalletManager : WalletManagerReconciler {
 
     fun amountFmt(amount: Amount): String {
         return when (walletMetadata?.selectedUnit) {
-            Unit.BTC -> amount.btcString()
-            Unit.SAT -> amount.satsString()
+            BitcoinUnit.BTC -> amount.btcString()
+            BitcoinUnit.SAT -> amount.satsString()
             else -> amount.satsString()
         }
     }
@@ -158,8 +154,8 @@ class WalletManager : WalletManagerReconciler {
 
     fun amountFmtUnit(amount: Amount): String {
         return when (walletMetadata?.selectedUnit) {
-            Unit.BTC -> amount.btcStringWithUnit()
-            Unit.SAT -> amount.satsStringWithUnit()
+            BitcoinUnit.BTC -> amount.btcStringWithUnit()
+            BitcoinUnit.SAT -> amount.satsStringWithUnit()
             else -> amount.satsStringWithUnit()
         }
     }

@@ -4,7 +4,7 @@ use bdk_wallet::LocalOutput;
 use bitcoin::Amount;
 use cove_types::{
     Network, OutPoint, WalletId,
-    unit::Unit,
+    unit::BitcoinUnit,
     utxo::{Utxo, UtxoType},
 };
 
@@ -19,7 +19,7 @@ type ListSort = super::CoinControlListSort;
 #[derive(Clone, Debug, Hash, Eq, PartialEq, uniffi::Object)]
 pub struct CoinControlManagerState {
     pub wallet_id: WalletId,
-    pub unit: Unit,
+    pub unit: BitcoinUnit,
     pub network: Network,
 
     pub utxos: Vec<Utxo>,

@@ -74,12 +74,12 @@ fun SendScreen(
 
     // format balance
     val balanceFormatted = when (metadata.selectedUnit) {
-        org.bitcoinppl.cove.Unit.BTC -> balance.asBtc().toString()
-        org.bitcoinppl.cove.Unit.SAT -> balance.asSats().toString()
+        org.bitcoinppl.cove.BitcoinUnit.BTC -> balance.asBtc().toString()
+        org.bitcoinppl.cove.BitcoinUnit.SAT -> balance.asSats().toString()
     }
     val balanceDenomination = when (metadata.selectedUnit) {
-        org.bitcoinppl.cove.Unit.BTC -> "BTC"
-        org.bitcoinppl.cove.Unit.SAT -> "sats"
+        org.bitcoinppl.cove.BitcoinUnit.BTC -> "BTC"
+        org.bitcoinppl.cove.BitcoinUnit.SAT -> "sats"
     }
     Scaffold(
         containerColor = CoveColor.BackgroundDark,
@@ -279,8 +279,8 @@ private fun AmountWidget(
     val amountInFiat = sendFlowManager.sendAmountFiat
 
     val denomination = when (metadata.selectedUnit) {
-        org.bitcoinppl.cove.Unit.BTC -> "BTC"
-        org.bitcoinppl.cove.Unit.SAT -> "sats"
+        org.bitcoinppl.cove.BitcoinUnit.BTC -> "BTC"
+        org.bitcoinppl.cove.BitcoinUnit.SAT -> "sats"
     }
 
     Column(modifier = Modifier.fillMaxWidth()) {

@@ -38,7 +38,7 @@ class CoinControlManager(
     var utxos by mutableStateOf<List<Utxo>>(emptyList())
         private set
 
-    var unit by mutableStateOf(Unit.SAT)
+    var unit by mutableStateOf(BitcoinUnit.SAT)
         private set
 
     private var updateSendFlowManagerTask: Job? = null
@@ -174,10 +174,10 @@ class CoinControlManager(
 
     fun displayAmount(amount: Amount, showUnit: Boolean = true): String {
         return when (unit to showUnit) {
-            Unit.BTC to true -> amount.btcStringWithUnit()
-            Unit.BTC to false -> amount.btcString()
-            Unit.SAT to true -> amount.satsStringWithUnit()
-            Unit.SAT to false -> amount.satsString()
+            BitcoinUnit.BTC to true -> amount.btcStringWithUnit()
+            BitcoinUnit.BTC to false -> amount.btcString()
+            BitcoinUnit.SAT to true -> amount.satsStringWithUnit()
+            BitcoinUnit.SAT to false -> amount.satsString()
             else -> amount.satsStringWithUnit()
         }
     }

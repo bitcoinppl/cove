@@ -11,9 +11,11 @@ pub mod color;
 pub mod color_scheme;
 pub mod confirm;
 pub mod fees;
+pub mod lock_state;
 pub mod network;
 pub mod psbt;
 pub mod redb;
+pub mod sort_order;
 pub mod transaction;
 pub mod unit;
 pub mod utxo;
@@ -24,7 +26,9 @@ pub use block_size::BlockSizeLast;
 pub use confirm::{ConfirmDetails, ConfirmDetailsError, InputOutputDetails, SplitOutput};
 
 pub use chain_position::ChainPosition;
+pub use lock_state::{LockState, UnlockMode};
 pub use network::Network;
+pub use sort_order::SortOrder;
 pub use wallet_id::WalletId;
 
 pub use transaction::out_point::OutPoint;

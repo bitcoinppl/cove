@@ -15,7 +15,7 @@ use crate::{
     database::Database,
     fiat::{FiatCurrency, client::FIAT_CLIENT},
     task,
-    transaction::{TransactionDirection, Unit},
+    transaction::{BitcoinUnit, TransactionDirection},
 };
 
 use crate::{
@@ -230,7 +230,7 @@ impl TransactionDetails {
     }
 
     #[uniffi::method]
-    pub fn fee_fmt(&self, unit: Unit) -> Option<String> {
+    pub fn fee_fmt(&self, unit: BitcoinUnit) -> Option<String> {
         let fee = self.fee?;
         Some(fee.fmt_string_with_unit(unit))
     }
@@ -251,7 +251,7 @@ impl TransactionDetails {
     }
 
     #[uniffi::method]
-    pub fn amount_fmt(&self, unit: Unit) -> String {
+    pub fn amount_fmt(&self, unit: BitcoinUnit) -> String {
         self.sent_and_received.amount_fmt(unit)
     }
 
@@ -266,7 +266,7 @@ impl TransactionDetails {
     }
 
     #[uniffi::method]
-    pub fn sent_sans_fee_fmt(&self, unit: Unit) -> Option<String> {
+    pub fn sent_sans_fee_fmt(&self, unit: BitcoinUnit) -> Option<String> {
         let amount = self.sent_sans_fee()?;
         Some(amount.fmt_string_with_unit(unit))
     }
