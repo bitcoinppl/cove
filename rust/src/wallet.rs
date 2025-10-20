@@ -1,4 +1,5 @@
 pub mod balance;
+pub mod ffi;
 pub mod fingerprint;
 pub mod metadata;
 

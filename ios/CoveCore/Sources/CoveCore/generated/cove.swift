@@ -25717,6 +25717,18 @@ public func defaultWalletColors() -> [WalletColor]  {
     )
 })
 }
+public func ffiMinSendAmount() -> Amount  {
+    return try!  FfiConverterTypeAmount_lift(try! rustCall() {
+    uniffi_cove_fn_func_ffi_min_send_amount($0
+    )
+})
+}
+public func ffiMinSendSats() -> UInt64  {
+    return try!  FfiConverterUInt64.lift(try! rustCall() {
+    uniffi_cove_fn_func_ffi_min_send_sats($0
+    )
+})
+}
 public func fiatAmountPreviewNew() -> FiatAmount  {
     return try!  FfiConverterTypeFiatAmount_lift(try! rustCall() {
     uniffi_cove_fn_func_fiat_amount_preview_new($0
@@ -25829,6 +25841,18 @@ public func numberOfWordsToWordCount(me: NumberOfBip39Words) -> UInt8  {
     return try!  FfiConverterUInt8.lift(try! rustCall() {
     uniffi_cove_fn_func_number_of_words_to_word_count(
         FfiConverterTypeNumberOfBip39Words_lower(me),$0
+    )
+})
+}
+public func previewNewLegacyFoundAddress() -> FoundAddress  {
+    return try!  FfiConverterTypeFoundAddress_lift(try! rustCall() {
+    uniffi_cove_fn_func_preview_new_legacy_found_address($0
+    )
+})
+}
+public func previewNewWrappedFoundAddress() -> FoundAddress  {
+    return try!  FfiConverterTypeFoundAddress_lift(try! rustCall() {
+    uniffi_cove_fn_func_preview_new_wrapped_found_address($0
     )
 })
 }
@@ -25960,6 +25984,13 @@ public func walletAddressTypeSortOrder(addressType: WalletAddressType) -> UInt8 
     )
 })
 }
+public func walletAddressTypeToString(walletAddressType: WalletAddressType) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_func_wallet_address_type_to_string(
+        FfiConverterTypeWalletAddressType_lower(walletAddressType),$0
+    )
+})
+}
 public func walletMetadataHash(metadata: WalletMetadata) -> UInt64  {
     return try!  FfiConverterUInt64.lift(try! rustCall() {
     uniffi_cove_fn_func_wallet_metadata_hash(
@@ -25986,13 +26017,6 @@ public func walletStateIsEqual(lhs: WalletLoadState, rhs: WalletLoadState) -> Bo
     uniffi_cove_fn_func_wallet_state_is_equal(
         FfiConverterTypeWalletLoadState_lower(lhs),
         FfiConverterTypeWalletLoadState_lower(rhs),$0
-    )
-})
-}
-public func walletTypeToString(walletType: WalletType) -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_cove_fn_func_wallet_type_to_string(
-        FfiConverterTypeWalletType_lower(walletType),$0
     )
 })
 }
@@ -26031,6 +26055,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_default_wallet_colors() != 39034) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_ffi_min_send_amount() != 9250) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_ffi_min_send_sats() != 5524) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_fiat_amount_preview_new() != 6422) {
@@ -26079,6 +26109,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_number_of_words_to_word_count() != 24846) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_preview_new_legacy_found_address() != 36773) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_preview_new_wrapped_found_address() != 57500) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_prices_are_equal() != 41102) {
@@ -26132,6 +26168,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_func_wallet_address_type_sort_order() != 47488) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_func_wallet_address_type_to_string() != 36064) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_func_wallet_metadata_hash() != 62639) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -26142,9 +26181,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_wallet_state_is_equal() != 27037) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_func_wallet_type_to_string() != 18258) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_authpin_check() != 17948) {

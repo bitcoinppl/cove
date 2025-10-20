@@ -5440,13 +5440,6 @@ public func feeSpeedToCircleColor(feeSpeed: FeeSpeed) -> FfiColor  {
     )
 })
 }
-public func feeSpeedToString(feeSpeed: FeeSpeed) -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_cove_types_fn_func_fee_speed_to_string(
-        FfiConverterTypeFeeSpeed_lower(feeSpeed),$0
-    )
-})
-}
 public func networkToString(network: Network) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_cove_types_fn_func_network_to_string(
@@ -5459,13 +5452,6 @@ public func previewNewUtxoList(outputCount: UInt8, changeCount: UInt8) -> [Utxo]
     uniffi_cove_types_fn_func_preview_new_utxo_list(
         FfiConverterUInt8.lower(outputCount),
         FfiConverterUInt8.lower(changeCount),$0
-    )
-})
-}
-public func unitToString(unit: BitcoinUnit) -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_cove_types_fn_func_unit_to_string(
-        FfiConverterTypeBitcoinUnit_lower(unit),$0
     )
 })
 }
@@ -5547,16 +5533,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_types_checksum_func_fee_speed_to_circle_color() != 51678) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_func_fee_speed_to_string() != 14557) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_cove_types_checksum_func_network_to_string() != 39809) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_func_preview_new_utxo_list() != 38611) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_types_checksum_func_unit_to_string() != 13028) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_func_utxo_date() != 4098) {
