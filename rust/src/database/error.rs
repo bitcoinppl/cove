@@ -4,7 +4,7 @@ use super::{
     unsigned_transactions::UnsignedTransactionsTableError, wallet::WalletTableError,
 };
 
-type Error = Database;
+type Error = DatabaseError;
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
 #[uniffi::export(Display)]
@@ -18,7 +18,7 @@ pub enum SerdeError {
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
 #[uniffi::export(Display)]
-pub enum Database {
+pub enum DatabaseError {
     #[error("failed to open database: {0}")]
     DatabaseAccess(String),
 

@@ -17,7 +17,7 @@ use cove_util::{format::NumberFormatter as _, result_ext::ResultExt as _};
 use crate::{
     app::FfiApp,
     converter::{Converter, ConverterError},
-    database::{Database, error::Database as DatabaseError},
+    database::{Database, error::DatabaseError},
     fee_client::{FEE_CLIENT, FEES, FeeResponse},
     fiat::{
         FiatCurrency,

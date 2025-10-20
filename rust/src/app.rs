@@ -7,7 +7,7 @@ use std::{sync::Arc, time::Duration};
 use crate::{
     auth::AuthType,
     color_scheme::ColorSchemeSelection,
-    database::{Database, error::Database as DatabaseError, global_flag::GlobalFlagKey},
+    database::{Database, error::DatabaseError, global_flag::GlobalFlagKey},
     fee_client::{FEE_CLIENT, FeeResponse},
     fiat::{
         FiatCurrency,
