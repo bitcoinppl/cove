@@ -86,7 +86,8 @@ private fun NewWalletScreen(app: AppManager, route: NewWalletRoute) {
         }
         is NewWalletRoute.Import -> {
             ImportWalletScreen(
-                totalWords = 12, // TODO: get from route
+                // TODO: get from route
+                totalWords = 12,
                 onBackClick = { app.popRoute() },
                 onImportSuccess = {
                     // TODO: navigate to wallet

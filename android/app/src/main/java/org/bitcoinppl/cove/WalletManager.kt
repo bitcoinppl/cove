@@ -48,7 +48,7 @@ class WalletManager : WalletManagerReconciler {
     var sendFlowErrorAlert by mutableStateOf<TaggedItem<SendFlowErrorAlert>?>(null)
 
     // cached transaction details
-    private val _transactionDetails = mutableMapOf<TxId, TransactionDetails>()
+    private val transactionDetailsCache = mutableMapOf<TxId, TransactionDetails>()
 
     // computed properties
     val unit: String
@@ -169,11 +169,11 @@ class WalletManager : WalletManagerReconciler {
 
     suspend fun transactionDetails(txId: TxId): TransactionDetails {
         // check cache first
-        _transactionDetails[txId]?.let { return it }
+        transactionDetailsCache[txId]?.let { return it }
 
         // fetch from rust and cache
         val details = rust.transactionDetails(txId)
-        _transactionDetails[txId] = details
+        transactionDetailsCache[txId] = details
         return details
     }
 
