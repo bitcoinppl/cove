@@ -4,6 +4,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.structuralEqualityPolicy
+import org.bitcoinppl.cove_core.*
+import org.bitcoinppl.cove_core.types.*
 
 /**
  * wrapper around FFI Router to make it observable in Compose

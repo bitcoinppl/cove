@@ -12,6 +12,8 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import org.bitcoinppl.cove_core.*
+import org.bitcoinppl.cove_core.types.*
 import java.io.Closeable
 import java.util.concurrent.atomic.AtomicBoolean
 
