@@ -67,34 +67,34 @@ class SendFlowPresenter(
      */
     fun alertTitle(): String {
         return when (val state = alertState?.item) {
-            is SendFlowAlertState.Error -> errorAlertTitle(state.error)
+            is SendFlowAlertState.Error -> errorAlertTitle(state.v1)
             is SendFlowAlertState.General -> state.title
             null -> ""
         }
     }
 
-    private fun errorAlertTitle(error: SendFlowError): String {
+    private fun errorAlertTitle(error: SendFlowException): String {
         return when (error) {
-            is SendFlowError.EmptyAddress,
-            is SendFlowError.InvalidAddress,
-            is SendFlowError.WrongNetwork,
+            is SendFlowException.EmptyAddress,
+            is SendFlowException.InvalidAddress,
+            is SendFlowException.WrongNetwork,
             -> "Invalid Address"
 
-            is SendFlowError.InvalidNumber,
-            is SendFlowError.ZeroAmount,
+            is SendFlowException.InvalidNumber,
+            is SendFlowException.ZeroAmount,
             -> "Invalid Amount"
 
-            is SendFlowError.InsufficientFunds,
-            is SendFlowError.NoBalance,
+            is SendFlowException.InsufficientFunds,
+            is SendFlowException.NoBalance,
             -> "Insufficient Funds"
 
-            is SendFlowError.SendAmountToLow -> "Send Amount Too Low"
-            is SendFlowError.UnableToGetFeeRate -> "Unable to get fee rate"
-            is SendFlowError.UnableToBuildTxn -> "Unable to build transaction"
-            is SendFlowError.UnableToGetMaxSend -> "Unable to get max send"
-            is SendFlowError.UnableToSaveUnsignedTransaction -> "Unable to Save Unsigned Transaction"
-            is SendFlowError.WalletManagerError -> "Error"
-            is SendFlowError.UnableToGetFeeDetails -> "Fee Details Error"
+            is SendFlowException.SendAmountToLow -> "Send Amount Too Low"
+            is SendFlowException.UnableToGetFeeRate -> "Unable to get fee rate"
+            is SendFlowException.UnableToBuildTxn -> "Unable to build transaction"
+            is SendFlowException.UnableToGetMaxSend -> "Unable to get max send"
+            is SendFlowException.UnableToSaveUnsignedTransaction -> "Unable to Save Unsigned Transaction"
+            is SendFlowException.WalletManager -> "Error"
+            is SendFlowException.UnableToGetFeeDetails -> "Fee Details Error"
         }
     }
 
@@ -103,55 +103,55 @@ class SendFlowPresenter(
      */
     fun alertMessage(): String {
         return when (val state = alertState?.item) {
-            is SendFlowAlertState.Error -> errorAlertMessage(state.error)
+            is SendFlowAlertState.Error -> errorAlertMessage(state.v1)
             is SendFlowAlertState.General -> state.message
             null -> ""
         }
     }
 
-    private fun errorAlertMessage(error: SendFlowError): String {
+    private fun errorAlertMessage(error: SendFlowException): String {
         return when (error) {
-            is SendFlowError.EmptyAddress ->
+            is SendFlowException.EmptyAddress ->
                 "Please enter an address"
 
-            is SendFlowError.InvalidNumber ->
+            is SendFlowException.InvalidNumber ->
                 "Please enter a valid number for the amount to send"
 
-            is SendFlowError.ZeroAmount ->
+            is SendFlowException.ZeroAmount ->
                 "Can't send an empty transaction. Please enter a valid amount"
 
-            is SendFlowError.NoBalance ->
+            is SendFlowException.NoBalance ->
                 "You do not have any bitcoin in your wallet. Please add some to send a transaction"
 
-            is SendFlowError.InvalidAddress ->
-                "The address ${error.address} is invalid"
+            is SendFlowException.InvalidAddress ->
+                "The address ${error.v1} is invalid"
 
-            is SendFlowError.WrongNetwork ->
+            is SendFlowException.WrongNetwork ->
                 "The address ${error.address} is on the wrong network, it is for ${error.validFor}. You are on ${error.current}"
 
-            is SendFlowError.InsufficientFunds ->
+            is SendFlowException.InsufficientFunds ->
                 "You do not have enough bitcoin in your wallet to cover the amount plus fees"
 
-            is SendFlowError.SendAmountToLow ->
+            is SendFlowException.SendAmountToLow ->
                 "Send amount is too low. Please send at least 5000 sats"
 
-            is SendFlowError.UnableToGetFeeRate ->
+            is SendFlowException.UnableToGetFeeRate ->
                 "Are you connected to the internet?"
 
-            is SendFlowError.WalletManagerError ->
-                error.msg.describe
+            is SendFlowException.WalletManager ->
+                error.v1.message ?: "Wallet Manager Error"
 
-            is SendFlowError.UnableToGetFeeDetails ->
-                error.msg
+            is SendFlowException.UnableToGetFeeDetails ->
+                error.v1
 
-            is SendFlowError.UnableToBuildTxn ->
-                error.msg
+            is SendFlowException.UnableToBuildTxn ->
+                error.v1
 
-            is SendFlowError.UnableToGetMaxSend ->
-                error.msg
+            is SendFlowException.UnableToGetMaxSend ->
+                error.v1
 
-            is SendFlowError.UnableToSaveUnsignedTransaction ->
-                error.msg
+            is SendFlowException.UnableToSaveUnsignedTransaction ->
+                error.v1
         }
     }
 
@@ -160,7 +160,7 @@ class SendFlowPresenter(
      */
     fun alertButtonAction(): (() -> Unit)? {
         return when (val state = alertState?.item) {
-            is SendFlowAlertState.Error -> errorAlertButtonAction(state.error)
+            is SendFlowAlertState.Error -> errorAlertButtonAction(state.v1)
             is SendFlowAlertState.General -> {
                 { alertState = null }
             }
@@ -168,11 +168,11 @@ class SendFlowPresenter(
         }
     }
 
-    private fun errorAlertButtonAction(error: SendFlowError): () -> Unit {
+    private fun errorAlertButtonAction(error: SendFlowException): () -> Unit {
         return when (error) {
-            is SendFlowError.EmptyAddress,
-            is SendFlowError.WrongNetwork,
-            is SendFlowError.InvalidAddress,
+            is SendFlowException.EmptyAddress,
+            is SendFlowException.WrongNetwork,
+            is SendFlowException.InvalidAddress,
             -> {
                 {
                     alertState = null
@@ -180,23 +180,23 @@ class SendFlowPresenter(
                 }
             }
 
-            is SendFlowError.NoBalance -> {
+            is SendFlowException.NoBalance -> {
                 {
                     alertState = null
                     app.popRoute()
                 }
             }
 
-            is SendFlowError.InvalidNumber,
-            is SendFlowError.InsufficientFunds,
-            is SendFlowError.SendAmountToLow,
-            is SendFlowError.ZeroAmount,
-            is SendFlowError.WalletManagerError,
-            is SendFlowError.UnableToGetFeeDetails,
-            is SendFlowError.UnableToGetFeeRate,
-            is SendFlowError.UnableToBuildTxn,
-            is SendFlowError.UnableToSaveUnsignedTransaction,
-            is SendFlowError.UnableToGetMaxSend,
+            is SendFlowException.InvalidNumber,
+            is SendFlowException.InsufficientFunds,
+            is SendFlowException.SendAmountToLow,
+            is SendFlowException.ZeroAmount,
+            is SendFlowException.WalletManager,
+            is SendFlowException.UnableToGetFeeDetails,
+            is SendFlowException.UnableToGetFeeRate,
+            is SendFlowException.UnableToBuildTxn,
+            is SendFlowException.UnableToSaveUnsignedTransaction,
+            is SendFlowException.UnableToGetMaxSend,
             -> {
                 {
                     focusField = SetAmountFocusField.AMOUNT
