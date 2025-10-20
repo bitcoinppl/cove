@@ -22,6 +22,8 @@ class SendFlowPresenter(
     val app: AppManager,
     val manager: WalletManager,
 ) : Closeable {
+    // TODO: use when implementing alert dialogs - prevents alerts from reappearing during dismissal animations
+    // see iOS showingAlert at SendFlowPresenter.swift:38 for usage pattern
     private var disappearing: Boolean = false
 
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
