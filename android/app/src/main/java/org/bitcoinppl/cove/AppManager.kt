@@ -127,7 +127,7 @@ class AppManager private constructor() : FfiReconcile {
         logDebug("did not find wallet manager for $id, creating new: ${walletManager?.id}")
 
         return try {
-            val manager = WalletManager(id)
+            val manager = WalletManager(id = id)
             walletManager = manager
             manager
         } catch (e: Exception) {
@@ -300,11 +300,11 @@ class AppManager private constructor() : FfiReconcile {
         mainScope.launch {
             when (message) {
                 is AppStateReconcileMessage.RouteUpdated -> {
-                    router.updateRoutes(message.routes.toList())
+                    router.updateRoutes(message.v1.toList())
                 }
 
                 is AppStateReconcileMessage.PushedRoute -> {
-                    val newRoutes = (router.routes + message.route).toList()
+                    val newRoutes = (router.routes + message.v1).toList()
                     router.updateRoutes(newRoutes)
                 }
 
@@ -313,37 +313,37 @@ class AppManager private constructor() : FfiReconcile {
                 }
 
                 is AppStateReconcileMessage.ColorSchemeChanged -> {
-                    colorSchemeSelection = message.colorSchemeSelection
+                    colorSchemeSelection = message.v1
                 }
 
                 is AppStateReconcileMessage.SelectedNodeChanged -> {
-                    selectedNode = message.node
+                    selectedNode = message.v1
                 }
 
                 is AppStateReconcileMessage.SelectedNetworkChanged -> {
                     if (previousSelectedNetwork == null) {
                         previousSelectedNetwork = selectedNetwork
                     }
-                    selectedNetwork = message.network
+                    selectedNetwork = message.v1
                 }
 
                 is AppStateReconcileMessage.DefaultRouteChanged -> {
-                    router.default = message.route
-                    router.updateRoutes(message.nestedRoutes.toList())
+                    router.default = message.v1
+                    router.updateRoutes(message.v2.toList())
                     routeId = UUID.randomUUID().toString()
                     logDebug("Route ID changed to: $routeId")
                 }
 
                 is AppStateReconcileMessage.FiatPricesChanged -> {
-                    prices = message.prices
+                    prices = message.v1
                 }
 
                 is AppStateReconcileMessage.FeesChanged -> {
-                    fees = message.fees
+                    fees = message.v1
                 }
 
                 is AppStateReconcileMessage.FiatCurrencyChanged -> {
-                    selectedFiatCurrency = message.fiatCurrency
+                    selectedFiatCurrency = message.v1
 
                     // refresh fiat values in the wallet manager using IO
                     walletManager?.let { wm ->

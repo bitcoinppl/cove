@@ -46,6 +46,7 @@ class SendFlowPresenter(
 
         override fun equals(other: Any?): Boolean {
             if (this === other) return true
+            if (other == null) return false
             return this::class == other::class
         }
 
@@ -210,12 +211,4 @@ class SendFlowPresenter(
         if (!isClosed.compareAndSet(false, true)) return
         mainScope.cancel()
     }
-}
-
-/**
- * focus fields for send amount screen
- */
-enum class SetAmountFocusField {
-    ADDRESS,
-    AMOUNT,
 }

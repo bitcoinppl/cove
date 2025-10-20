@@ -12,6 +12,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove_core.*
+import org.bitcoinppl.cove_core.tapcard.TapSigner
 import org.bitcoinppl.cove_core.types.*
 import java.io.Closeable
 import java.util.concurrent.atomic.AtomicBoolean
@@ -84,52 +85,47 @@ class WalletManager : WalletManagerReconciler, Closeable {
                 Color.Blue
             } ?: Color.Blue
 
-    // primary constructor
-    constructor(id: WalletId) {
-        this.id = id
-        val rust = RustWalletManager(id)
-        this.rust = rust
-
-        walletMetadata = rust.walletMetadata()
-        unsignedTransactions = runCatching { rust.getUnsignedTransactions() }.getOrElse { emptyList() }
+    // private constructor - use companion factory methods
+    private constructor(
+        walletId: WalletId,
+        rustManager: RustWalletManager,
+        metadata: WalletMetadata,
+    ) {
+        this.id = walletId
+        this.rust = rustManager
+        this.walletMetadata = metadata
+        this.unsignedTransactions = runCatching { rustManager.getUnsignedTransactions() }.getOrElse { emptyList() }
 
         // start fiat balance update
         mainScope.launch(Dispatchers.IO) { updateFiatBalance() }
 
-        rust.listenForUpdates(this)
-        logDebug("Initialized WalletManager for $id")
+        rustManager.listenForUpdates(this)
     }
 
-    // constructor from xpub
-    constructor(xpub: String) {
-        val rust = RustWalletManager.tryNewFromXpub(xpub)
-        val metadata = rust.walletMetadata()
+    companion object {
+        // create from wallet ID
+        operator fun invoke(id: WalletId): WalletManager {
+            val rust = RustWalletManager(id)
+            val metadata = rust.walletMetadata()
+            android.util.Log.d("WalletManager", "Initialized WalletManager for $id")
+            return WalletManager(id, rust, metadata)
+        }
 
-        this.rust = rust
-        this.walletMetadata = metadata
-        this.id = metadata.id
+        // create from xpub
+        fun fromXpub(xpub: String): WalletManager {
+            val rust = RustWalletManager.tryNewFromXpub(xpub)
+            val metadata = rust.walletMetadata()
+            android.util.Log.d("WalletManager", "Initialized WalletManager from xpub")
+            return WalletManager(metadata.id, rust, metadata)
+        }
 
-        // start fiat balance update
-        mainScope.launch(Dispatchers.IO) { updateFiatBalance() }
-
-        rust.listenForUpdates(this)
-        logDebug("Initialized WalletManager from xpub")
-    }
-
-    // constructor from TapSigner
-    constructor(tapSigner: TapSigner, deriveInfo: DeriveInfo, backup: ByteArray? = null) {
-        val rust = RustWalletManager.tryNewFromTapSigner(tapSigner, deriveInfo, backup)
-        val metadata = rust.walletMetadata()
-
-        this.rust = rust
-        this.walletMetadata = metadata
-        this.id = metadata.id
-
-        // start fiat balance update
-        mainScope.launch(Dispatchers.IO) { updateFiatBalance() }
-
-        rust.listenForUpdates(this)
-        logDebug("Initialized WalletManager from TapSigner")
+        // create from TapSigner
+        fun fromTapSigner(tapSigner: TapSigner, deriveInfo: DeriveInfo, backup: ByteArray? = null): WalletManager {
+            val rust = RustWalletManager.tryNewFromTapSigner(tapSigner, deriveInfo, backup)
+            val metadata = rust.walletMetadata()
+            android.util.Log.d("WalletManager", "Initialized WalletManager from TapSigner")
+            return WalletManager(metadata.id, rust, metadata)
+        }
     }
 
     private fun logDebug(message: String) {
@@ -215,12 +211,12 @@ class WalletManager : WalletManagerReconciler, Closeable {
             }
 
             is WalletManagerReconcileMessage.StartedExpandedFullScan -> {
-                loadState = WalletLoadState.SCANNING(message.txns)
+                loadState = WalletLoadState.SCANNING(message.v1)
             }
 
             is WalletManagerReconcileMessage.AvailableTransactions -> {
                 if (loadState is WalletLoadState.LOADING) {
-                    loadState = WalletLoadState.SCANNING(message.txns)
+                    loadState = WalletLoadState.SCANNING(message.v1)
                 }
             }
 
@@ -228,18 +224,18 @@ class WalletManager : WalletManagerReconciler, Closeable {
                 loadState =
                     when (loadState) {
                         is WalletLoadState.SCANNING, is WalletLoadState.LOADING ->
-                            WalletLoadState.SCANNING(message.txns)
+                            WalletLoadState.SCANNING(message.v1)
                         is WalletLoadState.LOADED ->
-                            WalletLoadState.LOADED(message.txns)
+                            WalletLoadState.LOADED(message.v1)
                     }
             }
 
             is WalletManagerReconcileMessage.ScanComplete -> {
-                loadState = WalletLoadState.LOADED(message.txns)
+                loadState = WalletLoadState.LOADED(message.v1)
             }
 
             is WalletManagerReconcileMessage.WalletBalanceChanged -> {
-                balance = message.balance
+                balance = message.v1
                 // update fiat balance in background
                 mainScope.launch(Dispatchers.IO) { updateFiatBalance() }
             }
@@ -252,15 +248,15 @@ class WalletManager : WalletManagerReconciler, Closeable {
             }
 
             is WalletManagerReconcileMessage.WalletMetadataChanged -> {
-                walletMetadata = message.metadata
-                rust.setWalletMetadata(message.metadata)
+                walletMetadata = message.v1
+                rust.setWalletMetadata(message.v1)
             }
 
             is WalletManagerReconcileMessage.WalletScannerResponse -> {
-                logDebug("walletScannerResponse: ${message.scannerResponse}")
-                when (val response = message.scannerResponse) {
-                    is WalletScannerResponse.FoundAddresses -> {
-                        foundAddresses = response.addressTypes
+                logDebug("walletScannerResponse: ${message.v1}")
+                when (val response = message.v1) {
+                    is ScannerResponse.FoundAddresses -> {
+                        foundAddresses = response.v1
                     }
                     else -> {
                         // handle other scanner response types
@@ -269,20 +265,20 @@ class WalletManager : WalletManagerReconciler, Closeable {
             }
 
             is WalletManagerReconcileMessage.NodeConnectionFailed -> {
-                errorAlert = WalletErrorAlert.NodeConnectionFailed(message.error)
-                logError(message.error)
+                errorAlert = WalletErrorAlert.NodeConnectionFailed(message.v1)
+                logError(message.v1)
             }
 
-            is WalletManagerReconcileMessage.WalletError -> {
-                logError("WalletError: ${message.error}")
+            is WalletManagerReconcileMessage.WalletException -> {
+                logError("WalletException: ${message.v1}")
             }
 
             is WalletManagerReconcileMessage.UnknownError -> {
-                logError("Unknown error: ${message.error}")
+                logError("Unknown error: ${message.v1}")
             }
 
-            is WalletManagerReconcileMessage.SendFlowError -> {
-                sendFlowErrorAlert = TaggedItem(message.error)
+            is WalletManagerReconcileMessage.SendFlowException -> {
+                sendFlowErrorAlert = TaggedItem(message.v1)
             }
         }
     }

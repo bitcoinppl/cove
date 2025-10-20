@@ -1818,9 +1818,9 @@ internal object UniffiLib {
         uniffiCallbackInterfaceSendFlowManagerReconciler.register(this)
         uniffiCallbackInterfaceTapcardTransportProtocol.register(this)
         uniffiCallbackInterfaceWalletManagerReconciler.register(this)
+        org.bitcoinppl.cove_core.tapcard.uniffiEnsureInitialized()
         org.bitcoinppl.cove_core.nfc.uniffiEnsureInitialized()
         org.bitcoinppl.cove_core.types.uniffiEnsureInitialized()
-        org.bitcoinppl.cove_core.tapcard.uniffiEnsureInitialized()
         org.bitcoinppl.cove_core.device.uniffiEnsureInitialized()
         
     }
@@ -2776,8 +2776,6 @@ external fun uniffi_cove_fn_method_transporterror_uniffi_trait_display(`ptr`: Ru
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_walletaddresstype_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-external fun uniffi_cove_fn_method_walletaddresstype_uniffi_trait_ord_cmp(`ptr`: RustBuffer.ByValue,`other`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): Byte
 external fun uniffi_cove_fn_method_walleterror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_walletmanagererror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -4558,29 +4556,6 @@ public object FfiConverterUByte: FfiConverter<UByte, Byte> {
 
     override fun write(value: UByte, buf: ByteBuffer) {
         buf.put(value.toByte())
-    }
-}
-
-/**
- * @suppress
- */
-public object FfiConverterByte: FfiConverter<Byte, Byte> {
-    override fun lift(value: Byte): Byte {
-        return value
-    }
-
-    override fun read(buf: ByteBuffer): Byte {
-        return buf.get()
-    }
-
-    override fun lower(value: Byte): Byte {
-        return value
-    }
-
-    override fun allocationSize(value: Byte) = 1UL
-
-    override fun write(value: Byte, buf: ByteBuffer) {
-        buf.put(value)
     }
 }
 
@@ -36701,15 +36676,6 @@ enum class WalletAddressType {
         _status)
 }
     )
-    }
-    // The local Rust `Ord` implementation
-    override fun compareTo(other: WalletAddressType): Int {
-        return FfiConverterByte.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_method_walletaddresstype_uniffi_trait_ord_cmp(FfiConverterTypeWalletAddressType.lower(this),
-        FfiConverterTypeWalletAddressType.lower(`other`),_status)
-}
-    ).toInt()
     }
 
     companion object

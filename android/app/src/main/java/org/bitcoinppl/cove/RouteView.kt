@@ -9,7 +9,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import kotlinx.coroutines.delay
-import org.bitcoinppl.cove.import_wallet.ImportWalletScreen
+import org.bitcoinppl.cove_core.*
+import org.bitcoinppl.cove_core.types.*
 
 /**
  * maps FFI Route enum to Compose screens
@@ -84,24 +85,14 @@ private fun NewWalletScreen(app: AppManager, route: NewWalletRoute) {
                 Text("New Wallet Select - TODO")
             }
         }
-        is NewWalletRoute.Import -> {
-            ImportWalletScreen(
-                // TODO: get from route
-                totalWords = 12,
-                onBackClick = { app.popRoute() },
-                onImportSuccess = {
-                    // TODO: navigate to wallet
-                },
-            )
-        }
         is NewWalletRoute.HotWallet -> {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text("Hot Wallet Flow - TODO")
             }
         }
-        is NewWalletRoute.Hardware -> {
+        is NewWalletRoute.ColdWallet -> {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Hardware Wallet Flow - TODO")
+                Text("Cold Wallet Flow - TODO")
             }
         }
     }

@@ -45,10 +45,8 @@ class SendFlowManager(
 
     // validated state
     var address by mutableStateOf<Address?>(null)
-        private set
 
     var amount by mutableStateOf<Amount?>(null)
-        private set
 
     var fiatAmount by mutableStateOf<Double?>(null)
         private set
@@ -133,13 +131,13 @@ class SendFlowManager(
         return rust.validateFeePercentage(displayAlert)
     }
 
-    fun setAddress(address: Address) {
+    fun updateAddress(address: Address) {
         _enteringAddress = address.string()
         this.address = address
         dispatch(SendFlowManagerAction.NotifyAddressChanged(address))
     }
 
-    fun setAmount(amount: Amount) {
+    fun updateAmount(amount: Amount) {
         this.amount = amount
         dispatch(SendFlowManagerAction.NotifyAmountChanged(amount))
     }
@@ -162,52 +160,52 @@ class SendFlowManager(
     private fun apply(message: SendFlowManagerReconcileMessage) {
         when (message) {
             is SendFlowManagerReconcileMessage.UpdateAmountFiat -> {
-                fiatAmount = message.fiat
+                fiatAmount = message.v1
             }
 
             is SendFlowManagerReconcileMessage.UpdateAmountSats -> {
                 refreshPresenters()
-                amount = Amount.fromSat(message.sats)
+                amount = Amount.fromSat(message.v1)
             }
 
             is SendFlowManagerReconcileMessage.UpdateFeeRateOptions -> {
                 refreshPresenters()
-                feeRateOptions = message.options
+                feeRateOptions = message.v1
             }
 
             is SendFlowManagerReconcileMessage.UpdateAddress -> {
-                address = message.address
+                address = message.v1
             }
 
             is SendFlowManagerReconcileMessage.UpdateEnteringBtcAmount -> {
-                enteringBtcAmount = message.amount
+                enteringBtcAmount = message.v1
             }
 
             is SendFlowManagerReconcileMessage.UpdateEnteringAddress -> {
-                _enteringAddress = message.address
+                _enteringAddress = message.v1
             }
 
             is SendFlowManagerReconcileMessage.UpdateEnteringFiatAmount -> {
-                enteringFiatAmount = message.amount
+                enteringFiatAmount = message.v1
             }
 
             is SendFlowManagerReconcileMessage.UpdateSelectedFeeRate -> {
                 refreshPresenters()
-                selectedFeeRate = message.rate
+                selectedFeeRate = message.v1
             }
 
             is SendFlowManagerReconcileMessage.UpdateFocusField -> {
-                presenter.focusField = message.field
+                presenter.focusField = message.v1
             }
 
             is SendFlowManagerReconcileMessage.SetAlert -> {
-                logWarn("setAlert: ${message.alertState}")
+                logWarn("setAlert: ${message.v1}")
 
                 // capture previous state before modifying
                 val hadSheet = presenter.sheetState != null
                 val hadAlert = presenter.alertState != null
 
-                presenter.alertState = TaggedItem(message.alertState)
+                presenter.alertState = TaggedItem(message.v1)
 
                 // handle alert/sheet conflict - delay only if there was a previous conflict
                 if (hadSheet || hadAlert) {
@@ -215,7 +213,7 @@ class SendFlowManager(
                     presenter.sheetState = null
                     mainScope.launch {
                         delay(600)
-                        presenter.alertState = TaggedItem(message.alertState)
+                        presenter.alertState = TaggedItem(message.v1)
                     }
                 }
             }
@@ -225,7 +223,7 @@ class SendFlowManager(
             }
 
             is SendFlowManagerReconcileMessage.SetMaxSelected -> {
-                maxSelected = message.maxSelected
+                maxSelected = message.v1
             }
 
             is SendFlowManagerReconcileMessage.UnsetMaxSelected -> {

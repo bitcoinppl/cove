@@ -32,17 +32,15 @@ class CoinControlManager(
     private val isClosed = AtomicBoolean(false)
 
     private var sort by mutableStateOf<CoinControlListSort?>(
-        CoinControlListSort.Date(SortOrder.DESCENDING),
+        CoinControlListSort.Date(ListSortDirection.DESCENDING),
     )
 
     var search by mutableStateOf("")
-        private set
 
     var totalSelected by mutableStateOf(Amount.fromSat(0u))
         private set
 
-    var selected by mutableStateOf<Set<String>>(emptySet())
-        private set
+    var selected by mutableStateOf<Set<OutPoint>>(emptySet())
 
     var utxos by mutableStateOf<List<Utxo>>(emptyList())
         private set
@@ -64,9 +62,9 @@ class CoinControlManager(
     }
 
     /**
-     * custom setter for search that dispatches notification
+     * update search and dispatch notification
      */
-    fun setSearch(value: String) {
+    fun updateSearch(value: String) {
         if (search != value) {
             dispatch(CoinControlManagerAction.NotifySearchChanged(value))
         }
@@ -74,9 +72,9 @@ class CoinControlManager(
     }
 
     /**
-     * custom setter for selected that dispatches notification
+     * update selected utxos and dispatch notification
      */
-    fun setSelected(value: Set<String>) {
+    fun updateSelected(value: Set<OutPoint>) {
         selected = value
         dispatch(CoinControlManagerAction.NotifySelectedUtxosChanged(value.toList()))
     }
@@ -107,9 +105,9 @@ class CoinControlManager(
     fun buttonArrow(key: CoinControlListSortKey): String? {
         return when (val presentation = rust.buttonPresentation(key)) {
             is ButtonPresentation.Selected -> {
-                when (presentation.order) {
-                    SortOrder.ASCENDING -> "arrow_upward"
-                    SortOrder.DESCENDING -> "arrow_downward"
+                when (presentation.v1) {
+                    ListSortDirection.ASCENDING -> "arrow_upward"
+                    ListSortDirection.DESCENDING -> "arrow_downward"
                 }
             }
             is ButtonPresentation.NotSelected -> null
@@ -131,7 +129,7 @@ class CoinControlManager(
         updateSendFlowManagerTask?.cancel()
         updateSendFlowManagerTask = null
 
-        val selectedUtxos = utxos.filter { selected.contains(it.id) }
+        val selectedUtxos = utxos.filter { selected.contains(it.outpoint) }
         sfm.dispatch(SendFlowManagerAction.SetCoinControlMode(selectedUtxos))
     }
 
@@ -142,7 +140,7 @@ class CoinControlManager(
             mainScope.launch {
                 delay(100)
                 if (!isActive) return@launch
-                val selectedUtxos = utxos.filter { selected.contains(it.id) }
+                val selectedUtxos = utxos.filter { selected.contains(it.outpoint) }
                 sfm.dispatch(SendFlowManagerAction.SetCoinControlMode(selectedUtxos))
             }
     }
@@ -150,7 +148,7 @@ class CoinControlManager(
     private fun apply(message: CoinControlManagerReconcileMessage) {
         when (message) {
             is CoinControlManagerReconcileMessage.UpdateSort -> {
-                sort = message.sort
+                sort = message.v1
             }
 
             is CoinControlManagerReconcileMessage.ClearSort -> {
@@ -158,26 +156,26 @@ class CoinControlManager(
             }
 
             is CoinControlManagerReconcileMessage.UpdateUtxos -> {
-                utxos = message.utxos
+                utxos = message.v1
             }
 
             is CoinControlManagerReconcileMessage.UpdateSearch -> {
-                search = message.search
+                search = message.v1
             }
 
             is CoinControlManagerReconcileMessage.UpdateSelectedUtxos -> {
                 updateSendFlowManager()
                 selected = message.utxos.toSet()
-                totalSelected = message.totalSelected
+                totalSelected = message.totalValue
             }
 
             is CoinControlManagerReconcileMessage.UpdateUnit -> {
-                unit = message.unit
+                unit = message.v1
             }
 
             is CoinControlManagerReconcileMessage.UpdateTotalSelectedAmount -> {
                 updateSendFlowManager()
-                totalSelected = message.amount
+                totalSelected = message.v1
             }
         }
     }

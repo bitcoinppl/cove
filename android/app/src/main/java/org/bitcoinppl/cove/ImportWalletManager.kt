@@ -2,6 +2,8 @@ package org.bitcoinppl.cove
 
 import android.util.Log
 import androidx.compose.runtime.Stable
+import org.bitcoinppl.cove_core.*
+import org.bitcoinppl.cove_core.types.*
 
 @Stable
 class ImportWalletManager : ImportWalletManagerReconciler {
