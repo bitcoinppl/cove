@@ -37,8 +37,15 @@ clean:
     rm -rf rust/target
 
 fmt:
+    just fmt-rust && just fmt-swift && just fmt-android
+
+fmt-rust:
     cd rust && cargo fmt --all
+
+fmt-swift:
     swiftformat . --swiftversion 6
+
+fmt-android:
     cd android && ./gradlew ktlintFormat 
 
 fix *flags="":
@@ -97,6 +104,9 @@ build-android-release:
 
 run-android: build-android
     bash scripts/run-android.sh
+
+compile-android:
+    cd android && ./gradlew assembleDebug
 
 # build ios
 build-ios profile="debug" device="false" sign="false":

@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 class SendFlowPresenter(
     val app: AppManager,
     val manager: WalletManager,
-):  Closeable {
+) : Closeable {
     private var disappearing: Boolean = false
 
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
