@@ -991,10 +991,6 @@ external fun uniffi_cove_checksum_func_default_node_selection(
 ): Short
 external fun uniffi_cove_checksum_func_default_wallet_colors(
 ): Short
-external fun uniffi_cove_checksum_func_ffi_min_send_amount(
-): Short
-external fun uniffi_cove_checksum_func_ffi_min_send_sats(
-): Short
 external fun uniffi_cove_checksum_func_fiat_amount_preview_new(
 ): Short
 external fun uniffi_cove_checksum_func_fiat_currency_emoji(
@@ -1026,10 +1022,6 @@ external fun uniffi_cove_checksum_func_node_selection_to_node(
 external fun uniffi_cove_checksum_func_number_of_words_in_groups(
 ): Short
 external fun uniffi_cove_checksum_func_number_of_words_to_word_count(
-): Short
-external fun uniffi_cove_checksum_func_preview_new_legacy_found_address(
-): Short
-external fun uniffi_cove_checksum_func_preview_new_wrapped_found_address(
 ): Short
 external fun uniffi_cove_checksum_func_prices_are_equal(
 ): Short
@@ -1072,6 +1064,8 @@ external fun uniffi_cove_checksum_func_wallet_metadata_is_equal(
 external fun uniffi_cove_checksum_func_wallet_metadata_preview(
 ): Short
 external fun uniffi_cove_checksum_func_wallet_state_is_equal(
+): Short
+external fun uniffi_cove_checksum_func_wallet_type_to_string(
 ): Short
 external fun uniffi_cove_checksum_method_authpin_check(
 ): Short
@@ -1812,10 +1806,10 @@ internal object UniffiLib {
         uniffiCallbackInterfaceSendFlowManagerReconciler.register(this)
         uniffiCallbackInterfaceTapcardTransportProtocol.register(this)
         uniffiCallbackInterfaceWalletManagerReconciler.register(this)
+        org.bitcoinppl.cove_core.tapcard.uniffiEnsureInitialized()
+        org.bitcoinppl.cove_core.device.uniffiEnsureInitialized()
         org.bitcoinppl.cove_core.types.uniffiEnsureInitialized()
         org.bitcoinppl.cove_core.nfc.uniffiEnsureInitialized()
-        org.bitcoinppl.cove_core.device.uniffiEnsureInitialized()
-        org.bitcoinppl.cove_core.tapcard.uniffiEnsureInitialized()
         
     }
     external fun uniffi_cove_fn_clone_addressargs(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -2858,10 +2852,6 @@ external fun uniffi_cove_fn_func_default_node_selection(uniffi_out_err: UniffiRu
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_func_default_wallet_colors(uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-external fun uniffi_cove_fn_func_ffi_min_send_amount(uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_fn_func_ffi_min_send_sats(uniffi_out_err: UniffiRustCallStatus, 
-): Long
 external fun uniffi_cove_fn_func_fiat_amount_preview_new(uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_func_fiat_currency_emoji(`fiatCurrency`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -2894,10 +2884,6 @@ external fun uniffi_cove_fn_func_number_of_words_in_groups(`me`: RustBuffer.ByVa
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_func_number_of_words_to_word_count(`me`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-external fun uniffi_cove_fn_func_preview_new_legacy_found_address(uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_fn_func_preview_new_wrapped_found_address(uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
 external fun uniffi_cove_fn_func_prices_are_equal(`lhs`: Long,`rhs`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
 external fun uniffi_cove_fn_func_string_or_data_try_into_multi_format(`stringOrData`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -2940,6 +2926,8 @@ external fun uniffi_cove_fn_func_wallet_metadata_preview(uniffi_out_err: UniffiR
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_func_wallet_state_is_equal(`lhs`: RustBuffer.ByValue,`rhs`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
+external fun uniffi_cove_fn_func_wallet_type_to_string(`walletType`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
 external fun ffi_cove_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun ffi_cove_rustbuffer_from_bytes(`bytes`: ForeignBytes.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -3080,12 +3068,6 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_func_default_wallet_colors() != 39034.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_func_ffi_min_send_amount() != 9250.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_func_ffi_min_send_sats() != 5524.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
     if (lib.uniffi_cove_checksum_func_fiat_amount_preview_new() != 6422.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -3132,12 +3114,6 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_number_of_words_to_word_count() != 24846.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_func_preview_new_legacy_found_address() != 36773.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_func_preview_new_wrapped_found_address() != 57500.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_prices_are_equal() != 41102.toShort()) {
@@ -3201,6 +3177,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_wallet_state_is_equal() != 27037.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_func_wallet_type_to_string() != 18258.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_authpin_check() != 17948.toShort()) {
@@ -42214,26 +42193,6 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
     )
     }
     
- fun `ffiMinSendAmount`(): Amount {
-            return FfiConverterTypeAmount.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_func_ffi_min_send_amount(
-    
-        _status)
-}
-    )
-    }
-    
- fun `ffiMinSendSats`(): kotlin.ULong {
-            return FfiConverterULong.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_func_ffi_min_send_sats(
-    
-        _status)
-}
-    )
-    }
-    
  fun `fiatAmountPreviewNew`(): FiatAmount {
             return FfiConverterTypeFiatAmount.lift(
     uniffiRustCall() { _status ->
@@ -42392,26 +42351,6 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
     UniffiLib.uniffi_cove_fn_func_number_of_words_to_word_count(
     
         FfiConverterTypeNumberOfBip39Words.lower(`me`),_status)
-}
-    )
-    }
-    
- fun `previewNewLegacyFoundAddress`(): FoundAddress {
-            return FfiConverterTypeFoundAddress.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_func_preview_new_legacy_found_address(
-    
-        _status)
-}
-    )
-    }
-    
- fun `previewNewWrappedFoundAddress`(): FoundAddress {
-            return FfiConverterTypeFoundAddress.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_func_preview_new_wrapped_found_address(
-    
-        _status)
 }
     )
     }
@@ -42628,6 +42567,16 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
     UniffiLib.uniffi_cove_fn_func_wallet_state_is_equal(
     
         FfiConverterTypeWalletLoadState.lower(`lhs`),FfiConverterTypeWalletLoadState.lower(`rhs`),_status)
+}
+    )
+    }
+    
+ fun `walletTypeToString`(`walletType`: WalletType): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_func_wallet_type_to_string(
+    
+        FfiConverterTypeWalletType.lower(`walletType`),_status)
 }
     )
     }

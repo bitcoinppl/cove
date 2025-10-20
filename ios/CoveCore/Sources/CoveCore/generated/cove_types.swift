@@ -1809,107 +1809,6 @@ public func FfiConverterTypeConfirmDetails_lower(_ value: ConfirmDetails) -> UIn
 
 
 
-public protocol InputOutputDetailsProtocol: AnyObject, Sendable {
-    
-}
-open class InputOutputDetails: InputOutputDetailsProtocol, @unchecked Sendable {
-    fileprivate let handle: UInt64
-
-    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public struct NoHandle {
-        public init() {}
-    }
-
-    // TODO: We'd like this to be `private` but for Swifty reasons,
-    // we can't implement `FfiConverter` without making this `required` and we can't
-    // make it `required` without making it `public`.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    required public init(unsafeFromHandle handle: UInt64) {
-        self.handle = handle
-    }
-
-    // This constructor can be used to instantiate a fake object.
-    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
-    //
-    // - Warning:
-    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public init(noHandle: NoHandle) {
-        self.handle = 0
-    }
-
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public func uniffiCloneHandle() -> UInt64 {
-        return try! rustCall { uniffi_cove_types_fn_clone_inputoutputdetails(self.handle, $0) }
-    }
-    // No primary constructor declared for this class.
-
-    deinit {
-        try! rustCall { uniffi_cove_types_fn_free_inputoutputdetails(handle, $0) }
-    }
-
-    
-
-    
-
-    
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeInputOutputDetails: FfiConverter {
-    typealias FfiType = UInt64
-    typealias SwiftType = InputOutputDetails
-
-    public static func lift(_ handle: UInt64) throws -> InputOutputDetails {
-        return InputOutputDetails(unsafeFromHandle: handle)
-    }
-
-    public static func lower(_ value: InputOutputDetails) -> UInt64 {
-        return value.uniffiCloneHandle()
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> InputOutputDetails {
-        let handle: UInt64 = try readInt(&buf)
-        return try lift(handle)
-    }
-
-    public static func write(_ value: InputOutputDetails, into buf: inout [UInt8]) {
-        writeInt(&buf, lower(value))
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeInputOutputDetails_lift(_ handle: UInt64) throws -> InputOutputDetails {
-    return try FfiConverterTypeInputOutputDetails.lift(handle)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeInputOutputDetails_lower(_ value: InputOutputDetails) -> UInt64 {
-    return FfiConverterTypeInputOutputDetails.lower(value)
-}
-
-
-
-
-
-
 public protocol FeeRateProtocol: AnyObject, Sendable {
     
     func satPerVb()  -> Float
@@ -2731,30 +2630,10 @@ public func FfiConverterTypeFeeRateOptionsWithTotalFee_lower(_ value: FeeRateOpt
 
 
 
-public protocol PsbtProtocol: AnyObject, Sendable {
-    
-    /**
-     * Total fee in sats.
-     */
-    func fee() throws  -> Amount
-    
-    /**
-     * Get total sending amount of all outputs
-     */
-    func outputTotalAmount()  -> Amount
-    
-    /**
-     * Get the transaction id of the unsigned transaction
-     */
-    func txId()  -> TxId
-    
-    /**
-     * The virtual size of the transaction.
-     */
-    func weight()  -> UInt64
+public protocol InputOutputDetailsProtocol: AnyObject, Sendable {
     
 }
-open class Psbt: PsbtProtocol, @unchecked Sendable {
+open class InputOutputDetails: InputOutputDetailsProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
 
     /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
@@ -2791,68 +2670,16 @@ open class Psbt: PsbtProtocol, @unchecked Sendable {
     @_documentation(visibility: private)
 #endif
     public func uniffiCloneHandle() -> UInt64 {
-        return try! rustCall { uniffi_cove_types_fn_clone_psbt(self.handle, $0) }
+        return try! rustCall { uniffi_cove_types_fn_clone_inputoutputdetails(self.handle, $0) }
     }
-public convenience init(data: Data)throws  {
-    let handle =
-        try rustCallWithError(FfiConverterTypePsbtError_lift) {
-    uniffi_cove_types_fn_constructor_psbt_new(
-        FfiConverterData.lower(data),$0
-    )
-}
-    self.init(unsafeFromHandle: handle)
-}
+    // No primary constructor declared for this class.
 
     deinit {
-        try! rustCall { uniffi_cove_types_fn_free_psbt(handle, $0) }
+        try! rustCall { uniffi_cove_types_fn_free_inputoutputdetails(handle, $0) }
     }
 
     
 
-    
-    /**
-     * Total fee in sats.
-     */
-open func fee()throws  -> Amount  {
-    return try  FfiConverterTypeAmount_lift(try rustCallWithError(FfiConverterTypePsbtError_lift) {
-    uniffi_cove_types_fn_method_psbt_fee(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
-    /**
-     * Get total sending amount of all outputs
-     */
-open func outputTotalAmount() -> Amount  {
-    return try!  FfiConverterTypeAmount_lift(try! rustCall() {
-    uniffi_cove_types_fn_method_psbt_output_total_amount(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
-    /**
-     * Get the transaction id of the unsigned transaction
-     */
-open func txId() -> TxId  {
-    return try!  FfiConverterTypeTxId_lift(try! rustCall() {
-    uniffi_cove_types_fn_method_psbt_tx_id(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
-    /**
-     * The virtual size of the transaction.
-     */
-open func weight() -> UInt64  {
-    return try!  FfiConverterUInt64.lift(try! rustCall() {
-    uniffi_cove_types_fn_method_psbt_weight(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
     
 
     
@@ -2862,24 +2689,24 @@ open func weight() -> UInt64  {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypePsbt: FfiConverter {
+public struct FfiConverterTypeInputOutputDetails: FfiConverter {
     typealias FfiType = UInt64
-    typealias SwiftType = Psbt
+    typealias SwiftType = InputOutputDetails
 
-    public static func lift(_ handle: UInt64) throws -> Psbt {
-        return Psbt(unsafeFromHandle: handle)
+    public static func lift(_ handle: UInt64) throws -> InputOutputDetails {
+        return InputOutputDetails(unsafeFromHandle: handle)
     }
 
-    public static func lower(_ value: Psbt) -> UInt64 {
+    public static func lower(_ value: InputOutputDetails) -> UInt64 {
         return value.uniffiCloneHandle()
     }
 
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Psbt {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> InputOutputDetails {
         let handle: UInt64 = try readInt(&buf)
         return try lift(handle)
     }
 
-    public static func write(_ value: Psbt, into buf: inout [UInt8]) {
+    public static func write(_ value: InputOutputDetails, into buf: inout [UInt8]) {
         writeInt(&buf, lower(value))
     }
 }
@@ -2888,15 +2715,15 @@ public struct FfiConverterTypePsbt: FfiConverter {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypePsbt_lift(_ handle: UInt64) throws -> Psbt {
-    return try FfiConverterTypePsbt.lift(handle)
+public func FfiConverterTypeInputOutputDetails_lift(_ handle: UInt64) throws -> InputOutputDetails {
+    return try FfiConverterTypeInputOutputDetails.lift(handle)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypePsbt_lower(_ value: Psbt) -> UInt64 {
-    return FfiConverterTypePsbt.lower(value)
+public func FfiConverterTypeInputOutputDetails_lower(_ value: InputOutputDetails) -> UInt64 {
+    return FfiConverterTypeInputOutputDetails.lower(value)
 }
 
 
@@ -3064,6 +2891,179 @@ public func FfiConverterTypeOutPoint_lift(_ handle: UInt64) throws -> OutPoint {
 #endif
 public func FfiConverterTypeOutPoint_lower(_ value: OutPoint) -> UInt64 {
     return FfiConverterTypeOutPoint.lower(value)
+}
+
+
+
+
+
+
+public protocol PsbtProtocol: AnyObject, Sendable {
+    
+    /**
+     * Total fee in sats.
+     */
+    func fee() throws  -> Amount
+    
+    /**
+     * Get total sending amount of all outputs
+     */
+    func outputTotalAmount()  -> Amount
+    
+    /**
+     * Get the transaction id of the unsigned transaction
+     */
+    func txId()  -> TxId
+    
+    /**
+     * The virtual size of the transaction.
+     */
+    func weight()  -> UInt64
+    
+}
+open class Psbt: PsbtProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_cove_types_fn_clone_psbt(self.handle, $0) }
+    }
+public convenience init(data: Data)throws  {
+    let handle =
+        try rustCallWithError(FfiConverterTypePsbtError_lift) {
+    uniffi_cove_types_fn_constructor_psbt_new(
+        FfiConverterData.lower(data),$0
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        try! rustCall { uniffi_cove_types_fn_free_psbt(handle, $0) }
+    }
+
+    
+
+    
+    /**
+     * Total fee in sats.
+     */
+open func fee()throws  -> Amount  {
+    return try  FfiConverterTypeAmount_lift(try rustCallWithError(FfiConverterTypePsbtError_lift) {
+    uniffi_cove_types_fn_method_psbt_fee(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+    /**
+     * Get total sending amount of all outputs
+     */
+open func outputTotalAmount() -> Amount  {
+    return try!  FfiConverterTypeAmount_lift(try! rustCall() {
+    uniffi_cove_types_fn_method_psbt_output_total_amount(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+    /**
+     * Get the transaction id of the unsigned transaction
+     */
+open func txId() -> TxId  {
+    return try!  FfiConverterTypeTxId_lift(try! rustCall() {
+    uniffi_cove_types_fn_method_psbt_tx_id(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+    /**
+     * The virtual size of the transaction.
+     */
+open func weight() -> UInt64  {
+    return try!  FfiConverterUInt64.lift(try! rustCall() {
+    uniffi_cove_types_fn_method_psbt_weight(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePsbt: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = Psbt
+
+    public static func lift(_ handle: UInt64) throws -> Psbt {
+        return Psbt(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: Psbt) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Psbt {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: Psbt, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePsbt_lift(_ handle: UInt64) throws -> Psbt {
+    return try FfiConverterTypePsbt.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePsbt_lower(_ value: Psbt) -> UInt64 {
+    return FfiConverterTypePsbt.lower(value)
 }
 
 
@@ -3698,6 +3698,66 @@ public func FfiConverterTypeUtxoList_lower(_ value: UtxoList) -> UInt64 {
 
 
 
+public struct AddressAndAmount {
+    public var label: String?
+    public var utxoType: UtxoType?
+    public var address: Address
+    public var amount: Amount
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(label: String?, utxoType: UtxoType?, address: Address, amount: Amount) {
+        self.label = label
+        self.utxoType = utxoType
+        self.address = address
+        self.amount = amount
+    }
+
+    
+}
+
+#if compiler(>=6)
+extension AddressAndAmount: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAddressAndAmount: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AddressAndAmount {
+        return
+            try AddressAndAmount(
+                label: FfiConverterOptionString.read(from: &buf), 
+                utxoType: FfiConverterOptionTypeUtxoType.read(from: &buf), 
+                address: FfiConverterTypeAddress.read(from: &buf), 
+                amount: FfiConverterTypeAmount.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: AddressAndAmount, into buf: inout [UInt8]) {
+        FfiConverterOptionString.write(value.label, into: &buf)
+        FfiConverterOptionTypeUtxoType.write(value.utxoType, into: &buf)
+        FfiConverterTypeAddress.write(value.address, into: &buf)
+        FfiConverterTypeAmount.write(value.amount, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAddressAndAmount_lift(_ buf: RustBuffer) throws -> AddressAndAmount {
+    return try FfiConverterTypeAddressAndAmount.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAddressAndAmount_lower(_ value: AddressAndAmount) -> RustBuffer {
+    return FfiConverterTypeAddressAndAmount.lower(value)
+}
+
+
 public struct AddressIndex: Equatable, Hashable {
     public var lastSeenIndex: UInt8
     public var addressListHash: UInt64
@@ -3855,66 +3915,6 @@ public func FfiConverterTypeRgb_lift(_ buf: RustBuffer) throws -> Rgb {
 #endif
 public func FfiConverterTypeRgb_lower(_ value: Rgb) -> RustBuffer {
     return FfiConverterTypeRgb.lower(value)
-}
-
-
-public struct AddressAndAmount {
-    public var label: String?
-    public var utxoType: UtxoType?
-    public var address: Address
-    public var amount: Amount
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(label: String?, utxoType: UtxoType?, address: Address, amount: Amount) {
-        self.label = label
-        self.utxoType = utxoType
-        self.address = address
-        self.amount = amount
-    }
-
-    
-}
-
-#if compiler(>=6)
-extension AddressAndAmount: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeAddressAndAmount: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AddressAndAmount {
-        return
-            try AddressAndAmount(
-                label: FfiConverterOptionString.read(from: &buf), 
-                utxoType: FfiConverterOptionTypeUtxoType.read(from: &buf), 
-                address: FfiConverterTypeAddress.read(from: &buf), 
-                amount: FfiConverterTypeAmount.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: AddressAndAmount, into buf: inout [UInt8]) {
-        FfiConverterOptionString.write(value.label, into: &buf)
-        FfiConverterOptionTypeUtxoType.write(value.utxoType, into: &buf)
-        FfiConverterTypeAddress.write(value.address, into: &buf)
-        FfiConverterTypeAmount.write(value.amount, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeAddressAndAmount_lift(_ buf: RustBuffer) throws -> AddressAndAmount {
-    return try FfiConverterTypeAddressAndAmount.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeAddressAndAmount_lower(_ value: AddressAndAmount) -> RustBuffer {
-    return FfiConverterTypeAddressAndAmount.lower(value)
 }
 
 
@@ -4178,6 +4178,317 @@ public func FfiConverterTypeAddressError_lower(_ value: AddressError) -> RustBuf
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum BitcoinUnit: Equatable, Hashable, CustomStringConvertible {
+    
+    case btc
+    case sat
+
+
+
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_types_fn_method_bitcoinunit_uniffi_trait_display(
+            FfiConverterTypeBitcoinUnit_lower(self),$0
+    )
+}
+    )
+}
+}
+
+#if compiler(>=6)
+extension BitcoinUnit: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBitcoinUnit: FfiConverterRustBuffer {
+    typealias SwiftType = BitcoinUnit
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BitcoinUnit {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .btc
+        
+        case 2: return .sat
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: BitcoinUnit, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .btc:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .sat:
+            writeInt(&buf, Int32(2))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBitcoinUnit_lift(_ buf: RustBuffer) throws -> BitcoinUnit {
+    return try FfiConverterTypeBitcoinUnit.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBitcoinUnit_lower(_ value: BitcoinUnit) -> RustBuffer {
+    return FfiConverterTypeBitcoinUnit.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum ColorSchemeSelection: Equatable, Hashable {
+    
+    case light
+    case dark
+    case system
+
+
+
+}
+
+#if compiler(>=6)
+extension ColorSchemeSelection: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeColorSchemeSelection: FfiConverterRustBuffer {
+    typealias SwiftType = ColorSchemeSelection
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ColorSchemeSelection {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .light
+        
+        case 2: return .dark
+        
+        case 3: return .system
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ColorSchemeSelection, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .light:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .dark:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .system:
+            writeInt(&buf, Int32(3))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeColorSchemeSelection_lift(_ buf: RustBuffer) throws -> ColorSchemeSelection {
+    return try FfiConverterTypeColorSchemeSelection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeColorSchemeSelection_lower(_ value: ColorSchemeSelection) -> RustBuffer {
+    return FfiConverterTypeColorSchemeSelection.lower(value)
+}
+
+
+
+public enum ConfirmDetailsError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
+
+    
+    
+    case QrCodeCreation(String
+    )
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
+}
+
+#if compiler(>=6)
+extension ConfirmDetailsError: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeConfirmDetailsError: FfiConverterRustBuffer {
+    typealias SwiftType = ConfirmDetailsError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ConfirmDetailsError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        
+
+        
+        case 1: return .QrCodeCreation(
+            try FfiConverterString.read(from: &buf)
+            )
+
+         default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ConfirmDetailsError, into buf: inout [UInt8]) {
+        switch value {
+
+        
+
+        
+        
+        case let .QrCodeCreation(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(v1, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeConfirmDetailsError_lift(_ buf: RustBuffer) throws -> ConfirmDetailsError {
+    return try FfiConverterTypeConfirmDetailsError.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeConfirmDetailsError_lower(_ value: ConfirmDetailsError) -> RustBuffer {
+    return FfiConverterTypeConfirmDetailsError.lower(value)
+}
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum FeeSpeed: Equatable, Hashable, CustomStringConvertible {
+    
+    case fast
+    case medium
+    case slow
+    case custom(durationMins: UInt32
+    )
+
+
+
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_types_fn_method_feespeed_uniffi_trait_display(
+            FfiConverterTypeFeeSpeed_lower(self),$0
+    )
+}
+    )
+}
+}
+
+#if compiler(>=6)
+extension FeeSpeed: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFeeSpeed: FfiConverterRustBuffer {
+    typealias SwiftType = FeeSpeed
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeeSpeed {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .fast
+        
+        case 2: return .medium
+        
+        case 3: return .slow
+        
+        case 4: return .custom(durationMins: try FfiConverterUInt32.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: FeeSpeed, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .fast:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .medium:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .slow:
+            writeInt(&buf, Int32(3))
+        
+        
+        case let .custom(durationMins):
+            writeInt(&buf, Int32(4))
+            FfiConverterUInt32.write(durationMins, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeeSpeed_lift(_ buf: RustBuffer) throws -> FeeSpeed {
+    return try FfiConverterTypeFeeSpeed.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeeSpeed_lower(_ value: FeeSpeed) -> RustBuffer {
+    return FfiConverterTypeFeeSpeed.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum FfiColor: Equatable, Hashable {
     
     case red(FfiOpacity
@@ -4350,78 +4661,6 @@ public func FfiConverterTypeFfiColor_lower(_ value: FfiColor) -> RustBuffer {
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum ColorSchemeSelection: Equatable, Hashable {
-    
-    case light
-    case dark
-    case system
-
-
-
-}
-
-#if compiler(>=6)
-extension ColorSchemeSelection: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeColorSchemeSelection: FfiConverterRustBuffer {
-    typealias SwiftType = ColorSchemeSelection
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ColorSchemeSelection {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-        
-        case 1: return .light
-        
-        case 2: return .dark
-        
-        case 3: return .system
-        
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: ColorSchemeSelection, into buf: inout [UInt8]) {
-        switch value {
-        
-        
-        case .light:
-            writeInt(&buf, Int32(1))
-        
-        
-        case .dark:
-            writeInt(&buf, Int32(2))
-        
-        
-        case .system:
-            writeInt(&buf, Int32(3))
-        
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeColorSchemeSelection_lift(_ buf: RustBuffer) throws -> ColorSchemeSelection {
-    return try FfiConverterTypeColorSchemeSelection.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeColorSchemeSelection_lower(_ value: ColorSchemeSelection) -> RustBuffer {
-    return FfiConverterTypeColorSchemeSelection.lower(value)
-}
-
-
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
-
 public enum FfiColorScheme: Equatable, Hashable {
     
     case light
@@ -4481,314 +4720,6 @@ public func FfiConverterTypeFfiColorScheme_lift(_ buf: RustBuffer) throws -> Ffi
 #endif
 public func FfiConverterTypeFfiColorScheme_lower(_ value: FfiColorScheme) -> RustBuffer {
     return FfiConverterTypeFfiColorScheme.lower(value)
-}
-
-
-
-public enum ConfirmDetailsError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
-
-    
-    
-    case QrCodeCreation(String
-    )
-
-    
-
-    
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-    
-}
-
-#if compiler(>=6)
-extension ConfirmDetailsError: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeConfirmDetailsError: FfiConverterRustBuffer {
-    typealias SwiftType = ConfirmDetailsError
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ConfirmDetailsError {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-
-        
-
-        
-        case 1: return .QrCodeCreation(
-            try FfiConverterString.read(from: &buf)
-            )
-
-         default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: ConfirmDetailsError, into buf: inout [UInt8]) {
-        switch value {
-
-        
-
-        
-        
-        case let .QrCodeCreation(v1):
-            writeInt(&buf, Int32(1))
-            FfiConverterString.write(v1, into: &buf)
-            
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeConfirmDetailsError_lift(_ buf: RustBuffer) throws -> ConfirmDetailsError {
-    return try FfiConverterTypeConfirmDetailsError.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeConfirmDetailsError_lower(_ value: ConfirmDetailsError) -> RustBuffer {
-    return FfiConverterTypeConfirmDetailsError.lower(value)
-}
-
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
-
-public enum FeeSpeed: Equatable, Hashable, CustomStringConvertible {
-    
-    case fast
-    case medium
-    case slow
-    case custom(durationMins: UInt32
-    )
-
-
-
-// The local Rust `Display` implementation.
-public var description: String {
-    return try!  FfiConverterString.lift(
-        try! rustCall() {
-    uniffi_cove_types_fn_method_feespeed_uniffi_trait_display(
-            FfiConverterTypeFeeSpeed_lower(self),$0
-    )
-}
-    )
-}
-}
-
-#if compiler(>=6)
-extension FeeSpeed: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeFeeSpeed: FfiConverterRustBuffer {
-    typealias SwiftType = FeeSpeed
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeeSpeed {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-        
-        case 1: return .fast
-        
-        case 2: return .medium
-        
-        case 3: return .slow
-        
-        case 4: return .custom(durationMins: try FfiConverterUInt32.read(from: &buf)
-        )
-        
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: FeeSpeed, into buf: inout [UInt8]) {
-        switch value {
-        
-        
-        case .fast:
-            writeInt(&buf, Int32(1))
-        
-        
-        case .medium:
-            writeInt(&buf, Int32(2))
-        
-        
-        case .slow:
-            writeInt(&buf, Int32(3))
-        
-        
-        case let .custom(durationMins):
-            writeInt(&buf, Int32(4))
-            FfiConverterUInt32.write(durationMins, into: &buf)
-            
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeFeeSpeed_lift(_ buf: RustBuffer) throws -> FeeSpeed {
-    return try FfiConverterTypeFeeSpeed.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeFeeSpeed_lower(_ value: FeeSpeed) -> RustBuffer {
-    return FfiConverterTypeFeeSpeed.lower(value)
-}
-
-
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
-
-public enum LockState: Equatable, Hashable {
-    
-    case locked
-    case unlocked
-
-
-
-}
-
-#if compiler(>=6)
-extension LockState: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeLockState: FfiConverterRustBuffer {
-    typealias SwiftType = LockState
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LockState {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-        
-        case 1: return .locked
-        
-        case 2: return .unlocked
-        
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: LockState, into buf: inout [UInt8]) {
-        switch value {
-        
-        
-        case .locked:
-            writeInt(&buf, Int32(1))
-        
-        
-        case .unlocked:
-            writeInt(&buf, Int32(2))
-        
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeLockState_lift(_ buf: RustBuffer) throws -> LockState {
-    return try FfiConverterTypeLockState.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeLockState_lower(_ value: LockState) -> RustBuffer {
-    return FfiConverterTypeLockState.lower(value)
-}
-
-
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
-
-public enum UnlockMode: Equatable, Hashable {
-    
-    case main
-    case decoy
-    case wipe
-    case locked
-
-
-
-}
-
-#if compiler(>=6)
-extension UnlockMode: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeUnlockMode: FfiConverterRustBuffer {
-    typealias SwiftType = UnlockMode
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UnlockMode {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-        
-        case 1: return .main
-        
-        case 2: return .decoy
-        
-        case 3: return .wipe
-        
-        case 4: return .locked
-        
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: UnlockMode, into buf: inout [UInt8]) {
-        switch value {
-        
-        
-        case .main:
-            writeInt(&buf, Int32(1))
-        
-        
-        case .decoy:
-            writeInt(&buf, Int32(2))
-        
-        
-        case .wipe:
-            writeInt(&buf, Int32(3))
-        
-        
-        case .locked:
-            writeInt(&buf, Int32(4))
-        
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeUnlockMode_lift(_ buf: RustBuffer) throws -> UnlockMode {
-    return try FfiConverterTypeUnlockMode.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeUnlockMode_lower(_ value: UnlockMode) -> RustBuffer {
-    return FfiConverterTypeUnlockMode.lower(value)
 }
 
 
@@ -4974,71 +4905,6 @@ public func FfiConverterTypePsbtError_lower(_ value: PsbtError) -> RustBuffer {
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum SortOrder: Equatable, Hashable {
-    
-    case ascending
-    case descending
-
-
-
-}
-
-#if compiler(>=6)
-extension SortOrder: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeSortOrder: FfiConverterRustBuffer {
-    typealias SwiftType = SortOrder
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SortOrder {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-        
-        case 1: return .ascending
-        
-        case 2: return .descending
-        
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: SortOrder, into buf: inout [UInt8]) {
-        switch value {
-        
-        
-        case .ascending:
-            writeInt(&buf, Int32(1))
-        
-        
-        case .descending:
-            writeInt(&buf, Int32(2))
-        
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeSortOrder_lift(_ buf: RustBuffer) throws -> SortOrder {
-    return try FfiConverterTypeSortOrder.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeSortOrder_lower(_ value: SortOrder) -> RustBuffer {
-    return FfiConverterTypeSortOrder.lower(value)
-}
-
-
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
-
 public enum TransactionDirection: Equatable, Hashable {
     
     case incoming
@@ -5098,71 +4964,6 @@ public func FfiConverterTypeTransactionDirection_lift(_ buf: RustBuffer) throws 
 #endif
 public func FfiConverterTypeTransactionDirection_lower(_ value: TransactionDirection) -> RustBuffer {
     return FfiConverterTypeTransactionDirection.lower(value)
-}
-
-
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
-
-public enum BitcoinUnit: Equatable, Hashable {
-    
-    case btc
-    case sat
-
-
-
-}
-
-#if compiler(>=6)
-extension BitcoinUnit: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeBitcoinUnit: FfiConverterRustBuffer {
-    typealias SwiftType = BitcoinUnit
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BitcoinUnit {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-        
-        case 1: return .btc
-        
-        case 2: return .sat
-        
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: BitcoinUnit, into buf: inout [UInt8]) {
-        switch value {
-        
-        
-        case .btc:
-            writeInt(&buf, Int32(1))
-        
-        
-        case .sat:
-            writeInt(&buf, Int32(2))
-        
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeBitcoinUnit_lift(_ buf: RustBuffer) throws -> BitcoinUnit {
-    return try FfiConverterTypeBitcoinUnit.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeBitcoinUnit_lower(_ value: BitcoinUnit) -> RustBuffer {
-    return FfiConverterTypeBitcoinUnit.lower(value)
 }
 
 
@@ -5405,6 +5206,31 @@ fileprivate struct FfiConverterSequenceTypeUtxo: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeBitcoinUnit: FfiConverterRustBuffer {
+    typealias SwiftType = [BitcoinUnit]
+
+    public static func write(_ value: [BitcoinUnit], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeBitcoinUnit.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [BitcoinUnit] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [BitcoinUnit]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeBitcoinUnit.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeColorSchemeSelection: FfiConverterRustBuffer {
     typealias SwiftType = [ColorSchemeSelection]
 
@@ -5447,31 +5273,6 @@ fileprivate struct FfiConverterSequenceTypeNetwork: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeNetwork.read(from: &buf))
-        }
-        return seq
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-fileprivate struct FfiConverterSequenceTypeBitcoinUnit: FfiConverterRustBuffer {
-    typealias SwiftType = [BitcoinUnit]
-
-    public static func write(_ value: [BitcoinUnit], into buf: inout [UInt8]) {
-        let len = Int32(value.count)
-        writeInt(&buf, len)
-        for item in value {
-            FfiConverterTypeBitcoinUnit.write(item, into: &buf)
-        }
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [BitcoinUnit] {
-        let len: Int32 = try readInt(&buf)
-        var seq = [BitcoinUnit]()
-        seq.reserveCapacity(Int(len))
-        for _ in 0 ..< len {
-            seq.append(try FfiConverterTypeBitcoinUnit.read(from: &buf))
         }
         return seq
     }
@@ -5591,6 +5392,18 @@ public func allColorSchemes() -> [ColorSchemeSelection]  {
     )
 })
 }
+public func allNetworks() -> [Network]  {
+    return try!  FfiConverterSequenceTypeNetwork.lift(try! rustCall() {
+    uniffi_cove_types_fn_func_all_networks($0
+    )
+})
+}
+public func allUnits() -> [BitcoinUnit]  {
+    return try!  FfiConverterSequenceTypeBitcoinUnit.lift(try! rustCall() {
+    uniffi_cove_types_fn_func_all_units($0
+    )
+})
+}
 public func colorSchemeSelectionCapitalizedString(colorScheme: ColorSchemeSelection) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_cove_types_fn_func_color_scheme_selection_capitalized_string(
@@ -5634,12 +5447,6 @@ public func feeSpeedToString(feeSpeed: FeeSpeed) -> String  {
     )
 })
 }
-public func allNetworks() -> [Network]  {
-    return try!  FfiConverterSequenceTypeNetwork.lift(try! rustCall() {
-    uniffi_cove_types_fn_func_all_networks($0
-    )
-})
-}
 public func networkToString(network: Network) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_cove_types_fn_func_network_to_string(
@@ -5647,9 +5454,11 @@ public func networkToString(network: Network) -> String  {
     )
 })
 }
-public func allUnits() -> [BitcoinUnit]  {
-    return try!  FfiConverterSequenceTypeBitcoinUnit.lift(try! rustCall() {
-    uniffi_cove_types_fn_func_all_units($0
+public func previewNewUtxoList(outputCount: UInt8, changeCount: UInt8) -> [Utxo]  {
+    return try!  FfiConverterSequenceTypeUtxo.lift(try! rustCall() {
+    uniffi_cove_types_fn_func_preview_new_utxo_list(
+        FfiConverterUInt8.lower(outputCount),
+        FfiConverterUInt8.lower(changeCount),$0
     )
 })
 }
@@ -5689,14 +5498,6 @@ public func utxoName(utxo: Utxo) -> String  {
     )
 })
 }
-public func previewNewUtxoList(outputCount: UInt8, changeCount: UInt8) -> [Utxo]  {
-    return try!  FfiConverterSequenceTypeUtxo.lift(try! rustCall() {
-    uniffi_cove_types_fn_func_preview_new_utxo_list(
-        FfiConverterUInt8.lower(outputCount),
-        FfiConverterUInt8.lower(changeCount),$0
-    )
-})
-}
 
 private enum InitializationResult {
     case ok
@@ -5713,358 +5514,358 @@ private let initializationResult: InitializationResult = {
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
-    if (uniffi_cove_types_checksum_func_address_is_valid() != 40004) {
+    if (uniffi_cove_types_checksum_func_address_is_valid() != 14595) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_func_address_is_valid_for_network() != 34573) {
+    if (uniffi_cove_types_checksum_func_address_is_valid_for_network() != 40110) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_func_address_string_spaced_out() != 27769) {
+    if (uniffi_cove_types_checksum_func_address_string_spaced_out() != 3722) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_func_all_color_schemes() != 49693) {
+    if (uniffi_cove_types_checksum_func_all_color_schemes() != 41794) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_func_color_scheme_selection_capitalized_string() != 30731) {
+    if (uniffi_cove_types_checksum_func_all_networks() != 39283) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_func_fee_rate_options_with_total_fee_is_equal() != 17627) {
+    if (uniffi_cove_types_checksum_func_all_units() != 5321) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_func_fee_speed_duration() != 51667) {
+    if (uniffi_cove_types_checksum_func_color_scheme_selection_capitalized_string() != 21781) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_func_fee_speed_is_custom() != 38261) {
+    if (uniffi_cove_types_checksum_func_fee_rate_options_with_total_fee_is_equal() != 28103) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_func_fee_speed_to_circle_color() != 20193) {
+    if (uniffi_cove_types_checksum_func_fee_speed_duration() != 9128) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_func_fee_speed_to_string() != 48606) {
+    if (uniffi_cove_types_checksum_func_fee_speed_is_custom() != 15411) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_func_all_networks() != 5848) {
+    if (uniffi_cove_types_checksum_func_fee_speed_to_circle_color() != 51678) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_func_network_to_string() != 16428) {
+    if (uniffi_cove_types_checksum_func_fee_speed_to_string() != 14557) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_func_all_units() != 35208) {
+    if (uniffi_cove_types_checksum_func_network_to_string() != 39809) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_func_unit_to_string() != 43944) {
+    if (uniffi_cove_types_checksum_func_preview_new_utxo_list() != 38611) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_func_utxo_date() != 26239) {
+    if (uniffi_cove_types_checksum_func_unit_to_string() != 13028) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_func_utxo_hash_to_uint() != 33471) {
+    if (uniffi_cove_types_checksum_func_utxo_date() != 4098) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_func_utxo_is_equal() != 34078) {
+    if (uniffi_cove_types_checksum_func_utxo_hash_to_uint() != 28817) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_func_utxo_name() != 48729) {
+    if (uniffi_cove_types_checksum_func_utxo_is_equal() != 4992) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_func_preview_new_utxo_list() != 32455) {
+    if (uniffi_cove_types_checksum_func_utxo_name() != 59798) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_address_hashtouint() != 25307) {
+    if (uniffi_cove_types_checksum_method_address_hashtouint() != 57811) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_address_spaced_out() != 7307) {
+    if (uniffi_cove_types_checksum_method_address_spaced_out() != 48577) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_address_string() != 24375) {
+    if (uniffi_cove_types_checksum_method_address_string() != 18040) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_address_unformatted() != 36743) {
+    if (uniffi_cove_types_checksum_method_address_unformatted() != 42481) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_addressinfo_address() != 18333) {
+    if (uniffi_cove_types_checksum_method_addressinfo_address() != 25247) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_addressinfo_address_unformatted() != 30474) {
+    if (uniffi_cove_types_checksum_method_addressinfo_address_unformatted() != 11638) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_addressinfo_index() != 1190) {
+    if (uniffi_cove_types_checksum_method_addressinfo_index() != 48719) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_addressinfowithderivation_address() != 22537) {
+    if (uniffi_cove_types_checksum_method_addressinfowithderivation_address() != 62901) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_addressinfowithderivation_address_spaced_out() != 2711) {
+    if (uniffi_cove_types_checksum_method_addressinfowithderivation_address_spaced_out() != 44817) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_addressinfowithderivation_address_unformatted() != 38193) {
+    if (uniffi_cove_types_checksum_method_addressinfowithderivation_address_unformatted() != 55763) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_addressinfowithderivation_derivation_path() != 62550) {
+    if (uniffi_cove_types_checksum_method_addressinfowithderivation_derivation_path() != 29713) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_addressinfowithderivation_index() != 40232) {
+    if (uniffi_cove_types_checksum_method_addressinfowithderivation_index() != 21738) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_addresswithnetwork_address() != 33829) {
+    if (uniffi_cove_types_checksum_method_addresswithnetwork_address() != 35941) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_addresswithnetwork_amount() != 15414) {
+    if (uniffi_cove_types_checksum_method_addresswithnetwork_amount() != 13991) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_addresswithnetwork_isvalidfornetwork() != 42219) {
+    if (uniffi_cove_types_checksum_method_addresswithnetwork_isvalidfornetwork() != 50452) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_addresswithnetwork_network() != 25441) {
+    if (uniffi_cove_types_checksum_method_addresswithnetwork_network() != 19521) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_amount_as_btc() != 12153) {
+    if (uniffi_cove_types_checksum_method_amount_as_btc() != 19021) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_amount_as_sats() != 8712) {
+    if (uniffi_cove_types_checksum_method_amount_as_sats() != 45064) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_amount_btc_string() != 40813) {
+    if (uniffi_cove_types_checksum_method_amount_btc_string() != 51350) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_amount_btc_string_with_unit() != 4146) {
+    if (uniffi_cove_types_checksum_method_amount_btc_string_with_unit() != 14319) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_amount_fmt_string() != 3973) {
+    if (uniffi_cove_types_checksum_method_amount_fmt_string() != 51437) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_amount_fmt_string_with_unit() != 64791) {
+    if (uniffi_cove_types_checksum_method_amount_fmt_string_with_unit() != 26917) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_amount_sats_string() != 46414) {
+    if (uniffi_cove_types_checksum_method_amount_sats_string() != 10854) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_amount_sats_string_with_unit() != 53544) {
+    if (uniffi_cove_types_checksum_method_amount_sats_string_with_unit() != 41252) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_confirmdetails_fee_percentage() != 7228) {
+    if (uniffi_cove_types_checksum_method_confirmdetails_fee_percentage() != 36424) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_confirmdetails_fee_rate() != 11989) {
+    if (uniffi_cove_types_checksum_method_confirmdetails_fee_rate() != 64136) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_confirmdetails_fee_total() != 14255) {
+    if (uniffi_cove_types_checksum_method_confirmdetails_fee_total() != 46798) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_confirmdetails_id() != 1448) {
+    if (uniffi_cove_types_checksum_method_confirmdetails_id() != 25703) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_confirmdetails_id_hash() != 43019) {
+    if (uniffi_cove_types_checksum_method_confirmdetails_id_hash() != 52978) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_confirmdetails_inputs() != 61203) {
+    if (uniffi_cove_types_checksum_method_confirmdetails_inputs() != 64636) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_confirmdetails_normalized_id() != 43735) {
+    if (uniffi_cove_types_checksum_method_confirmdetails_normalized_id() != 41475) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_confirmdetails_outputs() != 11686) {
+    if (uniffi_cove_types_checksum_method_confirmdetails_outputs() != 53367) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_confirmdetails_psbt() != 47244) {
+    if (uniffi_cove_types_checksum_method_confirmdetails_psbt() != 42998) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_confirmdetails_psbt_bytes() != 64298) {
+    if (uniffi_cove_types_checksum_method_confirmdetails_psbt_bytes() != 40387) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_confirmdetails_psbt_to_bbqr() != 44475) {
+    if (uniffi_cove_types_checksum_method_confirmdetails_psbt_to_bbqr() != 34024) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_confirmdetails_psbt_to_hex() != 28844) {
+    if (uniffi_cove_types_checksum_method_confirmdetails_psbt_to_hex() != 37877) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_confirmdetails_sending_amount() != 32253) {
+    if (uniffi_cove_types_checksum_method_confirmdetails_sending_amount() != 7338) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_confirmdetails_sending_to() != 38424) {
+    if (uniffi_cove_types_checksum_method_confirmdetails_sending_to() != 246) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_confirmdetails_spending_amount() != 58334) {
+    if (uniffi_cove_types_checksum_method_confirmdetails_spending_amount() != 57179) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_feerate_sat_per_vb() != 25940) {
+    if (uniffi_cove_types_checksum_method_feerate_sat_per_vb() != 37038) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_feerateoption_duration() != 37929) {
+    if (uniffi_cove_types_checksum_method_feerateoption_duration() != 2580) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_feerateoption_fee_rate() != 45273) {
+    if (uniffi_cove_types_checksum_method_feerateoption_fee_rate() != 12209) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_feerateoption_fee_speed() != 40949) {
+    if (uniffi_cove_types_checksum_method_feerateoption_fee_speed() != 30616) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_feerateoption_is_equal() != 33304) {
+    if (uniffi_cove_types_checksum_method_feerateoption_is_equal() != 37427) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_feerateoption_sat_per_vb() != 38044) {
+    if (uniffi_cove_types_checksum_method_feerateoption_sat_per_vb() != 26807) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_duration() != 34003) {
+    if (uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_duration() != 20795) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_fee_rate() != 46441) {
+    if (uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_fee_rate() != 14488) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_fee_rate_options() != 5569) {
+    if (uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_fee_rate_options() != 28190) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_fee_speed() != 51786) {
+    if (uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_fee_speed() != 10011) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_is_custom() != 33675) {
+    if (uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_is_custom() != 2457) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_is_equal() != 12772) {
+    if (uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_is_equal() != 188) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_sat_per_vb() != 61796) {
+    if (uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_sat_per_vb() != 10771) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_total_fee() != 47307) {
+    if (uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_total_fee() != 19319) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_feerateoptions_fast() != 53547) {
+    if (uniffi_cove_types_checksum_method_feerateoptions_fast() != 58050) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_feerateoptions_medium() != 44234) {
+    if (uniffi_cove_types_checksum_method_feerateoptions_medium() != 46514) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_feerateoptions_slow() != 52252) {
+    if (uniffi_cove_types_checksum_method_feerateoptions_slow() != 25223) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_add_custom_fee_rate() != 4884) {
+    if (uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_add_custom_fee_rate() != 8985) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_calculate_custom_fee_speed() != 37692) {
+    if (uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_calculate_custom_fee_speed() != 59236) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_custom() != 13008) {
+    if (uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_custom() != 1083) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_fast() != 50276) {
+    if (uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_fast() != 4059) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_fee_rate_options() != 44824) {
+    if (uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_fee_rate_options() != 49243) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_get_fee_rate_with() != 34987) {
+    if (uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_get_fee_rate_with() != 9780) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_medium() != 37448) {
+    if (uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_medium() != 49175) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_remove_custom_fee() != 54242) {
+    if (uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_remove_custom_fee() != 7542) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_slow() != 50247) {
+    if (uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_slow() != 41223) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_transaction_size() != 16234) {
+    if (uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_transaction_size() != 38410) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_psbt_fee() != 23286) {
+    if (uniffi_cove_types_checksum_method_outpoint_eq() != 21627) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_psbt_output_total_amount() != 21225) {
+    if (uniffi_cove_types_checksum_method_outpoint_hashtouint() != 32526) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_psbt_tx_id() != 3954) {
+    if (uniffi_cove_types_checksum_method_outpoint_txid() != 18444) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_psbt_weight() != 28925) {
+    if (uniffi_cove_types_checksum_method_outpoint_txid_str() != 20225) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_outpoint_eq() != 14112) {
+    if (uniffi_cove_types_checksum_method_outpoint_txn_link() != 4002) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_outpoint_hashtouint() != 51667) {
+    if (uniffi_cove_types_checksum_method_psbt_fee() != 64967) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_outpoint_txid() != 38543) {
+    if (uniffi_cove_types_checksum_method_psbt_output_total_amount() != 35605) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_outpoint_txid_str() != 43489) {
+    if (uniffi_cove_types_checksum_method_psbt_tx_id() != 2819) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_outpoint_txn_link() != 14032) {
+    if (uniffi_cove_types_checksum_method_psbt_weight() != 45133) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_sentandreceived_amount() != 64130) {
+    if (uniffi_cove_types_checksum_method_sentandreceived_amount() != 29531) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_sentandreceived_amount_fmt() != 34174) {
+    if (uniffi_cove_types_checksum_method_sentandreceived_amount_fmt() != 63143) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_sentandreceived_direction() != 54585) {
+    if (uniffi_cove_types_checksum_method_sentandreceived_direction() != 45513) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_sentandreceived_external_sent() != 46394) {
+    if (uniffi_cove_types_checksum_method_sentandreceived_external_sent() != 31349) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_sentandreceived_label() != 13733) {
+    if (uniffi_cove_types_checksum_method_sentandreceived_label() != 30415) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_sentandreceived_received() != 51331) {
+    if (uniffi_cove_types_checksum_method_sentandreceived_received() != 21592) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_sentandreceived_sent() != 46998) {
+    if (uniffi_cove_types_checksum_method_sentandreceived_sent() != 9820) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_txid_as_hash_string() != 7916) {
+    if (uniffi_cove_types_checksum_method_txid_as_hash_string() != 46331) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_constructor_address_from_string() != 58026) {
+    if (uniffi_cove_types_checksum_constructor_address_from_string() != 25852) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_constructor_address_preview_new() != 38108) {
+    if (uniffi_cove_types_checksum_constructor_address_preview_new() != 59780) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_constructor_address_random() != 40923) {
+    if (uniffi_cove_types_checksum_constructor_address_random() != 43251) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_constructor_addresswithnetwork_new() != 11084) {
+    if (uniffi_cove_types_checksum_constructor_addresswithnetwork_new() != 19636) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_constructor_amount_from_sat() != 32795) {
+    if (uniffi_cove_types_checksum_constructor_amount_from_sat() != 46692) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_constructor_amount_one_btc() != 13254) {
+    if (uniffi_cove_types_checksum_constructor_amount_one_btc() != 40476) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_constructor_amount_one_sat() != 27159) {
+    if (uniffi_cove_types_checksum_constructor_amount_one_sat() != 38530) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_constructor_confirmdetails_preview_new() != 53880) {
+    if (uniffi_cove_types_checksum_constructor_confirmdetails_preview_new() != 22957) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_constructor_feerate_from_sat_per_vb() != 23120) {
+    if (uniffi_cove_types_checksum_constructor_feerate_from_sat_per_vb() != 23381) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_constructor_feerateoption_new() != 46851) {
+    if (uniffi_cove_types_checksum_constructor_feerateoption_new() != 8797) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_constructor_feerateoptionwithtotalfee_new() != 48098) {
+    if (uniffi_cove_types_checksum_constructor_feerateoptionwithtotalfee_new() != 12642) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_constructor_feerateoptions_preview_new() != 37529) {
+    if (uniffi_cove_types_checksum_constructor_feerateoptions_preview_new() != 15683) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_constructor_feerateoptionswithtotalfee_preview_new() != 31377) {
+    if (uniffi_cove_types_checksum_constructor_feerateoptionswithtotalfee_preview_new() != 34906) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_constructor_psbt_new() != 33253) {
+    if (uniffi_cove_types_checksum_constructor_outpoint_preview_new() != 56715) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_constructor_outpoint_preview_new() != 58409) {
+    if (uniffi_cove_types_checksum_constructor_outpoint_with_vout() != 23992) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_constructor_outpoint_with_vout() != 46825) {
+    if (uniffi_cove_types_checksum_constructor_psbt_new() != 54693) {
         return InitializationResult.apiChecksumMismatch
     }
 

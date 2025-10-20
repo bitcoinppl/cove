@@ -711,7 +711,9 @@ impl Wallet {
     }
 
     #[uniffi::constructor]
-    pub fn new_from_export(export: Arc<crate::hardware_export::HardwareExport>) -> Result<Self, WalletError> {
+    pub fn new_from_export(
+        export: Arc<crate::hardware_export::HardwareExport>,
+    ) -> Result<Self, WalletError> {
         let export = Arc::unwrap_or_clone(export);
         Wallet::try_new_persisted_from_pubport(export.into_format())
     }
