@@ -43,7 +43,7 @@ fmt-rust:
     cd rust && cargo fmt --all
 
 fmt-swift:
-    swiftformat . --swiftversion 6
+    swiftformat ios --swiftversion 6
 
 fmt-android:
     cd android && ./gradlew ktlintFormat 
@@ -67,7 +67,7 @@ ci:
     just test
     cd rust && cargo clippy --all-targets --all-features -- -D warnings
     cd rust && cargo fmt --check
-    swiftformat --lint . --swiftversion 6
+    swiftformat --lint ios --swiftversion 6
     cd android && ./gradlew ktlintCheck
 
 xcode-reset:

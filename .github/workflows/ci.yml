@@ -30,7 +30,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: SwiftFormat
-        run: swiftformat --lint . --reporter github-actions-log --swiftversion 6 --exclude ios/CoveCore
+        run: swiftformat --lint ios --reporter github-actions-log --swiftversion 6
 
   ktlint:
     runs-on: ubuntu-latest
