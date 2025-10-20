@@ -4,7 +4,9 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
@@ -17,6 +19,9 @@ import java.util.UUID
 @Stable
 class AppManager private constructor() : FfiReconcile {
     private val tag = "AppManager"
+
+    // Scope for UI-bound work; reconcile() hops to Main here
+    private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     // rust bridge - not observable
     internal var rust: FfiApp = FfiApp()
@@ -279,78 +284,72 @@ class AppManager private constructor() : FfiReconcile {
 
     override fun reconcile(message: AppStateReconcileMessage) {
         logDebug("Reconcile: $message")
-
-        when (message) {
-            is AppStateReconcileMessage.RouteUpdated -> {
-                // create immutable copy so Compose detects change
-                router.updateRoutes(message.routes.toList())
-            }
-
-            is AppStateReconcileMessage.PushedRoute -> {
-                // create immutable copy so Compose detects change
-                val newRoutes = (router.routes + message.route).toList()
-                router.updateRoutes(newRoutes)
-            }
-
-            is AppStateReconcileMessage.DatabaseUpdated -> {
-                database = Database()
-            }
-
-            is AppStateReconcileMessage.ColorSchemeChanged -> {
-                colorSchemeSelection = message.colorSchemeSelection
-            }
-
-            is AppStateReconcileMessage.SelectedNodeChanged -> {
-                selectedNode = message.node
-            }
-
-            is AppStateReconcileMessage.SelectedNetworkChanged -> {
-                if (previousSelectedNetwork == null) {
-                    previousSelectedNetwork = selectedNetwork
+        // Ensure all Compose state mutations occur on Main
+        mainScope.launch {
+            when (message) {
+                is AppStateReconcileMessage.RouteUpdated -> {
+                    router.updateRoutes(message.routes.toList())
                 }
-                selectedNetwork = message.network
-            }
 
-            is AppStateReconcileMessage.DefaultRouteChanged -> {
-                router.default = message.route
-                // create immutable copy so Compose detects change
-                router.updateRoutes(message.nestedRoutes.toList())
-                routeId = UUID.randomUUID().toString()
-                logDebug("Route ID changed to: $routeId")
-            }
+                is AppStateReconcileMessage.PushedRoute -> {
+                    val newRoutes = (router.routes + message.route).toList()
+                    router.updateRoutes(newRoutes)
+                }
 
-            is AppStateReconcileMessage.FiatPricesChanged -> {
-                prices = message.prices
-            }
+                is AppStateReconcileMessage.DatabaseUpdated -> {
+                    database = Database()
+                }
 
-            is AppStateReconcileMessage.FeesChanged -> {
-                fees = message.fees
-            }
+                is AppStateReconcileMessage.ColorSchemeChanged -> {
+                    colorSchemeSelection = message.colorSchemeSelection
+                }
 
-            is AppStateReconcileMessage.FiatCurrencyChanged -> {
-                selectedFiatCurrency = message.fiatCurrency
+                is AppStateReconcileMessage.SelectedNodeChanged -> {
+                    selectedNode = message.node
+                }
 
-                // refresh fiat values in the wallet manager
-                walletManager?.let { wm ->
-                    // launch coroutine to update wallet balance
-                    kotlinx.coroutines.GlobalScope.launch {
-                        wm.forceWalletScan()
-                        wm.updateWalletBalance()
+                is AppStateReconcileMessage.SelectedNetworkChanged -> {
+                    if (previousSelectedNetwork == null) {
+                        previousSelectedNetwork = selectedNetwork
+                    }
+                    selectedNetwork = message.network
+                }
+
+                is AppStateReconcileMessage.DefaultRouteChanged -> {
+                    router.default = message.route
+                    router.updateRoutes(message.nestedRoutes.toList())
+                    routeId = UUID.randomUUID().toString()
+                    logDebug("Route ID changed to: $routeId")
+                }
+
+                is AppStateReconcileMessage.FiatPricesChanged -> {
+                    prices = message.prices
+                }
+
+                is AppStateReconcileMessage.FeesChanged -> {
+                    fees = message.fees
+                }
+
+                is AppStateReconcileMessage.FiatCurrencyChanged -> {
+                    selectedFiatCurrency = message.fiatCurrency
+
+                    // refresh fiat values in the wallet manager using IO
+                    walletManager?.let { wm ->
+                        launch(Dispatchers.IO) {
+                            wm.forceWalletScan()
+                            wm.updateWalletBalance()
+                        }
                     }
                 }
-            }
 
-            is AppStateReconcileMessage.AcceptedTerms -> {
-                isTermsAccepted = true
-            }
+                is AppStateReconcileMessage.AcceptedTerms -> {
+                    isTermsAccepted = true
+                }
 
-            is AppStateReconcileMessage.WalletModeChanged -> {
-                isLoading = true
-
-                // delay to show loading state briefly
-                kotlinx.coroutines.GlobalScope.launch {
-                    kotlinx.coroutines.delay(200)
-                    withContext(Dispatchers.Main) {
+                is AppStateReconcileMessage.WalletModeChanged -> {
+                    isLoading = true
+                    launch {
+                        kotlinx.coroutines.delay(200)
                         isLoading = false
                     }
                 }

@@ -5,12 +5,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.isActive
 
 /**
  * coin control manager - manages UTXO selection for send flow
@@ -21,6 +23,8 @@ class CoinControlManager(
     val rust: RustCoinControlManager,
 ) : CoinControlManagerReconciler {
     private val tag = "CoinControlManager"
+
+    private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     private var sort by mutableStateOf<CoinControlListSort?>(
         CoinControlListSort.Date(SortOrder.DESCENDING),
@@ -130,9 +134,9 @@ class CoinControlManager(
         val sfm = AppManager.getInstance().sendFlowManager ?: return
         updateSendFlowManagerTask?.cancel()
         updateSendFlowManagerTask =
-            GlobalScope.launch {
+            mainScope.launch {
                 delay(100)
-                if (!kotlinx.coroutines.isActive) return@launch
+                if (!isActive) return@launch
                 val selectedUtxos = utxos.filter { selected.contains(it.id) }
                 sfm.dispatch(SendFlowManagerAction.SetCoinControlMode(selectedUtxos))
             }
@@ -184,27 +188,17 @@ class CoinControlManager(
     }
 
     override fun reconcile(message: CoinControlManagerReconcileMessage) {
-        GlobalScope.launch(Dispatchers.IO) {
-            logDebug("reconcile: $message")
-            withContext(Dispatchers.Main) {
-                apply(message)
-            }
-        }
+        logDebug("reconcile: $message")
+        mainScope.launch { apply(message) }
     }
 
     override fun reconcileMany(messages: List<CoinControlManagerReconcileMessage>) {
-        GlobalScope.launch(Dispatchers.IO) {
-            logDebug("reconcile_messages: ${messages.size} messages")
-            withContext(Dispatchers.Main) {
-                messages.forEach { apply(it) }
-            }
-        }
+        logDebug("reconcile_messages: ${messages.size} messages")
+        mainScope.launch { messages.forEach { apply(it) } }
     }
 
     fun dispatch(action: CoinControlManagerAction) {
-        GlobalScope.launch(Dispatchers.IO) {
-            logDebug("dispatch: $action")
-            rust.dispatch(action)
-        }
+        logDebug("dispatch: $action")
+        mainScope.launch(Dispatchers.IO) { rust.dispatch(action) }
     }
 }

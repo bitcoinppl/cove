@@ -4,12 +4,14 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.isActive
 
 /**
  * send flow manager - manages send transaction flow state
@@ -21,6 +23,9 @@ class SendFlowManager(
     var presenter: SendFlowPresenter,
 ) : SendFlowManagerReconciler {
     private val tag = "SendFlowManager"
+
+    // Scope for UI-bound work; reconcile and UI updates run on Main
+    private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     val id: WalletId = rust.walletId()
 
@@ -198,11 +203,9 @@ class SendFlowManager(
                 if (presenter.sheetState != null || presenter.alertState != null) {
                     presenter.alertState = null
                     presenter.sheetState = null
-                    GlobalScope.launch {
+                    mainScope.launch {
                         delay(600)
-                        withContext(Dispatchers.Main) {
-                            presenter.alertState = TaggedItem(message.alertState)
-                        }
+                        presenter.alertState = TaggedItem(message.alertState)
                     }
                 }
             }
@@ -226,28 +229,18 @@ class SendFlowManager(
     }
 
     override fun reconcile(message: SendFlowManagerReconcileMessage) {
-        GlobalScope.launch(Dispatchers.IO) {
-            logDebug("reconcile: $message")
-            withContext(Dispatchers.Main) {
-                apply(message)
-            }
-        }
+        logDebug("reconcile: $message")
+        mainScope.launch { apply(message) }
     }
 
     override fun reconcileMany(messages: List<SendFlowManagerReconcileMessage>) {
-        GlobalScope.launch(Dispatchers.IO) {
-            logDebug("reconcile_messages: ${messages.size} messages")
-            withContext(Dispatchers.Main) {
-                messages.forEach { apply(it) }
-            }
-        }
+        logDebug("reconcile_messages: ${messages.size} messages")
+        mainScope.launch { messages.forEach { apply(it) } }
     }
 
     fun dispatch(action: SendFlowManagerAction) {
-        GlobalScope.launch(Dispatchers.IO) {
-            logDebug("dispatch: $action")
-            rust.dispatch(action)
-        }
+        logDebug("dispatch: $action")
+        mainScope.launch(Dispatchers.IO) { rust.dispatch(action) }
     }
 
     /**
@@ -266,9 +259,9 @@ class SendFlowManager(
         }
 
         debouncedTask =
-            GlobalScope.launch {
+            mainScope.launch {
                 delay(debounceDelayMs)
-                if (!kotlinx.coroutines.isActive) return@launch
+                if (!isActive) return@launch
                 dispatch(action)
             }
     }

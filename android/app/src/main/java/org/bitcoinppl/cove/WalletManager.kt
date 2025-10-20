@@ -5,7 +5,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -16,6 +18,8 @@ import kotlinx.coroutines.withContext
 @Stable
 class WalletManager : WalletManagerReconciler {
     private val tag = "WalletManager"
+
+    private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     val id: WalletId
     internal val rust: RustWalletManager
@@ -84,9 +88,7 @@ class WalletManager : WalletManagerReconciler {
         unsignedTransactions = runCatching { rust.getUnsignedTransactions() }.getOrElse { emptyList() }
 
         // start fiat balance update
-        kotlinx.coroutines.GlobalScope.launch {
-            updateFiatBalance()
-        }
+        mainScope.launch(Dispatchers.IO) { updateFiatBalance() }
 
         rust.listenForUpdates(this)
         logDebug("Initialized WalletManager for $id")
@@ -102,9 +104,7 @@ class WalletManager : WalletManagerReconciler {
         this.id = metadata.id
 
         // start fiat balance update
-        kotlinx.coroutines.GlobalScope.launch {
-            updateFiatBalance()
-        }
+        mainScope.launch(Dispatchers.IO) { updateFiatBalance() }
 
         rust.listenForUpdates(this)
         logDebug("Initialized WalletManager from xpub")
@@ -232,9 +232,7 @@ class WalletManager : WalletManagerReconciler {
             is WalletManagerReconcileMessage.WalletBalanceChanged -> {
                 balance = message.balance
                 // update fiat balance in background
-                kotlinx.coroutines.GlobalScope.launch {
-                    updateFiatBalance()
-                }
+                mainScope.launch(Dispatchers.IO) { updateFiatBalance() }
             }
 
             is WalletManagerReconcileMessage.UnsignedTransactionsChanged -> {
@@ -281,28 +279,18 @@ class WalletManager : WalletManagerReconciler {
     }
 
     override fun reconcile(message: WalletManagerReconcileMessage) {
-        kotlinx.coroutines.GlobalScope.launch(Dispatchers.IO) {
-            logDebug("reconcile: $message")
-            withContext(Dispatchers.Main) {
-                apply(message)
-            }
-        }
+        logDebug("reconcile: $message")
+        mainScope.launch { apply(message) }
     }
 
     override fun reconcileMany(messages: List<WalletManagerReconcileMessage>) {
-        kotlinx.coroutines.GlobalScope.launch(Dispatchers.IO) {
-            logDebug("reconcile_messages: ${messages.size} messages")
-            withContext(Dispatchers.Main) {
-                messages.forEach { apply(it) }
-            }
-        }
+        logDebug("reconcile_messages: ${messages.size} messages")
+        mainScope.launch { messages.forEach { apply(it) } }
     }
 
     fun dispatch(action: WalletManagerAction) {
-        kotlinx.coroutines.GlobalScope.launch(Dispatchers.IO) {
-            logDebug("dispatch: $action")
-            rust.dispatch(action)
-        }
+        logDebug("dispatch: $action")
+        mainScope.launch(Dispatchers.IO) { rust.dispatch(action) }
     }
 }
 

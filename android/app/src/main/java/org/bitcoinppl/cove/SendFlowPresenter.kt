@@ -3,8 +3,9 @@ package org.bitcoinppl.cove
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -18,6 +19,8 @@ class SendFlowPresenter(
     val manager: WalletManager,
 ) {
     private var disappearing: Boolean = false
+
+    private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     var focusField by mutableStateOf<SetAmountFocusField?>(null)
     var sheetState by mutableStateOf<TaggedItem<SheetState>?>(null)
@@ -46,11 +49,9 @@ class SendFlowPresenter(
 
     fun setDisappearing() {
         disappearing = true
-        GlobalScope.launch {
+        mainScope.launch {
             delay(500)
-            withContext(Dispatchers.Main) {
-                disappearing = false
-            }
+            disappearing = false
         }
     }
 

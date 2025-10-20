@@ -4,8 +4,9 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -18,6 +19,8 @@ class PendingWalletManager(
     numberOfWords: NumberOfBip39Words,
 ) : PendingWalletManagerReconciler {
     private val tag = "PendingWalletManager"
+
+    private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     val rust: RustPendingWalletManager = RustPendingWalletManager(numberOfWords)
 
@@ -38,23 +41,21 @@ class PendingWalletManager(
     }
 
     override fun reconcile(message: PendingWalletManagerReconcileMessage) {
-        GlobalScope.launch(Dispatchers.IO) {
-            logDebug("Reconcile: $message")
-            withContext(Dispatchers.Main) {
-                when (message) {
-                    is PendingWalletManagerReconcileMessage.Words -> {
-                        numberOfWords = message.numberOfBip39Words
-                        bip39Words = rust.bip39Words()
-                    }
+        logDebug("Reconcile: $message")
+        mainScope.launch {
+            when (message) {
+                is PendingWalletManagerReconcileMessage.Words -> {
+                    numberOfWords = message.numberOfBip39Words
+                    // Fetching words could be blocking; do it on IO then update on Main
+                    val words = withContext(Dispatchers.IO) { rust.bip39Words() }
+                    bip39Words = words
                 }
             }
         }
     }
 
     fun dispatch(action: PendingWalletManagerAction) {
-        GlobalScope.launch(Dispatchers.IO) {
-            logDebug("dispatch: $action")
-            rust.dispatch(action)
-        }
+        logDebug("dispatch: $action")
+        mainScope.launch(Dispatchers.IO) { rust.dispatch(action) }
     }
 }
