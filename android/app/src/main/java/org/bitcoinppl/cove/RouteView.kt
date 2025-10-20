@@ -54,7 +54,7 @@ fun RouteView(app: AppManager, route: Route) {
             LoadAndResetContainer(
                 app = app,
                 nextRoutes = route.resetTo.routes,
-                loadingTimeMs = route.afterMillis.toInt()
+                loadingTimeMs = route.afterMillis.toInt(),
             )
         }
     }
@@ -90,7 +90,7 @@ private fun NewWalletScreen(app: AppManager, route: NewWalletRoute) {
                 onBackClick = { app.popRoute() },
                 onImportSuccess = {
                     // TODO: navigate to wallet
-                }
+                },
             )
         }
         is NewWalletRoute.HotWallet -> {
@@ -156,7 +156,7 @@ private fun LoadingPlaceholder() {
 private fun LoadAndResetContainer(
     app: AppManager,
     nextRoutes: List<Route>,
-    loadingTimeMs: Int
+    loadingTimeMs: Int,
 ) {
     // show loading indicator
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

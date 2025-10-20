@@ -10,7 +10,7 @@ import androidx.compose.runtime.structuralEqualityPolicy
  * manages navigation state for the app
  */
 class RouterManager(
-    internal var ffiRouter: Router
+    internal var ffiRouter: Router,
 ) {
     // observable properties for Compose with structural equality to prevent feedback loops
     var default: Route by mutableStateOf(ffiRouter.default, structuralEqualityPolicy())
@@ -89,7 +89,7 @@ object RouteHelpers {
         id: WalletId,
         details: ConfirmDetails,
         signedTransaction: BitcoinTransaction? = null,
-        signedPsbt: Psbt? = null
+        signedPsbt: Psbt? = null,
     ): Route {
         return RouteFactory().sendConfirm(id, details, signedTransaction, signedPsbt)
     }

@@ -18,7 +18,7 @@ import kotlinx.coroutines.withContext
 @Stable
 class SendFlowManager(
     internal val rust: RustSendFlowManager,
-    var presenter: SendFlowPresenter
+    var presenter: SendFlowPresenter,
 ) : SendFlowManagerReconciler {
     private val tag = "SendFlowManager"
 
@@ -107,8 +107,8 @@ class SendFlowManager(
      */
     fun validate(displayAlert: Boolean = false): Boolean {
         return validateAmount(displayAlert) &&
-                validateAddress(displayAlert) &&
-                validateFeePercentage(displayAlert)
+            validateAddress(displayAlert) &&
+            validateFeePercentage(displayAlert)
     }
 
     fun validateAddress(displayAlert: Boolean = false): Boolean {
@@ -144,7 +144,7 @@ class SendFlowManager(
 
     suspend fun getNewCustomFeeRateWithTotal(
         feeRate: FeeRate,
-        feeSpeed: FeeSpeed
+        feeSpeed: FeeSpeed,
     ): FeeRateOptionWithTotalFee {
         return rust.getCustomFeeOption(feeRate, feeSpeed)
     }
@@ -255,7 +255,7 @@ class SendFlowManager(
      */
     fun debouncedDispatch(
         action: SendFlowManagerAction,
-        debounceDelayMs: Long = 66
+        debounceDelayMs: Long = 66,
     ) {
         debouncedTask?.cancel()
         debouncedTask = null
@@ -265,10 +265,11 @@ class SendFlowManager(
             return
         }
 
-        debouncedTask = GlobalScope.launch {
-            delay(debounceDelayMs)
-            if (!kotlinx.coroutines.isActive) return@launch
-            dispatch(action)
-        }
+        debouncedTask =
+            GlobalScope.launch {
+                delay(debounceDelayMs)
+                if (!kotlinx.coroutines.isActive) return@launch
+                dispatch(action)
+            }
     }
 }

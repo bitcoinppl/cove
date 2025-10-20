@@ -48,28 +48,31 @@ class WalletManager : WalletManagerReconciler {
 
     // computed properties
     val unit: String
-        get() = when (walletMetadata?.selectedUnit) {
-            Unit.BTC -> "btc"
-            Unit.SAT -> "sats"
-            else -> "sats"
-        }
+        get() =
+            when (walletMetadata?.selectedUnit) {
+                Unit.BTC -> "btc"
+                Unit.SAT -> "sats"
+                else -> "sats"
+            }
 
     val hasTransactions: Boolean
-        get() = when (loadState) {
-            is WalletLoadState.LOADING -> false
-            is WalletLoadState.SCANNING -> (loadState as WalletLoadState.SCANNING).txns.isNotEmpty()
-            is WalletLoadState.LOADED -> (loadState as WalletLoadState.LOADED).txns.isNotEmpty()
-        }
+        get() =
+            when (loadState) {
+                is WalletLoadState.LOADING -> false
+                is WalletLoadState.SCANNING -> (loadState as WalletLoadState.SCANNING).txns.isNotEmpty()
+                is WalletLoadState.LOADED -> (loadState as WalletLoadState.LOADED).txns.isNotEmpty()
+            }
 
     val isVerified: Boolean
         get() = walletMetadata?.verified ?: false
 
     val accentColor: Color
-        get() = walletMetadata?.let { metadata ->
-            // convert WalletColor to Compose Color
-            // TODO: implement proper color conversion from metadata.color
-            Color.Blue
-        } ?: Color.Blue
+        get() =
+            walletMetadata?.let { metadata ->
+                // convert WalletColor to Compose Color
+                // TODO: implement proper color conversion from metadata.color
+                Color.Blue
+            } ?: Color.Blue
 
     // primary constructor
     constructor(id: WalletId) {
@@ -213,12 +216,13 @@ class WalletManager : WalletManagerReconciler {
             }
 
             is WalletManagerReconcileMessage.UpdatedTransactions -> {
-                loadState = when (loadState) {
-                    is WalletLoadState.SCANNING, is WalletLoadState.LOADING ->
-                        WalletLoadState.SCANNING(message.txns)
-                    is WalletLoadState.LOADED ->
-                        WalletLoadState.LOADED(message.txns)
-                }
+                loadState =
+                    when (loadState) {
+                        is WalletLoadState.SCANNING, is WalletLoadState.LOADING ->
+                            WalletLoadState.SCANNING(message.txns)
+                        is WalletLoadState.LOADED ->
+                            WalletLoadState.LOADED(message.txns)
+                    }
             }
 
             is WalletManagerReconcileMessage.ScanComplete -> {
@@ -234,9 +238,10 @@ class WalletManager : WalletManagerReconciler {
             }
 
             is WalletManagerReconcileMessage.UnsignedTransactionsChanged -> {
-                unsignedTransactions = runCatching {
-                    rust.getUnsignedTransactions()
-                }.getOrElse { emptyList() }
+                unsignedTransactions =
+                    runCatching {
+                        rust.getUnsignedTransactions()
+                    }.getOrElse { emptyList() }
             }
 
             is WalletManagerReconcileMessage.WalletMetadataChanged -> {
@@ -307,6 +312,8 @@ class WalletManager : WalletManagerReconciler {
  */
 sealed class WalletLoadState {
     data object LOADING : WalletLoadState()
+
     data class SCANNING(val txns: List<Transaction>) : WalletLoadState()
+
     data class LOADED(val txns: List<Transaction>) : WalletLoadState()
 }

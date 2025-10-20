@@ -15,7 +15,7 @@ import kotlinx.coroutines.withContext
  */
 class SendFlowPresenter(
     val app: AppManager,
-    val manager: WalletManager
+    val manager: WalletManager,
 ) {
     private var disappearing: Boolean = false
 
@@ -31,6 +31,7 @@ class SendFlowPresenter(
      */
     sealed class SheetState {
         data object Qr : SheetState()
+
         data object Fee : SheetState()
 
         override fun equals(other: Any?): Boolean {
@@ -68,13 +69,16 @@ class SendFlowPresenter(
         return when (error) {
             is SendFlowError.EmptyAddress,
             is SendFlowError.InvalidAddress,
-            is SendFlowError.WrongNetwork -> "Invalid Address"
+            is SendFlowError.WrongNetwork,
+            -> "Invalid Address"
 
             is SendFlowError.InvalidNumber,
-            is SendFlowError.ZeroAmount -> "Invalid Amount"
+            is SendFlowError.ZeroAmount,
+            -> "Invalid Amount"
 
             is SendFlowError.InsufficientFunds,
-            is SendFlowError.NoBalance -> "Insufficient Funds"
+            is SendFlowError.NoBalance,
+            -> "Insufficient Funds"
 
             is SendFlowError.SendAmountToLow -> "Send Amount Too Low"
             is SendFlowError.UnableToGetFeeRate -> "Unable to get fee rate"
@@ -160,7 +164,8 @@ class SendFlowPresenter(
         return when (error) {
             is SendFlowError.EmptyAddress,
             is SendFlowError.WrongNetwork,
-            is SendFlowError.InvalidAddress -> {
+            is SendFlowError.InvalidAddress,
+            -> {
                 {
                     alertState = null
                     focusField = SetAmountFocusField.ADDRESS
@@ -183,7 +188,8 @@ class SendFlowPresenter(
             is SendFlowError.UnableToGetFeeRate,
             is SendFlowError.UnableToBuildTxn,
             is SendFlowError.UnableToSaveUnsignedTransaction,
-            is SendFlowError.UnableToGetMaxSend -> {
+            is SendFlowError.UnableToGetMaxSend,
+            -> {
                 {
                     focusField = SetAmountFocusField.AMOUNT
                     alertState = null
@@ -198,5 +204,5 @@ class SendFlowPresenter(
  */
 enum class SetAmountFocusField {
     ADDRESS,
-    AMOUNT
+    AMOUNT,
 }

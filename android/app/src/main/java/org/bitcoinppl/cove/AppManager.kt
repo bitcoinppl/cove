@@ -172,7 +172,6 @@ class AppManager private constructor() : FfiReconcile {
      * clears all cached data and reinitializes
      */
     fun reset() {
-        rust = FfiApp()
         database = Database()
         walletManager = null
         sendFlowManager = null

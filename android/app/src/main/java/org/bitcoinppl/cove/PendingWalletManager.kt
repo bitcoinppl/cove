@@ -15,7 +15,7 @@ import kotlinx.coroutines.withContext
  */
 @Stable
 class PendingWalletManager(
-    numberOfWords: NumberOfBip39Words
+    numberOfWords: NumberOfBip39Words,
 ) : PendingWalletManagerReconciler {
     private val tag = "PendingWalletManager"
 

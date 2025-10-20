@@ -18,12 +18,12 @@ import kotlinx.coroutines.withContext
  */
 @Stable
 class CoinControlManager(
-    val rust: RustCoinControlManager
+    val rust: RustCoinControlManager,
 ) : CoinControlManagerReconciler {
     private val tag = "CoinControlManager"
 
     private var sort by mutableStateOf<CoinControlListSort?>(
-        CoinControlListSort.Date(SortOrder.DESCENDING)
+        CoinControlListSort.Date(SortOrder.DESCENDING),
     )
 
     var search by mutableStateOf("")
@@ -129,12 +129,13 @@ class CoinControlManager(
     private fun updateSendFlowManager() {
         val sfm = AppManager.getInstance().sendFlowManager ?: return
         updateSendFlowManagerTask?.cancel()
-        updateSendFlowManagerTask = GlobalScope.launch {
-            delay(100)
-            if (!kotlinx.coroutines.isActive) return@launch
-            val selectedUtxos = utxos.filter { selected.contains(it.id) }
-            sfm.dispatch(SendFlowManagerAction.SetCoinControlMode(selectedUtxos))
-        }
+        updateSendFlowManagerTask =
+            GlobalScope.launch {
+                delay(100)
+                if (!kotlinx.coroutines.isActive) return@launch
+                val selectedUtxos = utxos.filter { selected.contains(it.id) }
+                sfm.dispatch(SendFlowManagerAction.SetCoinControlMode(selectedUtxos))
+            }
     }
 
     private fun apply(message: CoinControlManagerReconcileMessage) {
