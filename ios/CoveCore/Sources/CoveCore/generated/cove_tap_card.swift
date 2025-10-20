@@ -696,99 +696,6 @@ public func FfiConverterTypeSatsCard_lower(_ value: SatsCard) -> RustBuffer {
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum Field: Equatable, Hashable {
-    
-    case signature
-    case ident
-    case state
-    case nonce
-    case slotNumber
-    case address
-
-
-
-}
-
-#if compiler(>=6)
-extension Field: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeField: FfiConverterRustBuffer {
-    typealias SwiftType = Field
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Field {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-        
-        case 1: return .signature
-        
-        case 2: return .ident
-        
-        case 3: return .state
-        
-        case 4: return .nonce
-        
-        case 5: return .slotNumber
-        
-        case 6: return .address
-        
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: Field, into buf: inout [UInt8]) {
-        switch value {
-        
-        
-        case .signature:
-            writeInt(&buf, Int32(1))
-        
-        
-        case .ident:
-            writeInt(&buf, Int32(2))
-        
-        
-        case .state:
-            writeInt(&buf, Int32(3))
-        
-        
-        case .nonce:
-            writeInt(&buf, Int32(4))
-        
-        
-        case .slotNumber:
-            writeInt(&buf, Int32(5))
-        
-        
-        case .address:
-            writeInt(&buf, Int32(6))
-        
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeField_lift(_ buf: RustBuffer) throws -> Field {
-    return try FfiConverterTypeField.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeField_lower(_ value: Field) -> RustBuffer {
-    return FfiConverterTypeField.lower(value)
-}
-
-
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
-
 public enum SatsCardState: Equatable, Hashable {
     
     case sealed
@@ -929,6 +836,78 @@ public func FfiConverterTypeTapCard_lower(_ value: TapCard) -> RustBuffer {
 }
 
 
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum TapSignerState: Equatable, Hashable {
+    
+    case sealed
+    case unused
+    case error
+
+
+
+}
+
+#if compiler(>=6)
+extension TapSignerState: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTapSignerState: FfiConverterRustBuffer {
+    typealias SwiftType = TapSignerState
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TapSignerState {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .sealed
+        
+        case 2: return .unused
+        
+        case 3: return .error
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: TapSignerState, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .sealed:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .unused:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .error:
+            writeInt(&buf, Int32(3))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTapSignerState_lift(_ buf: RustBuffer) throws -> TapSignerState {
+    return try FfiConverterTypeTapSignerState.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTapSignerState_lower(_ value: TapSignerState) -> RustBuffer {
+    return FfiConverterTypeTapSignerState.lower(value)
+}
+
+
 
 public enum TapCardParseError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
@@ -1066,54 +1045,75 @@ public func FfiConverterTypeTapCardParseError_lower(_ value: TapCardParseError) 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum TapSignerState: Equatable, Hashable {
+public enum Field: Equatable, Hashable {
     
-    case sealed
-    case unused
-    case error
+    case signature
+    case ident
+    case state
+    case nonce
+    case slotNumber
+    case address
 
 
 
 }
 
 #if compiler(>=6)
-extension TapSignerState: Sendable {}
+extension Field: Sendable {}
 #endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypeTapSignerState: FfiConverterRustBuffer {
-    typealias SwiftType = TapSignerState
+public struct FfiConverterTypeField: FfiConverterRustBuffer {
+    typealias SwiftType = Field
 
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TapSignerState {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Field {
         let variant: Int32 = try readInt(&buf)
         switch variant {
         
-        case 1: return .sealed
+        case 1: return .signature
         
-        case 2: return .unused
+        case 2: return .ident
         
-        case 3: return .error
+        case 3: return .state
+        
+        case 4: return .nonce
+        
+        case 5: return .slotNumber
+        
+        case 6: return .address
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
-    public static func write(_ value: TapSignerState, into buf: inout [UInt8]) {
+    public static func write(_ value: Field, into buf: inout [UInt8]) {
         switch value {
         
         
-        case .sealed:
+        case .signature:
             writeInt(&buf, Int32(1))
         
         
-        case .unused:
+        case .ident:
             writeInt(&buf, Int32(2))
         
         
-        case .error:
+        case .state:
             writeInt(&buf, Int32(3))
+        
+        
+        case .nonce:
+            writeInt(&buf, Int32(4))
+        
+        
+        case .slotNumber:
+            writeInt(&buf, Int32(5))
+        
+        
+        case .address:
+            writeInt(&buf, Int32(6))
         
         }
     }
@@ -1123,15 +1123,15 @@ public struct FfiConverterTypeTapSignerState: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeTapSignerState_lift(_ buf: RustBuffer) throws -> TapSignerState {
-    return try FfiConverterTypeTapSignerState.lift(buf)
+public func FfiConverterTypeField_lift(_ buf: RustBuffer) throws -> Field {
+    return try FfiConverterTypeField.lift(buf)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeTapSignerState_lower(_ value: TapSignerState) -> RustBuffer {
-    return FfiConverterTypeTapSignerState.lower(value)
+public func FfiConverterTypeField_lower(_ value: Field) -> RustBuffer {
+    return FfiConverterTypeField.lower(value)
 }
 
 public func tapSignerPreviewNew(preview: Bool) -> TapSigner  {

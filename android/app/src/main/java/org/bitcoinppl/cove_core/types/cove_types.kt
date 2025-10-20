@@ -642,10 +642,6 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_types_checksum_func_all_color_schemes(
     ): Short
-    external fun uniffi_cove_types_checksum_func_all_networks(
-    ): Short
-    external fun uniffi_cove_types_checksum_func_all_units(
-    ): Short
     external fun uniffi_cove_types_checksum_func_color_scheme_selection_capitalized_string(
     ): Short
     external fun uniffi_cove_types_checksum_func_fee_rate_options_with_total_fee_is_equal(
@@ -656,9 +652,15 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_types_checksum_func_fee_speed_to_circle_color(
     ): Short
+    external fun uniffi_cove_types_checksum_func_fee_speed_to_string(
+    ): Short
+    external fun uniffi_cove_types_checksum_func_all_networks(
+    ): Short
     external fun uniffi_cove_types_checksum_func_network_to_string(
     ): Short
-    external fun uniffi_cove_types_checksum_func_preview_new_utxo_list(
+    external fun uniffi_cove_types_checksum_func_all_units(
+    ): Short
+    external fun uniffi_cove_types_checksum_func_unit_to_string(
     ): Short
     external fun uniffi_cove_types_checksum_func_utxo_date(
     ): Short
@@ -667,6 +669,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_types_checksum_func_utxo_is_equal(
     ): Short
     external fun uniffi_cove_types_checksum_func_utxo_name(
+    ): Short
+    external fun uniffi_cove_types_checksum_func_preview_new_utxo_list(
     ): Short
     external fun uniffi_cove_types_checksum_method_address_hashtouint(
     ): Short
@@ -800,6 +804,14 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_transaction_size(
     ): Short
+    external fun uniffi_cove_types_checksum_method_psbt_fee(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_psbt_output_total_amount(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_psbt_tx_id(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_psbt_weight(
+    ): Short
     external fun uniffi_cove_types_checksum_method_outpoint_eq(
     ): Short
     external fun uniffi_cove_types_checksum_method_outpoint_hashtouint(
@@ -809,14 +821,6 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_types_checksum_method_outpoint_txid_str(
     ): Short
     external fun uniffi_cove_types_checksum_method_outpoint_txn_link(
-    ): Short
-    external fun uniffi_cove_types_checksum_method_psbt_fee(
-    ): Short
-    external fun uniffi_cove_types_checksum_method_psbt_output_total_amount(
-    ): Short
-    external fun uniffi_cove_types_checksum_method_psbt_tx_id(
-    ): Short
-    external fun uniffi_cove_types_checksum_method_psbt_weight(
     ): Short
     external fun uniffi_cove_types_checksum_method_sentandreceived_amount(
     ): Short
@@ -860,11 +864,11 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_types_checksum_constructor_feerateoptionswithtotalfee_preview_new(
     ): Short
+    external fun uniffi_cove_types_checksum_constructor_psbt_new(
+    ): Short
     external fun uniffi_cove_types_checksum_constructor_outpoint_preview_new(
     ): Short
     external fun uniffi_cove_types_checksum_constructor_outpoint_with_vout(
-    ): Short
-    external fun uniffi_cove_types_checksum_constructor_psbt_new(
     ): Short
     external fun ffi_cove_types_uniffi_contract_version(
     ): Int
@@ -1012,6 +1016,10 @@ external fun uniffi_cove_types_fn_method_confirmdetails_sending_to(`ptr`: Long,u
 ): Long
 external fun uniffi_cove_types_fn_method_confirmdetails_spending_amount(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
+external fun uniffi_cove_types_fn_clone_inputoutputdetails(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Long
+external fun uniffi_cove_types_fn_free_inputoutputdetails(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
 external fun uniffi_cove_types_fn_clone_feerate(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
 external fun uniffi_cove_types_fn_free_feerate(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -1096,10 +1104,20 @@ external fun uniffi_cove_types_fn_method_feerateoptionswithtotalfee_slow(`ptr`: 
 ): Long
 external fun uniffi_cove_types_fn_method_feerateoptionswithtotalfee_transaction_size(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-external fun uniffi_cove_types_fn_clone_inputoutputdetails(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_clone_psbt(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-external fun uniffi_cove_types_fn_free_inputoutputdetails(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_free_psbt(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
+external fun uniffi_cove_types_fn_constructor_psbt_new(`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Long
+external fun uniffi_cove_types_fn_method_psbt_fee(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Long
+external fun uniffi_cove_types_fn_method_psbt_output_total_amount(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Long
+external fun uniffi_cove_types_fn_method_psbt_tx_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Long
+external fun uniffi_cove_types_fn_method_psbt_weight(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Long
 external fun uniffi_cove_types_fn_clone_outpoint(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
 external fun uniffi_cove_types_fn_free_outpoint(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -1118,20 +1136,6 @@ external fun uniffi_cove_types_fn_method_outpoint_txid_str(`ptr`: Long,uniffi_ou
 ): RustBuffer.ByValue
 external fun uniffi_cove_types_fn_method_outpoint_txn_link(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_clone_psbt(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_free_psbt(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Unit
-external fun uniffi_cove_types_fn_constructor_psbt_new(`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_psbt_fee(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_psbt_output_total_amount(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_psbt_tx_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_psbt_weight(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
 external fun uniffi_cove_types_fn_clone_sentandreceived(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
 external fun uniffi_cove_types_fn_free_sentandreceived(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -1178,8 +1182,6 @@ external fun uniffi_cove_types_fn_clone_utxolist(`handle`: Long,uniffi_out_err: 
 ): Long
 external fun uniffi_cove_types_fn_free_utxolist(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-external fun uniffi_cove_types_fn_method_bitcoinunit_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
 external fun uniffi_cove_types_fn_method_feespeed_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_types_fn_method_network_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -1198,10 +1200,6 @@ external fun uniffi_cove_types_fn_func_address_string_spaced_out(`address`: Rust
 ): RustBuffer.ByValue
 external fun uniffi_cove_types_fn_func_all_color_schemes(uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_func_all_networks(uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_func_all_units(uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
 external fun uniffi_cove_types_fn_func_color_scheme_selection_capitalized_string(`colorScheme`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_types_fn_func_fee_rate_options_with_total_fee_is_equal(`lhs`: Long,`rhs`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -1212,9 +1210,15 @@ external fun uniffi_cove_types_fn_func_fee_speed_is_custom(`feeSpeed`: RustBuffe
 ): Byte
 external fun uniffi_cove_types_fn_func_fee_speed_to_circle_color(`feeSpeed`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
+external fun uniffi_cove_types_fn_func_fee_speed_to_string(`feeSpeed`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_types_fn_func_all_networks(uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
 external fun uniffi_cove_types_fn_func_network_to_string(`network`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_func_preview_new_utxo_list(`outputCount`: Byte,`changeCount`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_types_fn_func_all_units(uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_types_fn_func_unit_to_string(`unit`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_types_fn_func_utxo_date(`utxo`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
@@ -1223,6 +1227,8 @@ external fun uniffi_cove_types_fn_func_utxo_hash_to_uint(`utxo`: RustBuffer.ByVa
 external fun uniffi_cove_types_fn_func_utxo_is_equal(`lhs`: RustBuffer.ByValue,`rhs`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
 external fun uniffi_cove_types_fn_func_utxo_name(`utxo`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_types_fn_func_preview_new_utxo_list(`outputCount`: Byte,`changeCount`: Byte,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun ffi_cove_types_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
@@ -1343,352 +1349,358 @@ private fun uniffiCheckContractApiVersion(lib: IntegrityCheckingUniffiLib) {
 }
 @Suppress("UNUSED_PARAMETER")
 private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
-    if (lib.uniffi_cove_types_checksum_func_address_is_valid() != 14595.toShort()) {
+    if (lib.uniffi_cove_types_checksum_func_address_is_valid() != 40004.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_func_address_is_valid_for_network() != 40110.toShort()) {
+    if (lib.uniffi_cove_types_checksum_func_address_is_valid_for_network() != 34573.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_func_address_string_spaced_out() != 3722.toShort()) {
+    if (lib.uniffi_cove_types_checksum_func_address_string_spaced_out() != 27769.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_func_all_color_schemes() != 41794.toShort()) {
+    if (lib.uniffi_cove_types_checksum_func_all_color_schemes() != 49693.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_func_all_networks() != 39283.toShort()) {
+    if (lib.uniffi_cove_types_checksum_func_color_scheme_selection_capitalized_string() != 30731.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_func_all_units() != 5321.toShort()) {
+    if (lib.uniffi_cove_types_checksum_func_fee_rate_options_with_total_fee_is_equal() != 17627.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_func_color_scheme_selection_capitalized_string() != 21781.toShort()) {
+    if (lib.uniffi_cove_types_checksum_func_fee_speed_duration() != 51667.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_func_fee_rate_options_with_total_fee_is_equal() != 28103.toShort()) {
+    if (lib.uniffi_cove_types_checksum_func_fee_speed_is_custom() != 38261.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_func_fee_speed_duration() != 9128.toShort()) {
+    if (lib.uniffi_cove_types_checksum_func_fee_speed_to_circle_color() != 20193.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_func_fee_speed_is_custom() != 15411.toShort()) {
+    if (lib.uniffi_cove_types_checksum_func_fee_speed_to_string() != 48606.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_func_fee_speed_to_circle_color() != 51678.toShort()) {
+    if (lib.uniffi_cove_types_checksum_func_all_networks() != 5848.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_func_network_to_string() != 39809.toShort()) {
+    if (lib.uniffi_cove_types_checksum_func_network_to_string() != 16428.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_func_preview_new_utxo_list() != 38611.toShort()) {
+    if (lib.uniffi_cove_types_checksum_func_all_units() != 35208.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_func_utxo_date() != 4098.toShort()) {
+    if (lib.uniffi_cove_types_checksum_func_unit_to_string() != 43944.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_func_utxo_hash_to_uint() != 28817.toShort()) {
+    if (lib.uniffi_cove_types_checksum_func_utxo_date() != 26239.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_func_utxo_is_equal() != 4992.toShort()) {
+    if (lib.uniffi_cove_types_checksum_func_utxo_hash_to_uint() != 33471.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_func_utxo_name() != 59798.toShort()) {
+    if (lib.uniffi_cove_types_checksum_func_utxo_is_equal() != 34078.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_address_hashtouint() != 57811.toShort()) {
+    if (lib.uniffi_cove_types_checksum_func_utxo_name() != 48729.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_address_spaced_out() != 48577.toShort()) {
+    if (lib.uniffi_cove_types_checksum_func_preview_new_utxo_list() != 32455.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_address_string() != 18040.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_address_hashtouint() != 25307.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_address_unformatted() != 42481.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_address_spaced_out() != 7307.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_addressinfo_address() != 25247.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_address_string() != 24375.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_addressinfo_address_unformatted() != 11638.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_address_unformatted() != 36743.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_addressinfo_index() != 48719.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_addressinfo_address() != 18333.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_addressinfowithderivation_address() != 62901.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_addressinfo_address_unformatted() != 30474.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_addressinfowithderivation_address_spaced_out() != 44817.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_addressinfo_index() != 1190.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_addressinfowithderivation_address_unformatted() != 55763.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_addressinfowithderivation_address() != 22537.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_addressinfowithderivation_derivation_path() != 29713.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_addressinfowithderivation_address_spaced_out() != 2711.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_addressinfowithderivation_index() != 21738.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_addressinfowithderivation_address_unformatted() != 38193.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_addresswithnetwork_address() != 35941.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_addressinfowithderivation_derivation_path() != 62550.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_addresswithnetwork_amount() != 13991.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_addressinfowithderivation_index() != 40232.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_addresswithnetwork_isvalidfornetwork() != 50452.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_addresswithnetwork_address() != 33829.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_addresswithnetwork_network() != 19521.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_addresswithnetwork_amount() != 15414.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_amount_as_btc() != 19021.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_addresswithnetwork_isvalidfornetwork() != 42219.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_amount_as_sats() != 45064.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_addresswithnetwork_network() != 25441.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_amount_btc_string() != 51350.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_amount_as_btc() != 12153.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_amount_btc_string_with_unit() != 14319.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_amount_as_sats() != 8712.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_amount_fmt_string() != 51437.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_amount_btc_string() != 40813.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_amount_fmt_string_with_unit() != 26917.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_amount_btc_string_with_unit() != 4146.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_amount_sats_string() != 10854.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_amount_fmt_string() != 3973.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_amount_sats_string_with_unit() != 41252.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_amount_fmt_string_with_unit() != 64791.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_confirmdetails_fee_percentage() != 36424.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_amount_sats_string() != 46414.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_confirmdetails_fee_rate() != 64136.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_amount_sats_string_with_unit() != 53544.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_confirmdetails_fee_total() != 46798.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_confirmdetails_fee_percentage() != 7228.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_confirmdetails_id() != 25703.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_confirmdetails_fee_rate() != 11989.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_confirmdetails_id_hash() != 52978.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_confirmdetails_fee_total() != 14255.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_confirmdetails_inputs() != 64636.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_confirmdetails_id() != 1448.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_confirmdetails_normalized_id() != 41475.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_confirmdetails_id_hash() != 43019.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_confirmdetails_outputs() != 53367.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_confirmdetails_inputs() != 61203.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_confirmdetails_psbt() != 42998.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_confirmdetails_normalized_id() != 43735.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_confirmdetails_psbt_bytes() != 40387.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_confirmdetails_outputs() != 11686.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_confirmdetails_psbt_to_bbqr() != 34024.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_confirmdetails_psbt() != 47244.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_confirmdetails_psbt_to_hex() != 37877.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_confirmdetails_psbt_bytes() != 64298.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_confirmdetails_sending_amount() != 7338.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_confirmdetails_psbt_to_bbqr() != 44475.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_confirmdetails_sending_to() != 246.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_confirmdetails_psbt_to_hex() != 28844.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_confirmdetails_spending_amount() != 57179.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_confirmdetails_sending_amount() != 32253.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_feerate_sat_per_vb() != 37038.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_confirmdetails_sending_to() != 38424.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_feerateoption_duration() != 2580.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_confirmdetails_spending_amount() != 58334.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_feerateoption_fee_rate() != 12209.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_feerate_sat_per_vb() != 25940.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_feerateoption_fee_speed() != 30616.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_feerateoption_duration() != 37929.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_feerateoption_is_equal() != 37427.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_feerateoption_fee_rate() != 45273.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_feerateoption_sat_per_vb() != 26807.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_feerateoption_fee_speed() != 40949.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_duration() != 20795.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_feerateoption_is_equal() != 33304.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_fee_rate() != 14488.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_feerateoption_sat_per_vb() != 38044.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_fee_rate_options() != 28190.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_duration() != 34003.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_fee_speed() != 10011.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_fee_rate() != 46441.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_is_custom() != 2457.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_fee_rate_options() != 5569.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_is_equal() != 188.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_fee_speed() != 51786.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_sat_per_vb() != 10771.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_is_custom() != 33675.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_total_fee() != 19319.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_is_equal() != 12772.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_feerateoptions_fast() != 58050.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_sat_per_vb() != 61796.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_feerateoptions_medium() != 46514.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_total_fee() != 47307.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_feerateoptions_slow() != 25223.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_feerateoptions_fast() != 53547.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_add_custom_fee_rate() != 8985.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_feerateoptions_medium() != 44234.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_calculate_custom_fee_speed() != 59236.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_feerateoptions_slow() != 52252.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_custom() != 1083.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_add_custom_fee_rate() != 4884.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_fast() != 4059.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_calculate_custom_fee_speed() != 37692.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_fee_rate_options() != 49243.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_custom() != 13008.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_get_fee_rate_with() != 9780.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_fast() != 50276.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_medium() != 49175.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_fee_rate_options() != 44824.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_remove_custom_fee() != 7542.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_get_fee_rate_with() != 34987.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_slow() != 41223.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_medium() != 37448.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_transaction_size() != 38410.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_remove_custom_fee() != 54242.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_outpoint_eq() != 21627.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_slow() != 50247.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_outpoint_hashtouint() != 32526.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_transaction_size() != 16234.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_outpoint_txid() != 18444.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_psbt_fee() != 23286.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_outpoint_txid_str() != 20225.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_psbt_output_total_amount() != 21225.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_outpoint_txn_link() != 4002.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_psbt_tx_id() != 3954.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_psbt_fee() != 64967.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_psbt_weight() != 28925.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_psbt_output_total_amount() != 35605.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_outpoint_eq() != 14112.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_psbt_tx_id() != 2819.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_outpoint_hashtouint() != 51667.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_psbt_weight() != 45133.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_outpoint_txid() != 38543.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_sentandreceived_amount() != 29531.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_outpoint_txid_str() != 43489.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_sentandreceived_amount_fmt() != 63143.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_outpoint_txn_link() != 14032.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_sentandreceived_direction() != 45513.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_sentandreceived_amount() != 64130.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_sentandreceived_external_sent() != 31349.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_sentandreceived_amount_fmt() != 34174.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_sentandreceived_label() != 30415.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_sentandreceived_direction() != 54585.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_sentandreceived_received() != 21592.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_sentandreceived_external_sent() != 46394.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_sentandreceived_sent() != 9820.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_sentandreceived_label() != 13733.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_txid_as_hash_string() != 46331.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_sentandreceived_received() != 51331.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_constructor_address_from_string() != 25852.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_sentandreceived_sent() != 46998.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_constructor_address_preview_new() != 59780.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_txid_as_hash_string() != 7916.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_constructor_address_random() != 43251.toShort()) {
+    if (lib.uniffi_cove_types_checksum_constructor_address_from_string() != 58026.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_constructor_addresswithnetwork_new() != 19636.toShort()) {
+    if (lib.uniffi_cove_types_checksum_constructor_address_preview_new() != 38108.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_constructor_amount_from_sat() != 46692.toShort()) {
+    if (lib.uniffi_cove_types_checksum_constructor_address_random() != 40923.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_constructor_amount_one_btc() != 40476.toShort()) {
+    if (lib.uniffi_cove_types_checksum_constructor_addresswithnetwork_new() != 11084.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_constructor_amount_one_sat() != 38530.toShort()) {
+    if (lib.uniffi_cove_types_checksum_constructor_amount_from_sat() != 32795.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_constructor_confirmdetails_preview_new() != 22957.toShort()) {
+    if (lib.uniffi_cove_types_checksum_constructor_amount_one_btc() != 13254.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_constructor_feerate_from_sat_per_vb() != 23381.toShort()) {
+    if (lib.uniffi_cove_types_checksum_constructor_amount_one_sat() != 27159.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_constructor_feerateoption_new() != 8797.toShort()) {
+    if (lib.uniffi_cove_types_checksum_constructor_confirmdetails_preview_new() != 53880.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_constructor_feerateoptionwithtotalfee_new() != 12642.toShort()) {
+    if (lib.uniffi_cove_types_checksum_constructor_feerate_from_sat_per_vb() != 23120.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_constructor_feerateoptions_preview_new() != 15683.toShort()) {
+    if (lib.uniffi_cove_types_checksum_constructor_feerateoption_new() != 46851.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_constructor_feerateoptionswithtotalfee_preview_new() != 34906.toShort()) {
+    if (lib.uniffi_cove_types_checksum_constructor_feerateoptionwithtotalfee_new() != 48098.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_constructor_outpoint_preview_new() != 56715.toShort()) {
+    if (lib.uniffi_cove_types_checksum_constructor_feerateoptions_preview_new() != 37529.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_constructor_outpoint_with_vout() != 23992.toShort()) {
+    if (lib.uniffi_cove_types_checksum_constructor_feerateoptionswithtotalfee_preview_new() != 31377.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_constructor_psbt_new() != 54693.toShort()) {
+    if (lib.uniffi_cove_types_checksum_constructor_psbt_new() != 33253.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_types_checksum_constructor_outpoint_preview_new() != 58409.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_types_checksum_constructor_outpoint_with_vout() != 46825.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
 }
@@ -4566,6 +4578,242 @@ public object FfiConverterTypeConfirmDetails: FfiConverter<ConfirmDetails, Long>
 
 
 //
+public interface InputOutputDetailsInterface {
+    
+    companion object
+}
+
+open class InputOutputDetails: Disposable, AutoCloseable, InputOutputDetailsInterface
+{
+
+    @Suppress("UNUSED_PARAMETER")
+    /**
+     * @suppress
+     */
+    constructor(withHandle: UniffiWithHandle, handle: Long) {
+        this.handle = handle
+        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
+    }
+
+    /**
+     * @suppress
+     *
+     * This constructor can be used to instantiate a fake object. Only used for tests. Any
+     * attempt to actually use an object constructed this way will fail as there is no
+     * connected Rust object.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    constructor(noHandle: NoHandle) {
+        this.handle = 0
+        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
+    }
+
+    protected val handle: Long
+    protected val cleanable: UniffiCleaner.Cleanable
+
+    private val wasDestroyed = AtomicBoolean(false)
+    private val callCounter = AtomicLong(1)
+
+    override fun destroy() {
+        // Only allow a single call to this method.
+        // TODO: maybe we should log a warning if called more than once?
+        if (this.wasDestroyed.compareAndSet(false, true)) {
+            // This decrement always matches the initial count of 1 given at creation time.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable.clean()
+            }
+        }
+    }
+
+    @Synchronized
+    override fun close() {
+        this.destroy()
+    }
+
+    internal inline fun <R> callWithHandle(block: (handle: Long) -> R): R {
+        // Check and increment the call counter, to keep the object alive.
+        // This needs a compare-and-set retry loop in case of concurrent updates.
+        do {
+            val c = this.callCounter.get()
+            if (c == 0L) {
+                throw IllegalStateException("${this.javaClass.simpleName} object has already been destroyed")
+            }
+            if (c == Long.MAX_VALUE) {
+                throw IllegalStateException("${this.javaClass.simpleName} call counter would overflow")
+            }
+        } while (! this.callCounter.compareAndSet(c, c + 1L))
+        // Now we can safely do the method call without the handle being freed concurrently.
+        try {
+            return block(this.uniffiCloneHandle())
+        } finally {
+            // This decrement always matches the increment we performed above.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable.clean()
+            }
+        }
+    }
+
+    // Use a static inner class instead of a closure so as not to accidentally
+    // capture `this` as part of the cleanable's action.
+    private class UniffiCleanAction(private val handle: Long) : Runnable {
+        override fun run() {
+            if (handle == 0.toLong()) {
+                // Fake object created with `NoHandle`, don't try to free.
+                return;
+            }
+            uniffiRustCall { status ->
+                UniffiLib.uniffi_cove_types_fn_free_inputoutputdetails(handle, status)
+            }
+        }
+    }
+
+    /**
+     * @suppress
+     */
+    fun uniffiCloneHandle(): Long {
+        if (handle == 0.toLong()) {
+            throw InternalException("uniffiCloneHandle() called on NoHandle object");
+        }
+        return uniffiRustCall() { status ->
+            UniffiLib.uniffi_cove_types_fn_clone_inputoutputdetails(handle, status)
+        }
+    }
+
+    
+
+    
+
+
+    
+    
+    /**
+     * @suppress
+     */
+    companion object
+    
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeInputOutputDetails: FfiConverter<InputOutputDetails, Long> {
+    override fun lower(value: InputOutputDetails): Long {
+        return value.uniffiCloneHandle()
+    }
+
+    override fun lift(value: Long): InputOutputDetails {
+        return InputOutputDetails(UniffiWithHandle, value)
+    }
+
+    override fun read(buf: ByteBuffer): InputOutputDetails {
+        return lift(buf.getLong())
+    }
+
+    override fun allocationSize(value: InputOutputDetails) = 8UL
+
+    override fun write(value: InputOutputDetails, buf: ByteBuffer) {
+        buf.putLong(lower(value))
+    }
+}
+
+
+// This template implements a class for working with a Rust struct via a handle
+// to the live Rust struct on the other side of the FFI.
+//
+// There's some subtlety here, because we have to be careful not to operate on a Rust
+// struct after it has been dropped, and because we must expose a public API for freeing
+// theq Kotlin wrapper object in lieu of reliable finalizers. The core requirements are:
+//
+//   * Each instance holds an opaque handle to the underlying Rust struct.
+//     Method calls need to read this handle from the object's state and pass it in to
+//     the Rust FFI.
+//
+//   * When an instance is no longer needed, its handle should be passed to a
+//     special destructor function provided by the Rust FFI, which will drop the
+//     underlying Rust struct.
+//
+//   * Given an instance, calling code is expected to call the special
+//     `destroy` method in order to free it after use, either by calling it explicitly
+//     or by using a higher-level helper like the `use` method. Failing to do so risks
+//     leaking the underlying Rust struct.
+//
+//   * We can't assume that calling code will do the right thing, and must be prepared
+//     to handle Kotlin method calls executing concurrently with or even after a call to
+//     `destroy`, and to handle multiple (possibly concurrent!) calls to `destroy`.
+//
+//   * We must never allow Rust code to operate on the underlying Rust struct after
+//     the destructor has been called, and must never call the destructor more than once.
+//     Doing so may trigger memory unsafety.
+//
+//   * To mitigate many of the risks of leaking memory and use-after-free unsafety, a `Cleaner`
+//     is implemented to call the destructor when the Kotlin object becomes unreachable.
+//     This is done in a background thread. This is not a panacea, and client code should be aware that
+//      1. the thread may starve if some there are objects that have poorly performing
+//     `drop` methods or do significant work in their `drop` methods.
+//      2. the thread is shared across the whole library. This can be tuned by using `android_cleaner = true`,
+//         or `android = true` in the [`kotlin` section of the `uniffi.toml` file](https://mozilla.github.io/uniffi-rs/kotlin/configuration.html).
+//
+// If we try to implement this with mutual exclusion on access to the handle, there is the
+// possibility of a race between a method call and a concurrent call to `destroy`:
+//
+//    * Thread A starts a method call, reads the value of the handle, but is interrupted
+//      before it can pass the handle over the FFI to Rust.
+//    * Thread B calls `destroy` and frees the underlying Rust struct.
+//    * Thread A resumes, passing the already-read handle value to Rust and triggering
+//      a use-after-free.
+//
+// One possible solution would be to use a `ReadWriteLock`, with each method call taking
+// a read lock (and thus allowed to run concurrently) and the special `destroy` method
+// taking a write lock (and thus blocking on live method calls). However, we aim not to
+// generate methods with any hidden blocking semantics, and a `destroy` method that might
+// block if called incorrectly seems to meet that bar.
+//
+// So, we achieve our goals by giving each instance an associated `AtomicLong` counter to track
+// the number of in-flight method calls, and an `AtomicBoolean` flag to indicate whether `destroy`
+// has been called. These are updated according to the following rules:
+//
+//    * The initial value of the counter is 1, indicating a live object with no in-flight calls.
+//      The initial value for the flag is false.
+//
+//    * At the start of each method call, we atomically check the counter.
+//      If it is 0 then the underlying Rust struct has already been destroyed and the call is aborted.
+//      If it is nonzero them we atomically increment it by 1 and proceed with the method call.
+//
+//    * At the end of each method call, we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+//    * When `destroy` is called, we atomically flip the flag from false to true.
+//      If the flag was already true we silently fail.
+//      Otherwise we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+// Astute readers may observe that this all sounds very similar to the way that Rust's `Arc<T>` works,
+// and indeed it is, with the addition of a flag to guard against multiple calls to `destroy`.
+//
+// The overall effect is that the underlying Rust struct is destroyed only when `destroy` has been
+// called *and* all in-flight method calls have completed, avoiding violating any of the expectations
+// of the underlying Rust code.
+//
+// This makes a cleaner a better alternative to _not_ calling `destroy()` as
+// and when the object is finished with, but the abstraction is not perfect: if the Rust object's `drop`
+// method is slow, and/or there are many objects to cleanup, and it's on a low end Android device, then the cleaner
+// thread may be starved, and the app will leak memory.
+//
+// In this case, `destroy`ing manually may be a better solution.
+//
+// The cleaner can live side by side with the manual calling of `destroy`. In the order of responsiveness, uniffi objects
+// with Rust peers are reclaimed:
+//
+// 1. By calling the `destroy` method of the object, which calls `rustObject.free()`. If that doesn't happen:
+// 2. When the object becomes unreachable, AND the Cleaner thread gets to call `rustObject.free()`. If the thread is starved then:
+// 3. The memory is reclaimed when the process terminates.
+//
+// [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
+//
+
+
+//
 public interface FeeRateInterface {
     
     fun `satPerVb`(): kotlin.Float
@@ -6194,12 +6442,32 @@ public object FfiConverterTypeFeeRateOptionsWithTotalFee: FfiConverter<FeeRateOp
 
 
 //
-public interface InputOutputDetailsInterface {
+public interface PsbtInterface {
+    
+    /**
+     * Total fee in sats.
+     */
+    fun `fee`(): Amount
+    
+    /**
+     * Get total sending amount of all outputs
+     */
+    fun `outputTotalAmount`(): Amount
+    
+    /**
+     * Get the transaction id of the unsigned transaction
+     */
+    fun `txId`(): TxId
+    
+    /**
+     * The virtual size of the transaction.
+     */
+    fun `weight`(): kotlin.ULong
     
     companion object
 }
 
-open class InputOutputDetails: Disposable, AutoCloseable, InputOutputDetailsInterface
+open class Psbt: Disposable, AutoCloseable, PsbtInterface
 {
 
     @Suppress("UNUSED_PARAMETER")
@@ -6223,6 +6491,14 @@ open class InputOutputDetails: Disposable, AutoCloseable, InputOutputDetailsInte
         this.handle = 0
         this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
     }
+    constructor(`data`: kotlin.ByteArray) :
+        this(UniffiWithHandle, 
+    uniffiRustCallWithError(PsbtException) { _status ->
+    UniffiLib.uniffi_cove_types_fn_constructor_psbt_new(
+    
+        FfiConverterByteArray.lower(`data`),_status)
+}
+    )
 
     protected val handle: Long
     protected val cleanable: UniffiCleaner.Cleanable
@@ -6278,7 +6554,7 @@ open class InputOutputDetails: Disposable, AutoCloseable, InputOutputDetailsInte
                 return;
             }
             uniffiRustCall { status ->
-                UniffiLib.uniffi_cove_types_fn_free_inputoutputdetails(handle, status)
+                UniffiLib.uniffi_cove_types_fn_free_psbt(handle, status)
             }
         }
     }
@@ -6291,9 +6567,74 @@ open class InputOutputDetails: Disposable, AutoCloseable, InputOutputDetailsInte
             throw InternalException("uniffiCloneHandle() called on NoHandle object");
         }
         return uniffiRustCall() { status ->
-            UniffiLib.uniffi_cove_types_fn_clone_inputoutputdetails(handle, status)
+            UniffiLib.uniffi_cove_types_fn_clone_psbt(handle, status)
         }
     }
+
+    
+    /**
+     * Total fee in sats.
+     */
+    @Throws(PsbtException::class)override fun `fee`(): Amount {
+            return FfiConverterTypeAmount.lift(
+    callWithHandle {
+    uniffiRustCallWithError(PsbtException) { _status ->
+    UniffiLib.uniffi_cove_types_fn_method_psbt_fee(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Get total sending amount of all outputs
+     */override fun `outputTotalAmount`(): Amount {
+            return FfiConverterTypeAmount.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_types_fn_method_psbt_output_total_amount(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Get the transaction id of the unsigned transaction
+     */override fun `txId`(): TxId {
+            return FfiConverterTypeTxId.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_types_fn_method_psbt_tx_id(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * The virtual size of the transaction.
+     */override fun `weight`(): kotlin.ULong {
+            return FfiConverterULong.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_types_fn_method_psbt_weight(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
 
     
 
@@ -6313,22 +6654,22 @@ open class InputOutputDetails: Disposable, AutoCloseable, InputOutputDetailsInte
 /**
  * @suppress
  */
-public object FfiConverterTypeInputOutputDetails: FfiConverter<InputOutputDetails, Long> {
-    override fun lower(value: InputOutputDetails): Long {
+public object FfiConverterTypePsbt: FfiConverter<Psbt, Long> {
+    override fun lower(value: Psbt): Long {
         return value.uniffiCloneHandle()
     }
 
-    override fun lift(value: Long): InputOutputDetails {
-        return InputOutputDetails(UniffiWithHandle, value)
+    override fun lift(value: Long): Psbt {
+        return Psbt(UniffiWithHandle, value)
     }
 
-    override fun read(buf: ByteBuffer): InputOutputDetails {
+    override fun read(buf: ByteBuffer): Psbt {
         return lift(buf.getLong())
     }
 
-    override fun allocationSize(value: InputOutputDetails) = 8UL
+    override fun allocationSize(value: Psbt) = 8UL
 
-    override fun write(value: InputOutputDetails, buf: ByteBuffer) {
+    override fun write(value: Psbt, buf: ByteBuffer) {
         buf.putLong(lower(value))
     }
 }
@@ -6660,335 +7001,6 @@ public object FfiConverterTypeOutPoint: FfiConverter<OutPoint, Long> {
     override fun allocationSize(value: OutPoint) = 8UL
 
     override fun write(value: OutPoint, buf: ByteBuffer) {
-        buf.putLong(lower(value))
-    }
-}
-
-
-// This template implements a class for working with a Rust struct via a handle
-// to the live Rust struct on the other side of the FFI.
-//
-// There's some subtlety here, because we have to be careful not to operate on a Rust
-// struct after it has been dropped, and because we must expose a public API for freeing
-// theq Kotlin wrapper object in lieu of reliable finalizers. The core requirements are:
-//
-//   * Each instance holds an opaque handle to the underlying Rust struct.
-//     Method calls need to read this handle from the object's state and pass it in to
-//     the Rust FFI.
-//
-//   * When an instance is no longer needed, its handle should be passed to a
-//     special destructor function provided by the Rust FFI, which will drop the
-//     underlying Rust struct.
-//
-//   * Given an instance, calling code is expected to call the special
-//     `destroy` method in order to free it after use, either by calling it explicitly
-//     or by using a higher-level helper like the `use` method. Failing to do so risks
-//     leaking the underlying Rust struct.
-//
-//   * We can't assume that calling code will do the right thing, and must be prepared
-//     to handle Kotlin method calls executing concurrently with or even after a call to
-//     `destroy`, and to handle multiple (possibly concurrent!) calls to `destroy`.
-//
-//   * We must never allow Rust code to operate on the underlying Rust struct after
-//     the destructor has been called, and must never call the destructor more than once.
-//     Doing so may trigger memory unsafety.
-//
-//   * To mitigate many of the risks of leaking memory and use-after-free unsafety, a `Cleaner`
-//     is implemented to call the destructor when the Kotlin object becomes unreachable.
-//     This is done in a background thread. This is not a panacea, and client code should be aware that
-//      1. the thread may starve if some there are objects that have poorly performing
-//     `drop` methods or do significant work in their `drop` methods.
-//      2. the thread is shared across the whole library. This can be tuned by using `android_cleaner = true`,
-//         or `android = true` in the [`kotlin` section of the `uniffi.toml` file](https://mozilla.github.io/uniffi-rs/kotlin/configuration.html).
-//
-// If we try to implement this with mutual exclusion on access to the handle, there is the
-// possibility of a race between a method call and a concurrent call to `destroy`:
-//
-//    * Thread A starts a method call, reads the value of the handle, but is interrupted
-//      before it can pass the handle over the FFI to Rust.
-//    * Thread B calls `destroy` and frees the underlying Rust struct.
-//    * Thread A resumes, passing the already-read handle value to Rust and triggering
-//      a use-after-free.
-//
-// One possible solution would be to use a `ReadWriteLock`, with each method call taking
-// a read lock (and thus allowed to run concurrently) and the special `destroy` method
-// taking a write lock (and thus blocking on live method calls). However, we aim not to
-// generate methods with any hidden blocking semantics, and a `destroy` method that might
-// block if called incorrectly seems to meet that bar.
-//
-// So, we achieve our goals by giving each instance an associated `AtomicLong` counter to track
-// the number of in-flight method calls, and an `AtomicBoolean` flag to indicate whether `destroy`
-// has been called. These are updated according to the following rules:
-//
-//    * The initial value of the counter is 1, indicating a live object with no in-flight calls.
-//      The initial value for the flag is false.
-//
-//    * At the start of each method call, we atomically check the counter.
-//      If it is 0 then the underlying Rust struct has already been destroyed and the call is aborted.
-//      If it is nonzero them we atomically increment it by 1 and proceed with the method call.
-//
-//    * At the end of each method call, we atomically decrement and check the counter.
-//      If it has reached zero then we destroy the underlying Rust struct.
-//
-//    * When `destroy` is called, we atomically flip the flag from false to true.
-//      If the flag was already true we silently fail.
-//      Otherwise we atomically decrement and check the counter.
-//      If it has reached zero then we destroy the underlying Rust struct.
-//
-// Astute readers may observe that this all sounds very similar to the way that Rust's `Arc<T>` works,
-// and indeed it is, with the addition of a flag to guard against multiple calls to `destroy`.
-//
-// The overall effect is that the underlying Rust struct is destroyed only when `destroy` has been
-// called *and* all in-flight method calls have completed, avoiding violating any of the expectations
-// of the underlying Rust code.
-//
-// This makes a cleaner a better alternative to _not_ calling `destroy()` as
-// and when the object is finished with, but the abstraction is not perfect: if the Rust object's `drop`
-// method is slow, and/or there are many objects to cleanup, and it's on a low end Android device, then the cleaner
-// thread may be starved, and the app will leak memory.
-//
-// In this case, `destroy`ing manually may be a better solution.
-//
-// The cleaner can live side by side with the manual calling of `destroy`. In the order of responsiveness, uniffi objects
-// with Rust peers are reclaimed:
-//
-// 1. By calling the `destroy` method of the object, which calls `rustObject.free()`. If that doesn't happen:
-// 2. When the object becomes unreachable, AND the Cleaner thread gets to call `rustObject.free()`. If the thread is starved then:
-// 3. The memory is reclaimed when the process terminates.
-//
-// [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
-//
-
-
-//
-public interface PsbtInterface {
-    
-    /**
-     * Total fee in sats.
-     */
-    fun `fee`(): Amount
-    
-    /**
-     * Get total sending amount of all outputs
-     */
-    fun `outputTotalAmount`(): Amount
-    
-    /**
-     * Get the transaction id of the unsigned transaction
-     */
-    fun `txId`(): TxId
-    
-    /**
-     * The virtual size of the transaction.
-     */
-    fun `weight`(): kotlin.ULong
-    
-    companion object
-}
-
-open class Psbt: Disposable, AutoCloseable, PsbtInterface
-{
-
-    @Suppress("UNUSED_PARAMETER")
-    /**
-     * @suppress
-     */
-    constructor(withHandle: UniffiWithHandle, handle: Long) {
-        this.handle = handle
-        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
-    }
-
-    /**
-     * @suppress
-     *
-     * This constructor can be used to instantiate a fake object. Only used for tests. Any
-     * attempt to actually use an object constructed this way will fail as there is no
-     * connected Rust object.
-     */
-    @Suppress("UNUSED_PARAMETER")
-    constructor(noHandle: NoHandle) {
-        this.handle = 0
-        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
-    }
-    constructor(`data`: kotlin.ByteArray) :
-        this(UniffiWithHandle, 
-    uniffiRustCallWithError(PsbtException) { _status ->
-    UniffiLib.uniffi_cove_types_fn_constructor_psbt_new(
-    
-        FfiConverterByteArray.lower(`data`),_status)
-}
-    )
-
-    protected val handle: Long
-    protected val cleanable: UniffiCleaner.Cleanable
-
-    private val wasDestroyed = AtomicBoolean(false)
-    private val callCounter = AtomicLong(1)
-
-    override fun destroy() {
-        // Only allow a single call to this method.
-        // TODO: maybe we should log a warning if called more than once?
-        if (this.wasDestroyed.compareAndSet(false, true)) {
-            // This decrement always matches the initial count of 1 given at creation time.
-            if (this.callCounter.decrementAndGet() == 0L) {
-                cleanable.clean()
-            }
-        }
-    }
-
-    @Synchronized
-    override fun close() {
-        this.destroy()
-    }
-
-    internal inline fun <R> callWithHandle(block: (handle: Long) -> R): R {
-        // Check and increment the call counter, to keep the object alive.
-        // This needs a compare-and-set retry loop in case of concurrent updates.
-        do {
-            val c = this.callCounter.get()
-            if (c == 0L) {
-                throw IllegalStateException("${this.javaClass.simpleName} object has already been destroyed")
-            }
-            if (c == Long.MAX_VALUE) {
-                throw IllegalStateException("${this.javaClass.simpleName} call counter would overflow")
-            }
-        } while (! this.callCounter.compareAndSet(c, c + 1L))
-        // Now we can safely do the method call without the handle being freed concurrently.
-        try {
-            return block(this.uniffiCloneHandle())
-        } finally {
-            // This decrement always matches the increment we performed above.
-            if (this.callCounter.decrementAndGet() == 0L) {
-                cleanable.clean()
-            }
-        }
-    }
-
-    // Use a static inner class instead of a closure so as not to accidentally
-    // capture `this` as part of the cleanable's action.
-    private class UniffiCleanAction(private val handle: Long) : Runnable {
-        override fun run() {
-            if (handle == 0.toLong()) {
-                // Fake object created with `NoHandle`, don't try to free.
-                return;
-            }
-            uniffiRustCall { status ->
-                UniffiLib.uniffi_cove_types_fn_free_psbt(handle, status)
-            }
-        }
-    }
-
-    /**
-     * @suppress
-     */
-    fun uniffiCloneHandle(): Long {
-        if (handle == 0.toLong()) {
-            throw InternalException("uniffiCloneHandle() called on NoHandle object");
-        }
-        return uniffiRustCall() { status ->
-            UniffiLib.uniffi_cove_types_fn_clone_psbt(handle, status)
-        }
-    }
-
-    
-    /**
-     * Total fee in sats.
-     */
-    @Throws(PsbtException::class)override fun `fee`(): Amount {
-            return FfiConverterTypeAmount.lift(
-    callWithHandle {
-    uniffiRustCallWithError(PsbtException) { _status ->
-    UniffiLib.uniffi_cove_types_fn_method_psbt_fee(
-        it,
-        _status)
-}
-    }
-    )
-    }
-    
-
-    
-    /**
-     * Get total sending amount of all outputs
-     */override fun `outputTotalAmount`(): Amount {
-            return FfiConverterTypeAmount.lift(
-    callWithHandle {
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_types_fn_method_psbt_output_total_amount(
-        it,
-        _status)
-}
-    }
-    )
-    }
-    
-
-    
-    /**
-     * Get the transaction id of the unsigned transaction
-     */override fun `txId`(): TxId {
-            return FfiConverterTypeTxId.lift(
-    callWithHandle {
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_types_fn_method_psbt_tx_id(
-        it,
-        _status)
-}
-    }
-    )
-    }
-    
-
-    
-    /**
-     * The virtual size of the transaction.
-     */override fun `weight`(): kotlin.ULong {
-            return FfiConverterULong.lift(
-    callWithHandle {
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_types_fn_method_psbt_weight(
-        it,
-        _status)
-}
-    }
-    )
-    }
-    
-
-    
-
-    
-
-
-    
-    
-    /**
-     * @suppress
-     */
-    companion object
-    
-}
-
-
-/**
- * @suppress
- */
-public object FfiConverterTypePsbt: FfiConverter<Psbt, Long> {
-    override fun lower(value: Psbt): Long {
-        return value.uniffiCloneHandle()
-    }
-
-    override fun lift(value: Long): Psbt {
-        return Psbt(UniffiWithHandle, value)
-    }
-
-    override fun read(buf: ByteBuffer): Psbt {
-        return lift(buf.getLong())
-    }
-
-    override fun allocationSize(value: Psbt) = 8UL
-
-    override fun write(value: Psbt, buf: ByteBuffer) {
         buf.putLong(lower(value))
     }
 }
@@ -8345,63 +8357,6 @@ public object FfiConverterTypeUtxoList: FfiConverter<UtxoList, Long> {
 
 
 
-data class AddressAndAmount (
-    var `label`: kotlin.String?
-    , 
-    var `utxoType`: UtxoType?
-    , 
-    var `address`: Address
-    , 
-    var `amount`: Amount
-    
-): Disposable{
-    
-
-    
-    @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
-    override fun destroy() {
-        
-    Disposable.destroy(
-        this.`label`,
-        this.`utxoType`,
-        this.`address`,
-        this.`amount`
-    )
-    }
-    
-    companion object
-}
-
-/**
- * @suppress
- */
-public object FfiConverterTypeAddressAndAmount: FfiConverterRustBuffer<AddressAndAmount> {
-    override fun read(buf: ByteBuffer): AddressAndAmount {
-        return AddressAndAmount(
-            FfiConverterOptionalString.read(buf),
-            FfiConverterOptionalTypeUtxoType.read(buf),
-            FfiConverterTypeAddress.read(buf),
-            FfiConverterTypeAmount.read(buf),
-        )
-    }
-
-    override fun allocationSize(value: AddressAndAmount) = (
-            FfiConverterOptionalString.allocationSize(value.`label`) +
-            FfiConverterOptionalTypeUtxoType.allocationSize(value.`utxoType`) +
-            FfiConverterTypeAddress.allocationSize(value.`address`) +
-            FfiConverterTypeAmount.allocationSize(value.`amount`)
-    )
-
-    override fun write(value: AddressAndAmount, buf: ByteBuffer) {
-            FfiConverterOptionalString.write(value.`label`, buf)
-            FfiConverterOptionalTypeUtxoType.write(value.`utxoType`, buf)
-            FfiConverterTypeAddress.write(value.`address`, buf)
-            FfiConverterTypeAmount.write(value.`amount`, buf)
-    }
-}
-
-
-
 data class AddressIndex (
     var `lastSeenIndex`: kotlin.UByte
     , 
@@ -8510,6 +8465,63 @@ public object FfiConverterTypeRgb: FfiConverterRustBuffer<Rgb> {
             FfiConverterUByte.write(value.`r`, buf)
             FfiConverterUByte.write(value.`g`, buf)
             FfiConverterUByte.write(value.`b`, buf)
+    }
+}
+
+
+
+data class AddressAndAmount (
+    var `label`: kotlin.String?
+    , 
+    var `utxoType`: UtxoType?
+    , 
+    var `address`: Address
+    , 
+    var `amount`: Amount
+    
+): Disposable{
+    
+
+    
+    @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
+    override fun destroy() {
+        
+    Disposable.destroy(
+        this.`label`,
+        this.`utxoType`,
+        this.`address`,
+        this.`amount`
+    )
+    }
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeAddressAndAmount: FfiConverterRustBuffer<AddressAndAmount> {
+    override fun read(buf: ByteBuffer): AddressAndAmount {
+        return AddressAndAmount(
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalTypeUtxoType.read(buf),
+            FfiConverterTypeAddress.read(buf),
+            FfiConverterTypeAmount.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: AddressAndAmount) = (
+            FfiConverterOptionalString.allocationSize(value.`label`) +
+            FfiConverterOptionalTypeUtxoType.allocationSize(value.`utxoType`) +
+            FfiConverterTypeAddress.allocationSize(value.`address`) +
+            FfiConverterTypeAmount.allocationSize(value.`amount`)
+    )
+
+    override fun write(value: AddressAndAmount, buf: ByteBuffer) {
+            FfiConverterOptionalString.write(value.`label`, buf)
+            FfiConverterOptionalTypeUtxoType.write(value.`utxoType`, buf)
+            FfiConverterTypeAddress.write(value.`address`, buf)
+            FfiConverterTypeAmount.write(value.`amount`, buf)
     }
 }
 
@@ -8803,256 +8815,6 @@ public object FfiConverterTypeAddressError : FfiConverterRustBuffer<AddressExcep
     }
 
 }
-
-
-
-
-enum class BitcoinUnit {
-    
-    BTC,
-    SAT;
-
-    // The local Rust `Display`/`Debug` implementation.
-    override fun toString(): String {
-        return FfiConverterString.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_types_fn_method_bitcoinunit_uniffi_trait_display(FfiConverterTypeBitcoinUnit.lower(this),
-        _status)
-}
-    )
-    }
-
-    companion object
-}
-
-
-/**
- * @suppress
- */
-public object FfiConverterTypeBitcoinUnit: FfiConverterRustBuffer<BitcoinUnit> {
-    override fun read(buf: ByteBuffer) = try {
-        BitcoinUnit.values()[buf.getInt() - 1]
-    } catch (e: IndexOutOfBoundsException) {
-        throw RuntimeException("invalid enum value, something is very wrong!!", e)
-    }
-
-    override fun allocationSize(value: BitcoinUnit) = 4UL
-
-    override fun write(value: BitcoinUnit, buf: ByteBuffer) {
-        buf.putInt(value.ordinal + 1)
-    }
-}
-
-
-
-
-
-
-enum class ColorSchemeSelection {
-    
-    LIGHT,
-    DARK,
-    SYSTEM;
-
-
-    companion object
-}
-
-
-/**
- * @suppress
- */
-public object FfiConverterTypeColorSchemeSelection: FfiConverterRustBuffer<ColorSchemeSelection> {
-    override fun read(buf: ByteBuffer) = try {
-        ColorSchemeSelection.values()[buf.getInt() - 1]
-    } catch (e: IndexOutOfBoundsException) {
-        throw RuntimeException("invalid enum value, something is very wrong!!", e)
-    }
-
-    override fun allocationSize(value: ColorSchemeSelection) = 4UL
-
-    override fun write(value: ColorSchemeSelection, buf: ByteBuffer) {
-        buf.putInt(value.ordinal + 1)
-    }
-}
-
-
-
-
-
-
-
-sealed class ConfirmDetailsException: kotlin.Exception() {
-    
-    class QrCodeCreation(
-        
-        val v1: kotlin.String
-        ) : ConfirmDetailsException() {
-        override val message
-            get() = "v1=${ v1 }"
-    }
-    
-
-
-    companion object ErrorHandler : UniffiRustCallStatusErrorHandler<ConfirmDetailsException> {
-        override fun lift(error_buf: RustBuffer.ByValue): ConfirmDetailsException = FfiConverterTypeConfirmDetailsError.lift(error_buf)
-    }
-
-    
-}
-
-/**
- * @suppress
- */
-public object FfiConverterTypeConfirmDetailsError : FfiConverterRustBuffer<ConfirmDetailsException> {
-    override fun read(buf: ByteBuffer): ConfirmDetailsException {
-        
-
-        return when(buf.getInt()) {
-            1 -> ConfirmDetailsException.QrCodeCreation(
-                FfiConverterString.read(buf),
-                )
-            else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
-        }
-    }
-
-    override fun allocationSize(value: ConfirmDetailsException): ULong {
-        return when(value) {
-            is ConfirmDetailsException.QrCodeCreation -> (
-                // Add the size for the Int that specifies the variant plus the size needed for all fields
-                4UL
-                + FfiConverterString.allocationSize(value.v1)
-            )
-        }
-    }
-
-    override fun write(value: ConfirmDetailsException, buf: ByteBuffer) {
-        when(value) {
-            is ConfirmDetailsException.QrCodeCreation -> {
-                buf.putInt(1)
-                FfiConverterString.write(value.v1, buf)
-                Unit
-            }
-        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
-    }
-
-}
-
-
-
-sealed class FeeSpeed {
-    
-    object Fast : FeeSpeed()
-    
-    
-    object Medium : FeeSpeed()
-    
-    
-    object Slow : FeeSpeed()
-    
-    
-    data class Custom(
-        val `durationMins`: kotlin.UInt) : FeeSpeed()
-        
-    {
-        
-
-    // The local Rust `Display`/`Debug` implementation.
-    override fun toString(): String {
-        return FfiConverterString.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_types_fn_method_feespeed_uniffi_trait_display(FfiConverterTypeFeeSpeed.lower(this),
-        _status)
-}
-    )
-    }
-        companion object
-    }
-    
-
-    
-
-    // The local Rust `Display`/`Debug` implementation.
-    override fun toString(): String {
-        return FfiConverterString.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_types_fn_method_feespeed_uniffi_trait_display(FfiConverterTypeFeeSpeed.lower(this),
-        _status)
-}
-    )
-    }
-
-    companion object
-}
-
-/**
- * @suppress
- */
-public object FfiConverterTypeFeeSpeed : FfiConverterRustBuffer<FeeSpeed>{
-    override fun read(buf: ByteBuffer): FeeSpeed {
-        return when(buf.getInt()) {
-            1 -> FeeSpeed.Fast
-            2 -> FeeSpeed.Medium
-            3 -> FeeSpeed.Slow
-            4 -> FeeSpeed.Custom(
-                FfiConverterUInt.read(buf),
-                )
-            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
-        }
-    }
-
-    override fun allocationSize(value: FeeSpeed) = when(value) {
-        is FeeSpeed.Fast -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-            )
-        }
-        is FeeSpeed.Medium -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-            )
-        }
-        is FeeSpeed.Slow -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-            )
-        }
-        is FeeSpeed.Custom -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterUInt.allocationSize(value.`durationMins`)
-            )
-        }
-    }
-
-    override fun write(value: FeeSpeed, buf: ByteBuffer) {
-        when(value) {
-            is FeeSpeed.Fast -> {
-                buf.putInt(1)
-                Unit
-            }
-            is FeeSpeed.Medium -> {
-                buf.putInt(2)
-                Unit
-            }
-            is FeeSpeed.Slow -> {
-                buf.putInt(3)
-                Unit
-            }
-            is FeeSpeed.Custom -> {
-                buf.putInt(4)
-                FfiConverterUInt.write(value.`durationMins`, buf)
-                Unit
-            }
-        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
-    }
-}
-
-
 
 
 
@@ -9381,11 +9143,42 @@ public object FfiConverterTypeFfiColor : FfiConverterRustBuffer<FfiColor>{
 
 
 
+enum class ColorSchemeSelection {
+    
+    LIGHT,
+    DARK,
+    SYSTEM;
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeColorSchemeSelection: FfiConverterRustBuffer<ColorSchemeSelection> {
+    override fun read(buf: ByteBuffer) = try {
+        ColorSchemeSelection.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: ColorSchemeSelection) = 4UL
+
+    override fun write(value: ColorSchemeSelection, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
 enum class FfiColorScheme {
     
     LIGHT,
     DARK;
-
 
     companion object
 }
@@ -9413,14 +9206,252 @@ public object FfiConverterTypeFfiColorScheme: FfiConverterRustBuffer<FfiColorSch
 
 
 
+
+sealed class ConfirmDetailsException: kotlin.Exception() {
+    
+    class QrCodeCreation(
+        
+        val v1: kotlin.String
+        ) : ConfirmDetailsException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+    
+
+
+    companion object ErrorHandler : UniffiRustCallStatusErrorHandler<ConfirmDetailsException> {
+        override fun lift(error_buf: RustBuffer.ByValue): ConfirmDetailsException = FfiConverterTypeConfirmDetailsError.lift(error_buf)
+    }
+
+    
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeConfirmDetailsError : FfiConverterRustBuffer<ConfirmDetailsException> {
+    override fun read(buf: ByteBuffer): ConfirmDetailsException {
+        
+
+        return when(buf.getInt()) {
+            1 -> ConfirmDetailsException.QrCodeCreation(
+                FfiConverterString.read(buf),
+                )
+            else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: ConfirmDetailsException): ULong {
+        return when(value) {
+            is ConfirmDetailsException.QrCodeCreation -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+        }
+    }
+
+    override fun write(value: ConfirmDetailsException, buf: ByteBuffer) {
+        when(value) {
+            is ConfirmDetailsException.QrCodeCreation -> {
+                buf.putInt(1)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+
+}
+
+
+
+sealed class FeeSpeed {
+    
+    object Fast : FeeSpeed()
+    
+    
+    object Medium : FeeSpeed()
+    
+    
+    object Slow : FeeSpeed()
+    
+    
+    data class Custom(
+        val `durationMins`: kotlin.UInt) : FeeSpeed()
+        
+    {
+        
+
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_types_fn_method_feespeed_uniffi_trait_display(FfiConverterTypeFeeSpeed.lower(this),
+        _status)
+}
+    )
+    }
+        companion object
+    }
+    
+
+    
+
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_types_fn_method_feespeed_uniffi_trait_display(FfiConverterTypeFeeSpeed.lower(this),
+        _status)
+}
+    )
+    }
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeFeeSpeed : FfiConverterRustBuffer<FeeSpeed>{
+    override fun read(buf: ByteBuffer): FeeSpeed {
+        return when(buf.getInt()) {
+            1 -> FeeSpeed.Fast
+            2 -> FeeSpeed.Medium
+            3 -> FeeSpeed.Slow
+            4 -> FeeSpeed.Custom(
+                FfiConverterUInt.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: FeeSpeed) = when(value) {
+        is FeeSpeed.Fast -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is FeeSpeed.Medium -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is FeeSpeed.Slow -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is FeeSpeed.Custom -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterUInt.allocationSize(value.`durationMins`)
+            )
+        }
+    }
+
+    override fun write(value: FeeSpeed, buf: ByteBuffer) {
+        when(value) {
+            is FeeSpeed.Fast -> {
+                buf.putInt(1)
+                Unit
+            }
+            is FeeSpeed.Medium -> {
+                buf.putInt(2)
+                Unit
+            }
+            is FeeSpeed.Slow -> {
+                buf.putInt(3)
+                Unit
+            }
+            is FeeSpeed.Custom -> {
+                buf.putInt(4)
+                FfiConverterUInt.write(value.`durationMins`, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+
+enum class LockState {
+    
+    LOCKED,
+    UNLOCKED;
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeLockState: FfiConverterRustBuffer<LockState> {
+    override fun read(buf: ByteBuffer) = try {
+        LockState.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: LockState) = 4UL
+
+    override fun write(value: LockState, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
+enum class UnlockMode {
+    
+    MAIN,
+    DECOY,
+    WIPE,
+    LOCKED;
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeUnlockMode: FfiConverterRustBuffer<UnlockMode> {
+    override fun read(buf: ByteBuffer) = try {
+        UnlockMode.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: UnlockMode) = 4UL
+
+    override fun write(value: UnlockMode, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
 enum class Network {
     
     BITCOIN,
     TESTNET,
     TESTNET4,
     SIGNET;
-
-    // The local Rust `Display`/`Debug` implementation.
     override fun toString(): String {
         return FfiConverterString.lift(
     uniffiRustCall() { _status ->
@@ -9561,11 +9592,41 @@ public object FfiConverterTypePsbtError : FfiConverterRustBuffer<PsbtException> 
 
 
 
+enum class SortOrder {
+    
+    ASCENDING,
+    DESCENDING;
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeSortOrder: FfiConverterRustBuffer<SortOrder> {
+    override fun read(buf: ByteBuffer) = try {
+        SortOrder.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: SortOrder) = 4UL
+
+    override fun write(value: SortOrder, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
 enum class TransactionDirection {
     
     INCOMING,
     OUTGOING;
-
 
     companion object
 }
@@ -9593,11 +9654,41 @@ public object FfiConverterTypeTransactionDirection: FfiConverterRustBuffer<Trans
 
 
 
+enum class BitcoinUnit {
+    
+    BTC,
+    SAT;
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeBitcoinUnit: FfiConverterRustBuffer<BitcoinUnit> {
+    override fun read(buf: ByteBuffer) = try {
+        BitcoinUnit.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: BitcoinUnit) = 4UL
+
+    override fun write(value: BitcoinUnit, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
 enum class UtxoType {
     
     OUTPUT,
     CHANGE;
-
 
     companion object
 }
@@ -9840,34 +9931,6 @@ public object FfiConverterSequenceTypeUtxo: FfiConverterRustBuffer<List<Utxo>> {
 /**
  * @suppress
  */
-public object FfiConverterSequenceTypeBitcoinUnit: FfiConverterRustBuffer<List<BitcoinUnit>> {
-    override fun read(buf: ByteBuffer): List<BitcoinUnit> {
-        val len = buf.getInt()
-        return List<BitcoinUnit>(len) {
-            FfiConverterTypeBitcoinUnit.read(buf)
-        }
-    }
-
-    override fun allocationSize(value: List<BitcoinUnit>): ULong {
-        val sizeForLength = 4UL
-        val sizeForItems = value.map { FfiConverterTypeBitcoinUnit.allocationSize(it) }.sum()
-        return sizeForLength + sizeForItems
-    }
-
-    override fun write(value: List<BitcoinUnit>, buf: ByteBuffer) {
-        buf.putInt(value.size)
-        value.iterator().forEach {
-            FfiConverterTypeBitcoinUnit.write(it, buf)
-        }
-    }
-}
-
-
-
-
-/**
- * @suppress
- */
 public object FfiConverterSequenceTypeColorSchemeSelection: FfiConverterRustBuffer<List<ColorSchemeSelection>> {
     override fun read(buf: ByteBuffer): List<ColorSchemeSelection> {
         val len = buf.getInt()
@@ -9914,6 +9977,34 @@ public object FfiConverterSequenceTypeNetwork: FfiConverterRustBuffer<List<Netwo
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypeNetwork.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeBitcoinUnit: FfiConverterRustBuffer<List<BitcoinUnit>> {
+    override fun read(buf: ByteBuffer): List<BitcoinUnit> {
+        val len = buf.getInt()
+        return List<BitcoinUnit>(len) {
+            FfiConverterTypeBitcoinUnit.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<BitcoinUnit>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeBitcoinUnit.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<BitcoinUnit>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeBitcoinUnit.write(it, buf)
         }
     }
 }
@@ -9976,26 +10067,6 @@ public typealias FfiConverterTypeWalletId = FfiConverterString
     )
     }
     
- fun `allNetworks`(): List<Network> {
-            return FfiConverterSequenceTypeNetwork.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_types_fn_func_all_networks(
-    
-        _status)
-}
-    )
-    }
-    
- fun `allUnits`(): List<BitcoinUnit> {
-            return FfiConverterSequenceTypeBitcoinUnit.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_types_fn_func_all_units(
-    
-        _status)
-}
-    )
-    }
-    
  fun `colorSchemeSelectionCapitalizedString`(`colorScheme`: ColorSchemeSelection): kotlin.String {
             return FfiConverterString.lift(
     uniffiRustCall() { _status ->
@@ -10046,6 +10117,26 @@ public typealias FfiConverterTypeWalletId = FfiConverterString
     )
     }
     
+ fun `feeSpeedToString`(`feeSpeed`: FeeSpeed): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_types_fn_func_fee_speed_to_string(
+    
+        FfiConverterTypeFeeSpeed.lower(`feeSpeed`),_status)
+}
+    )
+    }
+    
+ fun `allNetworks`(): List<Network> {
+            return FfiConverterSequenceTypeNetwork.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_types_fn_func_all_networks(
+    
+        _status)
+}
+    )
+    }
+    
  fun `networkToString`(`network`: Network): kotlin.String {
             return FfiConverterString.lift(
     uniffiRustCall() { _status ->
@@ -10056,12 +10147,22 @@ public typealias FfiConverterTypeWalletId = FfiConverterString
     )
     }
     
- fun `previewNewUtxoList`(`outputCount`: kotlin.UByte, `changeCount`: kotlin.UByte): List<Utxo> {
-            return FfiConverterSequenceTypeUtxo.lift(
+ fun `allUnits`(): List<BitcoinUnit> {
+            return FfiConverterSequenceTypeBitcoinUnit.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_types_fn_func_preview_new_utxo_list(
+    UniffiLib.uniffi_cove_types_fn_func_all_units(
     
-        FfiConverterUByte.lower(`outputCount`),FfiConverterUByte.lower(`changeCount`),_status)
+        _status)
+}
+    )
+    }
+    
+ fun `unitToString`(`unit`: BitcoinUnit): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_types_fn_func_unit_to_string(
+    
+        FfiConverterTypeBitcoinUnit.lower(`unit`),_status)
 }
     )
     }
@@ -10102,6 +10203,16 @@ public typealias FfiConverterTypeWalletId = FfiConverterString
     UniffiLib.uniffi_cove_types_fn_func_utxo_name(
     
         FfiConverterTypeUtxo.lower(`utxo`),_status)
+}
+    )
+    }
+    
+ fun `previewNewUtxoList`(`outputCount`: kotlin.UByte, `changeCount`: kotlin.UByte): List<Utxo> {
+            return FfiConverterSequenceTypeUtxo.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_types_fn_func_preview_new_utxo_list(
+    
+        FfiConverterUByte.lower(`outputCount`),FfiConverterUByte.lower(`changeCount`),_status)
 }
     )
     }

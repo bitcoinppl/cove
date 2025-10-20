@@ -720,6 +720,16 @@ public enum KeychainError: Swift.Error, Equatable, Hashable, Foundation.Localize
     )
 
     
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_device_fn_method_keychainerror_uniffi_trait_display(
+            FfiConverterTypeKeychainError_lower(self),$0
+    )
+}
+    )
+}
 
     
     public var errorDescription: String? {
