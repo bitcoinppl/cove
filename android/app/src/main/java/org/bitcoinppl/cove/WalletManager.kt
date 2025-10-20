@@ -58,8 +58,8 @@ class WalletManager : WalletManagerReconciler, Closeable {
     val unit: String
         get() =
             when (walletMetadata?.selectedUnit) {
-                Unit.BTC -> "btc"
-                Unit.SAT -> "sats"
+                BitcoinUnit.BTC -> "btc"
+                BitcoinUnit.SAT -> "sats"
                 else -> "sats"
             }
 
@@ -156,8 +156,8 @@ class WalletManager : WalletManagerReconciler, Closeable {
 
     fun amountFmt(amount: Amount): String {
         return when (walletMetadata?.selectedUnit) {
-            Unit.BTC -> amount.btcString()
-            Unit.SAT -> amount.satsString()
+            BitcoinUnit.BTC -> amount.btcString()
+            BitcoinUnit.SAT -> amount.satsString()
             else -> amount.satsString()
         }
     }
@@ -168,8 +168,8 @@ class WalletManager : WalletManagerReconciler, Closeable {
 
     fun amountFmtUnit(amount: Amount): String {
         return when (walletMetadata?.selectedUnit) {
-            Unit.BTC -> amount.btcStringWithUnit()
-            Unit.SAT -> amount.satsStringWithUnit()
+            BitcoinUnit.BTC -> amount.btcStringWithUnit()
+            BitcoinUnit.SAT -> amount.satsStringWithUnit()
             else -> amount.satsStringWithUnit()
         }
     }

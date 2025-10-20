@@ -1818,10 +1818,10 @@ internal object UniffiLib {
         uniffiCallbackInterfaceSendFlowManagerReconciler.register(this)
         uniffiCallbackInterfaceTapcardTransportProtocol.register(this)
         uniffiCallbackInterfaceWalletManagerReconciler.register(this)
-        org.bitcoinppl.cove_core.types.uniffiEnsureInitialized()
-        org.bitcoinppl.cove_core.device.uniffiEnsureInitialized()
         org.bitcoinppl.cove_core.nfc.uniffiEnsureInitialized()
+        org.bitcoinppl.cove_core.types.uniffiEnsureInitialized()
         org.bitcoinppl.cove_core.tapcard.uniffiEnsureInitialized()
+        org.bitcoinppl.cove_core.device.uniffiEnsureInitialized()
         
     }
     external fun uniffi_cove_fn_clone_addressargs(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
