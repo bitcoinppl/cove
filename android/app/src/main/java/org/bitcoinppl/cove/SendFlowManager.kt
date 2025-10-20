@@ -199,8 +199,8 @@ class SendFlowManager(
                 logWarn("setAlert: ${message.alertState}")
                 presenter.alertState = TaggedItem(message.alertState)
 
-                // handle alert/sheet conflict - delay if both present
-                if (presenter.sheetState != null || presenter.alertState != null) {
+                // handle alert/sheet conflict - delay only if there was a previous conflict
+                if (hadSheet || hadAlert) {
                     presenter.alertState = null
                     presenter.sheetState = null
                     mainScope.launch {
