@@ -54,7 +54,7 @@ fun RouteView(app: AppManager, route: Route) {
             LoadAndResetContainer(
                 app = app,
                 nextRoutes = route.resetTo.routes,
-                loadingTimeMs = route.afterMillis.toInt(),
+                loadingTimeMs = route.afterMillis,
             )
         }
     }
@@ -157,7 +157,7 @@ private fun LoadingPlaceholder() {
 private fun LoadAndResetContainer(
     app: AppManager,
     nextRoutes: List<Route>,
-    loadingTimeMs: Int,
+    loadingTimeMs: Long,
 ) {
     // show loading indicator
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -166,7 +166,7 @@ private fun LoadAndResetContainer(
 
     // execute reset after delay
     LaunchedEffect(Unit) {
-        delay(loadingTimeMs.toLong())
+        delay(loadingTimeMs)
 
         if (nextRoutes.size > 1) {
             // nested routes: first route is default, rest are nested
