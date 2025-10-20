@@ -95,6 +95,10 @@ btest test="":
 watch-test test="" flags="":
     watchexec --exts rs just test {{test}} {{flags}}
 
+# both
+compile:
+    just compile-ios && just compile-android
+
 # build android
 build-android:
     bash scripts/build-android.sh debug
@@ -125,4 +129,7 @@ build-ios-debug-device:
 
 run-ios: build-ios
     bash scripts/run-ios.sh
+
+compile-ios:
+    cd ios && xcodebuild -scheme Cove -sdk iphonesimulator -arch arm64 build
 

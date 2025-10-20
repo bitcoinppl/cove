@@ -109,6 +109,23 @@ pub enum WalletAddressType {
     Legacy,
 }
 
+impl WalletAddressType {
+    /// returns the sort order for this address type
+    /// native segwit (0) < wrapped segwit (1) < legacy (2)
+    pub fn sort_order(&self) -> u8 {
+        match self {
+            WalletAddressType::NativeSegwit => 0,
+            WalletAddressType::WrappedSegwit => 1,
+            WalletAddressType::Legacy => 2,
+        }
+    }
+}
+
+#[uniffi::export]
+fn wallet_address_type_sort_order(address_type: WalletAddressType) -> u8 {
+    address_type.sort_order()
+}
+
 impl Wallet {
     /// Create a new wallet from the given mnemonic save the bdk wallet filestore, save in our database and select it
     pub fn try_new_persisted_and_selected(
