@@ -32,6 +32,7 @@ impl GlobalFlagTable {
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
+#[uniffi::export(Display)]
 pub enum GlobalFlagTableError {
     #[error("failed to save global flag: {0}")]
     Save(String),

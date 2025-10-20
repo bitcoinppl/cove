@@ -16,6 +16,7 @@ use crate::{
 type Error = PendingWalletManagerError;
 
 #[derive(Debug, Clone, uniffi::Error, thiserror::Error)]
+#[uniffi::export(Display)]
 pub enum PendingWalletManagerError {
     #[error("failed to create wallet: {0}")]
     BdkError(String),
@@ -55,6 +56,7 @@ pub enum PendingWalletManagerAction {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, uniffi::Error, thiserror::Error)]
+#[uniffi::export(Display)]
 pub enum WalletCreationError {
     #[error("failed to create wallet: {0}")]
     Bdk(String),

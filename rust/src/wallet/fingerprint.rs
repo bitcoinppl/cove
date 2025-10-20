@@ -18,6 +18,7 @@ use serde::Serialize;
 pub struct Fingerprint(BdkFingerprint);
 
 #[derive(Debug, Clone, uniffi::Error, thiserror::Error)]
+#[uniffi::export(Display)]
 pub enum FingerprintError {
     #[error("wallet not found")]
     WalletNotFound,

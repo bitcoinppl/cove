@@ -1,5 +1,5 @@
 use crate::{
-    database::{Database, error::DatabaseError, historical_price::HistoricalPriceTable},
+    database::{Database, error::Database as DatabaseError, historical_price::HistoricalPriceTable},
     fiat::{FiatCurrency, client::FIAT_CLIENT, historical::HistoricalPrice},
     network::Network,
     transaction::ConfirmedTransaction,

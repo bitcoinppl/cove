@@ -66,6 +66,7 @@ pub struct WalletDataDb {
 }
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
+#[uniffi::export(Display)]
 pub enum WalletDataError {
     #[error("Unable to access database for wallet {id}, error: {error}")]
     DatabaseAccess { id: WalletId, error: String },

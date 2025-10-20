@@ -4,9 +4,10 @@ use super::{
     unsigned_transactions::UnsignedTransactionsTableError, wallet::WalletTableError,
 };
 
-type Error = DatabaseError;
+type Error = Database;
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
+#[uniffi::export(Display)]
 pub enum SerdeError {
     #[error("failed to serialize: {0}")]
     SerializationError(String),
@@ -16,7 +17,8 @@ pub enum SerdeError {
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
-pub enum DatabaseError {
+#[uniffi::export(Display)]
+pub enum Database {
     #[error("failed to open database: {0}")]
     DatabaseAccess(String),
 

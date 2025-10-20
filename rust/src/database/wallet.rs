@@ -24,6 +24,7 @@ pub const VERSION: Version = Version(1);
 pub struct Version(u32);
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
+#[uniffi::export(Display)]
 pub enum WalletTableError {
     #[error("failed to save wallets: {0}")]
     SaveError(String),

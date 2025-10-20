@@ -26,7 +26,7 @@ extension Double {
 
 extension FeeSpeed {
     var string: String {
-        feeSpeedToString(feeSpeed: self)
+        self.description
     }
 
     var duration: String {

@@ -19,6 +19,7 @@ pub struct LabelManager {
 }
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
+#[uniffi::export(Display)]
 pub enum LabelManagerError {
     #[error("Failed to parse labels: {0}")]
     Parse(String),

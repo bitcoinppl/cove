@@ -44,6 +44,7 @@ impl GlobalCacheTable {
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
+#[uniffi::export(Display)]
 pub enum GlobalCacheTableError {
     #[error("failed to save global flag: {0}")]
     Save(String),

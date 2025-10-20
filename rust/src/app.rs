@@ -7,7 +7,7 @@ use std::{sync::Arc, time::Duration};
 use crate::{
     auth::AuthType,
     color_scheme::ColorSchemeSelection,
-    database::{Database, error::DatabaseError, global_flag::GlobalFlagKey},
+    database::{Database, error::Database as DatabaseError, global_flag::GlobalFlagKey},
     fee_client::{FEE_CLIENT, FeeResponse},
     fiat::{
         FiatCurrency,
@@ -61,6 +61,7 @@ pub enum AppAction {
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
+#[uniffi::export(Display)]
 pub enum AppError {
     #[error("prices error: {0}")]
     PricesError(String),

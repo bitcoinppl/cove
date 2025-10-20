@@ -32,11 +32,6 @@ fn all_units() -> Vec<BitcoinUnit> {
     BitcoinUnit::iter().collect()
 }
 
-#[uniffi::export]
-fn unit_to_string(unit: BitcoinUnit) -> String {
-    unit.to_string()
-}
-
 impl Display for BitcoinUnit {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {

@@ -1,6 +1,6 @@
 use std::{borrow::Borrow, fmt::Debug, sync::Arc};
 
-use crate::database::{Record, error::DatabaseError, record::Timestamps};
+use crate::database::{Record, error::Database as DatabaseError, record::Timestamps};
 use bip329::{AddressRecord, InputRecord, Label, Labels, OutputRecord, TransactionRecord};
 use bitcoin::{Address, address::NetworkUnchecked};
 use cove_util::result_ext::ResultExt as _;
@@ -14,6 +14,7 @@ type SerdeRecord<T> = Cbor<Record<T>>;
 pub type Error = LabelDbError;
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
+#[uniffi::export(Display)]
 pub enum LabelDbError {
     #[error(transparent)]
     Database(#[from] DatabaseError),

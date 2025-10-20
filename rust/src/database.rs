@@ -32,7 +32,7 @@ use cove_common::consts::ROOT_DATA_DIR;
 
 pub static DATABASE: OnceCell<ArcSwap<Database>> = OnceCell::new();
 
-pub type Error = error::DatabaseError;
+pub type Error = error::Database;
 pub type Record<T> = record::Record<T>;
 
 #[derive(Debug, Clone, uniffi::Object)]

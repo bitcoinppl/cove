@@ -1,6 +1,7 @@
 use pubport::descriptor;
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Error, thiserror::Error)]
+#[uniffi::export(Display)]
 pub enum XpubError {
     #[error("Invalid descriptor {0}")]
     InvalidDescriptor(#[from] DescriptorError),
@@ -22,6 +23,7 @@ pub enum XpubError {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Error, thiserror::Error)]
+#[uniffi::export(Display)]
 pub enum DescriptorError {
     #[error("Invalid descriptor: {0:?}")]
     InvalidDescriptor(String),

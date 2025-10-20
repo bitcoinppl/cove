@@ -11,11 +11,11 @@ typealias Unit = CoveCore.BitcoinUnit
 
 extension String {
     init(_ unit: Unit) {
-        self = unitToString(unit: unit)
+        self = unit.description
     }
 
     init(_ walletAddressType: WalletAddressType) {
-        self = walletAddressTypeToString(walletAddressType: walletAddressType)
+        self = walletAddressType.description
     }
 
     init(_ address: Address) {
@@ -23,7 +23,7 @@ extension String {
     }
 
     init(_ walletType: WalletType) {
-        self = walletTypeToString(walletType: walletType)
+        self = walletType.description
     }
 
     init(_ fingeprint: Fingerprint) {
@@ -31,7 +31,7 @@ extension String {
     }
 
     init(_ feeSpeed: FeeSpeed) {
-        self = feeSpeedToString(feeSpeed: feeSpeed)
+        self = feeSpeed.description
     }
 
     init(_ network: Network) {

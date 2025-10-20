@@ -10,6 +10,7 @@ pub struct FileHandler {
 }
 
 #[derive(Debug, uniffi::Error, thiserror::Error)]
+#[uniffi::export(Display)]
 pub enum FileHandlerError {
     #[error("File not found")]
     FileNotFound,
