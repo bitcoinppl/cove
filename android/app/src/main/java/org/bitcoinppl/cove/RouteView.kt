@@ -53,8 +53,8 @@ fun RouteView(app: AppManager, route: Route) {
         is Route.LoadAndReset -> {
             LoadAndResetContainer(
                 app = app,
-                nextRoutes = route.resetTo.routes,
-                loadingTimeMs = route.afterMillis,
+                nextRoutes = route.resetTo.map { it.route() },
+                loadingTimeMs = route.afterMillis.toLong(),
             )
         }
     }
