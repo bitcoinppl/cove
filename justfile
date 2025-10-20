@@ -37,8 +37,15 @@ clean:
     rm -rf rust/target
 
 fmt:
+    just fmt-rust && just fmt-swift && just fmt-android
+
+fmt-rust:
     cd rust && cargo fmt --all
+
+fmt-swift:
     swiftformat . --swiftversion 6
+
+fmt-android:
     cd android && ./gradlew ktlintFormat 
 
 fix *flags="":
@@ -88,6 +95,10 @@ btest test="":
 watch-test test="" flags="":
     watchexec --exts rs just test {{test}} {{flags}}
 
+# both
+compile:
+    just compile-ios && just compile-android
+
 # build android
 build-android:
     bash scripts/build-android.sh debug
@@ -97,6 +108,9 @@ build-android-release:
 
 run-android: build-android
     bash scripts/run-android.sh
+
+compile-android:
+    cd android && ./gradlew assembleDebug
 
 # build ios
 build-ios profile="debug" device="false" sign="false":
@@ -115,4 +129,7 @@ build-ios-debug-device:
 
 run-ios: build-ios
     bash scripts/run-ios.sh
+
+compile-ios:
+    cd ios && xcodebuild -scheme Cove -sdk iphonesimulator -arch arm64 build
 

@@ -441,22 +441,6 @@ fileprivate struct FfiConverterUInt8: FfiConverterPrimitive {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterInt8: FfiConverterPrimitive {
-    typealias FfiType = Int8
-    typealias SwiftType = Int8
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Int8 {
-        return try lift(readInt(&buf))
-    }
-
-    public static func write(_ value: Int8, into buf: inout [UInt8]) {
-        writeInt(&buf, lower(value))
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
 fileprivate struct FfiConverterUInt16: FfiConverterPrimitive {
     typealias FfiType = UInt16
     typealias SwiftType = UInt16
@@ -20799,7 +20783,7 @@ public func FfiConverterTypeUnsignedTransactionsTableError_lower(_ value: Unsign
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum WalletAddressType: Equatable, Hashable, Comparable, CustomStringConvertible {
+public enum WalletAddressType: Equatable, Hashable, CustomStringConvertible {
     
     case nativeSegwit
     case wrappedSegwit
@@ -20816,17 +20800,6 @@ public var description: String {
     )
 }
     )
-}
-// The local Rust `Ord` implementation
-public static func < (self: WalletAddressType, other: WalletAddressType) -> Bool {
-    return try!  FfiConverterInt8.lift(
-        try! rustCall() {
-    uniffi_cove_fn_method_walletaddresstype_uniffi_trait_ord_cmp(
-            FfiConverterTypeWalletAddressType_lower(self),
-        FfiConverterTypeWalletAddressType_lower(other),$0
-    )
-}
-    ) < 0
 }
 }
 
@@ -25710,6 +25683,13 @@ public func walletAddressTypeLessThan(lhs: WalletAddressType, rhs: WalletAddress
     )
 })
 }
+public func walletAddressTypeSortOrder(addressType: WalletAddressType) -> UInt8  {
+    return try!  FfiConverterUInt8.lift(try! rustCall() {
+    uniffi_cove_fn_func_wallet_address_type_sort_order(
+        FfiConverterTypeWalletAddressType_lower(addressType),$0
+    )
+})
+}
 public func walletAddressTypeToString(walletAddressType: WalletAddressType) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_cove_fn_func_wallet_address_type_to_string(
@@ -25902,6 +25882,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_wallet_address_type_less_than() != 14566) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_wallet_address_type_sort_order() != 47488) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_wallet_address_type_to_string() != 36064) {

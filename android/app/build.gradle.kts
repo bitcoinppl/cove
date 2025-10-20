@@ -73,6 +73,7 @@ dependencies {
     // Uniffi
     implementation("net.java.dev.jna:jna:5.17.0@aar")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
 
     // Jetpack compose / flow
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.3")
