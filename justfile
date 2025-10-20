@@ -18,8 +18,15 @@ alias bidd := build-ios-debug-device
 alias ba := build-android
 alias bar := build-android-release
 
+# full build alias
+alias f := full
+
 default:
     just --list
+
+# full build and verification for all platforms
+full:
+    just bidd && just ba && just ci && just compile
 
 bacon:
     cd rust && bacon clippy
