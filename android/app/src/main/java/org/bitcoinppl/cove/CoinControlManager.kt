@@ -7,12 +7,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.isActive
+import java.io.Closeable
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * coin control manager - manages UTXO selection for send flow
@@ -21,10 +22,11 @@ import kotlinx.coroutines.isActive
 @Stable
 class CoinControlManager(
     val rust: RustCoinControlManager,
-) : CoinControlManagerReconciler {
+) : CoinControlManagerReconciler, Closeable {
     private val tag = "CoinControlManager"
 
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val isClosed = AtomicBoolean(false)
 
     private var sort by mutableStateOf<CoinControlListSort?>(
         CoinControlListSort.Date(SortOrder.DESCENDING),
@@ -200,5 +202,13 @@ class CoinControlManager(
     fun dispatch(action: CoinControlManagerAction) {
         logDebug("dispatch: $action")
         mainScope.launch(Dispatchers.IO) { rust.dispatch(action) }
+    }
+
+    override fun close() {
+        if (!isClosed.compareAndSet(false, true)) return
+        logDebug("Closing CoinControlManager")
+        updateSendFlowManagerTask?.cancel()
+        mainScope.cancel() // stop callbacks into Rust
+        rust.close() // free Rust Arc
     }
 }

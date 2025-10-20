@@ -8,7 +8,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.util.UUID
 
 /**
@@ -117,6 +116,9 @@ class AppManager private constructor() : FfiReconcile {
                 logDebug("found and using wallet manager for $id")
                 return it
             }
+            // close old manager before replacing
+            logDebug("closing old wallet manager for ${it.id}")
+            it.close()
         }
 
         logDebug("did not find wallet manager for $id, creating new: ${walletManager?.id}")
@@ -142,6 +144,9 @@ class AppManager private constructor() : FfiReconcile {
                 it.presenter = presenter
                 return it
             }
+            // close old manager before replacing
+            logDebug("closing old sendflow manager for ${it.id}")
+            it.close()
         }
 
         logDebug("did not find SendFlowManager for ${wm.id}, creating new")
@@ -177,6 +182,10 @@ class AppManager private constructor() : FfiReconcile {
      * clears all cached data and reinitializes
      */
     fun reset() {
+        // close managers before clearing them
+        walletManager?.close()
+        sendFlowManager?.close()
+
         database = Database()
         walletManager = null
         sendFlowManager = null

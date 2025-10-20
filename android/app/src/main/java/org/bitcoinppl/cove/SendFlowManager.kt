@@ -6,12 +6,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.isActive
+import java.io.Closeable
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * send flow manager - manages send transaction flow state
@@ -21,11 +22,12 @@ import kotlinx.coroutines.isActive
 class SendFlowManager(
     internal val rust: RustSendFlowManager,
     var presenter: SendFlowPresenter,
-) : SendFlowManagerReconciler {
+) : SendFlowManagerReconciler, Closeable {
     private val tag = "SendFlowManager"
 
     // Scope for UI-bound work; reconcile and UI updates run on Main
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val isClosed = AtomicBoolean(false)
 
     val id: WalletId = rust.walletId()
 
@@ -197,6 +199,11 @@ class SendFlowManager(
 
             is SendFlowManagerReconcileMessage.SetAlert -> {
                 logWarn("setAlert: ${message.alertState}")
+
+                // capture previous state before modifying
+                val hadSheet = presenter.sheetState != null
+                val hadAlert = presenter.alertState != null
+
                 presenter.alertState = TaggedItem(message.alertState)
 
                 // handle alert/sheet conflict - delay only if there was a previous conflict
@@ -264,5 +271,13 @@ class SendFlowManager(
                 if (!isActive) return@launch
                 dispatch(action)
             }
+    }
+
+    override fun close() {
+        if (!isClosed.compareAndSet(false, true)) return
+        logDebug("Closing SendFlowManager for $id")
+        debouncedTask?.cancel()
+        mainScope.cancel() // stop callbacks into Rust
+        rust.close() // free Rust Arc
     }
 }

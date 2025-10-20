@@ -7,8 +7,11 @@ import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.Closeable
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * pending wallet manager - manages hot wallet creation flow
@@ -17,10 +20,11 @@ import kotlinx.coroutines.withContext
 @Stable
 class PendingWalletManager(
     numberOfWords: NumberOfBip39Words,
-) : PendingWalletManagerReconciler {
+) : PendingWalletManagerReconciler, Closeable {
     private val tag = "PendingWalletManager"
 
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val isClosed = AtomicBoolean(false)
 
     val rust: RustPendingWalletManager = RustPendingWalletManager(numberOfWords)
 
@@ -57,5 +61,12 @@ class PendingWalletManager(
     fun dispatch(action: PendingWalletManagerAction) {
         logDebug("dispatch: $action")
         mainScope.launch(Dispatchers.IO) { rust.dispatch(action) }
+    }
+
+    override fun close() {
+        if (!isClosed.compareAndSet(false, true)) return
+        logDebug("Closing PendingWalletManager")
+        mainScope.cancel() // stop callbacks into Rust
+        rust.close() // free Rust Arc
     }
 }

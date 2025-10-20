@@ -6,9 +6,11 @@ import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import java.io.Closeable
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * send flow presenter - manages UI state for send flow screens
@@ -17,10 +19,11 @@ import kotlinx.coroutines.withContext
 class SendFlowPresenter(
     val app: AppManager,
     val manager: WalletManager,
-) {
+):  Closeable {
     private var disappearing: Boolean = false
 
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val isClosed = AtomicBoolean(false)
 
     var focusField by mutableStateOf<SetAmountFocusField?>(null)
     var sheetState by mutableStateOf<TaggedItem<SheetState>?>(null)
@@ -197,6 +200,11 @@ class SendFlowPresenter(
                 }
             }
         }
+    }
+
+    override fun close() {
+        if (!isClosed.compareAndSet(false, true)) return
+        mainScope.cancel()
     }
 }
 

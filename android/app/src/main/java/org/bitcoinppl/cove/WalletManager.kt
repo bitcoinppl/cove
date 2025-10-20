@@ -8,18 +8,22 @@ import androidx.compose.ui.graphics.Color
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.Closeable
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * wallet manager - manages wallet state, balance, transactions
  * ported from iOS WalletManager.swift
  */
 @Stable
-class WalletManager : WalletManagerReconciler {
+class WalletManager : WalletManagerReconciler, Closeable {
     private val tag = "WalletManager"
 
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val isClosed = AtomicBoolean(false)
 
     val id: WalletId
     internal val rust: RustWalletManager
@@ -118,6 +122,9 @@ class WalletManager : WalletManagerReconciler {
         this.rust = rust
         this.walletMetadata = metadata
         this.id = metadata.id
+
+        // start fiat balance update
+        mainScope.launch(Dispatchers.IO) { updateFiatBalance() }
 
         rust.listenForUpdates(this)
         logDebug("Initialized WalletManager from TapSigner")
@@ -291,6 +298,13 @@ class WalletManager : WalletManagerReconciler {
     fun dispatch(action: WalletManagerAction) {
         logDebug("dispatch: $action")
         mainScope.launch(Dispatchers.IO) { rust.dispatch(action) }
+    }
+
+    override fun close() {
+        if (!isClosed.compareAndSet(false, true)) return
+        logDebug("Closing WalletManager for $id")
+        mainScope.cancel() // stop callbacks into Rust
+        rust.close() // free Rust Arc
     }
 }
 
