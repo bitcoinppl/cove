@@ -60,6 +60,15 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Build Rust FFI bindings
+        run: bash scripts/build-ios.sh debug
+
       - name: Compile iOS
         run: cd ios && xcodebuild -scheme Cove -sdk iphonesimulator -arch arm64 build
 
