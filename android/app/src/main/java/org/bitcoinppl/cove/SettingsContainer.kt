@@ -1,16 +1,14 @@
 package org.bitcoinppl.cove
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.zIndex
-import com.example.cove.R
+import org.bitcoinppl.cove_core.*
+import org.bitcoinppl.cove_core.types.*
 
 /**
  * settings container - lightweight router for settings screens
@@ -20,25 +18,26 @@ import com.example.cove.R
 fun SettingsContainer(
     app: AppManager,
     route: SettingsRoute,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     Box(modifier = modifier.fillMaxSize()) {
-        // background pattern
-        Image(
-            painter = painterResource(id = R.drawable.image_settings_pattern),
-            contentDescription = null,
-            contentScale = ContentScale.FillBounds,
-            modifier = Modifier
-                .fillMaxSize()
-                .zIndex(0f)
-        )
+        // TODO: add background pattern drawable (image_settings_pattern)
+        // Image(
+        //     painter = painterResource(id = R.drawable.image_settings_pattern),
+        //     contentDescription = null,
+        //     contentScale = ContentScale.FillBounds,
+        //     modifier = Modifier
+        //         .fillMaxSize()
+        //         .zIndex(0f)
+        // )
 
         // background color overlay
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color(0xFFF2F2F7))
-                .zIndex(1f)
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .background(Color(0xFFF2F2F7))
+                    .zIndex(0f),
         )
 
         // settings content
@@ -69,7 +68,7 @@ fun SettingsContainer(
                     WalletSettingsContainer(
                         app = app,
                         id = route.id,
-                        route = route.route
+                        route = route.route,
                     )
                 }
                 is SettingsRoute.AllWallets -> {

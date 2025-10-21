@@ -76,7 +76,7 @@ class AppManager private constructor() : FfiReconcile {
 
     // cached managers (not observable)
     internal var walletManager: WalletManager? = null
-        private set
+        internal set
 
     internal var sendFlowManager: SendFlowManager? = null
         private set

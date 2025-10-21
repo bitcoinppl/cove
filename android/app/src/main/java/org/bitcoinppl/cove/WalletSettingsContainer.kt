@@ -11,6 +11,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import org.bitcoinppl.cove_core.*
+import org.bitcoinppl.cove_core.types.*
 
 /**
  * wallet settings container - lazy loads WalletManager for wallet settings
@@ -21,7 +23,7 @@ fun WalletSettingsContainer(
     app: AppManager,
     id: WalletId,
     route: WalletSettingsRoute,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     var manager by remember { mutableStateOf<WalletManager?>(null) }
     val tag = "WalletSettingsContainer"
@@ -33,12 +35,13 @@ fun WalletSettingsContainer(
             manager = app.getWalletManager(id)
         } catch (e: Exception) {
             android.util.Log.e(tag, "failed to load wallet", e)
-            app.alertState = TaggedItem(
-                AppAlertState.General(
-                    title = "Error!",
-                    message = "Unable to load wallet: ${e.message}"
+            app.alertState =
+                TaggedItem(
+                    AppAlertState.General(
+                        title = "Error!",
+                        message = "Unable to load wallet: ${e.message}",
+                    ),
                 )
-            )
         }
     }
 
@@ -47,38 +50,29 @@ fun WalletSettingsContainer(
         null -> {
             Box(
                 modifier = modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.Center,
             ) {
                 CircularProgressIndicator()
             }
         }
         else -> {
             when (route) {
-                is WalletSettingsRoute.Main -> {
+                WalletSettingsRoute.MAIN -> {
                     // TODO: implement WalletSettingsScreen with manager
                     Box(
                         modifier = modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
+                        contentAlignment = Alignment.Center,
                     ) {
                         androidx.compose.material3.Text("Wallet Settings - TODO")
                     }
                 }
-                is WalletSettingsRoute.ChangeName -> {
+                WalletSettingsRoute.CHANGE_NAME -> {
                     // TODO: implement change wallet name screen
                     Box(
                         modifier = modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
+                        contentAlignment = Alignment.Center,
                     ) {
                         androidx.compose.material3.Text("Change Name - TODO")
-                    }
-                }
-                is WalletSettingsRoute.ChangeColor -> {
-                    // TODO: implement change wallet color screen
-                    Box(
-                        modifier = modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        androidx.compose.material3.Text("Change Color - TODO")
                     }
                 }
             }

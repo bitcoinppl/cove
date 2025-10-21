@@ -4,6 +4,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import org.bitcoinppl.cove.components.FullPageLoadingView
+import org.bitcoinppl.cove_core.*
+import org.bitcoinppl.cove_core.types.*
 
 /**
  * list wallets screen - auto-selects first wallet or navigates to add wallet
@@ -12,7 +14,7 @@ import org.bitcoinppl.cove.components.FullPageLoadingView
 @Composable
 fun ListWalletsScreen(
     app: AppManager,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     // show loading indicator
     FullPageLoadingView(modifier = modifier)

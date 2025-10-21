@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import org.bitcoinppl.cove_core.*
+import org.bitcoinppl.cove_core.types.*
 
 /**
  * new hot wallet container - routes to hot wallet flow screens
@@ -14,14 +16,14 @@ import androidx.compose.ui.Modifier
 fun NewHotWalletContainer(
     app: AppManager,
     route: HotWalletRoute,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     when (route) {
         is HotWalletRoute.Select -> {
             // TODO: implement HotWalletSelectScreen
             Box(
                 modifier = modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.Center,
             ) {
                 androidx.compose.material3.Text("Hot Wallet Select - TODO")
             }
@@ -30,7 +32,7 @@ fun NewHotWalletContainer(
             // TODO: implement HotWalletCreateScreen
             Box(
                 modifier = modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.Center,
             ) {
                 androidx.compose.material3.Text("Hot Wallet Create - TODO")
             }
@@ -39,7 +41,7 @@ fun NewHotWalletContainer(
             // TODO: implement HotWalletImportScreen
             Box(
                 modifier = modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.Center,
             ) {
                 androidx.compose.material3.Text("Hot Wallet Import - TODO")
             }
@@ -48,7 +50,7 @@ fun NewHotWalletContainer(
             // TODO: implement VerifyWordsContainer
             Box(
                 modifier = modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.Center,
             ) {
                 androidx.compose.material3.Text("Verify Words - TODO")
             }

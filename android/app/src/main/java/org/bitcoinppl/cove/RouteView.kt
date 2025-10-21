@@ -9,6 +9,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import kotlinx.coroutines.delay
+import org.bitcoinppl.cove_core.*
+import org.bitcoinppl.cove_core.types.*
 
 /**
  * maps FFI Route enum to Compose screens
@@ -24,21 +26,21 @@ fun RouteView(app: AppManager, route: Route) {
         is Route.SelectedWallet -> {
             SelectedWalletContainer(
                 app = app,
-                id = route.v1
+                id = route.v1,
             )
         }
 
         is Route.NewWallet -> {
             NewWalletContainer(
                 app = app,
-                route = route.v1
+                route = route.v1,
             )
         }
 
         is Route.Settings -> {
             SettingsContainer(
                 app = app,
-                route = route.v1
+                route = route.v1,
             )
         }
 
@@ -53,14 +55,14 @@ fun RouteView(app: AppManager, route: Route) {
         is Route.Send -> {
             SendFlowContainer(
                 app = app,
-                sendRoute = route.v1
+                sendRoute = route.v1,
             )
         }
 
         is Route.CoinControl -> {
             CoinControlContainer(
                 app = app,
-                route = route.v1
+                route = route.v1,
             )
         }
 
@@ -68,7 +70,7 @@ fun RouteView(app: AppManager, route: Route) {
             LoadAndResetContainer(
                 app = app,
                 nextRoutes = route.resetTo.map { it.route() },
-                loadingTimeMs = route.afterMillis.toLong()
+                loadingTimeMs = route.afterMillis.toLong(),
             )
         }
     }
@@ -98,7 +100,7 @@ private fun TransactionDetailsScreen(app: AppManager, walletId: WalletId, detail
 private fun LoadAndResetContainer(
     app: AppManager,
     nextRoutes: List<Route>,
-    loadingTimeMs: Long
+    loadingTimeMs: Long,
 ) {
     // show loading indicator
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

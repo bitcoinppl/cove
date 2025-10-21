@@ -10,6 +10,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import kotlinx.coroutines.delay
 import org.bitcoinppl.cove.components.FullPageLoadingView
+import org.bitcoinppl.cove.wallet_transactions.WalletTransactionsScreen
+import org.bitcoinppl.cove_core.*
+import org.bitcoinppl.cove_core.types.*
 
 /**
  * selected wallet container - manages WalletManager lifecycle
@@ -19,14 +22,14 @@ import org.bitcoinppl.cove.components.FullPageLoadingView
 fun SelectedWalletContainer(
     app: AppManager,
     id: WalletId,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     var manager by remember { mutableStateOf<WalletManager?>(null) }
     val tag = "SelectedWalletContainer"
 
     // load manager on appear
     LaunchedEffect(id) {
-        if (manager != null && app.walletManager == null) {
+        if (manager != null || app.walletManager != null) {
             return@LaunchedEffect
         }
 
@@ -90,10 +93,17 @@ fun SelectedWalletContainer(
     // render
     when (val wm = manager) {
         null -> FullPageLoadingView(modifier = modifier)
-        else -> WalletTransactionsScreen(
-            app = app,
-            manager = wm,
-            modifier = modifier
-        )
+        else ->
+            WalletTransactionsScreen(
+                onBack = { app.popRoute() },
+                onSend = { /* TODO: implement send */ },
+                onReceive = { /* TODO: implement receive */ },
+                onQrCode = { /* TODO: implement QR code */ },
+                onMore = { /* TODO: implement more */ },
+                // TODO: get from theme
+                isDarkList = false,
+                // TODO: WalletTransactionsScreen doesn't accept modifier
+                // modifier = modifier
+            )
     }
 }

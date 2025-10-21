@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import org.bitcoinppl.cove_core.*
+import org.bitcoinppl.cove_core.types.*
 
 /**
  * new wallet container - simple router for new wallet flows
@@ -14,14 +16,14 @@ import androidx.compose.ui.Modifier
 fun NewWalletContainer(
     app: AppManager,
     route: NewWalletRoute,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     when (route) {
         is NewWalletRoute.Select -> {
             // TODO: implement NewWalletSelectScreen
             Box(
                 modifier = modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.Center,
             ) {
                 androidx.compose.material3.Text("New Wallet Select - TODO")
             }
@@ -30,38 +32,20 @@ fun NewWalletContainer(
             NewHotWalletContainer(
                 app = app,
                 route = route.v1,
-                modifier = modifier
+                modifier = modifier,
             )
         }
         is NewWalletRoute.ColdWallet -> {
             when (route.v1) {
-                is ColdWalletRoute.QrCode -> {
+                ColdWalletRoute.QR_CODE -> {
                     // TODO: implement QrCodeImportScreen
                     Box(
                         modifier = modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
+                        contentAlignment = Alignment.Center,
                     ) {
                         androidx.compose.material3.Text("QR Code Import - TODO")
                     }
                 }
-            }
-        }
-        is NewWalletRoute.Hardware -> {
-            // TODO: implement hardware wallet flows
-            Box(
-                modifier = modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                androidx.compose.material3.Text("Hardware Wallet - TODO")
-            }
-        }
-        is NewWalletRoute.Import -> {
-            // TODO: implement import wallet screen
-            Box(
-                modifier = modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                androidx.compose.material3.Text("Import Wallet - TODO")
             }
         }
     }

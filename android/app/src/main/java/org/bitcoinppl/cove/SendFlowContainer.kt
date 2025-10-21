@@ -12,6 +12,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import org.bitcoinppl.cove_core.*
+import org.bitcoinppl.cove_core.types.*
 
 /**
  * send flow container - manages WalletManager + SendFlowManager lifecycle
@@ -21,7 +23,7 @@ import androidx.compose.ui.Modifier
 fun SendFlowContainer(
     app: AppManager,
     sendRoute: SendRoute,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     var walletManager by remember { mutableStateOf<WalletManager?>(null) }
     var sendFlowManager by remember { mutableStateOf<SendFlowManager?>(null) }
@@ -33,7 +35,13 @@ fun SendFlowContainer(
         if (walletManager != null) return@LaunchedEffect
 
         try {
-            val id = sendRoute.id()
+            val id =
+                when (sendRoute) {
+                    is SendRoute.SetAmount -> sendRoute.id
+                    is SendRoute.CoinControlSetAmount -> sendRoute.id
+                    is SendRoute.HardwareExport -> sendRoute.id
+                    is SendRoute.Confirm -> sendRoute.v1.id
+                }
             android.util.Log.d(tag, "getting wallet for SendRoute $id")
 
             val wm = app.getWalletManager(id)
@@ -43,8 +51,8 @@ fun SendFlowContainer(
             // pre-populate address/amount based on route type
             when (sendRoute) {
                 is SendRoute.SetAmount -> {
-                    sendRoute.address?.let { sfm.setAddress(it) }
-                    sendRoute.amount?.let { sfm.setAmount(it) }
+                    sendRoute.address?.let { sfm.updateAddress(it) }
+                    sendRoute.amount?.let { sfm.updateAmount(it) }
                 }
                 else -> {}
             }
@@ -78,7 +86,7 @@ fun SendFlowContainer(
             // check for zero balance
             LaunchedEffect(wm.balance) {
                 if (wm.balance.spendable().asSats() == 0u.toULong()) {
-                    presenter.alertState = TaggedItem(SendFlowAlertState.Error(SendFlowError.NoBalance))
+                    presenter.alertState = TaggedItem(SendFlowAlertState.Error(SendFlowException.NoBalance()))
                 }
             }
 
@@ -88,13 +96,13 @@ fun SendFlowContainer(
                 walletManager = wm,
                 sendFlowManager = sfm,
                 presenter = presenter,
-                modifier = modifier
+                modifier = modifier,
             )
         }
         else -> {
             Box(
                 modifier = modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.Center,
             ) {
                 CircularProgressIndicator()
             }
@@ -112,14 +120,14 @@ private fun SendFlowRouteToScreen(
     walletManager: WalletManager,
     sendFlowManager: SendFlowManager,
     presenter: SendFlowPresenter,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     when (sendRoute) {
         is SendRoute.SetAmount -> {
             // TODO: implement SendScreen with manager parameters
             Box(
                 modifier = modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.Center,
             ) {
                 androidx.compose.material3.Text("Send Set Amount - TODO")
             }
@@ -128,7 +136,7 @@ private fun SendFlowRouteToScreen(
             // TODO: implement coin control set amount screen
             Box(
                 modifier = modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.Center,
             ) {
                 androidx.compose.material3.Text("Coin Control Set Amount - TODO")
             }
@@ -137,7 +145,7 @@ private fun SendFlowRouteToScreen(
             // TODO: implement send confirmation screen
             Box(
                 modifier = modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.Center,
             ) {
                 androidx.compose.material3.Text("Send Confirm - TODO")
             }
@@ -146,7 +154,7 @@ private fun SendFlowRouteToScreen(
             // TODO: implement hardware export screen
             Box(
                 modifier = modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.Center,
             ) {
                 androidx.compose.material3.Text("Hardware Export - TODO")
             }

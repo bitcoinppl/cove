@@ -11,6 +11,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import org.bitcoinppl.cove_core.*
+import org.bitcoinppl.cove_core.types.*
 
 /**
  * coin control container - manages WalletManager + CoinControlManager lifecycle
@@ -20,7 +22,7 @@ import androidx.compose.ui.Modifier
 fun CoinControlContainer(
     app: AppManager,
     route: CoinControlRoute,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     var walletManager by remember { mutableStateOf<WalletManager?>(null) }
     var manager by remember { mutableStateOf<CoinControlManager?>(null) }
@@ -31,7 +33,10 @@ fun CoinControlContainer(
         if (walletManager != null && manager != null) return@LaunchedEffect
 
         try {
-            val id = route.id()
+            val id =
+                when (route) {
+                    is CoinControlRoute.List -> route.v1
+                }
             android.util.Log.d(tag, "getting wallet for CoinControlRoute $id")
 
             val wm = app.getWalletManager(id)
@@ -42,12 +47,13 @@ fun CoinControlContainer(
             manager = ccm
         } catch (e: Exception) {
             android.util.Log.e(tag, "[ERROR] unable to get wallet: ${e.message}", e)
-            app.alertState = TaggedItem(
-                AppAlertState.General(
-                    title = "Error!",
-                    message = "Unable to get wallet: ${e.message}"
+            app.alertState =
+                TaggedItem(
+                    AppAlertState.General(
+                        title = "Error!",
+                        message = "Unable to get wallet: ${e.message}",
+                    ),
                 )
-            )
         }
     }
 
@@ -59,7 +65,7 @@ fun CoinControlContainer(
                     // TODO: use real UtxoListScreen with manager parameters
                     Box(
                         modifier = modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
+                        contentAlignment = Alignment.Center,
                     ) {
                         androidx.compose.material3.Text("UTXO List - TODO")
                     }
@@ -69,7 +75,7 @@ fun CoinControlContainer(
         else -> {
             Box(
                 modifier = modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.Center,
             ) {
                 CircularProgressIndicator()
             }
