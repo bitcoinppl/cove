@@ -43,6 +43,8 @@
     <string name="label_transaction_received">Received</string>
     <string name="title_transactions">Transactions</string>
     <string name="no_transactions_yet">No transactions yet</string>
+    <string name="pending">Pending</string>
+    <string name="unconfirmed">Unconfirmed</string>
     <string name="title_transaction_sent">Transaction Sent</string>
     <string name="title_transaction_received">Transaction Received</string>
     <string name="btn_add_label">Add label</string>

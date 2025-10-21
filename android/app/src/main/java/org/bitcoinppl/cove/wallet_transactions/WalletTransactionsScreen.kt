@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
@@ -276,71 +278,78 @@ fun WalletTransactionsScreen(
                             )
                         }
                     } else {
-                        // render transactions dynamically
-                        transactions.forEachIndexed { index, txn ->
-                            when (txn) {
-                                is Transaction.Confirmed -> {
-                                    val direction = txn.sentAndReceived().direction()
-                                    val txType =
-                                        when (direction) {
-                                            TransactionDirection.INCOMING -> TransactionType.RECEIVED
-                                            TransactionDirection.OUTGOING -> TransactionType.SENT
-                                        }
+                        // render transactions dynamically in scrollable list
+                        LazyColumn(
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            itemsIndexed(transactions) { index, txn ->
+                                when (txn) {
+                                    is Transaction.Confirmed -> {
+                                        val direction = txn.sentAndReceived().direction()
+                                        val txType =
+                                            when (direction) {
+                                                TransactionDirection.INCOMING -> TransactionType.RECEIVED
+                                                TransactionDirection.OUTGOING -> TransactionType.SENT
+                                            }
 
-                                    // format amount with manager if available
-                                    val formattedAmount =
-                                        manager?.let {
-                                            val amount = txn.sentAndReceived().amount()
-                                            val prefix = if (direction == TransactionDirection.OUTGOING) "-" else ""
-                                            prefix + it.displayAmount(amount, showUnit = true)
-                                        } ?: txn.sentAndReceived().label()
+                                        // format amount with manager if available
+                                        val formattedAmount =
+                                            manager?.let {
+                                                val amount = txn.sentAndReceived().amount()
+                                                val prefix = if (direction == TransactionDirection.OUTGOING) "-" else ""
+                                                prefix + it.displayAmount(amount, showUnit = true)
+                                            } ?: txn.sentAndReceived().label()
 
-                                    TransactionWidget(
-                                        type = txType,
-                                        date = txn.confirmedAtFmt(),
-                                        amount = formattedAmount,
-                                        balanceAfter = txn.blockHeightFmt(),
-                                        listCard = listCard,
-                                        primaryText = primaryText,
-                                        secondaryText = secondaryText,
-                                    )
+                                        TransactionWidget(
+                                            type = txType,
+                                            date = txn.confirmedAtFmt(),
+                                            amount = formattedAmount,
+                                            balanceAfter = txn.blockHeightFmt(),
+                                            listCard = listCard,
+                                            primaryText = primaryText,
+                                            secondaryText = secondaryText,
+                                        )
+                                    }
+                                    is Transaction.Unconfirmed -> {
+                                        val direction = txn.sentAndReceived().direction()
+                                        val txType =
+                                            when (direction) {
+                                                TransactionDirection.INCOMING -> TransactionType.RECEIVED
+                                                TransactionDirection.OUTGOING -> TransactionType.SENT
+                                            }
+
+                                        // format amount with manager if available
+                                        val formattedAmount =
+                                            manager?.let {
+                                                val amount = txn.sentAndReceived().amount()
+                                                val prefix = if (direction == TransactionDirection.OUTGOING) "-" else ""
+                                                prefix + it.displayAmount(amount, showUnit = true)
+                                            } ?: txn.sentAndReceived().label()
+
+                                        TransactionWidget(
+                                            type = txType,
+                                            date = stringResource(R.string.pending),
+                                            amount = formattedAmount,
+                                            balanceAfter = stringResource(R.string.unconfirmed),
+                                            listCard = listCard,
+                                            primaryText = primaryText,
+                                            secondaryText = secondaryText,
+                                        )
+                                    }
                                 }
-                                is Transaction.Unconfirmed -> {
-                                    val direction = txn.sentAndReceived().direction()
-                                    val txType =
-                                        when (direction) {
-                                            TransactionDirection.INCOMING -> TransactionType.RECEIVED
-                                            TransactionDirection.OUTGOING -> TransactionType.SENT
-                                        }
 
-                                    // format amount with manager if available
-                                    val formattedAmount =
-                                        manager?.let {
-                                            val amount = txn.sentAndReceived().amount()
-                                            val prefix = if (direction == TransactionDirection.OUTGOING) "-" else ""
-                                            prefix + it.displayAmount(amount, showUnit = true)
-                                        } ?: txn.sentAndReceived().label()
-
-                                    TransactionWidget(
-                                        type = txType,
-                                        date = "Pending",
-                                        amount = formattedAmount,
-                                        balanceAfter = "Unconfirmed",
-                                        listCard = listCard,
-                                        primaryText = primaryText,
-                                        secondaryText = secondaryText,
-                                    )
+                                // add divider between transactions (but not after the last one)
+                                if (index < transactions.size - 1) {
+                                    HorizontalDivider(color = dividerColor, thickness = 0.5.dp)
                                 }
                             }
 
-                            // add divider between transactions (but not after the last one)
-                            if (index < transactions.size - 1) {
-                                HorizontalDivider(color = dividerColor, thickness = 0.5.dp)
+                            // add bottom spacing
+                            item {
+                                Spacer(Modifier.height(12.dp))
                             }
                         }
                     }
-
-                    Spacer(Modifier.height(12.dp))
                 }
             }
         }
