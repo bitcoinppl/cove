@@ -54,6 +54,8 @@ import org.bitcoinppl.cove.WalletLoadState
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.views.ImageButton
+import org.bitcoinppl.cove_core.Transaction
+import org.bitcoinppl.cove_core.TransactionDirection
 
 enum class TransactionType { SENT, RECEIVED }
 
@@ -257,70 +259,86 @@ fun WalletTransactionsScreen(
                         fontWeight = FontWeight.SemiBold,
                     )
 
-                    TransactionWidget(
-                        type = TransactionType.SENT,
-                        date = "June 16, 2025",
-                        amount = "-28,784 SATS",
-                        balanceAfter = "2,196,795",
-                        listCard = listCard,
-                        primaryText = primaryText,
-                        secondaryText = secondaryText,
-                    )
-                    HorizontalDivider(color = dividerColor, thickness = 0.5.dp)
+                    // render real transactions or show empty state
+                    if (transactions.isEmpty()) {
+                        // empty state
+                        Box(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 32.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = "No transactions yet",
+                                color = secondaryText,
+                                fontSize = 14.sp,
+                            )
+                        }
+                    } else {
+                        // render transactions dynamically
+                        transactions.forEachIndexed { index, txn ->
+                            when (txn) {
+                                is Transaction.Confirmed -> {
+                                    val direction = txn.sentAndReceived().direction()
+                                    val txType =
+                                        when (direction) {
+                                            TransactionDirection.INCOMING -> TransactionType.RECEIVED
+                                            TransactionDirection.OUTGOING -> TransactionType.SENT
+                                        }
 
-                    TransactionWidget(
-                        type = TransactionType.SENT,
-                        date = "June 15, 2025",
-                        amount = "-152,724 SATS",
-                        balanceAfter = "2,194,934",
-                        listCard = listCard,
-                        primaryText = primaryText,
-                        secondaryText = secondaryText,
-                    )
-                    HorizontalDivider(color = dividerColor, thickness = 0.5.dp)
+                                    // format amount with manager if available
+                                    val formattedAmount =
+                                        manager?.let {
+                                            val amount = txn.sentAndReceived().amount()
+                                            val prefix = if (direction == TransactionDirection.OUTGOING) "-" else ""
+                                            prefix + it.displayAmount(amount, showUnit = true)
+                                        } ?: txn.sentAndReceived().label()
 
-                    TransactionWidget(
-                        type = TransactionType.RECEIVED,
-                        date = "June 15, 2025",
-                        amount = "10,001 SATS",
-                        balanceAfter = "2,194,932",
-                        listCard = listCard,
-                        primaryText = primaryText,
-                        secondaryText = secondaryText,
-                    )
-                    HorizontalDivider(color = dividerColor, thickness = 0.5.dp)
+                                    TransactionWidget(
+                                        type = txType,
+                                        date = txn.confirmedAtFmt(),
+                                        amount = formattedAmount,
+                                        balanceAfter = txn.blockHeightFmt(),
+                                        listCard = listCard,
+                                        primaryText = primaryText,
+                                        secondaryText = secondaryText,
+                                    )
+                                }
+                                is Transaction.Unconfirmed -> {
+                                    val direction = txn.sentAndReceived().direction()
+                                    val txType =
+                                        when (direction) {
+                                            TransactionDirection.INCOMING -> TransactionType.RECEIVED
+                                            TransactionDirection.OUTGOING -> TransactionType.SENT
+                                        }
 
-                    TransactionWidget(
-                        type = TransactionType.RECEIVED,
-                        date = "June 13, 2025",
-                        amount = "25,533 SATS",
-                        balanceAfter = "2,188,783",
-                        listCard = listCard,
-                        primaryText = primaryText,
-                        secondaryText = secondaryText,
-                    )
-                    HorizontalDivider(color = dividerColor, thickness = 0.5.dp)
+                                    // format amount with manager if available
+                                    val formattedAmount =
+                                        manager?.let {
+                                            val amount = txn.sentAndReceived().amount()
+                                            val prefix = if (direction == TransactionDirection.OUTGOING) "-" else ""
+                                            prefix + it.displayAmount(amount, showUnit = true)
+                                        } ?: txn.sentAndReceived().label()
 
-                    TransactionWidget(
-                        type = TransactionType.RECEIVED,
-                        date = "June 10, 2025",
-                        amount = "10,000 SATS",
-                        balanceAfter = "2,180,942",
-                        listCard = listCard,
-                        primaryText = primaryText,
-                        secondaryText = secondaryText,
-                    )
-                    HorizontalDivider(color = dividerColor, thickness = 0.5.dp)
+                                    TransactionWidget(
+                                        type = txType,
+                                        date = "Pending",
+                                        amount = formattedAmount,
+                                        balanceAfter = "Unconfirmed",
+                                        listCard = listCard,
+                                        primaryText = primaryText,
+                                        secondaryText = secondaryText,
+                                    )
+                                }
+                            }
 
-                    TransactionWidget(
-                        type = TransactionType.SENT,
-                        date = "June 10, 2025",
-                        amount = "-20,141 SATS",
-                        balanceAfter = "2,180,939",
-                        listCard = listCard,
-                        primaryText = primaryText,
-                        secondaryText = secondaryText,
-                    )
+                            // add divider between transactions (but not after the last one)
+                            if (index < transactions.size - 1) {
+                                HorizontalDivider(color = dividerColor, thickness = 0.5.dp)
+                            }
+                        }
+                    }
 
                     Spacer(Modifier.height(12.dp))
                 }
