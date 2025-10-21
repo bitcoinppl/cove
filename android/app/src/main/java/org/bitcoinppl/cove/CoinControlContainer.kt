@@ -70,50 +70,79 @@ fun CoinControlContainer(
         walletManager != null && manager != null -> {
             when (route) {
                 is CoinControlRoute.List -> {
-                    // convert rust UTXOs to UI model
-                    val utxos = manager!!.utxos.map { utxo ->
-                        val date = java.util.Date(utxo.datetime.toLong() * 1000)
-                        org.bitcoinppl.cove.utxo_list.UtxoUi(
-                            id = utxo.outpoint.toString(),
-                            label = utxo.label ?: "",
-                            address = utxo.address.toString(),
-                            amount = manager!!.displayAmount(utxo.amount),
-                            date = date,
-                            isChange = utxo.type == org.bitcoinppl.cove_core.types.UtxoType.CHANGE
-                        )
-                    }
+                    val currentManager = manager!!
 
-                    val selected = manager!!.selected.map { it.toString() }.toSet()
+                    val idToOutpoint =
+                        currentManager.utxos.associate {
+                            it.outpoint.toString() to it.outpoint
+                        }
+
+                    // convert rust UTXOs to UI model
+                    val utxos =
+                        currentManager.utxos.map { utxo ->
+                            val date = java.util.Date(utxo.datetime.toLong() * 1000)
+                            org.bitcoinppl.cove.utxo_list.UtxoUi(
+                                id = utxo.outpoint.toString(),
+                                label = utxo.label ?: "",
+                                address = utxo.address.string(),
+                                amount = currentManager.displayAmount(utxo.amount),
+                                date = date,
+                                isChange = utxo.type == org.bitcoinppl.cove_core.types.UtxoType.CHANGE,
+                            )
+                        }
+
+                    val selected = currentManager.selected.map { it.toString() }.toSet()
+
+                    // get current sort state from manager
+                    val currentSort =
+                        listOf(
+                            CoinControlListSortKey.DATE to org.bitcoinppl.cove.utxo_list.UtxoSort.DATE,
+                            CoinControlListSortKey.NAME to org.bitcoinppl.cove.utxo_list.UtxoSort.NAME,
+                            CoinControlListSortKey.AMOUNT to org.bitcoinppl.cove.utxo_list.UtxoSort.AMOUNT,
+                            CoinControlListSortKey.CHANGE to org.bitcoinppl.cove.utxo_list.UtxoSort.CHANGE,
+                        ).firstOrNull { (key, _) ->
+                            currentManager.rust.buttonPresentation(key) is ButtonPresentation.Selected
+                        }?.second ?: org.bitcoinppl.cove.utxo_list.UtxoSort.DATE
 
                     org.bitcoinppl.cove.utxo_list.UtxoListScreen(
                         utxos = utxos,
                         selected = selected,
-                        currentSort = org.bitcoinppl.cove.utxo_list.UtxoSort.DATE,
+                        currentSort = currentSort,
                         onBack = { app.popRoute() },
                         onMore = { /* TODO: implement more menu */ },
                         onToggle = { id ->
-                            val utxo = manager!!.utxos.find { it.outpoint.toString() == id }
-                            if (utxo != null) {
-                                val newSelected = if (selected.contains(id)) {
-                                    manager!!.selected - utxo.outpoint
-                                } else {
-                                    manager!!.selected + utxo.outpoint
-                                }
-                                manager!!.updateSelected(newSelected)
+                            val outpoint = idToOutpoint[id]
+                            if (outpoint != null) {
+                                val newSelected =
+                                    if (selected.contains(id)) {
+                                        currentManager.selected - outpoint
+                                    } else {
+                                        currentManager.selected + outpoint
+                                    }
+                                currentManager.updateSelected(newSelected)
                             }
                         },
                         onSelectAll = {
-                            val allOutpoints = manager!!.utxos.map { it.outpoint }.toSet()
-                            manager!!.updateSelected(allOutpoints)
+                            val allOutpoints = currentManager.utxos.map { it.outpoint }.toSet()
+                            currentManager.updateSelected(allOutpoints)
                         },
                         onDeselectAll = {
-                            manager!!.updateSelected(emptySet())
+                            currentManager.updateSelected(emptySet())
                         },
-                        onSortChange = { /* TODO: implement sort */ },
+                        onSortChange = { sort ->
+                            val sortKey =
+                                when (sort) {
+                                    org.bitcoinppl.cove.utxo_list.UtxoSort.DATE -> CoinControlListSortKey.DATE
+                                    org.bitcoinppl.cove.utxo_list.UtxoSort.NAME -> CoinControlListSortKey.NAME
+                                    org.bitcoinppl.cove.utxo_list.UtxoSort.AMOUNT -> CoinControlListSortKey.AMOUNT
+                                    org.bitcoinppl.cove.utxo_list.UtxoSort.CHANGE -> CoinControlListSortKey.CHANGE
+                                }
+                            currentManager.dispatch(CoinControlManagerAction.ChangeSort(sortKey))
+                        },
                         onContinue = {
-                            manager!!.continuePressed()
+                            currentManager.continuePressed()
                             app.popRoute()
-                        }
+                        },
                     )
                 }
             }
