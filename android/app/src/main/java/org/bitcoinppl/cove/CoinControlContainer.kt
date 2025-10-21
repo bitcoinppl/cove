@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -54,6 +55,13 @@ fun CoinControlContainer(
                         message = "Unable to get wallet: ${e.message}",
                     ),
                 )
+        }
+    }
+
+    // cleanup on disappear or wallet change
+    DisposableEffect(walletId) {
+        onDispose {
+            manager?.close()
         }
     }
 

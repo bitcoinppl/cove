@@ -120,8 +120,7 @@ fun SelectedWalletContainer(
                 onMore = { /* TODO: implement more */ },
                 // TODO: get from theme
                 isDarkList = false,
-                // TODO: WalletTransactionsScreen doesn't accept modifier
-                // modifier = modifier
+                manager = wm,
             )
     }
 }

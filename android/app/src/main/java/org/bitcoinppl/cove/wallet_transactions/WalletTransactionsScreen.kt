@@ -50,6 +50,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.WalletLoadState
+import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.views.ImageButton
 
@@ -95,11 +97,31 @@ fun WalletTransactionsScreen(
     onQrCode: () -> Unit,
     onMore: () -> Unit,
     isDarkList: Boolean,
+    manager: WalletManager? = null,
     initialBalanceHidden: Boolean = false,
     usdAmount: String = "$1,351.93",
     satsAmount: String = "1,166,369 SATS",
+    walletName: String = "Main",
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
+    // extract real data from manager if available
+    val actualWalletName = manager?.walletMetadata?.name ?: walletName
+    val actualSatsAmount =
+        manager?.let {
+            val spendable = it.balance.spendable()
+            it.displayAmount(spendable, showUnit = true)
+        } ?: satsAmount
+    val actualUsdAmount =
+        manager?.fiatBalance?.let {
+            "$${"%.2f".format(it)}"
+        } ?: usdAmount
+    val transactions =
+        when (val state = manager?.loadState) {
+            is WalletLoadState.LOADED -> state.txns
+            is WalletLoadState.SCANNING -> state.txns
+            else -> emptyList()
+        }
+
     val listBg = if (isDarkList) CoveColor.ListBackgroundDark else CoveColor.ListBackgroundLight
     val listCard = if (isDarkList) CoveColor.ListCardDark else CoveColor.ListCardAlternative
     val primaryText = if (isDarkList) CoveColor.TextPrimaryDark else CoveColor.TextPrimaryLight
@@ -119,7 +141,7 @@ fun WalletTransactionsScreen(
                     ),
                 title = {
                     Text(
-                        "Main",
+                        actualWalletName,
                         style = MaterialTheme.typography.titleMedium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -178,8 +200,8 @@ fun WalletTransactionsScreen(
                     verticalArrangement = Arrangement.spacedBy(24.dp),
                 ) {
                     BalanceWidget(
-                        usdAmount = usdAmount,
-                        satsAmount = satsAmount,
+                        usdAmount = actualUsdAmount,
+                        satsAmount = actualSatsAmount,
                         hidden = initialBalanceHidden,
                     )
 
