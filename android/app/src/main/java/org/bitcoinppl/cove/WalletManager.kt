@@ -11,6 +11,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.bitcoinppl.cove.utils.toComposeColor
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.tapcard.TapSigner
 import org.bitcoinppl.cove_core.types.*
@@ -78,12 +79,7 @@ class WalletManager : WalletManagerReconciler, Closeable {
         get() = walletMetadata?.verified ?: false
 
     val accentColor: Color
-        get() =
-            walletMetadata?.let { metadata ->
-                // convert WalletColor to Compose Color
-                // TODO: implement proper color conversion from metadata.color
-                Color.Blue
-            } ?: Color.Blue
+        get() = walletMetadata?.color?.toComposeColor() ?: Color.Blue
 
     // private constructor - use companion factory methods
     private constructor(

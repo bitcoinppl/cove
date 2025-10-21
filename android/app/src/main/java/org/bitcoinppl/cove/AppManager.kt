@@ -110,6 +110,14 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     /**
+     * set the cached wallet manager instance
+     */
+    internal fun setWalletManager(manager: WalletManager) {
+        logDebug("setting wallet manager for wallet ${manager.id}")
+        walletManager = manager
+    }
+
+    /**
      * get or create wallet manager for the given wallet id
      * caches the instance so we don't recreate unnecessarily
      */

@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
@@ -50,8 +52,14 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.WalletLoadState
+import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.views.ImageButton
+import org.bitcoinppl.cove_core.Transaction
+import org.bitcoinppl.cove_core.types.TransactionDirection
+import java.text.NumberFormat
+import java.util.Locale
 
 enum class TransactionType { SENT, RECEIVED }
 
@@ -95,11 +103,31 @@ fun WalletTransactionsScreen(
     onQrCode: () -> Unit,
     onMore: () -> Unit,
     isDarkList: Boolean,
+    manager: WalletManager? = null,
     initialBalanceHidden: Boolean = false,
     usdAmount: String = "$1,351.93",
     satsAmount: String = "1,166,369 SATS",
+    walletName: String = "Main",
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
+    // extract real data from manager if available
+    val actualWalletName = manager?.walletMetadata?.name ?: walletName
+    val actualSatsAmount =
+        manager?.let {
+            val spendable = it.balance.spendable()
+            it.displayAmount(spendable, showUnit = true)
+        } ?: satsAmount
+    val actualUsdAmount =
+        manager?.fiatBalance?.let {
+            NumberFormat.getCurrencyInstance(Locale.US).format(it)
+        } ?: usdAmount
+    val transactions =
+        when (val state = manager?.loadState) {
+            is WalletLoadState.LOADED -> state.txns
+            is WalletLoadState.SCANNING -> state.txns
+            else -> emptyList()
+        }
+
     val listBg = if (isDarkList) CoveColor.ListBackgroundDark else CoveColor.ListBackgroundLight
     val listCard = if (isDarkList) CoveColor.ListCardDark else CoveColor.ListCardAlternative
     val primaryText = if (isDarkList) CoveColor.TextPrimaryDark else CoveColor.TextPrimaryLight
@@ -119,7 +147,7 @@ fun WalletTransactionsScreen(
                     ),
                 title = {
                     Text(
-                        "Main",
+                        actualWalletName,
                         style = MaterialTheme.typography.titleMedium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -178,8 +206,8 @@ fun WalletTransactionsScreen(
                     verticalArrangement = Arrangement.spacedBy(24.dp),
                 ) {
                     BalanceWidget(
-                        usdAmount = usdAmount,
-                        satsAmount = satsAmount,
+                        usdAmount = actualUsdAmount,
+                        satsAmount = actualSatsAmount,
                         hidden = initialBalanceHidden,
                     )
 
@@ -235,72 +263,95 @@ fun WalletTransactionsScreen(
                         fontWeight = FontWeight.SemiBold,
                     )
 
-                    TransactionWidget(
-                        type = TransactionType.SENT,
-                        date = "June 16, 2025",
-                        amount = "-28,784 SATS",
-                        balanceAfter = "2,196,795",
-                        listCard = listCard,
-                        primaryText = primaryText,
-                        secondaryText = secondaryText,
-                    )
-                    HorizontalDivider(color = dividerColor, thickness = 0.5.dp)
+                    // render real transactions or show empty state
+                    if (transactions.isEmpty()) {
+                        // empty state
+                        Box(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 32.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = stringResource(R.string.no_transactions_yet),
+                                color = secondaryText,
+                                fontSize = 14.sp,
+                            )
+                        }
+                    } else {
+                        // render transactions dynamically in scrollable list
+                        LazyColumn(
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            itemsIndexed(transactions) { index, txn ->
+                                when (txn) {
+                                    is Transaction.Confirmed -> {
+                                        val direction = txn.v1.sentAndReceived().direction()
+                                        val txType =
+                                            when (direction) {
+                                                TransactionDirection.INCOMING -> TransactionType.RECEIVED
+                                                TransactionDirection.OUTGOING -> TransactionType.SENT
+                                            }
 
-                    TransactionWidget(
-                        type = TransactionType.SENT,
-                        date = "June 15, 2025",
-                        amount = "-152,724 SATS",
-                        balanceAfter = "2,194,934",
-                        listCard = listCard,
-                        primaryText = primaryText,
-                        secondaryText = secondaryText,
-                    )
-                    HorizontalDivider(color = dividerColor, thickness = 0.5.dp)
+                                        // format amount with manager if available
+                                        val formattedAmount =
+                                            manager?.let {
+                                                val amount = txn.v1.sentAndReceived().amount()
+                                                val prefix = if (direction == TransactionDirection.OUTGOING) "-" else ""
+                                                prefix + it.displayAmount(amount, showUnit = true)
+                                            } ?: txn.v1.sentAndReceived().label()
 
-                    TransactionWidget(
-                        type = TransactionType.RECEIVED,
-                        date = "June 15, 2025",
-                        amount = "10,001 SATS",
-                        balanceAfter = "2,194,932",
-                        listCard = listCard,
-                        primaryText = primaryText,
-                        secondaryText = secondaryText,
-                    )
-                    HorizontalDivider(color = dividerColor, thickness = 0.5.dp)
+                                        TransactionWidget(
+                                            type = txType,
+                                            date = txn.v1.confirmedAtFmt(),
+                                            amount = formattedAmount,
+                                            balanceAfter = txn.v1.blockHeightFmt(),
+                                            listCard = listCard,
+                                            primaryText = primaryText,
+                                            secondaryText = secondaryText,
+                                        )
+                                    }
+                                    is Transaction.Unconfirmed -> {
+                                        val direction = txn.v1.sentAndReceived().direction()
+                                        val txType =
+                                            when (direction) {
+                                                TransactionDirection.INCOMING -> TransactionType.RECEIVED
+                                                TransactionDirection.OUTGOING -> TransactionType.SENT
+                                            }
 
-                    TransactionWidget(
-                        type = TransactionType.RECEIVED,
-                        date = "June 13, 2025",
-                        amount = "25,533 SATS",
-                        balanceAfter = "2,188,783",
-                        listCard = listCard,
-                        primaryText = primaryText,
-                        secondaryText = secondaryText,
-                    )
-                    HorizontalDivider(color = dividerColor, thickness = 0.5.dp)
+                                        // format amount with manager if available
+                                        val formattedAmount =
+                                            manager?.let {
+                                                val amount = txn.v1.sentAndReceived().amount()
+                                                val prefix = if (direction == TransactionDirection.OUTGOING) "-" else ""
+                                                prefix + it.displayAmount(amount, showUnit = true)
+                                            } ?: txn.v1.sentAndReceived().label()
 
-                    TransactionWidget(
-                        type = TransactionType.RECEIVED,
-                        date = "June 10, 2025",
-                        amount = "10,000 SATS",
-                        balanceAfter = "2,180,942",
-                        listCard = listCard,
-                        primaryText = primaryText,
-                        secondaryText = secondaryText,
-                    )
-                    HorizontalDivider(color = dividerColor, thickness = 0.5.dp)
+                                        TransactionWidget(
+                                            type = txType,
+                                            date = stringResource(R.string.pending),
+                                            amount = formattedAmount,
+                                            balanceAfter = stringResource(R.string.unconfirmed),
+                                            listCard = listCard,
+                                            primaryText = primaryText,
+                                            secondaryText = secondaryText,
+                                        )
+                                    }
+                                }
 
-                    TransactionWidget(
-                        type = TransactionType.SENT,
-                        date = "June 10, 2025",
-                        amount = "-20,141 SATS",
-                        balanceAfter = "2,180,939",
-                        listCard = listCard,
-                        primaryText = primaryText,
-                        secondaryText = secondaryText,
-                    )
+                                // add divider between transactions (but not after the last one)
+                                if (index < transactions.size - 1) {
+                                    HorizontalDivider(color = dividerColor, thickness = 0.5.dp)
+                                }
+                            }
 
-                    Spacer(Modifier.height(12.dp))
+                            // add bottom spacing
+                            item {
+                                Spacer(Modifier.height(12.dp))
+                            }
+                        }
+                    }
                 }
             }
         }
