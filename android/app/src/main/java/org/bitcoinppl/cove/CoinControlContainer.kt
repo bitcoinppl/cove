@@ -70,13 +70,51 @@ fun CoinControlContainer(
         walletManager != null && manager != null -> {
             when (route) {
                 is CoinControlRoute.List -> {
-                    // TODO: use real UtxoListScreen with manager parameters
-                    Box(
-                        modifier = modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        androidx.compose.material3.Text("UTXO List - TODO")
+                    // convert rust UTXOs to UI model
+                    val utxos = manager!!.utxos.map { utxo ->
+                        val date = java.util.Date(utxo.datetime.toLong() * 1000)
+                        org.bitcoinppl.cove.utxo_list.UtxoUi(
+                            id = utxo.outpoint.toString(),
+                            label = utxo.label ?: "",
+                            address = utxo.address.toString(),
+                            amount = manager!!.displayAmount(utxo.amount),
+                            date = date,
+                            isChange = utxo.type == org.bitcoinppl.cove_core.types.UtxoType.CHANGE
+                        )
                     }
+
+                    val selected = manager!!.selected.map { it.toString() }.toSet()
+
+                    org.bitcoinppl.cove.utxo_list.UtxoListScreen(
+                        utxos = utxos,
+                        selected = selected,
+                        currentSort = org.bitcoinppl.cove.utxo_list.UtxoSort.DATE,
+                        onBack = { app.popRoute() },
+                        onMore = { /* TODO: implement more menu */ },
+                        onToggle = { id ->
+                            val utxo = manager!!.utxos.find { it.outpoint.toString() == id }
+                            if (utxo != null) {
+                                val newSelected = if (selected.contains(id)) {
+                                    manager!!.selected - utxo.outpoint
+                                } else {
+                                    manager!!.selected + utxo.outpoint
+                                }
+                                manager!!.updateSelected(newSelected)
+                            }
+                        },
+                        onSelectAll = {
+                            val allOutpoints = manager!!.utxos.map { it.outpoint }.toSet()
+                            manager!!.updateSelected(allOutpoints)
+                        },
+                        onDeselectAll = {
+                            manager!!.updateSelected(emptySet())
+                        },
+                        onSortChange = { /* TODO: implement sort */ },
+                        onContinue = {
+                            manager!!.continuePressed()
+                            app.popRoute()
+                        }
+                    )
                 }
             }
         }
