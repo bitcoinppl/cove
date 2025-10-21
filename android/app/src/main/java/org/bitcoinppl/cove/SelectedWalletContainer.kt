@@ -25,11 +25,13 @@ fun SelectedWalletContainer(
     modifier: Modifier = Modifier,
 ) {
     var manager by remember { mutableStateOf<WalletManager?>(null) }
+    var loadedId by remember { mutableStateOf<WalletId?>(null) }
     val tag = "SelectedWalletContainer"
 
     // load manager on appear
     LaunchedEffect(id) {
-        if (manager != null || app.walletManager != null) {
+        // only skip if we already loaded this specific id
+        if (loadedId == id && manager != null) {
             return@LaunchedEffect
         }
 
@@ -37,6 +39,7 @@ fun SelectedWalletContainer(
             android.util.Log.d(tag, "Getting wallet $id")
             val wm = app.getWalletManager(id)
             manager = wm
+            loadedId = id
 
             // small delay then update balance
             delay(500)
@@ -86,7 +89,7 @@ fun SelectedWalletContainer(
     LaunchedEffect(manager?.loadState) {
         val loadState = manager?.loadState
         if (loadState is WalletLoadState.LOADED) {
-            manager?.let { app.walletManager = it }
+            manager?.let { app.setWalletManager(it) }
         }
     }
 

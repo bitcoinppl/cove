@@ -76,7 +76,7 @@ class AppManager private constructor() : FfiReconcile {
 
     // cached managers (not observable)
     internal var walletManager: WalletManager? = null
-        internal set
+        private set
 
     internal var sendFlowManager: SendFlowManager? = null
         private set
@@ -107,6 +107,13 @@ class AppManager private constructor() : FfiReconcile {
         } else {
             android.util.Log.e(tag, message)
         }
+    }
+
+    /**
+     * set the cached wallet manager instance
+     */
+    internal fun setWalletManager(manager: WalletManager) {
+        walletManager = manager
     }
 
     /**
