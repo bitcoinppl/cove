@@ -46,26 +46,31 @@ fun SettingsContainer(
                 is SettingsRoute.Main -> {
                     org.bitcoinppl.cove.settings.SettingsScreen(
                         app = app,
+                        modifier = modifier,
                     )
                 }
                 is SettingsRoute.Network -> {
                     org.bitcoinppl.cove.settings.NetworkSettingsScreen(
                         app = app,
+                        modifier = modifier,
                     )
                 }
                 is SettingsRoute.Appearance -> {
                     org.bitcoinppl.cove.settings.AppearanceSettingsScreen(
                         app = app,
+                        modifier = modifier,
                     )
                 }
                 is SettingsRoute.Node -> {
                     org.bitcoinppl.cove.settings.NodeSettingsScreen(
                         app = app,
+                        modifier = modifier,
                     )
                 }
                 is SettingsRoute.FiatCurrency -> {
                     org.bitcoinppl.cove.settings.FiatCurrencySettingsScreen(
                         app = app,
+                        modifier = modifier,
                     )
                 }
                 is SettingsRoute.Wallet -> {

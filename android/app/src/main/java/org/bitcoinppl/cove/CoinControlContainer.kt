@@ -66,83 +66,15 @@ fun CoinControlContainer(
     }
 
     // render
+    val currentManager = manager
     when {
-        walletManager != null && manager != null -> {
+        walletManager != null && currentManager != null -> {
             when (route) {
                 is CoinControlRoute.List -> {
-                    val currentManager = manager!!
-
-                    val idToOutpoint =
-                        currentManager.utxos.associate {
-                            it.outpoint.toString() to it.outpoint
-                        }
-
-                    // convert rust UTXOs to UI model
-                    val utxos =
-                        currentManager.utxos.map { utxo ->
-                            val date = java.util.Date(utxo.datetime.toLong() * 1000)
-                            org.bitcoinppl.cove.utxo_list.UtxoUi(
-                                id = utxo.outpoint.toString(),
-                                label = utxo.label ?: "",
-                                address = utxo.address.string(),
-                                amount = currentManager.displayAmount(utxo.amount),
-                                date = date,
-                                isChange = utxo.type == org.bitcoinppl.cove_core.types.UtxoType.CHANGE,
-                            )
-                        }
-
-                    val selected = currentManager.selected.map { it.toString() }.toSet()
-
-                    // get current sort state from manager
-                    val currentSort =
-                        listOf(
-                            CoinControlListSortKey.DATE to org.bitcoinppl.cove.utxo_list.UtxoSort.DATE,
-                            CoinControlListSortKey.NAME to org.bitcoinppl.cove.utxo_list.UtxoSort.NAME,
-                            CoinControlListSortKey.AMOUNT to org.bitcoinppl.cove.utxo_list.UtxoSort.AMOUNT,
-                            CoinControlListSortKey.CHANGE to org.bitcoinppl.cove.utxo_list.UtxoSort.CHANGE,
-                        ).firstOrNull { (key, _) ->
-                            currentManager.rust.buttonPresentation(key) is ButtonPresentation.Selected
-                        }?.second ?: org.bitcoinppl.cove.utxo_list.UtxoSort.DATE
-
                     org.bitcoinppl.cove.utxo_list.UtxoListScreen(
-                        utxos = utxos,
-                        selected = selected,
-                        currentSort = currentSort,
-                        onBack = { app.popRoute() },
-                        onMore = { /* TODO: implement more menu */ },
-                        onToggle = { id ->
-                            val outpoint = idToOutpoint[id]
-                            if (outpoint != null) {
-                                val newSelected =
-                                    if (selected.contains(id)) {
-                                        currentManager.selected - outpoint
-                                    } else {
-                                        currentManager.selected + outpoint
-                                    }
-                                currentManager.updateSelected(newSelected)
-                            }
-                        },
-                        onSelectAll = {
-                            val allOutpoints = currentManager.utxos.map { it.outpoint }.toSet()
-                            currentManager.updateSelected(allOutpoints)
-                        },
-                        onDeselectAll = {
-                            currentManager.updateSelected(emptySet())
-                        },
-                        onSortChange = { sort ->
-                            val sortKey =
-                                when (sort) {
-                                    org.bitcoinppl.cove.utxo_list.UtxoSort.DATE -> CoinControlListSortKey.DATE
-                                    org.bitcoinppl.cove.utxo_list.UtxoSort.NAME -> CoinControlListSortKey.NAME
-                                    org.bitcoinppl.cove.utxo_list.UtxoSort.AMOUNT -> CoinControlListSortKey.AMOUNT
-                                    org.bitcoinppl.cove.utxo_list.UtxoSort.CHANGE -> CoinControlListSortKey.CHANGE
-                                }
-                            currentManager.dispatch(CoinControlManagerAction.ChangeSort(sortKey))
-                        },
-                        onContinue = {
-                            currentManager.continuePressed()
-                            app.popRoute()
-                        },
+                        manager = currentManager,
+                        app = app,
+                        modifier = modifier,
                     )
                 }
             }
