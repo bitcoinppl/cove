@@ -79,8 +79,8 @@ fun SendFlowContainer(
     // render
     when {
         walletManager != null && sendFlowManager != null && initCompleted -> {
-            val wm = walletManager!!
-            val sfm = sendFlowManager!!
+            val wm = walletManager ?: return
+            val sfm = sendFlowManager ?: return
             val presenter = sfm.presenter
 
             // check for zero balance
