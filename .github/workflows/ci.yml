@@ -44,6 +44,25 @@ jobs:
       - name: Run ktlint
         run: cd android && ./gradlew ktlintCheck
 
+  compile-android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - name: Compile Android
+        run: cd android && ./gradlew assembleDebug
+
+  compile-ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile iOS
+        run: cd ios && xcodebuild -scheme Cove -sdk iphonesimulator -arch arm64 build
+
   test:
     strategy:
       matrix:
