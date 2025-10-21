@@ -9,8 +9,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import kotlinx.coroutines.delay
-import org.bitcoinppl.cove_core.*
-import org.bitcoinppl.cove_core.types.*
 
 /**
  * maps FFI Route enum to Compose screens
@@ -24,15 +22,24 @@ fun RouteView(app: AppManager, route: Route) {
         }
 
         is Route.SelectedWallet -> {
-            SelectedWalletScreen(app = app, walletId = route.v1)
+            SelectedWalletContainer(
+                app = app,
+                id = route.v1
+            )
         }
 
         is Route.NewWallet -> {
-            NewWalletScreen(app = app, route = route.v1)
+            NewWalletContainer(
+                app = app,
+                route = route.v1
+            )
         }
 
         is Route.Settings -> {
-            SettingsScreen(app = app, route = route.v1)
+            SettingsContainer(
+                app = app,
+                route = route.v1
+            )
         }
 
         is Route.SecretWords -> {
@@ -44,66 +51,30 @@ fun RouteView(app: AppManager, route: Route) {
         }
 
         is Route.Send -> {
-            SendScreen(app = app, route = route.v1)
+            SendFlowContainer(
+                app = app,
+                sendRoute = route.v1
+            )
         }
 
         is Route.CoinControl -> {
-            CoinControlScreen(app = app, route = route.v1)
+            CoinControlContainer(
+                app = app,
+                route = route.v1
+            )
         }
 
         is Route.LoadAndReset -> {
             LoadAndResetContainer(
                 app = app,
                 nextRoutes = route.resetTo.map { it.route() },
-                loadingTimeMs = route.afterMillis.toLong(),
+                loadingTimeMs = route.afterMillis.toLong()
             )
         }
     }
 }
 
-// placeholder screens until they are fully implemented
-
-@Composable
-private fun ListWalletsScreen(app: AppManager) {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text("List Wallets - TODO")
-    }
-}
-
-@Composable
-private fun SelectedWalletScreen(app: AppManager, walletId: WalletId) {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text("Selected Wallet: $walletId - TODO")
-    }
-}
-
-@Composable
-private fun NewWalletScreen(app: AppManager, route: NewWalletRoute) {
-    when (route) {
-        is NewWalletRoute.Select -> {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("New Wallet Select - TODO")
-            }
-        }
-        is NewWalletRoute.HotWallet -> {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Hot Wallet Flow - TODO")
-            }
-        }
-        is NewWalletRoute.ColdWallet -> {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Cold Wallet Flow - TODO")
-            }
-        }
-    }
-}
-
-@Composable
-private fun SettingsScreen(app: AppManager, route: SettingsRoute) {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text("Settings: $route - TODO")
-    }
-}
+// placeholder screens for not yet implemented features
 
 @Composable
 private fun SecretWordsScreen(app: AppManager, walletId: WalletId) {
@@ -119,27 +90,6 @@ private fun TransactionDetailsScreen(app: AppManager, walletId: WalletId, detail
     }
 }
 
-@Composable
-private fun SendScreen(app: AppManager, route: SendRoute) {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text("Send Flow: $route - TODO")
-    }
-}
-
-@Composable
-private fun CoinControlScreen(app: AppManager, route: CoinControlRoute) {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text("Coin Control: $route - TODO")
-    }
-}
-
-@Composable
-private fun LoadingPlaceholder() {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        CircularProgressIndicator()
-    }
-}
-
 /**
  * load and reset container - shows loading state then executes route reset
  * ported from iOS LoadAndResetContainer
@@ -148,7 +98,7 @@ private fun LoadingPlaceholder() {
 private fun LoadAndResetContainer(
     app: AppManager,
     nextRoutes: List<Route>,
-    loadingTimeMs: Long,
+    loadingTimeMs: Long
 ) {
     // show loading indicator
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
