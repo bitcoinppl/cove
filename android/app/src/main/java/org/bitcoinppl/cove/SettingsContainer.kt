@@ -5,8 +5,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.zIndex
+import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
 
@@ -36,7 +36,7 @@ fun SettingsContainer(
             modifier =
                 Modifier
                     .fillMaxSize()
-                    .background(Color(0xFFF2F2F7))
+                    .background(CoveColor.ListBackgroundLight)
                     .zIndex(0f),
         )
 
