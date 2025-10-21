@@ -57,7 +57,7 @@ import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.views.ImageButton
 import org.bitcoinppl.cove_core.Transaction
-import org.bitcoinppl.cove_core.TransactionDirection
+import org.bitcoinppl.cove_core.types.TransactionDirection
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -287,7 +287,7 @@ fun WalletTransactionsScreen(
                             itemsIndexed(transactions) { index, txn ->
                                 when (txn) {
                                     is Transaction.Confirmed -> {
-                                        val direction = txn.sentAndReceived().direction()
+                                        val direction = txn.v1.sentAndReceived().direction()
                                         val txType =
                                             when (direction) {
                                                 TransactionDirection.INCOMING -> TransactionType.RECEIVED
@@ -297,23 +297,23 @@ fun WalletTransactionsScreen(
                                         // format amount with manager if available
                                         val formattedAmount =
                                             manager?.let {
-                                                val amount = txn.sentAndReceived().amount()
+                                                val amount = txn.v1.sentAndReceived().amount()
                                                 val prefix = if (direction == TransactionDirection.OUTGOING) "-" else ""
                                                 prefix + it.displayAmount(amount, showUnit = true)
-                                            } ?: txn.sentAndReceived().label()
+                                            } ?: txn.v1.sentAndReceived().label()
 
                                         TransactionWidget(
                                             type = txType,
-                                            date = txn.confirmedAtFmt(),
+                                            date = txn.v1.confirmedAtFmt(),
                                             amount = formattedAmount,
-                                            balanceAfter = txn.blockHeightFmt(),
+                                            balanceAfter = txn.v1.blockHeightFmt(),
                                             listCard = listCard,
                                             primaryText = primaryText,
                                             secondaryText = secondaryText,
                                         )
                                     }
                                     is Transaction.Unconfirmed -> {
-                                        val direction = txn.sentAndReceived().direction()
+                                        val direction = txn.v1.sentAndReceived().direction()
                                         val txType =
                                             when (direction) {
                                                 TransactionDirection.INCOMING -> TransactionType.RECEIVED
@@ -323,10 +323,10 @@ fun WalletTransactionsScreen(
                                         // format amount with manager if available
                                         val formattedAmount =
                                             manager?.let {
-                                                val amount = txn.sentAndReceived().amount()
+                                                val amount = txn.v1.sentAndReceived().amount()
                                                 val prefix = if (direction == TransactionDirection.OUTGOING) "-" else ""
                                                 prefix + it.displayAmount(amount, showUnit = true)
-                                            } ?: txn.sentAndReceived().label()
+                                            } ?: txn.v1.sentAndReceived().label()
 
                                         TransactionWidget(
                                             type = txType,
