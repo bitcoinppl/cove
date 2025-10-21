@@ -24,29 +24,29 @@ fun CoinControlContainer(
     route: CoinControlRoute,
     modifier: Modifier = Modifier,
 ) {
-    var walletManager by remember { mutableStateOf<WalletManager?>(null) }
-    var manager by remember { mutableStateOf<CoinControlManager?>(null) }
+    // extract wallet ID from route
+    val walletId =
+        when (route) {
+            is CoinControlRoute.List -> route.v1
+        }
+
+    var walletManager by remember(walletId) { mutableStateOf<WalletManager?>(null) }
+    var manager by remember(walletId) { mutableStateOf<CoinControlManager?>(null) }
     val tag = "CoinControlContainer"
 
     // async initialize managers
-    LaunchedEffect(Unit) {
-        if (walletManager != null && manager != null) return@LaunchedEffect
-
+    LaunchedEffect(walletId) {
         try {
-            val id =
-                when (route) {
-                    is CoinControlRoute.List -> route.v1
-                }
-            android.util.Log.d(tag, "getting wallet for CoinControlRoute $id")
+            android.util.Log.d(tag, "getting wallet for CoinControlRoute $walletId")
 
-            val wm = app.getWalletManager(id)
+            val wm = app.getWalletManager(walletId)
             val rustManager = wm.rust.newCoinControlManager()
             val ccm = CoinControlManager(rustManager)
 
             walletManager = wm
             manager = ccm
         } catch (e: Exception) {
-            android.util.Log.e(tag, "[ERROR] unable to get wallet: ${e.message}", e)
+            android.util.Log.e(tag, "unable to get wallet: ${e.message}", e)
             app.alertState =
                 TaggedItem(
                     AppAlertState.General(

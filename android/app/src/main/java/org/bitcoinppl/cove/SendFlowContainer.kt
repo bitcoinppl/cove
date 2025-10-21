@@ -25,26 +25,26 @@ fun SendFlowContainer(
     sendRoute: SendRoute,
     modifier: Modifier = Modifier,
 ) {
-    var walletManager by remember { mutableStateOf<WalletManager?>(null) }
-    var sendFlowManager by remember { mutableStateOf<SendFlowManager?>(null) }
-    var initCompleted by remember { mutableStateOf(false) }
+    // extract wallet ID from sendRoute
+    val walletId =
+        when (sendRoute) {
+            is SendRoute.SetAmount -> sendRoute.id
+            is SendRoute.CoinControlSetAmount -> sendRoute.id
+            is SendRoute.HardwareExport -> sendRoute.id
+            is SendRoute.Confirm -> sendRoute.v1.id
+        }
+
+    var walletManager by remember(walletId) { mutableStateOf<WalletManager?>(null) }
+    var sendFlowManager by remember(walletId) { mutableStateOf<SendFlowManager?>(null) }
+    var initCompleted by remember(walletId) { mutableStateOf(false) }
     val tag = "SendFlowContainer"
 
     // initialize managers on appear
-    LaunchedEffect(Unit) {
-        if (walletManager != null) return@LaunchedEffect
-
+    LaunchedEffect(sendRoute) {
         try {
-            val id =
-                when (sendRoute) {
-                    is SendRoute.SetAmount -> sendRoute.id
-                    is SendRoute.CoinControlSetAmount -> sendRoute.id
-                    is SendRoute.HardwareExport -> sendRoute.id
-                    is SendRoute.Confirm -> sendRoute.v1.id
-                }
-            android.util.Log.d(tag, "getting wallet for SendRoute $id")
+            android.util.Log.d(tag, "getting wallet for SendRoute $walletId")
 
-            val wm = app.getWalletManager(id)
+            val wm = app.getWalletManager(walletId)
             val presenter = SendFlowPresenter(app, wm)
             val sfm = app.getSendFlowManager(wm, presenter)
 
@@ -70,7 +70,7 @@ fun SendFlowContainer(
     }
 
     // cleanup on disappear
-    DisposableEffect(sendFlowManager) {
+    DisposableEffect(Unit) {
         onDispose {
             sendFlowManager?.presenter?.setDisappearing()
         }

@@ -25,7 +25,7 @@ fun WalletSettingsContainer(
     route: WalletSettingsRoute,
     modifier: Modifier = Modifier,
 ) {
-    var manager by remember { mutableStateOf<WalletManager?>(null) }
+    var manager by remember(id) { mutableStateOf<WalletManager?>(null) }
     val tag = "WalletSettingsContainer"
 
     // lazy load wallet manager
