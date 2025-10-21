@@ -25984,13 +25984,6 @@ public func walletAddressTypeSortOrder(addressType: WalletAddressType) -> UInt8 
     )
 })
 }
-public func walletAddressTypeToString(walletAddressType: WalletAddressType) -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_cove_fn_func_wallet_address_type_to_string(
-        FfiConverterTypeWalletAddressType_lower(walletAddressType),$0
-    )
-})
-}
 public func walletMetadataHash(metadata: WalletMetadata) -> UInt64  {
     return try!  FfiConverterUInt64.lift(try! rustCall() {
     uniffi_cove_fn_func_wallet_metadata_hash(
@@ -26166,9 +26159,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_wallet_address_type_sort_order() != 47488) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_func_wallet_address_type_to_string() != 36064) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_wallet_metadata_hash() != 62639) {

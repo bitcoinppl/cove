@@ -1065,8 +1065,6 @@ external fun uniffi_cove_checksum_func_update_prices_if_needed(
 ): Short
 external fun uniffi_cove_checksum_func_wallet_address_type_sort_order(
 ): Short
-external fun uniffi_cove_checksum_func_wallet_address_type_to_string(
-): Short
 external fun uniffi_cove_checksum_func_wallet_metadata_hash(
 ): Short
 external fun uniffi_cove_checksum_func_wallet_metadata_is_equal(
@@ -1815,9 +1813,9 @@ internal object UniffiLib {
         uniffiCallbackInterfaceTapcardTransportProtocol.register(this)
         uniffiCallbackInterfaceWalletManagerReconciler.register(this)
         org.bitcoinppl.cove_core.tapcard.uniffiEnsureInitialized()
-        org.bitcoinppl.cove_core.nfc.uniffiEnsureInitialized()
-        org.bitcoinppl.cove_core.types.uniffiEnsureInitialized()
         org.bitcoinppl.cove_core.device.uniffiEnsureInitialized()
+        org.bitcoinppl.cove_core.types.uniffiEnsureInitialized()
+        org.bitcoinppl.cove_core.nfc.uniffiEnsureInitialized()
         
     }
     external fun uniffi_cove_fn_clone_addressargs(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -2934,8 +2932,6 @@ external fun uniffi_cove_fn_func_update_prices_if_needed(
 ): Long
 external fun uniffi_cove_fn_func_wallet_address_type_sort_order(`addressType`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-external fun uniffi_cove_fn_func_wallet_address_type_to_string(`walletAddressType`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
 external fun uniffi_cove_fn_func_wallet_metadata_hash(`metadata`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
 external fun uniffi_cove_fn_func_wallet_metadata_is_equal(`lhs`: RustBuffer.ByValue,`rhs`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -3193,9 +3189,6 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_wallet_address_type_sort_order() != 47488.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_func_wallet_address_type_to_string() != 36064.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_wallet_metadata_hash() != 62639.toShort()) {
@@ -42595,16 +42588,6 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
     UniffiLib.uniffi_cove_fn_func_wallet_address_type_sort_order(
     
         FfiConverterTypeWalletAddressType.lower(`addressType`),_status)
-}
-    )
-    }
-    
- fun `walletAddressTypeToString`(`walletAddressType`: WalletAddressType): kotlin.String {
-            return FfiConverterString.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_func_wallet_address_type_to_string(
-    
-        FfiConverterTypeWalletAddressType.lower(`walletAddressType`),_status)
 }
     )
     }

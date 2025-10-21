@@ -104,8 +104,11 @@ pub struct Wallet {
 #[uniffi::export(Display)]
 pub enum WalletAddressType {
     #[default]
+    #[display("Native Segwit")]
     NativeSegwit,
+    #[display("Wrapped Segwit")]
     WrappedSegwit,
+    #[display("Legacy")]
     Legacy,
 }
 

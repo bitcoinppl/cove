@@ -6,17 +6,6 @@ use cove_types::amount::Amount;
 use super::{WalletAddressType, metadata};
 
 #[uniffi::export]
-pub fn wallet_address_type_to_string(wallet_address_type: WalletAddressType) -> String {
-    let str = match wallet_address_type {
-        WalletAddressType::NativeSegwit => "Native Segwit",
-        WalletAddressType::WrappedSegwit => "Wrapped Segwit",
-        WalletAddressType::Legacy => "Legacy",
-    };
-
-    str.to_string()
-}
-
-#[uniffi::export]
 pub fn preview_new_legacy_found_address() -> metadata::FoundAddress {
     metadata::FoundAddress {
         type_: WalletAddressType::Legacy,
