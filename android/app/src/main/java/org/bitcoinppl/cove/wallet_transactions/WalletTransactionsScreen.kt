@@ -58,6 +58,8 @@ import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.views.ImageButton
 import org.bitcoinppl.cove_core.Transaction
 import org.bitcoinppl.cove_core.TransactionDirection
+import java.text.NumberFormat
+import java.util.Locale
 
 enum class TransactionType { SENT, RECEIVED }
 
@@ -117,7 +119,7 @@ fun WalletTransactionsScreen(
         } ?: satsAmount
     val actualUsdAmount =
         manager?.fiatBalance?.let {
-            "$${"%.2f".format(it)}"
+            NumberFormat.getCurrencyInstance(Locale.US).format(it)
         } ?: usdAmount
     val transactions =
         when (val state = manager?.loadState) {
