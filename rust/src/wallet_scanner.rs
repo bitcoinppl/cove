@@ -67,6 +67,7 @@ pub enum WorkerState {
 }
 
 #[derive(Debug, Clone, uniffi::Error, thiserror::Error)]
+#[uniffi::export(Display)]
 pub enum WalletScannerError {
     #[error("No address types to scan")]
     NoAddressTypes,

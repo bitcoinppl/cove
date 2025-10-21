@@ -12359,6 +12359,16 @@ public enum AppError: Swift.Error, Equatable, Hashable, Foundation.LocalizedErro
     )
 
     
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_apperror_uniffi_trait_display(
+            FfiConverterTypeAppError_lower(self),$0
+    )
+}
+    )
+}
 
     
     public var errorDescription: String? {
@@ -12613,6 +12623,16 @@ public enum AuthError: Swift.Error, Equatable, Hashable, Foundation.LocalizedErr
     )
 
     
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_autherror_uniffi_trait_display(
+            FfiConverterTypeAuthError_lower(self),$0
+    )
+}
+    )
+}
 
     
     public var errorDescription: String? {
@@ -13085,6 +13105,16 @@ public enum Bip39Error: Swift.Error, Equatable, Hashable, Foundation.LocalizedEr
     case AmbiguousLanguages
 
     
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_bip39error_uniffi_trait_display(
+            FfiConverterTypeBip39Error_lower(self),$0
+    )
+}
+    )
+}
 
     
     public var errorDescription: String? {
@@ -13185,6 +13215,16 @@ public enum BitcoinTransactionError: Swift.Error, Equatable, Hashable, Foundatio
     )
 
     
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_bitcointransactionerror_uniffi_trait_display(
+            FfiConverterTypeBitcoinTransactionError_lower(self),$0
+    )
+}
+    )
+}
 
     
     public var errorDescription: String? {
@@ -13332,6 +13372,16 @@ public enum ByteReaderError: Swift.Error, Equatable, Hashable, Foundation.Locali
     case BufferTooSmall
 
     
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_bytereadererror_uniffi_trait_display(
+            FfiConverterTypeByteReaderError_lower(self),$0
+    )
+}
+    )
+}
 
     
     public var errorDescription: String? {
@@ -14110,6 +14160,16 @@ public enum ConverterError: Swift.Error, Equatable, Hashable, Foundation.Localiz
     )
 
     
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_convertererror_uniffi_trait_display(
+            FfiConverterTypeConverterError_lower(self),$0
+    )
+}
+    )
+}
 
     
     public var errorDescription: String? {
@@ -14198,6 +14258,16 @@ public enum DatabaseError: Swift.Error, Equatable, Hashable, Foundation.Localize
     )
 
     
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_databaseerror_uniffi_trait_display(
+            FfiConverterTypeDatabaseError_lower(self),$0
+    )
+}
+    )
+}
 
     
     public var errorDescription: String? {
@@ -14353,6 +14423,16 @@ public enum DescriptorError: Swift.Error, Equatable, Hashable, Foundation.Locali
     )
 
     
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_descriptorerror_uniffi_trait_display(
+            FfiConverterTypeDescriptorError_lower(self),$0
+    )
+}
+    )
+}
 
     
     public var errorDescription: String? {
@@ -14897,6 +14977,16 @@ public enum FileHandlerError: Swift.Error, Equatable, Hashable, Foundation.Local
     )
 
     
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_filehandlererror_uniffi_trait_display(
+            FfiConverterTypeFileHandlerError_lower(self),$0
+    )
+}
+    )
+}
 
     
     public var errorDescription: String? {
@@ -14989,6 +15079,16 @@ public enum FingerprintError: Swift.Error, Equatable, Hashable, Foundation.Local
     case WalletNotFound
 
     
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_fingerprinterror_uniffi_trait_display(
+            FfiConverterTypeFingerprintError_lower(self),$0
+    )
+}
+    )
+}
 
     
     public var errorDescription: String? {
@@ -15060,6 +15160,16 @@ public enum GlobalCacheTableError: Swift.Error, Equatable, Hashable, Foundation.
     )
 
     
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_globalcachetableerror_uniffi_trait_display(
+            FfiConverterTypeGlobalCacheTableError_lower(self),$0
+    )
+}
+    )
+}
 
     
     public var errorDescription: String? {
@@ -15288,6 +15398,16 @@ public enum GlobalConfigTableError: Swift.Error, Equatable, Hashable, Foundation
     case PinCodeMustBeHashed
 
     
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_globalconfigtableerror_uniffi_trait_display(
+            FfiConverterTypeGlobalConfigTableError_lower(self),$0
+    )
+}
+    )
+}
 
     
     public var errorDescription: String? {
@@ -15440,6 +15560,16 @@ public enum GlobalFlagTableError: Swift.Error, Equatable, Hashable, Foundation.L
     )
 
     
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_globalflagtableerror_uniffi_trait_display(
+            FfiConverterTypeGlobalFlagTableError_lower(self),$0
+    )
+}
+    )
+}
 
     
     public var errorDescription: String? {
@@ -15584,6 +15714,16 @@ public enum HistoricalPriceRecordError: Swift.Error, Equatable, Hashable, Founda
     )
 
     
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_historicalpricerecorderror_uniffi_trait_display(
+            FfiConverterTypeHistoricalPriceRecordError_lower(self),$0
+    )
+}
+    )
+}
 
     
     public var errorDescription: String? {
@@ -15659,6 +15799,16 @@ public enum HistoricalPriceTableError: Swift.Error, Equatable, Hashable, Foundat
     case NoRecordFound
 
     
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_historicalpricetableerror_uniffi_trait_display(
+            FfiConverterTypeHistoricalPriceTableError_lower(self),$0
+    )
+}
+    )
+}
 
     
     public var errorDescription: String? {
@@ -15915,6 +16065,16 @@ public enum ImportWalletError: Swift.Error, Equatable, Hashable, Foundation.Loca
     )
 
     
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_importwalleterror_uniffi_trait_display(
+            FfiConverterTypeImportWalletError_lower(self),$0
+    )
+}
+    )
+}
 
     
     public var errorDescription: String? {
@@ -16216,6 +16376,16 @@ public enum LabelDbError: Swift.Error, Equatable, Hashable, Foundation.Localized
     )
 
     
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_labeldberror_uniffi_trait_display(
+            FfiConverterTypeLabelDbError_lower(self),$0
+    )
+}
+    )
+}
 
     
     public var errorDescription: String? {
@@ -16314,6 +16484,16 @@ public enum LabelManagerError: Swift.Error, Equatable, Hashable, Foundation.Loca
     )
 
     
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_labelmanagererror_uniffi_trait_display(
+            FfiConverterTypeLabelManagerError_lower(self),$0
+    )
+}
+    )
+}
 
     
     public var errorDescription: String? {
@@ -16525,6 +16705,16 @@ public enum MnemonicError: Swift.Error, Equatable, Hashable, Foundation.Localize
     )
 
     
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_mnemonicerror_uniffi_trait_display(
+            FfiConverterTypeMnemonicError_lower(self),$0
+    )
+}
+    )
+}
 
     
     public var errorDescription: String? {
@@ -16605,6 +16795,16 @@ public enum MnemonicParseError: Swift.Error, Equatable, Hashable, Foundation.Loc
     )
 
     
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_mnemonicparseerror_uniffi_trait_display(
+            FfiConverterTypeMnemonicParseError_lower(self),$0
+    )
+}
+    )
+}
 
     
     public var errorDescription: String? {
@@ -16927,6 +17127,16 @@ public enum MultiQrError: Swift.Error, Equatable, Hashable, Foundation.Localized
     )
 
     
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_multiqrerror_uniffi_trait_display(
+            FfiConverterTypeMultiQrError_lower(self),$0
+    )
+}
+    )
+}
 
     
     public var errorDescription: String? {
@@ -17589,6 +17799,16 @@ public enum PendingWalletManagerError: Swift.Error, Equatable, Hashable, Foundat
     )
 
     
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_pendingwalletmanagererror_uniffi_trait_display(
+            FfiConverterTypePendingWalletManagerError_lower(self),$0
+    )
+}
+    )
+}
 
     
     public var errorDescription: String? {
@@ -18018,6 +18238,16 @@ public enum SeedQrError: Swift.Error, Equatable, Hashable, Foundation.LocalizedE
     )
 
     
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_seedqrerror_uniffi_trait_display(
+            FfiConverterTypeSeedQrError_lower(self),$0
+    )
+}
+    )
+}
 
     
     public var errorDescription: String? {
@@ -19144,6 +19374,16 @@ public enum SerdeError: Swift.Error, Equatable, Hashable, Foundation.LocalizedEr
     )
 
     
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_serdeerror_uniffi_trait_display(
+            FfiConverterTypeSerdeError_lower(self),$0
+    )
+}
+    )
+}
 
     
     public var errorDescription: String? {
@@ -20292,6 +20532,16 @@ public enum TransactionDetailError: Swift.Error, Equatable, Hashable, Foundation
     )
 
     
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_transactiondetailerror_uniffi_trait_display(
+            FfiConverterTypeTransactionDetailError_lower(self),$0
+    )
+}
+    )
+}
 
     
     public var errorDescription: String? {
@@ -20704,6 +20954,16 @@ public enum UnsignedTransactionsTableError: Swift.Error, Equatable, Hashable, Fo
     case NoRecordFound
 
     
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_unsignedtransactionstableerror_uniffi_trait_display(
+            FfiConverterTypeUnsignedTransactionsTableError_lower(self),$0
+    )
+}
+    )
+}
 
     
     public var errorDescription: String? {
@@ -21070,6 +21330,16 @@ public enum WalletCreationError: Swift.Error, Equatable, Hashable, Foundation.Lo
     )
 
     
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_walletcreationerror_uniffi_trait_display(
+            FfiConverterTypeWalletCreationError_lower(self),$0
+    )
+}
+    )
+}
 
     
     public var errorDescription: String? {
@@ -21188,6 +21458,16 @@ public enum WalletDataError: Swift.Error, Equatable, Hashable, Foundation.Locali
     )
 
     
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_walletdataerror_uniffi_trait_display(
+            FfiConverterTypeWalletDataError_lower(self),$0
+    )
+}
+    )
+}
 
     
     public var errorDescription: String? {
@@ -22404,6 +22684,16 @@ public enum WalletScannerError: Swift.Error, Equatable, Hashable, Foundation.Loc
     )
 
     
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_walletscannererror_uniffi_trait_display(
+            FfiConverterTypeWalletScannerError_lower(self),$0
+    )
+}
+    )
+}
 
     
     public var errorDescription: String? {
@@ -22557,6 +22847,16 @@ public enum WalletTableError: Swift.Error, Equatable, Hashable, Foundation.Local
     case WalletAlreadyExists
 
     
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_wallettableerror_uniffi_trait_display(
+            FfiConverterTypeWalletTableError_lower(self),$0
+    )
+}
+    )
+}
 
     
     public var errorDescription: String? {
@@ -22742,6 +23042,16 @@ public enum XpubError: Swift.Error, Equatable, Hashable, Foundation.LocalizedErr
     )
 
     
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_xpuberror_uniffi_trait_display(
+            FfiConverterTypeXpubError_lower(self),$0
+    )
+}
+    )
+}
 
     
     public var errorDescription: String? {
@@ -25407,14 +25717,6 @@ public func defaultWalletColors() -> [WalletColor]  {
     )
 })
 }
-public func discoveryStateIsEqual(lhs: DiscoveryState, rhs: DiscoveryState) -> Bool  {
-    return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_cove_fn_func_discovery_state_is_equal(
-        FfiConverterTypeDiscoveryState_lower(lhs),
-        FfiConverterTypeDiscoveryState_lower(rhs),$0
-    )
-})
-}
 public func ffiMinSendAmount() -> Amount  {
     return try!  FfiConverterTypeAmount_lift(try! rustCall() {
     uniffi_cove_fn_func_ffi_min_send_amount($0
@@ -25675,25 +25977,10 @@ public func updatePricesIfNeeded()async   {
             
         )
 }
-public func walletAddressTypeLessThan(lhs: WalletAddressType, rhs: WalletAddressType) -> Bool  {
-    return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_cove_fn_func_wallet_address_type_less_than(
-        FfiConverterTypeWalletAddressType_lower(lhs),
-        FfiConverterTypeWalletAddressType_lower(rhs),$0
-    )
-})
-}
 public func walletAddressTypeSortOrder(addressType: WalletAddressType) -> UInt8  {
     return try!  FfiConverterUInt8.lift(try! rustCall() {
     uniffi_cove_fn_func_wallet_address_type_sort_order(
         FfiConverterTypeWalletAddressType_lower(addressType),$0
-    )
-})
-}
-public func walletAddressTypeToString(walletAddressType: WalletAddressType) -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_cove_fn_func_wallet_address_type_to_string(
-        FfiConverterTypeWalletAddressType_lower(walletAddressType),$0
     )
 })
 }
@@ -25723,13 +26010,6 @@ public func walletStateIsEqual(lhs: WalletLoadState, rhs: WalletLoadState) -> Bo
     uniffi_cove_fn_func_wallet_state_is_equal(
         FfiConverterTypeWalletLoadState_lower(lhs),
         FfiConverterTypeWalletLoadState_lower(rhs),$0
-    )
-})
-}
-public func walletTypeToString(walletType: WalletType) -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_cove_fn_func_wallet_type_to_string(
-        FfiConverterTypeWalletType_lower(walletType),$0
     )
 })
 }
@@ -25768,9 +26048,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_default_wallet_colors() != 39034) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_func_discovery_state_is_equal() != 12390) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_ffi_min_send_amount() != 9250) {
@@ -25881,13 +26158,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_func_update_prices_if_needed() != 27986) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_func_wallet_address_type_less_than() != 14566) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_cove_checksum_func_wallet_address_type_sort_order() != 47488) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_func_wallet_address_type_to_string() != 36064) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_wallet_metadata_hash() != 62639) {
@@ -25900,9 +26171,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_wallet_state_is_equal() != 27037) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_func_wallet_type_to_string() != 18258) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_authpin_check() != 17948) {

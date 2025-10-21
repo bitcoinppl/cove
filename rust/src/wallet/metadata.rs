@@ -345,11 +345,6 @@ fn file_store_default() -> StoreType {
 }
 
 #[uniffi::export]
-fn wallet_type_to_string(wallet_type: WalletType) -> String {
-    wallet_type.to_string()
-}
-
-#[uniffi::export]
 fn hardware_wallet_is_tap_signer(hardware_wallet: HardwareWalletMetadata) -> bool {
     hardware_wallet.is_tap_signer()
 }

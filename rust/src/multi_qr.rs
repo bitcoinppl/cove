@@ -33,6 +33,7 @@ pub struct BbqrJoined(Joined);
 type Error = MultiQrError;
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
+#[uniffi::export(Display)]
 pub enum MultiQrError {
     #[error("Cannot add part to single QR")]
     CannotAddPartToSingleQr,

@@ -738,6 +738,8 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_cove_device_fn_init_callback_vtable_keychainaccess(`vtable`: UniffiVTableCallbackInterfaceKeychainAccess,
     ): Unit
+    external fun uniffi_cove_device_fn_method_keychainerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     external fun ffi_cove_device_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun ffi_cove_device_rustbuffer_from_bytes(`bytes`: ForeignBytes.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -1674,6 +1676,15 @@ sealed class KeychainException: kotlin.Exception() {
     }
     
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_device_fn_method_keychainerror_uniffi_trait_display(FfiConverterTypeKeychainError.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<KeychainException> {
         override fun lift(error_buf: RustBuffer.ByValue): KeychainException = FfiConverterTypeKeychainError.lift(error_buf)

@@ -18,8 +18,15 @@ alias bidd := build-ios-debug-device
 alias ba := build-android
 alias bar := build-android-release
 
+# full build alias
+alias f := full
+
 default:
     just --list
+
+# full build and verification for all platforms
+full:
+    just bidd && just ba && just ci && just compile
 
 bacon:
     cd rust && bacon clippy
@@ -43,7 +50,7 @@ fmt-rust:
     cd rust && cargo fmt --all
 
 fmt-swift:
-    swiftformat . --swiftversion 6
+    swiftformat ios --swiftversion 6
 
 fmt-android:
     cd android && ./gradlew ktlintFormat 
@@ -67,7 +74,7 @@ ci:
     just test
     cd rust && cargo clippy --all-targets --all-features -- -D warnings
     cd rust && cargo fmt --check
-    swiftformat --lint . --swiftversion 6
+    swiftformat --lint ios --swiftversion 6
     cd android && ./gradlew ktlintCheck
 
 xcode-reset:

@@ -35,6 +35,7 @@ pub enum AuthType {
 type Result<T, E = AuthError> = std::result::Result<T, E>;
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
+#[uniffi::export(Display)]
 pub enum AuthError {
     #[error("Unable to save pin to database {0:?}")]
     DatabaseSaveError(database::Error),

@@ -24,6 +24,7 @@ pub struct Mnemonic(bip39::Mnemonic);
 pub type Error = MnemonicError;
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
+#[uniffi::export(Display)]
 pub enum MnemonicError {
     #[error("failed to get wallet keychain")]
     GetWalletKeychain(#[from] KeychainError),
@@ -67,6 +68,7 @@ pub trait MnemonicExt {
 }
 
 #[derive(Debug, Clone, uniffi::Error, thiserror::Error)]
+#[uniffi::export(Display)]
 pub enum MnemonicParseError {
     #[error("Invalid mnemonic, failed to parse as plain mnemonic: {0}, and as seed qr: {1}")]
     InvalidMnemonic(String, String),

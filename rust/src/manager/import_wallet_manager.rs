@@ -48,6 +48,7 @@ pub enum ImportWalletManagerAction {
 impl_default_for!(RustImportWalletManager);
 
 #[derive(Debug, Clone, uniffi::Error, thiserror::Error)]
+#[uniffi::export(Display)]
 pub enum ImportWalletError {
     #[error("failed to import wallet: {0}")]
     WalletImportError(String),

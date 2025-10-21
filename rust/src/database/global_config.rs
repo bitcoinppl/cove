@@ -76,6 +76,7 @@ impl GlobalConfigTable {
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
+#[uniffi::export(Display)]
 pub enum GlobalConfigTableError {
     #[error("failed to save global config: {0}")]
     Save(String),

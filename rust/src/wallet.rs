@@ -104,8 +104,11 @@ pub struct Wallet {
 #[uniffi::export(Display)]
 pub enum WalletAddressType {
     #[default]
+    #[display("Native Segwit")]
     NativeSegwit,
+    #[display("Wrapped Segwit")]
     WrappedSegwit,
+    #[display("Legacy")]
     Legacy,
 }
 
@@ -701,5 +704,21 @@ mod tests {
 
         let _ = delete_wallet_specific_data(&metadata.id);
         assert_eq!("73c5da0a", fingerprint.as_str());
+    }
+}
+
+#[uniffi::export]
+impl Wallet {
+    #[uniffi::constructor]
+    pub fn new_from_xpub(xpub: String) -> Result<Self, WalletError> {
+        Wallet::try_new_persisted_from_xpub(xpub)
+    }
+
+    #[uniffi::constructor]
+    pub fn new_from_export(
+        export: Arc<crate::hardware_export::HardwareExport>,
+    ) -> Result<Self, WalletError> {
+        let export = Arc::unwrap_or_clone(export);
+        Wallet::try_new_persisted_from_pubport(export.into_format())
     }
 }

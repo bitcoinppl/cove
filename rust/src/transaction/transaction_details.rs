@@ -27,6 +27,7 @@ use cove_util::format::NumberFormatter as _;
 use super::{Amount, FeeRate, SentAndReceived, TxId};
 
 #[derive(Debug, PartialEq, Eq, thiserror::Error, uniffi::Error)]
+#[uniffi::export(Display)]
 pub enum TransactionDetailError {
     #[error("Unable to determine fee: {0}")]
     Fee(String),

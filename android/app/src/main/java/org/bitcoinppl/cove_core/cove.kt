@@ -991,8 +991,6 @@ external fun uniffi_cove_checksum_func_default_node_selection(
 ): Short
 external fun uniffi_cove_checksum_func_default_wallet_colors(
 ): Short
-external fun uniffi_cove_checksum_func_discovery_state_is_equal(
-): Short
 external fun uniffi_cove_checksum_func_ffi_min_send_amount(
 ): Short
 external fun uniffi_cove_checksum_func_ffi_min_send_sats(
@@ -1065,9 +1063,7 @@ external fun uniffi_cove_checksum_func_transactions_preview_new(
 ): Short
 external fun uniffi_cove_checksum_func_update_prices_if_needed(
 ): Short
-external fun uniffi_cove_checksum_func_wallet_address_type_less_than(
-): Short
-external fun uniffi_cove_checksum_func_wallet_address_type_to_string(
+external fun uniffi_cove_checksum_func_wallet_address_type_sort_order(
 ): Short
 external fun uniffi_cove_checksum_func_wallet_metadata_hash(
 ): Short
@@ -1076,8 +1072,6 @@ external fun uniffi_cove_checksum_func_wallet_metadata_is_equal(
 external fun uniffi_cove_checksum_func_wallet_metadata_preview(
 ): Short
 external fun uniffi_cove_checksum_func_wallet_state_is_equal(
-): Short
-external fun uniffi_cove_checksum_func_wallet_type_to_string(
 ): Short
 external fun uniffi_cove_checksum_method_authpin_check(
 ): Short
@@ -1819,9 +1813,9 @@ internal object UniffiLib {
         uniffiCallbackInterfaceTapcardTransportProtocol.register(this)
         uniffiCallbackInterfaceWalletManagerReconciler.register(this)
         org.bitcoinppl.cove_core.tapcard.uniffiEnsureInitialized()
-        org.bitcoinppl.cove_core.nfc.uniffiEnsureInitialized()
-        org.bitcoinppl.cove_core.types.uniffiEnsureInitialized()
         org.bitcoinppl.cove_core.device.uniffiEnsureInitialized()
+        org.bitcoinppl.cove_core.types.uniffiEnsureInitialized()
+        org.bitcoinppl.cove_core.nfc.uniffiEnsureInitialized()
         
     }
     external fun uniffi_cove_fn_clone_addressargs(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -2754,7 +2748,23 @@ external fun uniffi_cove_fn_init_callback_vtable_tapcardtransportprotocol(`vtabl
 ): Unit
 external fun uniffi_cove_fn_init_callback_vtable_walletmanagerreconciler(`vtable`: UniffiVTableCallbackInterfaceWalletManagerReconciler,
 ): Unit
+external fun uniffi_cove_fn_method_apperror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_autherror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_authmanagererror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_bip39error_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_bitcointransactionerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_bytereadererror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_convertererror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_databaseerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_descriptorerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_discoverystate_uniffi_trait_eq_eq(`ptr`: RustBuffer.ByValue,`other`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
@@ -2764,23 +2774,69 @@ external fun uniffi_cove_fn_method_discoverystate_uniffi_trait_hash(`ptr`: RustB
 ): Long
 external fun uniffi_cove_fn_method_fiatcurrency_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_filehandlererror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_fingerprinterror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_globalcachetableerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_globalconfigtableerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_globalflagtableerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_historicalpricerecorderror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_historicalpricetableerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_importwalleterror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_labeldberror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_labelmanagererror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_mnemonicerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_mnemonicparseerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_multiformaterror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_multiqrerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_pendingwalletmanagererror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_seedqrerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_sendflowerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_sendflowfiatonchangeerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_serdeerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_tapsignerreadererror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_transactiondetailerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_transporterror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_unsignedtransactionstableerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_walletaddresstype_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_walletcreationerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_walletdataerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_walleterror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_walletmanagererror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_walletscannererror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_wallettableerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_wallettype_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_xpuberror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_walletmetadata_uniffi_trait_eq_eq(`ptr`: RustBuffer.ByValue,`other`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
@@ -2802,8 +2858,6 @@ external fun uniffi_cove_fn_func_default_node_selection(uniffi_out_err: UniffiRu
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_func_default_wallet_colors(uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-external fun uniffi_cove_fn_func_discovery_state_is_equal(`lhs`: RustBuffer.ByValue,`rhs`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): Byte
 external fun uniffi_cove_fn_func_ffi_min_send_amount(uniffi_out_err: UniffiRustCallStatus, 
 ): Long
 external fun uniffi_cove_fn_func_ffi_min_send_sats(uniffi_out_err: UniffiRustCallStatus, 
@@ -2876,10 +2930,8 @@ external fun uniffi_cove_fn_func_transactions_preview_new(`confirmed`: Byte,`unc
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_func_update_prices_if_needed(
 ): Long
-external fun uniffi_cove_fn_func_wallet_address_type_less_than(`lhs`: RustBuffer.ByValue,`rhs`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_wallet_address_type_sort_order(`addressType`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-external fun uniffi_cove_fn_func_wallet_address_type_to_string(`walletAddressType`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
 external fun uniffi_cove_fn_func_wallet_metadata_hash(`metadata`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
 external fun uniffi_cove_fn_func_wallet_metadata_is_equal(`lhs`: RustBuffer.ByValue,`rhs`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -2888,8 +2940,6 @@ external fun uniffi_cove_fn_func_wallet_metadata_preview(uniffi_out_err: UniffiR
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_func_wallet_state_is_equal(`lhs`: RustBuffer.ByValue,`rhs`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-external fun uniffi_cove_fn_func_wallet_type_to_string(`walletType`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
 external fun ffi_cove_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun ffi_cove_rustbuffer_from_bytes(`bytes`: ForeignBytes.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -3030,9 +3080,6 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_func_default_wallet_colors() != 39034.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_func_discovery_state_is_equal() != 12390.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
     if (lib.uniffi_cove_checksum_func_ffi_min_send_amount() != 9250.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -3141,10 +3188,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_func_update_prices_if_needed() != 27986.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_func_wallet_address_type_less_than() != 14566.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_func_wallet_address_type_to_string() != 36064.toShort()) {
+    if (lib.uniffi_cove_checksum_func_wallet_address_type_sort_order() != 47488.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_wallet_metadata_hash() != 62639.toShort()) {
@@ -3157,9 +3201,6 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_wallet_state_is_equal() != 27037.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_func_wallet_type_to_string() != 18258.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_authpin_check() != 17948.toShort()) {
@@ -25389,6 +25430,15 @@ sealed class AppException: kotlin.Exception() {
     }
     
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_apperror_uniffi_trait_display(FfiConverterTypeAppError.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<AppException> {
         override fun lift(error_buf: RustBuffer.ByValue): AppException = FfiConverterTypeAppError.lift(error_buf)
@@ -25879,6 +25929,15 @@ sealed class AuthException: kotlin.Exception() {
     }
     
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_autherror_uniffi_trait_display(FfiConverterTypeAuthError.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<AuthException> {
         override fun lift(error_buf: RustBuffer.ByValue): AuthException = FfiConverterTypeAuthError.lift(error_buf)
@@ -26398,6 +26457,15 @@ sealed class Bip39Exception: kotlin.Exception() {
     }
     
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_bip39error_uniffi_trait_display(FfiConverterTypeBip39Error.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<Bip39Exception> {
         override fun lift(error_buf: RustBuffer.ByValue): Bip39Exception = FfiConverterTypeBip39Error.lift(error_buf)
@@ -26510,6 +26578,15 @@ sealed class BitcoinTransactionException: kotlin.Exception() {
     }
     
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_bitcointransactionerror_uniffi_trait_display(FfiConverterTypeBitcoinTransactionError.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<BitcoinTransactionException> {
         override fun lift(error_buf: RustBuffer.ByValue): BitcoinTransactionException = FfiConverterTypeBitcoinTransactionError.lift(error_buf)
@@ -26651,6 +26728,15 @@ sealed class ByteReaderException: kotlin.Exception() {
     }
     
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_bytereadererror_uniffi_trait_display(FfiConverterTypeByteReaderError.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<ByteReaderException> {
         override fun lift(error_buf: RustBuffer.ByValue): ByteReaderException = FfiConverterTypeByteReaderError.lift(error_buf)
@@ -27664,6 +27750,15 @@ sealed class ConverterException: kotlin.Exception() {
     }
     
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_convertererror_uniffi_trait_display(FfiConverterTypeConverterError.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<ConverterException> {
         override fun lift(error_buf: RustBuffer.ByValue): ConverterException = FfiConverterTypeConverterError.lift(error_buf)
@@ -27788,6 +27883,15 @@ sealed class DatabaseException: kotlin.Exception() {
     }
     
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_databaseerror_uniffi_trait_display(FfiConverterTypeDatabaseError.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<DatabaseException> {
         override fun lift(error_buf: RustBuffer.ByValue): DatabaseException = FfiConverterTypeDatabaseError.lift(error_buf)
@@ -28046,6 +28150,15 @@ sealed class DescriptorException: kotlin.Exception() {
     }
     
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_descriptorerror_uniffi_trait_display(FfiConverterTypeDescriptorError.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<DescriptorException> {
         override fun lift(error_buf: RustBuffer.ByValue): DescriptorException = FfiConverterTypeDescriptorError.lift(error_buf)
@@ -28691,6 +28804,15 @@ sealed class FileHandlerException: kotlin.Exception() {
     }
     
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_filehandlererror_uniffi_trait_display(FfiConverterTypeFileHandlerError.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<FileHandlerException> {
         override fun lift(error_buf: RustBuffer.ByValue): FileHandlerException = FfiConverterTypeFileHandlerError.lift(error_buf)
@@ -28784,6 +28906,15 @@ sealed class FingerprintException: kotlin.Exception() {
     }
     
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_fingerprinterror_uniffi_trait_display(FfiConverterTypeFingerprintError.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<FingerprintException> {
         override fun lift(error_buf: RustBuffer.ByValue): FingerprintException = FfiConverterTypeFingerprintError.lift(error_buf)
@@ -28848,6 +28979,15 @@ sealed class GlobalCacheTableException: kotlin.Exception() {
     }
     
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_globalcachetableerror_uniffi_trait_display(FfiConverterTypeGlobalCacheTableError.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<GlobalCacheTableException> {
         override fun lift(error_buf: RustBuffer.ByValue): GlobalCacheTableException = FfiConverterTypeGlobalCacheTableError.lift(error_buf)
@@ -29159,6 +29299,15 @@ sealed class GlobalConfigTableException: kotlin.Exception() {
     }
     
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_globalconfigtableerror_uniffi_trait_display(FfiConverterTypeGlobalConfigTableError.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<GlobalConfigTableException> {
         override fun lift(error_buf: RustBuffer.ByValue): GlobalConfigTableException = FfiConverterTypeGlobalConfigTableError.lift(error_buf)
@@ -29281,6 +29430,15 @@ sealed class GlobalFlagTableException: kotlin.Exception() {
     }
     
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_globalflagtableerror_uniffi_trait_display(FfiConverterTypeGlobalFlagTableError.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<GlobalFlagTableException> {
         override fun lift(error_buf: RustBuffer.ByValue): GlobalFlagTableException = FfiConverterTypeGlobalFlagTableError.lift(error_buf)
@@ -29426,6 +29584,15 @@ sealed class HistoricalPriceRecordException: kotlin.Exception() {
     }
     
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_historicalpricerecorderror_uniffi_trait_display(FfiConverterTypeHistoricalPriceRecordError.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<HistoricalPriceRecordException> {
         override fun lift(error_buf: RustBuffer.ByValue): HistoricalPriceRecordException = FfiConverterTypeHistoricalPriceRecordError.lift(error_buf)
@@ -29500,6 +29667,15 @@ sealed class HistoricalPriceTableException: kotlin.Exception() {
     }
     
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_historicalpricetableerror_uniffi_trait_display(FfiConverterTypeHistoricalPriceTableError.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<HistoricalPriceTableException> {
         override fun lift(error_buf: RustBuffer.ByValue): HistoricalPriceTableException = FfiConverterTypeHistoricalPriceTableError.lift(error_buf)
@@ -29777,6 +29953,15 @@ sealed class ImportWalletException: kotlin.Exception() {
     }
     
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_importwalleterror_uniffi_trait_display(FfiConverterTypeImportWalletError.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<ImportWalletException> {
         override fun lift(error_buf: RustBuffer.ByValue): ImportWalletException = FfiConverterTypeImportWalletError.lift(error_buf)
@@ -30052,6 +30237,15 @@ sealed class LabelDbException: kotlin.Exception() {
     }
     
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_labeldberror_uniffi_trait_display(FfiConverterTypeLabelDbError.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<LabelDbException> {
         override fun lift(error_buf: RustBuffer.ByValue): LabelDbException = FfiConverterTypeLabelDbError.lift(error_buf)
@@ -30197,6 +30391,15 @@ sealed class LabelManagerException: kotlin.Exception() {
     }
     
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_labelmanagererror_uniffi_trait_display(FfiConverterTypeLabelManagerError.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<LabelManagerException> {
         override fun lift(error_buf: RustBuffer.ByValue): LabelManagerException = FfiConverterTypeLabelManagerError.lift(error_buf)
@@ -30414,6 +30617,15 @@ sealed class MnemonicException: kotlin.Exception() {
     }
     
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_mnemonicerror_uniffi_trait_display(FfiConverterTypeMnemonicError.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<MnemonicException> {
         override fun lift(error_buf: RustBuffer.ByValue): MnemonicException = FfiConverterTypeMnemonicError.lift(error_buf)
@@ -30489,6 +30701,15 @@ sealed class MnemonicParseException: kotlin.Exception() {
     }
     
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_mnemonicparseerror_uniffi_trait_display(FfiConverterTypeMnemonicParseError.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<MnemonicParseException> {
         override fun lift(error_buf: RustBuffer.ByValue): MnemonicParseException = FfiConverterTypeMnemonicParseError.lift(error_buf)
@@ -31002,6 +31223,15 @@ sealed class MultiQrException: kotlin.Exception() {
     }
     
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_multiqrerror_uniffi_trait_display(FfiConverterTypeMultiQrError.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<MultiQrException> {
         override fun lift(error_buf: RustBuffer.ByValue): MultiQrException = FfiConverterTypeMultiQrError.lift(error_buf)
@@ -31781,6 +32011,15 @@ sealed class PendingWalletManagerException: kotlin.Exception() {
     }
     
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_pendingwalletmanagererror_uniffi_trait_display(FfiConverterTypePendingWalletManagerError.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<PendingWalletManagerException> {
         override fun lift(error_buf: RustBuffer.ByValue): PendingWalletManagerException = FfiConverterTypePendingWalletManagerError.lift(error_buf)
@@ -32398,6 +32637,15 @@ sealed class SeedQrException: kotlin.Exception() {
     }
     
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_seedqrerror_uniffi_trait_display(FfiConverterTypeSeedQrError.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<SeedQrException> {
         override fun lift(error_buf: RustBuffer.ByValue): SeedQrException = FfiConverterTypeSeedQrError.lift(error_buf)
@@ -34434,6 +34682,15 @@ sealed class SerdeException: kotlin.Exception() {
     }
     
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_serdeerror_uniffi_trait_display(FfiConverterTypeSerdeError.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<SerdeException> {
         override fun lift(error_buf: RustBuffer.ByValue): SerdeException = FfiConverterTypeSerdeError.lift(error_buf)
@@ -36128,6 +36385,15 @@ sealed class TransactionDetailException: kotlin.Exception() {
     }
     
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_transactiondetailerror_uniffi_trait_display(FfiConverterTypeTransactionDetailError.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<TransactionDetailException> {
         override fun lift(error_buf: RustBuffer.ByValue): TransactionDetailException = FfiConverterTypeTransactionDetailError.lift(error_buf)
@@ -36592,6 +36858,15 @@ sealed class UnsignedTransactionsTableException: kotlin.Exception() {
     }
     
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_unsignedtransactionstableerror_uniffi_trait_display(FfiConverterTypeUnsignedTransactionsTableError.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<UnsignedTransactionsTableException> {
         override fun lift(error_buf: RustBuffer.ByValue): UnsignedTransactionsTableException = FfiConverterTypeUnsignedTransactionsTableError.lift(error_buf)
@@ -37072,6 +37347,15 @@ sealed class WalletCreationException: kotlin.Exception() {
     }
     
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_walletcreationerror_uniffi_trait_display(FfiConverterTypeWalletCreationError.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<WalletCreationException> {
         override fun lift(error_buf: RustBuffer.ByValue): WalletCreationException = FfiConverterTypeWalletCreationError.lift(error_buf)
@@ -37225,6 +37509,15 @@ sealed class WalletDataException: kotlin.Exception() {
     }
     
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_walletdataerror_uniffi_trait_display(FfiConverterTypeWalletDataError.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<WalletDataException> {
         override fun lift(error_buf: RustBuffer.ByValue): WalletDataException = FfiConverterTypeWalletDataError.lift(error_buf)
@@ -39234,6 +39527,15 @@ sealed class WalletScannerException: kotlin.Exception() {
     }
     
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_walletscannererror_uniffi_trait_display(FfiConverterTypeWalletScannerError.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<WalletScannerException> {
         override fun lift(error_buf: RustBuffer.ByValue): WalletScannerException = FfiConverterTypeWalletScannerError.lift(error_buf)
@@ -39362,6 +39664,15 @@ sealed class WalletTableException: kotlin.Exception() {
     }
     
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_wallettableerror_uniffi_trait_display(FfiConverterTypeWalletTableError.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<WalletTableException> {
         override fun lift(error_buf: RustBuffer.ByValue): WalletTableException = FfiConverterTypeWalletTableError.lift(error_buf)
@@ -39526,6 +39837,15 @@ sealed class XpubException: kotlin.Exception() {
     }
     
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_xpuberror_uniffi_trait_display(FfiConverterTypeXpubError.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<XpubException> {
         override fun lift(error_buf: RustBuffer.ByValue): XpubException = FfiConverterTypeXpubError.lift(error_buf)
@@ -41894,16 +42214,6 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
     )
     }
     
- fun `discoveryStateIsEqual`(`lhs`: DiscoveryState, `rhs`: DiscoveryState): kotlin.Boolean {
-            return FfiConverterBoolean.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_func_discovery_state_is_equal(
-    
-        FfiConverterTypeDiscoveryState.lower(`lhs`),FfiConverterTypeDiscoveryState.lower(`rhs`),_status)
-}
-    )
-    }
-    
  fun `ffiMinSendAmount`(): Amount {
             return FfiConverterTypeAmount.lift(
     uniffiRustCall() { _status ->
@@ -42272,22 +42582,12 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
         UniffiNullRustCallStatusErrorHandler,
     )
     }
- fun `walletAddressTypeLessThan`(`lhs`: WalletAddressType, `rhs`: WalletAddressType): kotlin.Boolean {
-            return FfiConverterBoolean.lift(
+ fun `walletAddressTypeSortOrder`(`addressType`: WalletAddressType): kotlin.UByte {
+            return FfiConverterUByte.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_func_wallet_address_type_less_than(
+    UniffiLib.uniffi_cove_fn_func_wallet_address_type_sort_order(
     
-        FfiConverterTypeWalletAddressType.lower(`lhs`),FfiConverterTypeWalletAddressType.lower(`rhs`),_status)
-}
-    )
-    }
-    
- fun `walletAddressTypeToString`(`walletAddressType`: WalletAddressType): kotlin.String {
-            return FfiConverterString.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_func_wallet_address_type_to_string(
-    
-        FfiConverterTypeWalletAddressType.lower(`walletAddressType`),_status)
+        FfiConverterTypeWalletAddressType.lower(`addressType`),_status)
 }
     )
     }
@@ -42328,16 +42628,6 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
     UniffiLib.uniffi_cove_fn_func_wallet_state_is_equal(
     
         FfiConverterTypeWalletLoadState.lower(`lhs`),FfiConverterTypeWalletLoadState.lower(`rhs`),_status)
-}
-    )
-    }
-    
- fun `walletTypeToString`(`walletType`: WalletType): kotlin.String {
-            return FfiConverterString.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_func_wallet_type_to_string(
-    
-        FfiConverterTypeWalletType.lower(`walletType`),_status)
 }
     )
     }

@@ -656,13 +656,9 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_types_checksum_func_fee_speed_to_circle_color(
     ): Short
-    external fun uniffi_cove_types_checksum_func_fee_speed_to_string(
-    ): Short
     external fun uniffi_cove_types_checksum_func_network_to_string(
     ): Short
     external fun uniffi_cove_types_checksum_func_preview_new_utxo_list(
-    ): Short
-    external fun uniffi_cove_types_checksum_func_unit_to_string(
     ): Short
     external fun uniffi_cove_types_checksum_func_utxo_date(
     ): Short
@@ -1216,13 +1212,9 @@ external fun uniffi_cove_types_fn_func_fee_speed_is_custom(`feeSpeed`: RustBuffe
 ): Byte
 external fun uniffi_cove_types_fn_func_fee_speed_to_circle_color(`feeSpeed`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_func_fee_speed_to_string(`feeSpeed`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
 external fun uniffi_cove_types_fn_func_network_to_string(`network`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_types_fn_func_preview_new_utxo_list(`outputCount`: Byte,`changeCount`: Byte,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_func_unit_to_string(`unit`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_types_fn_func_utxo_date(`utxo`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
@@ -1384,16 +1376,10 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_types_checksum_func_fee_speed_to_circle_color() != 51678.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_func_fee_speed_to_string() != 14557.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
     if (lib.uniffi_cove_types_checksum_func_network_to_string() != 39809.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_func_preview_new_utxo_list() != 38611.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_types_checksum_func_unit_to_string() != 13028.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_func_utxo_date() != 4098.toShort()) {
@@ -10060,16 +10046,6 @@ public typealias FfiConverterTypeWalletId = FfiConverterString
     )
     }
     
- fun `feeSpeedToString`(`feeSpeed`: FeeSpeed): kotlin.String {
-            return FfiConverterString.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_types_fn_func_fee_speed_to_string(
-    
-        FfiConverterTypeFeeSpeed.lower(`feeSpeed`),_status)
-}
-    )
-    }
-    
  fun `networkToString`(`network`: Network): kotlin.String {
             return FfiConverterString.lift(
     uniffiRustCall() { _status ->
@@ -10086,16 +10062,6 @@ public typealias FfiConverterTypeWalletId = FfiConverterString
     UniffiLib.uniffi_cove_types_fn_func_preview_new_utxo_list(
     
         FfiConverterUByte.lower(`outputCount`),FfiConverterUByte.lower(`changeCount`),_status)
-}
-    )
-    }
-    
- fun `unitToString`(`unit`: BitcoinUnit): kotlin.String {
-            return FfiConverterString.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_types_fn_func_unit_to_string(
-    
-        FfiConverterTypeBitcoinUnit.lower(`unit`),_status)
 }
     )
     }

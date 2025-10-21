@@ -9,6 +9,7 @@ pub enum SeedQr {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error, uniffi::Error)]
+#[uniffi::export(Display)]
 pub enum SeedQrError {
     #[error("Not a standard seed QR, contains non numeric chars")]
     ContainsNonNumericChars,
@@ -24,6 +25,7 @@ pub enum SeedQrError {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy, thiserror::Error, uniffi::Error)]
+#[uniffi::export(Display)]
 pub enum Bip39Error {
     #[error("Mnemonic has a word count that is not a multiple of 6, found {0}.")]
     BadWordCount(u32),

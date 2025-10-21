@@ -23,6 +23,7 @@ pub struct HistoricalPriceTable {
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
+#[uniffi::export(Display)]
 pub enum HistoricalPriceTableError {
     #[error("failed to save historical price {0}")]
     Save(String),

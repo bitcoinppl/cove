@@ -186,11 +186,6 @@ mod fee_speed_ffi {
     use super::*;
 
     #[uniffi::export]
-    fn fee_speed_to_string(fee_speed: FeeSpeed) -> String {
-        fee_speed.to_string()
-    }
-
-    #[uniffi::export]
     fn fee_speed_to_circle_color(fee_speed: FeeSpeed) -> FfiColor {
         fee_speed.circle_color()
     }

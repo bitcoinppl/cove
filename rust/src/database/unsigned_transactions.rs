@@ -25,6 +25,7 @@ pub struct UnsignedTransactionsTable {
 type Result<T, E = UnsignedTransactionsTableError> = std::result::Result<T, E>;
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
+#[uniffi::export(Display)]
 pub enum UnsignedTransactionsTableError {
     #[error("failed to save unconfirmed transaction: {0}")]
     Save(String),

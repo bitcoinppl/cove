@@ -14,6 +14,7 @@ type SerdeRecord<T> = Cbor<Record<T>>;
 pub type Error = LabelDbError;
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
+#[uniffi::export(Display)]
 pub enum LabelDbError {
     #[error(transparent)]
     Database(#[from] DatabaseError),

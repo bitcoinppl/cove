@@ -12,6 +12,7 @@ use cove_types::WalletId;
 use cove_util::encryption::Cryptor;
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
+#[uniffi::export(Display)]
 pub enum KeychainError {
     #[error("unable to save")]
     Save,

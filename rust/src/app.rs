@@ -61,6 +61,7 @@ pub enum AppAction {
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
+#[uniffi::export(Display)]
 pub enum AppError {
     #[error("prices error: {0}")]
     PricesError(String),
