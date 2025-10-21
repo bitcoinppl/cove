@@ -270,7 +270,7 @@ fun WalletTransactionsScreen(
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
-                                text = "No transactions yet",
+                                text = stringResource(R.string.no_transactions_yet),
                                 color = secondaryText,
                                 fontSize = 14.sp,
                             )
