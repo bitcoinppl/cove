@@ -61,6 +61,9 @@ fix *flags="":
 clippy *flags="":
     cd rust && cargo clippy {{flags}}
 
+lint-android *flags="":
+    cd android && ./gradlew ktlintCheck {{flags}}
+
 update pkg="":
     cd rust && cargo update {{pkg}}
 
@@ -72,6 +75,7 @@ ci:
     just fmt
     cd rust && cargo clippy --all-targets --all-features
     just test
+    just lint-android
     cd rust && cargo clippy --all-targets --all-features -- -D warnings
     cd rust && cargo fmt --check
     swiftformat --lint ios --swiftversion 6
