@@ -106,7 +106,7 @@ private fun RecoveryWordsGrid(
 }
 
 @Composable
-private fun RecoveryWordChip(
+fun RecoveryWordChip(
     modifier: Modifier = Modifier,
     index: Int,
     word: String,

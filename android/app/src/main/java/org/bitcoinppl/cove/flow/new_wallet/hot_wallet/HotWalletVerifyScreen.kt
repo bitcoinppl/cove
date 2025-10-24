@@ -70,6 +70,7 @@ import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.views.DashDotsIndicator
 import org.bitcoinppl.cove.views.ImageButton
+import org.bitcoinppl.cove_core.WordValidator
 import kotlin.math.hypot
 import kotlin.math.roundToInt
 
@@ -91,19 +92,17 @@ object AnimationConfig {
 @Composable
 private fun HotWalletVerifyScreenPreview() {
     val snack = remember { SnackbarHostState() }
-    val options =
-        listOf(
-            "cargo", "city", "dash", "donate",
-            "exclude", "lemon", "october", "provide",
-            "top", "undo", "wide", "farm",
-        )
+    val validator = remember { WordValidator.preview(true) }
+    val options = validator.possibleWords(3u)
+
     HotWalletVerifyScreen(
         onBack = {},
         onShowWords = {},
         onSkip = {},
         snackbarHostState = snack,
         questionIndex = 3,
-        correctWord = "october",
+        validator = validator,
+        wordNumber = 3,
         options = options,
         onCorrectSelected = { word -> Log.d("HotWalletPreview", "onCorrectSelected: $word") },
     )
@@ -115,7 +114,8 @@ fun HotWalletVerifyScreen(
     onBack: () -> Unit,
     onShowWords: () -> Unit,
     onSkip: () -> Unit,
-    correctWord: String = "",
+    validator: WordValidator,
+    wordNumber: Int,
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
     questionIndex: Int = 1,
     options: List<String> = emptyList(),
@@ -148,7 +148,7 @@ fun HotWalletVerifyScreen(
             val dist = hypot(targetPosition.x - startPos.x, targetPosition.y - startPos.y)
             travelDistance = if (dist <= 0f) 1f else dist
 
-            val isCorrect = word.equals(correctWord, ignoreCase = true)
+            val isCorrect = validator.isWordCorrect(word, wordNumber.toUByte())
             val moveMs =
                 if (isCorrect) AnimationConfig.moveDurationMsCorrect else AnimationConfig.moveDurationMsIncorrect
             val dwellMs =
@@ -403,7 +403,7 @@ fun HotWalletVerifyScreen(
 
             if (animatingWord != null && overlayVisible) {
                 val word = animatingWord!!
-                val isCorrect = word.equals(correctWord, ignoreCase = true)
+                val isCorrect = validator.isWordCorrect(word, wordNumber.toUByte())
                 val remaining = hypot(targetPosition.x - animationX.value, targetPosition.y - animationY.value)
                 val threshold = if (isCorrect) AnimationConfig.colorFlipThresholdFractionCorrect else AnimationConfig.colorFlipThresholdFractionIncorrect
                 val nearTarget = travelDistance > 0f && (remaining / travelDistance) < threshold.coerceIn(0f, 1f)

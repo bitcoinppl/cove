@@ -73,13 +73,14 @@ fun VerifyWordsContainer(
                         // skip verification and go to wallet
                         app.resetRoute(Route.SelectedWallet(id))
                     },
-                    correctWord = "", // TODO: get correct word from validator
+                    validator = validator!!,
+                    wordNumber = 1,
                     questionIndex = 1,
                     options = validator!!.possibleWords(1u).map { it.lowercase() },
                     snackbarHostState = snackbarHostState,
                     onCorrectSelected = { word ->
-                        // check if word is correct using validator
-                        if (validator!!.isWordCorrect(word, 1u) && validator!!.isComplete(1u)) {
+                        // check if verification is complete
+                        if (validator!!.isComplete(1u)) {
                             verificationComplete = true
                         }
                     },
