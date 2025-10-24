@@ -309,12 +309,12 @@ private fun handleQrCode(
         }
 
         // add part to BBQr
-        val result = currentMultiQr.addPart(qr = StringOrData.String(qrData))
+        val result = currentMultiQr.addPart(qr = qrData)
         onPartsLeftUpdate(result.partsLeft())
 
         if (result.isComplete()) {
             val finalData = result.finalResult()
-            onScanComplete(finalData)
+            onScanComplete(StringOrData.String(finalData))
         }
     } catch (e: Exception) {
         onError(e.message ?: "Unknown error")

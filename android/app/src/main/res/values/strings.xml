@@ -47,6 +47,8 @@
     <string name="unconfirmed">Unconfirmed</string>
     <string name="title_transaction_sent">Transaction Sent</string>
     <string name="title_transaction_received">Transaction Received</string>
+    <string name="title_transaction_pending">Transaction Pending</string>
+    <string name="label_transaction_pending">Pending</string>
     <string name="btn_add_label">Add label</string>
     <string name="btn_view_in_explorer">View in Explorer</string>
     <string name="btn_show_details">Show Details</string>

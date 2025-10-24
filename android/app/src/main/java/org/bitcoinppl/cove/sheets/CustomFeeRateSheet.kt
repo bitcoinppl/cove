@@ -84,7 +84,7 @@ fun CustomFeeRateSheet(
                     )
 
                     withContext(Dispatchers.Main) {
-                        totalSats = feeRateOption.feeRate().totalFee()?.asSats()?.toLong()
+                        totalSats = feeRateOption.totalFee().asSats().toLong()
                         updatedFeeOptions = updatedFeeOptions.addCustomFeeRate(feeRateOption)
                         presenter.lastWorkingFeeRate = feeRate
                     }
