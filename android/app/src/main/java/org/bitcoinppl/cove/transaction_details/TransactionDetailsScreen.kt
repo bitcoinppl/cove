@@ -415,8 +415,6 @@ fun TransactionDetailsScreen(
                         totalSpentFiatFmt = totalSpentFiatFmt,
                         metadata = metadata
                     )
-                } else {
-                    Spacer(Modifier.weight(1f))
                 }
 
                 Column(
@@ -444,7 +442,12 @@ fun TransactionDetailsScreen(
 
                     TextButton(
                         onClick = {
-                            // TODO: implement toggle details expanded
+                            metadata?.let { currentMetadata ->
+                                val updatedMetadata = currentMetadata.copy(
+                                    detailsExpanded = !currentMetadata.detailsExpanded
+                                )
+                                manager.rust.setWalletMetadata(updatedMetadata)
+                            }
                         },
                         modifier = Modifier.align(Alignment.CenterHorizontally)
                     ) {
