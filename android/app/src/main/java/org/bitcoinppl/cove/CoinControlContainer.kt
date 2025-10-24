@@ -66,17 +66,16 @@ fun CoinControlContainer(
     }
 
     // render
+    val currentManager = manager
     when {
-        walletManager != null && manager != null -> {
+        walletManager != null && currentManager != null -> {
             when (route) {
                 is CoinControlRoute.List -> {
-                    // TODO: use real UtxoListScreen with manager parameters
-                    Box(
-                        modifier = modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        androidx.compose.material3.Text("UTXO List - TODO")
-                    }
+                    org.bitcoinppl.cove.utxo_list.UtxoListScreen(
+                        manager = currentManager,
+                        app = app,
+                        modifier = modifier,
+                    )
                 }
             }
         }

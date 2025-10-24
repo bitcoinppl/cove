@@ -57,137 +57,124 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.views.ImageButton
 import java.text.SimpleDateFormat
-import java.util.Calendar
-import java.util.Date
 import java.util.Locale
 
-data class UtxoUi(
-    val id: String,
-    val label: String,
-    val address: String,
-    val amount: String,
-    val date: Date,
-    val isChange: Boolean = false,
-)
+// extension properties on Utxo to match Swift implementation
+val org.bitcoinppl.cove_core.types.Utxo.id: ULong
+    get() = outpoint.hashToUint()
+
+val org.bitcoinppl.cove_core.types.Utxo.displayName: String
+    get() =
+        label ?: if (type == org.bitcoinppl.cove_core.types.UtxoType.CHANGE) {
+            "Change Address"
+        } else {
+            "Receive Address"
+        }
+
+val org.bitcoinppl.cove_core.types.Utxo.displayDate: String
+    get() {
+        val date = java.util.Date(datetime.toLong() * 1000)
+        return SimpleDateFormat("MMM d, yyyy", Locale.US).format(date)
+    }
 
 enum class UtxoSort { DATE, NAME, AMOUNT, CHANGE }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun sampleUtxos(): List<UtxoUi> =
-    listOf(
-        UtxoUi(
-            "1",
-            stringResource(R.string.change_address),
-            "tb1qf 60lxh n...p42 hdakp w7",
-            "301,191 SATS",
-            Calendar.getInstance().apply { set(2025, Calendar.JUNE, 16) }.time,
-            isChange = true,
-        ),
-        UtxoUi(
-            "2",
-            stringResource(R.string.receive_address),
-            "tb1q0 z6fej u...xlnx9 t05v 26",
-            "10,001 SATS",
-            Calendar.getInstance().apply { set(2025, Calendar.JUNE, 15) }.time,
-        ),
-        UtxoUi(
-            "3",
-            stringResource(R.string.receive_address),
-            "tb1qd yqdec...9kw9 d59lp 3c",
-            "20,000 SATS",
-            Calendar.getInstance().apply { set(2025, Calendar.JUNE, 10) }.time,
-        ),
-        UtxoUi(
-            "4",
-            stringResource(R.string.receive_address),
-            "tb1qt 6djy y...p w7z4 0jgn5 e0",
-            "10,000 SATS",
-            Calendar.getInstance().apply { set(2025, Calendar.JUNE, 10) }.time,
-        ),
-        UtxoUi(
-            "5",
-            stringResource(R.string.change_address),
-            "tb1qr l3fvk f...xmlx h2x6u t7",
-            "748,040 SATS",
-            Calendar.getInstance().apply { set(2025, Calendar.JUNE, 10) }.time,
-            isChange = true,
-        ),
-    )
+fun UtxoListScreen(
+    manager: org.bitcoinppl.cove.CoinControlManager,
+    app: org.bitcoinppl.cove.AppManager,
+    modifier: Modifier = Modifier,
+    snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
+) {
+    val selected =
+        remember(manager.selected) {
+            manager.selected.map { it.hashToUint() }.toSet()
+        }
 
-@Preview(showBackground = true, backgroundColor = 0xFFF2F2F7)
-@Composable
-private fun UtxoListNoneSelectedPreview() {
-    val snack = remember { SnackbarHostState() }
-    val items = sampleUtxos()
-    var chosen by remember { mutableStateOf(setOf<String>()) }
-    UtxoListScreen(
-        utxos = items,
-        selected = chosen,
-        currentSort = UtxoSort.DATE,
-        onBack = {},
-        onMore = {},
-        onToggle = { id -> chosen = chosen.toMutableSet().also { if (!it.add(id)) it.remove(id) } },
-        onSelectAll = { chosen = items.map { it.id }.toSet() },
-        onDeselectAll = { chosen = emptySet() },
-        onSortChange = {},
-        onContinue = {},
-        snackbarHostState = snack,
-    )
-}
+    val currentSort =
+        listOf(
+            org.bitcoinppl.cove_core.CoinControlListSortKey.DATE to UtxoSort.DATE,
+            org.bitcoinppl.cove_core.CoinControlListSortKey.NAME to UtxoSort.NAME,
+            org.bitcoinppl.cove_core.CoinControlListSortKey.AMOUNT to UtxoSort.AMOUNT,
+            org.bitcoinppl.cove_core.CoinControlListSortKey.CHANGE to UtxoSort.CHANGE,
+        ).firstOrNull { (key, _) ->
+            manager.rust.buttonPresentation(key) is org.bitcoinppl.cove_core.ButtonPresentation.Selected
+        }?.second ?: UtxoSort.DATE
 
-@Preview(showBackground = true, backgroundColor = 0xFFF2F2F7)
-@Composable
-private fun UtxoListSomeSelectedPreview() {
-    val snack = remember { SnackbarHostState() }
-    val items = sampleUtxos()
-    var chosen by remember { mutableStateOf(setOf("1", "2", "3")) }
-    UtxoListScreen(
-        utxos = items,
-        selected = chosen,
-        currentSort = UtxoSort.AMOUNT,
-        onBack = {},
-        onMore = {},
-        onToggle = { id -> chosen = chosen.toMutableSet().also { if (!it.add(id)) it.remove(id) } },
-        onSelectAll = { chosen = items.map { it.id }.toSet() },
-        onDeselectAll = { chosen = emptySet() },
-        onSortChange = {},
-        onContinue = {},
-        snackbarHostState = snack,
+    UtxoListScreenContent(
+        manager = manager,
+        utxos = manager.utxos,
+        selected = selected,
+        currentSort = currentSort,
+        totalSelectedAmount = manager.totalSelectedAmount,
+        searchQuery = manager.search,
+        onBack = { app.popRoute() },
+        onToggleUnit = {
+            manager.dispatch(org.bitcoinppl.cove_core.CoinControlManagerAction.ToggleUnit)
+        },
+        onToggle = { hash ->
+            val outpoint = manager.utxos.find { it.outpoint.hashToUint() == hash }?.outpoint
+            if (outpoint != null) {
+                val newSelected =
+                    if (manager.selected.contains(outpoint)) {
+                        manager.selected - outpoint
+                    } else {
+                        manager.selected + outpoint
+                    }
+                manager.updateSelected(newSelected)
+            }
+        },
+        onToggleSelectAll = {
+            manager.dispatch(org.bitcoinppl.cove_core.CoinControlManagerAction.ToggleSelectAll)
+        },
+        onSortChange = { sort ->
+            val sortKey =
+                when (sort) {
+                    UtxoSort.DATE -> org.bitcoinppl.cove_core.CoinControlListSortKey.DATE
+                    UtxoSort.NAME -> org.bitcoinppl.cove_core.CoinControlListSortKey.NAME
+                    UtxoSort.AMOUNT -> org.bitcoinppl.cove_core.CoinControlListSortKey.AMOUNT
+                    UtxoSort.CHANGE -> org.bitcoinppl.cove_core.CoinControlListSortKey.CHANGE
+                }
+            manager.dispatch(org.bitcoinppl.cove_core.CoinControlManagerAction.ChangeSort(sortKey))
+        },
+        onContinue = {
+            manager.continuePressed()
+            app.popRoute()
+        },
+        onSearchChange = { query ->
+            manager.updateSearch(query)
+        },
+        snackbarHostState = snackbarHostState,
     )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun UtxoListScreen(
-    utxos: List<UtxoUi>,
-    selected: Set<String>,
+private fun UtxoListScreenContent(
+    manager: org.bitcoinppl.cove.CoinControlManager,
+    utxos: List<org.bitcoinppl.cove_core.types.Utxo>,
+    selected: Set<ULong>,
     currentSort: UtxoSort,
+    totalSelectedAmount: String,
+    searchQuery: String,
     onBack: () -> Unit,
-    onMore: () -> Unit,
-    onToggle: (String) -> Unit,
-    onSelectAll: () -> Unit,
-    onDeselectAll: () -> Unit,
+    onToggleUnit: () -> Unit,
+    onToggle: (ULong) -> Unit,
+    onToggleSelectAll: () -> Unit,
     onSortChange: (UtxoSort) -> Unit,
     onContinue: () -> Unit,
+    onSearchChange: (String) -> Unit = {},
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
+    var menuExpanded by remember { mutableStateOf(false) }
     val anySelected = selected.isNotEmpty()
-    val totalSelectedAmount =
-        if (anySelected) {
-            val sum =
-                utxos.filter { selected.contains(it.id) }
-                    .sumOf { it.amount.filter { ch -> ch.isDigit() }.toLongOrNull() ?: 0L }
-            String.format(Locale.US, "%,d SATS", sum)
-        } else {
-            ""
-        }
 
     val listBg = CoveColor.ListBackgroundLight
     val listCard = CoveColor.ListCardLight
@@ -213,10 +200,29 @@ fun UtxoListScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = onMore) {
+                    IconButton(onClick = { menuExpanded = !menuExpanded }) {
                         Icon(
                             Icons.Filled.MoreVert,
                             contentDescription = null,
+                        )
+                    }
+                    androidx.compose.material3.DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false },
+                    ) {
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text("Toggle Unit") },
+                            onClick = {
+                                onToggleUnit()
+                                menuExpanded = false
+                            },
+                        )
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text(if (selected.isEmpty()) "Select All" else "Deselect All") },
+                            onClick = {
+                                onToggleSelectAll()
+                                menuExpanded = false
+                            },
                         )
                     }
                 },
@@ -259,9 +265,15 @@ fun UtxoListScreen(
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp),
                 ) {
-                    SearchBar {}
+                    SearchBar(
+                        initialQuery = searchQuery,
+                        onQueryChange = onSearchChange,
+                    )
                     Spacer(modifier = Modifier.height(16.dp))
-                    SortRow(currentSort = currentSort, onSortChange = onSortChange)
+                    SortRow(
+                        currentSort = currentSort,
+                        onSortChange = onSortChange,
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))
@@ -302,7 +314,7 @@ fun UtxoListScreen(
                                 fontWeight = FontWeight.Medium,
                                 modifier =
                                     Modifier.clickable {
-                                        if (selected.isNotEmpty()) onDeselectAll() else onSelectAll()
+                                        onToggleSelectAll()
                                     },
                             )
                         }
@@ -318,11 +330,12 @@ fun UtxoListScreen(
                         shape = RoundedCornerShape(16.dp),
                     ) {
                         Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                            utxos.forEachIndexed { index, item ->
+                            utxos.forEachIndexed { index, utxo ->
                                 UtxoItemRow(
-                                    item = item,
-                                    selected = selected.contains(item.id),
-                                    onToggle = { onToggle(item.id) },
+                                    manager = manager,
+                                    utxo = utxo,
+                                    selected = selected.contains(utxo.id),
+                                    onToggle = { onToggle(utxo.id) },
                                 )
                                 if (index != utxos.lastIndex) {
                                     HorizontalDivider(
@@ -409,7 +422,8 @@ fun UtxoListScreen(
 
 @Composable
 private fun UtxoItemRow(
-    item: UtxoUi,
+    manager: org.bitcoinppl.cove.CoinControlManager,
+    utxo: org.bitcoinppl.cove_core.types.Utxo,
     selected: Boolean,
     onToggle: () -> Unit,
 ) {
@@ -426,19 +440,19 @@ private fun UtxoItemRow(
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = item.label,
+                    text = utxo.displayName,
                     fontWeight = FontWeight.Normal,
                     color = CoveColor.TextPrimary,
                     fontSize = 14.sp,
                 )
-                if (item.isChange) {
+                if (utxo.type == org.bitcoinppl.cove_core.types.UtxoType.CHANGE) {
                     Spacer(Modifier.width(4.dp))
                     ChangeBadge()
                 }
             }
             Spacer(Modifier.height(4.dp))
             Text(
-                text = item.address,
+                text = utxo.address.string(),
                 color = Color(0xFF8E8E93),
                 fontSize = 12.sp,
                 maxLines = 1,
@@ -447,14 +461,14 @@ private fun UtxoItemRow(
         }
         Column(horizontalAlignment = Alignment.End) {
             Text(
-                item.amount,
+                manager.displayAmount(utxo.amount),
                 fontWeight = FontWeight.Normal,
                 fontSize = 14.sp,
                 color = Color(0xFF000000),
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                SimpleDateFormat("MMM d, yyyy", Locale.US).format(item.date),
+                utxo.displayDate,
                 color = Color(0xFF8E8E93),
                 fontSize = 12.sp,
             )
@@ -576,8 +590,11 @@ private fun SortChip(
 }
 
 @Composable
-private fun SearchBar(onQueryChange: (String) -> Unit) {
-    var query by remember { mutableStateOf("") }
+private fun SearchBar(
+    initialQuery: String,
+    onQueryChange: (String) -> Unit,
+) {
+    var query by remember(initialQuery) { mutableStateOf(initialQuery) }
     val bg = CoveColor.SurfaceLight
     Row(
         modifier =
