@@ -250,6 +250,8 @@ private suspend fun changeTapSignerPin(
                 ),
             )
     } catch (e: Exception) {
+        android.util.Log.e("TapSignerConfirmPin", "Error changing PIN", e)
+
         // check error type and show appropriate alert
         val errorMessage = e.message ?: "Unknown error"
         app.alertState =

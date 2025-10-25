@@ -23,6 +23,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -30,9 +31,21 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove_core.types.WalletId
+
+private suspend fun persistWallet(
+    tapSigner: org.bitcoinppl.cove_core.tapcard.TapSigner,
+    deriveInfo: org.bitcoinppl.cove_core.DeriveInfo,
+): WalletId =
+    withContext(Dispatchers.IO) {
+        val walletManager = WalletManager.fromTapSigner(tapSigner, deriveInfo)
+        walletManager.id
+    }
 
 /**
  * import success screen
@@ -49,14 +62,14 @@ fun TapSignerImportSuccessView(
     var walletId: WalletId? by remember { mutableStateOf(null) }
     var saving by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
 
     // save wallet on appear
     LaunchedEffect(tapSigner, deriveInfo) {
         saving = true
         error = null
         try {
-            val walletManager = WalletManager.fromTapSigner(tapSigner, deriveInfo)
-            walletId = walletManager.id
+            walletId = persistWallet(tapSigner, deriveInfo)
         } catch (e: Exception) {
             android.util.Log.e("TapSignerImportSuccess", "Failed to save wallet", e)
             error = e.message ?: "Failed to save wallet"
@@ -136,8 +149,18 @@ fun TapSignerImportSuccessView(
 
                     Button(
                         onClick = {
-                            saving = true
-                            error = null
+                            scope.launch {
+                                saving = true
+                                error = null
+                                try {
+                                    walletId = persistWallet(tapSigner, deriveInfo)
+                                } catch (e: Exception) {
+                                    android.util.Log.e("TapSignerImportSuccess", "Failed to save wallet", e)
+                                    error = e.message ?: "Failed to save wallet"
+                                } finally {
+                                    saving = false
+                                }
+                            }
                         },
                     ) {
                         Text("Retry")
