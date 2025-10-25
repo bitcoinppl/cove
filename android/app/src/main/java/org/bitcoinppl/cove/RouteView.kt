@@ -49,7 +49,11 @@ fun RouteView(app: AppManager, route: Route) {
         }
 
         is Route.TransactionDetails -> {
-            TransactionDetailsScreen(app = app, walletId = route.id, details = route.details)
+            org.bitcoinppl.cove.transaction_details.TransactionDetailsContainer(
+                app = app,
+                walletId = route.id,
+                details = route.details,
+            )
         }
 
         is Route.Send -> {
@@ -82,13 +86,6 @@ fun RouteView(app: AppManager, route: Route) {
 private fun SecretWordsScreen(app: AppManager, walletId: WalletId) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Text("Secret Words for $walletId - TODO")
-    }
-}
-
-@Composable
-private fun TransactionDetailsScreen(app: AppManager, walletId: WalletId, details: TransactionDetails) {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text("Transaction Details - TODO")
     }
 }
 

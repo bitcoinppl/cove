@@ -1,10 +1,14 @@
 package org.bitcoinppl.cove.transaction_details
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -23,7 +27,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.NorthEast
 import androidx.compose.material.icons.filled.SouthWest
@@ -42,7 +45,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -52,186 +59,131 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
+import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.WalletManager
+import org.bitcoinppl.cove.components.ConfirmationIndicatorView
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.views.ImageButton
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import org.bitcoinppl.cove_core.TransactionDetails
+import org.bitcoinppl.cove_core.WalletManagerAction
+import org.bitcoinppl.cove_core.WalletMetadata
+import org.bitcoinppl.cove_core.types.BitcoinUnit
 import kotlin.math.min
 
-enum class TxType { Sent, Received }
+private const val INITIAL_DELAY_MS = 2000L
+private const val FREQUENT_POLL_INTERVAL_MS = 30000L
+private const val NORMAL_POLL_INTERVAL_MS = 60000L
+private const val MAX_POLL_ERRORS = 10
+private const val CONFIRMATIONS_THRESHOLD = 3
 
-@Preview(showBackground = true)
-@Composable
-private fun TxDetailsSentLightPreview() {
-    Column(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp),
-    ) {
-        TransactionDetailsWidget(
-            txType = TxType.Sent,
-            isDark = false,
-            address = "tb1qc39qku u3epx ww8th xmh7 qsw04 p3jgp kj3a he",
-            addressExtra = "2,194,934 | 251,357",
-            networkFeePrimary = "2,724 SATS",
-            networkFeeSecondary = "≈ $3.15",
-            recipientReceivesPrimary = "150,000 SATS",
-            recipientReceivesSecondary = "≈ $173.86",
-            totalSpentPrimary = "-152,724 SATS",
-            totalSpentSecondary = "≈ $177.02",
-        )
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-private fun TxDetailsReceivedDarkPreview() {
-    Box(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .background(Color(0xFF000000)),
-    ) {
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp),
-        ) {
-            TransactionDetailsWidget(
-                txType = TxType.Received,
-                isDark = true,
-                address = "tb1qc39qku u3epx ww8th xmh7 qsw04 p3jgp kj3a he",
-                addressExtra = "2,194,934 | 251,357",
-                networkFeePrimary = "2,724 SATS",
-                networkFeeSecondary = "≈ $3.15",
-                recipientReceivesPrimary = "150,000 SATS",
-                recipientReceivesSecondary = "≈ $173.86",
-                totalSpentPrimary = "-152,724 SATS",
-                totalSpentSecondary = "≈ $177.02",
-            )
-        }
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-private fun TransactionSentLightPreview() {
-    TransactionDetailsScreen(
-        onBack = {},
-        onAddLabel = {},
-        onViewInExplorer = {},
-        onShowDetails = {},
-        isDark = false,
-        txType = TxType.Sent,
-        txAmountPrimary = "152,724 SATS",
-        txAmountSecondary = "≈ $177.02",
-        date = Date(),
-    )
-}
-
-@Preview(showBackground = true)
-@Composable
-private fun TransactionReceivedDarkPreview() {
-    TransactionDetailsScreen(
-        onBack = {},
-        onAddLabel = {},
-        onViewInExplorer = {},
-        onShowDetails = {},
-        isDark = true,
-        txType = TxType.Received,
-        txAmountPrimary = "152,724 SATS",
-        txAmountSecondary = "≈ $177.02",
-        date = Date(),
-    )
-}
-
-@Preview(showBackground = true)
-@Composable
-private fun TransactionSentLightExpandedPreview() {
-    TransactionDetailsScreen(
-        onBack = {},
-        onAddLabel = {},
-        onViewInExplorer = {},
-        onShowDetails = {},
-        isDark = false,
-        txType = TxType.Sent,
-        txAmountPrimary = "152,724 SATS",
-        txAmountSecondary = "≈ $177.02",
-        date = Date(),
-        isExpanded = true,
-        address = "tb1qc39qku u3epx ww8th xmh7 qsw04 p3jgp kj3a he",
-        addressExtra = "2,194,934 | 251,357",
-        networkFeePrimary = "2,724 SATS",
-        networkFeeSecondary = "≈ $3.15",
-        recipientReceivesPrimary = "150,000 SATS",
-        recipientReceivesSecondary = "≈ $173.86",
-        totalSpentPrimary = "-152,724 SATS",
-        totalSpentSecondary = "≈ $177.02",
-    )
-}
-
-@Preview(showBackground = true)
-@Composable
-private fun TransactionReceivedDarkExpandedPreview() {
-    TransactionDetailsScreen(
-        onBack = {},
-        onAddLabel = {},
-        onViewInExplorer = {},
-        onShowDetails = {},
-        isDark = true,
-        txType = TxType.Received,
-        txAmountPrimary = "152,724 SATS",
-        txAmountSecondary = "≈ $177.02",
-        date = Date(),
-        isExpanded = true,
-        address = "tb1qc39qku u3epx ww8th xmh7 qsw04 p3jgp kj3a he",
-        addressExtra = "2,194,934 | 251,357",
-        networkFeePrimary = "2,724 SATS",
-        networkFeeSecondary = "≈ $3.15",
-        recipientReceivesPrimary = "150,000 SATS",
-        recipientReceivesSecondary = "≈ $173.86",
-        totalSpentPrimary = "-152,724 SATS",
-        totalSpentSecondary = "≈ $177.02",
-    )
-}
-
+/**
+ * transaction details screen - now using manager-based pattern
+ * ported from iOS TransactionDetailsView.swift
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TransactionDetailsScreen(
-    onBack: () -> Unit,
-    onAddLabel: () -> Unit,
-    onViewInExplorer: () -> Unit,
-    onShowDetails: () -> Unit,
-    onNetworkFeeInfo: () -> Unit = {},
-    snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
-    isDark: Boolean = false,
-    txType: TxType = TxType.Sent,
-    title: String? = null,
-    txAmountPrimary: String = "",
-    txAmountSecondary: String = "",
-    date: Date? = null,
-    isExpanded: Boolean = false,
-    address: String = "",
-    addressExtra: String? = null,
-    networkFeePrimary: String? = null,
-    networkFeeSecondary: String? = null,
-    recipientReceivesPrimary: String? = null,
-    recipientReceivesSecondary: String? = null,
-    totalSpentPrimary: String? = null,
-    totalSpentSecondary: String? = null,
+    app: AppManager,
+    manager: WalletManager,
+    details: TransactionDetails,
 ) {
+    val context = LocalContext.current
+    val metadata = manager.walletMetadata
+
+    // state for confirmation polling
+    var numberOfConfirmations by remember { mutableStateOf<Int?>(null) }
+    var transactionDetails by remember { mutableStateOf(details) }
+    var feeFiatFmt by remember { mutableStateOf("---") }
+    var sentSansFeeFiatFmt by remember { mutableStateOf("---") }
+    var totalSpentFiatFmt by remember { mutableStateOf("---") }
+
+    // get current color scheme
+    val isDark = androidx.compose.foundation.isSystemInDarkTheme()
+
+    // load fiat amounts
+    LaunchedEffect(transactionDetails) {
+        feeFiatFmt =
+            try {
+                transactionDetails.feeFiatFmt()
+            } catch (e: Exception) {
+                "---"
+            }
+        sentSansFeeFiatFmt =
+            try {
+                transactionDetails.sentSansFeeFiatFmt()
+            } catch (e: Exception) {
+                "---"
+            }
+        totalSpentFiatFmt =
+            try {
+                transactionDetails.amountFiatFmt()
+            } catch (e: Exception) {
+                "---"
+            }
+    }
+
+    // poll for confirmations if not fully confirmed
+    LaunchedEffect(transactionDetails.txId()) {
+        if (!transactionDetails.isConfirmed()) {
+            delay(INITIAL_DELAY_MS)
+        }
+
+        var needsFrequentCheck = true
+        var errors = 0
+
+        while (true) {
+            try {
+                // refresh transaction details
+                val updated = manager.rust.transactionDetails(txId = transactionDetails.txId())
+                if (updated != null) {
+                    transactionDetails = updated
+                }
+
+                // get confirmations
+                val blockNumber = transactionDetails.blockNumber()
+                if (blockNumber != null) {
+                    val confirmations = manager.rust.numberOfConfirmations(blockHeight = blockNumber)
+                    numberOfConfirmations = confirmations.toInt()
+
+                    // if fully confirmed, slow down polling
+                    if (confirmations >= CONFIRMATIONS_THRESHOLD.toUInt() && needsFrequentCheck) {
+                        needsFrequentCheck = false
+                    }
+                }
+
+                // reset error count on success
+                errors = 0
+
+                // wait before next poll
+                if (needsFrequentCheck) {
+                    delay(FREQUENT_POLL_INTERVAL_MS)
+                } else {
+                    delay(NORMAL_POLL_INTERVAL_MS)
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("TransactionDetails", "error polling confirmations", e)
+                errors++
+                if (errors > MAX_POLL_ERRORS) {
+                    break
+                }
+                delay(FREQUENT_POLL_INTERVAL_MS)
+            }
+        }
+    }
+
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    // theme colors
     val bg = if (isDark) Color(0xFF000000) else Color(0xFFFFFFFF)
     val fg = if (isDark) Color(0xFFEFEFEF) else Color(0xFF101010)
     val sub = if (isDark) Color(0xFFB8B8B8) else Color(0xFF8F8F95)
@@ -253,26 +205,51 @@ fun TransactionDetailsScreen(
             )
         }
 
+    // derive UI state from transaction details
+    val isSent = transactionDetails.isSent()
+    val isReceived = transactionDetails.isReceived()
+    val isConfirmed = transactionDetails.isConfirmed()
+
     val headerTitle =
-        title ?: stringResource(
-            id = if (txType == TxType.Sent) R.string.title_transaction_sent else R.string.title_transaction_received,
+        stringResource(
+            id =
+                if (isConfirmed) {
+                    if (isSent) R.string.title_transaction_sent else R.string.title_transaction_received
+                } else {
+                    R.string.title_transaction_pending
+                },
         )
-    val actionLabelRes =
-        if (txType == TxType.Sent) R.string.label_transaction_sent else R.string.label_transaction_received
-    val actionIcon = if (txType == TxType.Sent) Icons.Filled.NorthEast else Icons.Filled.SouthWest
 
-    val dateFormatter = SimpleDateFormat("MMMM d, yyyy 'at' h:mm a", Locale.getDefault())
-    val formattedDate = date?.let { dateFormatter.format(it) } ?: ""
+    val actionLabelRes = if (isSent) R.string.label_transaction_sent else R.string.label_transaction_received
+    val actionIcon = if (isSent) Icons.Filled.NorthEast else Icons.Filled.SouthWest
 
+    // format date
+    val formattedDate = transactionDetails.confirmationDateTime() ?: ""
     val message =
-        if (formattedDate.isNotEmpty()) {
+        if (isConfirmed && formattedDate.isNotEmpty()) {
             stringResource(
-                id = if (txType == TxType.Sent) R.string.label_transaction_sent_on else R.string.label_transaction_received_on,
+                id = if (isSent) R.string.label_transaction_sent_on else R.string.label_transaction_received_on,
                 formattedDate,
             )
+        } else if (!isConfirmed) {
+            stringResource(R.string.label_transaction_pending)
         } else {
             ""
         }
+
+    // format amounts
+    val txAmountPrimary = manager.rust.displayAmount(amount = transactionDetails.amount())
+    val txAmountSecondary by androidx.compose.runtime.produceState(initialValue = "---") {
+        value =
+            try {
+                "≈ ${transactionDetails.amountFiatFmt()}"
+            } catch (e: Exception) {
+                "---"
+            }
+    }
+
+    // details expanded from metadata
+    val isExpanded = metadata?.detailsExpanded ?: false
 
     Scaffold(
         containerColor = bg,
@@ -287,7 +264,7 @@ fun TransactionDetailsScreen(
                     ),
                 title = { Text("") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = { app.popRoute() }) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = null,
@@ -345,31 +322,30 @@ fun TransactionDetailsScreen(
 
                 Spacer(Modifier.height(4.dp))
 
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier =
-                        Modifier
-                            .clip(RoundedCornerShape(16.dp))
-                            .clickable { onAddLabel() },
-                ) {
-                    Box(
-                        modifier =
-                            Modifier
-                                .size(18.dp)
-                                .clip(CircleShape)
-                                .background(chipBg),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Add,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(14.dp),
-                        )
-                    }
-                    Spacer(Modifier.size(8.dp))
-                    Text(stringResource(R.string.btn_add_label), color = fg, fontSize = 16.sp)
-                }
+                // TODO: add transaction labels - see issue #373
+                // Row(
+                //     verticalAlignment = Alignment.CenterVertically,
+                //     modifier = Modifier
+                //         .clip(RoundedCornerShape(16.dp))
+                //         .clickable { /* TODO */ }
+                // ) {
+                //     Box(
+                //         modifier = Modifier
+                //             .size(18.dp)
+                //             .clip(CircleShape)
+                //             .background(chipBg),
+                //         contentAlignment = Alignment.Center
+                //     ) {
+                //         Icon(
+                //             imageVector = Icons.Default.Add,
+                //             contentDescription = null,
+                //             tint = Color.White,
+                //             modifier = Modifier.size(14.dp)
+                //         )
+                //     }
+                //     Spacer(Modifier.size(8.dp))
+                //     Text(stringResource(R.string.btn_add_label), color = fg, fontSize = 16.sp)
+                // }
 
                 Spacer(Modifier.height(24.dp))
 
@@ -444,22 +420,34 @@ fun TransactionDetailsScreen(
                     }
                 }
 
+                // show confirmation indicator if < 3 confirmations
+                if (numberOfConfirmations != null && numberOfConfirmations!! < 3) {
+                    Spacer(Modifier.height(24.dp))
+                    Box(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .height(1.dp)
+                                .background(if (isDark) Color(0xFF222428) else Color(0xFFE4E5E7)),
+                    )
+                    Spacer(Modifier.height(24.dp))
+                    ConfirmationIndicatorView(
+                        current = numberOfConfirmations!!,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+
                 if (isExpanded) {
                     TransactionDetailsWidget(
-                        txType = txType,
+                        manager = manager,
+                        transactionDetails = transactionDetails,
+                        numberOfConfirmations = numberOfConfirmations,
                         isDark = isDark,
-                        address = address,
-                        addressExtra = addressExtra,
-                        networkFeePrimary = networkFeePrimary,
-                        networkFeeSecondary = networkFeeSecondary,
-                        recipientReceivesPrimary = recipientReceivesPrimary,
-                        recipientReceivesSecondary = recipientReceivesSecondary,
-                        totalSpentPrimary = totalSpentPrimary,
-                        totalSpentSecondary = totalSpentSecondary,
-                        onNetworkFeeInfo = onNetworkFeeInfo,
+                        feeFiatFmt = feeFiatFmt,
+                        sentSansFeeFiatFmt = sentSansFeeFiatFmt,
+                        totalSpentFiatFmt = totalSpentFiatFmt,
+                        metadata = metadata,
                     )
-                } else {
-                    Spacer(Modifier.weight(1f))
                 }
 
                 Column(
@@ -471,7 +459,11 @@ fun TransactionDetailsScreen(
                 ) {
                     ImageButton(
                         text = stringResource(R.string.btn_view_in_explorer),
-                        onClick = onViewInExplorer,
+                        onClick = {
+                            val url = transactionDetails.transactionUrl()
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                            context.startActivity(intent)
+                        },
                         colors =
                             ButtonDefaults.buttonColors(
                                 containerColor = if (isDark) CoveColor.SurfaceDark else CoveColor.midnightBlue,
@@ -485,7 +477,9 @@ fun TransactionDetailsScreen(
                     Spacer(Modifier.height(12.dp))
 
                     TextButton(
-                        onClick = onShowDetails,
+                        onClick = {
+                            manager.dispatch(WalletManagerAction.ToggleDetailsExpanded)
+                        },
                         modifier = Modifier.align(Alignment.CenterHorizontally),
                     ) {
                         Text(
@@ -504,21 +498,20 @@ fun TransactionDetailsScreen(
 
 @Composable
 private fun TransactionDetailsWidget(
-    txType: TxType,
+    manager: WalletManager,
+    transactionDetails: TransactionDetails,
+    numberOfConfirmations: Int?,
     isDark: Boolean,
-    address: String,
-    addressExtra: String?,
-    networkFeePrimary: String?,
-    networkFeeSecondary: String?,
-    recipientReceivesPrimary: String?,
-    recipientReceivesSecondary: String?,
-    totalSpentPrimary: String?,
-    totalSpentSecondary: String?,
-    onNetworkFeeInfo: () -> Unit = {},
+    feeFiatFmt: String,
+    sentSansFeeFiatFmt: String,
+    totalSpentFiatFmt: String,
+    metadata: WalletMetadata?,
 ) {
     val dividerColor = if (isDark) Color(0xFF222428) else Color(0xFFE4E5E7)
     val sub = if (isDark) Color(0xFFB8B8B8) else Color(0xFF8F8F95)
     val fg = if (isDark) Color(0xFFEFEFEF) else Color(0xFF101010)
+    val isSent = transactionDetails.isSent()
+    val isConfirmed = transactionDetails.isConfirmed()
 
     Spacer(Modifier.height(48.dp))
     Box(
@@ -530,45 +523,37 @@ private fun TransactionDetailsWidget(
     )
     Spacer(Modifier.height(24.dp))
 
-    val addressLabel =
-        stringResource(if (txType == TxType.Sent) R.string.label_sent_to else R.string.label_received_from)
-    if (address.isNotEmpty()) {
+    // show confirmations if confirmed
+    if (isConfirmed) {
         Column(modifier = Modifier.fillMaxWidth()) {
             Text(
-                addressLabel,
+                stringResource(R.string.label_confirmations),
                 color = if (isDark) Color(0xFFB8B8B8) else Color(0xFF6F6F75),
-                fontSize = 16.sp,
+                fontSize = 14.sp,
+            )
+            Spacer(Modifier.height(8.dp))
+            if (numberOfConfirmations != null) {
+                Text(
+                    numberOfConfirmations.toString(),
+                    color = fg,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+            Spacer(Modifier.height(14.dp))
+
+            Text(
+                stringResource(R.string.label_block_number),
+                color = if (isDark) Color(0xFFB8B8B8) else Color(0xFF6F6F75),
+                fontSize = 14.sp,
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                address,
+                transactionDetails.blockNumberFmt() ?: "",
                 color = fg,
-                fontSize = 20.sp,
+                fontSize = 16.sp,
                 fontWeight = FontWeight.SemiBold,
-                lineHeight = 24.sp,
             )
-            if (!addressExtra.isNullOrEmpty()) {
-                Spacer(Modifier.height(8.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(addressExtra, color = sub, fontSize = 14.sp)
-                    Spacer(Modifier.size(4.dp))
-                    Box(
-                        modifier =
-                            Modifier
-                                .size(14.dp)
-                                .clip(CircleShape)
-                                .background(Color(0xFF1FC35C)),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Check,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(10.dp),
-                        )
-                    }
-                }
-            }
         }
         Spacer(Modifier.height(24.dp))
         Box(
@@ -581,24 +566,63 @@ private fun TransactionDetailsWidget(
         Spacer(Modifier.height(24.dp))
     }
 
-    DetailsWidget(
-        label = stringResource(R.string.label_network_fee),
-        primary = networkFeePrimary,
-        secondary = networkFeeSecondary,
-        isDark = isDark,
-        showInfoIcon = true,
-        onInfoClick = onNetworkFeeInfo,
-    )
-    Spacer(Modifier.height(24.dp))
+    // address (sent to / received from)
+    val addressLabel =
+        stringResource(
+            if (isSent) R.string.label_sent_to else R.string.label_received_from,
+        )
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            addressLabel,
+            color = if (isDark) Color(0xFFB8B8B8) else Color(0xFF6F6F75),
+            fontSize = 16.sp,
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            transactionDetails.addressSpacedOut(),
+            color = fg,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.SemiBold,
+            lineHeight = 24.sp,
+        )
 
-    DetailsWidget(
-        label = stringResource(R.string.label_recipient_receives),
-        primary = recipientReceivesPrimary,
-        secondary = recipientReceivesSecondary,
-        isDark = isDark,
-    )
+        // show block number and confirmations for confirmed sent transactions
+        if (isSent && isConfirmed) {
+            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    transactionDetails.blockNumberFmt() ?: "",
+                    color = sub,
+                    fontSize = 14.sp,
+                )
+                Text(" | ", color = sub, fontSize = 14.sp)
+                if (numberOfConfirmations != null) {
+                    Text(
+                        numberOfConfirmations.toString(),
+                        color = sub,
+                        fontSize = 14.sp,
+                    )
+                    Spacer(Modifier.size(4.dp))
+                    Box(
+                        modifier =
+                            Modifier
+                                .size(14.dp)
+                                .clip(CircleShape)
+                                .background(CoveColor.SuccessGreen),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(10.dp),
+                        )
+                    }
+                }
+            }
+        }
+    }
     Spacer(Modifier.height(24.dp))
-
     Box(
         modifier =
             Modifier
@@ -608,13 +632,53 @@ private fun TransactionDetailsWidget(
     )
     Spacer(Modifier.height(24.dp))
 
-    DetailsWidget(
-        label = stringResource(R.string.label_total_spent),
-        primary = totalSpentPrimary,
-        secondary = totalSpentSecondary,
-        isDark = isDark,
-        isTotal = true,
-    )
+    // network fee (for sent transactions)
+    if (isSent) {
+        DetailsWidget(
+            label = stringResource(R.string.label_network_fee),
+            primary = transactionDetails.feeFmt(unit = metadata?.selectedUnit ?: BitcoinUnit.SAT),
+            secondary = "≈ $feeFiatFmt",
+            isDark = isDark,
+            showInfoIcon = true,
+            onInfoClick = { /* TODO: show fee info */ },
+        )
+        Spacer(Modifier.height(24.dp))
+
+        DetailsWidget(
+            label = stringResource(R.string.label_recipient_receives),
+            primary = transactionDetails.sentSansFeeFmt(unit = metadata?.selectedUnit ?: BitcoinUnit.SAT),
+            secondary = "≈ $sentSansFeeFiatFmt",
+            isDark = isDark,
+        )
+        Spacer(Modifier.height(24.dp))
+
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(dividerColor),
+        )
+        Spacer(Modifier.height(24.dp))
+
+        DetailsWidget(
+            label = stringResource(R.string.label_total_spent),
+            primary = transactionDetails.amountFmt(unit = metadata?.selectedUnit ?: BitcoinUnit.SAT),
+            secondary = "≈ $totalSpentFiatFmt",
+            isDark = isDark,
+            isTotal = true,
+        )
+    } else {
+        // received transaction details
+        ReceivedTransactionDetails(
+            transactionDetails = transactionDetails,
+            numberOfConfirmations = numberOfConfirmations,
+            isDark = isDark,
+            sub = sub,
+            fg = fg,
+        )
+    }
+
     Spacer(Modifier.height(72.dp))
 }
 
@@ -677,6 +741,108 @@ private fun DetailsWidget(
             if (!secondary.isNullOrEmpty()) {
                 Spacer(Modifier.height(6.dp))
                 Text(secondary, color = sub, fontSize = 14.sp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReceivedTransactionDetails(
+    transactionDetails: TransactionDetails,
+    numberOfConfirmations: Int?,
+    isDark: Boolean,
+    sub: Color,
+    fg: Color,
+) {
+    val context = LocalContext.current
+    var isCopied by remember { mutableStateOf(false) }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        // received at address with copy button
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    stringResource(R.string.label_received_at),
+                    color = if (isDark) Color(0xFFB8B8B8) else Color(0xFF6F6F75),
+                    fontSize = 16.sp,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    transactionDetails.addressSpacedOut(),
+                    color = fg,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    lineHeight = 24.sp,
+                )
+            }
+
+            Spacer(Modifier.width(12.dp))
+
+            // copy button
+            OutlinedButton(
+                onClick = {
+                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    val clip = ClipData.newPlainText("address", transactionDetails.address().string())
+                    clipboard.setPrimaryClip(clip)
+                    isCopied = true
+                },
+                shape = RoundedCornerShape(20.dp),
+                border = BorderStroke(1.dp, if (isDark) Color(0xFF4A4A4A) else Color(0xFFD1D1D6)),
+                colors =
+                    ButtonDefaults.outlinedButtonColors(
+                        contentColor = fg,
+                    ),
+                modifier = Modifier.padding(top = 20.dp),
+            ) {
+                Text(
+                    text = stringResource(if (isCopied) R.string.btn_copied else R.string.btn_copy),
+                    fontSize = 12.sp,
+                )
+            }
+        }
+
+        // reset copied state after delay
+        LaunchedEffect(isCopied) {
+            if (isCopied) {
+                delay(5000)
+                isCopied = false
+            }
+        }
+
+        // show block number and confirmations for confirmed received transactions
+        if (transactionDetails.isConfirmed() && numberOfConfirmations != null) {
+            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    transactionDetails.blockNumberFmt() ?: "",
+                    color = sub,
+                    fontSize = 14.sp,
+                )
+                Text(" | ", color = sub, fontSize = 14.sp)
+                Text(
+                    numberOfConfirmations.toString(),
+                    color = sub,
+                    fontSize = 14.sp,
+                )
+                Spacer(Modifier.size(4.dp))
+                Box(
+                    modifier =
+                        Modifier
+                            .size(14.dp)
+                            .clip(CircleShape)
+                            .background(CoveColor.SuccessGreen),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(10.dp),
+                    )
+                }
             }
         }
     }

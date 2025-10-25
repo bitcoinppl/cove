@@ -47,6 +47,8 @@
     <string name="unconfirmed">Unconfirmed</string>
     <string name="title_transaction_sent">Transaction Sent</string>
     <string name="title_transaction_received">Transaction Received</string>
+    <string name="title_transaction_pending">Transaction Pending</string>
+    <string name="label_transaction_pending">Pending</string>
     <string name="btn_add_label">Add label</string>
     <string name="btn_view_in_explorer">View in Explorer</string>
     <string name="btn_show_details">Show Details</string>
@@ -58,6 +60,11 @@
     <string name="label_network_fee">Network Fee</string>
     <string name="label_recipient_receives">Recipient Receives</string>
     <string name="label_total_spent">Total Spent</string>
+    <string name="label_confirmations">Confirmations</string>
+    <string name="label_block_number">Block Number</string>
+    <string name="label_received_at">Received At</string>
+    <string name="btn_copy">Copy</string>
+    <string name="btn_copied">Copied</string>
     <string name="title_manage_utxos">Manage UTXOs</string>
     <string name="search_utxos">Search UTXOs</string>
     <string name="sort_date">Date</string>
