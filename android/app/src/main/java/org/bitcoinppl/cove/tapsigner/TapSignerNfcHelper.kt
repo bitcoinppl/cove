@@ -1,14 +1,11 @@
 package org.bitcoinppl.cove.tapsigner
 
-import android.nfc.NfcAdapter
-import android.nfc.Tag
 import android.nfc.tech.IsoDep
 import kotlinx.coroutines.suspendCancellableCoroutine
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.TapcardTransportProtocol
 import org.bitcoinppl.cove_core.tapcard.TapSigner
 import org.bitcoinppl.cove_core.types.Psbt
-import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 /**
