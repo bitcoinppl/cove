@@ -253,7 +253,7 @@ private fun FeeOptionCard(
                 Spacer(modifier = Modifier.height(4.dp))
 
                 Text(
-                    text = "${String.format("%.2f", feeOption.satPerVb())} sats/vbyte",
+                    text = "${String.format(Locale.US, "%.2f", feeOption.satPerVb())} sat/vB",
                     style = MaterialTheme.typography.bodyMedium,
                     color = contentColor,
                 )
