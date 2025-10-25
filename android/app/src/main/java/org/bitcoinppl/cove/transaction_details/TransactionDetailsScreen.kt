@@ -76,6 +76,12 @@ import org.bitcoinppl.cove_core.WalletMetadata
 import org.bitcoinppl.cove_core.types.BitcoinUnit
 import kotlin.math.min
 
+private const val INITIAL_DELAY_MS = 2000L
+private const val FREQUENT_POLL_INTERVAL_MS = 30000L
+private const val NORMAL_POLL_INTERVAL_MS = 60000L
+private const val MAX_POLL_ERRORS = 10
+private const val CONFIRMATIONS_THRESHOLD = 3
+
 /**
  * transaction details screen - now using manager-based pattern
  * ported from iOS TransactionDetailsView.swift
@@ -125,8 +131,7 @@ fun TransactionDetailsScreen(
     // poll for confirmations if not fully confirmed
     LaunchedEffect(transactionDetails.txId()) {
         if (!transactionDetails.isConfirmed()) {
-            // start with a delay to avoid race condition
-            delay(2000)
+            delay(INITIAL_DELAY_MS)
         }
 
         var needsFrequentCheck = true
@@ -147,22 +152,32 @@ fun TransactionDetailsScreen(
                     numberOfConfirmations = confirmations.toInt()
 
                     // if fully confirmed, slow down polling
-                    if (confirmations >= 3u && needsFrequentCheck) {
+                    if (confirmations >= CONFIRMATIONS_THRESHOLD.toUInt() && needsFrequentCheck) {
                         needsFrequentCheck = false
+                    }
+
+                    // stop polling after sufficient confirmations
+                    if (confirmations >= CONFIRMATIONS_THRESHOLD.toUInt()) {
+                        break
                     }
                 }
 
+                // reset error count on success
+                errors = 0
+
                 // wait before next poll
                 if (needsFrequentCheck) {
-                    delay(30000) // 30 seconds
+                    delay(FREQUENT_POLL_INTERVAL_MS)
                 } else {
-                    delay(60000) // 60 seconds
+                    delay(NORMAL_POLL_INTERVAL_MS)
                 }
             } catch (e: Exception) {
                 android.util.Log.e("TransactionDetails", "error polling confirmations", e)
                 errors++
-                if (errors > 10) break
-                delay(30000)
+                if (errors > MAX_POLL_ERRORS) {
+                    break
+                }
+                delay(FREQUENT_POLL_INTERVAL_MS)
             }
         }
     }
@@ -469,7 +484,11 @@ fun TransactionDetailsScreen(
                                     currentMetadata.copy(
                                         detailsExpanded = !currentMetadata.detailsExpanded,
                                     )
-                                manager.rust.setWalletMetadata(updatedMetadata)
+                                try {
+                                    manager.rust.setWalletMetadata(updatedMetadata)
+                                } catch (e: Exception) {
+                                    android.util.Log.e("TransactionDetails", "failed to update metadata", e)
+                                }
                             }
                         },
                         modifier = Modifier.align(Alignment.CenterHorizontally),
