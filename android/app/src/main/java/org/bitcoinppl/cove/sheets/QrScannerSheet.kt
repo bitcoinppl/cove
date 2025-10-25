@@ -296,11 +296,12 @@ private fun handleQrCode(
 ) {
     try {
         // extract data from barcode - prefer rawValue (string) but fall back to rawBytes (binary)
-        val stringOrData: StringOrData = barcode.rawValue?.let {
-            StringOrData.String(it)
-        } ?: barcode.rawBytes?.let {
-            StringOrData.Data(it)
-        } ?: return
+        val stringOrData: StringOrData =
+            barcode.rawValue?.let {
+                StringOrData.String(it)
+            } ?: barcode.rawBytes?.let {
+                StringOrData.Data(it)
+            } ?: return
 
         // try to create or use existing multi-qr
         val currentMultiQr =

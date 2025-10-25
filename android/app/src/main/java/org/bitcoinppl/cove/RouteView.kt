@@ -52,7 +52,7 @@ fun RouteView(app: AppManager, route: Route) {
             org.bitcoinppl.cove.transaction_details.TransactionDetailsContainer(
                 app = app,
                 walletId = route.id,
-                details = route.details
+                details = route.details,
             )
         }
 

@@ -1,5 +1,6 @@
 package org.bitcoinppl.cove.transaction_details
 
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -7,7 +8,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import org.bitcoinppl.cove.AppManager
@@ -24,7 +24,7 @@ import org.bitcoinppl.cove_core.types.WalletId
 fun TransactionDetailsContainer(
     app: AppManager,
     walletId: WalletId,
-    details: TransactionDetails
+    details: TransactionDetails,
 ) {
     var manager by remember { mutableStateOf<WalletManager?>(null) }
     var loading by remember { mutableStateOf(true) }
@@ -52,7 +52,7 @@ fun TransactionDetailsContainer(
             // show error - TODO: better error UI
             androidx.compose.foundation.layout.Box(
                 modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.Center,
             ) {
                 androidx.compose.material3.Text("Error: $error")
             }
@@ -61,7 +61,7 @@ fun TransactionDetailsContainer(
             TransactionDetailsScreen(
                 app = app,
                 manager = manager!!,
-                details = details
+                details = details,
             )
         }
     }

@@ -21,43 +21,45 @@ import androidx.compose.ui.unit.sp
 fun ConfirmationIndicatorView(
     current: Int,
     total: Int = 3,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     Column(
         modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(
             text = "Confirmations",
             color = MaterialTheme.colorScheme.secondary,
-            fontSize = 14.sp
+            fontSize = 14.sp,
         )
 
         Text(
             text = "$current of $total",
             fontWeight = FontWeight.Bold,
-            fontSize = 16.sp
+            fontSize = 16.sp,
         )
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             repeat(total) { index ->
-                val backgroundColor = if (index < current) {
-                    Color(0xFF1FC35C) // green
-                } else {
-                    MaterialTheme.colorScheme.secondary.copy(alpha = 0.3f)
-                }
+                val backgroundColor =
+                    if (index < current) {
+                        Color(0xFF1FC35C) // green
+                    } else {
+                        MaterialTheme.colorScheme.secondary.copy(alpha = 0.3f)
+                    }
 
                 androidx.compose.foundation.layout.Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(8.dp)
-                        .background(
-                            color = backgroundColor,
-                            shape = RoundedCornerShape(4.dp)
-                        )
+                    modifier =
+                        Modifier
+                            .weight(1f)
+                            .height(8.dp)
+                            .background(
+                                color = backgroundColor,
+                                shape = RoundedCornerShape(4.dp),
+                            ),
                 )
             }
         }
