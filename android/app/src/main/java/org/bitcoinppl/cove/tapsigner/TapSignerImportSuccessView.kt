@@ -11,7 +11,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Error
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -45,14 +47,21 @@ fun TapSignerImportSuccessView(
     modifier: Modifier = Modifier,
 ) {
     var walletId: WalletId? by remember { mutableStateOf(null) }
+    var saving by remember { mutableStateOf(true) }
+    var error by remember { mutableStateOf<String?>(null) }
 
     // save wallet on appear
-    LaunchedEffect(Unit) {
+    LaunchedEffect(tapSigner, deriveInfo) {
+        saving = true
+        error = null
         try {
             val walletManager = WalletManager.fromTapSigner(tapSigner, deriveInfo)
             walletId = walletManager.id
         } catch (e: Exception) {
             android.util.Log.e("TapSignerImportSuccess", "Failed to save wallet", e)
+            error = e.message ?: "Failed to save wallet"
+        } finally {
+            saving = false
         }
     }
 
@@ -85,31 +94,83 @@ fun TapSignerImportSuccessView(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
-            Icon(
-                imageVector = Icons.Default.CheckCircle,
-                contentDescription = "Success",
-                modifier = Modifier.size(100.dp),
-                tint = Color.Green,
-            )
+            when {
+                saving -> {
+                    CircularProgressIndicator(modifier = Modifier.size(60.dp))
+                    Spacer(modifier = Modifier.height(20.dp))
+                    Text(
+                        text = "Saving wallet...",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                    )
+                }
+                error != null -> {
+                    Icon(
+                        imageVector = Icons.Default.Error,
+                        contentDescription = "Error",
+                        modifier = Modifier.size(100.dp),
+                        tint = MaterialTheme.colorScheme.error,
+                    )
 
-            Spacer(modifier = Modifier.height(20.dp))
+                    Spacer(modifier = Modifier.height(20.dp))
 
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Text(
-                    text = "Import Complete",
-                    style = MaterialTheme.typography.headlineLarge,
-                    fontWeight = FontWeight.Bold,
-                )
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Text(
+                            text = "Import Failed",
+                            style = MaterialTheme.typography.headlineLarge,
+                            fontWeight = FontWeight.Bold,
+                        )
 
-                Text(
-                    text = "Your TAPSIGNER wallet has been imported successfully.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    textAlign = TextAlign.Center,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
-                )
+                        Text(
+                            text = error!!,
+                            style = MaterialTheme.typography.bodyMedium,
+                            textAlign = TextAlign.Center,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    Button(
+                        onClick = {
+                            saving = true
+                            error = null
+                        },
+                    ) {
+                        Text("Retry")
+                    }
+                }
+                else -> {
+                    Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = "Success",
+                        modifier = Modifier.size(100.dp),
+                        tint = Color.Green,
+                    )
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Text(
+                            text = "Import Complete",
+                            style = MaterialTheme.typography.headlineLarge,
+                            fontWeight = FontWeight.Bold,
+                        )
+
+                        Text(
+                            text = "Your TAPSIGNER wallet has been imported successfully.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            textAlign = TextAlign.Center,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                        )
+                    }
+                }
             }
         }
 
@@ -118,10 +179,14 @@ fun TapSignerImportSuccessView(
             onClick = {
                 walletId?.let { id ->
                     app.selectWallet(id)
+                    app.sheetState = null
                 }
-                app.sheetState = null
             },
-            modifier = Modifier.fillMaxWidth().padding(bottom = 30.dp),
+            enabled = walletId != null,
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 30.dp),
         ) {
             Text("Continue")
         }
