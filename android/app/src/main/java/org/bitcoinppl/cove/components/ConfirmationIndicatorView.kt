@@ -16,6 +16,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.bitcoinppl.cove.ui.theme.CoveColor
 
 @Composable
 fun ConfirmationIndicatorView(
@@ -46,7 +47,7 @@ fun ConfirmationIndicatorView(
             repeat(total) { index ->
                 val backgroundColor =
                     if (index < current) {
-                        Color(0xFF1FC35C) // green
+                        CoveColor.SuccessGreen
                     } else {
                         MaterialTheme.colorScheme.secondary.copy(alpha = 0.3f)
                     }

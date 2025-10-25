@@ -29,6 +29,17 @@ import java.util.Locale
 import kotlin.math.max
 import kotlin.math.round
 
+private object CustomFeeRateConstants {
+    // small adjustment to fee rate for error handling
+    const val FEE_RATE_EPSILON = 0.01f
+
+    // debounce delay for fee calculation
+    const val FEE_CALC_DEBOUNCE_MS = 50L
+
+    // delay before showing alert after dismissing sheet
+    const val ALERT_DELAY_MS = 850L
+}
+
 /**
  * custom fee rate sheet - allows user to set custom sats/vbyte with slider
  * ported from iOS SendFlowCustomFeeRateView.swift
@@ -69,7 +80,7 @@ fun CustomFeeRateSheet(
     val maxFeeRate =
         remember(updatedFeeOptions, presenter.erroredFeeRate) {
             val fast3 = updatedFeeOptions.fast().satPerVb() * 3
-            val computed = presenter.erroredFeeRate?.let { minOf(it + 0.01f, fast3) } ?: fast3
+            val computed = presenter.erroredFeeRate?.let { minOf(it + CustomFeeRateConstants.FEE_RATE_EPSILON, fast3) } ?: fast3
             max(1f, computed)
         }
 
@@ -78,7 +89,7 @@ fun CustomFeeRateSheet(
         feeCalculationJob?.cancel()
         feeCalculationJob =
             scope.launch {
-                delay(50) // debounce
+                delay(CustomFeeRateConstants.FEE_CALC_DEBOUNCE_MS)
 
                 withContext(Dispatchers.IO) {
                     try {
@@ -101,7 +112,7 @@ fun CustomFeeRateSheet(
 
                             if (presenter.lastWorkingFeeRate != null) {
                                 onDismiss()
-                                delay(850)
+                                delay(CustomFeeRateConstants.ALERT_DELAY_MS)
                                 presenter.alertState =
                                     TaggedItem(
                                         SendFlowAlertState.General(
@@ -112,7 +123,11 @@ fun CustomFeeRateSheet(
                             }
                         }
                     } catch (e: Exception) {
-                        android.util.Log.e("CustomFeeRateSheet", "Unable to get total sats: ${e.message}")
+                        // unexpected error during fee calculation
+                        android.util.Log.e("CustomFeeRateSheet", "Unexpected error calculating fee: ${e.javaClass.simpleName} - ${e.message}", e)
+                        withContext(Dispatchers.Main) {
+                            // keep previous total sats value, don't crash
+                        }
                     }
                 }
             }

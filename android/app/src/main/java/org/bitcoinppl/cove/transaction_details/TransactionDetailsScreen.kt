@@ -619,7 +619,7 @@ private fun TransactionDetailsWidget(
                             Modifier
                                 .size(14.dp)
                                 .clip(CircleShape)
-                                .background(Color(0xFF1FC35C)),
+                                .background(CoveColor.SuccessGreen),
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(

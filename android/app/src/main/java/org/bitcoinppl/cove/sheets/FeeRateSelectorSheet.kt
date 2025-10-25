@@ -1,6 +1,7 @@
 package org.bitcoinppl.cove.sheets
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -14,7 +15,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.isSystemInDarkTheme
+import java.util.Locale
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.SendFlowManager
 import org.bitcoinppl.cove.SendFlowPresenter
 import org.bitcoinppl.cove.WalletManager
@@ -124,6 +128,7 @@ fun FeeRateSelectorSheet(
             Spacer(modifier = Modifier.height(20.dp))
 
             // customize fee button
+            val isDark = isSystemInDarkTheme()
             Button(
                 onClick = { showCustomFeeSheet = true },
                 modifier =
@@ -132,7 +137,7 @@ fun FeeRateSelectorSheet(
                         .padding(horizontal = 24.dp),
                 colors =
                     ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF1C1C1E),
+                        containerColor = if (isDark) CoveColor.SurfaceDark else CoveColor.midnightBlue,
                     ),
                 shape = RoundedCornerShape(10.dp),
             ) {
@@ -174,16 +179,26 @@ private fun FeeOptionCard(
     isSelected: Boolean,
     onSelect: () -> Unit,
 ) {
+    val isDark = isSystemInDarkTheme()
+
     val backgroundColor =
         if (isSelected) {
-            Color(0xFF1C1C1E).copy(alpha = 0.8f)
+            if (isDark) {
+                CoveColor.SurfaceDark.copy(alpha = 0.8f)
+            } else {
+                CoveColor.midnightBlue.copy(alpha = 0.8f)
+            }
         } else {
             MaterialTheme.colorScheme.surfaceVariant
         }
 
     val contentColor =
         if (isSelected) {
-            Color.White
+            if (isDark) {
+                CoveColor.TextPrimaryDark
+            } else {
+                Color.White
+            }
         } else {
             MaterialTheme.colorScheme.onSurface
         }
@@ -200,6 +215,11 @@ private fun FeeOptionCard(
             Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(12.dp))
+                .border(
+                    width = 1.dp,
+                    color = borderColor,
+                    shape = RoundedCornerShape(12.dp),
+                )
                 .background(backgroundColor)
                 .clickable(onClick = onSelect)
                 .padding(16.dp),
