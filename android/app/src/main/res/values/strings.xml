@@ -60,6 +60,11 @@
     <string name="label_network_fee">Network Fee</string>
     <string name="label_recipient_receives">Recipient Receives</string>
     <string name="label_total_spent">Total Spent</string>
+    <string name="label_confirmations">Confirmations</string>
+    <string name="label_block_number">Block Number</string>
+    <string name="label_received_at">Received At</string>
+    <string name="btn_copy">Copy</string>
+    <string name="btn_copied">Copied</string>
     <string name="title_manage_utxos">Manage UTXOs</string>
     <string name="search_utxos">Search UTXOs</string>
     <string name="sort_date">Date</string>

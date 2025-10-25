@@ -538,7 +538,7 @@ private fun TransactionDetailsWidget(
     if (isConfirmed) {
         Column(modifier = Modifier.fillMaxWidth()) {
             Text(
-                "Confirmations",
+                stringResource(R.string.label_confirmations),
                 color = if (isDark) Color(0xFFB8B8B8) else Color(0xFF6F6F75),
                 fontSize = 14.sp,
             )
@@ -554,7 +554,7 @@ private fun TransactionDetailsWidget(
             Spacer(Modifier.height(14.dp))
 
             Text(
-                "Block Number",
+                stringResource(R.string.label_block_number),
                 color = if (isDark) Color(0xFFB8B8B8) else Color(0xFF6F6F75),
                 fontSize = 14.sp,
             )
