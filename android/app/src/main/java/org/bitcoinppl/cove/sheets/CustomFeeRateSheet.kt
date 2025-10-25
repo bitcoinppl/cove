@@ -25,6 +25,9 @@ import org.bitcoinppl.cove_core.SendFlowException
 import org.bitcoinppl.cove_core.types.FeeRate
 import org.bitcoinppl.cove_core.types.FeeRateOptionWithTotalFee
 import org.bitcoinppl.cove_core.types.FeeRateOptionsWithTotalFee
+import java.util.Locale
+import kotlin.math.max
+import kotlin.math.round
 
 /**
  * custom fee rate sheet - allows user to set custom sats/vbyte with slider
@@ -52,7 +55,7 @@ fun CustomFeeRateSheet(
     val feeRateFloat =
         remember(feeRateText) {
             feeRateText.toFloatOrNull()?.let {
-                (it * 100).toInt() / 100f // round to 2 decimals
+                round(it * 100f) / 100f
             } ?: selectedOption.satPerVb()
         }
 
@@ -66,7 +69,8 @@ fun CustomFeeRateSheet(
     val maxFeeRate =
         remember(updatedFeeOptions, presenter.erroredFeeRate) {
             val fast3 = updatedFeeOptions.fast().satPerVb() * 3
-            presenter.erroredFeeRate?.let { minOf(it + 0.01f, fast3) } ?: fast3
+            val computed = presenter.erroredFeeRate?.let { minOf(it + 0.01f, fast3) } ?: fast3
+            max(1f, computed)
         }
 
     // get total sats with debouncing
@@ -180,7 +184,7 @@ fun CustomFeeRateSheet(
             // slider
             Slider(
                 value = feeRateFloat.coerceIn(1f, maxFeeRate),
-                onValueChange = { feeRateText = String.format("%.2f", it) },
+                onValueChange = { feeRateText = String.format(Locale.US, "%.2f", it) },
                 valueRange = 1f..maxFeeRate,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -198,7 +202,7 @@ fun CustomFeeRateSheet(
                     color = MaterialTheme.colorScheme.secondary,
                 )
                 Text(
-                    text = "${String.format("%.2f", maxFeeRate)} sat/vB",
+                    text = "${String.format(Locale.US, "%.2f", maxFeeRate)} sat/vB",
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.secondary,
                 )
