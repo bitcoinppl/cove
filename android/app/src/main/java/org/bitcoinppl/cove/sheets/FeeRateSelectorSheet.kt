@@ -39,7 +39,7 @@ fun FeeRateSelectorSheet(
     onDismiss: () -> Unit,
 ) {
     var showCustomFeeSheet by remember { mutableStateOf(false) }
-    var currentFeeOptions by remember { mutableStateOf(feeOptions) }
+    var currentFeeOptions by remember(feeOptions) { mutableStateOf(feeOptions) }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
