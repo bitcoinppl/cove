@@ -86,6 +86,10 @@ fun CustomFeeRateSheet(
 
     // get total sats with debouncing
     fun getTotalSatsDeduped(feeRate: Float) {
+        // guard against empty send flow state
+        if (sendFlowManager.amount == null) return
+        if (sendFlowManager.address == null) return
+
         feeCalculationJob?.cancel()
         feeCalculationJob =
             scope.launch {
