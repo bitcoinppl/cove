@@ -34,6 +34,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -90,7 +91,7 @@ fun SecretWordsScreen(
                     ),
                 title = {
                     Text(
-                        "Recovery Words",
+                        stringResource(R.string.label_recovery_words_title),
                         fontSize = 17.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = Color.White,
@@ -150,7 +151,7 @@ fun SecretWordsScreen(
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
-                            text = errorMessage ?: "loading...",
+                            text = errorMessage ?: stringResource(R.string.label_loading),
                             color = Color.White.copy(alpha = 0.7f),
                             fontSize = 16.sp,
                         )
@@ -168,21 +169,21 @@ fun SecretWordsScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Text(
-                        text = "Recovery Words",
+                        text = stringResource(R.string.label_recovery_words_title),
                         fontSize = 36.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = Color.White,
                     )
 
                     Text(
-                        text = "Your secret recovery words are the only way to recover your wallet if you lose your phone or switch to a different wallet. Whoever has your recovery words, controls your Bitcoin.",
+                        text = stringResource(R.string.label_recovery_words_body),
                         fontSize = 12.sp,
                         color = Color.White.copy(alpha = 0.75f),
                         lineHeight = 18.sp,
                     )
 
                     Text(
-                        text = "Please save these words in a secure location.",
+                        text = stringResource(R.string.label_recovery_words_secure_note),
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White.copy(alpha = 0.9f),

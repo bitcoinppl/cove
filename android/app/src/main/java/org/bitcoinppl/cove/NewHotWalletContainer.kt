@@ -2,7 +2,6 @@ package org.bitcoinppl.cove
 
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -80,12 +79,6 @@ private fun PendingWalletContainer(
         loading = false
     }
 
-    DisposableEffect(Unit) {
-        onDispose {
-            // cleanup if needed
-        }
-    }
-
     when {
         loading -> FullPageLoadingView()
         manager != null ->
@@ -114,12 +107,6 @@ private fun ImportWalletContainer(
     LaunchedEffect(Unit) {
         manager = ImportWalletManager()
         loading = false
-    }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            // cleanup if needed
-        }
     }
 
     when {

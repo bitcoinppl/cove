@@ -15,11 +15,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -41,6 +44,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -82,6 +86,8 @@ fun HotWalletCreateScreen(
     val pagerState = rememberPagerState(pageCount = { groupedWords.size })
     val scope = rememberCoroutineScope()
     var showBackConfirmation by remember { mutableStateOf(false) }
+    var showSaveError by remember { mutableStateOf(false) }
+    var saveErrorMessage by remember { mutableStateOf("") }
 
     // sync page state
     LaunchedEffect(pagerState.currentPage) {
@@ -102,7 +108,8 @@ fun HotWalletCreateScreen(
             )
         } catch (e: Exception) {
             Log.e("HotWalletCreate", "error saving wallet: $e")
-            // TODO: show error alert
+            saveErrorMessage = e.message ?: "Unknown error occurred"
+            showSaveError = true
         }
     }
 
@@ -119,7 +126,7 @@ fun HotWalletCreateScreen(
                     ),
                 title = {
                     Text(
-                        "Backup your wallet",
+                        stringResource(R.string.title_backup_wallet),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
@@ -128,11 +135,9 @@ fun HotWalletCreateScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = { showBackConfirmation = true }) {
-                        Text(
-                            text = "‹",
-                            color = Color.White,
-                            fontSize = 32.sp,
-                            fontWeight = FontWeight.Light,
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Default.ArrowBack,
+                            contentDescription = "Back",
                         )
                     }
                 },
@@ -216,7 +221,7 @@ fun HotWalletCreateScreen(
                     }
 
                     Text(
-                        text = "Recovery Words",
+                        text = stringResource(R.string.label_recovery_words_title),
                         color = Color.White,
                         fontSize = 38.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -224,7 +229,7 @@ fun HotWalletCreateScreen(
                     )
 
                     Text(
-                        text = "Your secret recovery words are the only way to recover your wallet if you lose your phone or switch to a different wallet. Whoever has your recovery words, controls your Bitcoin.",
+                        text = stringResource(R.string.label_recovery_words_body),
                         color = CoveColor.coveLightGray,
                         fontSize = 15.sp,
                         lineHeight = 20.sp,
@@ -232,7 +237,7 @@ fun HotWalletCreateScreen(
                     )
 
                     Text(
-                        text = "Please save these words in a secure location.",
+                        text = stringResource(R.string.label_recovery_words_secure_note),
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
                         fontSize = 15.sp,
@@ -245,7 +250,12 @@ fun HotWalletCreateScreen(
                     )
 
                     ImageButton(
-                        text = if (isLastPage) "Save Wallet" else "Next",
+                        text =
+                            if (isLastPage) {
+                                stringResource(R.string.btn_save_wallet)
+                            } else {
+                                stringResource(R.string.btn_next)
+                            },
                         onClick = {
                             if (isLastPage) {
                                 handleSaveWallet()
@@ -270,8 +280,8 @@ fun HotWalletCreateScreen(
         if (showBackConfirmation) {
             AlertDialog(
                 onDismissRequest = { showBackConfirmation = false },
-                title = { Text("⚠️ Wallet Not Saved ⚠️") },
-                text = { Text("You will have to write down a new set of words.") },
+                title = { Text(stringResource(R.string.alert_title_wallet_not_saved)) },
+                text = { Text(stringResource(R.string.alert_message_wallet_not_saved)) },
                 confirmButton = {
                     TextButton(
                         onClick = {
@@ -279,12 +289,26 @@ fun HotWalletCreateScreen(
                             app.popRoute()
                         },
                     ) {
-                        Text("Yes, Go Back", color = Color.Red)
+                        Text(stringResource(R.string.btn_yes_go_back), color = Color.Red)
                     }
                 },
                 dismissButton = {
                     TextButton(onClick = { showBackConfirmation = false }) {
-                        Text("Cancel")
+                        Text(stringResource(R.string.btn_cancel))
+                    }
+                },
+            )
+        }
+
+        // save error dialog
+        if (showSaveError) {
+            AlertDialog(
+                onDismissRequest = { showSaveError = false },
+                title = { Text(stringResource(R.string.alert_title_save_failed)) },
+                text = { Text(stringResource(R.string.alert_message_save_failed, saveErrorMessage)) },
+                confirmButton = {
+                    TextButton(onClick = { showSaveError = false }) {
+                        Text(stringResource(R.string.btn_ok))
                     }
                 },
             )

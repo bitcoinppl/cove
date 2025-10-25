@@ -55,6 +55,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -104,6 +105,7 @@ fun HotWalletImportScreen(
     app: AppManager,
     manager: ImportWalletManager,
     numberOfWords: NumberOfBip39Words,
+    // TODO: implement QR and NFC import functionality
     importType: ImportType,
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
@@ -161,7 +163,7 @@ fun HotWalletImportScreen(
                     ),
                 title = {
                     Text(
-                        "Import Wallet",
+                        stringResource(R.string.title_import_wallet),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
@@ -245,7 +247,7 @@ fun HotWalletImportScreen(
                     }
 
                     Text(
-                        text = "Import Wallet",
+                        text = stringResource(R.string.title_import_wallet),
                         color = Color.White,
                         fontSize = 38.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -253,7 +255,7 @@ fun HotWalletImportScreen(
                     )
 
                     Text(
-                        text = "Enter your recovery words below to restore your wallet. Make sure you're in a private location.",
+                        text = stringResource(R.string.label_import_wallet_instructions),
                         color = CoveColor.coveLightGray,
                         fontSize = 15.sp,
                         lineHeight = 20.sp,
@@ -266,7 +268,7 @@ fun HotWalletImportScreen(
                     )
 
                     ImageButton(
-                        text = "Import Wallet",
+                        text = stringResource(R.string.action_import_wallet),
                         onClick = { if (isAllWordsValid()) importWallet() },
                         colors =
                             ButtonDefaults.buttonColors(
@@ -286,11 +288,11 @@ fun HotWalletImportScreen(
             AlertState.InvalidWords -> {
                 AlertDialog(
                     onDismissRequest = { alertState = AlertState.None },
-                    title = { Text("Words not valid") },
-                    text = { Text("The words you entered does not create a valid wallet. Please check the words and try again.") },
+                    title = { Text(stringResource(R.string.alert_title_words_not_valid)) },
+                    text = { Text(stringResource(R.string.alert_message_words_not_valid)) },
                     confirmButton = {
                         TextButton(onClick = { alertState = AlertState.None }) {
-                            Text("OK")
+                            Text(stringResource(R.string.btn_ok))
                         }
                     },
                 )
@@ -298,8 +300,8 @@ fun HotWalletImportScreen(
             AlertState.DuplicateWallet -> {
                 AlertDialog(
                     onDismissRequest = { alertState = AlertState.None },
-                    title = { Text("Duplicate Wallet") },
-                    text = { Text("This wallet has already been imported!") },
+                    title = { Text(stringResource(R.string.alert_title_duplicate_wallet)) },
+                    text = { Text(stringResource(R.string.alert_message_duplicate_wallet)) },
                     confirmButton = {
                         TextButton(
                             onClick = {
@@ -310,7 +312,7 @@ fun HotWalletImportScreen(
                                 }
                             },
                         ) {
-                            Text("OK")
+                            Text(stringResource(R.string.btn_ok))
                         }
                     },
                 )

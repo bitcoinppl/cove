@@ -168,7 +168,7 @@ fun HotWalletSelectScreen(
                     }
 
                     Text(
-                        text = "Do you already have a wallet?",
+                        text = stringResource(R.string.label_wallet_add_new_hot_wallet),
                         color = Color.White,
                         fontSize = 38.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -185,7 +185,7 @@ fun HotWalletSelectScreen(
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         ImageButton(
-                            text = "Create new wallet",
+                            text = stringResource(R.string.btn_wallet_create),
                             onClick = {
                                 showSheet = true
                                 nextScreen = NextScreenDialog.Create
@@ -206,7 +206,7 @@ fun HotWalletSelectScreen(
                             modifier = Modifier.align(Alignment.CenterHorizontally),
                         ) {
                             Text(
-                                text = "Import existing wallet",
+                                text = stringResource(R.string.btn_wallet_import),
                                 color = Color.White,
                                 fontWeight = FontWeight.Medium,
                             )
@@ -231,7 +231,7 @@ fun HotWalletSelectScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Text(
-                        text = "Select Number of Words",
+                        text = stringResource(R.string.label_select_number_of_words),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.padding(bottom = 8.dp),
@@ -246,7 +246,7 @@ fun HotWalletSelectScreen(
                             },
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Text("Scan QR", modifier = Modifier.fillMaxWidth())
+                            Text(stringResource(R.string.btn_scan_qr), modifier = Modifier.fillMaxWidth())
                         }
 
                         TextButton(
@@ -256,7 +256,7 @@ fun HotWalletSelectScreen(
                             },
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Text("NFC", modifier = Modifier.fillMaxWidth())
+                            Text(stringResource(R.string.btn_nfc), modifier = Modifier.fillMaxWidth())
                         }
                     }
 
@@ -268,7 +268,7 @@ fun HotWalletSelectScreen(
                         },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Text("12 Words", modifier = Modifier.fillMaxWidth())
+                        Text(stringResource(R.string.btn_12_words), modifier = Modifier.fillMaxWidth())
                     }
 
                     // 24 words option
@@ -279,7 +279,7 @@ fun HotWalletSelectScreen(
                         },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Text("24 Words", modifier = Modifier.fillMaxWidth())
+                        Text(stringResource(R.string.btn_24_words), modifier = Modifier.fillMaxWidth())
                     }
                 }
             }
