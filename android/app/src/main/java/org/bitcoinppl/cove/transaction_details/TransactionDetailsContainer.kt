@@ -31,6 +31,10 @@ fun TransactionDetailsContainer(
     var error by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(walletId) {
+        loading = true
+        error = null
+        manager = null
+
         try {
             manager = app.getWalletManager(walletId)
             loading = false
