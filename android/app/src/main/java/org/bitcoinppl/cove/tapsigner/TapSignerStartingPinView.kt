@@ -136,7 +136,7 @@ fun TapSignerStartingPinView(
             // description
             Text(
                 text =
-                    "The starting PIN is the 6 digit numeric PIN found of the back of your TAPSIGNER",
+                    "The starting PIN is the 6 digit numeric PIN found on the back of your TAPSIGNER",
                 style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center,
             )

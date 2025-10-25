@@ -108,7 +108,7 @@ fun TapSignerSetupSuccessView(
                 )
 
                 Text(
-                    text = "Your TAPSIGNER ready to use.",
+                    text = "Your TAPSIGNER is ready to use.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
                 )
@@ -118,7 +118,7 @@ fun TapSignerSetupSuccessView(
 
             Text(
                 text =
-                    "If you haven't already done so please download your backup and store it in a safe place. You will need this and the backup password on the back of the card to restore you wallet.",
+                    "If you haven't already done so please download your backup and store it in a safe place. You will need this and the backup password on the back of the card to restore your wallet.",
                 style = MaterialTheme.typography.bodySmall,
                 textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
