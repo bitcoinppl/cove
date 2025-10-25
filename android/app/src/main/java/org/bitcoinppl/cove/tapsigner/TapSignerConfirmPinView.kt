@@ -222,6 +222,7 @@ private suspend fun setupTapSigner(
             manager.resetRoute(TapSignerRoute.SetupRetry(args.tapSigner, setupResponse))
         } else {
             // failed completely, go back to home
+            android.util.Log.e("TapSignerConfirmPin", "Setup failed", e)
             app.sheetState = null
             app.alertState =
                 TaggedItem(
