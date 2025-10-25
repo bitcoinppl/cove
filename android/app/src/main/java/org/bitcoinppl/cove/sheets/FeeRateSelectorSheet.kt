@@ -36,29 +36,32 @@ fun FeeRateSelectorSheet(
     feeOptions: FeeRateOptionsWithTotalFee,
     selectedOption: FeeRateOptionWithTotalFee,
     onSelectFee: (FeeRateOptionWithTotalFee) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
 ) {
     var showCustomFeeSheet by remember { mutableStateOf(false) }
+    var currentFeeOptions by remember { mutableStateOf(feeOptions) }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = MaterialTheme.colorScheme.surface
+        containerColor = MaterialTheme.colorScheme.surface,
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-                .padding(bottom = 32.dp)
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 32.dp),
         ) {
             // title
             Text(
                 text = "Network Fee",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp),
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             )
 
             Spacer(modifier = Modifier.height(20.dp))
@@ -67,12 +70,12 @@ fun FeeRateSelectorSheet(
             FeeOptionCard(
                 app = app,
                 manager = walletManager,
-                feeOption = feeOptions.fast(),
-                isSelected = selectedOption.feeSpeed() == feeOptions.fast().feeSpeed(),
+                feeOption = currentFeeOptions.fast(),
+                isSelected = selectedOption.feeSpeed() == currentFeeOptions.fast().feeSpeed(),
                 onSelect = {
-                    onSelectFee(feeOptions.fast())
+                    onSelectFee(currentFeeOptions.fast())
                     onDismiss()
-                }
+                },
             )
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -81,12 +84,12 @@ fun FeeRateSelectorSheet(
             FeeOptionCard(
                 app = app,
                 manager = walletManager,
-                feeOption = feeOptions.medium(),
-                isSelected = selectedOption.feeSpeed() == feeOptions.medium().feeSpeed(),
+                feeOption = currentFeeOptions.medium(),
+                isSelected = selectedOption.feeSpeed() == currentFeeOptions.medium().feeSpeed(),
                 onSelect = {
-                    onSelectFee(feeOptions.medium())
+                    onSelectFee(currentFeeOptions.medium())
                     onDismiss()
-                }
+                },
             )
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -95,16 +98,16 @@ fun FeeRateSelectorSheet(
             FeeOptionCard(
                 app = app,
                 manager = walletManager,
-                feeOption = feeOptions.slow(),
-                isSelected = selectedOption.feeSpeed() == feeOptions.slow().feeSpeed(),
+                feeOption = currentFeeOptions.slow(),
+                isSelected = selectedOption.feeSpeed() == currentFeeOptions.slow().feeSpeed(),
                 onSelect = {
-                    onSelectFee(feeOptions.slow())
+                    onSelectFee(currentFeeOptions.slow())
                     onDismiss()
-                }
+                },
             )
 
             // custom option if exists
-            feeOptions.custom()?.let { customOption ->
+            currentFeeOptions.custom()?.let { customOption ->
                 Spacer(modifier = Modifier.height(12.dp))
                 FeeOptionCard(
                     app = app,
@@ -114,7 +117,7 @@ fun FeeRateSelectorSheet(
                     onSelect = {
                         onSelectFee(customOption)
                         onDismiss()
-                    }
+                    },
                 )
             }
 
@@ -123,19 +126,21 @@ fun FeeRateSelectorSheet(
             // customize fee button
             Button(
                 onClick = { showCustomFeeSheet = true },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF1C1C1E)
-                ),
-                shape = RoundedCornerShape(10.dp)
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp),
+                colors =
+                    ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF1C1C1E),
+                    ),
+                shape = RoundedCornerShape(10.dp),
             ) {
                 Text(
                     text = "Customize Fee",
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(vertical = 4.dp)
+                    modifier = Modifier.padding(vertical = 4.dp),
                 )
             }
         }
@@ -147,15 +152,16 @@ fun FeeRateSelectorSheet(
             app = app,
             sendFlowManager = sendFlowManager,
             presenter = presenter,
-            feeOptions = feeOptions,
+            feeOptions = currentFeeOptions,
             selectedOption = selectedOption,
             onUpdateFeeOptions = { newOptions, newSelected ->
+                currentFeeOptions = newOptions
                 onSelectFee(newSelected)
+                showCustomFeeSheet = false
             },
             onDismiss = {
                 showCustomFeeSheet = false
-                onDismiss()
-            }
+            },
         )
     }
 }
@@ -166,57 +172,61 @@ private fun FeeOptionCard(
     manager: WalletManager,
     feeOption: FeeRateOptionWithTotalFee,
     isSelected: Boolean,
-    onSelect: () -> Unit
+    onSelect: () -> Unit,
 ) {
-    val backgroundColor = if (isSelected) {
-        Color(0xFF1C1C1E).copy(alpha = 0.8f)
-    } else {
-        MaterialTheme.colorScheme.surfaceVariant
-    }
+    val backgroundColor =
+        if (isSelected) {
+            Color(0xFF1C1C1E).copy(alpha = 0.8f)
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant
+        }
 
-    val contentColor = if (isSelected) {
-        Color.White
-    } else {
-        MaterialTheme.colorScheme.onSurface
-    }
+    val contentColor =
+        if (isSelected) {
+            Color.White
+        } else {
+            MaterialTheme.colorScheme.onSurface
+        }
 
-    val borderColor = if (isSelected) {
-        MaterialTheme.colorScheme.primary.copy(alpha = 0.75f)
-    } else {
-        Color.Transparent
-    }
+    val borderColor =
+        if (isSelected) {
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.75f)
+        } else {
+            Color.Transparent
+        }
 
     Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(backgroundColor)
-            .clickable(onClick = onSelect)
-            .padding(16.dp)
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(backgroundColor)
+                .clickable(onClick = onSelect)
+                .padding(16.dp),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             // left side - fee speed and duration
             Column(
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Text(
                         text = feeOption.feeSpeed().toString(),
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Medium,
-                        color = contentColor
+                        color = contentColor,
                     )
 
                     // duration capsule
                     DurationCapsule(
                         speed = feeOption.feeSpeed(),
-                        fontColor = contentColor
+                        fontColor = contentColor,
                     )
                 }
 
@@ -225,34 +235,35 @@ private fun FeeOptionCard(
                 Text(
                     text = "${String.format("%.2f", feeOption.satPerVb())} sats/vbyte",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = contentColor
+                    color = contentColor,
                 )
             }
 
             // right side - total fee
             Column(
-                horizontalAlignment = Alignment.End
+                horizontalAlignment = Alignment.End,
             ) {
                 Text(
                     text = "${feeOption.totalFee().satsString()} sats",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Medium,
-                    color = contentColor
+                    color = contentColor,
                 )
 
                 Spacer(modifier = Modifier.height(4.dp))
 
                 // fiat amount
-                val fiatAmount = remember(feeOption, app.prices) {
-                    app.prices?.let {
-                        "≈ ${manager.rust.convertAndDisplayFiat(feeOption.totalFee(), it)}"
-                    } ?: "---"
-                }
+                val fiatAmount =
+                    remember(feeOption, app.prices) {
+                        app.prices?.let {
+                            "≈ ${manager.rust.convertAndDisplayFiat(feeOption.totalFee(), it)}"
+                        } ?: "---"
+                    }
 
                 Text(
                     text = fiatAmount,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = contentColor
+                    color = contentColor,
                 )
             }
 
@@ -263,7 +274,7 @@ private fun FeeOptionCard(
                     imageVector = Icons.Default.Check,
                     contentDescription = "Selected",
                     tint = contentColor,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(20.dp),
                 )
             }
         }
@@ -273,34 +284,35 @@ private fun FeeOptionCard(
 @Composable
 private fun DurationCapsule(
     speed: FeeSpeed,
-    fontColor: Color
+    fontColor: Color,
 ) {
     // get duration string from FeeSpeed
-    val durationText = remember(speed) {
-        when (speed) {
-            is FeeSpeed.Fast -> "~10 min"
-            is FeeSpeed.Medium -> "~30 min"
-            is FeeSpeed.Slow -> "~1 hour"
-            is FeeSpeed.Custom -> {
-                val mins = speed.durationMins.toInt()
-                when {
-                    mins < 60 -> "~$mins min"
-                    mins < 120 -> "~1 hour"
-                    else -> "~${mins / 60} hours"
+    val durationText =
+        remember(speed) {
+            when (speed) {
+                is FeeSpeed.Fast -> "~10 min"
+                is FeeSpeed.Medium -> "~30 min"
+                is FeeSpeed.Slow -> "~1 hour"
+                is FeeSpeed.Custom -> {
+                    val mins = speed.durationMins.toInt()
+                    when {
+                        mins < 60 -> "~$mins min"
+                        mins < 120 -> "~1 hour"
+                        else -> "~${mins / 60} hours"
+                    }
                 }
             }
         }
-    }
 
     Surface(
         shape = RoundedCornerShape(12.dp),
-        color = fontColor.copy(alpha = 0.2f)
+        color = fontColor.copy(alpha = 0.2f),
     ) {
         Text(
             text = durationText,
             style = MaterialTheme.typography.labelSmall,
             color = fontColor,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
         )
     }
 }
