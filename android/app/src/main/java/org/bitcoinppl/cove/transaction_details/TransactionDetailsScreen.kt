@@ -1,8 +1,12 @@
 package org.bitcoinppl.cove.transaction_details
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -679,6 +683,15 @@ private fun TransactionDetailsWidget(
             isDark = isDark,
             isTotal = true,
         )
+    } else {
+        // received transaction details
+        ReceivedTransactionDetails(
+            transactionDetails = transactionDetails,
+            numberOfConfirmations = numberOfConfirmations,
+            isDark = isDark,
+            sub = sub,
+            fg = fg,
+        )
     }
 
     Spacer(Modifier.height(72.dp))
@@ -743,6 +756,107 @@ private fun DetailsWidget(
             if (!secondary.isNullOrEmpty()) {
                 Spacer(Modifier.height(6.dp))
                 Text(secondary, color = sub, fontSize = 14.sp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReceivedTransactionDetails(
+    transactionDetails: TransactionDetails,
+    numberOfConfirmations: Int?,
+    isDark: Boolean,
+    sub: Color,
+    fg: Color,
+) {
+    val context = LocalContext.current
+    var isCopied by remember { mutableStateOf(false) }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        // received at address with copy button
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    stringResource(R.string.label_received_at),
+                    color = if (isDark) Color(0xFFB8B8B8) else Color(0xFF6F6F75),
+                    fontSize = 16.sp,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    transactionDetails.addressSpacedOut(),
+                    color = fg,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    lineHeight = 24.sp,
+                )
+            }
+
+            Spacer(Modifier.width(12.dp))
+
+            // copy button
+            OutlinedButton(
+                onClick = {
+                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    val clip = ClipData.newPlainText("address", transactionDetails.address().string())
+                    clipboard.setPrimaryClip(clip)
+                    isCopied = true
+                },
+                shape = RoundedCornerShape(20.dp),
+                border = BorderStroke(1.dp, if (isDark) Color(0xFF4A4A4A) else Color(0xFFD1D1D6)),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = fg,
+                ),
+                modifier = Modifier.padding(top = 20.dp),
+            ) {
+                Text(
+                    text = stringResource(if (isCopied) R.string.btn_copied else R.string.btn_copy),
+                    fontSize = 12.sp,
+                )
+            }
+        }
+
+        // reset copied state after delay
+        LaunchedEffect(isCopied) {
+            if (isCopied) {
+                delay(5000)
+                isCopied = false
+            }
+        }
+
+        // show block number and confirmations for confirmed received transactions
+        if (transactionDetails.isConfirmed() && numberOfConfirmations != null) {
+            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    transactionDetails.blockNumberFmt() ?: "",
+                    color = sub,
+                    fontSize = 14.sp,
+                )
+                Text(" | ", color = sub, fontSize = 14.sp)
+                Text(
+                    numberOfConfirmations.toString(),
+                    color = sub,
+                    fontSize = 14.sp,
+                )
+                Spacer(Modifier.size(4.dp))
+                Box(
+                    modifier =
+                        Modifier
+                            .size(14.dp)
+                            .clip(CircleShape)
+                            .background(CoveColor.SuccessGreen),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(10.dp),
+                    )
+                }
             }
         }
     }
