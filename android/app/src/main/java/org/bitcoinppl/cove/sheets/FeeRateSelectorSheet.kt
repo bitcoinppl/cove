@@ -3,6 +3,7 @@ package org.bitcoinppl.cove.sheets
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -15,16 +16,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.isSystemInDarkTheme
-import java.util.Locale
 import org.bitcoinppl.cove.AppManager
-import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.SendFlowManager
 import org.bitcoinppl.cove.SendFlowPresenter
 import org.bitcoinppl.cove.WalletManager
+import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove_core.types.FeeRateOptionWithTotalFee
 import org.bitcoinppl.cove_core.types.FeeRateOptionsWithTotalFee
 import org.bitcoinppl.cove_core.types.FeeSpeed
+import java.util.Locale
 
 /**
  * fee rate selector sheet - displays fast/medium/slow fee options

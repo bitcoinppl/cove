@@ -6,7 +6,6 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -76,6 +75,7 @@ import org.bitcoinppl.cove.components.ConfirmationIndicatorView
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.views.ImageButton
 import org.bitcoinppl.cove_core.TransactionDetails
+import org.bitcoinppl.cove_core.WalletManagerAction
 import org.bitcoinppl.cove_core.WalletMetadata
 import org.bitcoinppl.cove_core.types.BitcoinUnit
 import kotlin.math.min
@@ -158,11 +158,6 @@ fun TransactionDetailsScreen(
                     // if fully confirmed, slow down polling
                     if (confirmations >= CONFIRMATIONS_THRESHOLD.toUInt() && needsFrequentCheck) {
                         needsFrequentCheck = false
-                    }
-
-                    // stop polling after sufficient confirmations
-                    if (confirmations >= CONFIRMATIONS_THRESHOLD.toUInt()) {
-                        break
                     }
                 }
 
@@ -327,7 +322,7 @@ fun TransactionDetailsScreen(
 
                 Spacer(Modifier.height(4.dp))
 
-                // TODO: Add label functionality - deferred to future phase
+                // TODO: add transaction labels - see issue #373
                 // Row(
                 //     verticalAlignment = Alignment.CenterVertically,
                 //     modifier = Modifier
@@ -483,17 +478,7 @@ fun TransactionDetailsScreen(
 
                     TextButton(
                         onClick = {
-                            metadata?.let { currentMetadata ->
-                                val updatedMetadata =
-                                    currentMetadata.copy(
-                                        detailsExpanded = !currentMetadata.detailsExpanded,
-                                    )
-                                try {
-                                    manager.rust.setWalletMetadata(updatedMetadata)
-                                } catch (e: Exception) {
-                                    android.util.Log.e("TransactionDetails", "failed to update metadata", e)
-                                }
-                            }
+                            manager.dispatch(WalletManagerAction.ToggleDetailsExpanded)
                         },
                         modifier = Modifier.align(Alignment.CenterHorizontally),
                     ) {
@@ -806,9 +791,10 @@ private fun ReceivedTransactionDetails(
                 },
                 shape = RoundedCornerShape(20.dp),
                 border = BorderStroke(1.dp, if (isDark) Color(0xFF4A4A4A) else Color(0xFFD1D1D6)),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = fg,
-                ),
+                colors =
+                    ButtonDefaults.outlinedButtonColors(
+                        contentColor = fg,
+                    ),
                 modifier = Modifier.padding(top = 20.dp),
             ) {
                 Text(
