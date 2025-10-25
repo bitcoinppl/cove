@@ -107,7 +107,7 @@ fun HotWalletCreateScreen(
                 ),
             )
         } catch (e: Exception) {
-            Log.e("HotWalletCreate", "error saving wallet: $e")
+            Log.e("HotWalletCreate", "error saving wallet", e)
             saveErrorMessage = e.message ?: "Unknown error occurred"
             showSaveError = true
         }

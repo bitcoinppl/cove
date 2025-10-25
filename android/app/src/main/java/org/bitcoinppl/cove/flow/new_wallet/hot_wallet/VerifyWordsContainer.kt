@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -33,6 +34,11 @@ fun VerifyWordsContainer(
     var loading by remember { mutableStateOf(true) }
     var verificationComplete by remember { mutableStateOf(false) }
 
+    // verification state - tracks current word being verified
+    var wordNumber by remember { mutableIntStateOf(1) }
+    var questionIndex by remember { mutableIntStateOf(1) }
+    var possibleWords by remember { mutableStateOf<List<String>>(emptyList()) }
+
     LaunchedEffect(Unit) {
         try {
             val walletManager = app.getWalletManager(id)
@@ -40,16 +46,14 @@ fun VerifyWordsContainer(
 
             manager = walletManager
             validator = wordValidator
+
+            // initialize possible words for first question
+            possibleWords = wordValidator.possibleWords(1u.toUByte()).map { it.lowercase() }
+
             loading = false
         } catch (e: Exception) {
-            Log.e("VerifyWordsContainer", "failed to initialize: $e")
+            Log.e("VerifyWordsContainer", "failed to initialize", e)
             loading = false
-        }
-    }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            // cleanup if needed
         }
     }
 
@@ -74,15 +78,26 @@ fun VerifyWordsContainer(
                         app.resetRoute(Route.SelectedWallet(id))
                     },
                     validator = validator!!,
-                    wordNumber = 1,
-                    questionIndex = 1,
-                    options = validator!!.possibleWords(1u).map { it.lowercase() },
+                    wordNumber = wordNumber,
+                    questionIndex = questionIndex,
+                    options = possibleWords,
                     snackbarHostState = snackbarHostState,
                     onCorrectSelected = { word ->
-                        // check if verification is complete
-                        if (validator!!.isComplete(1u)) {
-                            verificationComplete = true
+                        // check if the word is correct
+                        if (!validator!!.isWordCorrect(word, wordNumber.toUByte())) {
+                            return@HotWalletVerifyScreen
                         }
+
+                        // check if verification is complete
+                        if (validator!!.isComplete(wordNumber.toUByte())) {
+                            verificationComplete = true
+                            return@HotWalletVerifyScreen
+                        }
+
+                        // advance to next word
+                        wordNumber += 1
+                        questionIndex += 1
+                        possibleWords = validator!!.possibleWords(wordNumber.toUByte()).map { it.lowercase() }
                     },
                 )
             }

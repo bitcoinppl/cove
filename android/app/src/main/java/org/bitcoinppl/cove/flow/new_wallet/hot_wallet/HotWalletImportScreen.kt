@@ -82,6 +82,7 @@ private enum class AlertState {
     None,
     InvalidWords,
     DuplicateWallet,
+    GenericError,
 }
 
 @Preview(showBackground = true, backgroundColor = 0xFF0D1B2A)
@@ -122,16 +123,20 @@ fun HotWalletImportScreen(
 
     var alertState by remember { mutableStateOf(AlertState.None) }
     var duplicateWalletId by remember { mutableStateOf<WalletId?>(null) }
+    var genericErrorMessage by remember { mutableStateOf("") }
     var focusedField by remember { mutableIntStateOf(0) }
 
     fun isAllWordsValid(): Boolean {
-        return enteredWords.flatten().all { word ->
-            word.isNotEmpty() &&
-                Bip39WordSpecificAutocomplete(
-                    wordNumber = 1u,
-                    numberOfWords = numberOfWords,
-                ).isBip39Word(word)
-        }
+        return enteredWords
+            .flatten()
+            .withIndex()
+            .all { (idx, word) ->
+                word.isNotEmpty() &&
+                    Bip39WordSpecificAutocomplete(
+                        wordNumber = (idx + 1).toUShort(),
+                        numberOfWords = numberOfWords,
+                    ).isBip39Word(word)
+            }
     }
 
     fun importWallet() {
@@ -140,13 +145,15 @@ fun HotWalletImportScreen(
             app.rust.selectWallet(walletMetadata.id)
             app.resetRoute(Route.SelectedWallet(walletMetadata.id))
         } catch (e: ImportWalletException.InvalidWordGroup) {
-            Log.d("HotWalletImport", "invalid words: $e")
+            Log.d("HotWalletImport", "invalid words", e)
             alertState = AlertState.InvalidWords
         } catch (e: ImportWalletException.WalletAlreadyExists) {
             duplicateWalletId = e.v1
             alertState = AlertState.DuplicateWallet
         } catch (e: Exception) {
-            Log.e("HotWalletImport", "import error: $e")
+            Log.e("HotWalletImport", "import error", e)
+            genericErrorMessage = e.message ?: "Unknown error occurred"
+            alertState = AlertState.GenericError
         }
     }
 
@@ -313,6 +320,18 @@ fun HotWalletImportScreen(
                             },
                         ) {
                             Text(stringResource(R.string.btn_ok))
+                        }
+                    },
+                )
+            }
+            AlertState.GenericError -> {
+                AlertDialog(
+                    onDismissRequest = { alertState = AlertState.None },
+                    title = { Text("Import Error") },
+                    text = { Text(genericErrorMessage) },
+                    confirmButton = {
+                        TextButton(onClick = { alertState = AlertState.None }) {
+                            Text("OK")
                         }
                     },
                 )

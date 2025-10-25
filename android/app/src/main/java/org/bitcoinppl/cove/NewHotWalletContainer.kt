@@ -71,12 +71,19 @@ private fun PendingWalletContainer(
     numberOfWords: NumberOfBip39Words,
     snackbarHostState: SnackbarHostState,
 ) {
-    var manager by remember { mutableStateOf<PendingWalletManager?>(null) }
+    var manager by remember(numberOfWords) { mutableStateOf<PendingWalletManager?>(null) }
     var loading by remember { mutableStateOf(true) }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(numberOfWords) {
         manager = PendingWalletManager(numberOfWords)
         loading = false
+    }
+
+    androidx.compose.runtime.DisposableEffect(numberOfWords) {
+        onDispose {
+            // cleanup when numberOfWords changes or component is disposed
+            manager = null
+        }
     }
 
     when {
@@ -107,6 +114,13 @@ private fun ImportWalletContainer(
     LaunchedEffect(Unit) {
         manager = ImportWalletManager()
         loading = false
+    }
+
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        onDispose {
+            // cleanup when component is disposed
+            manager = null
+        }
     }
 
     when {
