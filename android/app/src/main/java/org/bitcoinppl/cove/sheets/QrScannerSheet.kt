@@ -150,6 +150,9 @@ private fun QrScannerContent(
 
     val barcodeScanner = remember { BarcodeScanning.getClient() }
     val executor = remember { Executors.newSingleThreadExecutor() }
+    val cameraProviderRef = remember { mutableStateOf<ProcessCameraProvider?>(null) }
+    val previewRef = remember { mutableStateOf<Preview?>(null) }
+    val analysisRef = remember { mutableStateOf<ImageAnalysis?>(null) }
 
     Box(
         modifier =
@@ -166,11 +169,13 @@ private fun QrScannerContent(
 
                     cameraProviderFuture.addListener({
                         val cameraProvider = cameraProviderFuture.get()
+                        cameraProviderRef.value = cameraProvider
 
                         val preview =
                             Preview.Builder().build().also {
                                 it.setSurfaceProvider(previewView.surfaceProvider)
                             }
+                        previewRef.value = preview
 
                         val imageAnalysis =
                             ImageAnalysis.Builder()
@@ -186,8 +191,9 @@ private fun QrScannerContent(
                                                     imageProxy.imageInfo.rotationDegrees,
                                                 )
 
+                                            val mainExecutor = ContextCompat.getMainExecutor(ctx)
                                             barcodeScanner.process(image)
-                                                .addOnSuccessListener { barcodes ->
+                                                .addOnSuccessListener(mainExecutor) { barcodes ->
                                                     for (barcode in barcodes) {
                                                         if (barcode.format == Barcode.FORMAT_QR_CODE) {
                                                             handleQrCode(
@@ -217,6 +223,9 @@ private fun QrScannerContent(
                                                         }
                                                     }
                                                 }
+                                                .addOnFailureListener(mainExecutor) { e ->
+                                                    Log.e("QrScanner", "Barcode processing failed", e)
+                                                }
                                                 .addOnCompleteListener {
                                                     imageProxy.close()
                                                 }
@@ -225,11 +234,13 @@ private fun QrScannerContent(
                                         }
                                     }
                                 }
+                        analysisRef.value = imageAnalysis
 
                         val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 
                         try {
-                            cameraProvider.unbindAll()
+                            // unbind only our use cases
+                            cameraProvider.unbind(preview, imageAnalysis)
                             cameraProvider.bindToLifecycle(
                                 lifecycleOwner,
                                 cameraSelector,
@@ -279,6 +290,18 @@ private fun QrScannerContent(
 
     DisposableEffect(Unit) {
         onDispose {
+            // stop analysis before shutting down executor
+            analysisRef.value?.clearAnalyzer()
+
+            // unbind use cases
+            cameraProviderRef.value?.let { cp ->
+                val p = previewRef.value
+                val a = analysisRef.value
+                if (p != null && a != null) {
+                    cp.unbind(p, a)
+                }
+            }
+
             executor.shutdown()
             barcodeScanner.close()
         }
@@ -311,6 +334,7 @@ private fun handleQrCode(
                 onTotalPartsUpdate(newMultiQr.totalParts())
                 newMultiQr
             } catch (e: Exception) {
+                Log.d("QrScanner", "Not a BBQr (falling back to single QR): ${e.message}")
                 // single QR code (not BBQr)
                 onScanComplete(stringOrData)
                 return
