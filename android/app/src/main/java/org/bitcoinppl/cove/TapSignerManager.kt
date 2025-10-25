@@ -21,6 +21,7 @@ class TapSignerManager(
         private set
 
     private var nfc: TapSignerNfcHelper? = null
+    private var nfcFor: org.bitcoinppl.cove_core.tapcard.TapSigner? = null
     val path = mutableStateListOf<org.bitcoinppl.cove_core.TapSignerRoute>()
     var initialRoute by mutableStateOf(initialRoute)
         private set
@@ -28,10 +29,14 @@ class TapSignerManager(
     var enteredPin: String? by mutableStateOf(null)
 
     fun getOrCreateNfc(tapSigner: org.bitcoinppl.cove_core.tapcard.TapSigner): TapSignerNfcHelper {
-        nfc?.let { return it }
+        // recreate NFC helper if TapSigner has changed
+        if (nfc != null && nfcFor === tapSigner) {
+            return nfc!!
+        }
 
         val newNfc = TapSignerNfcHelper(tapSigner)
         nfc = newNfc
+        nfcFor = tapSigner
         return newNfc
     }
 
