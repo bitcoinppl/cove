@@ -41,18 +41,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.R
-import org.bitcoinppl.cove.ui.theme.WalletColor
+import org.bitcoinppl.cove.utils.toComposeColor
 import org.bitcoinppl.cove.views.CardItem
 import org.bitcoinppl.cove.views.ClickableInfoRow
 import org.bitcoinppl.cove.views.CustomSpacer
 import org.bitcoinppl.cove.views.InfoRow
 import org.bitcoinppl.cove.views.SwitchRow
+import org.bitcoinppl.cove_core.WalletColor
+import org.bitcoinppl.cove_core.defaultWalletColors
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -128,7 +130,7 @@ fun WalletSettingsScreen(wallet: TempWalletMock) {
                             // TODO:NAME CHANGE?
                         }
                         ListSpacer()
-                        WalletColorSelector(wallet.settings.colorId)
+                        WalletColorSelector(wallet.settings.color)
                         ListSpacer()
                         SwitchRow(
                             stringResource(R.string.label_wallet_show_transaction_labels),
@@ -192,7 +194,7 @@ fun WalletSettingsScreenPreview() {
             networkName = "Signet",
             fingerPrint = "AsSdf322",
             walletType = "HOT",
-            WalletSettings(name = "MyWallet", WalletColor.LIGHT_RED.id, true),
+            WalletSettings(name = "MyWallet", WalletColor.WPastelRed, true),
         ),
     )
 }
@@ -200,19 +202,16 @@ fun WalletSettingsScreenPreview() {
 @Preview
 @Composable
 fun WalletColorSelectorPreview() {
-    WalletColorSelector(WalletColor.LIGHT_ORANGE.id)
+    WalletColorSelector(WalletColor.Orange)
 }
 
 @Composable
-private fun WalletColorSelector(selectedColorId: Int) {
+private fun WalletColorSelector(selectedWalletColor: WalletColor) {
     var selectedColor by remember {
-        mutableStateOf(
-            WalletColor.getWalletColorById(selectedColorId) ?: WalletColor.LIGHT_BLUE,
-        )
+        mutableStateOf(selectedWalletColor)
     }
 
-    val windowInfo = LocalWindowInfo.current
-    val containerSize = windowInfo.containerSize.width
+    val availableColors = remember { defaultWalletColors() }
 
     Column(
         Modifier
@@ -237,7 +236,7 @@ private fun WalletColorSelector(selectedColorId: Int) {
                 Modifier
                     .aspectRatio(1f)
                     .background(
-                        color = selectedColor.color,
+                        color = selectedColor.toComposeColor(),
                         shape = RoundedCornerShape(8.dp),
                     ).weight(1f),
             )
@@ -254,8 +253,8 @@ private fun WalletColorSelector(selectedColorId: Int) {
                         .weight(3f),
                 contentPadding = PaddingValues(2.dp),
             ) {
-                items(WalletColor.entries.size) { index ->
-                    val walletColor = WalletColor.entries[index]
+                items(availableColors.size) { index ->
+                    val walletColor = availableColors[index]
 
                     Box(
                         modifier =
@@ -285,7 +284,7 @@ private fun WalletColorSelector(selectedColorId: Int) {
                             modifier =
                                 Modifier
                                     .fillMaxSize()
-                                    .background(walletColor.color, CircleShape),
+                                    .background(walletColor.toComposeColor(), CircleShape),
                         )
                     }
                 }
@@ -311,6 +310,6 @@ data class TempWalletMock(
 // TODO:Remove and change to a real Wallet from CoveLib
 data class WalletSettings(
     val name: String,
-    val colorId: Int,
+    val color: WalletColor,
     val showLabels: Boolean,
 )
