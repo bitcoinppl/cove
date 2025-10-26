@@ -121,6 +121,7 @@
     <string name="label_import_wallet_instructions">Enter your recovery words below to restore your wallet. Make sure you\'re in a private location.</string>
     <string name="alert_title_words_not_valid">Words not valid</string>
     <string name="alert_message_words_not_valid">The words you entered do not create a valid wallet. Please check the words and try again.</string>
+    <string name="alert_title_import_error">Import Error</string>
     <string name="alert_title_duplicate_wallet">Duplicate Wallet</string>
     <string name="alert_message_duplicate_wallet">This wallet has already been imported!</string>
     <string name="label_select_number_of_words">Select Number of Words</string>

@@ -327,11 +327,11 @@ fun HotWalletImportScreen(
             AlertState.GenericError -> {
                 AlertDialog(
                     onDismissRequest = { alertState = AlertState.None },
-                    title = { Text("Import Error") },
+                    title = { Text(stringResource(R.string.alert_title_import_error)) },
                     text = { Text(genericErrorMessage) },
                     confirmButton = {
                         TextButton(onClick = { alertState = AlertState.None }) {
-                            Text("OK")
+                            Text(stringResource(R.string.btn_ok))
                         }
                     },
                 )
