@@ -80,6 +80,7 @@ fun HotWalletCreateScreen(
     app: AppManager,
     manager: PendingWalletManager,
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
+    onBackPressed: (() -> Unit)? = null,
 ) {
     val groupedWords = remember(manager) { manager.rust.bip39WordsGrouped() }
     var currentPage by remember { mutableIntStateOf(0) }
@@ -134,7 +135,15 @@ fun HotWalletCreateScreen(
                     )
                 },
                 navigationIcon = {
-                    IconButton(onClick = { showBackConfirmation = true }) {
+                    IconButton(
+                        onClick = {
+                            if (onBackPressed != null) {
+                                showBackConfirmation = true
+                            } else {
+                                app.popRoute()
+                            }
+                        },
+                    ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Default.ArrowBack,
                             contentDescription = "Back",
@@ -286,7 +295,8 @@ fun HotWalletCreateScreen(
                     TextButton(
                         onClick = {
                             showBackConfirmation = false
-                            app.popRoute()
+                            // call cleanup callback if provided, otherwise just pop
+                            onBackPressed?.invoke() ?: app.popRoute()
                         },
                     ) {
                         Text(stringResource(R.string.btn_yes_go_back), color = Color.Red)

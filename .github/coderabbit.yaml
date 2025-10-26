@@ -33,7 +33,6 @@ review:
         Compose Best Practices:
         - LaunchedEffect should be keyed to actual dependencies, not Unit
         - Set loading states at the beginning of LaunchedEffect blocks
-        - Use FLAG_SECURE for screens displaying sensitive data (recovery words, mnemonics)
   general_guidelines: |
     - Check spelling and grammar in code comments and documentation across all files.
     - Look for consistent styling, formatting, and naming conventions.

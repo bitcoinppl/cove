@@ -55,24 +55,27 @@ fun SecretWordsScreen(
     app: AppManager,
     walletId: WalletId,
 ) {
-    var words by remember { mutableStateOf<Mnemonic?>(null) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var words by remember(walletId) { mutableStateOf<Mnemonic?>(null) }
+    var errorMessage by remember(walletId) { mutableStateOf<String?>(null) }
 
-    // lock on appear
-    LaunchedEffect(Unit) {
+    // lock on appear and reload when walletId changes
+    LaunchedEffect(walletId) {
         // TODO: implement auth.lock() when AuthManager is available
-        if (words == null) {
-            try {
-                words = Mnemonic(id = walletId)
-            } catch (e: Exception) {
-                errorMessage = e.message ?: "failed to load recovery words"
-                android.util.Log.e("SecretWordsScreen", "error loading mnemonic", e)
-            }
+
+        // close previous mnemonic before loading new one
+        words?.close()
+        words = null
+
+        try {
+            words = Mnemonic(id = walletId)
+        } catch (e: Exception) {
+            errorMessage = e.message ?: "failed to load recovery words"
+            android.util.Log.e("SecretWordsScreen", "error loading mnemonic", e)
         }
     }
 
     // cleanup on dispose
-    DisposableEffect(Unit) {
+    DisposableEffect(walletId) {
         onDispose {
             // clear words from memory
             words?.close()

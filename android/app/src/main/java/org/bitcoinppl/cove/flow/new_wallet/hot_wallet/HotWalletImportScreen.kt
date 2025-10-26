@@ -117,14 +117,14 @@ fun HotWalletImportScreen(
         }
 
     val numberOfGroups = wordCount / GROUPS_OF
-    var enteredWords by remember {
+    var enteredWords by remember(numberOfWords) {
         mutableStateOf(List(numberOfGroups) { List(GROUPS_OF) { "" } })
     }
 
     var alertState by remember { mutableStateOf(AlertState.None) }
     var duplicateWalletId by remember { mutableStateOf<WalletId?>(null) }
     var genericErrorMessage by remember { mutableStateOf("") }
-    var focusedField by remember { mutableIntStateOf(0) }
+    var focusedField by remember(numberOfWords) { mutableIntStateOf(0) }
 
     fun isAllWordsValid(): Boolean {
         return enteredWords

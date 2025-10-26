@@ -76,9 +76,10 @@ private fun PendingWalletContainer(
 
     LaunchedEffect(numberOfWords) {
         try {
-            // close previous manager before creating new one
+            // create new manager first, only close old if successful
+            val newManager = PendingWalletManager(numberOfWords)
             manager?.close()
-            manager = PendingWalletManager(numberOfWords)
+            manager = newManager
         } catch (e: Exception) {
             android.util.Log.e("PendingWalletContainer", "failed to init pending manager", e)
         } finally {
@@ -101,6 +102,11 @@ private fun PendingWalletContainer(
                 app = app,
                 manager = manager!!,
                 snackbarHostState = snackbarHostState,
+                onBackPressed = {
+                    // explicit cleanup before navigation
+                    manager?.close()
+                    app.popRoute()
+                },
             )
         else -> FullPageLoadingView()
     }
@@ -121,7 +127,10 @@ private fun ImportWalletContainer(
 
     LaunchedEffect(numberOfWords, importType) {
         try {
-            manager = ImportWalletManager()
+            // create new manager first, only close old if successful
+            val newManager = ImportWalletManager()
+            manager?.close()
+            manager = newManager
         } catch (e: Exception) {
             android.util.Log.e("ImportWalletContainer", "failed to init import manager", e)
         } finally {
