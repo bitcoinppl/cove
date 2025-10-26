@@ -81,7 +81,7 @@ fun HotWalletCreateScreen(
     manager: PendingWalletManager,
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
-    val groupedWords = remember { manager.rust.bip39WordsGrouped() }
+    val groupedWords = remember(manager) { manager.rust.bip39WordsGrouped() }
     var currentPage by remember { mutableIntStateOf(0) }
     val pagerState = rememberPagerState(pageCount = { groupedWords.size })
     val scope = rememberCoroutineScope()

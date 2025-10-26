@@ -57,6 +57,15 @@ fun VerifyWordsContainer(
         }
     }
 
+    DisposableEffect(Unit) {
+        onDispose {
+            // clean up validator to prevent resource leak
+            validator?.destroy()
+            validator = null
+            manager = null
+        }
+    }
+
     when {
         loading -> FullPageLoadingView()
         manager != null && validator != null -> {

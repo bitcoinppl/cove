@@ -75,6 +75,8 @@ private fun PendingWalletContainer(
     var loading by remember { mutableStateOf(true) }
 
     LaunchedEffect(numberOfWords) {
+        // close previous manager before creating new one
+        manager?.close()
         manager = PendingWalletManager(numberOfWords)
         loading = false
     }
@@ -82,6 +84,7 @@ private fun PendingWalletContainer(
     androidx.compose.runtime.DisposableEffect(numberOfWords) {
         onDispose {
             // cleanup when numberOfWords changes or component is disposed
+            manager?.close()
             manager = null
         }
     }
@@ -119,6 +122,7 @@ private fun ImportWalletContainer(
     androidx.compose.runtime.DisposableEffect(Unit) {
         onDispose {
             // cleanup when component is disposed
+            manager?.close()
             manager = null
         }
     }
