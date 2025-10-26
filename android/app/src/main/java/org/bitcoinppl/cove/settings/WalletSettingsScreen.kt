@@ -205,13 +205,36 @@ fun WalletColorSelectorPreview() {
     WalletColorSelector(WalletColor.Orange)
 }
 
+// static color list for compose previews to avoid FFI calls in IDE
+private val previewWalletColors =
+    listOf(
+        WalletColor.WBeige,
+        WalletColor.WPastelBlue,
+        WalletColor.WPastelNavy,
+        WalletColor.WPastelRed,
+        WalletColor.WPastelYellow,
+        WalletColor.WPastelTeal,
+        WalletColor.Blue,
+        WalletColor.Green,
+        WalletColor.Orange,
+        WalletColor.Purple,
+    )
+
 @Composable
 private fun WalletColorSelector(selectedWalletColor: WalletColor) {
     var selectedColor by remember {
         mutableStateOf(selectedWalletColor)
     }
 
-    val availableColors = remember { defaultWalletColors() }
+    val isInPreview = LocalInspectionMode.current
+    val availableColors =
+        remember(isInPreview) {
+            if (isInPreview) {
+                previewWalletColors
+            } else {
+                defaultWalletColors()
+            }
+        }
 
     Column(
         Modifier
