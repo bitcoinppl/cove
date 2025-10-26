@@ -126,7 +126,7 @@ fun HotWalletCreateScreen(
                     ),
                 title = {
                     Text(
-                        stringResource(R.string.title_backup_wallet),
+                        stringResource(R.string.title_wallet_backup),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,

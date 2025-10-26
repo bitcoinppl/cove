@@ -75,10 +75,15 @@ private fun PendingWalletContainer(
     var loading by remember { mutableStateOf(true) }
 
     LaunchedEffect(numberOfWords) {
-        // close previous manager before creating new one
-        manager?.close()
-        manager = PendingWalletManager(numberOfWords)
-        loading = false
+        try {
+            // close previous manager before creating new one
+            manager?.close()
+            manager = PendingWalletManager(numberOfWords)
+        } catch (e: Exception) {
+            android.util.Log.e("PendingWalletContainer", "failed to init pending manager", e)
+        } finally {
+            loading = false
+        }
     }
 
     androidx.compose.runtime.DisposableEffect(numberOfWords) {
@@ -114,9 +119,14 @@ private fun ImportWalletContainer(
     var manager by remember { mutableStateOf<ImportWalletManager?>(null) }
     var loading by remember { mutableStateOf(true) }
 
-    LaunchedEffect(Unit) {
-        manager = ImportWalletManager()
-        loading = false
+    LaunchedEffect(numberOfWords, importType) {
+        try {
+            manager = ImportWalletManager()
+        } catch (e: Exception) {
+            android.util.Log.e("ImportWalletContainer", "failed to init import manager", e)
+        } finally {
+            loading = false
+        }
     }
 
     androidx.compose.runtime.DisposableEffect(Unit) {

@@ -75,7 +75,7 @@ fun SecretWordsScreen(
     DisposableEffect(Unit) {
         onDispose {
             // clear words from memory
-            words?.destroy()
+            words?.close()
             words = null
         }
     }

@@ -39,7 +39,8 @@ fun VerifyWordsContainer(
     var questionIndex by remember { mutableIntStateOf(1) }
     var possibleWords by remember { mutableStateOf<List<String>>(emptyList()) }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(id) {
+        loading = true
         try {
             val walletManager = app.getWalletManager(id)
             val wordValidator = walletManager.rust.wordValidator()
