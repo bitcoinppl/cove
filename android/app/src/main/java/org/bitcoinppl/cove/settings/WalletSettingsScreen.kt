@@ -1,5 +1,6 @@
 package org.bitcoinppl.cove.settings
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -232,7 +233,12 @@ private fun WalletColorSelector(selectedWalletColor: WalletColor) {
             if (isInPreview) {
                 previewWalletColors
             } else {
-                defaultWalletColors()
+                try {
+                    defaultWalletColors()
+                } catch (e: Throwable) {
+                    Log.e("WalletSettingsScreen", "failed to load default wallet colors", e)
+                    previewWalletColors
+                }
             }
         }
 
