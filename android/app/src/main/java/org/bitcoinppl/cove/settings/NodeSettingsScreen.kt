@@ -30,10 +30,13 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,9 +55,9 @@ import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.views.CardItem
 import org.bitcoinppl.cove.views.CustomSpacer
+import org.bitcoinppl.cove_core.NodeSelection
 import org.bitcoinppl.cove_core.NodeSelector
 import org.bitcoinppl.cove_core.NodeSelectorException
-import org.bitcoinppl.cove_core.NodeSelection
 import org.bitcoinppl.cove_core.nodeSelectionToNode
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -65,6 +68,7 @@ fun NodeSettingsScreen(
 ) {
     val nodeSelector = remember { NodeSelector() }
     val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
 
     val nodeList = remember { nodeSelector.nodeList() }
     var selectedNodeName by remember {
@@ -77,20 +81,35 @@ fun NodeSettingsScreen(
     var isLoading by remember { mutableStateOf(false) }
     var showErrorDialog by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
-    var errorTitle by remember { mutableStateOf("Error") }
+    var errorTitle by remember { mutableStateOf("") }
+
+    // compute all string resources at composable level
+    val customElectrum = stringResource(R.string.node_custom_electrum)
+    val customEsplora = stringResource(R.string.node_custom_esplora)
+    val successConnected = stringResource(R.string.node_success_connected)
+    val successSaved = stringResource(R.string.node_success_saved)
+    val errorTitleDefault = stringResource(R.string.node_error_title)
+    val errorNotFound = stringResource(R.string.node_error_not_found)
+    val errorConnectionFailed = stringResource(R.string.node_error_connection_failed)
+    val errorConnectionMessage = stringResource(R.string.node_error_connection_message)
+    val errorUnknown = stringResource(R.string.node_error_unknown)
+    val errorUrlEmpty = stringResource(R.string.node_error_url_empty)
+    val errorParseTitle = stringResource(R.string.node_error_parse_title)
 
     val showCustomFields = selectedNodeName.startsWith("Custom")
 
     // pre-fill custom fields if a custom node was previously saved
-    if (showCustomFields && customUrl.isEmpty()) {
-        val savedNode = nodeSelector.selectedNode()
-        if (savedNode is NodeSelection.Custom) {
-            val node = nodeSelectionToNode(savedNode)
-            if ((selectedNodeName.contains("Electrum") && node.apiType.toString() == "ELECTRUM") ||
-                (selectedNodeName.contains("Esplora") && node.apiType.toString() == "ESPLORA")
-            ) {
-                customUrl = node.url
-                customNodeName = node.name
+    LaunchedEffect(showCustomFields) {
+        if (showCustomFields && customUrl.isEmpty()) {
+            val savedNode = nodeSelector.selectedNode()
+            if (savedNode is NodeSelection.Custom) {
+                val node = nodeSelectionToNode(savedNode)
+                if ((selectedNodeName.contains("Electrum") && node.apiType.toString() == "ELECTRUM") ||
+                    (selectedNodeName.contains("Esplora") && node.apiType.toString() == "ESPLORA")
+                ) {
+                    customUrl = node.url
+                    customNodeName = node.name
+                }
             }
         }
     }
@@ -103,28 +122,29 @@ fun NodeSettingsScreen(
         scope.launch {
             isLoading = true
             try {
-                val node = withContext(Dispatchers.IO) {
-                    nodeSelector.selectPresetNode(nodeName)
-                }
+                val node =
+                    withContext(Dispatchers.IO) {
+                        nodeSelector.selectPresetNode(nodeName)
+                    }
 
                 withContext(Dispatchers.IO) {
                     nodeSelector.checkSelectedNode(node)
                 }
 
-                errorTitle = "Success"
-                errorMessage = "Successfully connected to ${node.url}"
-                showErrorDialog = true
+                snackbarHostState.showSnackbar(
+                    successConnected.format(node.url),
+                )
             } catch (e: NodeSelectorException.NodeNotFound) {
-                errorTitle = "Error"
-                errorMessage = "Node not found: ${e.v1}"
+                errorTitle = errorTitleDefault
+                errorMessage = errorNotFound.format(e.v1)
                 showErrorDialog = true
             } catch (e: NodeSelectorException.NodeAccessException) {
-                errorTitle = "Connection Failed"
-                errorMessage = "Failed to connect to node\n${e.v1}"
+                errorTitle = errorConnectionFailed
+                errorMessage = errorConnectionMessage.format(e.v1)
                 showErrorDialog = true
             } catch (e: Exception) {
-                errorTitle = "Error"
-                errorMessage = "Unknown error: ${e.message}"
+                errorTitle = errorTitleDefault
+                errorMessage = errorUnknown.format(e.message ?: "")
                 showErrorDialog = true
             } finally {
                 isLoading = false
@@ -134,8 +154,8 @@ fun NodeSettingsScreen(
 
     fun checkAndSaveCustomNode() {
         if (customUrl.isEmpty()) {
-            errorTitle = "Error"
-            errorMessage = "URL cannot be empty"
+            errorTitle = errorTitleDefault
+            errorMessage = errorUrlEmpty
             showErrorDialog = true
             return
         }
@@ -143,9 +163,10 @@ fun NodeSettingsScreen(
         scope.launch {
             isLoading = true
             try {
-                val node = withContext(Dispatchers.IO) {
-                    nodeSelector.parseCustomNode(customUrl, selectedNodeName, customNodeName)
-                }
+                val node =
+                    withContext(Dispatchers.IO) {
+                        nodeSelector.parseCustomNode(customUrl, selectedNodeName, customNodeName)
+                    }
 
                 // update fields with parsed values
                 customUrl = node.url
@@ -155,20 +176,18 @@ fun NodeSettingsScreen(
                     nodeSelector.checkAndSaveNode(node)
                 }
 
-                errorTitle = "Success"
-                errorMessage = "Connected to node successfully"
-                showErrorDialog = true
+                snackbarHostState.showSnackbar(successSaved)
             } catch (e: NodeSelectorException.ParseNodeUrlException) {
-                errorTitle = "Unable to parse URL"
+                errorTitle = errorParseTitle
                 errorMessage = e.v1
                 showErrorDialog = true
             } catch (e: NodeSelectorException.NodeAccessException) {
-                errorTitle = "Connection Failed"
-                errorMessage = "Failed to connect to node\n${e.v1}"
+                errorTitle = errorConnectionFailed
+                errorMessage = errorConnectionMessage.format(e.v1)
                 showErrorDialog = true
             } catch (e: Exception) {
-                errorTitle = "Error"
-                errorMessage = "Unknown error: ${e.message}"
+                errorTitle = errorTitleDefault
+                errorMessage = errorUnknown.format(e.message ?: "")
                 showErrorDialog = true
             } finally {
                 isLoading = false
@@ -181,6 +200,7 @@ fun NodeSettingsScreen(
             modifier
                 .fillMaxSize()
                 .padding(WindowInsets.safeDrawing.asPaddingValues()),
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = @Composable {
             TopAppBar(
                 title = {
@@ -197,7 +217,10 @@ fun NodeSettingsScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = { app.popRoute() }) {
-                        Icon(Icons.AutoMirrored.Default.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            Icons.AutoMirrored.Default.ArrowBack,
+                            contentDescription = stringResource(R.string.content_description_back),
+                        )
                     }
                 },
                 actions = {
@@ -249,10 +272,10 @@ fun NodeSettingsScreen(
 
                         // custom electrum
                         NodeRow(
-                            nodeName = "Custom Electrum",
-                            isSelected = selectedNodeName == "Custom Electrum",
+                            nodeName = customElectrum,
+                            isSelected = selectedNodeName == customElectrum,
                             onClick = {
-                                selectedNodeName = "Custom Electrum"
+                                selectedNodeName = customElectrum
                             },
                         )
 
@@ -260,10 +283,10 @@ fun NodeSettingsScreen(
 
                         // custom esplora
                         NodeRow(
-                            nodeName = "Custom Esplora",
-                            isSelected = selectedNodeName == "Custom Esplora",
+                            nodeName = customEsplora,
+                            isSelected = selectedNodeName == customEsplora,
                             onClick = {
-                                selectedNodeName = "Custom Esplora"
+                                selectedNodeName = customEsplora
                             },
                         )
                     }
@@ -284,8 +307,8 @@ fun NodeSettingsScreen(
                             OutlinedTextField(
                                 value = customUrl,
                                 onValueChange = { customUrl = it },
-                                label = { Text("URL") },
-                                placeholder = { Text("Enter URL") },
+                                label = { Text(stringResource(R.string.node_url_label)) },
+                                placeholder = { Text(stringResource(R.string.node_url_placeholder)) },
                                 keyboardOptions =
                                     KeyboardOptions(
                                         keyboardType = KeyboardType.Uri,
@@ -298,8 +321,8 @@ fun NodeSettingsScreen(
                             OutlinedTextField(
                                 value = customNodeName,
                                 onValueChange = { customNodeName = it },
-                                label = { Text("Name") },
-                                placeholder = { Text("Node Name (optional)") },
+                                label = { Text(stringResource(R.string.node_name_label)) },
+                                placeholder = { Text(stringResource(R.string.node_name_placeholder)) },
                                 keyboardOptions =
                                     KeyboardOptions(
                                         capitalization = KeyboardCapitalization.None,
@@ -313,7 +336,7 @@ fun NodeSettingsScreen(
                                 enabled = customUrl.isNotEmpty() && !isLoading,
                                 modifier = Modifier.fillMaxWidth(),
                             ) {
-                                Text("Save Custom Node")
+                                Text(stringResource(R.string.node_save_button))
                             }
                         }
                     }
@@ -329,7 +352,7 @@ fun NodeSettingsScreen(
             text = { Text(errorMessage) },
             confirmButton = {
                 TextButton(onClick = { showErrorDialog = false }) {
-                    Text("OK")
+                    Text(stringResource(R.string.btn_ok))
                 }
             },
         )
@@ -359,7 +382,7 @@ private fun NodeRow(
         if (isSelected) {
             Icon(
                 imageVector = Icons.Default.Check,
-                contentDescription = "Selected",
+                contentDescription = stringResource(R.string.content_description_selected),
                 tint = MaterialTheme.colorScheme.primary,
             )
         }
