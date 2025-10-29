@@ -8,6 +8,19 @@
 
 ---
 
+## Table of Contents
+
+- [Rust Core](#rust-core)
+- [UniFFI Bindings](#uniffi-bindings)
+- [Mobile Frontends](#mobile-frontends)
+- [Build & Tooling](#build--tooling)
+- [Testing](#testing)
+- [Extending the Core](#extending-the-core)
+- [Development Workflow](#development-workflow)
+- [Quick Pointers](#quick-pointers)
+
+---
+
 ## Rust Core
 
 **Layout.** The top-level crate (`rust/src/lib.rs`) re-exports a collection of domain-focused modules (wallets, routing, hardware, fiat, etc.) plus internal crates under `rust/crates/`. Everything compiles into `libcove.{a,so}` and the `coveffi` cdylib specified in `rust/uniffi.toml`.
