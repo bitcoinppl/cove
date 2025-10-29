@@ -80,6 +80,7 @@ ci:
     cd rust && cargo fmt --check
     swiftformat --lint ios --swiftversion 6
     cd android && ./gradlew ktlintCheck
+    just compile
 
 xcode-reset:
     killAll Xcode || true
