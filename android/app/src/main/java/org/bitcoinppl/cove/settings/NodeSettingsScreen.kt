@@ -55,6 +55,7 @@ import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.views.CardItem
 import org.bitcoinppl.cove.views.CustomSpacer
+import org.bitcoinppl.cove_core.ApiType
 import org.bitcoinppl.cove_core.NodeSelection
 import org.bitcoinppl.cove_core.NodeSelector
 import org.bitcoinppl.cove_core.NodeSelectorException
@@ -71,8 +72,9 @@ fun NodeSettingsScreen(
     val snackbarHostState = remember { SnackbarHostState() }
 
     val nodeList = remember { nodeSelector.nodeList() }
+    var selectedNodeSelection by remember { mutableStateOf(nodeSelector.selectedNode()) }
     var selectedNodeName by remember {
-        mutableStateOf(nodeSelectionToNode(nodeSelector.selectedNode()).name)
+        mutableStateOf(nodeSelectionToNode(selectedNodeSelection).name)
     }
 
     var customUrl by remember { mutableStateOf("") }
@@ -96,17 +98,24 @@ fun NodeSettingsScreen(
     val errorUrlEmpty = stringResource(R.string.node_error_url_empty)
     val errorParseTitle = stringResource(R.string.node_error_parse_title)
 
-    val showCustomFields = selectedNodeName.startsWith("Custom")
+    val showCustomFields =
+        selectedNodeSelection is NodeSelection.Custom ||
+            selectedNodeName == customElectrum ||
+            selectedNodeName == customEsplora
 
     // pre-fill custom fields if a custom node was previously saved
-    LaunchedEffect(showCustomFields) {
+    LaunchedEffect(showCustomFields, selectedNodeSelection) {
         if (showCustomFields && customUrl.isEmpty()) {
-            val savedNode = nodeSelector.selectedNode()
+            val savedNode = selectedNodeSelection
             if (savedNode is NodeSelection.Custom) {
                 val node = nodeSelectionToNode(savedNode)
-                if ((selectedNodeName.contains("Electrum") && node.apiType.toString() == "ELECTRUM") ||
-                    (selectedNodeName.contains("Esplora") && node.apiType.toString() == "ESPLORA")
-                ) {
+                val matchesType =
+                    when (selectedNodeName) {
+                        customElectrum -> node.apiType == ApiType.ELECTRUM
+                        customEsplora -> node.apiType == ApiType.ESPLORA
+                        else -> true
+                    }
+                if (matchesType) {
                     customUrl = node.url
                     customNodeName = node.name
                 }
@@ -130,6 +139,7 @@ fun NodeSettingsScreen(
                 withContext(Dispatchers.IO) {
                     nodeSelector.checkSelectedNode(node)
                 }
+                selectedNodeSelection = NodeSelection.Preset(node)
 
                 snackbarHostState.showSnackbar(
                     successConnected.format(node.url),
@@ -175,6 +185,8 @@ fun NodeSettingsScreen(
                 withContext(Dispatchers.IO) {
                     nodeSelector.checkAndSaveNode(node)
                 }
+                selectedNodeSelection = NodeSelection.Custom(node)
+                selectedNodeName = node.name
 
                 snackbarHostState.showSnackbar(successSaved)
             } catch (e: NodeSelectorException.ParseNodeUrlException) {
