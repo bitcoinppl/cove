@@ -130,4 +130,25 @@
     <string name="btn_12_words">12 Words</string>
     <string name="btn_24_words">24 Words</string>
     <string name="label_loading">loading…</string>
+
+    <!-- Node Settings -->
+    <string name="node_custom_electrum">Custom Electrum</string>
+    <string name="node_custom_esplora">Custom Esplora</string>
+    <string name="node_url_label">URL</string>
+    <string name="node_url_placeholder">Enter URL</string>
+    <string name="node_name_label">Name</string>
+    <string name="node_name_placeholder">Node Name (optional)</string>
+    <string name="node_save_button">Save Custom Node</string>
+    <string name="node_success_title">Success</string>
+    <string name="node_success_connected">Successfully connected to %1$s</string>
+    <string name="node_success_saved">Connected to node successfully</string>
+    <string name="node_error_title">Error</string>
+    <string name="node_error_not_found">Node not found: %1$s</string>
+    <string name="node_error_connection_failed">Connection Failed</string>
+    <string name="node_error_connection_message">Failed to connect to node\n%1$s</string>
+    <string name="node_error_unknown">Unknown error: %1$s</string>
+    <string name="node_error_url_empty">URL cannot be empty</string>
+    <string name="node_error_parse_title">Unable to parse URL</string>
+    <string name="content_description_back">Back</string>
+    <string name="content_description_selected">Selected</string>
 </resources>
