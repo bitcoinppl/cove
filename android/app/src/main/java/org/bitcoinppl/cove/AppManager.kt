@@ -168,8 +168,7 @@ class AppManager private constructor() : FfiReconcile {
 
     val fullVersionId: String
         get() {
-            // TODO: get app version from BuildConfig or similar
-            val appVersion = "0.0.1" // placeholder
+            val appVersion = BuildConfig.VERSION_NAME
             if (appVersion != rust.version()) {
                 return "MISMATCH ${rust.version()} || $appVersion (${rust.gitShortHash()})"
             }
