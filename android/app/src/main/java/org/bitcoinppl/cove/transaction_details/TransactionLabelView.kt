@@ -96,13 +96,6 @@ fun TransactionLabelView(
     }
 
     fun saveLabel() {
-        // trim whitespace and validate
-        val trimmedLabel = editingLabel.trim()
-        if (trimmedLabel.isBlank()) {
-            isEditing = false
-            return
-        }
-
         if (isOperationInProgress) return
 
         scope.launch {
@@ -111,7 +104,7 @@ fun TransactionLabelView(
                 val metadata = manager.walletMetadata
                 labelManager.insertOrUpdateLabelsForTxn(
                     details = transactionDetails,
-                    label = trimmedLabel,
+                    label = editingLabel.trim(),
                     origin = metadata?.origin,
                 )
 
