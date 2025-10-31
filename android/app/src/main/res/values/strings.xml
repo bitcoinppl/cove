@@ -50,6 +50,8 @@
     <string name="title_transaction_pending">Transaction Pending</string>
     <string name="label_transaction_pending">Pending</string>
     <string name="btn_add_label">Add label</string>
+    <string name="btn_edit_label">Edit</string>
+    <string name="btn_delete_label">Delete</string>
     <string name="btn_view_in_explorer">View in Explorer</string>
     <string name="btn_show_details">Show Details</string>
     <string name="btn_hide_details">Hide Details</string>

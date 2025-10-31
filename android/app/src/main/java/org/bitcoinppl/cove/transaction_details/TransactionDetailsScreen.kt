@@ -322,30 +322,11 @@ fun TransactionDetailsScreen(
 
                 Spacer(Modifier.height(4.dp))
 
-                // TODO: add transaction labels - see issue #373
-                // Row(
-                //     verticalAlignment = Alignment.CenterVertically,
-                //     modifier = Modifier
-                //         .clip(RoundedCornerShape(16.dp))
-                //         .clickable { /* TODO */ }
-                // ) {
-                //     Box(
-                //         modifier = Modifier
-                //             .size(18.dp)
-                //             .clip(CircleShape)
-                //             .background(chipBg),
-                //         contentAlignment = Alignment.Center
-                //     ) {
-                //         Icon(
-                //             imageVector = Icons.Default.Add,
-                //             contentDescription = null,
-                //             tint = Color.White,
-                //             modifier = Modifier.size(14.dp)
-                //         )
-                //     }
-                //     Spacer(Modifier.size(8.dp))
-                //     Text(stringResource(R.string.btn_add_label), color = fg, fontSize = 16.sp)
-                // }
+                TransactionLabelView(
+                    transactionDetails = transactionDetails,
+                    manager = manager,
+                    secondaryColor = sub,
+                )
 
                 Spacer(Modifier.height(24.dp))
 
