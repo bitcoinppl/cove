@@ -15,15 +15,17 @@ review:
         - Identify spelling mistakes in comments, string literals, and documentation
     - path: "android/app/src/main/java/org/bitcoinppl/cove/**/*.kt"
       instructions: |
+        ⚠️ CRITICAL FFI/Threading Policy - READ FIRST:
+        - NEVER suggest moving Rust FFI calls to background threads (withContext(Dispatchers.IO))
+        - Rust FFI calls are SYNCHRONOUS and FAST - they complete in microseconds
+        - The Rust core uses Tokio runtime internally and handles all async operations
+        - Database operations (redb) are optimized and do NOT block the UI thread
+        - ONLY suggest Dispatchers.IO with profiling evidence showing >16ms UI blocking
+        - If you see a Rust FFI call on the main thread, DO NOT FLAG IT - this is correct
+
         - Verify correct functionality and logic consistency.
         - Check for idiomatic Kotlin usage and performance best practices.
         - Ignore generated bindings code in android/app/src/main/java/org/bitcoinppl/cove_core/**
-
-        IMPORTANT FFI/Threading Guidelines:
-        - DO NOT suggest wrapping FFI calls in withContext(Dispatchers.IO) without evidence of UI blocking
-        - The Rust core uses Tokio runtime and handles async internally
-        - Simple database operations (redb) are fast and do not need threading changes
-        - Only suggest Dispatchers.IO if there is profiling evidence of actual UI blocking
 
         FFI Resource Management:
         - Always verify that UniFFI objects implementing AutoCloseable call .close() before being nulled
@@ -38,6 +40,12 @@ review:
     - Look for consistent styling, formatting, and naming conventions.
     - Suggest improvements for readability, maintainability, and modularity.
     - Flag TODOs, FIXMEs, and commented-out code for potential cleanup.
+
+    CRITICAL - Rust FFI Threading Policy:
+    - DO NOT suggest moving Rust FFI calls to background threads or using Dispatchers.IO
+    - Rust FFI calls are synchronous, fast, and handle threading internally via Tokio runtime
+    - Only suggest threading changes if there is profiling evidence of actual UI blocking
+    - The Rust core is async-first and manages its own thread pool
 
 knowledge_base:
   - |
@@ -75,11 +83,14 @@ knowledge_base:
        - FFI calls from Rust are synchronous (not suspending)
 
     2. **Threading Model - CRITICAL**
-       - Rust core handles threading internally via Tokio runtime
-       - FFI calls are exposed as synchronous Kotlin functions
-       - Database operations (redb) are fast and synchronous
-       - DO NOT suggest withContext(Dispatchers.IO) for FFI calls without profiling evidence
-       - The Rust side already handles async operations internally
+       - ⚠️ FFI calls are SYNCHRONOUS, FAST, and should stay on the main thread
+       - Rust core handles ALL threading internally via Tokio runtime with its own thread pool
+       - FFI calls are thin wrappers that complete in microseconds (not milliseconds)
+       - Database operations (redb) are memory-mapped and optimized for speed
+       - The Rust side handles all async operations, networking, and I/O internally
+       - DO NOT suggest withContext(Dispatchers.IO) or moving FFI calls off main thread
+       - Only suggest threading changes with profiling evidence showing >16ms blocking
+       - If you see manager.dispatch() or similar FFI calls on main thread, this is CORRECT
 
     3. **UniFFI Type Mappings**
        - Rust errors ending in Error become Exception in Kotlin
