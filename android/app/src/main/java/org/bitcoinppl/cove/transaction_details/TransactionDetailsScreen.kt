@@ -326,6 +326,7 @@ fun TransactionDetailsScreen(
                     transactionDetails = transactionDetails,
                     manager = manager,
                     secondaryColor = sub,
+                    snackbarHostState = snackbarHostState,
                 )
 
                 Spacer(Modifier.height(24.dp))

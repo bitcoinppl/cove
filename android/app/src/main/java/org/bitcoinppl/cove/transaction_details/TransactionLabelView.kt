@@ -3,6 +3,7 @@ package org.bitcoinppl.cove.transaction_details
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -10,10 +11,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -30,6 +34,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -39,26 +44,34 @@ import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove_core.TransactionDetails
 import org.bitcoinppl.cove_core.types.TxId
 
+private const val TAG = "TransactionLabel"
+
 @Composable
 fun TransactionLabelView(
     transactionDetails: TransactionDetails,
     manager: WalletManager,
     secondaryColor: Color,
+    snackbarHostState: SnackbarHostState,
     modifier: Modifier = Modifier,
 ) {
     var isEditing by remember { mutableStateOf(false) }
     var editingLabel by remember { mutableStateOf("") }
     var showMenu by remember { mutableStateOf(false) }
     var currentLabel by remember { mutableStateOf(transactionDetails.transactionLabel()) }
+    var isOperationInProgress by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val focusRequester = remember { FocusRequester() }
+    val context = LocalContext.current
 
     val labelManager = remember { manager.rust.labelManager() }
     val txId: TxId = transactionDetails.txId()
 
     // update current label when transaction details change
+    // guard against race condition by not updating when editing
     LaunchedEffect(transactionDetails) {
-        currentLabel = transactionDetails.transactionLabel()
+        if (!isEditing) {
+            currentLabel = transactionDetails.transactionLabel()
+        }
     }
 
     // get updated details with the new label
@@ -68,36 +81,56 @@ fun TransactionLabelView(
                 val details = manager.transactionDetails(txId = txId)
                 currentLabel = details.transactionLabel()
             } catch (e: Exception) {
-                println("Error getting updated label: $e")
+                android.util.Log.e(TAG, "Error getting updated label", e)
+                val message = context.getString(R.string.label_update_error, e.message ?: "Unknown error")
+                snackbarHostState.showSnackbar(
+                    message = message,
+                    duration = SnackbarDuration.Short
+                )
             }
         }
     }
 
     fun saveLabel() {
-        if (editingLabel.isBlank()) {
+        // trim whitespace and validate
+        val trimmedLabel = editingLabel.trim()
+        if (trimmedLabel.isBlank()) {
             isEditing = false
             return
         }
 
+        if (isOperationInProgress) return
+
         scope.launch {
+            isOperationInProgress = true
             try {
                 val metadata = manager.walletMetadata
                 labelManager.insertOrUpdateLabelsForTxn(
                     details = transactionDetails,
-                    label = editingLabel,
+                    label = trimmedLabel,
                     origin = metadata?.origin,
                 )
 
                 updateDetails()
                 isEditing = false
             } catch (e: Exception) {
-                println("Unable to save label: $e")
+                android.util.Log.e(TAG, "Unable to save label", e)
+                val message = context.getString(R.string.label_save_error, e.message ?: "Unknown error")
+                snackbarHostState.showSnackbar(
+                    message = message,
+                    duration = SnackbarDuration.Short
+                )
+            } finally {
+                isOperationInProgress = false
             }
         }
     }
 
     fun deleteLabel() {
+        if (isOperationInProgress) return
+
         scope.launch {
+            isOperationInProgress = true
             try {
                 labelManager.deleteLabelsForTxn(txId = txId)
                 isEditing = false
@@ -106,7 +139,14 @@ fun TransactionLabelView(
 
                 updateDetails()
             } catch (e: Exception) {
-                println("Unable to delete label: $e")
+                android.util.Log.e(TAG, "Unable to delete label", e)
+                val message = context.getString(R.string.label_delete_error, e.message ?: "Unknown error")
+                snackbarHostState.showSnackbar(
+                    message = message,
+                    duration = SnackbarDuration.Short
+                )
+            } finally {
+                isOperationInProgress = false
             }
         }
     }
@@ -157,6 +197,15 @@ fun TransactionLabelView(
                                 }
                             },
                 )
+
+                if (isOperationInProgress) {
+                    Spacer(Modifier.width(8.dp))
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        color = secondaryColor,
+                        strokeWidth = 2.dp,
+                    )
+                }
             }
 
             currentLabel != null -> {
@@ -166,7 +215,7 @@ fun TransactionLabelView(
                     modifier =
                         Modifier
                             .clip(RoundedCornerShape(8.dp))
-                            .clickable { showMenu = true },
+                            .clickable(enabled = !isOperationInProgress) { showMenu = true },
                 ) {
                     Icon(
                         imageVector = Icons.Default.Edit,
@@ -181,6 +230,15 @@ fun TransactionLabelView(
                         color = secondaryColor,
                         fontSize = 14.sp,
                     )
+
+                    if (isOperationInProgress) {
+                        Spacer(Modifier.width(8.dp))
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            color = secondaryColor,
+                            strokeWidth = 2.dp,
+                        )
+                    }
                 }
 
                 // dropdown menu for edit/delete
@@ -194,6 +252,7 @@ fun TransactionLabelView(
                             showMenu = false
                             setEditing()
                         },
+                        enabled = !isOperationInProgress,
                         leadingIcon = {
                             Icon(
                                 imageVector = Icons.Default.Edit,
@@ -208,6 +267,7 @@ fun TransactionLabelView(
                             showMenu = false
                             deleteLabel()
                         },
+                        enabled = !isOperationInProgress,
                         leadingIcon = {
                             Icon(
                                 imageVector = Icons.Default.Delete,
@@ -225,7 +285,7 @@ fun TransactionLabelView(
                     modifier =
                         Modifier
                             .clip(RoundedCornerShape(8.dp))
-                            .clickable { setEditing() },
+                            .clickable(enabled = !isOperationInProgress) { setEditing() },
                 ) {
                     Icon(
                         imageVector = Icons.Default.Add,
