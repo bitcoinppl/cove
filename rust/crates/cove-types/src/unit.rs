@@ -2,18 +2,23 @@ use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, uniffi::Enum, strum::EnumIter,
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    uniffi::Enum,
+    strum::EnumIter,
 )]
 #[uniffi::export(Display)]
 pub enum BitcoinUnit {
+    #[default]
     Btc,
     Sat,
-}
-
-impl Default for BitcoinUnit {
-    fn default() -> Self {
-        Self::Btc
-    }
 }
 
 use strum::IntoEnumIterator;
