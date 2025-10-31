@@ -271,6 +271,15 @@ impl TapSignerReader {
     }
 }
 
+/// Create a new TapSignerReader
+#[uniffi::export]
+pub async fn tap_signer_reader_new(
+    transport: Box<dyn TapcardTransportProtocol>,
+    cmd: Option<TapSignerCmd>,
+) -> Result<Arc<TapSignerReader>, TapSignerReaderError> {
+    TapSignerReader::new(transport, cmd).await.map(Arc::new)
+}
+
 impl TapSignerReader {
     async fn wait_if_needed(&self) -> Result<(), Error> {
         let mut auth_delay = self.reader.lock().await.auth_delay;

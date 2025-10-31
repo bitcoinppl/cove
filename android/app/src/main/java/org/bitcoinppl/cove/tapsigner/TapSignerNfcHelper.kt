@@ -1,11 +1,18 @@
 package org.bitcoinppl.cove.tapsigner
 
+import android.app.Activity
+import android.nfc.NfcAdapter
+import android.nfc.Tag
 import android.nfc.tech.IsoDep
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.TapcardTransportProtocol
 import org.bitcoinppl.cove_core.tapcard.TapSigner
 import org.bitcoinppl.cove_core.types.Psbt
+import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 /**
@@ -13,10 +20,12 @@ import kotlin.coroutines.resumeWithException
  * ported from iOS TapSignerNFC.swift
  */
 class TapSignerNfcHelper(
+    private val activity: Activity,
     private val tapSigner: TapSigner,
 ) {
     private val tag = "TapSignerNfcHelper"
     private var lastResponse: TapSignerResponse? = null
+    private val nfcAdapter: NfcAdapter? = NfcAdapter.getDefaultAdapter(activity)
 
     suspend fun setupTapSigner(
         factoryPin: String,
@@ -32,8 +41,9 @@ class TapSignerNfcHelper(
     }
 
     suspend fun derive(pin: String): DeriveInfo {
-        // placeholder implementation - actual NFC not yet implemented
-        throw Exception("NFC operations not yet implemented for Android")
+        return performTapSignerCmd(TapSignerCmd.Derive(pin)) { response ->
+            (response as? TapSignerResponse.Import)?.v1
+        }
     }
 
     suspend fun changePin(
@@ -67,23 +77,90 @@ class TapSignerNfcHelper(
         successResult: (TapSignerResponse?) -> T?,
     ): T =
         suspendCancellableCoroutine { continuation ->
-            // request NFC adapter to scan
-            // this would integrate with Android's NFC system
-            // for now, we'll throw an error indicating NFC not implemented
-            continuation.resumeWithException(
-                Exception("NFC operations not yet implemented for Android"),
+            if (nfcAdapter == null) {
+                continuation.resumeWithException(Exception("NFC not available on this device"))
+                return@suspendCancellableCoroutine
+            }
+
+            if (!nfcAdapter.isEnabled) {
+                continuation.resumeWithException(Exception("NFC is disabled. Please enable NFC in settings"))
+                return@suspendCancellableCoroutine
+            }
+
+            android.util.Log.d(tag, "Starting NFC scan for command: $cmd")
+
+            // enable reader mode to detect ISO7816 tags
+            val readerCallback = NfcAdapter.ReaderCallback { tag ->
+                android.util.Log.d(this.tag, "NFC tag detected")
+
+                // execute NFC operation in coroutine scope
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        val result = executeNfcCommand(tag, cmd, successResult)
+                        continuation.resume(result)
+                    } catch (e: Exception) {
+                        android.util.Log.e(this@TapSignerNfcHelper.tag, "NFC command failed", e)
+                        continuation.resumeWithException(e)
+                    } finally {
+                        nfcAdapter.disableReaderMode(activity)
+                    }
+                }
+            }
+
+            nfcAdapter.enableReaderMode(
+                activity,
+                readerCallback,
+                NfcAdapter.FLAG_READER_NFC_A or NfcAdapter.FLAG_READER_SKIP_NDEF_CHECK,
+                null
             )
 
-            // TODO: implement NFC scanning and tag detection
-            // the actual implementation would:
-            // 1. use NfcAdapter to enable reader mode
-            // 2. detect ISO7816 tags
-            // 3. create TapCardTransport from IsoDep
-            // 4. create TapSignerReader with transport and cmd
-            // 5. run the reader and get response
-            // 6. call successResult with response
-            // 7. handle errors appropriately
+            // handle cancellation
+            continuation.invokeOnCancellation {
+                android.util.Log.d(tag, "NFC scan cancelled")
+                nfcAdapter.disableReaderMode(activity)
+            }
         }
+
+    private suspend fun <T> executeNfcCommand(
+        tag: Tag,
+        cmd: TapSignerCmd,
+        successResult: (TapSignerResponse?) -> T?,
+    ): T {
+        val isoDep = IsoDep.get(tag)
+            ?: throw Exception("Tag is not ISO7816 compatible")
+
+        try {
+            isoDep.connect()
+            isoDep.timeout = 2000 // 2 seconds timeout for TapSigner operations
+
+            android.util.Log.d(this.tag, "IsoDep connected, creating transport")
+
+            // create transport and reader
+            val transport = TapCardTransport(isoDep)
+            val reader = tapSignerReaderNew(transport, cmd)
+
+            android.util.Log.d(this.tag, "Running TapSigner command")
+            val response = reader.run()
+            lastResponse = response
+
+            android.util.Log.d(this.tag, "Command completed, response: ${response::class.simpleName}")
+
+            val result = successResult(response)
+            if (result != null) {
+                return result
+            } else {
+                throw Exception("Unexpected response type: ${response::class.simpleName}")
+            }
+        } finally {
+            try {
+                if (isoDep.isConnected) {
+                    isoDep.close()
+                }
+            } catch (e: Exception) {
+                android.util.Log.w(this.tag, "Error closing IsoDep", e)
+            }
+        }
+    }
 
     private suspend fun doSetupTapSigner(
         factoryPin: String,
@@ -93,19 +170,55 @@ class TapSignerNfcHelper(
         var errorCount = 0
         var lastError: Exception? = null
 
-        return suspendCancellableCoroutine { continuation ->
-            // TODO: implement setup flow similar to iOS
-            // the flow would:
-            // 1. create SetupCmd
-            // 2. start NFC scanning
-            // 3. create reader and run command
-            // 4. handle incomplete responses with continueSetup
-            // 5. retry on errors up to 5 times
-            // 6. resume continuation with result
+        // create initial setup command
+        val setupCmd = try {
+            SetupCmd.tryNew(factoryPin, newPin, chainCode)
+        } catch (e: Exception) {
+            android.util.Log.e(tag, "Failed to create setup command", e)
+            throw e
+        }
 
-            continuation.resumeWithException(
-                Exception("NFC operations not yet implemented for Android"),
-            )
+        // perform initial setup
+        var response = try {
+            performTapSignerCmd(TapSignerCmd.Setup(setupCmd)) { resp ->
+                (resp as? TapSignerResponse.Setup)?.v1
+            }
+        } catch (e: Exception) {
+            android.util.Log.e(tag, "Setup failed", e)
+            throw e
+        }
+
+        // if already complete, return
+        if (response is SetupCmdResponse.Complete) {
+            return response
+        }
+
+        // continue setup for multi-step flow
+        while (true) {
+            lastResponse = TapSignerResponse.Setup(response)
+
+            val continueResult = try {
+                continueSetup(response)
+            } catch (e: Exception) {
+                errorCount++
+                lastError = e
+                android.util.Log.e(tag, "Continue setup failed (attempt $errorCount)", e)
+
+                if (errorCount > 5) {
+                    android.util.Log.e(tag, "Max retries exceeded, last error: $lastError")
+                    throw e
+                }
+                continue
+            }
+
+            when (continueResult) {
+                is SetupCmdResponse.Complete -> {
+                    return continueResult
+                }
+                else -> {
+                    response = continueResult
+                }
+            }
         }
     }
 
@@ -120,11 +233,10 @@ class TapSignerNfcHelper(
 
         if (cmd == null) return response
 
-        return suspendCancellableCoroutine { continuation ->
-            // TODO: implement continue setup
-            continuation.resumeWithException(
-                Exception("NFC operations not yet implemented for Android"),
-            )
+        android.util.Log.d(tag, "Continuing setup with next command")
+
+        return performTapSignerCmd(TapSignerCmd.Setup(cmd)) { resp ->
+            (resp as? TapSignerResponse.Setup)?.v1
         }
     }
 }

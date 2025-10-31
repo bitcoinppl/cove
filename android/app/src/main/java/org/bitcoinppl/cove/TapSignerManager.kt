@@ -1,5 +1,6 @@
 package org.bitcoinppl.cove.tapsigner
 
+import android.app.Activity
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -13,6 +14,7 @@ import java.util.UUID
  */
 @Stable
 class TapSignerManager(
+    private val activity: Activity,
     initialRoute: org.bitcoinppl.cove_core.TapSignerRoute,
 ) {
     private val tag = "TapSignerManager"
@@ -34,7 +36,7 @@ class TapSignerManager(
             return nfc!!
         }
 
-        val newNfc = TapSignerNfcHelper(tapSigner)
+        val newNfc = TapSignerNfcHelper(activity, tapSigner)
         nfc = newNfc
         nfcFor = tapSigner
         return newNfc

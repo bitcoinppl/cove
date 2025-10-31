@@ -1041,6 +1041,8 @@ external fun uniffi_cove_checksum_func_tap_signer_error_is_auth_error(
 ): Short
 external fun uniffi_cove_checksum_func_tap_signer_error_is_no_backup_error(
 ): Short
+external fun uniffi_cove_checksum_func_tap_signer_reader_new(
+): Short
 external fun uniffi_cove_checksum_func_tap_signer_response_backup_response(
 ): Short
 external fun uniffi_cove_checksum_func_tap_signer_response_change_response(
@@ -1812,10 +1814,10 @@ internal object UniffiLib {
         uniffiCallbackInterfaceSendFlowManagerReconciler.register(this)
         uniffiCallbackInterfaceTapcardTransportProtocol.register(this)
         uniffiCallbackInterfaceWalletManagerReconciler.register(this)
-        org.bitcoinppl.cove_core.types.uniffiEnsureInitialized()
-        org.bitcoinppl.cove_core.nfc.uniffiEnsureInitialized()
-        org.bitcoinppl.cove_core.device.uniffiEnsureInitialized()
         org.bitcoinppl.cove_core.tapcard.uniffiEnsureInitialized()
+        org.bitcoinppl.cove_core.types.uniffiEnsureInitialized()
+        org.bitcoinppl.cove_core.device.uniffiEnsureInitialized()
+        org.bitcoinppl.cove_core.nfc.uniffiEnsureInitialized()
         
     }
     external fun uniffi_cove_fn_clone_addressargs(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -2908,6 +2910,8 @@ external fun uniffi_cove_fn_func_tap_signer_error_is_auth_error(`error`: RustBuf
 ): Byte
 external fun uniffi_cove_fn_func_tap_signer_error_is_no_backup_error(`error`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
+external fun uniffi_cove_fn_func_tap_signer_reader_new(`transport`: Long,`cmd`: RustBuffer.ByValue,
+): Long
 external fun uniffi_cove_fn_func_tap_signer_response_backup_response(`response`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_func_tap_signer_response_change_response(`response`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -3153,6 +3157,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_tap_signer_error_is_no_backup_error() != 60157.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_func_tap_signer_reader_new() != 50779.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_tap_signer_response_backup_response() != 38008.toShort()) {
@@ -42467,6 +42474,24 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
     )
     }
     
+
+        /**
+         * Create a new TapSignerReader
+         */
+    @Throws(TapSignerReaderException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+     suspend fun `tapSignerReaderNew`(`transport`: TapcardTransportProtocol, `cmd`: TapSignerCmd?) : TapSignerReader {
+        return uniffiRustCallAsync(
+        UniffiLib.uniffi_cove_fn_func_tap_signer_reader_new(FfiConverterTypeTapcardTransportProtocol.lower(`transport`),FfiConverterOptionalTypeTapSignerCmd.lower(`cmd`),),
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_u64(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_u64(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_u64(future) },
+        // lift function
+        { FfiConverterTypeTapSignerReader.lift(it) },
+        // Error FFI converter
+        TapSignerReaderException.ErrorHandler,
+    )
+    }
  fun `tapSignerResponseBackupResponse`(`response`: TapSignerResponse): kotlin.ByteArray? {
             return FfiConverterOptionalByteArray.lift(
     uniffiRustCall() { _status ->

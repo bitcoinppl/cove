@@ -1,9 +1,11 @@
 package org.bitcoinppl.cove
 
+import android.app.Activity
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import org.bitcoinppl.cove.tapsigner.*
 import org.bitcoinppl.cove_core.TapSignerRoute
 
@@ -18,7 +20,8 @@ fun TapSignerContainer(
     modifier: Modifier = Modifier,
 ) {
     val app = App
-    val manager = remember(route) { TapSignerManager(route) }
+    val activity = LocalContext.current as Activity
+    val manager = remember(route, activity) { TapSignerManager(activity, route) }
 
     // use current route or last in path
     val currentRoute = manager.path.lastOrNull() ?: manager.initialRoute
