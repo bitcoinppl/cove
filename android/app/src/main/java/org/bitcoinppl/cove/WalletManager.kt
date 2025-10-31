@@ -178,6 +178,10 @@ class WalletManager : WalletManagerReconciler, Closeable {
         return details
     }
 
+    fun updateTransactionDetailsCache(txId: TxId, details: TransactionDetails) {
+        transactionDetailsCache[txId] = details
+    }
+
     private suspend fun updateFiatBalance() {
         try {
             val fiatBal = rust.balanceInFiat()

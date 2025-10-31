@@ -78,14 +78,18 @@ fun TransactionLabelView(
     fun updateDetails() {
         scope.launch {
             try {
-                val details = manager.transactionDetails(txId = txId)
+                // bypass cache to get fresh label data from rust
+                val details = manager.rust.transactionDetails(txId)
                 currentLabel = details.transactionLabel()
+
+                // update the cache so future reads get the updated label
+                manager.updateTransactionDetailsCache(txId, details)
             } catch (e: Exception) {
                 android.util.Log.e(TAG, "Error getting updated label", e)
                 val message = context.getString(R.string.label_update_error, e.message ?: "Unknown error")
                 snackbarHostState.showSnackbar(
                     message = message,
-                    duration = SnackbarDuration.Short
+                    duration = SnackbarDuration.Short,
                 )
             }
         }
@@ -118,7 +122,7 @@ fun TransactionLabelView(
                 val message = context.getString(R.string.label_save_error, e.message ?: "Unknown error")
                 snackbarHostState.showSnackbar(
                     message = message,
-                    duration = SnackbarDuration.Short
+                    duration = SnackbarDuration.Short,
                 )
             } finally {
                 isOperationInProgress = false
@@ -143,7 +147,7 @@ fun TransactionLabelView(
                 val message = context.getString(R.string.label_delete_error, e.message ?: "Unknown error")
                 snackbarHostState.showSnackbar(
                     message = message,
-                    duration = SnackbarDuration.Short
+                    duration = SnackbarDuration.Short,
                 )
             } finally {
                 isOperationInProgress = false
