@@ -111,12 +111,12 @@ impl LabelManager {
         label: String,
         origin: Option<String>,
     ) -> Result<()> {
-        // if the label is empty, don't do anything
-        if label.is_empty() {
-            return Ok(());
-        }
-
         let label = label.trim();
+
+        // if the label is empty, delete the label
+        if label.is_empty() {
+            return self.delete_labels_for_txn(Arc::new(details.tx_id));
+        }
         let tx_id = details.tx_id;
         let insert_or_update =
             self.insert_or_update_transaction_label(&tx_id, label.to_string(), origin)?;

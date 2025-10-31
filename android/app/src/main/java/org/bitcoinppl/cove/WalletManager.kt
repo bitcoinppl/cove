@@ -16,6 +16,7 @@ import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.tapcard.TapSigner
 import org.bitcoinppl.cove_core.types.*
 import java.io.Closeable
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -56,7 +57,7 @@ class WalletManager : WalletManagerReconciler, Closeable {
     var sendFlowErrorAlert by mutableStateOf<TaggedItem<SendFlowErrorAlert>?>(null)
 
     // cached transaction details
-    private val transactionDetailsCache = mutableMapOf<TxId, TransactionDetails>()
+    private val transactionDetailsCache = ConcurrentHashMap<TxId, TransactionDetails>()
 
     // computed properties
     val unit: String
@@ -176,6 +177,10 @@ class WalletManager : WalletManagerReconciler, Closeable {
         val details = rust.transactionDetails(txId)
         transactionDetailsCache[txId] = details
         return details
+    }
+
+    fun updateTransactionDetailsCache(txId: TxId, details: TransactionDetails) {
+        transactionDetailsCache[txId] = details
     }
 
     private suspend fun updateFiatBalance() {
