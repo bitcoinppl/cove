@@ -63,7 +63,7 @@ fun TransactionLabelView(
     val focusRequester = remember { FocusRequester() }
     val context = LocalContext.current
 
-    val labelManager = remember { manager.rust.labelManager() }
+    val labelManager = remember(manager.id) { manager.rust.labelManager() }
     val txId: TxId = transactionDetails.txId()
 
     // update current label when transaction details change
