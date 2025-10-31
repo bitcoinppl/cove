@@ -16,6 +16,7 @@ import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.tapcard.TapSigner
 import org.bitcoinppl.cove_core.types.*
 import java.io.Closeable
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -56,7 +57,7 @@ class WalletManager : WalletManagerReconciler, Closeable {
     var sendFlowErrorAlert by mutableStateOf<TaggedItem<SendFlowErrorAlert>?>(null)
 
     // cached transaction details
-    private val transactionDetailsCache = mutableMapOf<TxId, TransactionDetails>()
+    private val transactionDetailsCache = ConcurrentHashMap<TxId, TransactionDetails>()
 
     // computed properties
     val unit: String
