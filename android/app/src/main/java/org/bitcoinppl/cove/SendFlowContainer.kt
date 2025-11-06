@@ -129,7 +129,9 @@ private fun SendFlowRouteToScreen(
             SendScreen(
                 onBack = { app.popRoute() },
                 onNext = {
-                    // TODO: navigate to confirmation screen after validation
+                    if (sendFlowManager.validate(displayAlert = true)) {
+                        sendFlowManager.dispatch(SendFlowManagerAction.FinalizeAndGoToNextScreen)
+                    }
                 },
                 onScanQr = {
                     presenter.sheetState = TaggedItem(SendFlowPresenter.SheetState.Qr)
@@ -156,10 +158,11 @@ private fun SendFlowRouteToScreen(
                         FiatOrBtc.FIAT -> "" // don't show denomination in fiat mode, it's part of the amount
                         else -> walletManager.unit
                     },
-                dollarEquivalentText = when (walletManager.walletMetadata?.fiatOrBtc) {
-                    FiatOrBtc.FIAT -> sendFlowManager.sendAmountBtc
-                    else -> sendFlowManager.sendAmountFiat
-                },
+                dollarEquivalentText =
+                    when (walletManager.walletMetadata?.fiatOrBtc) {
+                        FiatOrBtc.FIAT -> sendFlowManager.sendAmountBtc
+                        else -> sendFlowManager.sendAmountFiat
+                    },
                 initialAddress = sendFlowManager.enteringAddress,
                 accountShort = walletManager.walletMetadata?.masterFingerprint?.asUppercase()?.take(8) ?: "",
                 feeEta =
