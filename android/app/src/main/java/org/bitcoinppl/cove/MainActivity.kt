@@ -16,6 +16,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -32,7 +33,6 @@ class MainActivity : ComponentActivity() {
         setContent {
             CoveTheme {
                 val app = remember { AppManager.getInstance() }
-                var currentRoute by remember { mutableStateOf(app.router.default) }
                 var initError by remember { mutableStateOf<String?>(null) }
 
                 // initialize async runtime on start
@@ -46,11 +46,6 @@ class MainActivity : ComponentActivity() {
                         Log.e(TAG, errorMsg, e)
                         initError = errorMsg
                     }
-                }
-
-                // update route when default changes
-                LaunchedEffect(app.router.default) {
-                    currentRoute = app.router.default
                 }
 
                 // show error, loading, or main UI
@@ -78,7 +73,9 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                     app.asyncRuntimeReady -> {
-                        RouteView(app = app, route = currentRoute)
+                        key(app.routeId) {
+                            RouteView(app = app, route = app.router.currentRoute)
+                        }
                     }
                     else -> {
                         Box(
