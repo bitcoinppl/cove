@@ -16294,6 +16294,78 @@ public func FfiConverterTypeImportWalletManagerReconcileMessage_lower(_ value: I
 }
 
 
+
+public enum InitError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
+
+    
+    
+    case RootDataDirAlreadySet(message: String)
+    
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
+}
+
+#if compiler(>=6)
+extension InitError: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeInitError: FfiConverterRustBuffer {
+    typealias SwiftType = InitError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> InitError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        
+
+        
+        case 1: return .RootDataDirAlreadySet(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: InitError, into buf: inout [UInt8]) {
+        switch value {
+
+        
+
+        
+        case .RootDataDirAlreadySet(_ /* message is ignored*/):
+            writeInt(&buf, Int32(1))
+
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeInitError_lift(_ buf: RustBuffer) throws -> InitError {
+    return try FfiConverterTypeInitError.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeInitError_lower(_ value: InitError) -> RustBuffer {
+    return FfiConverterTypeInitError.lower(value)
+}
+
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -25864,6 +25936,16 @@ public func pricesAreEqual(lhs: PriceResponse, rhs: PriceResponse) -> Bool  {
     )
 })
 }
+/**
+ * set root data directory before any database access
+ * required for Android to specify app-specific storage path
+ */
+public func setRootDataDir(path: String)throws   {try rustCallWithError(FfiConverterTypeInitError_lift) {
+    uniffi_cove_fn_func_set_root_data_dir(
+        FfiConverterString.lower(path),$0
+    )
+}
+}
 public func stringOrDataTryIntoMultiFormat(stringOrData: StringOrData)throws  -> MultiFormat  {
     return try  FfiConverterTypeMultiFormat_lift(try rustCallWithError(FfiConverterTypeMultiFormatError_lift) {
     uniffi_cove_fn_func_string_or_data_try_into_multi_format(
@@ -26111,6 +26193,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_prices_are_equal() != 41102) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_set_root_data_dir() != 56109) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_string_or_data_try_into_multi_format() != 34953) {
