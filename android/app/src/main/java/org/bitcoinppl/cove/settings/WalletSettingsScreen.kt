@@ -27,12 +27,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -73,6 +75,8 @@ fun WalletSettingsScreen(
     modifier: Modifier = Modifier,
 ) {
     val metadata = manager.walletMetadata
+    var showDeleteConfirmation by remember { mutableStateOf(false) }
+    var deleteError by remember { mutableStateOf<String?>(null) }
 
     // validate metadata on appear and disappear
     LaunchedEffect(Unit) {
@@ -219,12 +223,7 @@ fun WalletSettingsScreen(
                                     .fillMaxWidth()
                                     .padding(all = 8.dp)
                                     .clickable(true) {
-                                        try {
-                                            manager.rust.deleteWallet()
-                                            app.popRoute()
-                                        } catch (e: Exception) {
-                                            Log.e("WalletSettingsScreen", "failed to delete wallet", e)
-                                        }
+                                        showDeleteConfirmation = true
                                     },
                             text = stringResource(R.string.label_wallet_delete),
                             style = MaterialTheme.typography.bodyLarge,
@@ -236,6 +235,50 @@ fun WalletSettingsScreen(
             }
         },
     )
+
+    // confirmation dialog for wallet deletion
+    if (showDeleteConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmation = false },
+            title = { Text("Are you sure?") },
+            text = { Text("This action cannot be undone.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteConfirmation = false
+                        try {
+                            manager.rust.deleteWallet()
+                            app.popRoute()
+                        } catch (e: Exception) {
+                            deleteError = e.message ?: "Failed to delete wallet"
+                            Log.e("WalletSettingsScreen", "failed to delete wallet", e)
+                        }
+                    },
+                ) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirmation = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
+    // error dialog for deletion failures
+    deleteError?.let { error ->
+        AlertDialog(
+            onDismissRequest = { deleteError = null },
+            title = { Text("Failed to Delete Wallet") },
+            text = { Text(error) },
+            confirmButton = {
+                TextButton(onClick = { deleteError = null }) {
+                    Text("OK")
+                }
+            },
+        )
+    }
 }
 
 @Preview
