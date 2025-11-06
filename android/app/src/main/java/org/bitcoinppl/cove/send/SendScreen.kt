@@ -61,6 +61,8 @@ private fun SendScreenPreview() {
         feeAmount = "451 sats",
         totalSpendingCrypto = "26,006 sats",
         totalSpendingFiat = "≈ $29.38",
+        onAmountChanged = {},
+        onAddressChanged = {},
         snackbarHostState = snack,
     )
 }
@@ -85,6 +87,8 @@ fun SendScreen(
     feeAmount: String,
     totalSpendingCrypto: String,
     totalSpendingFiat: String,
+    onAmountChanged: (String) -> Unit,
+    onAddressChanged: (String) -> Unit,
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
     Scaffold(
@@ -145,11 +149,13 @@ fun SendScreen(
                         initialAmount = amountText,
                         denomination = amountDenomination,
                         dollarText = dollarEquivalentText,
+                        onAmountChanged = onAmountChanged,
                     )
                     HorizontalDivider(color = CoveColor.DividerLight, thickness = 1.dp)
                     AddressWidget(
                         onScanQr = onScanQr,
                         initialAddress = initialAddress,
+                        onAddressChanged = onAddressChanged,
                     )
                     HorizontalDivider(color = CoveColor.DividerLight, thickness = 1.dp)
                     SpendingWidget(
@@ -242,8 +248,17 @@ private fun AmountWidget(
     initialAmount: String,
     denomination: String,
     dollarText: String,
+    onAmountChanged: (String) -> Unit,
 ) {
     var amount by remember { mutableStateOf(initialAmount) }
+
+    // bidirectional sync: update local state when parent state changes
+    androidx.compose.runtime.LaunchedEffect(initialAmount) {
+        if (amount != initialAmount) {
+            amount = initialAmount
+        }
+    }
+
     Column(modifier = Modifier.fillMaxWidth()) {
         Spacer(Modifier.height(20.dp))
         Text(
@@ -266,7 +281,10 @@ private fun AmountWidget(
             Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
                 BasicTextField(
                     value = amount,
-                    onValueChange = { amount = it },
+                    onValueChange = { newValue ->
+                        amount = newValue
+                        onAmountChanged(newValue)
+                    },
                     textStyle =
                         TextStyle(
                             color = CoveColor.TextPrimary,
@@ -306,8 +324,17 @@ private fun AmountWidget(
 private fun AddressWidget(
     onScanQr: () -> Unit,
     initialAddress: String,
+    onAddressChanged: (String) -> Unit,
 ) {
     var address by remember { mutableStateOf(initialAddress) }
+
+    // bidirectional sync: update local state when parent state changes
+    androidx.compose.runtime.LaunchedEffect(initialAddress) {
+        if (address != initialAddress) {
+            address = initialAddress
+        }
+    }
+
     Column(modifier = Modifier.fillMaxWidth()) {
         Spacer(Modifier.height(20.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -335,7 +362,10 @@ private fun AddressWidget(
         Spacer(Modifier.height(10.dp))
         BasicTextField(
             value = address,
-            onValueChange = { address = it },
+            onValueChange = { newValue ->
+                address = newValue
+                onAddressChanged(newValue)
+            },
             textStyle =
                 TextStyle(
                     color = CoveColor.TextPrimary,

@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import org.bitcoinppl.cove.flow.new_wallet.NewWalletSelectScreen
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
 
@@ -20,13 +21,18 @@ fun NewWalletContainer(
 ) {
     when (route) {
         is NewWalletRoute.Select -> {
-            // TODO: implement NewWalletSelectScreen
-            Box(
-                modifier = modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center,
-            ) {
-                androidx.compose.material3.Text("New Wallet Select - TODO")
-            }
+            NewWalletSelectScreen(
+                onBack = { app.popRoute() },
+                onOpenNewHotWallet = {
+                    app.pushRoute(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Select)))
+                },
+                onOpenQrScan = {
+                    app.pushRoute(Route.NewWallet(NewWalletRoute.ColdWallet(ColdWalletRoute.QR_CODE)))
+                },
+                onOpenNfcScan = {
+                    // TODO: implement NFC scan route when available
+                },
+            )
         }
         is NewWalletRoute.HotWallet -> {
             NewHotWalletContainer(
