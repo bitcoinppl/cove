@@ -102,7 +102,7 @@ fun WalletSettingsScreen(
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.error,
                 )
-                CustomSpacer(height = 16.dp)
+                CustomSpacer(height = 16.dp, paddingValues = PaddingValues())
                 TextButton(onClick = { app.popRoute() }) {
                     Text("Go Back")
                 }
