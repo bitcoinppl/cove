@@ -65,6 +65,7 @@ import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.WalletColor
 import org.bitcoinppl.cove_core.WalletManagerAction
 import org.bitcoinppl.cove_core.WalletSettingsRoute
+import org.bitcoinppl.cove_core.WalletType
 import org.bitcoinppl.cove_core.defaultWalletColors
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -89,6 +90,27 @@ fun WalletSettingsScreen(
         }
     }
 
+    // show error if metadata is not available
+    if (metadata == null) {
+        Box(
+            modifier = modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "Failed to load wallet settings",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                CustomSpacer(height = 16.dp)
+                TextButton(onClick = { app.popRoute() }) {
+                    Text("Go Back")
+                }
+            }
+        }
+        return
+    }
+
     Scaffold(
         modifier =
             modifier
@@ -103,7 +125,7 @@ fun WalletSettingsScreen(
                     ) {
                         Text(
                             style = MaterialTheme.typography.bodyLarge,
-                            text = metadata?.name ?: "",
+                            text = metadata.name,
                             textAlign = TextAlign.Center,
                         )
                     }
@@ -137,7 +159,7 @@ fun WalletSettingsScreen(
                     ) {
                         InfoRow(
                             stringResource(R.string.label_wallet_network),
-                            metadata?.network?.toString() ?: "",
+                            metadata.network.toString(),
                         )
                         ListSpacer()
                         InfoRow(
@@ -147,7 +169,7 @@ fun WalletSettingsScreen(
                         ListSpacer()
                         InfoRow(
                             stringResource(R.string.label_wallet_type),
-                            metadata?.walletType?.toString() ?: "",
+                            metadata.walletType.toString(),
                         )
                     }
                 }
@@ -160,23 +182,21 @@ fun WalletSettingsScreen(
                     ) {
                         ClickableInfoRow(
                             stringResource(R.string.label_wallet_name),
-                            metadata?.name ?: "",
+                            metadata.name,
                             Icons.AutoMirrored.Default.KeyboardArrowRight,
                         ) {
-                            metadata?.id?.let { id ->
-                                app.pushRoute(
-                                    Route.Settings(
-                                        SettingsRoute.Wallet(
-                                            id = id,
-                                            route = WalletSettingsRoute.CHANGE_NAME,
-                                        ),
+                            app.pushRoute(
+                                Route.Settings(
+                                    SettingsRoute.Wallet(
+                                        id = metadata.id,
+                                        route = WalletSettingsRoute.CHANGE_NAME,
                                     ),
-                                )
-                            }
+                                ),
+                            )
                         }
                         ListSpacer()
                         WalletColorSelector(
-                            selectedWalletColor = metadata?.color ?: WalletColor.Orange,
+                            selectedWalletColor = metadata.color,
                             onColorChange = { color ->
                                 manager.dispatch(WalletManagerAction.UpdateColor(color))
                             },
@@ -184,7 +204,7 @@ fun WalletSettingsScreen(
                         ListSpacer()
                         SwitchRow(
                             stringResource(R.string.label_wallet_show_transaction_labels),
-                            metadata?.showLabels ?: false,
+                            metadata.showLabels,
                         ) { _ ->
                             manager.dispatch(WalletManagerAction.ToggleShowLabels)
                         }
@@ -202,21 +222,22 @@ fun WalletSettingsScreen(
                                 .padding(vertical = 8.dp)
                                 .padding(start = 8.dp),
                     ) {
-                        Text(
-                            modifier =
-                                Modifier
-                                    .fillMaxWidth()
-                                    .padding(all = 8.dp)
-                                    .clickable(true) {
-                                        metadata?.id?.let { id ->
-                                            app.pushRoute(Route.SecretWords(id))
-                                        }
-                                    },
-                            text = stringResource(R.string.label_wallet_view_secrets),
-                            style = MaterialTheme.typography.bodyMedium,
-                            textAlign = TextAlign.Start,
-                        )
-                        ListSpacer()
+                        // only show for hot wallets that have a mnemonic
+                        if (metadata.walletType == WalletType.HOT) {
+                            Text(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .padding(all = 8.dp)
+                                        .clickable(true) {
+                                            app.pushRoute(Route.SecretWords(metadata.id))
+                                        },
+                                text = stringResource(R.string.label_wallet_view_secrets),
+                                style = MaterialTheme.typography.bodyMedium,
+                                textAlign = TextAlign.Start,
+                            )
+                            ListSpacer()
+                        }
                         Text(
                             modifier =
                                 Modifier
@@ -245,11 +266,12 @@ fun WalletSettingsScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        showDeleteConfirmation = false
                         try {
                             manager.rust.deleteWallet()
+                            showDeleteConfirmation = false
                             app.popRoute()
                         } catch (e: Exception) {
+                            showDeleteConfirmation = false
                             deleteError = e.message ?: "Failed to delete wallet"
                             Log.e("WalletSettingsScreen", "failed to delete wallet", e)
                         }
