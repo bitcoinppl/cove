@@ -114,10 +114,18 @@ fun SelectedWalletContainer(
         else ->
             WalletTransactionsScreen(
                 onBack = { app.popRoute() },
-                onSend = { /* TODO: implement send */ },
-                onReceive = { /* TODO: implement receive */ },
-                onQrCode = { /* TODO: implement QR code */ },
-                onMore = { /* TODO: implement more */ },
+                onSend = {
+                    app.pushRoute(Route.Send(SendRoute.SetAmount(id, null, null)))
+                },
+                onReceive = {
+                    // TODO: implement receive address screen/sheet
+                },
+                onQrCode = {
+                    // TODO: implement QR code scanner
+                },
+                onMore = {
+                    // TODO: implement more options menu
+                },
                 // TODO: get from theme
                 isDarkList = false,
                 manager = wm,

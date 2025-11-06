@@ -12,6 +12,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import org.bitcoinppl.cove.send.SendScreen
+import org.bitcoinppl.cove.send.send_confirmation.SendConfirmationScreen
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
 
@@ -124,13 +126,40 @@ private fun SendFlowRouteToScreen(
 ) {
     when (sendRoute) {
         is SendRoute.SetAmount -> {
-            // TODO: implement SendScreen with manager parameters
-            Box(
-                modifier = modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center,
-            ) {
-                androidx.compose.material3.Text("Send Set Amount - TODO")
-            }
+            SendScreen(
+                onBack = { app.popRoute() },
+                onNext = {
+                    // TODO: navigate to confirmation screen after validation
+                },
+                onScanQr = {
+                    presenter.sheetState = TaggedItem(SendFlowPresenter.SheetState.Qr)
+                },
+                onChangeSpeed = {
+                    presenter.sheetState = TaggedItem(SendFlowPresenter.SheetState.Fee)
+                },
+                onToggleBalanceVisibility = {
+                    // TODO: implement balance visibility toggle
+                },
+                isBalanceHidden = false, // TODO: get from app preferences
+                balanceAmount = walletManager.amountFmt(walletManager.balance.spendable()),
+                balanceDenomination = walletManager.unit,
+                amountText = sendFlowManager.enteringBtcAmount.ifEmpty { sendFlowManager.enteringFiatAmount },
+                amountDenomination = walletManager.unit,
+                dollarEquivalentText = sendFlowManager.sendAmountFiat,
+                initialAddress = sendFlowManager.enteringAddress,
+                accountShort = walletManager.walletMetadata?.masterFingerprint?.asUppercase()?.take(8) ?: "",
+                feeEta = sendFlowManager.selectedFeeRate?.let {
+                    when (it.feeSpeed()) {
+                        is FeeSpeed.Slow -> "~1 hour"
+                        is FeeSpeed.Medium -> "~30 minutes"
+                        is FeeSpeed.Fast -> "~10 minutes"
+                        is FeeSpeed.Custom -> "Custom"
+                    }
+                } ?: "~30 minutes",
+                feeAmount = sendFlowManager.totalFeeString,
+                totalSpendingCrypto = sendFlowManager.totalSpentInBtc,
+                totalSpendingFiat = sendFlowManager.totalSpentInFiat,
+            )
         }
         is SendRoute.CoinControlSetAmount -> {
             // TODO: implement coin control set amount screen
@@ -142,13 +171,27 @@ private fun SendFlowRouteToScreen(
             }
         }
         is SendRoute.Confirm -> {
-            // TODO: implement send confirmation screen
-            Box(
-                modifier = modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center,
-            ) {
-                androidx.compose.material3.Text("Send Confirm - TODO")
-            }
+            val details = sendRoute.v1.details
+            SendConfirmationScreen(
+                onBack = { app.popRoute() },
+                onSwipeToSend = {
+                    // TODO: implement sign and broadcast
+                },
+                onToggleBalanceVisibility = {
+                    // TODO: implement balance visibility toggle
+                },
+                isBalanceHidden = false, // TODO: get from app preferences
+                balanceAmount = walletManager.amountFmt(walletManager.balance.spendable()),
+                balanceDenomination = walletManager.unit,
+                sendingAmount = walletManager.amountFmt(details.sendingAmount()),
+                sendingAmountDenomination = walletManager.unit,
+                dollarEquivalentText = sendFlowManager.sendAmountFiat,
+                accountShort = walletManager.walletMetadata?.masterFingerprint?.asUppercase()?.take(8) ?: "",
+                address = details.sendingTo().string(),
+                networkFee = walletManager.amountFmtUnit(details.feeTotal()),
+                willReceive = walletManager.amountFmtUnit(details.sendingAmount()),
+                willPay = walletManager.amountFmtUnit(details.spendingAmount()),
+            )
         }
         is SendRoute.HardwareExport -> {
             // TODO: implement hardware export screen
