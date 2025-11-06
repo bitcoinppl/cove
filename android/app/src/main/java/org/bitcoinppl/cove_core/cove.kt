@@ -1033,6 +1033,8 @@ external fun uniffi_cove_checksum_func_preview_new_wrapped_found_address(
 ): Short
 external fun uniffi_cove_checksum_func_prices_are_equal(
 ): Short
+external fun uniffi_cove_checksum_func_set_root_data_dir(
+): Short
 external fun uniffi_cove_checksum_func_string_or_data_try_into_multi_format(
 ): Short
 external fun uniffi_cove_checksum_func_tap_signer_confirm_pin_args_new_from_new_pin(
@@ -1813,9 +1815,9 @@ internal object UniffiLib {
         uniffiCallbackInterfaceTapcardTransportProtocol.register(this)
         uniffiCallbackInterfaceWalletManagerReconciler.register(this)
         org.bitcoinppl.cove_core.types.uniffiEnsureInitialized()
+        org.bitcoinppl.cove_core.tapcard.uniffiEnsureInitialized()
         org.bitcoinppl.cove_core.nfc.uniffiEnsureInitialized()
         org.bitcoinppl.cove_core.device.uniffiEnsureInitialized()
-        org.bitcoinppl.cove_core.tapcard.uniffiEnsureInitialized()
         
     }
     external fun uniffi_cove_fn_clone_addressargs(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -2900,6 +2902,8 @@ external fun uniffi_cove_fn_func_preview_new_wrapped_found_address(uniffi_out_er
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_func_prices_are_equal(`lhs`: Long,`rhs`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
+external fun uniffi_cove_fn_func_set_root_data_dir(`path`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
 external fun uniffi_cove_fn_func_string_or_data_try_into_multi_format(`stringOrData`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_func_tap_signer_confirm_pin_args_new_from_new_pin(`args`: RustBuffer.ByValue,`newPin`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -3141,6 +3145,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_prices_are_equal() != 41102.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_func_set_root_data_dir() != 56109.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_string_or_data_try_into_multi_format() != 34953.toShort()) {
@@ -30136,6 +30143,49 @@ public object FfiConverterTypeImportWalletManagerReconcileMessage: FfiConverterR
 
 
 
+
+
+sealed class InitException(message: String): kotlin.Exception(message) {
+        
+        class RootDataDirAlreadySet(message: String) : InitException(message)
+        
+
+
+    companion object ErrorHandler : UniffiRustCallStatusErrorHandler<InitException> {
+        override fun lift(error_buf: RustBuffer.ByValue): InitException = FfiConverterTypeInitError.lift(error_buf)
+    }
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeInitError : FfiConverterRustBuffer<InitException> {
+    override fun read(buf: ByteBuffer): InitException {
+        
+            return when(buf.getInt()) {
+            1 -> InitException.RootDataDirAlreadySet(FfiConverterString.read(buf))
+            else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
+        }
+        
+    }
+
+    override fun allocationSize(value: InitException): ULong {
+        return 4UL
+    }
+
+    override fun write(value: InitException, buf: ByteBuffer) {
+        when(value) {
+            is InitException.RootDataDirAlreadySet -> {
+                buf.putInt(1)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+
+}
+
+
+
 sealed class InsertOrUpdate {
     
     data class Insert(
@@ -42425,6 +42475,20 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
 }
     )
     }
+    
+
+        /**
+         * set root data directory before any database access
+         * required for Android to specify app-specific storage path
+         */
+    @Throws(InitException::class) fun `setRootDataDir`(`path`: kotlin.String)
+        = 
+    uniffiRustCallWithError(InitException) { _status ->
+    UniffiLib.uniffi_cove_fn_func_set_root_data_dir(
+    
+        FfiConverterString.lower(`path`),_status)
+}
+    
     
 
     @Throws(MultiFormatException::class) fun `stringOrDataTryIntoMultiFormat`(`stringOrData`: StringOrData): MultiFormat {

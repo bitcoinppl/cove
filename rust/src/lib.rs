@@ -52,3 +52,20 @@ use cove_types::color;
 use cove_types::color_scheme;
 use cove_types::network;
 use cove_types::psbt;
+
+use std::path::PathBuf;
+
+#[derive(Debug, Clone, uniffi::Error, thiserror::Error)]
+#[uniffi(flat_error)]
+pub enum InitError {
+    #[error("Failed to set root data directory: {0}")]
+    RootDataDirAlreadySet(String),
+}
+
+/// set root data directory before any database access
+/// required for Android to specify app-specific storage path
+#[uniffi::export]
+fn set_root_data_dir(path: String) -> Result<(), InitError> {
+    cove_common::consts::set_root_data_dir(PathBuf::from(path))
+        .map_err(InitError::RootDataDirAlreadySet)
+}
