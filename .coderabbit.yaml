@@ -13,6 +13,7 @@ review:
       instructions: |
         - Review SwiftUI view code for proper layout, best practices
         - Identify spelling mistakes in comments, string literals, and documentation
+        - Ignore generated bindings code in ios/CoveCore/Sources/CoveCore/generated/**
     - path: "android/app/src/main/java/org/bitcoinppl/cove/**/*.kt"
       instructions: |
         ⚠️ CRITICAL FFI/Threading Policy - READ FIRST:

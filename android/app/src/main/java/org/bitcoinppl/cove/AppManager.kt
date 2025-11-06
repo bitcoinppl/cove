@@ -74,6 +74,9 @@ class AppManager private constructor() : FfiReconcile {
     var routeId by mutableStateOf(UUID.randomUUID().toString())
         private set
 
+    // tracks whether async runtime has been initialized
+    var asyncRuntimeReady by mutableStateOf(false)
+
     // cached managers (not observable)
     internal var walletManager: WalletManager? = null
         private set
