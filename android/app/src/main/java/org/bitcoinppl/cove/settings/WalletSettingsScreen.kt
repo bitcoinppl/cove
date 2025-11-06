@@ -27,14 +27,18 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,22 +51,69 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.utils.toComposeColor
 import org.bitcoinppl.cove.views.CardItem
 import org.bitcoinppl.cove.views.ClickableInfoRow
 import org.bitcoinppl.cove.views.CustomSpacer
 import org.bitcoinppl.cove.views.InfoRow
 import org.bitcoinppl.cove.views.SwitchRow
+import org.bitcoinppl.cove_core.Route
+import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.WalletColor
+import org.bitcoinppl.cove_core.WalletManagerAction
+import org.bitcoinppl.cove_core.WalletSettingsRoute
+import org.bitcoinppl.cove_core.WalletType
 import org.bitcoinppl.cove_core.defaultWalletColors
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun WalletSettingsScreen(wallet: TempWalletMock) {
+fun WalletSettingsScreen(
+    app: AppManager,
+    manager: WalletManager,
+    modifier: Modifier = Modifier,
+) {
+    val metadata = manager.walletMetadata
+    var showDeleteConfirmation by remember { mutableStateOf(false) }
+    var deleteError by remember { mutableStateOf<String?>(null) }
+
+    // validate metadata on appear and disappear
+    LaunchedEffect(Unit) {
+        manager.validateMetadata()
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            manager.validateMetadata()
+        }
+    }
+
+    // show error if metadata is not available
+    if (metadata == null) {
+        Box(
+            modifier = modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "Failed to load wallet settings",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                CustomSpacer(height = 16.dp, paddingValues = PaddingValues())
+                TextButton(onClick = { app.popRoute() }) {
+                    Text("Go Back")
+                }
+            }
+        }
+        return
+    }
+
     Scaffold(
         modifier =
-            Modifier
+            modifier
                 .fillMaxSize()
                 .padding(WindowInsets.safeDrawing.asPaddingValues()),
         topBar = @Composable {
@@ -74,14 +125,14 @@ fun WalletSettingsScreen(wallet: TempWalletMock) {
                     ) {
                         Text(
                             style = MaterialTheme.typography.bodyLarge,
-                            text = wallet.settings.name,
+                            text = metadata.name,
                             textAlign = TextAlign.Center,
                         )
                     }
                 },
                 navigationIcon = {
                     IconButton(onClick = {
-                        // TODO:navigate back to Settings
+                        app.popRoute()
                     }) {
                         Icon(Icons.AutoMirrored.Default.ArrowBack, contentDescription = "Back")
                     }
@@ -106,14 +157,20 @@ fun WalletSettingsScreen(wallet: TempWalletMock) {
                                 .padding(vertical = 8.dp)
                                 .padding(start = 8.dp),
                     ) {
-                        InfoRow(stringResource(R.string.label_wallet_network), wallet.networkName)
+                        InfoRow(
+                            stringResource(R.string.label_wallet_network),
+                            metadata.network.toString(),
+                        )
                         ListSpacer()
                         InfoRow(
                             stringResource(R.string.label_wallet_fingerprint),
-                            wallet.fingerPrint,
+                            manager.rust.masterFingerprint() ?: "",
                         )
                         ListSpacer()
-                        InfoRow(stringResource(R.string.label_wallet_type), wallet.walletType)
+                        InfoRow(
+                            stringResource(R.string.label_wallet_type),
+                            metadata.walletType.toString(),
+                        )
                     }
                 }
                 CardItem(title = stringResource(R.string.title_wallet_settings), allCaps = true) {
@@ -125,19 +182,31 @@ fun WalletSettingsScreen(wallet: TempWalletMock) {
                     ) {
                         ClickableInfoRow(
                             stringResource(R.string.label_wallet_name),
-                            wallet.settings.name,
+                            metadata.name,
                             Icons.AutoMirrored.Default.KeyboardArrowRight,
                         ) {
-                            // TODO:NAME CHANGE?
+                            app.pushRoute(
+                                Route.Settings(
+                                    SettingsRoute.Wallet(
+                                        id = metadata.id,
+                                        route = WalletSettingsRoute.CHANGE_NAME,
+                                    ),
+                                ),
+                            )
                         }
                         ListSpacer()
-                        WalletColorSelector(wallet.settings.color)
+                        WalletColorSelector(
+                            selectedWalletColor = metadata.color,
+                            onColorChange = { color ->
+                                manager.dispatch(WalletManagerAction.UpdateColor(color))
+                            },
+                        )
                         ListSpacer()
                         SwitchRow(
                             stringResource(R.string.label_wallet_show_transaction_labels),
-                            wallet.settings.showLabels,
-                        ) { isChecked ->
-                            // TODO: changeSettings of wallet
+                            metadata.showLabels,
+                        ) { _ ->
+                            manager.dispatch(WalletManagerAction.ToggleShowLabels)
                         }
                     }
                 }
@@ -153,26 +222,29 @@ fun WalletSettingsScreen(wallet: TempWalletMock) {
                                 .padding(vertical = 8.dp)
                                 .padding(start = 8.dp),
                     ) {
+                        // only show for hot wallets that have a mnemonic
+                        if (metadata.walletType == WalletType.HOT) {
+                            Text(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .padding(all = 8.dp)
+                                        .clickable(true) {
+                                            app.pushRoute(Route.SecretWords(metadata.id))
+                                        },
+                                text = stringResource(R.string.label_wallet_view_secrets),
+                                style = MaterialTheme.typography.bodyMedium,
+                                textAlign = TextAlign.Start,
+                            )
+                            ListSpacer()
+                        }
                         Text(
                             modifier =
                                 Modifier
                                     .fillMaxWidth()
                                     .padding(all = 8.dp)
                                     .clickable(true) {
-                                        // TODO:SHOW SECRETS wallet flow
-                                    },
-                            text = stringResource(R.string.label_wallet_view_secrets),
-                            style = MaterialTheme.typography.bodyMedium,
-                            textAlign = TextAlign.Start,
-                        )
-                        ListSpacer()
-                        Text(
-                            modifier =
-                                Modifier
-                                    .fillMaxWidth()
-                                    .padding(all = 8.dp)
-                                    .clickable(true) {
-                                        // TODO:DELETE wallet flow
+                                        showDeleteConfirmation = true
                                     },
                             text = stringResource(R.string.label_wallet_delete),
                             style = MaterialTheme.typography.bodyLarge,
@@ -184,20 +256,51 @@ fun WalletSettingsScreen(wallet: TempWalletMock) {
             }
         },
     )
-}
 
-@Preview
-@Composable
-fun WalletSettingsScreenPreview() {
-    WalletSettingsScreen(
-        TempWalletMock(
-            id = "Id_!@#@!",
-            networkName = "Signet",
-            fingerPrint = "AsSdf322",
-            walletType = "HOT",
-            WalletSettings(name = "MyWallet", WalletColor.WPastelRed, true),
-        ),
-    )
+    // confirmation dialog for wallet deletion
+    if (showDeleteConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmation = false },
+            title = { Text("Are you sure?") },
+            text = { Text("This action cannot be undone.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        try {
+                            manager.rust.deleteWallet()
+                            showDeleteConfirmation = false
+                            app.popRoute()
+                        } catch (e: Exception) {
+                            showDeleteConfirmation = false
+                            deleteError = e.message ?: "Failed to delete wallet"
+                            Log.e("WalletSettingsScreen", "failed to delete wallet", e)
+                        }
+                    },
+                ) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirmation = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
+    // error dialog for deletion failures
+    deleteError?.let { error ->
+        AlertDialog(
+            onDismissRequest = { deleteError = null },
+            title = { Text("Failed to Delete Wallet") },
+            text = { Text(error) },
+            confirmButton = {
+                TextButton(onClick = { deleteError = null }) {
+                    Text("OK")
+                }
+            },
+        )
+    }
 }
 
 @Preview
@@ -222,8 +325,11 @@ private val previewWalletColors =
     )
 
 @Composable
-private fun WalletColorSelector(selectedWalletColor: WalletColor) {
-    var selectedColor by remember {
+private fun WalletColorSelector(
+    selectedWalletColor: WalletColor,
+    onColorChange: (WalletColor) -> Unit = {},
+) {
+    var selectedColor by remember(selectedWalletColor) {
         mutableStateOf(selectedWalletColor)
     }
 
@@ -291,7 +397,10 @@ private fun WalletColorSelector(selectedWalletColor: WalletColor) {
                                 .padding(4.dp)
                                 .aspectRatio(1f)
                                 .size(48.dp) // circle size
-                                .clickable { selectedColor = walletColor },
+                                .clickable {
+                                    selectedColor = walletColor
+                                    onColorChange(walletColor)
+                                },
                     ) {
                         // If selected → border first
                         if (walletColor == selectedColor) {
@@ -326,19 +435,3 @@ private fun WalletColorSelector(selectedWalletColor: WalletColor) {
 private fun ListSpacer() {
     CustomSpacer(height = 8.dp, paddingValues = PaddingValues(start = 8.dp))
 }
-
-// TODO:Remove and change to a real Wallet from CoveLib
-data class TempWalletMock(
-    val id: String,
-    val networkName: String,
-    val fingerPrint: String,
-    val walletType: String,
-    val settings: WalletSettings,
-)
-
-// TODO:Remove and change to a real Wallet from CoveLib
-data class WalletSettings(
-    val name: String,
-    val color: WalletColor,
-    val showLabels: Boolean,
-)
