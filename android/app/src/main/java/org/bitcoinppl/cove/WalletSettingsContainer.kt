@@ -11,6 +11,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import org.bitcoinppl.cove.settings.WalletSettingsChangeNameScreen
+import org.bitcoinppl.cove.settings.WalletSettingsScreen
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
 
@@ -58,22 +60,18 @@ fun WalletSettingsContainer(
         else -> {
             when (route) {
                 WalletSettingsRoute.MAIN -> {
-                    // TODO: implement WalletSettingsScreen with manager
-                    Box(
-                        modifier = modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        androidx.compose.material3.Text("Wallet Settings - TODO")
-                    }
+                    WalletSettingsScreen(
+                        app = app,
+                        manager = wm,
+                        modifier = modifier,
+                    )
                 }
                 WalletSettingsRoute.CHANGE_NAME -> {
-                    // TODO: implement change wallet name screen
-                    Box(
-                        modifier = modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        androidx.compose.material3.Text("Change Name - TODO")
-                    }
+                    WalletSettingsChangeNameScreen(
+                        app = app,
+                        manager = wm,
+                        modifier = modifier,
+                    )
                 }
             }
         }
