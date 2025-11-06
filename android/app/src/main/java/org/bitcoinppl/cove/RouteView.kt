@@ -3,12 +3,12 @@ package org.bitcoinppl.cove
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import kotlinx.coroutines.delay
+import org.bitcoinppl.cove.secret_words.SecretWordsScreen
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
 
@@ -77,15 +77,6 @@ fun RouteView(app: AppManager, route: Route) {
                 loadingTimeMs = route.afterMillis.toLong(),
             )
         }
-    }
-}
-
-// placeholder screens for not yet implemented features
-
-@Composable
-private fun SecretWordsScreen(app: AppManager, walletId: WalletId) {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text("Secret Words for $walletId - TODO")
     }
 }
 
