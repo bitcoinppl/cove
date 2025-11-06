@@ -111,6 +111,22 @@ class SendFlowManager(
         }
 
     /**
+     * update entering BTC amount with debounced dispatch
+     */
+    fun updateEnteringBtcAmount(value: String) {
+        enteringBtcAmount = value
+        debouncedDispatch(SendFlowManagerAction.NotifyEnteringBtcAmountChanged(value))
+    }
+
+    /**
+     * update entering fiat amount with debounced dispatch
+     */
+    fun updateEnteringFiatAmount(value: String) {
+        enteringFiatAmount = value
+        debouncedDispatch(SendFlowManagerAction.NotifyEnteringFiatAmountChanged(value))
+    }
+
+    /**
      * validate entire send flow
      */
     fun validate(displayAlert: Boolean = false): Boolean {

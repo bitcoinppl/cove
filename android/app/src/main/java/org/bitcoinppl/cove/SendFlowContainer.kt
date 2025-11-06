@@ -140,33 +140,47 @@ private fun SendFlowRouteToScreen(
                 onToggleBalanceVisibility = {
                     // TODO: implement balance visibility toggle
                 },
-                isBalanceHidden = false, // TODO: get from app preferences
+                // TODO: get from app preferences
+                isBalanceHidden = false,
                 balanceAmount = walletManager.amountFmt(walletManager.balance.spendable()),
                 balanceDenomination = walletManager.unit,
-                amountText = when (walletManager.walletMetadata?.fiatOrBtc) {
-                    FiatOrBtc.BTC -> sendFlowManager.enteringBtcAmount
-                    FiatOrBtc.FIAT -> sendFlowManager.enteringFiatAmount
-                    else -> sendFlowManager.enteringBtcAmount
-                },
-                amountDenomination = when (walletManager.walletMetadata?.fiatOrBtc) {
-                    FiatOrBtc.BTC -> walletManager.unit
-                    FiatOrBtc.FIAT -> ""  // don't show denomination in fiat mode, it's part of the amount
-                    else -> walletManager.unit
-                },
+                amountText =
+                    when (walletManager.walletMetadata?.fiatOrBtc) {
+                        FiatOrBtc.BTC -> sendFlowManager.enteringBtcAmount
+                        FiatOrBtc.FIAT -> sendFlowManager.enteringFiatAmount
+                        else -> sendFlowManager.enteringBtcAmount
+                    },
+                amountDenomination =
+                    when (walletManager.walletMetadata?.fiatOrBtc) {
+                        FiatOrBtc.BTC -> walletManager.unit
+                        FiatOrBtc.FIAT -> "" // don't show denomination in fiat mode, it's part of the amount
+                        else -> walletManager.unit
+                    },
                 dollarEquivalentText = sendFlowManager.sendAmountFiat,
                 initialAddress = sendFlowManager.enteringAddress,
                 accountShort = walletManager.walletMetadata?.masterFingerprint?.asUppercase()?.take(8) ?: "",
-                feeEta = sendFlowManager.selectedFeeRate?.let {
-                    when (it.feeSpeed()) {
-                        is FeeSpeed.Slow -> "~1 hour"
-                        is FeeSpeed.Medium -> "~30 minutes"
-                        is FeeSpeed.Fast -> "~10 minutes"
-                        is FeeSpeed.Custom -> "Custom"
-                    }
-                } ?: "~30 minutes",
+                feeEta =
+                    sendFlowManager.selectedFeeRate?.let {
+                        when (it.feeSpeed()) {
+                            is FeeSpeed.Slow -> "~1 hour"
+                            is FeeSpeed.Medium -> "~30 minutes"
+                            is FeeSpeed.Fast -> "~10 minutes"
+                            is FeeSpeed.Custom -> "Custom"
+                        }
+                    } ?: "~30 minutes",
                 feeAmount = sendFlowManager.totalFeeString,
                 totalSpendingCrypto = sendFlowManager.totalSpentInBtc,
                 totalSpendingFiat = sendFlowManager.totalSpentInFiat,
+                onAmountChanged = { newAmount ->
+                    when (walletManager.walletMetadata?.fiatOrBtc) {
+                        FiatOrBtc.BTC -> sendFlowManager.updateEnteringBtcAmount(newAmount)
+                        FiatOrBtc.FIAT -> sendFlowManager.updateEnteringFiatAmount(newAmount)
+                        else -> sendFlowManager.updateEnteringBtcAmount(newAmount)
+                    }
+                },
+                onAddressChanged = { newAddress ->
+                    sendFlowManager.enteringAddress = newAddress
+                },
             )
         }
         is SendRoute.CoinControlSetAmount -> {
@@ -188,7 +202,8 @@ private fun SendFlowRouteToScreen(
                 onToggleBalanceVisibility = {
                     // TODO: implement balance visibility toggle
                 },
-                isBalanceHidden = false, // TODO: get from app preferences
+                // TODO: get from app preferences
+                isBalanceHidden = false,
                 balanceAmount = walletManager.amountFmt(walletManager.balance.spendable()),
                 balanceDenomination = walletManager.unit,
                 sendingAmount = walletManager.amountFmt(details.sendingAmount()),
