@@ -39,6 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.Auth
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.views.RecoveryWordChip
@@ -58,9 +59,13 @@ fun SecretWordsScreen(
     var words by remember(walletId) { mutableStateOf<Mnemonic?>(null) }
     var errorMessage by remember(walletId) { mutableStateOf<String?>(null) }
 
+    // get auth manager
+    val auth = remember { Auth }
+
     // lock on appear and reload when walletId changes
     LaunchedEffect(walletId) {
-        // TODO: implement auth.lock() when AuthManager is available
+        // lock authentication before showing seed words
+        auth.lock()
 
         // close previous mnemonic before loading new one
         words?.close()
