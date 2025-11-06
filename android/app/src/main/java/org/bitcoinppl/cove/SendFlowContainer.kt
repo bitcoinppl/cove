@@ -156,7 +156,10 @@ private fun SendFlowRouteToScreen(
                         FiatOrBtc.FIAT -> "" // don't show denomination in fiat mode, it's part of the amount
                         else -> walletManager.unit
                     },
-                dollarEquivalentText = sendFlowManager.sendAmountFiat,
+                dollarEquivalentText = when (walletManager.walletMetadata?.fiatOrBtc) {
+                    FiatOrBtc.FIAT -> sendFlowManager.sendAmountBtc
+                    else -> sendFlowManager.sendAmountFiat
+                },
                 initialAddress = sendFlowManager.enteringAddress,
                 accountShort = walletManager.walletMetadata?.masterFingerprint?.asUppercase()?.take(8) ?: "",
                 feeEta =
