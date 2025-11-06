@@ -143,8 +143,16 @@ private fun SendFlowRouteToScreen(
                 isBalanceHidden = false, // TODO: get from app preferences
                 balanceAmount = walletManager.amountFmt(walletManager.balance.spendable()),
                 balanceDenomination = walletManager.unit,
-                amountText = sendFlowManager.enteringBtcAmount.ifEmpty { sendFlowManager.enteringFiatAmount },
-                amountDenomination = walletManager.unit,
+                amountText = when (walletManager.walletMetadata?.fiatOrBtc) {
+                    FiatOrBtc.BTC -> sendFlowManager.enteringBtcAmount
+                    FiatOrBtc.FIAT -> sendFlowManager.enteringFiatAmount
+                    else -> sendFlowManager.enteringBtcAmount
+                },
+                amountDenomination = when (walletManager.walletMetadata?.fiatOrBtc) {
+                    FiatOrBtc.BTC -> walletManager.unit
+                    FiatOrBtc.FIAT -> ""  // don't show denomination in fiat mode, it's part of the amount
+                    else -> walletManager.unit
+                },
                 dollarEquivalentText = sendFlowManager.sendAmountFiat,
                 initialAddress = sendFlowManager.enteringAddress,
                 accountShort = walletManager.walletMetadata?.masterFingerprint?.asUppercase()?.take(8) ?: "",
