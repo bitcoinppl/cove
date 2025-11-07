@@ -1,6 +1,12 @@
 package org.bitcoinppl.cove.flow.new_wallet.hot_wallet
 
+import android.Manifest
+import android.app.Activity
 import android.util.Log
+import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageAnalysis
+import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -24,14 +30,18 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Nfc
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -39,6 +49,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -53,7 +64,9 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
@@ -66,6 +79,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.isGranted
+import com.google.accompanist.permissions.rememberPermissionState
+import com.google.mlkit.vision.barcode.BarcodeScanning
+import com.google.mlkit.vision.barcode.common.Barcode
+import com.google.mlkit.vision.common.InputImage
 import kotlinx.coroutines.delay
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.ImportWalletManager
@@ -75,6 +96,8 @@ import org.bitcoinppl.cove.views.DashDotsIndicator
 import org.bitcoinppl.cove.views.ImageButton
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
+import java.util.concurrent.Executors
+import androidx.camera.core.Preview as CameraPreview
 
 private const val GROUPS_OF = 12
 
@@ -100,13 +123,12 @@ private fun HotWalletImportScreenPreview() {
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
 fun HotWalletImportScreen(
     app: AppManager,
     manager: ImportWalletManager,
     numberOfWords: NumberOfBip39Words,
-    // TODO: implement QR and NFC import functionality
     importType: ImportType,
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
@@ -125,6 +147,51 @@ fun HotWalletImportScreen(
     var duplicateWalletId by remember { mutableStateOf<WalletId?>(null) }
     var genericErrorMessage by remember { mutableStateOf("") }
     var focusedField by remember(numberOfWords) { mutableIntStateOf(0) }
+
+    // QR and NFC state
+    var showQrScanner by remember { mutableStateOf(false) }
+    var showNfcScanner by remember { mutableStateOf(false) }
+    var multiQr by remember { mutableStateOf<MultiQr?>(null) }
+
+    // auto-open scanner based on importType (matching iOS behavior)
+    LaunchedEffect(importType) {
+        when (importType) {
+            ImportType.QR -> {
+                showQrScanner = true
+            }
+            ImportType.NFC -> {
+                // add small delay like iOS (200ms)
+                delay(200)
+                showNfcScanner = true
+            }
+            ImportType.MANUAL -> {
+                // focus first field
+                focusedField = 0
+            }
+        }
+    }
+
+    fun setWords(words: List<List<String>>) {
+        // validate word count (must be 12 or 24)
+        val totalWords = words.flatten().size
+        if (totalWords != 12 && totalWords != 24) {
+            Log.w("HotWalletImport", "Invalid word count: $totalWords")
+            genericErrorMessage = "Invalid number of words. Expected 12 or 24 words, got $totalWords"
+            alertState = AlertState.GenericError
+            return
+        }
+
+        // reset scanners
+        multiQr = null
+        showQrScanner = false
+        showNfcScanner = false
+
+        // update words
+        enteredWords = words
+
+        // move to last field
+        focusedField = totalWords - 1
+    }
 
     fun isAllWordsValid(): Boolean {
         return enteredWords
@@ -185,7 +252,25 @@ fun HotWalletImportScreen(
                         )
                     }
                 },
-                actions = {},
+                actions = {
+                    Row {
+                        // NFC button
+                        IconButton(onClick = { showNfcScanner = true }) {
+                            Icon(
+                                imageVector = Icons.Default.Nfc,
+                                contentDescription = "NFC Import",
+                            )
+                        }
+
+                        // QR button
+                        IconButton(onClick = { showQrScanner = true }) {
+                            Icon(
+                                imageVector = Icons.Default.QrCodeScanner,
+                                contentDescription = "QR Code Import",
+                            )
+                        }
+                    }
+                },
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -337,6 +422,33 @@ fun HotWalletImportScreen(
                 )
             }
             AlertState.None -> {}
+        }
+
+        // QR Scanner Bottom Sheet
+        if (showQrScanner) {
+            QrScannerSheet(
+                numberOfWords = numberOfWords,
+                onDismiss = {
+                    showQrScanner = false
+                    multiQr = null
+                },
+                onWordsScanned = { words ->
+                    setWords(words)
+                },
+            )
+        }
+
+        // NFC Scanner Bottom Sheet
+        if (showNfcScanner) {
+            NfcScannerSheet(
+                numberOfWords = numberOfWords,
+                onDismiss = {
+                    showNfcScanner = false
+                },
+                onWordsScanned = { words ->
+                    setWords(words)
+                },
+            )
         }
     }
 }
@@ -504,5 +616,476 @@ private fun WordInputField(
                         onFocusChanged(focusState.isFocused)
                     },
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
+@Composable
+@androidx.camera.core.ExperimentalGetImage
+private fun QrScannerSheet(
+    numberOfWords: NumberOfBip39Words,
+    onDismiss: () -> Unit,
+    onWordsScanned: (List<List<String>>) -> Unit,
+) {
+    val cameraPermissionState = rememberPermissionState(Manifest.permission.CAMERA)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = Color.Black,
+    ) {
+        if (cameraPermissionState.status.isGranted) {
+            QrScannerContent(
+                numberOfWords = numberOfWords,
+                onDismiss = onDismiss,
+                onWordsScanned = onWordsScanned,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            // camera permission request
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Text(
+                    text = "Camera Access Required",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                )
+
+                Text(
+                    text = "Please allow camera access to scan QR codes",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White.copy(alpha = 0.7f),
+                    textAlign = TextAlign.Center,
+                )
+
+                TextButton(onClick = { cameraPermissionState.launchPermissionRequest() }) {
+                    Text("Grant Permission", color = Color.White)
+                }
+
+                TextButton(onClick = onDismiss) {
+                    Text("Cancel", color = Color.White.copy(alpha = 0.6f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+@androidx.camera.core.ExperimentalGetImage
+private fun QrScannerContent(
+    numberOfWords: NumberOfBip39Words,
+    onDismiss: () -> Unit,
+    onWordsScanned: (List<List<String>>) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    var multiQr by remember { mutableStateOf<MultiQr?>(null) }
+    var scanComplete by remember { mutableStateOf(false) }
+    var totalParts by remember { mutableStateOf<UInt?>(null) }
+    var partsLeft by remember { mutableStateOf<UInt?>(null) }
+
+    val partsScanned =
+        remember(totalParts, partsLeft) {
+            totalParts?.let { total ->
+                partsLeft?.let { left ->
+                    (total - left).toInt()
+                }
+            }
+        }
+
+    val barcodeScanner = remember { BarcodeScanning.getClient() }
+    val executor = remember { Executors.newSingleThreadExecutor() }
+    val cameraProviderRef = remember { mutableStateOf<ProcessCameraProvider?>(null) }
+    val previewRef = remember { mutableStateOf<CameraPreview?>(null) }
+    val analysisRef = remember { mutableStateOf<ImageAnalysis?>(null) }
+
+    Box(modifier = modifier) {
+        if (!scanComplete) {
+            // camera preview
+            AndroidView(
+                factory = { ctx ->
+                    val previewView = PreviewView(ctx)
+                    val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
+
+                    cameraProviderFuture.addListener({
+                        val cameraProvider = cameraProviderFuture.get()
+                        cameraProviderRef.value = cameraProvider
+
+                        val preview =
+                            CameraPreview.Builder().build().also {
+                                it.setSurfaceProvider(previewView.surfaceProvider)
+                            }
+                        previewRef.value = preview
+
+                        val imageAnalysis =
+                            ImageAnalysis.Builder()
+                                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                                .build()
+                                .also { analysis ->
+                                    analysis.setAnalyzer(executor) { imageProxy ->
+                                        val mediaImage = imageProxy.image
+                                        if (mediaImage != null) {
+                                            val image =
+                                                InputImage.fromMediaImage(
+                                                    mediaImage,
+                                                    imageProxy.imageInfo.rotationDegrees,
+                                                )
+
+                                            val mainExecutor = ContextCompat.getMainExecutor(ctx)
+                                            barcodeScanner.process(image)
+                                                .addOnSuccessListener(mainExecutor) { barcodes ->
+                                                    for (barcode in barcodes) {
+                                                        if (barcode.format == Barcode.FORMAT_QR_CODE) {
+                                                            handleQrCodeForSeed(
+                                                                barcode = barcode,
+                                                                numberOfWords = numberOfWords,
+                                                                multiQr = multiQr,
+                                                                onMultiQrUpdate = { multiQr = it },
+                                                                onTotalPartsUpdate = { totalParts = it },
+                                                                onPartsLeftUpdate = { partsLeft = it },
+                                                                onScanComplete = { words ->
+                                                                    scanComplete = true
+                                                                    onWordsScanned(words)
+                                                                },
+                                                                onError = { error ->
+                                                                    Log.e("QrScannerSheet", "Error: $error")
+                                                                    onDismiss()
+                                                                },
+                                                            )
+                                                            break
+                                                        }
+                                                    }
+                                                }
+                                                .addOnFailureListener(mainExecutor) { e ->
+                                                    Log.e("QrScannerSheet", "Barcode processing failed", e)
+                                                }
+                                                .addOnCompleteListener {
+                                                    imageProxy.close()
+                                                }
+                                        } else {
+                                            imageProxy.close()
+                                        }
+                                    }
+                                }
+                        analysisRef.value = imageAnalysis
+
+                        val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+
+                        try {
+                            cameraProvider.unbindAll()
+                            cameraProvider.bindToLifecycle(
+                                lifecycleOwner,
+                                cameraSelector,
+                                preview,
+                                imageAnalysis,
+                            )
+                        } catch (e: Exception) {
+                            Log.e("QrScannerSheet", "Camera binding failed", e)
+                        }
+                    }, ContextCompat.getMainExecutor(ctx))
+
+                    previewView
+                },
+                modifier = Modifier.fillMaxSize(),
+            )
+
+            // overlay content
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(16.dp),
+                verticalArrangement = Arrangement.SpaceBetween,
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Spacer(modifier = Modifier.weight(1f))
+
+                Text(
+                    text = "Scan Seed Phrase QR Code",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White,
+                )
+
+                Spacer(modifier = Modifier.weight(5f))
+
+                // multi-part progress
+                if (totalParts != null && partsLeft != null) {
+                    Column(
+                        modifier =
+                            Modifier
+                                .background(Color.Black.copy(alpha = 0.7f))
+                                .padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Text(
+                            text = "Scanned $partsScanned of ${totalParts?.toInt()}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            color = Color.White,
+                        )
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        Text(
+                            text = "${partsLeft?.toInt()} parts left",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White.copy(alpha = 0.7f),
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.weight(1f))
+            }
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            analysisRef.value?.clearAnalyzer()
+
+            cameraProviderRef.value?.let { cp ->
+                val p = previewRef.value
+                val a = analysisRef.value
+                if (p != null && a != null) {
+                    cp.unbind(p, a)
+                }
+            }
+
+            executor.shutdown()
+            barcodeScanner.close()
+        }
+    }
+}
+
+private fun handleQrCodeForSeed(
+    barcode: Barcode,
+    numberOfWords: NumberOfBip39Words,
+    multiQr: MultiQr?,
+    onMultiQrUpdate: (MultiQr) -> Unit,
+    onTotalPartsUpdate: (UInt) -> Unit,
+    onPartsLeftUpdate: (UInt) -> Unit,
+    onScanComplete: (List<List<String>>) -> Unit,
+    onError: (String) -> Unit,
+) {
+    try {
+        val qrString = barcode.rawValue ?: return
+        val qrBytes = barcode.rawBytes
+
+        // try to parse as MultiQr first (for BBQr/SeedQR)
+        val currentMultiQr =
+            multiQr ?: try {
+                val newMultiQr = MultiQr.newFromString(qr = qrString)
+                onMultiQrUpdate(newMultiQr)
+                onTotalPartsUpdate(newMultiQr.totalParts())
+                newMultiQr
+            } catch (e: Exception) {
+                Log.d("QrScannerSheet", "Not a BBQr, trying plain text: ${e.message}")
+                // try plain text mnemonic
+                tryParsePlainTextOrSeedQr(qrString, qrBytes, numberOfWords, onScanComplete, onError)
+                return
+            }
+
+        // check if it's a BBQr
+        if (!currentMultiQr.isBbqr()) {
+            tryParsePlainTextOrSeedQr(qrString, qrBytes, numberOfWords, onScanComplete, onError)
+            return
+        }
+
+        // add part to BBQr
+        val result = currentMultiQr.addPart(qr = qrString)
+        onPartsLeftUpdate(result.partsLeft())
+
+        if (result.isComplete()) {
+            val finalData = result.finalResult()
+            tryParsePlainTextOrSeedQr(finalData, null, numberOfWords, onScanComplete, onError)
+        }
+    } catch (e: Exception) {
+        onError(e.message ?: "Unknown error")
+    }
+}
+
+private fun tryParsePlainTextOrSeedQr(
+    qrString: String,
+    qrBytes: ByteArray?,
+    numberOfWords: NumberOfBip39Words,
+    onScanComplete: (List<List<String>>) -> Unit,
+    onError: (String) -> Unit,
+) {
+    try {
+        // try parsing as plain text mnemonic first
+        val words = groupedPlainWordsOf(mnemonic = qrString, groups = GROUPS_OF.toUByte())
+        onScanComplete(words)
+    } catch (e: Exception) {
+        Log.d("QrScannerSheet", "Not plain text, trying SeedQR: ${e.message}")
+
+        // try parsing as SeedQR (binary format)
+        qrBytes?.let { bytes ->
+            try {
+                val seedQr = SeedQr.newFromData(data = bytes)
+                val words = seedQr.groupedPlainWords(groupsOf = GROUPS_OF.toUByte())
+                onScanComplete(words)
+                return
+            } catch (e2: Exception) {
+                Log.d("QrScannerSheet", "Not SeedQR binary: ${e2.message}")
+            }
+        }
+
+        onError("Unable to parse QR code as seed phrase")
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun NfcScannerSheet(
+    numberOfWords: NumberOfBip39Words,
+    onDismiss: () -> Unit,
+    onWordsScanned: (List<List<String>>) -> Unit,
+) {
+    val context = LocalContext.current
+    val activity = context as? Activity
+
+    if (activity == null) {
+        // fallback if not in activity context
+        ModalBottomSheet(
+            onDismissRequest = onDismiss,
+            containerColor = CoveColor.midnightBlue,
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(
+                    "Unable to access NFC",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color.White,
+                )
+                TextButton(onClick = onDismiss) {
+                    Text("Close", color = Color.White)
+                }
+            }
+        }
+        return
+    }
+
+    val nfcReader = remember(activity) { org.bitcoinppl.cove.nfc.NfcReader(activity) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    // start scanning when sheet opens
+    LaunchedEffect(Unit) {
+        nfcReader.startScanning()
+
+        // listen for scan results
+        nfcReader.scanResults.collect { result ->
+            when (result) {
+                is org.bitcoinppl.cove.nfc.NfcScanResult.Success -> {
+                    // try to parse the NFC data as seed words
+                    try {
+                        // try string format first
+                        result.text?.let { text ->
+                            val words = groupedPlainWordsOf(mnemonic = text, groups = GROUPS_OF.toUByte())
+                            onWordsScanned(words)
+                            return@collect
+                        }
+
+                        // try binary format (SeedQR)
+                        result.data?.let { data ->
+                            val seedQr = SeedQr.newFromData(data = data)
+                            val words = seedQr.groupedPlainWords(groupsOf = GROUPS_OF.toUByte())
+                            onWordsScanned(words)
+                            return@collect
+                        }
+
+                        errorMessage = "No readable seed phrase found on NFC tag"
+                    } catch (e: Exception) {
+                        Log.e("NfcScannerSheet", "Error parsing NFC data", e)
+                        errorMessage = "Unable to parse seed phrase: ${e.message}"
+                    }
+                }
+                is org.bitcoinppl.cove.nfc.NfcScanResult.Error -> {
+                    errorMessage = result.message
+                }
+            }
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            nfcReader.reset()
+        }
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = {
+            nfcReader.reset()
+            onDismiss()
+        },
+        containerColor = CoveColor.midnightBlue,
+    ) {
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            if (nfcReader.isScanning) {
+                CircularProgressIndicator(
+                    color = Color.White,
+                    modifier = Modifier.padding(16.dp),
+                )
+
+                Icon(
+                    imageVector = Icons.Default.Nfc,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.padding(16.dp),
+                )
+
+                Text(
+                    text = "Ready to Scan",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                )
+
+                Text(
+                    text = nfcReader.message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White.copy(alpha = 0.7f),
+                    textAlign = TextAlign.Center,
+                )
+
+                if (errorMessage != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = errorMessage!!,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = CoveColor.ErrorRed,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            TextButton(
+                onClick = {
+                    nfcReader.reset()
+                    onDismiss()
+                },
+            ) {
+                Text("Cancel", color = Color.White)
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+        }
     }
 }
