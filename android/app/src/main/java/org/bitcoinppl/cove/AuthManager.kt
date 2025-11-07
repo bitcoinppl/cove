@@ -35,8 +35,7 @@ class AuthManager private constructor() : AuthManagerReconciler {
     var type by mutableStateOf<AuthType>(Database().globalConfig().authType())
         private set
 
-    val isLockedState = mutableStateOf(true)
-    var isLocked by isLockedState
+    var isLocked by mutableStateOf(true)
         private set
 
     var isWipeDataPinEnabled by mutableStateOf<Boolean>(rust.isWipeDataPinEnabled())

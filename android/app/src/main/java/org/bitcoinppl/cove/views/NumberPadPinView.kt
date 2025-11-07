@@ -29,7 +29,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -50,7 +49,6 @@ import kotlin.math.roundToInt
 @Composable
 fun NumberPadPinView(
     title: String = "Enter Pin",
-    isLocked: MutableState<Boolean>? = null,
     isPinCorrect: (String) -> Boolean,
     showPin: Boolean = true,
     pinLength: Int = 6,
@@ -158,7 +156,6 @@ fun NumberPadPinView(
                                 delay(100) // brief delay for user feedback
 
                                 if (isPinCorrect(pin)) {
-                                    isLocked?.value = false
                                     onUnlock(pin)
                                     pin = ""
                                 } else {
@@ -207,7 +204,6 @@ fun NumberPadPinView(
                                 delay(100) // brief delay for user feedback
 
                                 if (isPinCorrect(pin)) {
-                                    isLocked?.value = false
                                     onUnlock(pin)
                                     pin = ""
                                 } else {

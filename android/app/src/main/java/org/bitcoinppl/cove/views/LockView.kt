@@ -155,13 +155,13 @@ fun LockView(
                     // show PIN screen
                     else -> {
                         NumberPadPinView(
-                            isLocked = auth.isLockedState,
                             isPinCorrect = { pin ->
                                 when (auth.handleAndReturnUnlockMode(pin)) {
                                     UnlockMode.MAIN, UnlockMode.DECOY, UnlockMode.WIPE -> true
                                     UnlockMode.LOCKED -> false
                                 }
                             },
+                            onUnlock = { auth.unlock() },
                             backAction =
                                 if (auth.type == AuthType.BOTH && isBiometricAvailable) {
                                     { screen = Screen.BIOMETRIC }
