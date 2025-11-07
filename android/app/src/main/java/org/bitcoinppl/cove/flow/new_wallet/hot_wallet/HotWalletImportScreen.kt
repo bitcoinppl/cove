@@ -1062,16 +1062,32 @@ private fun NfcScannerSheet(
                     color = Color.White.copy(alpha = 0.7f),
                     textAlign = TextAlign.Center,
                 )
+            } else {
+                // show icon and error message when not scanning
+                Icon(
+                    imageVector = Icons.Default.Nfc,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.padding(16.dp),
+                )
 
-                if (errorMessage != null) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = errorMessage!!,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = CoveColor.ErrorRed,
-                        textAlign = TextAlign.Center,
-                    )
-                }
+                Text(
+                    text = "NFC Unavailable",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                )
+            }
+
+            // show error message regardless of scanning state
+            if (errorMessage != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = errorMessage!!,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = CoveColor.ErrorRed,
+                    textAlign = TextAlign.Center,
+                )
             }
 
             Spacer(modifier = Modifier.height(8.dp))

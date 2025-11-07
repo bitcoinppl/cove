@@ -13,6 +13,7 @@ import androidx.compose.runtime.setValue
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.receiveAsFlow
+import java.nio.charset.Charset
 
 class NfcReader(private val activity: Activity) {
     private val nfcAdapter: NfcAdapter? = NfcAdapter.getDefaultAdapter(activity)
@@ -115,14 +116,14 @@ class NfcReader(private val activity: Activity) {
                             payload,
                             languageCodeLength + 1,
                             payload.size - languageCodeLength - 1,
-                            charset(textEncoding),
+                            Charset.forName(textEncoding),
                         )
                     textContent = text
                     Log.d("NfcReader", "Found text: $text")
                 } else {
                     // try as raw string
                     try {
-                        val text = String(payload, charset("UTF-8"))
+                        val text = String(payload, Charsets.UTF_8)
                         if (text.isNotBlank()) {
                             textContent = text
                             Log.d("NfcReader", "Found raw text: $text")
