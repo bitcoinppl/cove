@@ -1,7 +1,10 @@
 package org.bitcoinppl.cove.flow.new_wallet.hot_wallet
 
 import android.util.Log
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -33,6 +36,7 @@ fun VerifyWordsContainer(
     var validator by remember { mutableStateOf<WordValidator?>(null) }
     var loading by remember { mutableStateOf(true) }
     var verificationComplete by remember { mutableStateOf(false) }
+    var showSecretWordsAlert by remember { mutableStateOf(false) }
 
     // verification state - tracks current word being verified
     var wordNumber by remember { mutableIntStateOf(1) }
@@ -79,10 +83,7 @@ fun VerifyWordsContainer(
             } else {
                 HotWalletVerifyScreen(
                     onBack = { app.popRoute() },
-                    onShowWords = {
-                        // navigate to secret words screen
-                        // TODO: implement when secret words route is available
-                    },
+                    onShowWords = { showSecretWordsAlert = true },
                     onSkip = {
                         // skip verification and go to wallet
                         app.resetRoute(Route.SelectedWallet(id))
@@ -116,5 +117,33 @@ fun VerifyWordsContainer(
             // error state
             FullPageLoadingView()
         }
+    }
+
+    // secret words confirmation dialog
+    if (showSecretWordsAlert) {
+        AlertDialog(
+            onDismissRequest = { showSecretWordsAlert = false },
+            title = { Text("See Secret Words?") },
+            text = {
+                Text(
+                    "Whoever has your secret words has access to your bitcoin. Please keep these safe and don't show them to anyone else.",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showSecretWordsAlert = false
+                        app.pushRoute(Route.SecretWords(id))
+                    },
+                ) {
+                    Text("Yes, Show Me")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSecretWordsAlert = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
     }
 }
