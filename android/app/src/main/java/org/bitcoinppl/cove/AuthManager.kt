@@ -168,7 +168,6 @@ class AuthManager private constructor() : AuthManagerReconciler {
             if (Database().globalConfig().isInMainMode()) {
                 try {
                     rust.switchToDecoyMode()
-                    unlock()
                     resetAppAndSelectWallet()
                 } catch (e: Exception) {
                     android.util.Log.e(tag, "failed to switch to decoy mode", e)
@@ -176,6 +175,7 @@ class AuthManager private constructor() : AuthManagerReconciler {
                 }
             }
 
+            unlock()
             return UnlockMode.DECOY
         }
 
