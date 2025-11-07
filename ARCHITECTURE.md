@@ -102,6 +102,31 @@ Actors are ideal for components that need to process messages sequentially, main
 - Each Kotlin manager implements the generated `FfiReconcile` interface and creates its own lifecycle-aware coroutine scope (`Dispatchers.Main` + `SupervisorJob`). In `init`, managers create their Rust counterpart, call `listenForUpdates(this)`, and implement `reconcile(...)` to update Compose state or emit side-effects.
 - Shared navigation mirrors the Rust router: `RouterManager` listens for `RouteUpdated` events from the core and reconciles Compose navigation stacks.
 
+**State management patterns:**
+
+- **Use callbacks, not MutableState parameters**: While iOS uses `@Binding` extensively for two-way state binding, Android/Compose follows the "state down, events up" pattern with callbacks. Composables should accept value parameters (e.g., `value: String`) and callback parameters (e.g., `onValueChange: (String) -> Unit`), never `MutableState<T>` parameters.
+- **Why callbacks?** This follows official Android guidelines, matches standard library components (`TextField`, `Switch`, etc.), maintains unidirectional data flow, and makes previews easier. The codebase uses callbacks in 99% of components.
+- **Bidirectional sync**: When a child component needs to both read and write parent state, use `LaunchedEffect(parentValue) { childValue = parentValue }` to sync changes from parent to child, and callbacks to notify parent of child changes. While this creates boilerplate (~8 lines per field), it's the idiomatic Android pattern.
+- **Example pattern**:
+  ```kotlin
+  @Composable
+  fun MyComponent(
+      value: String,              // state down
+      onValueChange: (String) -> Unit,  // events up
+  ) {
+      var localValue by remember { mutableStateOf(value) }
+      LaunchedEffect(value) { localValue = value }  // sync parent → child
+
+      TextField(
+          value = localValue,
+          onValueChange = {
+              localValue = it
+              onValueChange(it)  // notify parent
+          }
+      )
+  }
+  ```
+
 ### Manager Pattern (cross-platform)
 
 1. UI calls `manager.dispatch(action)` or a helper method (e.g. `importWallet`).

@@ -10,6 +10,14 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
+import java.time.Instant
+
+enum class UnlockMode {
+    MAIN,
+    DECOY,
+    WIPE,
+    LOCKED,
+}
 
 /**
  * auth manager - manages authentication state
@@ -30,6 +38,8 @@ class AuthManager private constructor() : AuthManagerReconciler {
     var isLocked by mutableStateOf(true)
         private set
 
+    var isUsingBiometrics by mutableStateOf(false)
+
     var isWipeDataPinEnabled by mutableStateOf<Boolean>(rust.isWipeDataPinEnabled())
         private set
 
@@ -38,6 +48,9 @@ class AuthManager private constructor() : AuthManagerReconciler {
 
     val isAuthEnabled: Boolean
         get() = type != AuthType.NONE
+
+    val lockedAt: Instant?
+        get() = rust.lockedAt()?.let { Instant.ofEpochSecond(it.toLong()) }
 
     init {
         logDebug("Initializing AuthManager")
@@ -83,6 +96,123 @@ class AuthManager private constructor() : AuthManagerReconciler {
             rust.setLockedAt(lockedAt = 0UL)
         } catch (e: Exception) {
             android.util.Log.e(tag, "failed to unlock", e)
+        }
+    }
+
+    /**
+     * check if in decoy mode
+     */
+    fun isInDecoyMode(): Boolean {
+        return rust.isInDecoyMode()
+    }
+
+    /**
+     * check if PIN matches main wallet PIN
+     */
+    fun checkPin(pin: String): Boolean {
+        return AuthPin().check(pin)
+    }
+
+    /**
+     * check if PIN is decoy PIN
+     */
+    fun checkDecoyPin(pin: String): Boolean {
+        return rust.checkDecoyPin(pin)
+    }
+
+    /**
+     * check if PIN is wipe data PIN
+     */
+    fun checkWipeDataPin(pin: String): Boolean {
+        return rust.checkWipeDataPin(pin)
+    }
+
+    /**
+     * reset app and select wallet (helper to avoid duplication)
+     */
+    private fun resetAppAndSelectWallet() {
+        val app = App
+        app.reset()
+        app.isLoading = true
+
+        val db = Database()
+        val selectedWalletId = db.globalConfig().selectedWallet()
+        if (selectedWalletId != null) {
+            try {
+                app.rust.selectWallet(selectedWalletId)
+            } catch (e: Exception) {
+                android.util.Log.e(tag, "failed to select wallet", e)
+            }
+        } else {
+            app.loadAndReset(Route.ListWallets)
+        }
+    }
+
+    /**
+     * handle PIN entry and return unlock mode
+     * this is the main entry point for authentication
+     */
+    fun handleAndReturnUnlockMode(pin: String): UnlockMode {
+        // check if PIN matches main wallet PIN
+        if (AuthPin().check(pin)) {
+            if (Database().globalConfig().isInDecoyMode()) {
+                switchToMainMode()
+            }
+            unlock()
+            return UnlockMode.MAIN
+        }
+
+        // check if the entered pin is the decoy pin, if so enter decoy mode
+        if (checkDecoyPin(pin)) {
+            // enter decoy mode if not already in decoy mode and reset app and router
+            if (Database().globalConfig().isInMainMode()) {
+                try {
+                    rust.switchToDecoyMode()
+                    unlock()
+                    resetAppAndSelectWallet()
+                } catch (e: Exception) {
+                    android.util.Log.e(tag, "failed to switch to decoy mode", e)
+                    return UnlockMode.LOCKED
+                }
+            }
+
+            return UnlockMode.DECOY
+        }
+
+        // check if the entered pin is a wipeDataPin
+        // if so wipe the data
+        if (checkWipeDataPin(pin)) {
+            try {
+                App.rust.dangerousWipeAllData()
+
+                // reset auth manager
+                rust = RustAuthManager()
+                unlock()
+
+                type = AuthType.NONE
+
+                // reset app manager
+                App.reset()
+
+                return UnlockMode.WIPE
+            } catch (e: Exception) {
+                android.util.Log.e(tag, "failed to wipe all data", e)
+                return UnlockMode.LOCKED
+            }
+        }
+
+        return UnlockMode.LOCKED
+    }
+
+    /**
+     * switch to main mode from decoy mode
+     */
+    fun switchToMainMode() {
+        try {
+            rust.switchToMainMode()
+            resetAppAndSelectWallet()
+        } catch (e: Exception) {
+            android.util.Log.e(tag, "failed to switch to main mode", e)
         }
     }
 
