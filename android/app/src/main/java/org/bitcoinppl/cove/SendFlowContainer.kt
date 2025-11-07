@@ -321,13 +321,12 @@ private fun SendFlowRouteToScreen(
             }
         }
         is SendRoute.HardwareExport -> {
-            // TODO: implement hardware export screen
-            Box(
-                modifier = modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center,
-            ) {
-                androidx.compose.material3.Text("Hardware Export - TODO")
-            }
+            HardwareExportScreen(
+                app = app,
+                walletManager = walletManager,
+                details = sendRoute.details,
+                modifier = modifier,
+            )
         }
     }
 }
