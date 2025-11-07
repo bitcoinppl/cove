@@ -91,6 +91,7 @@ dependencies {
     implementation("androidx.camera:camera-view:1.3.1")
     implementation("com.google.accompanist:accompanist-permissions:0.34.0")
     implementation("com.google.android.gms:play-services-mlkit-barcode-scanning:18.3.0")
+    implementation("com.google.zxing:core:3.5.3")
 }
 
 ktlint {
