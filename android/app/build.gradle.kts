@@ -80,6 +80,12 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.3")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.9.3")
     implementation("androidx.compose.runtime:runtime-livedata:1.9.0")
+    // lifecycle process for app-level lifecycle observation
+    implementation("androidx.lifecycle:lifecycle-process:2.9.3")
+
+    // biometric authentication - using alpha for latest features
+    // matches iOS LocalAuthentication capabilities
+    implementation("androidx.biometric:biometric-ktx:1.2.0-alpha05")
 
     // Camera and QR scanning
     implementation("androidx.camera:camera-camera2:1.3.1")
