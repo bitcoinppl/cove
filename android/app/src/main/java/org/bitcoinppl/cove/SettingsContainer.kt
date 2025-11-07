@@ -82,8 +82,10 @@ fun SettingsContainer(
                     )
                 }
                 is SettingsRoute.AllWallets -> {
-                    // TODO: implement all wallets list
-                    androidx.compose.material3.Text("All Wallets - TODO")
+                    org.bitcoinppl.cove.settings.SettingsListAllWalletsScreen(
+                        app = app,
+                        modifier = modifier,
+                    )
                 }
             }
         }
