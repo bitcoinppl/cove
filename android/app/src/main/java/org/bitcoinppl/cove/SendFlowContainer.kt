@@ -225,6 +225,7 @@ private fun SendFlowRouteToScreen(
 
             SendConfirmationScreen(
                 onBack = { app.popRoute() },
+                sendState = sendState,
                 onSwipeToSend = {
                     sendState = SendState.Sending
                     scope.launch {
@@ -238,6 +239,7 @@ private fun SendFlowRouteToScreen(
                             }
                             sendState = SendState.Sent
                             showSuccessAlert = true
+                            Auth.unlock()
                         } catch (e: WalletManagerException) {
                             sendState = SendState.Error(e.message ?: "Unknown error")
                             showErrorAlert = true
