@@ -75,6 +75,9 @@ fun SendFlowContainer(
                     sendRoute.address?.let { sfm.updateAddress(it) }
                     sendRoute.amount?.let { sfm.updateAmount(it) }
                 }
+                is SendRoute.CoinControlSetAmount -> {
+                    sfm.dispatch(SendFlowManagerAction.SetCoinControlMode(sendRoute.utxos))
+                }
                 else -> {}
             }
 
@@ -209,13 +212,58 @@ private fun SendFlowRouteToScreen(
             )
         }
         is SendRoute.CoinControlSetAmount -> {
-            // TODO: implement coin control set amount screen
-            Box(
-                modifier = modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center,
-            ) {
-                androidx.compose.material3.Text("Coin Control Set Amount - TODO")
-            }
+            org.bitcoinppl.cove.send.CoinControlSetAmountScreen(
+                onBack = { app.popRoute() },
+                onNext = {
+                    if (sendFlowManager.validate(displayAlert = true)) {
+                        sendFlowManager.dispatch(SendFlowManagerAction.FinalizeAndGoToNextScreen)
+                    }
+                },
+                onScanQr = {
+                    presenter.sheetState = TaggedItem(SendFlowPresenter.SheetState.Qr)
+                },
+                onChangeSpeed = {
+                    presenter.sheetState = TaggedItem(SendFlowPresenter.SheetState.Fee)
+                },
+                onToggleBalanceVisibility = {
+                    // TODO: implement balance visibility toggle
+                },
+                onAmountTap = {
+                    presenter.sheetState = TaggedItem(SendFlowPresenter.SheetState.CoinControlCustomAmount)
+                },
+                onUtxoDetailsClick = {
+                    presenter.sheetState = TaggedItem(SendFlowPresenter.SheetState.CoinControlCustomAmount)
+                },
+                // TODO: get from app preferences
+                isBalanceHidden = false,
+                balanceAmount = walletManager.amountFmt(walletManager.balance.spendable()),
+                balanceDenomination = walletManager.unit,
+                sendingAmount = sendFlowManager.sendAmountBtc,
+                sendingDenomination = walletManager.unit,
+                dollarEquivalentText = sendFlowManager.sendAmountFiat,
+                initialAddress = sendFlowManager.enteringAddress,
+                accountShort = walletManager.walletMetadata?.masterFingerprint?.asUppercase()?.take(8) ?: "",
+                feeEta =
+                    sendFlowManager.selectedFeeRate?.let {
+                        when (it.feeSpeed()) {
+                            is FeeSpeed.Slow -> "~1 hour"
+                            is FeeSpeed.Medium -> "~30 minutes"
+                            is FeeSpeed.Fast -> "~10 minutes"
+                            is FeeSpeed.Custom -> "Custom"
+                        }
+                    } ?: "~30 minutes",
+                feeAmount = sendFlowManager.totalFeeString,
+                totalSpendingCrypto = sendFlowManager.totalSpentInBtc,
+                totalSpendingFiat = sendFlowManager.totalSpentInFiat,
+                utxoCount = sendRoute.utxos.size,
+                utxos = sendRoute.utxos,
+                sendFlowManager = sendFlowManager,
+                walletManager = walletManager,
+                presenter = presenter,
+                onAddressChanged = { newAddress ->
+                    sendFlowManager.enteringAddress = newAddress
+                },
+            )
         }
         is SendRoute.Confirm -> {
             val details = sendRoute.v1.details
