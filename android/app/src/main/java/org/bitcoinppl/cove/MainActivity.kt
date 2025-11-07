@@ -24,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.ui.theme.CoveTheme
+import org.bitcoinppl.cove.views.LockView
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -73,8 +74,10 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                     app.asyncRuntimeReady -> {
-                        key(app.routeId) {
-                            RouteView(app = app, route = app.router.currentRoute)
+                        LockView {
+                            key(app.routeId) {
+                                RouteView(app = app, route = app.router.currentRoute)
+                            }
                         }
                     }
                     else -> {
