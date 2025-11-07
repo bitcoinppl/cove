@@ -2,20 +2,39 @@ package org.bitcoinppl.cove
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.send.SendScreen
 import org.bitcoinppl.cove.send.send_confirmation.SendConfirmationScreen
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
+
+/**
+ * UI state for tracking send transaction progress
+ * Mirrors iOS SendState enum
+ */
+sealed interface SendState {
+    data object Idle : SendState
+
+    data object Sending : SendState
+
+    data object Sent : SendState
+
+    data class Error(val message: String) : SendState
+}
 
 /**
  * send flow container - manages WalletManager + SendFlowManager lifecycle
@@ -200,10 +219,38 @@ private fun SendFlowRouteToScreen(
         }
         is SendRoute.Confirm -> {
             val details = sendRoute.v1.details
+            val signedTransaction = sendRoute.v1.signedTransaction
+
+            var sendState by remember { mutableStateOf<SendState>(SendState.Idle) }
+            var showSuccessAlert by remember { mutableStateOf(false) }
+            var showErrorAlert by remember { mutableStateOf(false) }
+            val scope = rememberCoroutineScope()
+
             SendConfirmationScreen(
                 onBack = { app.popRoute() },
+                sendState = sendState,
                 onSwipeToSend = {
-                    // TODO: implement sign and broadcast
+                    sendState = SendState.Sending
+                    scope.launch {
+                        try {
+                            // check if we have a pre-signed transaction (hardware wallet)
+                            if (signedTransaction != null) {
+                                walletManager.rust.broadcastTransaction(signedTransaction)
+                            } else {
+                                // sign and broadcast (hot wallet)
+                                walletManager.rust.signAndBroadcastTransaction(details.psbt())
+                            }
+                            sendState = SendState.Sent
+                            showSuccessAlert = true
+                            Auth.unlock()
+                        } catch (e: WalletManagerException) {
+                            sendState = SendState.Error(e.message ?: "Unknown error")
+                            showErrorAlert = true
+                        } catch (e: Exception) {
+                            sendState = SendState.Error(e.message ?: "Unknown error")
+                            showErrorAlert = true
+                        }
+                    }
                 },
                 onToggleBalanceVisibility = {
                     // TODO: implement balance visibility toggle
@@ -221,6 +268,57 @@ private fun SendFlowRouteToScreen(
                 willReceive = walletManager.amountFmtUnit(details.sendingAmount()),
                 willPay = walletManager.amountFmtUnit(details.spendingAmount()),
             )
+
+            // success alert dialog
+            if (showSuccessAlert) {
+                AlertDialog(
+                    onDismissRequest = {
+                        showSuccessAlert = false
+                        app.popRoute()
+                    },
+                    title = { Text("Success") },
+                    text = { Text("Transaction sent successfully!") },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                showSuccessAlert = false
+                                app.popRoute()
+                            },
+                        ) {
+                            Text("OK")
+                        }
+                    },
+                )
+            }
+
+            // error alert dialog
+            if (showErrorAlert) {
+                AlertDialog(
+                    onDismissRequest = {
+                        showErrorAlert = false
+                        sendState = SendState.Idle
+                    },
+                    title = { Text("Error") },
+                    text = {
+                        val errorMessage =
+                            when (val state = sendState) {
+                                is SendState.Error -> state.message
+                                else -> "Failed to send transaction"
+                            }
+                        Text(errorMessage)
+                    },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                showErrorAlert = false
+                                sendState = SendState.Idle
+                            },
+                        ) {
+                            Text("OK")
+                        }
+                    },
+                )
+            }
         }
         is SendRoute.HardwareExport -> {
             // TODO: implement hardware export screen

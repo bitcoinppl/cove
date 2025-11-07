@@ -19,6 +19,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CurrencyBitcoin
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -41,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.SendState
 import org.bitcoinppl.cove.ui.theme.CoveColor
 
 // Animation duration in milliseconds for swipe button returning to start position when swipe is incomplete.
@@ -81,6 +84,7 @@ private fun SendConfirmationScreenPreview() {
 fun SendConfirmationScreen(
     onBack: () -> Unit,
     onSwipeToSend: () -> Unit,
+    sendState: SendState = SendState.Idle,
     onToggleBalanceVisibility: () -> Unit = {},
     isBalanceHidden: Boolean = false,
     balanceAmount: String,
@@ -160,6 +164,7 @@ fun SendConfirmationScreen(
                     Spacer(Modifier.weight(1f))
                     SwipeToSendStub(
                         text = stringResource(R.string.action_swipe_to_send),
+                        sendState = sendState,
                         onComplete = onSwipeToSend,
                         containerColor = CoveColor.SurfaceLight,
                         targetContainerColor = SWIPE_BUTTON_BG_COLOR_TARGET,
@@ -398,6 +403,7 @@ private fun KeyValueRow(
 @Composable
 private fun SwipeToSendStub(
     text: String,
+    sendState: SendState,
     onComplete: () -> Unit,
     containerColor: Color,
     targetContainerColor: Color,
@@ -419,7 +425,7 @@ private fun SwipeToSendStub(
     val progress = if (maxOffsetPx <= 0f) 0f else (currentOffset / maxOffsetPx).coerceIn(0f, 1f)
     val dragState =
         rememberDraggableState { delta ->
-            if (!completed) {
+            if (!completed && sendState is SendState.Idle) {
                 rawOffset = (rawOffset + delta).coerceIn(0f, maxOffsetPx)
             }
         }
@@ -431,6 +437,19 @@ private fun SwipeToSendStub(
         animationSpec = infiniteRepeatable(animation = tween(900), repeatMode = RepeatMode.Reverse),
         label = "pulseAlpha",
     )
+
+    // snap to full when state changes to non-idle
+    LaunchedEffect(sendState) {
+        if (sendState !is SendState.Idle) {
+            animOffset.snapTo(maxOffsetPx)
+            rawOffset = maxOffsetPx
+        } else {
+            // reset when back to idle
+            animOffset.snapTo(0f)
+            rawOffset = 0f
+            completed = false
+        }
+    }
     Box(
         modifier =
             modifier
@@ -458,7 +477,7 @@ private fun SwipeToSendStub(
                 .draggable(
                     state = dragState,
                     orientation = Orientation.Horizontal,
-                    enabled = true,
+                    enabled = sendState is SendState.Idle,
                     onDragStarted = {
                         isDragging = true
                     },
@@ -482,14 +501,76 @@ private fun SwipeToSendStub(
         contentAlignment = Alignment.Center,
     ) {
         val displayColor = androidx.compose.ui.graphics.lerp(textColor, targetTextColor, progress)
-        Text(
-            text = text,
-            color = displayColor,
-            fontSize = 18.sp,
-            fontWeight = FontWeight.SemiBold,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.align(Alignment.Center),
-        )
+
+        // show swipe text only when idle
+        if (sendState is SendState.Idle) {
+            Text(
+                text = text,
+                color = displayColor,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.align(Alignment.Center),
+            )
+        }
+
+        // state overlay - matches iOS SwipeToSendView
+        when (sendState) {
+            is SendState.Idle -> Unit // handled above
+            is SendState.Sending -> {
+                Row(
+                    modifier = Modifier.align(Alignment.Center),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "sending",
+                        color = Color.White,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    ThreeDotsAnimation()
+                }
+            }
+            is SendState.Sent -> {
+                Row(
+                    modifier = Modifier.align(Alignment.Center),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "sent",
+                        color = Color.White,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = null,
+                        tint = Color.Green,
+                    )
+                }
+            }
+            is SendState.Error -> {
+                Row(
+                    modifier = Modifier.align(Alignment.Center),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "error",
+                        color = Color.White,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = null,
+                        tint = Color.Red,
+                    )
+                }
+            }
+        }
 
         Box(
             modifier =
@@ -501,11 +582,41 @@ private fun SwipeToSendStub(
                     .background(knobColor),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                contentDescription = null,
-                tint = Color.White,
-                modifier = Modifier.graphicsLayer(alpha = if (!isDragging && progress == 0f) pulseAlpha else 1f),
+            // only show arrow icon when idle
+            if (sendState is SendState.Idle) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.graphicsLayer(alpha = if (!isDragging && progress == 0f) pulseAlpha else 1f),
+                )
+            }
+        }
+    }
+}
+
+// three dots animation for sending state
+@Composable
+private fun ThreeDotsAnimation() {
+    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        repeat(3) { index ->
+            val infiniteTransition = rememberInfiniteTransition(label = "dot$index")
+            val alpha by infiniteTransition.animateFloat(
+                initialValue = 0.3f,
+                targetValue = 1f,
+                animationSpec =
+                    infiniteRepeatable(
+                        animation = tween(600, delayMillis = index * 200),
+                        repeatMode = RepeatMode.Reverse,
+                    ),
+                label = "dotAlpha$index",
+            )
+            Box(
+                modifier =
+                    Modifier
+                        .size(6.dp)
+                        .graphicsLayer { this.alpha = alpha }
+                        .background(Color.White, CircleShape),
             )
         }
     }
