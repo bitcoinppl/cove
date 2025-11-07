@@ -1,11 +1,9 @@
 package org.bitcoinppl.cove
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import org.bitcoinppl.cove.flow.new_wallet.NewWalletSelectScreen
+import org.bitcoinppl.cove.flow.new_wallet.cold_wallet.QrCodeImportScreen
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
 
@@ -44,13 +42,7 @@ fun NewWalletContainer(
         is NewWalletRoute.ColdWallet -> {
             when (route.v1) {
                 ColdWalletRoute.QR_CODE -> {
-                    // TODO: implement QrCodeImportScreen
-                    Box(
-                        modifier = modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        androidx.compose.material3.Text("QR Code Import - TODO")
-                    }
+                    QrCodeImportScreen(app = app, modifier = modifier)
                 }
             }
         }
