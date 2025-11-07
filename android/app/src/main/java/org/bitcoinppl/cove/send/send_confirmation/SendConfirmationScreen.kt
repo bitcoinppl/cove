@@ -604,17 +604,19 @@ private fun ThreeDotsAnimation() {
             val alpha by infiniteTransition.animateFloat(
                 initialValue = 0.3f,
                 targetValue = 1f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(600, delayMillis = index * 200),
-                    repeatMode = RepeatMode.Reverse,
-                ),
+                animationSpec =
+                    infiniteRepeatable(
+                        animation = tween(600, delayMillis = index * 200),
+                        repeatMode = RepeatMode.Reverse,
+                    ),
                 label = "dotAlpha$index",
             )
             Box(
-                modifier = Modifier
-                    .size(6.dp)
-                    .graphicsLayer { this.alpha = alpha }
-                    .background(Color.White, CircleShape)
+                modifier =
+                    Modifier
+                        .size(6.dp)
+                        .graphicsLayer { this.alpha = alpha }
+                        .background(Color.White, CircleShape),
             )
         }
     }

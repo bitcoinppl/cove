@@ -28,8 +28,11 @@ import org.bitcoinppl.cove_core.types.*
  */
 sealed interface SendState {
     data object Idle : SendState
+
     data object Sending : SendState
+
     data object Sent : SendState
+
     data class Error(val message: String) : SendState
 }
 
@@ -280,24 +283,28 @@ private fun SendFlowRouteToScreen(
                             onClick = {
                                 showSuccessAlert = false
                                 app.popRoute()
-                            }
+                            },
                         ) {
                             Text("OK")
                         }
-                    }
+                    },
                 )
             }
 
             // error alert dialog
             if (showErrorAlert) {
                 AlertDialog(
-                    onDismissRequest = { showErrorAlert = false },
+                    onDismissRequest = {
+                        showErrorAlert = false
+                        sendState = SendState.Idle
+                    },
                     title = { Text("Error") },
                     text = {
-                        val errorMessage = when (val state = sendState) {
-                            is SendState.Error -> state.message
-                            else -> "Failed to send transaction"
-                        }
+                        val errorMessage =
+                            when (val state = sendState) {
+                                is SendState.Error -> state.message
+                                else -> "Failed to send transaction"
+                            }
                         Text(errorMessage)
                     },
                     confirmButton = {
@@ -305,11 +312,11 @@ private fun SendFlowRouteToScreen(
                             onClick = {
                                 showErrorAlert = false
                                 sendState = SendState.Idle
-                            }
+                            },
                         ) {
                             Text("OK")
                         }
-                    }
+                    },
                 )
             }
         }
