@@ -99,6 +99,12 @@ fun LockView(
                         super.onAuthenticationSucceeded(result)
                         auth.isUsingBiometrics = false
                         showBiometric = false
+
+                        // if in decoy mode, switch back to main mode (biometric = trusted user = main mode)
+                        if (auth.isInDecoyMode()) {
+                            auth.switchToMainMode()
+                        }
+
                         auth.unlock()
                     }
 

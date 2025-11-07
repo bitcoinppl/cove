@@ -166,9 +166,14 @@ class AuthManager private constructor() : AuthManagerReconciler {
         if (checkDecoyPin(pin)) {
             // enter decoy mode if not already in decoy mode and reset app and router
             if (Database().globalConfig().isInMainMode()) {
-                rust.switchToDecoyMode()
-                unlock()
-                resetAppAndSelectWallet()
+                try {
+                    rust.switchToDecoyMode()
+                    unlock()
+                    resetAppAndSelectWallet()
+                } catch (e: Exception) {
+                    android.util.Log.e(tag, "failed to switch to decoy mode", e)
+                    return UnlockMode.LOCKED
+                }
             }
 
             return UnlockMode.DECOY
@@ -177,18 +182,23 @@ class AuthManager private constructor() : AuthManagerReconciler {
         // check if the entered pin is a wipeDataPin
         // if so wipe the data
         if (checkWipeDataPin(pin)) {
-            App.rust.dangerousWipeAllData()
+            try {
+                App.rust.dangerousWipeAllData()
 
-            // reset auth manager
-            rust = RustAuthManager()
-            unlock()
+                // reset auth manager
+                rust = RustAuthManager()
+                unlock()
 
-            type = AuthType.NONE
+                type = AuthType.NONE
 
-            // reset app manager
-            App.reset()
+                // reset app manager
+                App.reset()
 
-            return UnlockMode.WIPE
+                return UnlockMode.WIPE
+            } catch (e: Exception) {
+                android.util.Log.e(tag, "failed to wipe all data", e)
+                return UnlockMode.LOCKED
+            }
         }
 
         return UnlockMode.LOCKED
@@ -198,8 +208,12 @@ class AuthManager private constructor() : AuthManagerReconciler {
      * switch to main mode from decoy mode
      */
     fun switchToMainMode() {
-        rust.switchToMainMode()
-        resetAppAndSelectWallet()
+        try {
+            rust.switchToMainMode()
+            resetAppAndSelectWallet()
+        } catch (e: Exception) {
+            android.util.Log.e(tag, "failed to switch to main mode", e)
+        }
     }
 
     override fun reconcile(message: AuthManagerReconcileMessage) {
