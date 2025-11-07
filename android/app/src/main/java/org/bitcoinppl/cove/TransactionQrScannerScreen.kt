@@ -169,33 +169,29 @@ private fun QrScannerContent(
     // handle transaction import when scannedCode changes
     LaunchedEffect(scannedCode) {
         scannedCode?.let { txHex ->
-            scope.launch {
-                try {
-                    val bitcoinTransaction = BitcoinTransaction(txHex = txHex)
-                    val db = Database().unsignedTransactions()
-                    val txnRecord = db.getTxThrow(txId = bitcoinTransaction.txId())
+            try {
+                val (txnRecord, signedTransaction) = txnRecordAndSignedTxn(txHex)
 
-                    val route =
-                        RouteFactory().sendConfirm(
-                            id = txnRecord.walletId(),
-                            details = txnRecord.confirmDetails(),
-                            signedTransaction = bitcoinTransaction,
-                        )
+                val route =
+                    RouteFactory().sendConfirm(
+                        id = txnRecord.walletId(),
+                        details = txnRecord.confirmDetails(),
+                        signedTransaction = signedTransaction,
+                    )
 
-                    onDismiss() // dismiss scanner
-                    app.pushRoute(route)
-                } catch (e: Exception) {
-                    Log.e("TransactionQrScanner", "Error importing transaction: $e")
-                    errorMessage = e.message ?: "Failed to import signed transaction"
-                    onDismiss()
-                    app.alertState =
-                        TaggedItem(
-                            AppAlertState.General(
-                                title = "Import Error",
-                                message = errorMessage ?: "Failed to import transaction",
-                            ),
-                        )
-                }
+                onDismiss() // dismiss scanner
+                app.pushRoute(route)
+            } catch (e: Exception) {
+                Log.e("TransactionQrScanner", "Error importing transaction: $e")
+                errorMessage = e.message ?: "Failed to import signed transaction"
+                onDismiss()
+                app.alertState =
+                    TaggedItem(
+                        AppAlertState.General(
+                            title = "Import Error",
+                            message = errorMessage ?: "Failed to import transaction",
+                        ),
+                    )
             }
         }
     }

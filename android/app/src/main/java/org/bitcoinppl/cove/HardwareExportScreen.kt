@@ -89,6 +89,18 @@ private enum class AlertState {
     PasteError,
 }
 
+/**
+ * Parse signed transaction and retrieve original unsigned transaction record
+ * Returns pair of (UnsignedTransactionRecord, BitcoinTransaction)
+ * Throws exception if parsing fails or transaction not found
+ */
+internal fun txnRecordAndSignedTxn(hex: String): Pair<UnsignedTransactionRecord, BitcoinTransaction> {
+    val bitcoinTransaction = BitcoinTransaction(txHex = hex)
+    val db = Database().unsignedTransactions()
+    val record = db.getTxThrow(txId = bitcoinTransaction.txId())
+    return Pair(record, bitcoinTransaction)
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HardwareExportScreen(
@@ -104,6 +116,7 @@ fun HardwareExportScreen(
     var confirmationState by remember { mutableStateOf<ConfirmationState?>(null) }
     var alertState by remember { mutableStateOf<AlertState?>(null) }
     var alertMessage by remember { mutableStateOf("") }
+    var showQrScanner by remember { mutableStateOf(false) }
 
     var bbqrStrings by remember { mutableStateOf<List<String>>(emptyList()) }
 
@@ -133,13 +146,19 @@ fun HardwareExportScreen(
                                 }
                             } ?: throw Exception("Unable to read file")
 
-                        // TODO: implement transaction parsing and import
-                        // this requires implementing txnRecordAndSignedTxn equivalent
-                        alertState = AlertState.FileError
-                        alertMessage = "File import not yet fully implemented"
+                        val (txnRecord, signedTransaction) = txnRecordAndSignedTxn(fileContents.trim())
+
+                        val route =
+                            RouteFactory().sendConfirm(
+                                id = txnRecord.walletId(),
+                                details = txnRecord.confirmDetails(),
+                                signedTransaction = signedTransaction,
+                            )
+
+                        app.pushRoute(route)
                     } catch (e: Exception) {
                         alertState = AlertState.FileError
-                        alertMessage = e.message ?: "Unknown error"
+                        alertMessage = e.message ?: "Failed to import signed transaction"
                     }
                 }
             }
@@ -401,9 +420,7 @@ fun HardwareExportScreen(
                         TextButton(
                             onClick = {
                                 confirmationState = null
-                                // TODO: open QR scanner
-                                alertState = AlertState.FileError
-                                alertMessage = "QR scanner not yet implemented"
+                                showQrScanner = true
                             },
                             modifier = Modifier.fillMaxWidth(),
                         ) {
@@ -425,19 +442,33 @@ fun HardwareExportScreen(
                         TextButton(
                             onClick = {
                                 confirmationState = null
-                                val clipboard =
-                                    context.getSystemService(Context.CLIPBOARD_SERVICE)
-                                        as ClipboardManager
-                                val clipData = clipboard.primaryClip
-                                val code = clipData?.getItemAt(0)?.text?.toString() ?: ""
+                                scope.launch {
+                                    try {
+                                        val clipboard =
+                                            context.getSystemService(Context.CLIPBOARD_SERVICE)
+                                                as ClipboardManager
+                                        val clipData = clipboard.primaryClip
+                                        val code = clipData?.getItemAt(0)?.text?.toString() ?: ""
 
-                                if (code.isEmpty()) {
-                                    alertState = AlertState.PasteError
-                                    alertMessage = "No text found on the clipboard."
-                                } else {
-                                    // TODO: implement transaction parsing
-                                    alertState = AlertState.PasteError
-                                    alertMessage = "Paste import not yet fully implemented"
+                                        if (code.isEmpty()) {
+                                            alertState = AlertState.PasteError
+                                            alertMessage = "No text found on the clipboard."
+                                        } else {
+                                            val (txnRecord, signedTransaction) = txnRecordAndSignedTxn(code.trim())
+
+                                            val route =
+                                                RouteFactory().sendConfirm(
+                                                    id = txnRecord.walletId(),
+                                                    details = txnRecord.confirmDetails(),
+                                                    signedTransaction = signedTransaction,
+                                                )
+
+                                            app.pushRoute(route)
+                                        }
+                                    } catch (e: Exception) {
+                                        alertState = AlertState.PasteError
+                                        alertMessage = e.message ?: "Failed to parse transaction from clipboard"
+                                    }
                                 }
                             },
                             modifier = Modifier.fillMaxWidth(),
@@ -489,6 +520,14 @@ fun HardwareExportScreen(
                     Text("OK")
                 }
             },
+        )
+    }
+
+    // fullscreen QR scanner
+    if (showQrScanner) {
+        TransactionQrScannerScreen(
+            app = app,
+            onDismiss = { showQrScanner = false },
         )
     }
 }
