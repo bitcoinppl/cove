@@ -34,6 +34,7 @@ import org.bitcoinppl.cove_core.BitcoinTransaction
 import org.bitcoinppl.cove_core.Database
 import org.bitcoinppl.cove_core.MultiQr
 import org.bitcoinppl.cove_core.RouteFactory
+import org.bitcoinppl.cove_core.StringOrData
 import java.util.concurrent.Executors
 
 @OptIn(ExperimentalPermissionsApi::class, ExperimentalMaterial3Api::class)
@@ -154,7 +155,7 @@ private fun QrScannerContent(
     var scanComplete by remember { mutableStateOf(false) }
     var totalParts by remember { mutableStateOf<UInt?>(null) }
     var partsLeft by remember { mutableStateOf<UInt?>(null) }
-    var scannedCode by remember { mutableStateOf<String?>(null) }
+    var scannedCode by remember { mutableStateOf<StringOrData?>(null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     val partsScanned =
@@ -168,9 +169,10 @@ private fun QrScannerContent(
 
     // handle transaction import when scannedCode changes
     LaunchedEffect(scannedCode) {
-        scannedCode?.let { txHex ->
+        scannedCode?.let { stringOrData ->
             try {
-                val (txnRecord, signedTransaction) = txnRecordAndSignedTxn(txHex)
+                val transaction = BitcoinTransaction.tryFromStringOrData(stringOrData)
+                val (txnRecord, signedTransaction) = txnRecordAndSignedTxn(transaction)
 
                 val route =
                     RouteFactory().sendConfirm(
@@ -367,30 +369,52 @@ private fun handleQrCode(
     onMultiQrUpdate: (MultiQr) -> Unit,
     onTotalPartsUpdate: (UInt) -> Unit,
     onPartsLeftUpdate: (UInt) -> Unit,
-    onScanComplete: (String) -> Unit,
+    onScanComplete: (StringOrData) -> Unit,
     onError: (String) -> Unit,
 ) {
     try {
-        val qrString = barcode.rawValue ?: return
+        // check both rawBytes (binary) and rawValue (text)
+        // prioritize rawValue (text) if available, fall back to rawBytes (binary)
+        val qrData = when {
+            barcode.rawValue != null -> StringOrData.String(barcode.rawValue!!)
+            barcode.rawBytes != null -> StringOrData.Data(barcode.rawBytes!!)
+            else -> return // no data available
+        }
 
         // try to create or use existing multi-qr
         val currentMultiQr =
             multiQr ?: try {
-                val newMultiQr = MultiQr.newFromString(qr = qrString)
+                val newMultiQr = MultiQr.tryNew(qr = qrData)
                 onMultiQrUpdate(newMultiQr)
                 onTotalPartsUpdate(newMultiQr.totalParts())
                 newMultiQr
             } catch (e: Exception) {
                 Log.d("TransactionQrScanner", "Not a BBQr (single QR): ${e.message}")
                 // single QR code (not BBQr)
-                onScanComplete(qrString)
+                onScanComplete(qrData)
                 return
             }
 
         // check if it's a BBQr
         if (!currentMultiQr.isBbqr()) {
-            onScanComplete(qrString)
+            onScanComplete(qrData)
             return
+        }
+
+        // for BBQr parts, we need to use the string representation
+        // extract the string from StringOrData for addPart
+        val qrString = when (qrData) {
+            is StringOrData.String -> qrData.v1
+            is StringOrData.Data -> {
+                // try to convert bytes to string for BBQr
+                try {
+                    qrData.v1.toString(Charsets.UTF_8)
+                } catch (e: Exception) {
+                    Log.e("TransactionQrScanner", "Failed to convert binary to string for BBQr: $e")
+                    onError("Binary QR codes not supported for multi-part BBQr")
+                    return
+                }
+            }
         }
 
         // add part to BBQr
@@ -399,7 +423,8 @@ private fun handleQrCode(
 
         if (result.isComplete()) {
             val finalData = result.finalResult()
-            onScanComplete(finalData)
+            // finalResult returns a string, so wrap it in StringOrData
+            onScanComplete(StringOrData.String(finalData))
         }
     } catch (e: Exception) {
         onError(e.message ?: "Unknown error")

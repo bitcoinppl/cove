@@ -101,6 +101,16 @@ internal fun txnRecordAndSignedTxn(hex: String): Pair<UnsignedTransactionRecord,
     return Pair(record, bitcoinTransaction)
 }
 
+/**
+ * Overload that takes a BitcoinTransaction directly
+ * Throws exception if transaction not found in database
+ */
+internal fun txnRecordAndSignedTxn(transaction: BitcoinTransaction): Pair<UnsignedTransactionRecord, BitcoinTransaction> {
+    val db = Database().unsignedTransactions()
+    val record = db.getTxThrow(txId = transaction.txId())
+    return Pair(record, transaction)
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HardwareExportScreen(
