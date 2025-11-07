@@ -28,7 +28,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -92,11 +91,13 @@ fun LockView(
                 object : BiometricPrompt.AuthenticationCallback() {
                     override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
                         super.onAuthenticationError(errorCode, errString)
+                        auth.isUsingBiometrics = false
                         showBiometric = false
                     }
 
                     override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                         super.onAuthenticationSucceeded(result)
+                        auth.isUsingBiometrics = false
                         showBiometric = false
                         auth.unlock()
                     }
@@ -144,8 +145,12 @@ fun LockView(
                         BiometricView(
                             showBoth = auth.type == AuthType.BOTH,
                             onBiometricTap = {
-                                showBiometric = true
-                                biometricPrompt?.authenticate(promptInfo)
+                                // guard against re-entry
+                                if (!auth.isUsingBiometrics) {
+                                    auth.isUsingBiometrics = true
+                                    showBiometric = true
+                                    biometricPrompt?.authenticate(promptInfo)
+                                }
                             },
                             onEnterPinTap = {
                                 screen = Screen.PIN
@@ -155,6 +160,7 @@ fun LockView(
                     // show PIN screen
                     else -> {
                         NumberPadPinView(
+                            showPin = false,
                             isPinCorrect = { pin ->
                                 when (auth.handleAndReturnUnlockMode(pin)) {
                                     UnlockMode.MAIN, UnlockMode.DECOY, UnlockMode.WIPE -> true

@@ -38,6 +38,8 @@ class AuthManager private constructor() : AuthManagerReconciler {
     var isLocked by mutableStateOf(true)
         private set
 
+    var isUsingBiometrics by mutableStateOf(false)
+
     var isWipeDataPinEnabled by mutableStateOf<Boolean>(rust.isWipeDataPinEnabled())
         private set
 
