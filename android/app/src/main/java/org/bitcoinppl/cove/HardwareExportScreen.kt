@@ -71,6 +71,14 @@ import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
 import java.io.File
 
+internal object TransactionImportErrors {
+    const val FAILED_TO_IMPORT = "Failed to import signed transaction"
+    const val INVALID_HEX_FORMAT = "Invalid transaction format. Expected hexadecimal string."
+    const val FILE_READ_ERROR = "Unable to read file"
+    const val CLIPBOARD_EMPTY = "No text found on the clipboard."
+    const val TRANSACTION_NOT_FOUND = "Transaction not found in pending transactions."
+}
+
 private enum class SheetState {
     Details,
     InputOutputDetails,
@@ -95,9 +103,21 @@ private enum class AlertState {
  * Throws exception if parsing fails or transaction not found
  */
 internal fun txnRecordAndSignedTxn(hex: String): Pair<UnsignedTransactionRecord, BitcoinTransaction> {
-    val bitcoinTransaction = BitcoinTransaction(txHex = hex)
+    val bitcoinTransaction =
+        try {
+            BitcoinTransaction(txHex = hex)
+        } catch (e: Exception) {
+            throw IllegalArgumentException(TransactionImportErrors.INVALID_HEX_FORMAT, e)
+        }
+
     val db = Database().unsignedTransactions()
-    val record = db.getTxThrow(txId = bitcoinTransaction.txId())
+    val record =
+        try {
+            db.getTxThrow(txId = bitcoinTransaction.txId())
+        } catch (e: Exception) {
+            throw IllegalArgumentException(TransactionImportErrors.TRANSACTION_NOT_FOUND, e)
+        }
+
     return Pair(record, bitcoinTransaction)
 }
 
@@ -154,7 +174,7 @@ fun HardwareExportScreen(
                                 context.contentResolver.openInputStream(uri)?.use { input ->
                                     input.bufferedReader().use { it.readText() }
                                 }
-                            } ?: throw Exception("Unable to read file")
+                            } ?: throw Exception(TransactionImportErrors.FILE_READ_ERROR)
 
                         val (txnRecord, signedTransaction) = txnRecordAndSignedTxn(fileContents.trim())
 
@@ -168,7 +188,7 @@ fun HardwareExportScreen(
                         app.pushRoute(route)
                     } catch (e: Exception) {
                         alertState = AlertState.FileError
-                        alertMessage = e.message ?: "Failed to import signed transaction"
+                        alertMessage = e.message ?: TransactionImportErrors.FAILED_TO_IMPORT
                     }
                 }
             }
@@ -452,18 +472,20 @@ fun HardwareExportScreen(
                         TextButton(
                             onClick = {
                                 confirmationState = null
-                                scope.launch {
-                                    try {
-                                        val clipboard =
-                                            context.getSystemService(Context.CLIPBOARD_SERVICE)
-                                                as ClipboardManager
-                                        val clipData = clipboard.primaryClip
-                                        val code = clipData?.getItemAt(0)?.text?.toString() ?: ""
+                                // clipboard access is synchronous and non-blocking
+                                val clipboard =
+                                    context.getSystemService(Context.CLIPBOARD_SERVICE)
+                                        as ClipboardManager
+                                val clipData = clipboard.primaryClip
+                                val code = clipData?.getItemAt(0)?.text?.toString() ?: ""
 
-                                        if (code.isEmpty()) {
-                                            alertState = AlertState.PasteError
-                                            alertMessage = "No text found on the clipboard."
-                                        } else {
+                                if (code.isEmpty()) {
+                                    alertState = AlertState.PasteError
+                                    alertMessage = TransactionImportErrors.CLIPBOARD_EMPTY
+                                } else {
+                                    // only wrap blocking FFI operations in coroutine
+                                    scope.launch {
+                                        try {
                                             val (txnRecord, signedTransaction) = txnRecordAndSignedTxn(code.trim())
 
                                             val route =
@@ -474,10 +496,10 @@ fun HardwareExportScreen(
                                                 )
 
                                             app.pushRoute(route)
+                                        } catch (e: Exception) {
+                                            alertState = AlertState.PasteError
+                                            alertMessage = e.message ?: TransactionImportErrors.FAILED_TO_IMPORT
                                         }
-                                    } catch (e: Exception) {
-                                        alertState = AlertState.PasteError
-                                        alertMessage = e.message ?: "Failed to parse transaction from clipboard"
                                     }
                                 }
                             },
