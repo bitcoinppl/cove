@@ -484,6 +484,7 @@ private fun handleQrCode(
 
         onStateUpdate(
             scanningState.copy(
+                multiQr = multiQr,
                 partsLeft = partsLeft,
                 totalParts = scanningState.totalParts ?: multiQr.totalParts(),
             ),
