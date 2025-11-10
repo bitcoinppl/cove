@@ -49,6 +49,20 @@ Key actors include:
 
 Actors are ideal for components that need to process messages sequentially, maintain internal state, and send reconciliation updates back to the UI when work completes.
 
+**Singleton pattern.** Many core components use singleton patterns for global access, implemented via `OnceLock`, `LazyLock`, or `ArcSwap`. Creating new instances returns cheap clones (typically `Arc` clones) of the global singleton, similar to how `AppManager.shared` works on iOS or `AppManager.getInstance()` on Android. Key singletons include:
+
+- `Database::global()` (`rust/src/database.rs`) - Database access via `OnceCell<ArcSwap<Database>>`. Calling `Database()` from Kotlin/Swift returns an `Arc` clone of the global instance.
+- `App::global()` (`rust/src/app.rs`) - Application state and routing coordinator via `OnceCell<App>`.
+- `FfiApp::global()` (`rust/src/app.rs`) - FFI wrapper for app, always returns a new `Arc<Self>` that accesses `App::global()`.
+- `AUTH_MANAGER` (`rust/src/manager/auth_manager.rs`) - Authentication manager via `LazyLock<Arc<RustAuthManager>>`.
+- `Keychain::global()` (`rust/crates/cove-device/src/keychain.rs`) - Platform keychain access via `OnceCell`, initialized once by the host app.
+- `Device::global()` (`rust/crates/cove-device/src/device.rs`) - Device capabilities access via `OnceCell`, initialized once by the host app.
+- `FIAT_CLIENT` (`rust/src/fiat/client.rs`) - Price fetching client via `LazyLock<FiatClient>`.
+- `FEE_CLIENT` (`rust/src/fee_client.rs`) - Fee estimation client via `LazyLock<FeeClient>`.
+- `PRICES` & `FEES` - Thread-safe cached data via `LazyLock<ArcSwap<Option<T>>>` for lock-free reads with atomic updates.
+
+This pattern is used throughout the codebase for shared resources and is safe to use from any thread. Platform code mirrors this with `AppManager.shared` (iOS) and `AppManager.getInstance()` (Android).
+
 **State reconciliation.** Each manager module owns a `flume` channel pair. Rust emits typed `…ReconcileMessage` enums through the channel, and the generated FFI surface forwards them to the platform reconcilers. Platform managers should call `listen_for_updates` immediately after instantiating their Rust counterpart (e.g. `AppManager` in `ios/Cove/AppManager.swift`) so no reconciliation messages are missed. Long-lived managers (wallet, send flow, auth) also keep shared state in `Arc<RwLock<_>>` structures so the reconciler can request snapshots.
 
 **Routing & application shell.** `rust/src/app.rs` defines `App`, the singleton that coordinates routing, fees/prices, network selection, and terms acceptance. Its `FfiApp` wrapper implements the UniFFI object exposed to the UI. Route updates use `AppStateReconcileMessage` callbacks to keep Kotlin/Swift state in sync.

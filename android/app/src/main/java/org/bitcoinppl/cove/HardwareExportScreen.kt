@@ -71,6 +71,14 @@ import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
 import java.io.File
 
+internal object TransactionImportErrors {
+    const val FAILED_TO_IMPORT = "Failed to import signed transaction"
+    const val INVALID_HEX_FORMAT = "Invalid transaction format. Expected hexadecimal string."
+    const val FILE_READ_ERROR = "Unable to read file"
+    const val CLIPBOARD_EMPTY = "No text found on the clipboard."
+    const val TRANSACTION_NOT_FOUND = "Transaction not found in pending transactions."
+}
+
 private enum class SheetState {
     Details,
     InputOutputDetails,
@@ -89,6 +97,40 @@ private enum class AlertState {
     PasteError,
 }
 
+/**
+ * Parse signed transaction and retrieve original unsigned transaction record
+ * Returns pair of (UnsignedTransactionRecord, BitcoinTransaction)
+ * Throws exception if parsing fails or transaction not found
+ */
+internal fun txnRecordAndSignedTxn(hex: String): Pair<UnsignedTransactionRecord, BitcoinTransaction> {
+    val bitcoinTransaction =
+        try {
+            BitcoinTransaction(txHex = hex)
+        } catch (e: Exception) {
+            throw IllegalArgumentException(TransactionImportErrors.INVALID_HEX_FORMAT, e)
+        }
+
+    val db = Database().unsignedTransactions()
+    val record =
+        try {
+            db.getTxThrow(txId = bitcoinTransaction.txId())
+        } catch (e: Exception) {
+            throw IllegalArgumentException(TransactionImportErrors.TRANSACTION_NOT_FOUND, e)
+        }
+
+    return Pair(record, bitcoinTransaction)
+}
+
+/**
+ * Overload that takes a BitcoinTransaction directly
+ * Throws exception if transaction not found in database
+ */
+internal fun txnRecordAndSignedTxn(transaction: BitcoinTransaction): Pair<UnsignedTransactionRecord, BitcoinTransaction> {
+    val db = Database().unsignedTransactions()
+    val record = db.getTxThrow(txId = transaction.txId())
+    return Pair(record, transaction)
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HardwareExportScreen(
@@ -104,6 +146,7 @@ fun HardwareExportScreen(
     var confirmationState by remember { mutableStateOf<ConfirmationState?>(null) }
     var alertState by remember { mutableStateOf<AlertState?>(null) }
     var alertMessage by remember { mutableStateOf("") }
+    var showQrScanner by remember { mutableStateOf(false) }
 
     var bbqrStrings by remember { mutableStateOf<List<String>>(emptyList()) }
 
@@ -131,15 +174,21 @@ fun HardwareExportScreen(
                                 context.contentResolver.openInputStream(uri)?.use { input ->
                                     input.bufferedReader().use { it.readText() }
                                 }
-                            } ?: throw Exception("Unable to read file")
+                            } ?: throw Exception(TransactionImportErrors.FILE_READ_ERROR)
 
-                        // TODO: implement transaction parsing and import
-                        // this requires implementing txnRecordAndSignedTxn equivalent
-                        alertState = AlertState.FileError
-                        alertMessage = "File import not yet fully implemented"
+                        val (txnRecord, signedTransaction) = txnRecordAndSignedTxn(fileContents.trim())
+
+                        val route =
+                            RouteFactory().sendConfirm(
+                                id = txnRecord.walletId(),
+                                details = txnRecord.confirmDetails(),
+                                signedTransaction = signedTransaction,
+                            )
+
+                        app.pushRoute(route)
                     } catch (e: Exception) {
                         alertState = AlertState.FileError
-                        alertMessage = e.message ?: "Unknown error"
+                        alertMessage = e.message ?: TransactionImportErrors.FAILED_TO_IMPORT
                     }
                 }
             }
@@ -401,9 +450,7 @@ fun HardwareExportScreen(
                         TextButton(
                             onClick = {
                                 confirmationState = null
-                                // TODO: open QR scanner
-                                alertState = AlertState.FileError
-                                alertMessage = "QR scanner not yet implemented"
+                                showQrScanner = true
                             },
                             modifier = Modifier.fillMaxWidth(),
                         ) {
@@ -425,6 +472,7 @@ fun HardwareExportScreen(
                         TextButton(
                             onClick = {
                                 confirmationState = null
+                                // clipboard access is synchronous and non-blocking
                                 val clipboard =
                                     context.getSystemService(Context.CLIPBOARD_SERVICE)
                                         as ClipboardManager
@@ -433,11 +481,26 @@ fun HardwareExportScreen(
 
                                 if (code.isEmpty()) {
                                     alertState = AlertState.PasteError
-                                    alertMessage = "No text found on the clipboard."
+                                    alertMessage = TransactionImportErrors.CLIPBOARD_EMPTY
                                 } else {
-                                    // TODO: implement transaction parsing
-                                    alertState = AlertState.PasteError
-                                    alertMessage = "Paste import not yet fully implemented"
+                                    // only wrap blocking FFI operations in coroutine
+                                    scope.launch {
+                                        try {
+                                            val (txnRecord, signedTransaction) = txnRecordAndSignedTxn(code.trim())
+
+                                            val route =
+                                                RouteFactory().sendConfirm(
+                                                    id = txnRecord.walletId(),
+                                                    details = txnRecord.confirmDetails(),
+                                                    signedTransaction = signedTransaction,
+                                                )
+
+                                            app.pushRoute(route)
+                                        } catch (e: Exception) {
+                                            alertState = AlertState.PasteError
+                                            alertMessage = e.message ?: TransactionImportErrors.FAILED_TO_IMPORT
+                                        }
+                                    }
                                 }
                             },
                             modifier = Modifier.fillMaxWidth(),
@@ -489,6 +552,14 @@ fun HardwareExportScreen(
                     Text("OK")
                 }
             },
+        )
+    }
+
+    // fullscreen QR scanner
+    if (showQrScanner) {
+        TransactionQrScannerScreen(
+            app = app,
+            onDismiss = { showQrScanner = false },
         )
     }
 }
