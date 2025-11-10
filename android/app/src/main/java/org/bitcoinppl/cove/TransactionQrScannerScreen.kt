@@ -11,6 +11,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Error
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -19,6 +20,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
@@ -29,13 +31,39 @@ import com.google.accompanist.permissions.rememberPermissionState
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
-import kotlinx.coroutines.launch
 import org.bitcoinppl.cove_core.BitcoinTransaction
-import org.bitcoinppl.cove_core.Database
 import org.bitcoinppl.cove_core.MultiQr
 import org.bitcoinppl.cove_core.RouteFactory
 import org.bitcoinppl.cove_core.StringOrData
 import java.util.concurrent.Executors
+
+/**
+ * Represents the state of the QR scanner
+ */
+private sealed class ScannerState {
+    object Idle : ScannerState()
+
+    data class Scanning(
+        val multiQr: MultiQr? = null,
+        val totalParts: UInt? = null,
+        val partsLeft: UInt? = null,
+    ) : ScannerState() {
+        val partsScanned: Int?
+            get() =
+                totalParts?.let { total ->
+                    partsLeft?.let { left ->
+                        (total - left).toInt()
+                    }
+                }
+
+        val isMultiPart: Boolean
+            get() = totalParts != null && partsLeft != null
+    }
+
+    data class Error(val message: String) : ScannerState()
+
+    data class Complete(val data: StringOrData) : ScannerState()
+}
 
 @OptIn(ExperimentalPermissionsApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -151,26 +179,13 @@ private fun QrScannerContent(
     val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
 
-    var multiQr by remember { mutableStateOf<MultiQr?>(null) }
-    var scanComplete by remember { mutableStateOf(false) }
-    var totalParts by remember { mutableStateOf<UInt?>(null) }
-    var partsLeft by remember { mutableStateOf<UInt?>(null) }
-    var scannedCode by remember { mutableStateOf<StringOrData?>(null) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var scannerState by remember { mutableStateOf<ScannerState>(ScannerState.Idle) }
 
-    val partsScanned =
-        remember(totalParts, partsLeft) {
-            totalParts?.let { total ->
-                partsLeft?.let { left ->
-                    (total - left).toInt()
-                }
-            }
-        }
-
-    // handle transaction import when scannedCode changes
-    LaunchedEffect(scannedCode) {
-        scannedCode?.let { stringOrData ->
+    // handle transaction import when scan completes
+    LaunchedEffect(scannerState) {
+        if (scannerState is ScannerState.Complete) {
             try {
+                val stringOrData = (scannerState as ScannerState.Complete).data
                 val transaction = BitcoinTransaction.tryFromStringOrData(stringOrData)
                 val (txnRecord, signedTransaction) = txnRecordAndSignedTxn(transaction)
 
@@ -181,18 +196,13 @@ private fun QrScannerContent(
                         signedTransaction = signedTransaction,
                     )
 
-                onDismiss() // dismiss scanner
+                onDismiss()
                 app.pushRoute(route)
             } catch (e: Exception) {
                 Log.e("TransactionQrScanner", "Error importing transaction: $e")
-                errorMessage = e.message ?: "Failed to import signed transaction"
-                onDismiss()
-                app.alertState =
-                    TaggedItem(
-                        AppAlertState.General(
-                            title = "Import Error",
-                            message = errorMessage ?: "Failed to import transaction",
-                        ),
+                scannerState =
+                    ScannerState.Error(
+                        e.message ?: TransactionImportErrors.FAILED_TO_IMPORT,
                     )
             }
         }
@@ -205,142 +215,184 @@ private fun QrScannerContent(
     val analysisRef = remember { mutableStateOf<ImageAnalysis?>(null) }
 
     Box(modifier = modifier) {
-        if (!scanComplete) {
-            // camera preview
-            AndroidView(
-                factory = { ctx ->
-                    val previewView = PreviewView(ctx)
-                    val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
+        when (val state = scannerState) {
+            is ScannerState.Error -> {
+                // show error overlay with retry option
+                Column(
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.9f))
+                            .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Error,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(64.dp),
+                    )
 
-                    cameraProviderFuture.addListener({
-                        val cameraProvider = cameraProviderFuture.get()
-                        cameraProviderRef.value = cameraProvider
+                    Spacer(modifier = Modifier.height(16.dp))
 
-                        val preview =
-                            Preview.Builder().build().also {
-                                it.setSurfaceProvider(previewView.surfaceProvider)
-                            }
-                        previewRef.value = preview
+                    Text(
+                        text = "Scan Failed",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                    )
 
-                        val imageAnalysis =
-                            ImageAnalysis.Builder()
-                                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                                .build()
-                                .also { analysis ->
-                                    analysis.setAnalyzer(executor) { imageProxy ->
-                                        val mediaImage = imageProxy.image
-                                        if (mediaImage != null) {
-                                            val image =
-                                                InputImage.fromMediaImage(
-                                                    mediaImage,
-                                                    imageProxy.imageInfo.rotationDegrees,
-                                                )
+                    Spacer(modifier = Modifier.height(8.dp))
 
-                                            val mainExecutor = ContextCompat.getMainExecutor(ctx)
-                                            barcodeScanner.process(image)
-                                                .addOnSuccessListener(mainExecutor) { barcodes ->
-                                                    for (barcode in barcodes) {
-                                                        if (barcode.format == Barcode.FORMAT_QR_CODE) {
-                                                            handleQrCode(
-                                                                barcode = barcode,
-                                                                multiQr = multiQr,
-                                                                onMultiQrUpdate = { multiQr = it },
-                                                                onTotalPartsUpdate = { totalParts = it },
-                                                                onPartsLeftUpdate = { partsLeft = it },
-                                                                onScanComplete = {
-                                                                    scanComplete = true
-                                                                    scannedCode = it
-                                                                },
-                                                                onError = { error ->
-                                                                    Log.e("TransactionQrScanner", "Error: $error")
-                                                                    errorMessage = error
-                                                                },
-                                                            )
-                                                            break
-                                                        }
-                                                    }
-                                                }
-                                                .addOnFailureListener(mainExecutor) { e ->
-                                                    Log.e("TransactionQrScanner", "Barcode processing failed", e)
-                                                }
-                                                .addOnCompleteListener {
-                                                    imageProxy.close()
-                                                }
-                                        } else {
-                                            imageProxy.close()
-                                        }
-                                    }
-                                }
-                        analysisRef.value = imageAnalysis
+                    Text(
+                        text = state.message,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White.copy(alpha = 0.7f),
+                        textAlign = TextAlign.Center,
+                    )
 
-                        val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+                    Spacer(modifier = Modifier.height(24.dp))
 
-                        try {
-                            cameraProvider.unbindAll()
-                            cameraProvider.bindToLifecycle(
-                                lifecycleOwner,
-                                cameraSelector,
-                                preview,
-                                imageAnalysis,
-                            )
-                        } catch (e: Exception) {
-                            Log.e("TransactionQrScanner", "Camera binding failed", e)
-                        }
-                    }, ContextCompat.getMainExecutor(ctx))
-
-                    previewView
-                },
-                modifier = Modifier.fillMaxSize(),
-            )
-
-            // overlay content
-            Column(
-                modifier =
-                    Modifier
-                        .fillMaxSize()
-                        .padding(16.dp),
-                verticalArrangement = Arrangement.SpaceBetween,
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Spacer(modifier = Modifier.weight(1f))
-
-                Text(
-                    text = "Scan Signed Transaction",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color.White,
-                )
-
-                Spacer(modifier = Modifier.weight(5f))
-
-                // multi-part progress
-                if (totalParts != null && partsLeft != null) {
-                    Column(
-                        modifier =
-                            Modifier
-                                .background(Color.Black.copy(alpha = 0.7f))
-                                .padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
+                    Button(
+                        onClick = { scannerState = ScannerState.Idle },
                     ) {
-                        Text(
-                            text = "Scanned $partsScanned of ${totalParts?.toInt()}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium,
-                            color = Color.White,
-                        )
-
-                        Spacer(modifier = Modifier.height(4.dp))
-
-                        Text(
-                            text = "${partsLeft?.toInt()} parts left",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White.copy(alpha = 0.7f),
-                        )
+                        Text("Try Again")
                     }
                 }
+            }
 
-                Spacer(modifier = Modifier.weight(1f))
+            is ScannerState.Complete -> {
+                // scanning complete, show nothing (transition handled in LaunchedEffect)
+            }
+
+            else -> {
+                // camera preview for Idle and Scanning states
+                AndroidView(
+                    factory = { ctx ->
+                        val previewView = PreviewView(ctx)
+                        val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
+
+                        cameraProviderFuture.addListener({
+                            val cameraProvider = cameraProviderFuture.get()
+                            cameraProviderRef.value = cameraProvider
+
+                            val preview =
+                                Preview.Builder().build().also {
+                                    it.setSurfaceProvider(previewView.surfaceProvider)
+                                }
+                            previewRef.value = preview
+
+                            val imageAnalysis =
+                                ImageAnalysis.Builder()
+                                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                                    .build()
+                                    .also { analysis ->
+                                        analysis.setAnalyzer(executor) { imageProxy ->
+                                            val mediaImage = imageProxy.image
+                                            if (mediaImage != null) {
+                                                val image =
+                                                    InputImage.fromMediaImage(
+                                                        mediaImage,
+                                                        imageProxy.imageInfo.rotationDegrees,
+                                                    )
+
+                                                val mainExecutor = ContextCompat.getMainExecutor(ctx)
+                                                barcodeScanner.process(image)
+                                                    .addOnSuccessListener(mainExecutor) { barcodes ->
+                                                        for (barcode in barcodes) {
+                                                            if (barcode.format == Barcode.FORMAT_QR_CODE) {
+                                                                handleQrCode(
+                                                                    currentState = scannerState,
+                                                                    barcode = barcode,
+                                                                    onStateUpdate = { scannerState = it },
+                                                                )
+                                                                break
+                                                            }
+                                                        }
+                                                    }
+                                                    .addOnFailureListener(mainExecutor) { e ->
+                                                        Log.e("TransactionQrScanner", "Barcode processing failed", e)
+                                                    }
+                                                    .addOnCompleteListener {
+                                                        imageProxy.close()
+                                                    }
+                                            } else {
+                                                imageProxy.close()
+                                            }
+                                        }
+                                    }
+                            analysisRef.value = imageAnalysis
+
+                            val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+
+                            try {
+                                cameraProvider.unbindAll()
+                                cameraProvider.bindToLifecycle(
+                                    lifecycleOwner,
+                                    cameraSelector,
+                                    preview,
+                                    imageAnalysis,
+                                )
+                            } catch (e: Exception) {
+                                Log.e("TransactionQrScanner", "Camera binding failed", e)
+                            }
+                        }, ContextCompat.getMainExecutor(ctx))
+
+                        previewView
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                )
+
+                // overlay content
+                Column(
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .padding(16.dp),
+                    verticalArrangement = Arrangement.SpaceBetween,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Spacer(modifier = Modifier.weight(1f))
+
+                    Text(
+                        text = "Scan Signed Transaction",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White,
+                    )
+
+                    Spacer(modifier = Modifier.weight(5f))
+
+                    // multi-part progress
+                    if (state is ScannerState.Scanning && state.isMultiPart) {
+                        Column(
+                            modifier =
+                                Modifier
+                                    .background(Color.Black.copy(alpha = 0.7f))
+                                    .padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Text(
+                                text = "Scanned ${state.partsScanned} of ${state.totalParts?.toInt()}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium,
+                                color = Color.White,
+                            )
+
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            Text(
+                                text = "${state.partsLeft?.toInt()} parts left",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White.copy(alpha = 0.7f),
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.weight(1f))
+                }
             }
         }
     }
@@ -364,69 +416,85 @@ private fun QrScannerContent(
 }
 
 private fun handleQrCode(
+    currentState: ScannerState,
     barcode: Barcode,
-    multiQr: MultiQr?,
-    onMultiQrUpdate: (MultiQr) -> Unit,
-    onTotalPartsUpdate: (UInt) -> Unit,
-    onPartsLeftUpdate: (UInt) -> Unit,
-    onScanComplete: (StringOrData) -> Unit,
-    onError: (String) -> Unit,
+    onStateUpdate: (ScannerState) -> Unit,
 ) {
     try {
         // check both rawBytes (binary) and rawValue (text)
         // prioritize rawValue (text) if available, fall back to rawBytes (binary)
-        val qrData = when {
-            barcode.rawValue != null -> StringOrData.String(barcode.rawValue!!)
-            barcode.rawBytes != null -> StringOrData.Data(barcode.rawBytes!!)
-            else -> return // no data available
-        }
+        val qrData =
+            when {
+                barcode.rawValue != null -> StringOrData.String(barcode.rawValue!!)
+                barcode.rawBytes != null -> StringOrData.Data(barcode.rawBytes!!)
+                else -> return // no data available
+            }
+
+        val scanningState =
+            when (currentState) {
+                is ScannerState.Scanning -> currentState
+                else -> ScannerState.Scanning()
+            }
 
         // try to create or use existing multi-qr
-        val currentMultiQr =
-            multiQr ?: try {
+        val multiQr =
+            scanningState.multiQr ?: try {
                 val newMultiQr = MultiQr.tryNew(qr = qrData)
-                onMultiQrUpdate(newMultiQr)
-                onTotalPartsUpdate(newMultiQr.totalParts())
+                val totalParts = newMultiQr.totalParts()
+                onStateUpdate(
+                    ScannerState.Scanning(
+                        multiQr = newMultiQr,
+                        totalParts = totalParts,
+                    ),
+                )
                 newMultiQr
             } catch (e: Exception) {
                 Log.d("TransactionQrScanner", "Not a BBQr (single QR): ${e.message}")
                 // single QR code (not BBQr)
-                onScanComplete(qrData)
+                onStateUpdate(ScannerState.Complete(qrData))
                 return
             }
 
         // check if it's a BBQr
-        if (!currentMultiQr.isBbqr()) {
-            onScanComplete(qrData)
+        if (!multiQr.isBbqr()) {
+            onStateUpdate(ScannerState.Complete(qrData))
             return
         }
 
         // for BBQr parts, we need to use the string representation
         // extract the string from StringOrData for addPart
-        val qrString = when (qrData) {
-            is StringOrData.String -> qrData.v1
-            is StringOrData.Data -> {
-                // try to convert bytes to string for BBQr
-                try {
-                    qrData.v1.toString(Charsets.UTF_8)
-                } catch (e: Exception) {
-                    Log.e("TransactionQrScanner", "Failed to convert binary to string for BBQr: $e")
-                    onError("Binary QR codes not supported for multi-part BBQr")
-                    return
+        val qrString =
+            when (qrData) {
+                is StringOrData.String -> qrData.v1
+                is StringOrData.Data -> {
+                    // try to convert bytes to string for BBQr
+                    try {
+                        qrData.v1.toString(Charsets.UTF_8)
+                    } catch (e: Exception) {
+                        Log.e("TransactionQrScanner", "Failed to convert binary to string for BBQr: $e")
+                        onStateUpdate(ScannerState.Error("Binary QR codes not supported for multi-part BBQr"))
+                        return
+                    }
                 }
             }
-        }
 
         // add part to BBQr
-        val result = currentMultiQr.addPart(qr = qrString)
-        onPartsLeftUpdate(result.partsLeft())
+        val result = multiQr.addPart(qr = qrString)
+        val partsLeft = result.partsLeft()
+
+        onStateUpdate(
+            scanningState.copy(
+                partsLeft = partsLeft,
+                totalParts = scanningState.totalParts ?: multiQr.totalParts(),
+            ),
+        )
 
         if (result.isComplete()) {
             val finalData = result.finalResult()
             // finalResult returns a string, so wrap it in StringOrData
-            onScanComplete(StringOrData.String(finalData))
+            onStateUpdate(ScannerState.Complete(StringOrData.String(finalData)))
         }
     } catch (e: Exception) {
-        onError(e.message ?: "Unknown error")
+        onStateUpdate(ScannerState.Error(e.message ?: "Unknown scanning error"))
     }
 }
