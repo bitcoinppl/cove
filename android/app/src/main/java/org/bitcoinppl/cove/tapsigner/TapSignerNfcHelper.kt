@@ -102,99 +102,111 @@ class TapSignerNfcHelper(
         activity: Activity,
         cmd: TapSignerCmd,
         successResult: (TapSignerResponse?) -> T?,
-    ): T =
-        withTimeout(90_000) {
-            suspendCancellableCoroutine { continuation ->
-                val nfcAdapter = NfcAdapter.getDefaultAdapter(activity)
+    ): T {
+        val nfcAdapter = NfcAdapter.getDefaultAdapter(activity)
 
-                if (nfcAdapter == null) {
-                    continuation.resumeWithException(Exception("NFC is not supported on this device"))
-                    return@suspendCancellableCoroutine
-                }
+        if (nfcAdapter == null) {
+            throw Exception("NFC is not supported on this device")
+        }
 
-                if (!nfcAdapter.isEnabled) {
-                    continuation.resumeWithException(Exception("NFC is disabled. Please enable it in Settings"))
-                    return@suspendCancellableCoroutine
-                }
+        if (!nfcAdapter.isEnabled) {
+            throw Exception("NFC is disabled. Please enable it in Settings")
+        }
 
-                val hasResumed = AtomicBoolean(false)
+        return try {
+            withTimeout(90_000) {
+                suspendCancellableCoroutine { continuation ->
+                    val hasResumed = AtomicBoolean(false)
 
-                // enable reader mode for ISO14443 tags (TapSigner uses ISO7816)
-                nfcAdapter.enableReaderMode(
-                    activity,
-                    { nfcTag ->
-                        if (hasResumed.get()) return@enableReaderMode
+                    // enable reader mode for ISO14443 tags (TapSigner uses ISO7816)
+                    nfcAdapter.enableReaderMode(
+                        activity,
+                        { nfcTag ->
+                            if (hasResumed.get()) return@enableReaderMode
 
-                        // launch coroutine to handle async operations
-                        CoroutineScope(Dispatchers.IO).launch {
-                            try {
-                                // get IsoDep technology
-                                val isoDep = IsoDep.get(nfcTag)
-                                if (isoDep == null) {
-                                    if (hasResumed.compareAndSet(false, true)) {
-                                        nfcAdapter.disableReaderMode(activity)
-                                        continuation.resumeWithException(Exception("Tag does not support IsoDep"))
-                                    }
-                                    return@launch
-                                }
-
-                                // connect to tag
-                                isoDep.connect()
-                                android.util.Log.d(tag, "Connected to IsoDep tag")
-
-                                // create transport and reader
-                                val transport = TapCardTransport(isoDep)
-                                val reader = createTapSignerReader(transport, cmd)
-
-                                // run the command
-                                val response = reader.run()
-                                lastResponse = response
-
-                                // extract result
-                                val result = successResult(response)
-                                if (result != null) {
-                                    if (hasResumed.compareAndSet(false, true)) {
-                                        nfcAdapter.disableReaderMode(activity)
-                                        continuation.resume(result)
-                                    }
-                                } else {
-                                    if (hasResumed.compareAndSet(false, true)) {
-                                        nfcAdapter.disableReaderMode(activity)
-                                        continuation.resumeWithException(
-                                            Exception("Failed to extract result from response"),
-                                        )
-                                    }
-                                }
-
-                                // cleanup
+                            // launch coroutine to handle async operations
+                            CoroutineScope(Dispatchers.IO).launch {
+                                var isoDep: IsoDep? = null
                                 try {
-                                    if (isoDep.isConnected) {
-                                        isoDep.close()
+                                    // get IsoDep technology
+                                    isoDep = IsoDep.get(nfcTag)
+                                    if (isoDep == null) {
+                                        if (hasResumed.compareAndSet(false, true)) {
+                                            continuation.resumeWithException(Exception("Tag does not support IsoDep"))
+                                        }
+                                        return@launch
+                                    }
+
+                                    // connect to tag
+                                    isoDep.connect()
+                                    android.util.Log.d(tag, "Connected to IsoDep tag")
+
+                                    // create transport and reader
+                                    val transport = TapCardTransport(isoDep)
+                                    val reader = createTapSignerReader(transport, cmd)
+
+                                    // run the command
+                                    val response = reader.run()
+                                    lastResponse = response
+
+                                    // extract result
+                                    val result = successResult(response)
+                                    if (result != null) {
+                                        if (hasResumed.compareAndSet(false, true)) {
+                                            continuation.resume(result)
+                                        }
+                                    } else {
+                                        if (hasResumed.compareAndSet(false, true)) {
+                                            continuation.resumeWithException(
+                                                Exception("Failed to extract result from response"),
+                                            )
+                                        }
                                     }
                                 } catch (e: Exception) {
-                                    android.util.Log.e(tag, "Error closing IsoDep", e)
-                                }
-                            } catch (e: Exception) {
-                                android.util.Log.e(tag, "Error processing TapSigner command", e)
-                                if (hasResumed.compareAndSet(false, true)) {
-                                    nfcAdapter.disableReaderMode(activity)
-                                    continuation.resumeWithException(e)
+                                    android.util.Log.e(tag, "Error processing TapSigner command", e)
+                                    if (hasResumed.compareAndSet(false, true)) {
+                                        continuation.resumeWithException(e)
+                                    }
+                                } finally {
+                                    // always close IsoDep connection
+                                    isoDep?.let {
+                                        try {
+                                            if (it.isConnected) {
+                                                it.close()
+                                            }
+                                        } catch (e: Exception) {
+                                            android.util.Log.e(tag, "Error closing IsoDep", e)
+                                        }
+                                    }
+                                    // always disable reader mode after operation completes
+                                    if (hasResumed.get()) {
+                                        activity.runOnUiThread {
+                                            nfcAdapter.disableReaderMode(activity)
+                                        }
+                                    }
                                 }
                             }
-                        }
-                    },
-                    NfcAdapter.FLAG_READER_NFC_A or
-                        NfcAdapter.FLAG_READER_SKIP_NDEF_CHECK or
-                        NfcAdapter.FLAG_READER_NO_PLATFORM_SOUNDS,
-                    null,
-                )
+                        },
+                        NfcAdapter.FLAG_READER_NFC_A or
+                            NfcAdapter.FLAG_READER_SKIP_NDEF_CHECK or
+                            NfcAdapter.FLAG_READER_NO_PLATFORM_SOUNDS,
+                        null,
+                    )
 
-                // cleanup when cancelled
-                continuation.invokeOnCancellation {
-                    nfcAdapter.disableReaderMode(activity)
+                    // cleanup when cancelled
+                    continuation.invokeOnCancellation {
+                        activity.runOnUiThread {
+                            nfcAdapter.disableReaderMode(activity)
+                        }
+                    }
                 }
             }
+        } finally {
+            activity.runOnUiThread {
+                nfcAdapter.disableReaderMode(activity)
+            }
         }
+    }
 
     private suspend fun doSetupTapSigner(
         activity: Activity,
