@@ -166,7 +166,9 @@ fun SelectedWalletContainer(
                                     }
                                 }
                                 else -> {
-                                    manager?.rust?.labelManager()?.export()
+                                    withContext(Dispatchers.IO) {
+                                        manager?.rust?.labelManager()?.export()
+                                    }
                                 }
                             }
 
@@ -180,6 +182,9 @@ fun SelectedWalletContainer(
                             val message =
                                 if (isExporting) "Transactions exported successfully" else "Labels exported successfully"
                             snackbarHostState.showSnackbar(message)
+                        } ?: run {
+                            val errorType = if (isExporting) "transactions" else "labels"
+                            snackbarHostState.showSnackbar("Error: Unable to generate $errorType export data")
                         }
 
                         isExporting = false
