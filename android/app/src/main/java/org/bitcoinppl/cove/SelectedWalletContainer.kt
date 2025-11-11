@@ -19,7 +19,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.components.FullPageLoadingView
-import org.bitcoinppl.cove.wallet_transactions.MoreOptionsBottomSheet
+import org.bitcoinppl.cove.wallet_transactions.WalletMoreOptionsSheet
 import org.bitcoinppl.cove.wallet_transactions.WalletTransactionsScreen
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
@@ -55,7 +55,6 @@ fun SelectedWalletContainer(
 ) {
     var manager by remember { mutableStateOf<WalletManager?>(null) }
     var loadedId by remember { mutableStateOf<WalletId?>(null) }
-    var showMoreOptions by remember { mutableStateOf(false) }
     val tag = "SelectedWalletContainer"
 
     // load manager on appear
