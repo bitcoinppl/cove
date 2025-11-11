@@ -14,7 +14,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -34,9 +33,13 @@ private const val WALLET_SCAN_DELAY_MS = 400L
 // delay before showing export loading alert
 private const val EXPORT_LOADING_ALERT_DELAY_MS = 500L
 
+// delay before showing file picker after dismissing alert
+private const val ALERT_DISMISS_DELAY_MS = 500L
+
 // export type for tracking what is being exported
 sealed class ExportType {
     data object Labels : ExportType()
+
     data object Transactions : ExportType()
 }
 
@@ -130,7 +133,6 @@ fun SelectedWalletContainer(
     // state for more options sheet
     var showMoreOptions by remember { mutableStateOf(false) }
     var exportType by remember { mutableStateOf<ExportType?>(null) }
-    var exportLoadingJob by remember { mutableStateOf<Job?>(null) }
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -150,8 +152,9 @@ fun SelectedWalletContainer(
                             } ?: throw Exception("Unable to read file")
 
                         // validate import was successful before showing success message
-                        val labelManager = manager?.rust?.labelManager()
-                            ?: throw Exception("Label manager not available")
+                        val labelManager =
+                            manager?.rust?.labelManager()
+                                ?: throw Exception("Label manager not available")
 
                         labelManager.import(fileContents.trim())
 
@@ -161,7 +164,7 @@ fun SelectedWalletContainer(
                         snackbarHostState.showSnackbar("Labels imported successfully")
                     } catch (e: Exception) {
                         android.util.Log.e(tag, "error importing labels", e)
-                        snackbarHostState.showSnackbar("Unable to import labels. Please check the file format.")
+                        snackbarHostState.showSnackbar("Unable to import labels: ${e.localizedMessage ?: e.message}")
                     }
                 }
             }
@@ -176,19 +179,19 @@ fun SelectedWalletContainer(
                 scope.launch {
                     val currentExportType = exportType
                     try {
-                        // show loading alert after 500ms if export is taking long (like iOS)
-                        val loadingJob = scope.launch {
-                            delay(EXPORT_LOADING_ALERT_DELAY_MS)
-                            if (currentExportType is ExportType.Transactions) {
-                                app.alertState = TaggedItem(
-                                    AppAlertState.General(
-                                        title = "Exporting, please wait...",
-                                        message = "Creating a transaction export file. If this is the first time it might take a while"
-                                    )
-                                )
+                        val alertTask =
+                            scope.launch {
+                                delay(EXPORT_LOADING_ALERT_DELAY_MS)
+                                if (currentExportType is ExportType.Transactions) {
+                                    app.alertState =
+                                        TaggedItem(
+                                            AppAlertState.General(
+                                                title = "Exporting, please wait...",
+                                                message = "Creating a transaction export file. If this is the first time it might take a while",
+                                            ),
+                                        )
+                                }
                             }
-                        }
-                        exportLoadingJob = loadingJob
 
                         val content =
                             when (currentExportType) {
@@ -205,11 +208,13 @@ fun SelectedWalletContainer(
                                 null -> null
                             }
 
-                        // cancel loading alert if it's showing
-                        loadingJob.cancel()
+                        // cancel loading alert task
+                        alertTask.cancel()
+
+                        // dismiss alert if showing and wait before continuing
                         if (app.alertState != null) {
                             app.alertState = null
-                            delay(500)
+                            delay(ALERT_DISMISS_DELAY_MS)
                         }
 
                         content?.let { data ->
@@ -219,42 +224,42 @@ fun SelectedWalletContainer(
                                 }
                             }
 
-                            val message = when (currentExportType) {
-                                is ExportType.Transactions -> "Transactions exported successfully"
-                                is ExportType.Labels -> "Labels exported successfully"
-                                null -> "Export completed"
-                            }
+                            val message =
+                                when (currentExportType) {
+                                    is ExportType.Transactions -> "Transactions exported successfully"
+                                    is ExportType.Labels -> "Labels exported successfully"
+                                    null -> "Export completed"
+                                }
                             snackbarHostState.showSnackbar(message)
                         } ?: run {
-                            val errorType = when (currentExportType) {
-                                is ExportType.Transactions -> "transactions"
-                                is ExportType.Labels -> "labels"
-                                null -> "export"
-                            }
+                            val errorType =
+                                when (currentExportType) {
+                                    is ExportType.Transactions -> "transactions"
+                                    is ExportType.Labels -> "labels"
+                                    null -> "export"
+                                }
                             snackbarHostState.showSnackbar("Unable to generate $errorType export data")
                         }
                     } catch (e: Exception) {
                         android.util.Log.e(tag, "error exporting file", e)
-                        exportLoadingJob?.cancel()
                         if (app.alertState != null) {
                             app.alertState = null
                         }
 
-                        val errorType = when (currentExportType) {
-                            is ExportType.Transactions -> "transactions"
-                            is ExportType.Labels -> "labels"
-                            null -> "export"
-                        }
-                        snackbarHostState.showSnackbar("Unable to export $errorType. Please try again.")
+                        val errorType =
+                            when (currentExportType) {
+                                is ExportType.Transactions -> "transactions"
+                                is ExportType.Labels -> "labels"
+                                null -> "export"
+                            }
+                        snackbarHostState.showSnackbar("Unable to export $errorType: ${e.localizedMessage ?: e.message}")
                     } finally {
                         exportType = null
-                        exportLoadingJob = null
                     }
                 }
             } ?: run {
                 // reset state if user cancelled the document picker
                 exportType = null
-                exportLoadingJob = null
             }
         }
 

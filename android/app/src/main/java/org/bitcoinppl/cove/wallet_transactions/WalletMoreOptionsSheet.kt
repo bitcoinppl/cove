@@ -45,7 +45,10 @@ fun WalletMoreOptionsSheet(
     onExportLabels: () -> Unit,
     onExportTransactions: () -> Unit,
 ) {
-    val metadata = manager.walletMetadata ?: return
+    val metadata =
+        manager.walletMetadata ?: run {
+            return
+        }
     val hasLabels = manager.rust.labelManager().hasLabels()
     val hasTransactions = manager.hasTransactions
     val hardwareMetadata = metadata.hardwareMetadata
