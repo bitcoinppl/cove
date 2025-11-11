@@ -24,9 +24,9 @@ reviews:
         - ONLY suggest Dispatchers.IO with profiling evidence showing >16ms UI blocking
         - If you see a Rust FFI call on the main thread, DO NOT FLAG IT - this is correct
 
+        - Ignore generated bindings code in android/app/src/main/java/org/bitcoinppl/cove_core/**
         - Verify correct functionality and logic consistency.
         - Check for idiomatic Kotlin usage and performance best practices.
-        - Ignore generated bindings code in android/app/src/main/java/org/bitcoinppl/cove_core/**
 
         FFI Resource Management:
         - Always verify that UniFFI objects implementing AutoCloseable call .close() before being nulled
@@ -36,64 +36,70 @@ reviews:
         Compose Best Practices:
         - LaunchedEffect should be keyed to actual dependencies, not Unit
         - Set loading states at the beginning of LaunchedEffect blocks
-  general_guidelines: |
-    - Check spelling and grammar in code comments and documentation across all files.
-    - Look for consistent styling, formatting, and naming conventions.
-    - Suggest improvements for readability, maintainability, and modularity.
-    - Flag TODOs, FIXMEs, and commented-out code for potential cleanup.
-
-    CRITICAL - Rust FFI Threading Policy:
-    - DO NOT suggest moving Rust FFI calls to background threads or using Dispatchers.IO
-    - Rust FFI calls are synchronous, fast, and handle threading internally via Tokio runtime
-    - Only suggest threading changes if there is profiling evidence of actual UI blocking
-    - The Rust core is async-first and manages its own thread pool
 
 knowledge_base:
-  - |
-    ## Cove Architecture Overview
+  code_guidelines:
+    enabled: true
+    guidelines: |
+      ## General Code Guidelines
 
-    This project uses a Rust core with UniFFI-generated bindings for iOS (Swift) and Android (Kotlin).
+      - Check spelling and grammar in code comments and documentation across all files.
+      - Look for consistent styling, formatting, and naming conventions.
+      - Suggest improvements for readability, maintainability, and modularity.
+      - Flag TODOs, FIXMEs, and commented-out code for potential cleanup.
 
-    ### Core Architecture Principles
+      CRITICAL - Rust FFI Threading Policy:
+      - DO NOT suggest moving Rust FFI calls to background threads or using Dispatchers.IO
+      - Rust FFI calls are synchronous, fast, and handle threading internally via Tokio runtime
+      - Only suggest threading changes if there is profiling evidence of actual UI blocking
+      - The Rust core is async-first and manages its own thread pool
 
-    1. **Rust Core is Single Source of Truth**
-       - All wallet logic, networking, persistence, and hardware integrations in rust/
-       - Wraps BDK, redb, NFC, and TapSigner support
-       - UniFFI generates FFI bindings automatically
+      ## Cove Architecture Overview
 
-    2. **Async Runtime**
-       - Rust core is async-first with Tokio runtime
-       - Runtime initialized once via FfiApp::init_on_start
-       - Background workloads use act-zero actors on Tokio runtime
+      For complete architecture documentation, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
-    3. **State Reconciliation Pattern**
-       - Rust emits typed reconciliation messages via flume channels
-       - Platform managers listen for updates and update observable state
-       - Flow: UI calls manager.dispatch(action) → Rust mutates state → reconciler updates UI
+      This project uses a Rust core with UniFFI-generated bindings for iOS (Swift) and Android (Kotlin).
 
-    4. **FFI Resource Management**
-       - UniFFI objects implement AutoCloseable (Kotlin) with destroy() methods
-       - Resources register cleanup via UniffiCleaner
-       - Must call .close() before nulling to trigger proper cleanup and zeroization
+      ### Core Architecture Principles
 
-    ### Android-Specific Architecture
+      1. **Rust Core is Single Source of Truth**
+         - All wallet logic, networking, persistence, and hardware integrations in rust/
+         - Wraps BDK, redb, NFC, and TapSigner support
+         - UniFFI generates FFI bindings automatically
 
-    1. **Manager Pattern**
-       - Managers extend BaseManager for lifecycle-aware coroutine scopes
-       - Use Dispatchers.Main for UI updates
-       - FFI calls from Rust are synchronous (not suspending)
+      2. **Async Runtime**
+         - Rust core is async-first with Tokio runtime
+         - Runtime initialized once via FfiApp::init_on_start
+         - Background workloads use act-zero actors on Tokio runtime
 
-    2. **Threading Model - CRITICAL**
-       - ⚠️ FFI calls are SYNCHRONOUS, FAST, and should stay on the main thread
-       - Rust core handles ALL threading internally via Tokio runtime with its own thread pool
-       - FFI calls are thin wrappers that complete in microseconds (not milliseconds)
-       - Database operations (redb) are memory-mapped and optimized for speed
-       - The Rust side handles all async operations, networking, and I/O internally
-       - DO NOT suggest withContext(Dispatchers.IO) or moving FFI calls off main thread
-       - Only suggest threading changes with profiling evidence showing >16ms blocking
-       - If you see manager.dispatch() or similar FFI calls on main thread, this is CORRECT
+      3. **State Reconciliation Pattern**
+         - Rust emits typed reconciliation messages via flume channels
+         - Platform managers listen for updates and update observable state
+         - Flow: UI calls manager.dispatch(action) → Rust mutates state → reconciler updates UI
 
-    3. **UniFFI Type Mappings**
-       - Rust errors ending in Error become Exception in Kotlin
-       - Enum variants with unnamed fields use v1, v2, v3 in Kotlin
-       - Enum variants with named fields preserve field names
+      4. **FFI Resource Management**
+         - UniFFI objects implement AutoCloseable (Kotlin) with destroy() methods
+         - Resources register cleanup via UniffiCleaner
+         - Must call .close() before nulling to trigger proper cleanup and zeroization
+
+      ### Android-Specific Architecture
+
+      1. **Manager Pattern**
+         - Managers extend BaseManager for lifecycle-aware coroutine scopes
+         - Use Dispatchers.Main for UI updates
+         - FFI calls from Rust are synchronous (not suspending)
+
+      2. **Threading Model - CRITICAL**
+         - ⚠️ FFI calls are SYNCHRONOUS, FAST, and should stay on the main thread
+         - Rust core handles ALL threading internally via Tokio runtime with its own thread pool
+         - FFI calls are thin wrappers that complete in microseconds (not milliseconds)
+         - Database operations (redb) are memory-mapped and optimized for speed
+         - The Rust side handles all async operations, networking, and I/O internally
+         - DO NOT suggest withContext(Dispatchers.IO) or moving FFI calls off main thread
+         - Only suggest threading changes with profiling evidence showing >16ms blocking
+         - If you see manager.dispatch() or similar FFI calls on main thread, this is CORRECT
+
+      3. **UniFFI Type Mappings**
+         - Rust errors ending in Error become Exception in Kotlin
+         - Enum variants with unnamed fields use v1, v2, v3 in Kotlin
+         - Enum variants with named fields preserve field names
