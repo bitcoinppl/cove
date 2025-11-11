@@ -31,6 +31,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
@@ -58,6 +59,7 @@ fun TapSignerConfirmPinView(
     var confirmPin by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
     val offsetX = remember { Animatable(0f) }
+    val context = LocalContext.current
 
     // reset PIN when screen appears
     LaunchedEffect(Unit) {
@@ -69,7 +71,20 @@ fun TapSignerConfirmPinView(
         if (confirmPin.length == 6) {
             delay(200)
             scope.launch {
-                checkPin(app, manager, args, confirmPin, offsetX) {
+                val activity = context as? android.app.Activity
+                if (activity == null) {
+                    app.alertState =
+                        TaggedItem(
+                            AppAlertState.General(
+                                title = "Error",
+                                message = "Unable to access NFC. Please try again.",
+                            ),
+                        )
+                    confirmPin = ""
+                    return@launch
+                }
+
+                checkPin(app, manager, args, confirmPin, offsetX, activity) {
                     confirmPin = ""
                 }
             }
@@ -159,6 +174,7 @@ private suspend fun checkPin(
     args: TapSignerConfirmPinArgs,
     confirmPin: String,
     offsetX: Animatable<Float, *>,
+    activity: android.app.Activity,
     onPinMismatch: () -> Unit,
 ) {
     if (confirmPin != args.newPin) {
@@ -179,8 +195,8 @@ private suspend fun checkPin(
     }
 
     when (args.action) {
-        TapSignerPinAction.SETUP -> setupTapSigner(app, manager, args)
-        TapSignerPinAction.CHANGE -> changeTapSignerPin(app, manager, args)
+        TapSignerPinAction.SETUP -> setupTapSigner(app, manager, args, activity)
+        TapSignerPinAction.CHANGE -> changeTapSignerPin(app, manager, args, activity)
     }
 }
 
@@ -188,6 +204,7 @@ private suspend fun setupTapSigner(
     app: AppManager,
     manager: TapSignerManager,
     args: TapSignerConfirmPinArgs,
+    activity: android.app.Activity,
 ) {
     val nfc = manager.getOrCreateNfc(args.tapSigner)
 
@@ -202,7 +219,7 @@ private suspend fun setupTapSigner(
         }
 
     try {
-        val response = nfc.setupTapSigner(args.startingPin, args.newPin, chainCodeBytes)
+        val response = nfc.setupTapSigner(activity, args.startingPin, args.newPin, chainCodeBytes)
 
         when (response) {
             is org.bitcoinppl.cove_core.SetupCmdResponse.Complete -> {
@@ -236,11 +253,12 @@ private suspend fun changeTapSignerPin(
     app: AppManager,
     manager: TapSignerManager,
     args: TapSignerConfirmPinArgs,
+    activity: android.app.Activity,
 ) {
     val nfc = manager.getOrCreateNfc(args.tapSigner)
 
     try {
-        nfc.changePin(args.startingPin, args.newPin)
+        nfc.changePin(activity, args.startingPin, args.newPin)
 
         app.alertState =
             TaggedItem(

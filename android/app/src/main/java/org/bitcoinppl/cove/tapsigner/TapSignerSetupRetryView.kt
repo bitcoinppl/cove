@@ -21,6 +21,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -44,6 +45,7 @@ fun TapSignerSetupRetryView(
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     Column(
         modifier =
@@ -107,9 +109,21 @@ fun TapSignerSetupRetryView(
         Button(
             onClick = {
                 scope.launch {
+                    val activity = context as? android.app.Activity
+                    if (activity == null) {
+                        app.alertState =
+                            TaggedItem(
+                                AppAlertState.General(
+                                    title = "Error",
+                                    message = "Unable to access NFC. Please try again.",
+                                ),
+                            )
+                        return@launch
+                    }
+
                     val nfc = manager.getOrCreateNfc(tapSigner)
                     try {
-                        val result = nfc.continueSetup(response)
+                        val result = nfc.continueSetup(activity, response)
                         when (result) {
                             is SetupCmdResponse.Complete -> {
                                 manager.resetRoute(TapSignerRoute.SetupSuccess(tapSigner, result.v1))

@@ -305,9 +305,12 @@ fun HardwareExportScreen(
                     SignTapSignerSection(
                         tapSigner = hwMetadata.v1,
                         onSign = {
-                            // TODO: implement TapSigner signing flow
-                            alertState = AlertState.NfcError
-                            alertMessage = "TapSigner signing not yet implemented"
+                            val route =
+                                TapSignerRoute.EnterPin(
+                                    tapSigner = hwMetadata.v1,
+                                    action = AfterPinAction.Sign(details.psbt()),
+                                )
+                            app.sheetState = TaggedItem(AppSheetState.TapSigner(route))
                         },
                     )
                 }

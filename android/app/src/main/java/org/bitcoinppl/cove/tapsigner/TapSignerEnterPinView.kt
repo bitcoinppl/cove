@@ -143,7 +143,27 @@ fun TapSignerEnterPinView(
                 if (newPin.length == 6) {
                     manager.enteredPin = newPin
                     scope.launch {
-                        runAction(app, manager, tapSigner, action, newPin, createBackupLauncher)
+                        val activity = context as? android.app.Activity
+                        if (activity == null) {
+                            app.alertState =
+                                TaggedItem(
+                                    AppAlertState.General(
+                                        title = "Error",
+                                        message = "Unable to access NFC. Please try again.",
+                                    ),
+                                )
+                            return@launch
+                        }
+
+                        runAction(
+                            app,
+                            manager,
+                            tapSigner,
+                            action,
+                            newPin,
+                            createBackupLauncher,
+                            activity,
+                        )
                     }
                 }
             },
@@ -160,21 +180,22 @@ private suspend fun runAction(
     action: org.bitcoinppl.cove_core.AfterPinAction,
     pin: String,
     createBackupLauncher: androidx.activity.result.ActivityResultLauncher<String>,
+    activity: android.app.Activity,
 ) {
     val nfc = manager.getOrCreateNfc(tapSigner)
 
     when (action) {
         is AfterPinAction.Derive -> {
-            deriveAction(app, manager, nfc, tapSigner, pin)
+            deriveAction(app, manager, nfc, tapSigner, pin, activity)
         }
         is AfterPinAction.Change -> {
             changeAction(manager, tapSigner, pin)
         }
         is AfterPinAction.Backup -> {
-            backupAction(app, nfc, tapSigner, pin, createBackupLauncher)
+            backupAction(app, nfc, tapSigner, pin, createBackupLauncher, activity)
         }
         is AfterPinAction.Sign -> {
-            signAction(app, nfc, action.v1, pin)
+            signAction(app, nfc, action.v1, pin, activity)
         }
     }
 }
@@ -185,9 +206,10 @@ private suspend fun deriveAction(
     nfc: TapSignerNfcHelper,
     tapSigner: org.bitcoinppl.cove_core.tapcard.TapSigner,
     pin: String,
+    activity: android.app.Activity,
 ) {
     try {
-        val deriveInfo = nfc.derive(pin)
+        val deriveInfo = nfc.derive(activity, pin)
         manager.resetRoute(
             org.bitcoinppl.cove_core.TapSignerRoute.ImportSuccess(
                 tapSigner,
@@ -230,9 +252,10 @@ private suspend fun backupAction(
     tapSigner: org.bitcoinppl.cove_core.tapcard.TapSigner,
     pin: String,
     createBackupLauncher: androidx.activity.result.ActivityResultLauncher<String>,
+    activity: android.app.Activity,
 ) {
     try {
-        val backup = nfc.backup(pin)
+        val backup = nfc.backup(activity, pin)
         // save backup and show export dialog
         app.saveTapSignerBackup(tapSigner, backup)
 
@@ -257,9 +280,10 @@ private suspend fun signAction(
     nfc: TapSignerNfcHelper,
     psbt: Psbt,
     pin: String,
+    activity: android.app.Activity,
 ) {
     try {
-        val signedPsbt = nfc.sign(psbt, pin)
+        val signedPsbt = nfc.sign(activity, psbt, pin)
         val db = org.bitcoinppl.cove_core.Database().unsignedTransactions()
         val txId = psbt.txId()
         val record = db.getTxThrow(txId = txId)
