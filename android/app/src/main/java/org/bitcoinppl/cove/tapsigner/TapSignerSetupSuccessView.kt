@@ -59,6 +59,9 @@ fun TapSignerSetupSuccessView(
         }
     }
 
+    // launcher for creating backup file
+    val createBackupLauncher = rememberBackupExportLauncher(app) { setup.backup }
+
     Column(
         modifier =
             modifier
@@ -129,7 +132,8 @@ fun TapSignerSetupSuccessView(
             // download backup button
             Surface(
                 onClick = {
-                    // TODO: implement backup export
+                    val fileName = "${tapSigner.identFileNamePrefix()}_backup.txt"
+                    createBackupLauncher.launch(fileName)
                 },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(10.dp),

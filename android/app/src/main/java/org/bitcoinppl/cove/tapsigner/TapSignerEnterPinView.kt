@@ -27,11 +27,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import org.bitcoinppl.cove.AppAlertState
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove_core.AfterPinAction
 import org.bitcoinppl.cove_core.TapSignerPinAction
 import org.bitcoinppl.cove_core.types.Psbt
@@ -50,6 +53,7 @@ fun TapSignerEnterPinView(
 ) {
     var pin by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     val message =
         when (action) {
@@ -67,6 +71,13 @@ fun TapSignerEnterPinView(
     LaunchedEffect(Unit) {
         pin = ""
     }
+
+    // launcher for creating backup file
+    val createBackupLauncher =
+        rememberBackupExportLauncher(app) {
+            app.getTapSignerBackup(tapSigner)
+                ?: throw IllegalStateException("Backup not available for this TapSigner")
+        }
 
     Column(
         modifier =
@@ -132,7 +143,7 @@ fun TapSignerEnterPinView(
                 if (newPin.length == 6) {
                     manager.enteredPin = newPin
                     scope.launch {
-                        runAction(app, manager, tapSigner, action, newPin)
+                        runAction(app, manager, tapSigner, action, newPin, createBackupLauncher)
                     }
                 }
             },
@@ -148,6 +159,7 @@ private suspend fun runAction(
     tapSigner: org.bitcoinppl.cove_core.tapcard.TapSigner,
     action: org.bitcoinppl.cove_core.AfterPinAction,
     pin: String,
+    createBackupLauncher: androidx.activity.result.ActivityResultLauncher<String>,
 ) {
     val nfc = manager.getOrCreateNfc(tapSigner)
 
@@ -159,7 +171,7 @@ private suspend fun runAction(
             changeAction(manager, tapSigner, pin)
         }
         is AfterPinAction.Backup -> {
-            backupAction(app, nfc, tapSigner, pin)
+            backupAction(app, nfc, tapSigner, pin, createBackupLauncher)
         }
         is AfterPinAction.Sign -> {
             signAction(app, nfc, action.v1, pin)
@@ -188,7 +200,7 @@ private suspend fun deriveAction(
             app.alertState =
                 org.bitcoinppl.cove.TaggedItem(
                     org.bitcoinppl.cove.AppAlertState.TapSignerDeriveFailed(
-                        e.message ?: "Unknown error",
+                        "Failed to derive wallet: ${e.message ?: "Unknown error occurred"}",
                     ),
                 )
         }
@@ -217,19 +229,23 @@ private suspend fun backupAction(
     nfc: TapSignerNfcHelper,
     tapSigner: org.bitcoinppl.cove_core.tapcard.TapSigner,
     pin: String,
+    createBackupLauncher: androidx.activity.result.ActivityResultLauncher<String>,
 ) {
     try {
         val backup = nfc.backup(pin)
         // save backup and show export dialog
         app.saveTapSignerBackup(tapSigner, backup)
-        // TODO: implement backup export
+
+        // trigger backup export
+        val fileName = "${tapSigner.identFileNamePrefix()}_backup.txt"
+        createBackupLauncher.launch(fileName)
     } catch (e: Exception) {
         if (!isAuthError(e)) {
             app.alertState =
                 org.bitcoinppl.cove.TaggedItem(
                     org.bitcoinppl.cove.AppAlertState.General(
                         title = "Backup Failed!",
-                        message = e.message ?: "Unknown error",
+                        message = "Failed to create backup: ${e.message ?: "Unknown error occurred"}",
                     ),
                 )
         }
@@ -262,7 +278,7 @@ private suspend fun signAction(
                 org.bitcoinppl.cove.TaggedItem(
                     org.bitcoinppl.cove.AppAlertState.General(
                         title = "Signing Failed!",
-                        message = e.message ?: "Unknown error",
+                        message = "Failed to sign transaction: ${e.message ?: "Unknown error occurred"}",
                     ),
                 )
             app.sheetState = null
