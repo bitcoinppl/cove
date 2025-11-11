@@ -156,7 +156,7 @@ class TapCardNfcManager private constructor() {
                             // handle specific errors
                             val errorMessage =
                                 when {
-                                    e.message?.contains("BadAuth") == true -> "Wrong PIN, please try again"
+                                    tapSignerErrorIsAuthError(e) -> "Wrong PIN, please try again"
                                     e.message?.contains("connection lost") == true ->
                                         "Tag connection lost, please hold your phone still"
 

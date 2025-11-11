@@ -311,6 +311,7 @@ private suspend fun signAction(
 }
 
 private fun isAuthError(error: Exception): Boolean {
-    // check if error is a bad auth error
-    return error.message?.contains("BadAuth", ignoreCase = true) == true
+    // check if error is a bad auth error using type-safe FFI function
+    return error is org.bitcoinppl.cove_core.TapSignerReaderException &&
+        org.bitcoinppl.cove_core.tapSignerErrorIsAuthError(error)
 }
