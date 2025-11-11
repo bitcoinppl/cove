@@ -156,4 +156,15 @@
     <string name="node_error_parse_title">Unable to parse URL</string>
     <string name="content_description_back">Back</string>
     <string name="content_description_selected">Selected</string>
+
+    <!-- More Options Menu -->
+    <string name="title_more_options">More Options</string>
+    <string name="menu_scan_nfc">Scan NFC</string>
+    <string name="menu_import_labels">Import Labels</string>
+    <string name="menu_export_labels">Export Labels</string>
+    <string name="menu_export_transactions">Export Transactions</string>
+    <string name="menu_change_pin">Change PIN</string>
+    <string name="menu_download_backup">Download Backup</string>
+    <string name="menu_manage_utxos">Manage UTXOs</string>
+    <string name="menu_wallet_settings">Wallet Settings</string>
 </resources>

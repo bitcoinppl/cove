@@ -219,7 +219,7 @@ private suspend fun setupTapSigner(
         }
 
     try {
-        val response = nfc.setupTapSigner(activity, args.startingPin, args.newPin, chainCodeBytes)
+        val response = nfc.setupTapSigner(args.startingPin, args.newPin, chainCodeBytes)
 
         when (response) {
             is org.bitcoinppl.cove_core.SetupCmdResponse.Complete -> {
@@ -258,7 +258,7 @@ private suspend fun changeTapSignerPin(
     val nfc = manager.getOrCreateNfc(args.tapSigner)
 
     try {
-        nfc.changePin(activity, args.startingPin, args.newPin)
+        nfc.changePin(args.startingPin, args.newPin)
 
         app.alertState =
             TaggedItem(

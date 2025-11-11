@@ -209,7 +209,7 @@ private suspend fun deriveAction(
     activity: android.app.Activity,
 ) {
     try {
-        val deriveInfo = nfc.derive(activity, pin)
+        val deriveInfo = nfc.derive(pin)
         manager.resetRoute(
             org.bitcoinppl.cove_core.TapSignerRoute.ImportSuccess(
                 tapSigner,
@@ -255,7 +255,7 @@ private suspend fun backupAction(
     activity: android.app.Activity,
 ) {
     try {
-        val backup = nfc.backup(activity, pin)
+        val backup = nfc.backup(pin)
         // save backup and show export dialog
         app.saveTapSignerBackup(tapSigner, backup)
 
@@ -283,7 +283,7 @@ private suspend fun signAction(
     activity: android.app.Activity,
 ) {
     try {
-        val signedPsbt = nfc.sign(activity, psbt, pin)
+        val signedPsbt = nfc.sign(psbt, pin)
         val db = org.bitcoinppl.cove_core.Database().unsignedTransactions()
         val txId = psbt.txId()
         val record = db.getTxThrow(txId = txId)
@@ -311,6 +311,7 @@ private suspend fun signAction(
 }
 
 private fun isAuthError(error: Exception): Boolean {
-    // check if error is a bad auth error
-    return error.message?.contains("BadAuth", ignoreCase = true) == true
+    // check if error is a bad auth error using type-safe FFI function
+    return error is org.bitcoinppl.cove_core.TapSignerReaderException &&
+        org.bitcoinppl.cove_core.tapSignerErrorIsAuthError(error)
 }

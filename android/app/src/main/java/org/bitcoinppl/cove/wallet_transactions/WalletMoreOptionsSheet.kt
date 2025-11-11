@@ -27,12 +27,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.AppSheetState
+import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove_core.AfterPinAction
 import org.bitcoinppl.cove_core.CoinControlRoute
 import org.bitcoinppl.cove_core.HardwareWalletMetadata
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.SettingsRoute
+import org.bitcoinppl.cove_core.TapSignerRoute
 import org.bitcoinppl.cove_core.WalletSettingsRoute
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -120,15 +124,20 @@ fun WalletMoreOptionsSheet(
 
             // TapSigner options
             if (hardwareMetadata is HardwareWalletMetadata.TapSigner) {
+                val tapSigner = hardwareMetadata.v1
+
                 // change PIN
                 MenuOption(
                     icon = { Icon(Icons.Default.Key, contentDescription = null) },
                     label = "Change PIN",
                     onClick = {
-                        // TODO: implement TapSigner PIN change flow
-                        // reference: iOS MoreInfoPopover.swift:79-85 (ChangePinButton)
-                        // should navigate to TapSignerRoute.enterPin with action: .change
                         onDismiss()
+                        val route =
+                            TapSignerRoute.EnterPin(
+                                tapSigner = tapSigner,
+                                action = AfterPinAction.Change,
+                            )
+                        app.sheetState = TaggedItem(AppSheetState.TapSigner(route))
                     },
                 )
 
@@ -139,10 +148,20 @@ fun WalletMoreOptionsSheet(
                     icon = { Icon(Icons.Default.Download, contentDescription = null) },
                     label = "Download Backup",
                     onClick = {
-                        // TODO: implement TapSigner backup download flow
-                        // reference: iOS MoreInfoPopover.swift:88-104 (DownloadBackupButton)
-                        // should check for cached backup or navigate to TapSignerRoute.enterPin with action: .backup
                         onDismiss()
+                        // check if backup already exists in cache
+                        val backup = app.getTapSignerBackup(tapSigner)
+                        if (backup != null) {
+                            // TODO: implement export backup directly
+                        } else {
+                            // open TapSigner flow with Backup action
+                            val route =
+                                TapSignerRoute.EnterPin(
+                                    tapSigner = tapSigner,
+                                    action = AfterPinAction.Backup,
+                                )
+                            app.sheetState = TaggedItem(AppSheetState.TapSigner(route))
+                        }
                     },
                 )
 

@@ -399,6 +399,18 @@ impl TapSignerReader {
     }
 }
 
+/// Factory function to create a TapSignerReader instance
+/// This is a workaround for UniFFI not generating async constructors for Kotlin
+/// While iOS can use the async constructor directly, Android needs this factory function
+#[uniffi::export]
+pub async fn create_tap_signer_reader(
+    transport: Box<dyn TapcardTransportProtocol>,
+    cmd: Option<TapSignerCmd>,
+) -> Result<Arc<TapSignerReader>, TapSignerReaderError> {
+    let reader = TapSignerReader::new(transport, cmd).await?;
+    Ok(Arc::new(reader))
+}
+
 #[uniffi::export]
 impl SetupCmd {
     #[uniffi::constructor(default(chain_code = None))]

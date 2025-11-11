@@ -312,7 +312,7 @@ fun SelectedWalletContainer(
                 snackbarHostState = snackbarHostState,
             )
 
-            // more options bottom sheet
+            // show more options bottom sheet
             if (showMoreOptions) {
                 WalletMoreOptionsSheet(
                     app = app,
@@ -320,7 +320,6 @@ fun SelectedWalletContainer(
                     onDismiss = { showMoreOptions = false },
                     onImportLabels = {
                         showMoreOptions = false
-                        // accept plain text and JSON files (mimics iOS behavior)
                         importLabelLauncher.launch(arrayOf("text/plain", "application/json", "application/x-jsonlines"))
                     },
                     onExportLabels = {
