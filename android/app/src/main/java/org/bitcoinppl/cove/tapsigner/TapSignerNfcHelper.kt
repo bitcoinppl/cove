@@ -1,6 +1,5 @@
 package org.bitcoinppl.cove.tapsigner
 
-import android.app.Activity
 import android.util.Log
 import org.bitcoinppl.cove.nfc.TapCardNfcManager
 import org.bitcoinppl.cove_core.*
@@ -9,7 +8,6 @@ import org.bitcoinppl.cove_core.types.Psbt
 
 /**
  * NFC helper for TapSigner operations
- * ported from iOS TapSignerNFC.swift
  */
 class TapSignerNfcHelper(
     private val tapSigner: TapSigner,
@@ -19,13 +17,12 @@ class TapSignerNfcHelper(
     private var lastResponse: TapSignerResponse? = null
 
     suspend fun setupTapSigner(
-        activity: Activity,
         factoryPin: String,
         newPin: String,
         chainCode: ByteArray? = null,
     ): SetupCmdResponse {
         return try {
-            doSetupTapSigner(activity, factoryPin, newPin, chainCode)
+            doSetupTapSigner(factoryPin, newPin, chainCode)
         } catch (e: Exception) {
             Log.e(tag, "Setup failed", e)
             throw e
@@ -37,34 +34,49 @@ class TapSignerNfcHelper(
             // NOTE: Derive returns Import response in Rust (see tap_signer_reader.rs)
             when (response) {
                 is TapSignerResponse.Import -> response.v1
-                else -> null
+                else -> throw Exception(
+                    "Unexpected response type for Derive command: ${response?.javaClass?.simpleName}",
+                )
             }
         }
     }
 
     suspend fun changePin(
-        activity: Activity,
         currentPin: String,
         newPin: String,
     ) {
         performTapSignerCmd<Unit>(TapSignerCmd.Change(currentPin, newPin)) { response ->
-            if (response is TapSignerResponse.Change) Unit else null
+            when (response) {
+                is TapSignerResponse.Change -> Unit
+                else -> throw Exception(
+                    "Unexpected response type for Change command: ${response?.javaClass?.simpleName}",
+                )
+            }
         }
     }
 
-    suspend fun backup(activity: Activity, pin: String): ByteArray {
+    suspend fun backup(pin: String): ByteArray {
         return performTapSignerCmd(TapSignerCmd.Backup(pin)) { response ->
-            (response as? TapSignerResponse.Backup)?.v1
+            when (response) {
+                is TapSignerResponse.Backup -> response.v1
+                else -> throw Exception(
+                    "Unexpected response type for Backup command: ${response?.javaClass?.simpleName}",
+                )
+            }
         }
     }
 
     suspend fun sign(
-        activity: Activity,
         psbt: Psbt,
         pin: String,
     ): Psbt {
         return performTapSignerCmd(TapSignerCmd.Sign(psbt, pin)) { response ->
-            (response as? TapSignerResponse.Sign)?.v1
+            when (response) {
+                is TapSignerResponse.Sign -> response.v1
+                else -> throw Exception(
+                    "Unexpected response type for Sign command: ${response?.javaClass?.simpleName}",
+                )
+            }
         }
     }
 
@@ -75,9 +87,9 @@ class TapSignerNfcHelper(
         successResult: (TapSignerResponse?) -> T?,
     ): T {
         try {
-            val result = nfcManager.performTapSignerCmd(cmd, successResult)
-            // store last response for retry scenarios
-            lastResponse = null // response is already extracted
+            val (result, response) = nfcManager.performTapSignerCmd(cmd, successResult)
+            // store last response for retry scenarios (matches iOS behavior)
+            lastResponse = response
             return result
         } catch (e: Exception) {
             Log.e(tag, "TapSigner command failed", e)
@@ -86,18 +98,22 @@ class TapSignerNfcHelper(
     }
 
     private suspend fun doSetupTapSigner(
-        activity: Activity,
         factoryPin: String,
         newPin: String,
         chainCode: ByteArray?,
     ): SetupCmdResponse {
         val cmd = SetupCmd.tryNew(factoryPin, newPin, chainCode)
         return performTapSignerCmd(TapSignerCmd.Setup(cmd)) { response ->
-            (response as? TapSignerResponse.Setup)?.v1
+            when (response) {
+                is TapSignerResponse.Setup -> response.v1
+                else -> throw Exception(
+                    "Unexpected response type for Setup command: ${response?.javaClass?.simpleName}",
+                )
+            }
         }
     }
 
-    suspend fun continueSetup(activity: Activity, response: SetupCmdResponse): SetupCmdResponse {
+    suspend fun continueSetup(response: SetupCmdResponse): SetupCmdResponse {
         val cmd =
             when (response) {
                 is SetupCmdResponse.ContinueFromInit -> response.v1.continueCmd
@@ -109,7 +125,12 @@ class TapSignerNfcHelper(
         if (cmd == null) return response
 
         return performTapSignerCmd(TapSignerCmd.Setup(cmd)) { resp ->
-            (resp as? TapSignerResponse.Setup)?.v1
+            when (resp) {
+                is TapSignerResponse.Setup -> resp.v1
+                else -> throw Exception(
+                    "Unexpected response type for Setup command: ${resp?.javaClass?.simpleName}",
+                )
+            }
         }
     }
 }

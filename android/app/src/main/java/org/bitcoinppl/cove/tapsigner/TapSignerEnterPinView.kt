@@ -255,7 +255,7 @@ private suspend fun backupAction(
     activity: android.app.Activity,
 ) {
     try {
-        val backup = nfc.backup(activity, pin)
+        val backup = nfc.backup(pin)
         // save backup and show export dialog
         app.saveTapSignerBackup(tapSigner, backup)
 
@@ -283,7 +283,7 @@ private suspend fun signAction(
     activity: android.app.Activity,
 ) {
     try {
-        val signedPsbt = nfc.sign(activity, psbt, pin)
+        val signedPsbt = nfc.sign(psbt, pin)
         val db = org.bitcoinppl.cove_core.Database().unsignedTransactions()
         val txId = psbt.txId()
         val record = db.getTxThrow(txId = txId)

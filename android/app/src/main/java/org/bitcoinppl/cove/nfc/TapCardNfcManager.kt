@@ -23,7 +23,6 @@ import kotlin.coroutines.resumeWithException
 /**
  * Manages NFC operations for TapCard (TapSigner/SatsCard)
  * singleton that's initialized with Activity context from MainActivity
- * ported from iOS TapCardNFC class
  */
 class TapCardNfcManager private constructor() {
     private val tag = "TapCardNfcManager"
@@ -61,12 +60,12 @@ class TapCardNfcManager private constructor() {
 
     /**
      * Perform a TapSigner command by scanning for NFC tag
-     * matches iOS performTapSignerCmd pattern
+     * Returns a Pair of (extracted result, raw response) to enable retry scenarios
      */
     suspend fun <T> performTapSignerCmd(
         cmd: TapSignerCmd,
         successResult: (TapSignerResponse?) -> T?,
-    ): T =
+    ): Pair<T, TapSignerResponse?> =
         operationMutex.withLock {
             val activity = activityRef?.get() ?: throw Exception("Activity no longer available")
             val nfcAdapter = this.nfcAdapter ?: throw Exception("NFC not available on this device")
@@ -102,6 +101,7 @@ class TapCardNfcManager private constructor() {
                 // handle tag detection and command execution
                 val job =
                     CoroutineScope(Dispatchers.IO).launch {
+                        var isoDep: IsoDep? = null
                         try {
                             // wait for tag with timeout
                             val detectedTag =
@@ -112,7 +112,7 @@ class TapCardNfcManager private constructor() {
                             Log.d(tag, "Processing detected tag")
 
                             // get IsoDep tech (ISO7816)
-                            val isoDep =
+                            isoDep =
                                 IsoDep.get(detectedTag)
                                     ?: throw Exception("Tag doesn't support IsoDep (ISO7816)")
 
@@ -136,22 +136,20 @@ class TapCardNfcManager private constructor() {
 
                             Log.d(tag, "TapSigner command completed successfully")
 
-                            // clean up
-                            stopScanning()
-                            runCatching { isoDep.close() }
-
                             // extract result using successResult function
                             val result =
                                 successResult(response)
                                     ?: throw Exception("Command completed but result extraction failed")
 
+                            // return both extracted result and raw response for retry scenarios
+                            val resultPair = Pair(result, response)
+
                             // guard against cancelled continuation
                             if (continuation.isActive) {
-                                continuation.resume(result)
+                                continuation.resume(resultPair)
                             }
                         } catch (e: TapSignerReaderException) {
                             Log.e(tag, "TapSigner error", e)
-                            stopScanning()
 
                             // guard against cancelled continuation
                             if (continuation.isActive) {
@@ -159,10 +157,20 @@ class TapCardNfcManager private constructor() {
                             }
                         } catch (e: Exception) {
                             Log.e(tag, "NFC operation failed", e)
-                            stopScanning()
                             // guard against cancelled continuation
                             if (continuation.isActive) {
                                 continuation.resumeWithException(e)
+                            }
+                        } finally {
+                            // always clean up NFC resources
+                            stopScanning()
+                            isoDep?.let {
+                                runCatching {
+                                    if (it.isConnected) {
+                                        it.close()
+                                        Log.d(tag, "IsoDep connection closed")
+                                    }
+                                }
                             }
                         }
                     }
@@ -179,9 +187,12 @@ class TapCardNfcManager private constructor() {
     private fun stopScanning() {
         if (isScanning) {
             isScanning = false
-            activityRef?.get()?.runOnUiThread {
-                nfcAdapter?.disableReaderMode(activityRef?.get())
-                Log.d(tag, "Stopped NFC scanning")
+            val activity = activityRef?.get()
+            if (activity != null) {
+                activity.runOnUiThread {
+                    nfcAdapter?.disableReaderMode(activity)
+                    Log.d(tag, "Stopped NFC scanning")
+                }
             }
         }
     }

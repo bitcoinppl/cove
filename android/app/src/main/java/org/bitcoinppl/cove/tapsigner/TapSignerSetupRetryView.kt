@@ -123,7 +123,7 @@ fun TapSignerSetupRetryView(
 
                     val nfc = manager.getOrCreateNfc(tapSigner)
                     try {
-                        val result = nfc.continueSetup(activity, response)
+                        val result = nfc.continueSetup(response)
                         when (result) {
                             is SetupCmdResponse.Complete -> {
                                 manager.resetRoute(TapSignerRoute.SetupSuccess(tapSigner, result.v1))
