@@ -1,7 +1,5 @@
 package org.bitcoinppl.cove.tapsigner
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -26,24 +24,16 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import org.bitcoinppl.cove.AppAlertState
 import org.bitcoinppl.cove.AppManager
-import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove_core.types.WalletId
-import org.bitcoinppl.cove_core.util.hexEncode
 
 /**
  * setup success screen
@@ -58,8 +48,6 @@ fun TapSignerSetupSuccessView(
     modifier: Modifier = Modifier,
 ) {
     var walletId: WalletId? by remember { mutableStateOf(null) }
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
 
     // save wallet on appear
     LaunchedEffect(Unit) {
@@ -72,38 +60,7 @@ fun TapSignerSetupSuccessView(
     }
 
     // launcher for creating backup file
-    val createBackupLauncher =
-        rememberLauncherForActivityResult(
-            ActivityResultContracts.CreateDocument("text/plain"),
-        ) { uri ->
-            uri?.let {
-                scope.launch {
-                    try {
-                        withContext(Dispatchers.IO) {
-                            val hexBackup = hexEncode(setup.backup)
-                            context.contentResolver.openOutputStream(uri)?.use { output ->
-                                output.write(hexBackup.toByteArray())
-                            } ?: throw java.io.IOException("Failed to open output stream")
-                        }
-                        app.alertState =
-                            TaggedItem(
-                                AppAlertState.General(
-                                    title = "Backup Saved!",
-                                    message = "Your backup has been saved successfully!",
-                                ),
-                            )
-                    } catch (e: Exception) {
-                        app.alertState =
-                            TaggedItem(
-                                AppAlertState.General(
-                                    title = "Saving Backup Failed!",
-                                    message = e.message ?: "Unknown error",
-                                ),
-                            )
-                    }
-                }
-            }
-        }
+    val createBackupLauncher = rememberBackupExportLauncher(app) { setup.backup }
 
     Column(
         modifier =

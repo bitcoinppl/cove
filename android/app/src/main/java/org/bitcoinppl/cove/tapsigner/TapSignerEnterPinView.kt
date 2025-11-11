@@ -1,7 +1,5 @@
 package org.bitcoinppl.cove.tapsigner
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,16 +31,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.AppAlertState
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove_core.AfterPinAction
 import org.bitcoinppl.cove_core.TapSignerPinAction
 import org.bitcoinppl.cove_core.types.Psbt
-import org.bitcoinppl.cove_core.util.hexEncode
 
 /**
  * PIN entry screen for TapSigner authentication
@@ -79,39 +74,9 @@ fun TapSignerEnterPinView(
 
     // launcher for creating backup file
     val createBackupLauncher =
-        rememberLauncherForActivityResult(
-            ActivityResultContracts.CreateDocument("text/plain"),
-        ) { uri ->
-            uri?.let {
-                scope.launch {
-                    try {
-                        withContext(Dispatchers.IO) {
-                            val backup =
-                                app.getTapSignerBackup(tapSigner)
-                                    ?: throw Exception("Backup not found")
-                            val hexBackup = hexEncode(backup)
-                            context.contentResolver.openOutputStream(uri)?.use { output ->
-                                output.write(hexBackup.toByteArray())
-                            } ?: throw java.io.IOException("Failed to open output stream")
-                        }
-                        app.alertState =
-                            TaggedItem(
-                                AppAlertState.General(
-                                    title = "Backup Saved!",
-                                    message = "Your backup has been saved successfully!",
-                                ),
-                            )
-                    } catch (e: Exception) {
-                        app.alertState =
-                            TaggedItem(
-                                AppAlertState.General(
-                                    title = "Saving Backup Failed!",
-                                    message = e.message ?: "Unknown error",
-                                ),
-                            )
-                    }
-                }
-            }
+        rememberBackupExportLauncher(app) {
+            app.getTapSignerBackup(tapSigner)
+                ?: throw IllegalStateException("Backup not available for this TapSigner")
         }
 
     Column(
@@ -235,7 +200,7 @@ private suspend fun deriveAction(
             app.alertState =
                 org.bitcoinppl.cove.TaggedItem(
                     org.bitcoinppl.cove.AppAlertState.TapSignerDeriveFailed(
-                        e.message ?: "Unknown error",
+                        "Failed to derive wallet: ${e.message ?: "Unknown error occurred"}",
                     ),
                 )
         }
@@ -280,7 +245,7 @@ private suspend fun backupAction(
                 org.bitcoinppl.cove.TaggedItem(
                     org.bitcoinppl.cove.AppAlertState.General(
                         title = "Backup Failed!",
-                        message = e.message ?: "Unknown error",
+                        message = "Failed to create backup: ${e.message ?: "Unknown error occurred"}",
                     ),
                 )
         }
@@ -313,7 +278,7 @@ private suspend fun signAction(
                 org.bitcoinppl.cove.TaggedItem(
                     org.bitcoinppl.cove.AppAlertState.General(
                         title = "Signing Failed!",
-                        message = e.message ?: "Unknown error",
+                        message = "Failed to sign transaction: ${e.message ?: "Unknown error occurred"}",
                     ),
                 )
             app.sheetState = null
