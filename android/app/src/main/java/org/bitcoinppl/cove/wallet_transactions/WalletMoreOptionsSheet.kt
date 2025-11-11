@@ -126,6 +126,8 @@ fun WalletMoreOptionsSheet(
                     label = "Change PIN",
                     onClick = {
                         // TODO: implement TapSigner PIN change flow
+                        // reference: iOS MoreInfoPopover.swift:79-85 (ChangePinButton)
+                        // should navigate to TapSignerRoute.enterPin with action: .change
                         onDismiss()
                     },
                 )
@@ -138,6 +140,8 @@ fun WalletMoreOptionsSheet(
                     label = "Download Backup",
                     onClick = {
                         // TODO: implement TapSigner backup download flow
+                        // reference: iOS MoreInfoPopover.swift:88-104 (DownloadBackupButton)
+                        // should check for cached backup or navigate to TapSignerRoute.enterPin with action: .backup
                         onDismiss()
                     },
                 )

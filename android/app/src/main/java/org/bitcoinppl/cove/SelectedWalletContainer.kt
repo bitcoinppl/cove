@@ -133,29 +133,28 @@ fun SelectedWalletContainer(
     // state for more options sheet
     var showMoreOptions by remember { mutableStateOf(false) }
     var exportType by remember { mutableStateOf<ExportType?>(null) }
-    var exportJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
-    var importJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    var isExporting by remember { mutableStateOf(false) }
+    var isImporting by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // cleanup on dispose - cancel running jobs and clear alert state
+    // cleanup on dispose - clear alert state if export is in progress
     DisposableEffect(Unit) {
         onDispose {
-            exportJob?.cancel()
-            importJob?.cancel()
-            if (exportType != null && app.alertState != null) {
+            if (isExporting && app.alertState != null) {
                 app.alertState = null
             }
         }
     }
 
-    // file import launcher (for labels) - restricts to plain text and JSON files
+    // file import launcher (for labels) - accepts plain text and JSON files
     val importLabelLauncher =
-        rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             uri?.let {
-                importJob = scope.launch {
+                scope.launch {
+                    isImporting = true
                     try {
                         val fileContents =
                             withContext(Dispatchers.IO) {
@@ -172,14 +171,20 @@ fun SelectedWalletContainer(
                         labelManager.import(fileContents.trim())
 
                         // refresh transactions with updated labels
-                        manager?.rust?.getTransactions()
+                        try {
+                            manager?.rust?.getTransactions()
+                        } catch (refreshError: Exception) {
+                            android.util.Log.e(tag, "failed to refresh transactions after label import", refreshError)
+                            snackbarHostState.showSnackbar("Labels imported successfully, but transaction list may need manual refresh")
+                            return@launch
+                        }
 
                         snackbarHostState.showSnackbar("Labels imported successfully")
                     } catch (e: Exception) {
                         android.util.Log.e(tag, "error importing labels", e)
                         snackbarHostState.showSnackbar("Unable to import labels: ${e.localizedMessage ?: e.message}")
                     } finally {
-                        importJob = null
+                        isImporting = false
                     }
                 }
             }
@@ -191,13 +196,17 @@ fun SelectedWalletContainer(
             ActivityResultContracts.CreateDocument("text/plain"),
         ) { uri ->
             uri?.let {
-                exportJob = scope.launch {
+                scope.launch {
+                    isExporting = true
                     val currentExportType = exportType
+                    var showedLoadingAlert = false
+
                     try {
-                        val alertTask =
+                        // show loading alert for transaction exports after a delay
+                        val alertJob =
                             scope.launch {
                                 delay(EXPORT_LOADING_ALERT_DELAY_MS)
-                                if (currentExportType is ExportType.Transactions) {
+                                if (isExporting && currentExportType is ExportType.Transactions) {
                                     app.alertState =
                                         TaggedItem(
                                             AppAlertState.General(
@@ -205,6 +214,7 @@ fun SelectedWalletContainer(
                                                 message = "Creating a transaction export file. If this is the first time it might take a while",
                                             ),
                                         )
+                                    showedLoadingAlert = true
                                 }
                             }
 
@@ -223,11 +233,9 @@ fun SelectedWalletContainer(
                                 null -> null
                             }
 
-                        // cancel loading alert task
-                        alertTask.cancel()
-
-                        // dismiss alert if showing and wait before continuing
-                        if (app.alertState != null) {
+                        // cancel and clear loading alert if shown
+                        alertJob.cancel()
+                        if (showedLoadingAlert) {
                             app.alertState = null
                             delay(ALERT_DISMISS_DELAY_MS)
                         }
@@ -257,7 +265,8 @@ fun SelectedWalletContainer(
                         }
                     } catch (e: Exception) {
                         android.util.Log.e(tag, "error exporting file", e)
-                        if (app.alertState != null) {
+                        // clear any loading alert on error
+                        if (showedLoadingAlert) {
                             app.alertState = null
                         }
 
@@ -269,8 +278,8 @@ fun SelectedWalletContainer(
                             }
                         snackbarHostState.showSnackbar("Unable to export $errorType: ${e.localizedMessage ?: e.message}")
                     } finally {
+                        isExporting = false
                         exportType = null
-                        exportJob = null
                     }
                 }
             } ?: run {
@@ -311,8 +320,8 @@ fun SelectedWalletContainer(
                     onDismiss = { showMoreOptions = false },
                     onImportLabels = {
                         showMoreOptions = false
-                        // restrict to plain text and JSON files (mimics iOS behavior)
-                        importLabelLauncher.launch("text/plain")
+                        // accept plain text and JSON files (mimics iOS behavior)
+                        importLabelLauncher.launch(arrayOf("text/plain", "application/json", "application/x-jsonlines"))
                     },
                     onExportLabels = {
                         showMoreOptions = false
