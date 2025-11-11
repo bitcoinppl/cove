@@ -138,6 +138,15 @@ fun SelectedWalletContainer(
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
+    // cleanup alert state on dispose to prevent stuck alerts during navigation
+    DisposableEffect(exportType) {
+        onDispose {
+            if (exportType != null && app.alertState != null) {
+                app.alertState = null
+            }
+        }
+    }
+
     // file import launcher (for labels) - restricts to plain text and JSON files
     val importLabelLauncher =
         rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
