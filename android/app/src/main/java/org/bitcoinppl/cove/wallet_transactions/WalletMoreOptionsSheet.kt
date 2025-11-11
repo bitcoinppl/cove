@@ -81,6 +81,7 @@ fun WalletMoreOptionsSheet(
                 label = "Import Labels",
                 onClick = {
                     onImportLabels()
+                    onDismiss()
                 },
             )
 
@@ -93,6 +94,7 @@ fun WalletMoreOptionsSheet(
                     label = "Export Labels",
                     onClick = {
                         onExportLabels()
+                        onDismiss()
                     },
                 )
 
@@ -106,6 +108,7 @@ fun WalletMoreOptionsSheet(
                     label = "Export Transactions",
                     onClick = {
                         onExportTransactions()
+                        onDismiss()
                     },
                 )
 
