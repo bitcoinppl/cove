@@ -1,5 +1,6 @@
 package org.bitcoinppl.cove.tapsigner
 
+import android.util.Log
 import kotlinx.coroutines.suspendCancellableCoroutine
 import org.bitcoinppl.cove.nfc.TapCardNfcManager
 import org.bitcoinppl.cove_core.*
@@ -53,7 +54,7 @@ class TapSignerNfcHelper(
         return try {
             doSetupTapSigner(activity, factoryPin, newPin, chainCode)
         } catch (e: Exception) {
-            android.util.Log.e(tag, "Setup failed", e)
+            Log.e(tag, "Setup failed", e)
             throw e
         }
     }
@@ -107,7 +108,7 @@ class TapSignerNfcHelper(
             lastResponse = null // response is already extracted
             return result
         } catch (e: Exception) {
-            android.util.Log.e(tag, "TapSigner command failed", e)
+            Log.e(tag, "TapSigner command failed", e)
             throw e
         }
     }
