@@ -153,19 +153,9 @@ class TapCardNfcManager private constructor() {
                             Log.e(tag, "TapSigner error", e)
                             stopScanning()
 
-                            // handle specific errors
-                            val errorMessage =
-                                when {
-                                    tapSignerErrorIsAuthError(e) -> "Wrong PIN, please try again"
-                                    e.message?.contains("connection lost") == true ->
-                                        "Tag connection lost, please hold your phone still"
-
-                                    else -> e.message ?: "TapSigner error occurred"
-                                }
-
                             // guard against cancelled continuation
                             if (continuation.isActive) {
-                                continuation.resumeWithException(Exception(errorMessage))
+                                continuation.resumeWithException(e)
                             }
                         } catch (e: Exception) {
                             Log.e(tag, "NFC operation failed", e)

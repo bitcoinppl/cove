@@ -209,7 +209,7 @@ private suspend fun deriveAction(
     activity: android.app.Activity,
 ) {
     try {
-        val deriveInfo = nfc.derive(activity, pin)
+        val deriveInfo = nfc.derive(pin)
         manager.resetRoute(
             org.bitcoinppl.cove_core.TapSignerRoute.ImportSuccess(
                 tapSigner,
