@@ -1,16 +1,25 @@
 package org.bitcoinppl.cove
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.components.FullPageLoadingView
+import org.bitcoinppl.cove.wallet_transactions.WalletMoreOptionsSheet
 import org.bitcoinppl.cove.wallet_transactions.WalletTransactionsScreen
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
@@ -108,10 +117,88 @@ fun SelectedWalletContainer(
         }
     }
 
+    // state for more options sheet
+    var showMoreOptions by remember { mutableStateOf(false) }
+    var isExporting by remember { mutableStateOf(false) }
+
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    // file import launcher (for labels)
+    val importLabelLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+            uri?.let {
+                scope.launch {
+                    try {
+                        val fileContents =
+                            withContext(Dispatchers.IO) {
+                                context.contentResolver.openInputStream(uri)?.use { input ->
+                                    input.bufferedReader().use { it.readText() }
+                                }
+                            } ?: throw Exception("Unable to read file")
+
+                        manager?.rust?.labelManager()?.import(fileContents.trim())
+                        manager?.rust?.getTransactions()
+
+                        snackbarHostState.showSnackbar("Labels imported successfully")
+                    } catch (e: Exception) {
+                        android.util.Log.e(tag, "error importing labels", e)
+                        snackbarHostState.showSnackbar("Error importing labels: ${e.message}")
+                    }
+                }
+            }
+        }
+
+    // file export launcher (for labels and transactions)
+    val exportFileLauncher =
+        rememberLauncherForActivityResult(
+            ActivityResultContracts.CreateDocument("text/plain"),
+        ) { uri ->
+            uri?.let {
+                scope.launch {
+                    try {
+                        val content =
+                            when {
+                                isExporting -> {
+                                    withContext(Dispatchers.IO) {
+                                        manager?.rust?.createTransactionsWithFiatExport()
+                                    }
+                                }
+                                else -> {
+                                    manager?.rust?.labelManager()?.export()
+                                }
+                            }
+
+                        content?.let { data ->
+                            withContext(Dispatchers.IO) {
+                                context.contentResolver.openOutputStream(uri)?.use { output ->
+                                    output.bufferedWriter().use { it.write(data) }
+                                }
+                            }
+
+                            val message =
+                                if (isExporting) "Transactions exported successfully" else "Labels exported successfully"
+                            snackbarHostState.showSnackbar(message)
+                        }
+
+                        isExporting = false
+                    } catch (e: Exception) {
+                        android.util.Log.e(tag, "error exporting file", e)
+                        snackbarHostState.showSnackbar("Error exporting: ${e.message}")
+                        isExporting = false
+                    }
+                }
+            } ?: run {
+                // reset flag if user cancelled the document picker
+                isExporting = false
+            }
+        }
+
     // render
     when (val wm = manager) {
         null -> FullPageLoadingView(modifier = modifier)
-        else ->
+        else -> {
             WalletTransactionsScreen(
                 onBack = { app.popRoute() },
                 onSend = {
@@ -124,11 +211,39 @@ fun SelectedWalletContainer(
                     // TODO: implement QR code scanner
                 },
                 onMore = {
-                    // TODO: implement more options menu
+                    showMoreOptions = true
                 },
                 // TODO: get from theme
                 isDarkList = false,
                 manager = wm,
+                snackbarHostState = snackbarHostState,
             )
+
+            // more options bottom sheet
+            if (showMoreOptions) {
+                WalletMoreOptionsSheet(
+                    app = app,
+                    manager = wm,
+                    onDismiss = { showMoreOptions = false },
+                    onImportLabels = {
+                        showMoreOptions = false
+                        importLabelLauncher.launch("*/*")
+                    },
+                    onExportLabels = {
+                        showMoreOptions = false
+                        val metadata = wm.walletMetadata
+                        val fileName = wm.rust.labelManager().exportDefaultFileName(metadata?.name ?: "wallet")
+                        exportFileLauncher.launch(fileName)
+                    },
+                    onExportTransactions = {
+                        showMoreOptions = false
+                        isExporting = true
+                        val metadata = wm.walletMetadata
+                        val fileName = "${metadata?.name?.lowercase() ?: "wallet"}_transactions.csv"
+                        exportFileLauncher.launch(fileName)
+                    },
+                )
+            }
+        }
     }
 }
