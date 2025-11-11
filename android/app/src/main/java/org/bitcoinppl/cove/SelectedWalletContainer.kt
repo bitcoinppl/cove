@@ -19,6 +19,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.components.FullPageLoadingView
+import org.bitcoinppl.cove.nfc.NfcLabelImportSheet
 import org.bitcoinppl.cove.wallet_transactions.WalletMoreOptionsSheet
 import org.bitcoinppl.cove.wallet_transactions.WalletTransactionsScreen
 import org.bitcoinppl.cove_core.*
@@ -132,6 +133,7 @@ fun SelectedWalletContainer(
 
     // state for more options sheet
     var showMoreOptions by remember { mutableStateOf(false) }
+    var showNfcScanner by remember { mutableStateOf(false) }
     var exportType by remember { mutableStateOf<ExportType?>(null) }
     var isExporting by remember { mutableStateOf(false) }
     var isImporting by remember { mutableStateOf(false) }
@@ -318,6 +320,10 @@ fun SelectedWalletContainer(
                     app = app,
                     manager = wm,
                     onDismiss = { showMoreOptions = false },
+                    onScanNfc = {
+                        showMoreOptions = false
+                        showNfcScanner = true
+                    },
                     onImportLabels = {
                         showMoreOptions = false
                         importLabelLauncher.launch(arrayOf("text/plain", "application/json", "application/x-jsonlines"))
@@ -337,6 +343,47 @@ fun SelectedWalletContainer(
                         exportFileLauncher.launch(fileName)
                     },
                 )
+            }
+
+            // show NFC label import sheet
+            if (showNfcScanner) {
+                val labelManager =
+                    try {
+                        wm.rust.labelManager()
+                    } catch (e: Exception) {
+                        android.util.Log.e(tag, "Failed to get label manager", e)
+                        showNfcScanner = false
+                        scope.launch {
+                            snackbarHostState.showSnackbar("Unable to access label manager")
+                        }
+                        null
+                    }
+
+                labelManager?.let {
+                    NfcLabelImportSheet(
+                        labelManager = it,
+                        onDismiss = { showNfcScanner = false },
+                        onSuccess = {
+                            showNfcScanner = false
+                            scope.launch {
+                                // refresh transactions with updated labels
+                                try {
+                                    wm.rust.getTransactions()
+                                    snackbarHostState.showSnackbar("Labels imported successfully")
+                                } catch (e: Exception) {
+                                    android.util.Log.e(tag, "Failed to refresh transactions after NFC label import", e)
+                                    snackbarHostState.showSnackbar("Labels imported, but failed to refresh transactions")
+                                }
+                            }
+                        },
+                        onError = { errorMsg ->
+                            showNfcScanner = false
+                            scope.launch {
+                                snackbarHostState.showSnackbar("Failed to import labels: $errorMsg")
+                            }
+                        },
+                    )
+                }
             }
         }
     }

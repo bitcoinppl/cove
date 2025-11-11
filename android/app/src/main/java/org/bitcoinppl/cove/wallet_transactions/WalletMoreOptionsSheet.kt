@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.Nfc
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.Upload
@@ -46,6 +47,7 @@ fun WalletMoreOptionsSheet(
     app: AppManager,
     manager: WalletManager,
     onDismiss: () -> Unit,
+    onScanNfc: () -> Unit,
     onImportLabels: () -> Unit,
     onExportLabels: () -> Unit,
     onExportTransactions: () -> Unit,
@@ -82,6 +84,18 @@ fun WalletMoreOptionsSheet(
             )
 
             Spacer(modifier = Modifier.height(16.dp))
+
+            // scan NFC
+            MenuOption(
+                icon = { Icon(Icons.Default.Nfc, contentDescription = null) },
+                label = "Scan NFC",
+                onClick = {
+                    onScanNfc()
+                    onDismiss()
+                },
+            )
+
+            HorizontalDivider(color = CoveColor.DividerLightAlpha.copy(alpha = 0.3f))
 
             // import labels
             MenuOption(
