@@ -133,14 +133,18 @@ fun SelectedWalletContainer(
     // state for more options sheet
     var showMoreOptions by remember { mutableStateOf(false) }
     var exportType by remember { mutableStateOf<ExportType?>(null) }
+    var exportJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    var importJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // cleanup alert state on dispose to prevent stuck alerts during navigation
-    DisposableEffect(exportType) {
+    // cleanup on dispose - cancel running jobs and clear alert state
+    DisposableEffect(Unit) {
         onDispose {
+            exportJob?.cancel()
+            importJob?.cancel()
             if (exportType != null && app.alertState != null) {
                 app.alertState = null
             }
@@ -151,7 +155,7 @@ fun SelectedWalletContainer(
     val importLabelLauncher =
         rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
             uri?.let {
-                scope.launch {
+                importJob = scope.launch {
                     try {
                         val fileContents =
                             withContext(Dispatchers.IO) {
@@ -174,6 +178,8 @@ fun SelectedWalletContainer(
                     } catch (e: Exception) {
                         android.util.Log.e(tag, "error importing labels", e)
                         snackbarHostState.showSnackbar("Unable to import labels: ${e.localizedMessage ?: e.message}")
+                    } finally {
+                        importJob = null
                     }
                 }
             }
@@ -185,7 +191,7 @@ fun SelectedWalletContainer(
             ActivityResultContracts.CreateDocument("text/plain"),
         ) { uri ->
             uri?.let {
-                scope.launch {
+                exportJob = scope.launch {
                     val currentExportType = exportType
                     try {
                         val alertTask =
@@ -264,6 +270,7 @@ fun SelectedWalletContainer(
                         snackbarHostState.showSnackbar("Unable to export $errorType: ${e.localizedMessage ?: e.message}")
                     } finally {
                         exportType = null
+                        exportJob = null
                     }
                 }
             } ?: run {
