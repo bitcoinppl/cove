@@ -1,4 +1,4 @@
-review:
+reviews:
   path_instructions:
     - path: "rust/**/*.rs"
       instructions: |
@@ -7,7 +7,7 @@ review:
         - Suggest improvements to error handling, unwraps, and Result handling.
         - Check for any potential memory leaks or unsafe code.
         - Check for any potential mutex deadlocks.
-        - Check for potentail security issues, make sure Bitcoin wallets are handled securely.
+        - Check for potential security issues, make sure Bitcoin wallets are handled securely.
         - Identify spelling mistakes in comments, string literals, and documentation
     - path: "ios/Cove/**/*.swift"
       instructions: |
