@@ -1,15 +1,8 @@
 package org.bitcoinppl.cove.tapsigner
 
-import android.app.Activity
-import android.nfc.NfcAdapter
-import android.nfc.tech.IsoDep
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.coroutines.withTimeout
+import org.bitcoinppl.cove.nfc.TapCardNfcManager
 import org.bitcoinppl.cove_core.*
-import org.bitcoinppl.cove_core.TapcardTransportProtocol
 import org.bitcoinppl.cove_core.tapcard.TapSigner
 import org.bitcoinppl.cove_core.types.Psbt
 import java.util.concurrent.atomic.AtomicBoolean
@@ -48,6 +41,7 @@ class TapSignerNfcHelper(
     private val tapSigner: TapSigner,
 ) {
     private val tag = "TapSignerNfcHelper"
+    private val nfcManager = TapCardNfcManager.getInstance()
     private var lastResponse: TapSignerResponse? = null
 
     suspend fun setupTapSigner(
@@ -64,9 +58,13 @@ class TapSignerNfcHelper(
         }
     }
 
-    suspend fun derive(activity: Activity, pin: String): DeriveInfo {
-        return performTapSignerCmd(activity, TapSignerCmd.Derive(pin)) { response ->
-            (response as? TapSignerResponse.Import)?.v1
+    suspend fun derive(pin: String): DeriveInfo {
+        return performTapSignerCmd(TapSignerCmd.Derive(pin)) { response ->
+            // NOTE: Derive returns Import response in Rust (see tap_signer_reader.rs)
+            when (response) {
+                is TapSignerResponse.Import -> response.v1
+                else -> null
+            }
         }
     }
 
@@ -103,11 +101,16 @@ class TapSignerNfcHelper(
         cmd: TapSignerCmd,
         successResult: (TapSignerResponse?) -> T?,
     ): T {
-        val nfcAdapter = NfcAdapter.getDefaultAdapter(activity)
-
-        if (nfcAdapter == null) {
-            throw Exception("NFC is not supported on this device")
+        try {
+            val result = nfcManager.performTapSignerCmd(cmd, successResult)
+            // store last response for retry scenarios
+            lastResponse = null // response is already extracted
+            return result
+        } catch (e: Exception) {
+            android.util.Log.e(tag, "TapSigner command failed", e)
+            throw e
         }
+    }
 
         if (!nfcAdapter.isEnabled) {
             throw Exception("NFC is disabled. Please enable it in Settings")
@@ -231,42 +234,8 @@ class TapSignerNfcHelper(
 
         if (cmd == null) return response
 
-        return performTapSignerCmd(activity, TapSignerCmd.Setup(cmd)) { resp ->
+        return performTapSignerCmd(TapSignerCmd.Setup(cmd)) { resp ->
             (resp as? TapSignerResponse.Setup)?.v1
-        }
-    }
-}
-
-/**
- * Android NFC transport implementation
- * implements TapcardTransportProtocol for IsoDep tags
- */
-private class TapCardTransport(
-    private val isoDep: IsoDep,
-) : TapcardTransportProtocol {
-    override fun setMessage(message: String) {
-        // Android NFC doesn't support updating UI message during transaction
-        android.util.Log.d("TapCardTransport", "Message: $message")
-    }
-
-    override fun appendMessage(message: String) {
-        android.util.Log.d("TapCardTransport", "Append: $message")
-    }
-
-    override suspend fun transmitApdu(commandApdu: ByteArray): ByteArray {
-        android.util.Log.d("TapCardTransport", "Transmitting APDU: ${commandApdu.size} bytes")
-
-        return try {
-            if (!isoDep.isConnected) {
-                isoDep.connect()
-            }
-
-            val response = isoDep.transceive(commandApdu)
-            android.util.Log.d("TapCardTransport", "APDU response: ${response.size} bytes")
-            response
-        } catch (e: Exception) {
-            android.util.Log.e("TapCardTransport", "APDU error", e)
-            throw e
         }
     }
 }

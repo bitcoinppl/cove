@@ -985,6 +985,8 @@ external fun uniffi_cove_checksum_func_all_fiat_currencies(
 ): Short
 external fun uniffi_cove_checksum_func_coin_control_list_sort_key_to_string(
 ): Short
+external fun uniffi_cove_checksum_func_create_tap_signer_reader(
+): Short
 external fun uniffi_cove_checksum_func_create_transport_error_from_code(
 ): Short
 external fun uniffi_cove_checksum_func_default_node_selection(
@@ -1814,10 +1816,10 @@ internal object UniffiLib {
         uniffiCallbackInterfaceSendFlowManagerReconciler.register(this)
         uniffiCallbackInterfaceTapcardTransportProtocol.register(this)
         uniffiCallbackInterfaceWalletManagerReconciler.register(this)
-        org.bitcoinppl.cove_core.types.uniffiEnsureInitialized()
+        org.bitcoinppl.cove_core.device.uniffiEnsureInitialized()
         org.bitcoinppl.cove_core.tapcard.uniffiEnsureInitialized()
         org.bitcoinppl.cove_core.nfc.uniffiEnsureInitialized()
-        org.bitcoinppl.cove_core.device.uniffiEnsureInitialized()
+        org.bitcoinppl.cove_core.types.uniffiEnsureInitialized()
         
     }
     external fun uniffi_cove_fn_clone_addressargs(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -2854,6 +2856,8 @@ external fun uniffi_cove_fn_func_all_fiat_currencies(uniffi_out_err: UniffiRustC
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_func_coin_control_list_sort_key_to_string(`key`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
+external fun uniffi_cove_fn_func_create_tap_signer_reader(`transport`: Long,`cmd`: RustBuffer.ByValue,
+): Long
 external fun uniffi_cove_fn_func_create_transport_error_from_code(`code`: Short,`message`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_func_default_node_selection(uniffi_out_err: UniffiRustCallStatus, 
@@ -3073,6 +3077,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_coin_control_list_sort_key_to_string() != 57975.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_func_create_tap_signer_reader() != 9840.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_create_transport_error_from_code() != 58675.toShort()) {
@@ -42234,6 +42241,26 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
     )
     }
     
+
+        /**
+         * Factory function to create a TapSignerReader instance
+         * This is a workaround for UniFFI not generating async constructors for Kotlin
+         * While iOS can use the async constructor directly, Android needs this factory function
+         */
+    @Throws(TapSignerReaderException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+     suspend fun `createTapSignerReader`(`transport`: TapcardTransportProtocol, `cmd`: TapSignerCmd?) : TapSignerReader {
+        return uniffiRustCallAsync(
+        UniffiLib.uniffi_cove_fn_func_create_tap_signer_reader(FfiConverterTypeTapcardTransportProtocol.lower(`transport`),FfiConverterOptionalTypeTapSignerCmd.lower(`cmd`),),
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_u64(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_u64(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_u64(future) },
+        // lift function
+        { FfiConverterTypeTapSignerReader.lift(it) },
+        // Error FFI converter
+        TapSignerReaderException.ErrorHandler,
+    )
+    }
  fun `createTransportErrorFromCode`(`code`: kotlin.UShort, `message`: kotlin.String): TransportException {
             return FfiConverterTypeTransportError.lift(
     uniffiRustCall() { _status ->

@@ -19,7 +19,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.components.FullPageLoadingView
-import org.bitcoinppl.cove.wallet_transactions.WalletMoreOptionsSheet
+import org.bitcoinppl.cove.wallet_transactions.MoreOptionsBottomSheet
 import org.bitcoinppl.cove.wallet_transactions.WalletTransactionsScreen
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
@@ -55,6 +55,7 @@ fun SelectedWalletContainer(
 ) {
     var manager by remember { mutableStateOf<WalletManager?>(null) }
     var loadedId by remember { mutableStateOf<WalletId?>(null) }
+    var showMoreOptions by remember { mutableStateOf(false) }
     val tag = "SelectedWalletContainer"
 
     // load manager on appear
@@ -312,31 +313,12 @@ fun SelectedWalletContainer(
                 snackbarHostState = snackbarHostState,
             )
 
-            // more options bottom sheet
+            // show more options bottom sheet
             if (showMoreOptions) {
-                WalletMoreOptionsSheet(
+                MoreOptionsBottomSheet(
                     app = app,
                     manager = wm,
                     onDismiss = { showMoreOptions = false },
-                    onImportLabels = {
-                        showMoreOptions = false
-                        // accept plain text and JSON files (mimics iOS behavior)
-                        importLabelLauncher.launch(arrayOf("text/plain", "application/json", "application/x-jsonlines"))
-                    },
-                    onExportLabels = {
-                        showMoreOptions = false
-                        exportType = ExportType.Labels
-                        val metadata = wm.walletMetadata
-                        val fileName = wm.rust.labelManager().exportDefaultFileName(metadata?.name ?: "wallet")
-                        exportFileLauncher.launch(fileName)
-                    },
-                    onExportTransactions = {
-                        showMoreOptions = false
-                        exportType = ExportType.Transactions
-                        val metadata = wm.walletMetadata
-                        val fileName = "${metadata?.name?.lowercase() ?: "wallet"}_transactions.csv"
-                        exportFileLauncher.launch(fileName)
-                    },
                 )
             }
         }
