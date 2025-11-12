@@ -37,7 +37,7 @@ class AppManager private constructor() : FfiReconcile {
 
     // ui state
     var isSidebarVisible by mutableStateOf(false)
-        private set
+        internal set
 
     var isLoading by mutableStateOf(false)
 

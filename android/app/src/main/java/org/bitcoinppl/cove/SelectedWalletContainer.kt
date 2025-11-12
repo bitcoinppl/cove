@@ -294,8 +294,18 @@ fun SelectedWalletContainer(
     when (val wm = manager) {
         null -> FullPageLoadingView(modifier = modifier)
         else -> {
+            val canGoBack = app.router.routes.isNotEmpty()
+            android.util.Log.d("SelectedWalletContainer", "canGoBack=$canGoBack, routes=${app.router.routes.size}, default=${app.router.default}")
+
             WalletTransactionsScreen(
-                onBack = { app.popRoute() },
+                onBack = {
+                    if (canGoBack) {
+                        app.popRoute()
+                    } else {
+                        app.toggleSidebar()
+                    }
+                },
+                canGoBack = canGoBack,
                 onSend = {
                     app.pushRoute(Route.Send(SendRoute.SetAmount(id, null, null)))
                 },
