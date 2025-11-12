@@ -1,6 +1,11 @@
 package org.bitcoinppl.cove.flow.new_wallet
 
+import android.content.ClipboardManager
+import android.content.Context
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -8,28 +13,37 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ContentPaste
+import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -37,16 +51,23 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.bitcoinppl.cove.App
+import org.bitcoinppl.cove.AppAlertState
+import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.views.DashDotsIndicator
 import org.bitcoinppl.cove.views.ImageButton
+import org.bitcoinppl.cove_core.Wallet
+import org.bitcoinppl.cove_core.WalletException
 
 @Preview(showBackground = true, backgroundColor = 0xFF0D1B2A)
 @Composable
 private fun NewWalletSelectScreenPreview() {
     val snack = remember { SnackbarHostState() }
     NewWalletSelectScreen(
+        app = App,
         onBack = {},
         onOpenNewHotWallet = {},
         onOpenQrScan = {},
@@ -58,12 +79,88 @@ private fun NewWalletSelectScreenPreview() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NewWalletSelectScreen(
+    app: AppManager,
     onBack: () -> Unit,
     onOpenNewHotWallet: () -> Unit,
     onOpenQrScan: () -> Unit,
     onOpenNfcScan: () -> Unit,
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
+    var showHardwareWalletSheet by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+
+    fun importWallet(content: String) {
+        try {
+            val wallet = Wallet.newFromXpub(xpub = content.trim())
+            val id = wallet.id()
+            android.util.Log.d("NewWalletSelectScreen", "Imported Wallet: $id")
+
+            app.rust.selectWallet(id = id)
+            app.alertState =
+                TaggedItem(
+                    AppAlertState.General(
+                        title = "Success",
+                        message = "Imported Wallet Successfully",
+                    ),
+                )
+            app.popRoute()
+        } catch (e: WalletException.MultiFormat) {
+            app.popRoute()
+            app.alertState =
+                TaggedItem(
+                    AppAlertState.ErrorImportingHardwareWallet(
+                        message = e.v1.toString(),
+                    ),
+                )
+        } catch (e: WalletException.WalletAlreadyExists) {
+            try {
+                app.rust.selectWallet(id = e.v1)
+                app.alertState =
+                    TaggedItem(
+                        AppAlertState.General(
+                            title = "Success",
+                            message = "Wallet already exists: ${e.v1}",
+                        ),
+                    )
+                app.popRoute()
+            } catch (selectError: Exception) {
+                app.popRoute()
+                app.alertState =
+                    TaggedItem(
+                        AppAlertState.ErrorImportingHardwareWallet(
+                            message = "Unable to select wallet",
+                        ),
+                    )
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("NewWalletSelectScreen", "Error importing hardware wallet: $e")
+            app.popRoute()
+            app.alertState =
+                TaggedItem(
+                    AppAlertState.ErrorImportingHardwareWallet(
+                        message = e.message ?: "Unknown error",
+                    ),
+                )
+        }
+    }
+
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        uri?.let {
+            // read file content and import wallet
+            context.contentResolver.openInputStream(it)?.use { stream ->
+                val content = stream.bufferedReader().readText()
+                importWallet(content)
+            }
+        }
+    }
+
+    fun pasteFromClipboard(): String? {
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        return clipboard.primaryClip?.getItemAt(0)?.text?.toString()
+    }
+
     Scaffold(containerColor = CoveColor.midnightBlue, topBar = {
         CenterAlignedTopAppBar(
             colors =
@@ -173,7 +270,7 @@ fun NewWalletSelectScreen(
                                 )
                             },
                             onClick = {
-                                // todo
+                                showHardwareWalletSheet = true
                             },
                             colors =
                                 ButtonDefaults.buttonColors(
@@ -202,6 +299,90 @@ fun NewWalletSelectScreen(
                         )
                     }
                 }
+            }
+        }
+    }
+
+    if (showHardwareWalletSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showHardwareWalletSheet = false }
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 32.dp)
+            ) {
+                Text(
+                    text = "Import Hardware Wallet",
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+
+                // QR Code option
+                ListItem(
+                    headlineContent = { Text("QR Code") },
+                    supportingContent = { Text("Scan descriptor QR code") },
+                    leadingContent = {
+                        Icon(
+                            painter = painterResource(R.drawable.icon_qr_code),
+                            contentDescription = null
+                        )
+                    },
+                    modifier = Modifier.clickable {
+                        showHardwareWalletSheet = false
+                        onOpenQrScan()
+                    }
+                )
+
+                // File option
+                ListItem(
+                    headlineContent = { Text("File") },
+                    supportingContent = { Text("Import from file") },
+                    leadingContent = {
+                        Icon(
+                            imageVector = Icons.Default.InsertDriveFile,
+                            contentDescription = null
+                        )
+                    },
+                    modifier = Modifier.clickable {
+                        showHardwareWalletSheet = false
+                        filePickerLauncher.launch("*/*")
+                    }
+                )
+
+                // NFC option
+                ListItem(
+                    headlineContent = { Text("NFC") },
+                    supportingContent = { Text("Tap hardware wallet") },
+                    leadingContent = {
+                        Icon(
+                            painter = painterResource(R.drawable.icon_contactless),
+                            contentDescription = null
+                        )
+                    },
+                    modifier = Modifier.clickable {
+                        showHardwareWalletSheet = false
+                        onOpenNfcScan()
+                    }
+                )
+
+                // Paste option
+                ListItem(
+                    headlineContent = { Text("Paste") },
+                    supportingContent = { Text("Paste from clipboard") },
+                    leadingContent = {
+                        Icon(
+                            imageVector = Icons.Default.ContentPaste,
+                            contentDescription = null
+                        )
+                    },
+                    modifier = Modifier.clickable {
+                        showHardwareWalletSheet = false
+                        pasteFromClipboard()?.let { content ->
+                            importWallet(content)
+                        }
+                    }
+                )
             }
         }
     }
