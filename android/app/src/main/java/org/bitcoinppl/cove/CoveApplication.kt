@@ -7,6 +7,8 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import org.bitcoinppl.cove_core.AuthType
 import org.bitcoinppl.cove_core.setRootDataDir
+import org.bitcoinppl.cove_core.device.Keychain
+import org.bitcoinppl.cove_core.device.Device
 import java.time.Instant
 
 // auto-unlock time thresholds (in seconds) - matches iOS behavior
@@ -29,6 +31,19 @@ class CoveApplication : Application() {
             Log.e(TAG, "Failed to set root data directory", e)
             throw RuntimeException("Failed to initialize app data directory", e)
         }
+
+        // initialize keychain and device before any FFI calls that might use them
+        try {
+            Keychain(KeychainAccessor(this))
+            Device(DeviceAccessor())
+            Log.d(TAG, "Keychain and device initialized")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to initialize keychain and device", e)
+            throw RuntimeException("Failed to initialize security infrastructure", e)
+        }
+
+        // initialize app manager to ensure updater is ready before lifecycle callbacks
+        AppManager.getInstance()
 
         // setup app lifecycle observer for auth lock/unlock
         setupLifecycleObserver()

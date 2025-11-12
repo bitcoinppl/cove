@@ -24,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.nfc.TapCardNfcManager
+import org.bitcoinppl.cove.sidebar.SidebarContainer
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove.views.LockView
 
@@ -79,8 +80,10 @@ class MainActivity : ComponentActivity() {
                     }
                     app.asyncRuntimeReady -> {
                         LockView {
-                            key(app.routeId) {
-                                RouteView(app = app, route = app.router.currentRoute)
+                            SidebarContainer(app = app) {
+                                key(app.routeId) {
+                                    RouteView(app = app, route = app.router.currentRoute)
+                                }
                             }
                         }
                     }

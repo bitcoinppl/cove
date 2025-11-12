@@ -84,6 +84,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-process:2.9.3")
 
     implementation("androidx.biometric:biometric-ktx:1.4.0-alpha02")
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
 
     // Camera and QR scanning
     implementation("androidx.camera:camera-camera2:1.3.1")
