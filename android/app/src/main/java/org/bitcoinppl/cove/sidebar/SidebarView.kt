@@ -56,18 +56,20 @@ fun SidebarView(
 ) {
     val coroutineScope = rememberCoroutineScope()
 
-    val wallets = try {
-        Database().wallets().all()
-    } catch (e: Exception) {
-        emptyList()
-    }
+    val wallets =
+        try {
+            Database().wallets().all()
+        } catch (e: Exception) {
+            emptyList()
+        }
 
     Column(
-        modifier = modifier
-            .width(280.dp)
-            .fillMaxHeight()
-            .background(CoveColor.midnightBlue)
-            .padding(20.dp),
+        modifier =
+            modifier
+                .width(280.dp)
+                .fillMaxHeight()
+                .background(CoveColor.midnightBlue)
+                .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(0.dp),
     ) {
         // header with icon and NFC button
@@ -79,9 +81,10 @@ fun SidebarView(
             Image(
                 painter = painterResource(id = R.drawable.cove_logo),
                 contentDescription = "Cove",
-                modifier = Modifier
-                    .size(65.dp)
-                    .clip(CircleShape),
+                modifier =
+                    Modifier
+                        .size(65.dp)
+                        .clip(CircleShape),
             )
 
             IconButton(
@@ -149,26 +152,28 @@ fun SidebarView(
 
         // add wallet button
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable {
-                    app.isSidebarVisible = false
-                    coroutineScope.launch {
-                        delay(300)
-                        val wallets = try {
-                            Database().wallets().all()
-                        } catch (e: Exception) {
-                            emptyList()
-                        }
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        app.isSidebarVisible = false
+                        coroutineScope.launch {
+                            delay(300)
+                            val wallets =
+                                try {
+                                    Database().wallets().all()
+                                } catch (e: Exception) {
+                                    emptyList()
+                                }
 
-                        if (wallets.isEmpty()) {
-                            app.resetRoute(RouteFactory().newWalletSelect())
-                        } else {
-                            app.pushRoute(RouteFactory().newWalletSelect())
+                            if (wallets.isEmpty()) {
+                                app.resetRoute(RouteFactory().newWalletSelect())
+                            } else {
+                                app.pushRoute(RouteFactory().newWalletSelect())
+                            }
                         }
                     }
-                }
-                .padding(vertical = 8.dp),
+                    .padding(vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(20.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -189,16 +194,17 @@ fun SidebarView(
 
         // settings button
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable {
-                    app.isSidebarVisible = false
-                    coroutineScope.launch {
-                        delay(300)
-                        app.pushRoute(Route.Settings(SettingsRoute.Main))
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        app.isSidebarVisible = false
+                        coroutineScope.launch {
+                            delay(300)
+                            app.pushRoute(Route.Settings(SettingsRoute.Main))
+                        }
                     }
-                }
-                .padding(vertical = 8.dp),
+                    .padding(vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(20.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -223,21 +229,23 @@ private fun WalletItem(
     onClick: () -> Unit,
 ) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .background(CoveColor.coveLightGray.copy(alpha = 0.06f))
-            .clickable(onClick = onClick)
-            .padding(16.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(10.dp))
+                .background(CoveColor.coveLightGray.copy(alpha = 0.06f))
+                .clickable(onClick = onClick)
+                .padding(16.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // color indicator
         Box(
-            modifier = Modifier
-                .size(8.dp)
-                .clip(CircleShape)
-                .background(wallet.color.toComposeColor()),
+            modifier =
+                Modifier
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(wallet.color.toComposeColor()),
         )
 
         // wallet name

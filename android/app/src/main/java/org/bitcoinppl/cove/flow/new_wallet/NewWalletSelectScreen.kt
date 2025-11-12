@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -144,17 +143,18 @@ fun NewWalletSelectScreen(
         }
     }
 
-    val filePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri ->
-        uri?.let {
-            // read file content and import wallet
-            context.contentResolver.openInputStream(it)?.use { stream ->
-                val content = stream.bufferedReader().readText()
-                importWallet(content)
+    val filePickerLauncher =
+        rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.GetContent(),
+        ) { uri ->
+            uri?.let {
+                // read file content and import wallet
+                context.contentResolver.openInputStream(it)?.use { stream ->
+                    val content = stream.bufferedReader().readText()
+                    importWallet(content)
+                }
             }
         }
-    }
 
     fun pasteFromClipboard(): String? {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -305,17 +305,18 @@ fun NewWalletSelectScreen(
 
     if (showHardwareWalletSheet) {
         ModalBottomSheet(
-            onDismissRequest = { showHardwareWalletSheet = false }
+            onDismissRequest = { showHardwareWalletSheet = false },
         ) {
             Column(
-                modifier = Modifier
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = 32.dp)
+                modifier =
+                    Modifier
+                        .padding(horizontal = 16.dp)
+                        .padding(bottom = 32.dp),
             ) {
                 Text(
                     text = "Import Hardware Wallet",
                     style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.padding(bottom = 16.dp)
+                    modifier = Modifier.padding(bottom = 16.dp),
                 )
 
                 // QR Code option
@@ -325,13 +326,14 @@ fun NewWalletSelectScreen(
                     leadingContent = {
                         Icon(
                             painter = painterResource(R.drawable.icon_qr_code),
-                            contentDescription = null
+                            contentDescription = null,
                         )
                     },
-                    modifier = Modifier.clickable {
-                        showHardwareWalletSheet = false
-                        onOpenQrScan()
-                    }
+                    modifier =
+                        Modifier.clickable {
+                            showHardwareWalletSheet = false
+                            onOpenQrScan()
+                        },
                 )
 
                 // File option
@@ -341,13 +343,14 @@ fun NewWalletSelectScreen(
                     leadingContent = {
                         Icon(
                             imageVector = Icons.Default.InsertDriveFile,
-                            contentDescription = null
+                            contentDescription = null,
                         )
                     },
-                    modifier = Modifier.clickable {
-                        showHardwareWalletSheet = false
-                        filePickerLauncher.launch("*/*")
-                    }
+                    modifier =
+                        Modifier.clickable {
+                            showHardwareWalletSheet = false
+                            filePickerLauncher.launch("*/*")
+                        },
                 )
 
                 // NFC option
@@ -357,13 +360,14 @@ fun NewWalletSelectScreen(
                     leadingContent = {
                         Icon(
                             painter = painterResource(R.drawable.icon_contactless),
-                            contentDescription = null
+                            contentDescription = null,
                         )
                     },
-                    modifier = Modifier.clickable {
-                        showHardwareWalletSheet = false
-                        onOpenNfcScan()
-                    }
+                    modifier =
+                        Modifier.clickable {
+                            showHardwareWalletSheet = false
+                            onOpenNfcScan()
+                        },
                 )
 
                 // Paste option
@@ -373,15 +377,16 @@ fun NewWalletSelectScreen(
                     leadingContent = {
                         Icon(
                             imageVector = Icons.Default.ContentPaste,
-                            contentDescription = null
+                            contentDescription = null,
                         )
                     },
-                    modifier = Modifier.clickable {
-                        showHardwareWalletSheet = false
-                        pasteFromClipboard()?.let { content ->
-                            importWallet(content)
-                        }
-                    }
+                    modifier =
+                        Modifier.clickable {
+                            showHardwareWalletSheet = false
+                            pasteFromClipboard()?.let { content ->
+                                importWallet(content)
+                            }
+                        },
                 )
             }
         }

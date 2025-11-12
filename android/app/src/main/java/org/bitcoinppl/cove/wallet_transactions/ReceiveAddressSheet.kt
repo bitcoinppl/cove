@@ -4,9 +4,12 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -21,6 +24,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -33,9 +37,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import kotlinx.coroutines.launch
@@ -54,6 +60,8 @@ fun ReceiveAddressSheet(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val tag = "ReceiveAddressSheet"
+    val isDarkTheme = isSystemInDarkTheme()
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var addressInfo by remember { mutableStateOf<AddressInfoWithDerivation?>(null) }
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -114,84 +122,138 @@ fun ReceiveAddressSheet(
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
+        sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.surface,
     ) {
+        ReceiveAddressSheetContent(
+            walletName = manager.walletMetadata?.name ?: "Wallet",
+            addressText = addressInfo?.addressSpacedOut(),
+            addressRaw = addressInfo?.addressUnformatted(),
+            derivationPath = addressInfo?.derivationPath(),
+            isLoading = isLoading,
+            onCopyAddress = ::copyAddress,
+            onCreateNewAddress = ::createNewAddress,
+        )
+    }
+}
+
+@Composable
+private fun ReceiveAddressSheetContent(
+    walletName: String,
+    addressText: String?,
+    addressRaw: String?,
+    derivationPath: String?,
+    isLoading: Boolean,
+    onCopyAddress: () -> Unit,
+    onCreateNewAddress: () -> Unit,
+) {
+    val isDarkTheme = isSystemInDarkTheme()
+
+    Column(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // combined QR code and address section
         Column(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = 32.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
+                    .clip(RoundedCornerShape(12.dp)),
         ) {
-            // wallet name header
-            Text(
-                text = manager.walletMetadata?.name ?: "Wallet",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp),
-                textAlign = TextAlign.Center,
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // QR code section
-            Box(
-                modifier =
-                    Modifier
-                        .size(250.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Color.White)
-                        .padding(16.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                when {
-                    isLoading -> {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(48.dp),
-                            color = CoveColor.midnightBlue,
-                        )
-                    }
-                    addressInfo != null -> {
-                        val qrBitmap =
-                            remember(addressInfo) {
-                                QrCodeGenerator.generate(
-                                    text = addressInfo!!.addressUnformatted(),
-                                    size = 512,
-                                    errorCorrectionLevel = ErrorCorrectionLevel.M,
-                                )
-                            }
-                        Image(
-                            bitmap = qrBitmap.asImageBitmap(),
-                            contentDescription = "QR Code",
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
-                }
-            }
-
-            // derivation path (if available)
-            addressInfo?.derivationPath()?.let { path ->
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Derivation: $path",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = CoveColor.TextSecondary.copy(alpha = 0.5f),
-                )
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // address label section
+            // QR code section with duskBlue background
             Column(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(CoveColor.duskBlue)
+                        .background(
+                            CoveColor.duskBlue.copy(
+                                alpha = if (isDarkTheme) 0.4f else 1f,
+                            ),
+                        ),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // wallet name header
+                Text(
+                    text = walletName,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White,
+                    textAlign = TextAlign.Center,
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // QR code
+                Box(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 32.dp)
+                            .aspectRatio(1f)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color.White)
+                            .padding(18.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    when {
+                        isLoading -> {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(48.dp),
+                                color = CoveColor.midnightBlue,
+                            )
+                        }
+                        addressRaw != null -> {
+                            val qrBitmap =
+                                remember(addressRaw) {
+                                    QrCodeGenerator.generate(
+                                        text = addressRaw,
+                                        size = 512,
+                                        errorCorrectionLevel = ErrorCorrectionLevel.L,
+                                    )
+                                }
+                            Image(
+                                bitmap = qrBitmap.asImageBitmap(),
+                                contentDescription = "QR Code",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.FillBounds,
+                            )
+                        }
+                    }
+                }
+
+                // derivation path (if available)
+                derivationPath?.let { path ->
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Derivation: $path",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.5f),
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center,
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+            }
+
+            // address label section with midnightBlue background
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .background(
+                            CoveColor.midnightBlue.copy(
+                                alpha = if (isDarkTheme) 0.4f else 0.95f,
+                            ),
+                        )
                         .padding(16.dp),
             ) {
                 Text(
@@ -203,9 +265,9 @@ fun ReceiveAddressSheet(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                if (addressInfo != null) {
+                if (addressText != null) {
                     Text(
-                        text = addressInfo!!.addressSpacedOut(),
+                        text = addressText,
                         style = MaterialTheme.typography.bodyMedium,
                         fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
                         color = Color.White,
@@ -213,46 +275,62 @@ fun ReceiveAddressSheet(
                     )
                 }
             }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // copy address button
-            Button(
-                onClick = ::copyAddress,
-                enabled = addressInfo != null && !isLoading,
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .height(50.dp),
-                colors =
-                    ButtonDefaults.buttonColors(
-                        containerColor = CoveColor.midnightBtn,
-                        contentColor = Color.White,
-                        disabledContainerColor = CoveColor.ButtonDisabled,
-                        disabledContentColor = CoveColor.ButtonDisabledText,
-                    ),
-                shape = RoundedCornerShape(10.dp),
-            ) {
-                Text(
-                    text = "Copy Address",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // create new address button
-            TextButton(
-                onClick = ::createNewAddress,
-                enabled = !isLoading,
-            ) {
-                Text(
-                    text = "Create New Address",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
         }
+
+        Spacer(modifier = Modifier.height(64.dp))
+
+        // copy address button
+        Button(
+            onClick = onCopyAddress,
+            enabled = addressText != null && !isLoading,
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .height(50.dp),
+            colors =
+                ButtonDefaults.buttonColors(
+                    containerColor = CoveColor.midnightBtn,
+                    contentColor = Color.White,
+                    disabledContainerColor = CoveColor.ButtonDisabled,
+                    disabledContentColor = CoveColor.ButtonDisabledText,
+                ),
+            shape = RoundedCornerShape(10.dp),
+        ) {
+            Text(
+                text = "Copy Address",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // create new address button
+        TextButton(
+            onClick = onCreateNewAddress,
+            enabled = !isLoading,
+        ) {
+            Text(
+                text = "Create New Address",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+    }
+}
+
+@Preview(showBackground = true, heightDp = 800)
+@Composable
+private fun ReceiveAddressSheetPreview() {
+    MaterialTheme {
+        ReceiveAddressSheetContent(
+            walletName = "Wallet 1",
+            addressText = "bc1qu dmkyk hhnel w7cn7 vg8ma 0y7et u0tdv vm2n6 zk",
+            addressRaw = "bc1qudmkykhhne1w7cn7vg8ma0y7etu0tdvvm2n6zk",
+            derivationPath = "84'/0'/0'/0/6",
+            isLoading = false,
+            onCopyAddress = {},
+            onCreateNewAddress = {},
+        )
     }
 }

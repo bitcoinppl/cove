@@ -47,11 +47,12 @@ fun SidebarContainer(
     )
 
     // current offset combines animated offset and gesture offset
-    val currentOffset = if (isDragging) {
-        (targetOffset + gestureOffset).coerceIn(0f, sidebarWidthPx)
-    } else {
-        animatedOffset
-    }
+    val currentOffset =
+        if (isDragging) {
+            (targetOffset + gestureOffset).coerceIn(0f, sidebarWidthPx)
+        } else {
+            animatedOffset
+        }
 
     // calculate open percentage for backdrop opacity
     val openPercentage = (currentOffset / sidebarWidthPx).coerceIn(0f, 1f)
@@ -65,76 +66,78 @@ fun SidebarContainer(
         // backdrop overlay
         if (openPercentage > 0f) {
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.45f * openPercentage))
-                    .pointerInput(Unit) {
-                        detectHorizontalDragGestures(
-                            onDragStart = { },
-                            onDragEnd = {
-                                // tap to close
-                                if (!isDragging) {
-                                    app.isSidebarVisible = false
-                                }
-                            },
-                            onDragCancel = { },
-                            onHorizontalDrag = { _, _ -> },
-                        )
-                    },
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.45f * openPercentage))
+                        .pointerInput(Unit) {
+                            detectHorizontalDragGestures(
+                                onDragStart = { },
+                                onDragEnd = {
+                                    // tap to close
+                                    if (!isDragging) {
+                                        app.isSidebarVisible = false
+                                    }
+                                },
+                                onDragCancel = { },
+                                onHorizontalDrag = { _, _ -> },
+                            )
+                        },
             )
         }
 
         // main content
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .offset { IntOffset(currentOffset.roundToInt(), 0) }
-                .pointerInput(gesturesEnabled) {
-                    if (gesturesEnabled) {
-                        detectHorizontalDragGestures(
-                            onDragStart = { offset ->
-                                // only start drag from left edge when closed
-                                if (!app.isSidebarVisible && offset.x < 25.dp.toPx()) {
-                                    isDragging = true
-                                    gestureOffset = 0f
-                                } else if (app.isSidebarVisible) {
-                                    isDragging = true
-                                    gestureOffset = 0f
-                                }
-                            },
-                            onDragEnd = {
-                                if (isDragging) {
-                                    // determine if we should complete the open/close action
-                                    val threshold = sidebarWidthPx * 0.5f
-                                    val finalOffset = targetOffset + gestureOffset
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .offset { IntOffset(currentOffset.roundToInt(), 0) }
+                    .pointerInput(gesturesEnabled) {
+                        if (gesturesEnabled) {
+                            detectHorizontalDragGestures(
+                                onDragStart = { offset ->
+                                    // only start drag from left edge when closed
+                                    if (!app.isSidebarVisible && offset.x < 25.dp.toPx()) {
+                                        isDragging = true
+                                        gestureOffset = 0f
+                                    } else if (app.isSidebarVisible) {
+                                        isDragging = true
+                                        gestureOffset = 0f
+                                    }
+                                },
+                                onDragEnd = {
+                                    if (isDragging) {
+                                        // determine if we should complete the open/close action
+                                        val threshold = sidebarWidthPx * 0.5f
+                                        val finalOffset = targetOffset + gestureOffset
 
-                                    app.isSidebarVisible = finalOffset > threshold
+                                        app.isSidebarVisible = finalOffset > threshold
 
+                                        isDragging = false
+                                        gestureOffset = 0f
+                                    }
+                                },
+                                onDragCancel = {
                                     isDragging = false
                                     gestureOffset = 0f
-                                }
-                            },
-                            onDragCancel = {
-                                isDragging = false
-                                gestureOffset = 0f
-                            },
-                            onHorizontalDrag = { _, dragAmount ->
-                                if (isDragging) {
-                                    // apply dampening factor (90%)
-                                    gestureOffset += dragAmount * 0.9f
+                                },
+                                onHorizontalDrag = { _, dragAmount ->
+                                    if (isDragging) {
+                                        // apply dampening factor (90%)
+                                        gestureOffset += dragAmount * 0.9f
 
-                                    // constrain gesture offset
-                                    val proposedOffset = targetOffset + gestureOffset
-                                    if (proposedOffset < 0f) {
-                                        gestureOffset = -targetOffset
-                                    } else if (proposedOffset > sidebarWidthPx) {
-                                        gestureOffset = sidebarWidthPx - targetOffset
+                                        // constrain gesture offset
+                                        val proposedOffset = targetOffset + gestureOffset
+                                        if (proposedOffset < 0f) {
+                                            gestureOffset = -targetOffset
+                                        } else if (proposedOffset > sidebarWidthPx) {
+                                            gestureOffset = sidebarWidthPx - targetOffset
+                                        }
                                     }
-                                }
-                            },
-                        )
-                    }
-                },
+                                },
+                            )
+                        }
+                    },
         ) {
             content()
         }
@@ -142,9 +145,10 @@ fun SidebarContainer(
         // sidebar view
         if (openPercentage > 0f || app.isSidebarVisible) {
             Box(
-                modifier = Modifier
-                    .align(Alignment.CenterStart)
-                    .offset { IntOffset((currentOffset - sidebarWidthPx).roundToInt(), 0) },
+                modifier =
+                    Modifier
+                        .align(Alignment.CenterStart)
+                        .offset { IntOffset((currentOffset - sidebarWidthPx).roundToInt(), 0) },
             ) {
                 SidebarView(app = app)
             }
