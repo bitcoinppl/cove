@@ -30,6 +30,9 @@ class CoveApplication : Application() {
             throw RuntimeException("Failed to initialize app data directory", e)
         }
 
+        // initialize app manager to ensure updater is ready before lifecycle callbacks
+        AppManager.getInstance()
+
         // setup app lifecycle observer for auth lock/unlock
         setupLifecycleObserver()
     }

@@ -241,6 +241,7 @@ class AppManager private constructor() : FfiReconcile {
         if (newRoutes != router.routes) {
             dispatch(AppAction.UpdateRoute(newRoutes))
         }
+        router.updateRoutes(newRoutes)
     }
 
     fun pushRoutes(routes: List<Route>) {
@@ -252,6 +253,7 @@ class AppManager private constructor() : FfiReconcile {
         if (newRoutes != router.routes) {
             dispatch(AppAction.UpdateRoute(newRoutes))
         }
+        router.updateRoutes(newRoutes)
     }
 
     fun popRoute() {
@@ -263,6 +265,7 @@ class AppManager private constructor() : FfiReconcile {
             if (newRoutes != router.routes) {
                 dispatch(AppAction.UpdateRoute(newRoutes))
             }
+            router.updateRoutes(newRoutes)
         }
     }
 
@@ -273,6 +276,7 @@ class AppManager private constructor() : FfiReconcile {
         if (routes != router.routes) {
             dispatch(AppAction.UpdateRoute(routes))
         }
+        router.updateRoutes(routes)
     }
 
     fun scanQr() {
