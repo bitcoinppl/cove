@@ -77,7 +77,7 @@ fun SidebarView(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Image(
-                painter = painterResource(id = R.drawable.ic_launcher_foreground),
+                painter = painterResource(id = R.drawable.cove_logo),
                 contentDescription = "Cove",
                 modifier = Modifier
                     .size(65.dp)
