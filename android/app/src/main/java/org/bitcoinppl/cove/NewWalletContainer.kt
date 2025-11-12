@@ -20,6 +20,7 @@ fun NewWalletContainer(
     when (route) {
         is NewWalletRoute.Select -> {
             NewWalletSelectScreen(
+                app = app,
                 onBack = { app.popRoute() },
                 onOpenNewHotWallet = {
                     app.pushRoute(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Select)))
