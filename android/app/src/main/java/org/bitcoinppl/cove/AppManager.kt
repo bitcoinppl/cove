@@ -316,11 +316,12 @@ class AppManager private constructor() : FfiReconcile {
                 is MultiFormat.Bip329Labels -> {
                     val selectedWallet = database.globalConfig().selectedWallet()
                     if (selectedWallet == null) {
-                        alertState = TaggedItem(
-                            AppAlertState.InvalidFileFormat(
-                                "Currently BIP329 labels must be imported through the wallet actions"
+                        alertState =
+                            TaggedItem(
+                                AppAlertState.InvalidFileFormat(
+                                    "Currently BIP329 labels must be imported through the wallet actions",
+                                ),
                             )
-                        )
                         return
                     }
 
@@ -337,19 +338,21 @@ class AppManager private constructor() : FfiReconcile {
                         }
                     } catch (e: Exception) {
                         logError("Failed to import labels", e)
-                        alertState = TaggedItem(
-                            AppAlertState.InvalidFileFormat(
-                                e.message ?: "Failed to import labels"
+                        alertState =
+                            TaggedItem(
+                                AppAlertState.InvalidFileFormat(
+                                    e.message ?: "Failed to import labels",
+                                ),
                             )
-                        )
                     }
                 }
             }
         } catch (e: Exception) {
             logError("Unable to handle scanned code", e)
-            alertState = TaggedItem(
-                AppAlertState.InvalidFileFormat(e.message ?: "Unknown error")
-            )
+            alertState =
+                TaggedItem(
+                    AppAlertState.InvalidFileFormat(e.message ?: "Unknown error"),
+                )
         }
     }
 
@@ -373,9 +376,10 @@ class AppManager private constructor() : FfiReconcile {
             }
         } catch (e: Exception) {
             logError("Unable to import wallet", e)
-            alertState = TaggedItem(
-                AppAlertState.ErrorImportingHotWallet(e.message ?: "Unknown error")
-            )
+            alertState =
+                TaggedItem(
+                    AppAlertState.ErrorImportingHotWallet(e.message ?: "Unknown error"),
+                )
         }
     }
 
@@ -399,9 +403,10 @@ class AppManager private constructor() : FfiReconcile {
             }
         } catch (e: Exception) {
             logError("Error importing hardware wallet", e)
-            alertState = TaggedItem(
-                AppAlertState.ErrorImportingHardwareWallet(e.message ?: "Unknown error")
-            )
+            alertState =
+                TaggedItem(
+                    AppAlertState.ErrorImportingHardwareWallet(e.message ?: "Unknown error"),
+                )
         }
     }
 
@@ -420,13 +425,14 @@ class AppManager private constructor() : FfiReconcile {
         }
 
         if (!addressWithNetwork.isValidForNetwork(currentNetwork)) {
-            alertState = TaggedItem(
-                AppAlertState.AddressWrongNetwork(
-                    address = address,
-                    network = network,
-                    currentNetwork = currentNetwork,
+            alertState =
+                TaggedItem(
+                    AppAlertState.AddressWrongNetwork(
+                        address = address,
+                        network = network,
+                        currentNetwork = currentNetwork,
+                    ),
                 )
-            )
             return
         }
 
@@ -449,11 +455,12 @@ class AppManager private constructor() : FfiReconcile {
             return
         }
 
-        val route = RouteFactory().sendConfirm(
-            id = txnRecord.walletId(),
-            details = txnRecord.confirmDetails(),
-            signedTransaction = transaction,
-        )
+        val route =
+            RouteFactory().sendConfirm(
+                id = txnRecord.walletId(),
+                details = txnRecord.confirmDetails(),
+                signedTransaction = transaction,
+            )
 
         pushRoute(route)
     }

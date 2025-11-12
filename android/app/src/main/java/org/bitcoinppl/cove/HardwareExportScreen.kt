@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -559,8 +560,33 @@ fun HardwareExportScreen(
 
     // fullscreen QR scanner
     if (showQrScanner) {
-        TransactionQrScannerScreen(
-            app = app,
+        QrCodeScanView(
+            onScanned = { stringOrData ->
+                try {
+                    val transaction = BitcoinTransaction.tryFromStringOrData(stringOrData)
+                    val (txnRecord, signedTransaction) = txnRecordAndSignedTxn(transaction)
+
+                    val route =
+                        RouteFactory().sendConfirm(
+                            id = txnRecord.walletId(),
+                            details = txnRecord.confirmDetails(),
+                            signedTransaction = signedTransaction,
+                        )
+
+                    showQrScanner = false
+                    app.pushRoute(route)
+                } catch (e: Exception) {
+                    Log.e("HardwareExportScreen", "Error importing transaction: $e")
+                    showQrScanner = false
+                    app.alertState =
+                        TaggedItem(
+                            AppAlertState.General(
+                                title = "Scan Failed",
+                                message = e.message ?: TransactionImportErrors.FAILED_TO_IMPORT,
+                            ),
+                        )
+                }
+            },
             onDismiss = { showQrScanner = false },
         )
     }

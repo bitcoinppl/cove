@@ -98,7 +98,7 @@ class MainActivity : ComponentActivity() {
                                 SheetContent(
                                     state = taggedState,
                                     app = app,
-                                    onDismiss = { app.sheetState = null }
+                                    onDismiss = { app.sheetState = null },
                                 )
                             }
                         }
@@ -134,16 +134,17 @@ private fun SheetContent(
                 onDismissRequest = onDismiss,
                 sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
             ) {
-                GeneralQrScannerSheet(
+                QrCodeScanView(
                     onScanned = { stringOrData ->
                         try {
                             val multiFormat = stringOrDataTryIntoMultiFormat(stringOrData)
                             app.handleMultiFormat(multiFormat)
                         } catch (e: Exception) {
                             Log.e("MainActivity", "Failed to parse QR code: ${e.message}", e)
-                            app.alertState = TaggedItem(
-                                AppAlertState.InvalidFormat(e.message ?: "Unknown error")
-                            )
+                            app.alertState =
+                                TaggedItem(
+                                    AppAlertState.InvalidFormat(e.message ?: "Unknown error"),
+                                )
                         }
                     },
                     onDismiss = onDismiss,

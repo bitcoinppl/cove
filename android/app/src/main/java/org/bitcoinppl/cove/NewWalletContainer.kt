@@ -3,7 +3,7 @@ package org.bitcoinppl.cove
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import org.bitcoinppl.cove.flow.new_wallet.NewWalletSelectScreen
-import org.bitcoinppl.cove.flow.new_wallet.cold_wallet.QrCodeImportScreen
+import org.bitcoinppl.cove.flow.new_wallet.cold_wallet.ColdWalletQrScanScreen
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
 
@@ -52,7 +52,7 @@ fun NewWalletContainer(
         is NewWalletRoute.ColdWallet -> {
             when (route.v1) {
                 ColdWalletRoute.QR_CODE -> {
-                    QrCodeImportScreen(app = app, modifier = modifier)
+                    ColdWalletQrScanScreen(app = app, modifier = modifier)
                 }
             }
         }

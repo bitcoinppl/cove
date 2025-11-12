@@ -31,23 +31,18 @@ import com.google.accompanist.permissions.rememberPermissionState
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
-import org.bitcoinppl.cove_core.BitcoinTransaction
 import org.bitcoinppl.cove_core.MultiQr
-import org.bitcoinppl.cove_core.RouteFactory
 import org.bitcoinppl.cove_core.StringOrData
 import java.util.concurrent.Executors
 
-/**
- * Represents the state of the QR scanner
- */
-private sealed class ScannerState {
-    object Idle : ScannerState()
+private sealed class QrCodeScannerState {
+    object Idle : QrCodeScannerState()
 
     data class Scanning(
         val multiQr: MultiQr? = null,
         val totalParts: UInt? = null,
         val partsLeft: UInt? = null,
-    ) : ScannerState() {
+    ) : QrCodeScannerState() {
         val partsScanned: Int?
             get() =
                 totalParts?.let { total ->
@@ -60,16 +55,16 @@ private sealed class ScannerState {
             get() = totalParts != null && partsLeft != null
     }
 
-    data class Error(val message: String) : ScannerState()
+    data class Error(val message: String) : QrCodeScannerState()
 
-    data class Complete(val data: StringOrData) : ScannerState()
+    data class Complete(val data: StringOrData) : QrCodeScannerState()
 }
 
 @OptIn(ExperimentalPermissionsApi::class, ExperimentalMaterial3Api::class)
 @Composable
-fun TransactionQrScannerScreen(
-    app: AppManager,
-    onDismiss: () -> Unit = {},
+fun QrCodeScanView(
+    onScanned: (StringOrData) -> Unit,
+    onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val cameraPermissionState = rememberPermissionState(Manifest.permission.CAMERA)
@@ -79,7 +74,7 @@ fun TransactionQrScannerScreen(
             TopAppBar(
                 title = { },
                 navigationIcon = {
-                    IconButton(onClick = { onDismiss() }) {
+                    IconButton(onClick = onDismiss) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",
@@ -100,14 +95,13 @@ fun TransactionQrScannerScreen(
             when {
                 cameraPermissionState.status.isGranted -> {
                     QrScannerContent(
-                        app = app,
+                        onScanned = onScanned,
                         onDismiss = onDismiss,
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
                 else -> {
                     PermissionDeniedContent(
-                        app = app,
                         permissionState = cameraPermissionState,
                         onDismiss = onDismiss,
                         modifier = Modifier.fillMaxSize(),
@@ -121,7 +115,6 @@ fun TransactionQrScannerScreen(
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
 private fun PermissionDeniedContent(
-    app: AppManager,
     permissionState: PermissionState,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
@@ -141,7 +134,7 @@ private fun PermissionDeniedContent(
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            text = "Please allow camera access to scan signed transactions.",
+            text = "Please allow camera access to scan QR codes.",
             style = MaterialTheme.typography.bodyMedium,
             color = Color.White.copy(alpha = 0.7f),
         )
@@ -159,9 +152,7 @@ private fun PermissionDeniedContent(
         Spacer(modifier = Modifier.height(12.dp))
 
         TextButton(
-            onClick = {
-                onDismiss()
-            },
+            onClick = onDismiss,
         ) {
             Text("Cancel", color = Color.White)
         }
@@ -171,40 +162,21 @@ private fun PermissionDeniedContent(
 @Composable
 @androidx.camera.core.ExperimentalGetImage
 private fun QrScannerContent(
-    app: AppManager,
+    onScanned: (StringOrData) -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    val scope = rememberCoroutineScope()
 
-    var scannerState by remember { mutableStateOf<ScannerState>(ScannerState.Idle) }
+    var scannerState by remember { mutableStateOf<QrCodeScannerState>(QrCodeScannerState.Idle) }
 
-    // handle transaction import when scan completes
+    // handle scan completion
     LaunchedEffect(scannerState) {
-        if (scannerState is ScannerState.Complete) {
-            try {
-                val stringOrData = (scannerState as ScannerState.Complete).data
-                val transaction = BitcoinTransaction.tryFromStringOrData(stringOrData)
-                val (txnRecord, signedTransaction) = txnRecordAndSignedTxn(transaction)
-
-                val route =
-                    RouteFactory().sendConfirm(
-                        id = txnRecord.walletId(),
-                        details = txnRecord.confirmDetails(),
-                        signedTransaction = signedTransaction,
-                    )
-
-                onDismiss()
-                app.pushRoute(route)
-            } catch (e: Exception) {
-                Log.e("TransactionQrScanner", "Error importing transaction: $e")
-                scannerState =
-                    ScannerState.Error(
-                        e.message ?: TransactionImportErrors.FAILED_TO_IMPORT,
-                    )
-            }
+        if (scannerState is QrCodeScannerState.Complete) {
+            val data = (scannerState as QrCodeScannerState.Complete).data
+            onDismiss()
+            onScanned(data)
         }
     }
 
@@ -216,7 +188,7 @@ private fun QrScannerContent(
 
     Box(modifier = modifier) {
         when (val state = scannerState) {
-            is ScannerState.Error -> {
+            is QrCodeScannerState.Error -> {
                 // show error overlay with retry option
                 Column(
                     modifier =
@@ -255,15 +227,15 @@ private fun QrScannerContent(
                     Spacer(modifier = Modifier.height(24.dp))
 
                     Button(
-                        onClick = { scannerState = ScannerState.Idle },
+                        onClick = { scannerState = QrCodeScannerState.Idle },
                     ) {
                         Text("Try Again")
                     }
                 }
             }
 
-            is ScannerState.Complete -> {
-                // scanning complete, show nothing (transition handled in LaunchedEffect)
+            is QrCodeScannerState.Complete -> {
+                // scanning complete, transitioning to onScanned callback
             }
 
             else -> {
@@ -312,7 +284,7 @@ private fun QrScannerContent(
                                                         }
                                                     }
                                                     .addOnFailureListener(mainExecutor) { e ->
-                                                        Log.e("TransactionQrScanner", "Barcode processing failed", e)
+                                                        Log.e("QrCodeScanView", "Barcode processing failed", e)
                                                     }
                                                     .addOnCompleteListener {
                                                         imageProxy.close()
@@ -335,7 +307,7 @@ private fun QrScannerContent(
                                     imageAnalysis,
                                 )
                             } catch (e: Exception) {
-                                Log.e("TransactionQrScanner", "Camera binding failed", e)
+                                Log.e("QrCodeScanView", "Camera binding failed", e)
                             }
                         }, ContextCompat.getMainExecutor(ctx))
 
@@ -356,7 +328,7 @@ private fun QrScannerContent(
                     Spacer(modifier = Modifier.weight(1f))
 
                     Text(
-                        text = "Scan Signed Transaction",
+                        text = "Scan QR Code",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.SemiBold,
                         color = Color.White,
@@ -365,7 +337,7 @@ private fun QrScannerContent(
                     Spacer(modifier = Modifier.weight(5f))
 
                     // multi-part progress
-                    if (state is ScannerState.Scanning && state.isMultiPart) {
+                    if (state is QrCodeScannerState.Scanning && state.isMultiPart) {
                         Column(
                             modifier =
                                 Modifier
@@ -416,9 +388,9 @@ private fun QrScannerContent(
 }
 
 private fun handleQrCode(
-    currentState: ScannerState,
+    currentState: QrCodeScannerState,
     barcode: Barcode,
-    onStateUpdate: (ScannerState) -> Unit,
+    onStateUpdate: (QrCodeScannerState) -> Unit,
 ) {
     try {
         // check both rawBytes (binary) and rawValue (text)
@@ -432,8 +404,8 @@ private fun handleQrCode(
 
         val scanningState =
             when (currentState) {
-                is ScannerState.Scanning -> currentState
-                else -> ScannerState.Scanning()
+                is QrCodeScannerState.Scanning -> currentState
+                else -> QrCodeScannerState.Scanning()
             }
 
         // try to create or use existing multi-qr
@@ -442,22 +414,22 @@ private fun handleQrCode(
                 val newMultiQr = MultiQr.tryNew(qr = qrData)
                 val totalParts = newMultiQr.totalParts()
                 onStateUpdate(
-                    ScannerState.Scanning(
+                    QrCodeScannerState.Scanning(
                         multiQr = newMultiQr,
                         totalParts = totalParts,
                     ),
                 )
                 newMultiQr
             } catch (e: Exception) {
-                Log.d("TransactionQrScanner", "Not a BBQr (single QR): ${e.message}")
+                Log.d("QrCodeScanView", "Not a BBQr (single QR): ${e.message}")
                 // single QR code (not BBQr)
-                onStateUpdate(ScannerState.Complete(qrData))
+                onStateUpdate(QrCodeScannerState.Complete(qrData))
                 return
             }
 
         // check if it's a BBQr
         if (!multiQr.isBbqr()) {
-            onStateUpdate(ScannerState.Complete(qrData))
+            onStateUpdate(QrCodeScannerState.Complete(qrData))
             return
         }
 
@@ -471,8 +443,8 @@ private fun handleQrCode(
                     try {
                         qrData.v1.toString(Charsets.UTF_8)
                     } catch (e: Exception) {
-                        Log.e("TransactionQrScanner", "Failed to convert binary to string for BBQr: $e")
-                        onStateUpdate(ScannerState.Error("Binary QR codes not supported for multi-part BBQr"))
+                        Log.e("QrCodeScanView", "Failed to convert binary to string for BBQr: $e")
+                        onStateUpdate(QrCodeScannerState.Error("Binary QR codes not supported for multi-part BBQr"))
                         return
                     }
                 }
@@ -493,9 +465,9 @@ private fun handleQrCode(
         if (result.isComplete()) {
             val finalData = result.finalResult()
             // finalResult returns a string, so wrap it in StringOrData
-            onStateUpdate(ScannerState.Complete(StringOrData.String(finalData)))
+            onStateUpdate(QrCodeScannerState.Complete(StringOrData.String(finalData)))
         }
     } catch (e: Exception) {
-        onStateUpdate(ScannerState.Error(e.message ?: "Unknown scanning error"))
+        onStateUpdate(QrCodeScannerState.Error(e.message ?: "Unknown scanning error"))
     }
 }
