@@ -1,10 +1,14 @@
 package org.bitcoinppl.cove
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.zIndex
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove_core.*
@@ -21,16 +25,6 @@ fun SettingsContainer(
     modifier: Modifier = Modifier,
 ) {
     Box(modifier = modifier.fillMaxSize()) {
-        // TODO: add background pattern drawable (image_settings_pattern)
-        // Image(
-        //     painter = painterResource(id = R.drawable.image_settings_pattern),
-        //     contentDescription = null,
-        //     contentScale = ContentScale.FillBounds,
-        //     modifier = Modifier
-        //         .fillMaxSize()
-        //         .zIndex(0f)
-        // )
-
         // background color overlay
         Box(
             modifier =
@@ -38,6 +32,18 @@ fun SettingsContainer(
                     .fillMaxSize()
                     .background(CoveColor.ListBackgroundLight)
                     .zIndex(0f),
+        )
+
+        // background pattern
+        Image(
+            painter = painterResource(id = R.drawable.image_chain_code_pattern_horizontal),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .graphicsLayer(alpha = 0.25f)
+                    .zIndex(1f),
         )
 
         // settings content
