@@ -12,8 +12,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -27,6 +31,7 @@ import org.bitcoinppl.cove.nfc.TapCardNfcManager
 import org.bitcoinppl.cove.sidebar.SidebarContainer
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove.views.LockView
+import org.bitcoinppl.cove_core.stringOrDataTryIntoMultiFormat
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -79,11 +84,22 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                     app.asyncRuntimeReady -> {
-                        LockView {
-                            SidebarContainer(app = app) {
-                                key(app.routeId) {
-                                    RouteView(app = app, route = app.router.currentRoute)
+                        Box {
+                            LockView {
+                                SidebarContainer(app = app) {
+                                    key(app.routeId) {
+                                        RouteView(app = app, route = app.router.currentRoute)
+                                    }
                                 }
+                            }
+
+                            // global sheet rendering
+                            app.sheetState?.let { taggedState ->
+                                SheetContent(
+                                    state = taggedState,
+                                    app = app,
+                                    onDismiss = { app.sheetState = null }
+                                )
                             }
                         }
                     }
@@ -102,5 +118,41 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         private const val TAG = "MainActivity"
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SheetContent(
+    state: TaggedItem<AppSheetState>,
+    app: AppManager,
+    onDismiss: () -> Unit,
+) {
+    when (state.item) {
+        is AppSheetState.Qr -> {
+            ModalBottomSheet(
+                onDismissRequest = onDismiss,
+                sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            ) {
+                GeneralQrScannerSheet(
+                    onScanned = { stringOrData ->
+                        try {
+                            val multiFormat = stringOrDataTryIntoMultiFormat(stringOrData)
+                            app.handleMultiFormat(multiFormat)
+                        } catch (e: Exception) {
+                            Log.e("MainActivity", "Failed to parse QR code: ${e.message}", e)
+                            app.alertState = TaggedItem(
+                                AppAlertState.InvalidFormat(e.message ?: "Unknown error")
+                            )
+                        }
+                    },
+                    onDismiss = onDismiss,
+                )
+            }
+        }
+        is AppSheetState.TapSigner -> {
+            // TapSigner sheets would go here if needed
+            // Currently handled elsewhere in the app
+        }
     }
 }
