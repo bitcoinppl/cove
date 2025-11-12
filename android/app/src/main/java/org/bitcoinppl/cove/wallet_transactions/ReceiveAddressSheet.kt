@@ -103,9 +103,10 @@ fun ReceiveAddressSheet(
         }
     }
 
-    // if there's an error, dismiss and don't show the sheet
+    // if there's an error, show it to the user then dismiss
     if (errorMessage != null && !isLoading) {
         LaunchedEffect(errorMessage) {
+            snackbarHostState.showSnackbar(errorMessage!!)
             onDismiss()
         }
         return
