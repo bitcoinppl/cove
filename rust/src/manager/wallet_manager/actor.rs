@@ -1372,7 +1372,9 @@ impl WalletActor {
         if node_client.is_none() {
             debug!("creating node client");
             let node = Database::global().global_config.selected_node();
-            let node_client = NodeClient::new(&node).await?;
+            let node_client = NodeClient::new(&node).await.map_err(|err| {
+                Error::NodeConnectionFailed(format!("failed to create node client: {}", err))
+            })?;
             self.node_client = Some(node_client);
         };
 
