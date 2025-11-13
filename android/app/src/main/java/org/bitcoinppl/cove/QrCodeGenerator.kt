@@ -22,10 +22,11 @@ object QrCodeGenerator {
         errorCorrectionLevel: ErrorCorrectionLevel = ErrorCorrectionLevel.L,
         margin: Int = 0,
     ): Bitmap {
-        val hints = mapOf(
-            EncodeHintType.ERROR_CORRECTION to errorCorrectionLevel,
-            EncodeHintType.MARGIN to margin,
-        )
+        val hints =
+            mapOf(
+                EncodeHintType.ERROR_CORRECTION to errorCorrectionLevel,
+                EncodeHintType.MARGIN to margin,
+            )
 
         val writer = QRCodeWriter()
         val bitMatrix = writer.encode(text, BarcodeFormat.QR_CODE, size, size, hints)
