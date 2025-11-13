@@ -176,6 +176,8 @@ private fun QrScannerContent(
         if (scannerState is QrCodeScannerState.Complete) {
             val data = (scannerState as QrCodeScannerState.Complete).data
             onScanned(data)
+            // reset state to prevent re-trigger on recomposition
+            scannerState = QrCodeScannerState.Idle
         }
     }
 
@@ -438,14 +440,9 @@ private fun handleQrCode(
             when (qrData) {
                 is StringOrData.String -> qrData.v1
                 is StringOrData.Data -> {
-                    // try to convert bytes to string for BBQr
-                    try {
-                        qrData.v1.toString(Charsets.UTF_8)
-                    } catch (e: Exception) {
-                        Log.e("QrCodeScanView", "Failed to convert binary to string for BBQr: $e")
-                        onStateUpdate(QrCodeScannerState.Error("Binary QR codes not supported for multi-part BBQr"))
-                        return
-                    }
+                    // skip binary QR codes for multi-part BBQr, keep scanning
+                    Log.d("QrCodeScanView", "Skipping binary QR code in multi-part scan")
+                    return
                 }
             }
 

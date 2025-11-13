@@ -93,8 +93,13 @@ fun ColdWalletQrScanScreen(app: AppManager, modifier: Modifier = Modifier) {
                                 ),
                             )
                     } catch (e: WalletException.MultiFormat) {
-                        app.handleMultiFormat(e.v1)
                         app.popRoute()
+                        app.alertState =
+                            TaggedItem(
+                                AppAlertState.ErrorImportingHardwareWallet(
+                                    message = e.v1.toString(),
+                                ),
+                            )
                     } catch (e: WalletException.WalletAlreadyExists) {
                         try {
                             app.rust.selectWallet(id = e.v1)
