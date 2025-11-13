@@ -347,9 +347,10 @@ private fun WordCardView(
                                 .weight(1f)
                                 .background(
                                     color = CoveColor.btnPrimary,
-                                    shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
-                                )
-                                .padding(horizontal = 12.dp, vertical = 12.dp),
+                                    shape =
+                                        androidx.compose.foundation.shape
+                                            .RoundedCornerShape(10.dp),
+                                ).padding(horizontal = 12.dp, vertical = 12.dp),
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),

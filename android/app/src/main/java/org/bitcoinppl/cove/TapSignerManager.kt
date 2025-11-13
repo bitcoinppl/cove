@@ -54,8 +54,8 @@ class TapSignerManager(
     private fun shouldPreventNavigation(
         from: org.bitcoinppl.cove_core.TapSignerRoute,
         to: org.bitcoinppl.cove_core.TapSignerRoute,
-    ): Boolean {
-        return when {
+    ): Boolean =
+        when {
             from is org.bitcoinppl.cove_core.TapSignerRoute.InitSelect &&
                 to is org.bitcoinppl.cove_core.TapSignerRoute.InitSelect -> true
             from is org.bitcoinppl.cove_core.TapSignerRoute.InitAdvanced &&
@@ -68,7 +68,6 @@ class TapSignerManager(
                 to is org.bitcoinppl.cove_core.TapSignerRoute.ConfirmPin -> true
             else -> false
         }
-    }
 
     fun popRoute() {
         if (path.isNotEmpty()) {

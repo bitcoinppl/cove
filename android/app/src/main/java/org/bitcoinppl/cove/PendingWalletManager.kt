@@ -22,7 +22,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 @Stable
 class PendingWalletManager(
     numberOfWords: NumberOfBip39Words,
-) : PendingWalletManagerReconciler, Closeable {
+) : PendingWalletManagerReconciler,
+    Closeable {
     private val tag = "PendingWalletManager"
 
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)

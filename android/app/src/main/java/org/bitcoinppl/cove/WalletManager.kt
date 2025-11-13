@@ -24,7 +24,9 @@ import java.util.concurrent.atomic.AtomicBoolean
  * ported from iOS WalletManager.swift
  */
 @Stable
-class WalletManager : WalletManagerReconciler, Closeable {
+class WalletManager :
+    WalletManagerReconciler,
+    Closeable {
     private val tag = "WalletManager"
 
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -145,29 +147,23 @@ class WalletManager : WalletManagerReconciler, Closeable {
         rust.forceWalletScan()
     }
 
-    suspend fun firstAddress(): AddressInfo {
-        return rust.addressAt(0u)
-    }
+    suspend fun firstAddress(): AddressInfo = rust.addressAt(0u)
 
-    fun amountFmt(amount: Amount): String {
-        return when (walletMetadata?.selectedUnit) {
+    fun amountFmt(amount: Amount): String =
+        when (walletMetadata?.selectedUnit) {
             BitcoinUnit.BTC -> amount.btcString()
             BitcoinUnit.SAT -> amount.satsString()
             else -> amount.satsString()
         }
-    }
 
-    fun displayAmount(amount: Amount, showUnit: Boolean = true): String {
-        return rust.displayAmount(amount, showUnit)
-    }
+    fun displayAmount(amount: Amount, showUnit: Boolean = true): String = rust.displayAmount(amount, showUnit)
 
-    fun amountFmtUnit(amount: Amount): String {
-        return when (walletMetadata?.selectedUnit) {
+    fun amountFmtUnit(amount: Amount): String =
+        when (walletMetadata?.selectedUnit) {
             BitcoinUnit.BTC -> amount.btcStringWithUnit()
             BitcoinUnit.SAT -> amount.satsStringWithUnit()
             else -> amount.satsStringWithUnit()
         }
-    }
 
     suspend fun transactionDetails(txId: TxId): TransactionDetails {
         // check cache first
@@ -314,7 +310,11 @@ class WalletManager : WalletManagerReconciler, Closeable {
 sealed class WalletLoadState {
     data object LOADING : WalletLoadState()
 
-    data class SCANNING(val txns: List<Transaction>) : WalletLoadState()
+    data class SCANNING(
+        val txns: List<Transaction>,
+    ) : WalletLoadState()
 
-    data class LOADED(val txns: List<Transaction>) : WalletLoadState()
+    data class LOADED(
+        val txns: List<Transaction>,
+    ) : WalletLoadState()
 }

@@ -15,7 +15,9 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.receiveAsFlow
 import java.nio.charset.Charset
 
-class NfcReader(private val activity: Activity) {
+class NfcReader(
+    private val activity: Activity,
+) {
     private val nfcAdapter: NfcAdapter? = NfcAdapter.getDefaultAdapter(activity)
     private val _scanResults = Channel<NfcScanResult>(Channel.BUFFERED)
     val scanResults: Flow<NfcScanResult> = _scanResults.receiveAsFlow()
@@ -155,7 +157,10 @@ class NfcReader(private val activity: Activity) {
 }
 
 sealed class NfcScanResult {
-    data class Success(val text: String?, val data: ByteArray?) : NfcScanResult() {
+    data class Success(
+        val text: String?,
+        val data: ByteArray?,
+    ) : NfcScanResult() {
         override fun equals(other: Any?): Boolean {
             if (this === other) return true
             if (javaClass != other?.javaClass) return false
@@ -180,5 +185,7 @@ sealed class NfcScanResult {
         }
     }
 
-    data class Error(val message: String) : NfcScanResult()
+    data class Error(
+        val message: String,
+    ) : NfcScanResult()
 }

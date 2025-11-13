@@ -306,8 +306,7 @@ private fun FeeOptionCard(
                                 .background(
                                     color = if (isSelected) CoveColor.BorderMedium else CoveColor.BorderLight,
                                     shape = RoundedCornerShape(12.dp),
-                                )
-                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                                ).padding(horizontal = 8.dp, vertical = 4.dp),
                     ) {
                         Box(
                             modifier =
@@ -418,8 +417,7 @@ fun CustomNetworkFeeBottomSheet(
                         .background(
                             color = CoveColor.BorderLight,
                             shape = RoundedCornerShape(12.dp),
-                        )
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                        ).padding(horizontal = 8.dp, vertical = 4.dp),
             ) {
                 Box(
                     modifier =
