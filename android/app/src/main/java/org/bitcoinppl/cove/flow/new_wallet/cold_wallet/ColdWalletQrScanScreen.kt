@@ -84,6 +84,7 @@ fun ColdWalletQrScanScreen(app: AppManager, modifier: Modifier = Modifier) {
                         Log.d("ColdWalletQrScanScreen", "Imported Wallet: $id")
 
                         app.rust.selectWallet(id = id)
+                        app.popRoute()
                         app.alertState =
                             TaggedItem(
                                 AppAlertState.General(
@@ -91,18 +92,13 @@ fun ColdWalletQrScanScreen(app: AppManager, modifier: Modifier = Modifier) {
                                     message = "Imported Wallet Successfully",
                                 ),
                             )
-                        app.popRoute()
                     } catch (e: WalletException.MultiFormat) {
+                        app.handleMultiFormat(e.v1)
                         app.popRoute()
-                        app.alertState =
-                            TaggedItem(
-                                AppAlertState.ErrorImportingHardwareWallet(
-                                    message = e.v1.toString(),
-                                ),
-                            )
                     } catch (e: WalletException.WalletAlreadyExists) {
                         try {
                             app.rust.selectWallet(id = e.v1)
+                            app.popRoute()
                             app.alertState =
                                 TaggedItem(
                                     AppAlertState.General(
@@ -110,7 +106,6 @@ fun ColdWalletQrScanScreen(app: AppManager, modifier: Modifier = Modifier) {
                                         message = "Wallet already exists: ${e.v1}",
                                     ),
                                 )
-                            app.popRoute()
                         } catch (selectError: Exception) {
                             app.popRoute()
                             app.alertState =
