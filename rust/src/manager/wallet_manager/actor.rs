@@ -51,6 +51,7 @@ use std::{
     time::{Duration, UNIX_EPOCH},
 };
 use tap::TapFallible as _;
+use tokio::time::Instant;
 use tracing::{debug, error, info, warn};
 
 use self::mnemonic::{Mnemonic, MnemonicExt as _};
@@ -114,6 +115,7 @@ impl FullScanType {
 impl Actor for WalletActor {
     async fn started(&mut self, addr: Addr<Self>) -> ActorResult<()> {
         self.addr = addr.downgrade();
+        send!(addr.check_node_connection());
         Produces::ok(())
     }
 
@@ -670,7 +672,10 @@ impl WalletActor {
     }
 
     pub async fn next_address(&mut self) -> ActorResult<AddressInfoWithDerivation> {
+        debug!("actor next_address");
+        let now = Instant::now();
         let address = self.wallet.get_next_address()?;
+        debug!("actor next_address took {}ms", now.elapsed().as_millis());
         Produces::ok(address)
     }
 
@@ -1365,6 +1370,7 @@ impl WalletActor {
     async fn node_client(&mut self) -> Result<&NodeClient> {
         let node_client = self.node_client.as_ref();
         if node_client.is_none() {
+            debug!("creating node client");
             let node = Database::global().global_config.selected_node();
             let node_client = NodeClient::new(&node).await?;
             self.node_client = Some(node_client);
