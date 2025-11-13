@@ -694,24 +694,6 @@ struct CoveApp: App {
                     message: alertMessage
                 )
                 .sheet(item: $app.sheetState, content: SheetContent)
-                .gesture(
-                    app.router.routes.isEmpty
-                        ? DragGesture()
-                        .onChanged { gesture in
-                            if gesture.startLocation.x < 25, gesture.translation.width > 100 {
-                                withAnimation(.spring()) {
-                                    app.isSidebarVisible = true
-                                }
-                            }
-                        }
-                        .onEnded { gesture in
-                            if gesture.startLocation.x < 20, gesture.translation.width > 50 {
-                                withAnimation(.spring()) {
-                                    app.isSidebarVisible = true
-                                }
-                            }
-                        } : nil
-                )
                 .task {
                     await app.rust.initOnStart()
                     await MainActor.run { app.asyncRuntimeReady = true }
