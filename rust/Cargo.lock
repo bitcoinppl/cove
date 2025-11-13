@@ -683,6 +683,7 @@ dependencies = [
  "cove-macros",
  "cove-nfc",
  "cove-tap-card",
+ "cove-tokio-ext",
  "cove-types",
  "cove-util",
  "csv",
@@ -817,6 +818,13 @@ dependencies = [
  "thiserror 2.0.17",
  "tracing",
  "uniffi 0.30.0",
+]
+
+[[package]]
+name = "cove-tokio-ext"
+version = "0.1.0"
+dependencies = [
+ "tokio",
 ]
 
 [[package]]
