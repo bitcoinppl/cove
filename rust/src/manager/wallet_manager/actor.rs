@@ -36,6 +36,7 @@ use bitcoin::{Amount, FeeRate as BdkFeeRate, OutPoint, TxIn, Txid};
 use bitcoin::{Transaction as BdkTransaction, params::Params};
 use cove_bdk::coin_selection::CoveDefaultCoinSelection;
 use cove_common::consts::{GAP_LIMIT, MIN_SEND_AMOUNT};
+use cove_tokio_ext::FutureTimeoutExt as _;
 use cove_types::{
     address::AddressInfoWithDerivation,
     confirm::{AddressAndAmount, ConfirmDetails, ExtraItem, InputOutputDetails, SplitOutput},
@@ -176,7 +177,17 @@ impl WalletActor {
 
     pub async fn balance(&mut self) -> ActorResult<Balance> {
         let balance = self.wallet.balance();
+
+        // cache balance in database
+        if let Err(error) = self.db.set_balance(balance.clone()) {
+            tracing::warn!("failed to cache balance: {error}");
+        }
+
         Produces::ok(balance)
+    }
+
+    pub async fn cached_balance(&mut self) -> ActorResult<Option<Balance>> {
+        Produces::ok(self.db.get_balance().ok().flatten())
     }
 
     // Build a transaction but don't advance the change address index
@@ -679,8 +690,16 @@ impl WalletActor {
         Produces::ok(address)
     }
 
-    pub async fn check_node_connection(&mut self) -> ActorResult<()> {
-        let node_client = self.node_client().await?.clone();
+    #[into_actor_result]
+    pub async fn check_node_connection(&mut self) -> Result<(), Error> {
+        let node_client = self
+            .node_client()
+            .with_timeout(Duration::from_secs(5))
+            .await
+            .map_err(|err| {
+                Error::NodeConnectionFailed(format!("failed to create node client: {err}"))
+            })??
+            .clone();
 
         let reconciler = self.reconciler.clone();
         self.addr.send_fut(async move {
@@ -691,7 +710,7 @@ impl WalletActor {
             }
         });
 
-        Produces::ok(())
+        Ok(())
     }
 
     pub async fn wallet_scan_and_notify(&mut self, force_scan: bool) -> ActorResult<()> {
@@ -1367,14 +1386,15 @@ impl WalletActor {
         Some(())
     }
 
-    async fn node_client(&mut self) -> Result<&NodeClient> {
+    async fn node_client(&mut self) -> Result<&NodeClient, Error> {
         let node_client = self.node_client.as_ref();
         if node_client.is_none() {
             debug!("creating node client");
             let node = Database::global().global_config.selected_node();
             let node_client = NodeClient::new(&node).await.map_err(|err| {
-                Error::NodeConnectionFailed(format!("failed to create node client: {}", err))
+                Error::NodeConnectionFailed(format!("failed to create node client: {err}"))
             })?;
+
             self.node_client = Some(node_client);
         };
 
