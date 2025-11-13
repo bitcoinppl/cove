@@ -54,45 +54,29 @@ impl From<&OutPoint> for bitcoin::OutPoint {
 }
 
 // MARK: FFI
-mod ffi {
-    use std::{
-        hash::{Hash as _, Hasher as _},
-        sync::Arc,
-    };
-
-    use super::*;
-
-    #[uniffi::export]
-    impl OutPoint {
-        #[uniffi::method(name = "hashToUint")]
-        fn ffi_hash(&self) -> u64 {
-            let mut hasher = std::hash::DefaultHasher::new();
-            self.hash(&mut hasher);
-            hasher.finish()
-        }
-
-        #[uniffi::method(name = "eq")]
-        fn ffi_eq(&self, rhs: Arc<OutPoint>) -> bool {
-            *self == *rhs
-        }
+#[uniffi::export]
+impl OutPoint {
+    #[uniffi::method(name = "hashToUint")]
+    fn _ffi_hash(&self) -> u64 {
+        use std::hash::{Hash as _, Hasher as _};
+        let mut hasher = std::hash::DefaultHasher::new();
+        self.hash(&mut hasher);
+        hasher.finish()
     }
-}
 
-// MARK: FFI PREVIEW
-mod ffi_preview {
-    use super::OutPoint;
-    use crate::TxId;
+    #[uniffi::method(name = "eq")]
+    fn _ffi_eq(&self, rhs: std::sync::Arc<OutPoint>) -> bool {
+        *self == *rhs
+    }
 
-    #[uniffi::export]
-    impl OutPoint {
-        #[uniffi::constructor]
-        pub fn preview_new() -> Self {
-            Self::with_vout(0)
-        }
+    // MARK: FFI PREVIEW
+    #[uniffi::constructor(name = "previewNew")]
+    pub fn _ffi_preview_new() -> Self {
+        Self::_ffi_with_vout(0)
+    }
 
-        #[uniffi::constructor]
-        pub fn with_vout(vout: u32) -> Self {
-            Self { txid: TxId::preview_new(), vout }
-        }
+    #[uniffi::constructor(name = "withVout")]
+    pub fn _ffi_with_vout(vout: u32) -> Self {
+        Self { txid: TxId::preview_new(), vout }
     }
 }

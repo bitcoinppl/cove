@@ -58,37 +58,26 @@ pub struct FeeRateOptions {
     pub slow: FeeRateOption,
 }
 
-mod fee_rate_options_ffi {
-    use super::*;
-
-    #[uniffi::export]
-    impl FeeRateOptions {
-        pub fn fast(&self) -> FeeRateOption {
-            self.fast
-        }
-
-        pub fn medium(&self) -> FeeRateOption {
-            self.medium
-        }
-
-        pub fn slow(&self) -> FeeRateOption {
-            self.slow
-        }
+#[uniffi::export]
+impl FeeRateOptions {
+    pub fn fast(&self) -> FeeRateOption {
+        self.fast
     }
-}
 
-mod preview_ffi {
-    use super::*;
+    pub fn medium(&self) -> FeeRateOption {
+        self.medium
+    }
 
-    #[uniffi::export]
-    impl FeeRateOptions {
-        #[uniffi::constructor]
-        pub fn preview_new() -> Self {
-            Self {
-                fast: FeeRateOption::new(FeeSpeed::Fast, 9.87),
-                medium: FeeRateOption::new(FeeSpeed::Medium, 7.22),
-                slow: FeeRateOption::new(FeeSpeed::Slow, 2.11),
-            }
+    pub fn slow(&self) -> FeeRateOption {
+        self.slow
+    }
+
+    #[uniffi::constructor(name = "previewNew")]
+    pub fn _ffi_preview_new() -> Self {
+        Self {
+            fast: FeeRateOption::new(FeeSpeed::Fast, 9.87),
+            medium: FeeRateOption::new(FeeSpeed::Medium, 7.22),
+            slow: FeeRateOption::new(FeeSpeed::Slow, 2.11),
         }
     }
 }
@@ -324,78 +313,75 @@ impl FeeRateOptionsWithTotalFee {
     }
 }
 
-mod fee_rate_option_with_total_fee_ffi {
-    use super::*;
+// MARK: FFI
+#[uniffi::export]
+impl FeeRateOptionWithTotalFee {
+    #[uniffi::constructor(name = "new")]
+    pub fn _ffi_new(fee_speed: FeeSpeed, fee_rate: Arc<FeeRate>, total_fee: Arc<Amount>) -> Self {
+        let fee_rate = Arc::unwrap_or_clone(fee_rate);
+        let total_fee = Arc::unwrap_or_clone(total_fee);
 
-    #[uniffi::export]
-    impl FeeRateOptionWithTotalFee {
-        #[uniffi::constructor(name = "new")]
-        pub fn _new(fee_speed: FeeSpeed, fee_rate: Arc<FeeRate>, total_fee: Arc<Amount>) -> Self {
-            let fee_rate = Arc::unwrap_or_clone(fee_rate);
-            let total_fee = Arc::unwrap_or_clone(total_fee);
-
-            Self { fee_speed, fee_rate, total_fee }
-        }
-
-        pub fn fee_speed(&self) -> FeeSpeed {
-            self.fee_speed
-        }
-
-        pub fn fee_rate(&self) -> FeeRate {
-            self.fee_rate
-        }
-
-        pub fn total_fee(&self) -> Amount {
-            self.total_fee
-        }
-
-        pub fn sat_per_vb(&self) -> f32 {
-            self.fee_rate.sat_per_vb()
-        }
-
-        pub fn duration(&self) -> String {
-            self.fee_speed.duration()
-        }
-
-        pub fn fee_rate_options(&self) -> FeeRateOption {
-            (*self).into()
-        }
-
-        pub fn is_equal(&self, rhs: Arc<FeeRateOptionWithTotalFee>) -> bool {
-            self.fee_speed == rhs.fee_speed
-                && self.fee_rate == rhs.fee_rate
-                && self.total_fee == rhs.total_fee
-        }
+        Self { fee_speed, fee_rate, total_fee }
     }
 
-    #[uniffi::export]
-    impl FeeRateOptionsWithTotalFee {
-        pub fn fast(&self) -> FeeRateOptionWithTotalFee {
-            self.fast
-        }
+    pub fn fee_speed(&self) -> FeeSpeed {
+        self.fee_speed
+    }
 
-        pub fn medium(&self) -> FeeRateOptionWithTotalFee {
-            self.medium
-        }
+    pub fn fee_rate(&self) -> FeeRate {
+        self.fee_rate
+    }
 
-        pub fn slow(&self) -> FeeRateOptionWithTotalFee {
-            self.slow
-        }
+    pub fn total_fee(&self) -> Amount {
+        self.total_fee
+    }
 
-        pub fn fee_rate_options(&self) -> FeeRateOptions {
-            (*self).into()
-        }
+    pub fn sat_per_vb(&self) -> f32 {
+        self.fee_rate.sat_per_vb()
+    }
 
-        #[uniffi::constructor]
-        fn preview_new() -> Self {
-            let options = FeeRateOptions::preview_new();
+    pub fn duration(&self) -> String {
+        self.fee_speed.duration()
+    }
 
-            Self {
-                fast: FeeRateOptionWithTotalFee::new(options.fast, Amount::from_sat(3050)),
-                medium: FeeRateOptionWithTotalFee::new(options.medium, Amount::from_sat(2344)),
-                slow: FeeRateOptionWithTotalFee::new(options.slow, Amount::from_sat(1375)),
-                custom: None,
-            }
+    pub fn fee_rate_options(&self) -> FeeRateOption {
+        (*self).into()
+    }
+
+    pub fn is_equal(&self, rhs: Arc<FeeRateOptionWithTotalFee>) -> bool {
+        self.fee_speed == rhs.fee_speed
+            && self.fee_rate == rhs.fee_rate
+            && self.total_fee == rhs.total_fee
+    }
+}
+
+#[uniffi::export]
+impl FeeRateOptionsWithTotalFee {
+    pub fn fast(&self) -> FeeRateOptionWithTotalFee {
+        self.fast
+    }
+
+    pub fn medium(&self) -> FeeRateOptionWithTotalFee {
+        self.medium
+    }
+
+    pub fn slow(&self) -> FeeRateOptionWithTotalFee {
+        self.slow
+    }
+
+    pub fn fee_rate_options(&self) -> FeeRateOptions {
+        (*self).into()
+    }
+
+    #[uniffi::constructor(name = "previewNew")]
+    pub fn _ffi_preview_new() -> Self {
+        let options = FeeRateOptions::_ffi_preview_new();
+
+        Self {
+            fast: FeeRateOptionWithTotalFee::new(options.fast, Amount::from_sat(3050)),
+            medium: FeeRateOptionWithTotalFee::new(options.medium, Amount::from_sat(2344)),
+            slow: FeeRateOptionWithTotalFee::new(options.slow, Amount::from_sat(1375)),
+            custom: None,
         }
     }
 }

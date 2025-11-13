@@ -524,27 +524,27 @@ fileprivate struct FfiConverterOptionData: FfiConverterRustBuffer {
 }
 public func generateRandomChainCode() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_cove_util_fn_func_generate_random_chain_code($0
+    uniffi_cove_util_fn_func_generaterandomchaincode($0
     )
 })
 }
 public func hexDecode(hex: String) -> Data?  {
     return try!  FfiConverterOptionData.lift(try! rustCall() {
-    uniffi_cove_util_fn_func_hex_decode(
+    uniffi_cove_util_fn_func_hexdecode(
         FfiConverterString.lower(hex),$0
     )
 })
 }
 public func hexEncode(bytes: Data) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_cove_util_fn_func_hex_encode(
+    uniffi_cove_util_fn_func_hexencode(
         FfiConverterData.lower(bytes),$0
     )
 })
 }
 public func hexToUtf8String(hex: String) -> String?  {
     return try!  FfiConverterOptionString.lift(try! rustCall() {
-    uniffi_cove_util_fn_func_hex_to_utf8_string(
+    uniffi_cove_util_fn_func_hextoutf8string(
         FfiConverterString.lower(hex),$0
     )
 })
@@ -565,16 +565,16 @@ private let initializationResult: InitializationResult = {
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
-    if (uniffi_cove_util_checksum_func_generate_random_chain_code() != 48326) {
+    if (uniffi_cove_util_checksum_func_generaterandomchaincode() != 10336) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_util_checksum_func_hex_decode() != 30938) {
+    if (uniffi_cove_util_checksum_func_hexdecode() != 15286) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_util_checksum_func_hex_encode() != 50472) {
+    if (uniffi_cove_util_checksum_func_hexencode() != 43846) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_util_checksum_func_hex_to_utf8_string() != 7316) {
+    if (uniffi_cove_util_checksum_func_hextoutf8string() != 44131) {
         return InitializationResult.apiChecksumMismatch
     }
 

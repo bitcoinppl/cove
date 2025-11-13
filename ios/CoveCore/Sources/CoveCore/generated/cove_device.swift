@@ -543,6 +543,11 @@ public convenience init(device: DeviceAccess) {
 }
 
     deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
         try! rustCall { uniffi_cove_device_fn_free_device(handle, $0) }
     }
 
@@ -652,6 +657,11 @@ public convenience init(keychain: KeychainAccess) {
 }
 
     deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
         try! rustCall { uniffi_cove_device_fn_free_keychain(handle, $0) }
     }
 
@@ -1159,22 +1169,22 @@ private let initializationResult: InitializationResult = {
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
-    if (uniffi_cove_device_checksum_constructor_device_new() != 32480) {
+    if (uniffi_cove_device_checksum_constructor_device_new() != 34667) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_constructor_keychain_new() != 51879) {
+    if (uniffi_cove_device_checksum_constructor_keychain_new() != 48183) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_deviceaccess_timezone() != 25459) {
+    if (uniffi_cove_device_checksum_method_deviceaccess_timezone() != 54194) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_keychainaccess_save() != 56258) {
+    if (uniffi_cove_device_checksum_method_keychainaccess_save() != 25345) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_keychainaccess_get() != 57291) {
+    if (uniffi_cove_device_checksum_method_keychainaccess_get() != 23224) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_keychainaccess_delete() != 51330) {
+    if (uniffi_cove_device_checksum_method_keychainaccess_delete() != 1213) {
         return InitializationResult.apiChecksumMismatch
     }
 

@@ -549,9 +549,8 @@ impl TapSignerReaderError {
 
 mod ffi {
     use super::*;
-    use cove_util::generate_random_chain_code;
 
-    fn derive_info() -> DeriveInfo {
+    pub fn derive_info() -> DeriveInfo {
         use std::str::FromStr as _;
         let xpub = "xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM";
         let original_xpub = bitcoin::bip32::Xpub::from_str(xpub).unwrap();
@@ -570,67 +569,69 @@ mod ffi {
             path: vec![84, 1, 0],
         }
     }
+}
 
-    #[uniffi::export]
-    fn tap_signer_response_setup_response(response: TapSignerResponse) -> Option<SetupCmdResponse> {
-        response.setup_response().cloned()
-    }
+#[uniffi::export(name = "tapSignerResponseSetupResponse")]
+fn _ffi_tap_signer_response_setup_response(
+    response: TapSignerResponse,
+) -> Option<SetupCmdResponse> {
+    response.setup_response().cloned()
+}
 
-    #[uniffi::export]
-    fn tap_signer_response_derive_response(response: TapSignerResponse) -> Option<DeriveInfo> {
-        response.derive_response().cloned()
-    }
+#[uniffi::export(name = "tapSignerResponseDeriveResponse")]
+fn _ffi_tap_signer_response_derive_response(response: TapSignerResponse) -> Option<DeriveInfo> {
+    response.derive_response().cloned()
+}
 
-    #[uniffi::export]
-    fn tap_signer_response_change_response(response: TapSignerResponse) -> bool {
-        response.change_response().is_some()
-    }
+#[uniffi::export(name = "tapSignerResponseChangeResponse")]
+fn _ffi_tap_signer_response_change_response(response: TapSignerResponse) -> bool {
+    response.change_response().is_some()
+}
 
-    #[uniffi::export]
-    fn tap_signer_response_backup_response(response: TapSignerResponse) -> Option<Vec<u8>> {
-        response.backup_response().map(Into::into)
-    }
+#[uniffi::export(name = "tapSignerResponseBackupResponse")]
+fn _ffi_tap_signer_response_backup_response(response: TapSignerResponse) -> Option<Vec<u8>> {
+    response.backup_response().map(Into::into)
+}
 
-    #[uniffi::export]
-    fn tap_signer_response_sign_response(response: TapSignerResponse) -> Option<Arc<Psbt>> {
-        response.sign_response()
-    }
+#[uniffi::export(name = "tapSignerResponseSignResponse")]
+fn _ffi_tap_signer_response_sign_response(response: TapSignerResponse) -> Option<Arc<Psbt>> {
+    response.sign_response()
+}
 
-    #[uniffi::export]
-    fn tap_signer_setup_retry_continue_cmd(preview: bool) -> SetupCmdResponse {
-        assert!(preview);
+#[uniffi::export(name = "tapSignerSetupRetryContinueCmd")]
+fn _ffi_tap_signer_setup_retry_continue_cmd(preview: bool) -> SetupCmdResponse {
+    assert!(preview);
 
-        let backup = vec![0u8; 32];
-        let setup_cmd = SetupCmd {
-            factory_pin: "123456".to_string(),
-            new_pin: "000000".to_string(),
-            chain_code: generate_random_chain_code(),
-        };
+    let backup = vec![0u8; 32];
+    let setup_cmd = SetupCmd {
+        factory_pin: "123456".to_string(),
+        new_pin: "000000".to_string(),
+        chain_code: cove_util::generate_random_chain_code(),
+    };
 
-        SetupCmdResponse::ContinueFromDerive(ContinueFromDerive {
-            backup,
-            derive_info: derive_info(),
-            continue_cmd: Arc::new(setup_cmd),
-            error: TapSignerReaderError::NoCommand,
-        })
-    }
+    SetupCmdResponse::ContinueFromDerive(ContinueFromDerive {
+        backup,
+        derive_info: ffi::derive_info(),
+        continue_cmd: Arc::new(setup_cmd),
+        error: TapSignerReaderError::NoCommand,
+    })
+}
 
-    #[uniffi::export]
-    fn tap_signer_error_is_auth_error(error: TapSignerReaderError) -> bool {
-        error.is_auth_error()
-    }
+#[uniffi::export(name = "tapSignerErrorIsAuthError")]
+fn _ffi_tap_signer_error_is_auth_error(error: TapSignerReaderError) -> bool {
+    error.is_auth_error()
+}
 
-    #[uniffi::export]
-    fn tap_signer_error_is_no_backup_error(error: TapSignerReaderError) -> bool {
-        error.is_no_backup_error()
-    }
+#[uniffi::export(name = "tapSignerErrorIsNoBackupError")]
+fn _ffi_tap_signer_error_is_no_backup_error(error: TapSignerReaderError) -> bool {
+    error.is_no_backup_error()
+}
 
-    // MARK: - FFI PREVIEW
-    #[uniffi::export]
-    fn tap_signer_setup_complete_new(preview: bool) -> TapSignerSetupComplete {
-        assert!(preview);
+// MARK: - FFI PREVIEW
+#[uniffi::export(name = "tapSignerSetupCompleteNew")]
+fn _ffi_tap_signer_setup_complete_new(preview: bool) -> TapSignerSetupComplete {
+    assert!(preview);
 
-        let backup = vec![0u8; 32];
-        TapSignerSetupComplete { backup, derive_info: derive_info() }
-    }
+    let backup = vec![0u8; 32];
+    TapSignerSetupComplete { backup, derive_info: ffi::derive_info() }
 }

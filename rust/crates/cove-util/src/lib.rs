@@ -50,33 +50,25 @@ pub fn split_at_decimal_point(amount: &str) -> (&str, &str, &str) {
     (before_decimal, ".", after_decimal)
 }
 
-mod ffi {
-    #[uniffi::export]
-    fn hex_encode(bytes: Vec<u8>) -> String {
-        hex::encode(bytes)
-    }
+#[uniffi::export(name = "hexEncode")]
+fn _ffi_hex_encode(bytes: Vec<u8>) -> String {
+    hex::encode(bytes)
+}
 
-    #[uniffi::export]
-    fn hex_decode(hex: &str) -> Option<Vec<u8>> {
-        hex::decode(hex).ok()
-    }
+#[uniffi::export(name = "hexDecode")]
+fn _ffi_hex_decode(hex: &str) -> Option<Vec<u8>> {
+    hex::decode(hex).ok()
+}
 
-    #[uniffi::export]
-    pub fn generate_random_chain_code() -> String {
-        use rand::Rng as _;
+#[uniffi::export(name = "generateRandomChainCode")]
+pub fn _ffi_generate_random_chain_code() -> String {
+    hex::encode(generate_random_chain_code())
+}
 
-        let rng = &mut rand::rng();
-        let mut chain_code = [0u8; 32];
-        rng.fill(&mut chain_code);
-
-        hex::encode(chain_code)
-    }
-
-    #[uniffi::export]
-    fn hex_to_utf8_string(hex: &str) -> Option<String> {
-        let bytes = hex_decode(hex)?;
-        String::from_utf8(bytes).ok()
-    }
+#[uniffi::export(name = "hexToUtf8String")]
+fn _ffi_hex_to_utf8_string(hex: &str) -> Option<String> {
+    let bytes = _ffi_hex_decode(hex)?;
+    String::from_utf8(bytes).ok()
 }
 
 #[cfg(test)]

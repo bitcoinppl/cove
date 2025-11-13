@@ -250,14 +250,12 @@ pub async fn fetch_and_update_prices_if_needed() -> Result<()> {
     Ok(())
 }
 
-mod ffi {
+#[uniffi::export(name = "updatePricesIfNeeded")]
+async fn _ffi_update_prices_if_needed() {
     use tracing::error;
 
-    #[uniffi::export]
-    async fn update_prices_if_needed() {
-        if let Err(error) = crate::fiat::client::fetch_and_update_prices_if_needed().await {
-            error!("unable to update prices: {error:?}");
-        }
+    if let Err(error) = crate::fiat::client::fetch_and_update_prices_if_needed().await {
+        error!("unable to update prices: {error:?}");
     }
 }
 

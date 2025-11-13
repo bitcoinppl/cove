@@ -255,7 +255,7 @@ mod ffi_preview {
 #[uniffi::export]
 impl ConfirmDetails {
     #[uniffi::constructor(name = "previewNew", default(amount = 20448))]
-    pub fn ffi_preview_new(amount: u64) -> Self {
+    pub fn _ffi_preview_new(amount: u64) -> Self {
         let psbt = ffi_preview::psbt_preview_new();
         let more_details = InputOutputDetails::new(&psbt, Network::Bitcoin);
 
