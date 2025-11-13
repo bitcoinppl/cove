@@ -137,6 +137,16 @@ struct WalletSettingsView: View {
                         Text("View Secret Words")
                             .font(.subheadline)
                     }
+                    .confirmationDialog("Are you sure?", isPresented: $showingSecretWordsConfirmation) {
+                        Button("Show Me") {
+                            app.pushRoute(Route.secretWords(manager.walletMetadata.id))
+                        }
+                        Button("Cancel", role: .cancel) {}
+                    } message: {
+                        Text(
+                            "Whoever has access to your secret words, has access to your bitcoin. Please keep these safe, don't show them to anyone."
+                        )
+                    }
                 }
 
                 Button {
@@ -145,34 +155,24 @@ struct WalletSettingsView: View {
                     Text("Delete Wallet").foregroundStyle(.red)
                         .font(.subheadline)
                 }
-            }
-            .navigationTitle(manager.walletMetadata.name)
-            .navigationBarTitleDisplayMode(.inline)
-            .foregroundColor(.primary)
-            .confirmationDialog("Are you sure?", isPresented: $showingDeleteConfirmation) {
-                Button("Delete", role: .destructive) {
-                    do {
-                        try manager.rust.deleteWallet()
-                        dismiss()
-                    } catch {
-                        Log.error("Unable to delete wallet: \(error)")
+                .confirmationDialog("Are you sure?", isPresented: $showingDeleteConfirmation) {
+                    Button("Delete", role: .destructive) {
+                        do {
+                            try manager.rust.deleteWallet()
+                            dismiss()
+                        } catch {
+                            Log.error("Unable to delete wallet: \(error)")
+                        }
                     }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("This action cannot be undone.")
                 }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("This action cannot be undone.")
-            }
-            .confirmationDialog("Are you sure?", isPresented: $showingSecretWordsConfirmation) {
-                Button("Show Me") {
-                    app.pushRoute(Route.secretWords(manager.walletMetadata.id))
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text(
-                    "Whoever has access to your secret words, has access to your bitcoin. Please keep these safe, don't show them to anyone."
-                )
             }
         }
+        .navigationTitle(manager.walletMetadata.name)
+        .navigationBarTitleDisplayMode(.inline)
+        .foregroundColor(.primary)
         .onDisappear { manager.validateMetadata() }
         .onAppear { manager.validateMetadata() }
         .scrollContentBackground(.hidden)
