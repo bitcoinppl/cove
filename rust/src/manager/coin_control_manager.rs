@@ -424,22 +424,18 @@ impl CoinControlListSortKey {
     }
 }
 
-mod ffi {
+// MARK: FFI
+#[uniffi::export]
+impl RustCoinControlManager {
+    #[uniffi::constructor(default(output_count = 20, change_count = 4))]
+    pub fn preview_new(output_count: u8, change_count: u8) -> Self {
+        let (sender, receiver) = flume::bounded(10);
 
-    use super::*;
-
-    #[uniffi::export]
-    impl RustCoinControlManager {
-        #[uniffi::constructor(default(output_count = 20, change_count = 4))]
-        pub fn preview_new(output_count: u8, change_count: u8) -> Self {
-            let (sender, receiver) = flume::bounded(10);
-
-            let state = State::preview_new(output_count, change_count);
-            Self {
-                state: Arc::new(Mutex::new(state)),
-                reconciler: MessageSender::new(sender),
-                reconcile_receiver: Arc::new(receiver),
-            }
+        let state = State::preview_new(output_count, change_count);
+        Self {
+            state: Arc::new(Mutex::new(state)),
+            reconciler: MessageSender::new(sender),
+            reconcile_receiver: Arc::new(receiver),
         }
     }
 }

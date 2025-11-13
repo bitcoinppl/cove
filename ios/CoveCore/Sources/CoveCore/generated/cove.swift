@@ -25769,6 +25769,25 @@ public func coinControlListSortKeyToString(key: CoinControlListSortKey) -> Strin
     )
 })
 }
+/**
+ * Factory function to create a TapSignerReader instance
+ * This is a workaround for UniFFI not generating async constructors for Kotlin
+ * While iOS can use the async constructor directly, Android needs this factory function
+ */
+public func createTapSignerReader(transport: TapcardTransportProtocol, cmd: TapSignerCmd?)async throws  -> TapSignerReader  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_func_create_tap_signer_reader(FfiConverterCallbackInterfaceTapcardTransportProtocol_lower(transport),FfiConverterOptionTypeTapSignerCmd.lower(cmd)
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_u64,
+            completeFunc: ffi_cove_rust_future_complete_u64,
+            freeFunc: ffi_cove_rust_future_free_u64,
+            liftFunc: FfiConverterTypeTapSignerReader_lift,
+            errorHandler: FfiConverterTypeTapSignerReaderError_lift
+        )
+}
 public func createTransportErrorFromCode(code: UInt16, message: String) -> TransportError  {
     return try!  FfiConverterTypeTransportError_lift(try! rustCall() {
     uniffi_cove_fn_func_create_transport_error_from_code(
@@ -26121,6 +26140,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_coin_control_list_sort_key_to_string() != 57975) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_create_tap_signer_reader() != 9840) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_create_transport_error_from_code() != 58675) {
