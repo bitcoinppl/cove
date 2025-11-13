@@ -55,9 +55,13 @@ private sealed class QrCodeScannerState {
             get() = totalParts != null && partsLeft != null
     }
 
-    data class Error(val message: String) : QrCodeScannerState()
+    data class Error(
+        val message: String,
+    ) : QrCodeScannerState()
 
-    data class Complete(val data: StringOrData) : QrCodeScannerState()
+    data class Complete(
+        val data: StringOrData,
+    ) : QrCodeScannerState()
 }
 
 @OptIn(ExperimentalPermissionsApi::class, ExperimentalMaterial3Api::class)
@@ -257,7 +261,8 @@ private fun QrScannerContent(
                             previewRef.value = preview
 
                             val imageAnalysis =
-                                ImageAnalysis.Builder()
+                                ImageAnalysis
+                                    .Builder()
                                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                                     .build()
                                     .also { analysis ->
@@ -271,7 +276,8 @@ private fun QrScannerContent(
                                                     )
 
                                                 val mainExecutor = ContextCompat.getMainExecutor(ctx)
-                                                barcodeScanner.process(image)
+                                                barcodeScanner
+                                                    .process(image)
                                                     .addOnSuccessListener(mainExecutor) { barcodes ->
                                                         for (barcode in barcodes) {
                                                             if (barcode.format == Barcode.FORMAT_QR_CODE) {
@@ -283,11 +289,9 @@ private fun QrScannerContent(
                                                                 break
                                                             }
                                                         }
-                                                    }
-                                                    .addOnFailureListener(mainExecutor) { e ->
+                                                    }.addOnFailureListener(mainExecutor) { e ->
                                                         Log.e("QrCodeScanView", "Barcode processing failed", e)
-                                                    }
-                                                    .addOnCompleteListener {
+                                                    }.addOnCompleteListener {
                                                         imageProxy.close()
                                                     }
                                             } else {

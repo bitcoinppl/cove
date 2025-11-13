@@ -52,37 +52,27 @@ object RouteHelpers {
      * check if two routes have the same parent
      * useful for determining if a route change requires a full reset
      */
-    fun isSameParentRoute(route: Route, routeToCheck: Route): Boolean {
-        return RouteFactory().isSameParentRoute(route, routeToCheck)
-    }
+    fun isSameParentRoute(route: Route, routeToCheck: Route): Boolean = RouteFactory().isSameParentRoute(route, routeToCheck)
 
     /**
      * create a wallet select route
      */
-    fun newWalletSelect(): Route {
-        return RouteFactory().newWalletSelect()
-    }
+    fun newWalletSelect(): Route = RouteFactory().newWalletSelect()
 
     /**
      * create a settings route with nested path
      */
-    fun nestedSettings(route: SettingsRoute): List<Route> {
-        return RouteFactory().nestedSettings(route)
-    }
+    fun nestedSettings(route: SettingsRoute): List<Route> = RouteFactory().nestedSettings(route)
 
     /**
      * create a wallet settings route with nested path
      */
-    fun nestedWalletSettings(id: WalletId): List<Route> {
-        return RouteFactory().nestedWalletSettings(id)
-    }
+    fun nestedWalletSettings(id: WalletId): List<Route> = RouteFactory().nestedWalletSettings(id)
 
     /**
      * create a send amount route
      */
-    fun sendSetAmount(id: WalletId, address: Address? = null, amount: Amount? = null): Route {
-        return RouteFactory().sendSetAmount(id, address, amount)
-    }
+    fun sendSetAmount(id: WalletId, address: Address? = null, amount: Amount? = null): Route = RouteFactory().sendSetAmount(id, address, amount)
 
     /**
      * create a send confirm route
@@ -92,56 +82,40 @@ object RouteHelpers {
         details: ConfirmDetails,
         signedTransaction: BitcoinTransaction? = null,
         signedPsbt: Psbt? = null,
-    ): Route {
-        return RouteFactory().sendConfirm(id, details, signedTransaction, signedPsbt)
-    }
+    ): Route = RouteFactory().sendConfirm(id, details, signedTransaction, signedPsbt)
 
     /**
      * create a coin control send route
      */
-    fun coinControlSend(id: WalletId, utxos: List<Utxo>): Route {
-        return RouteFactory().coinControlSend(id, utxos)
-    }
+    fun coinControlSend(id: WalletId, utxos: List<Utxo>): Route = RouteFactory().coinControlSend(id, utxos)
 
     /**
      * create a secret words route
      */
-    fun secretWords(walletId: WalletId): Route {
-        return RouteFactory().secretWords(walletId)
-    }
+    fun secretWords(walletId: WalletId): Route = RouteFactory().secretWords(walletId)
 
     /**
      * create a hot wallet route
      */
-    fun hotWallet(route: HotWalletRoute): Route {
-        return RouteFactory().hotWallet(route)
-    }
+    fun hotWallet(route: HotWalletRoute): Route = RouteFactory().hotWallet(route)
 
     /**
      * create a new hot wallet route
      */
-    fun newHotWallet(): Route {
-        return RouteFactory().newHotWallet()
-    }
+    fun newHotWallet(): Route = RouteFactory().newHotWallet()
 
     /**
      * create a load and reset route
      */
-    fun loadAndResetTo(resetTo: Route): Route {
-        return RouteFactory().loadAndResetTo(resetTo)
-    }
+    fun loadAndResetTo(resetTo: Route): Route = RouteFactory().loadAndResetTo(resetTo)
 
     /**
      * create a load and reset route with delay
      */
-    fun loadAndResetToAfter(resetTo: Route, time: UInt): Route {
-        return RouteFactory().loadAndResetToAfter(resetTo, time)
-    }
+    fun loadAndResetToAfter(resetTo: Route, time: UInt): Route = RouteFactory().loadAndResetToAfter(resetTo, time)
 
     /**
      * create a nested load and reset route
      */
-    fun loadAndResetNestedTo(defaultRoute: Route, nestedRoutes: List<Route>): Route {
-        return RouteFactory().loadAndResetNestedTo(defaultRoute, nestedRoutes)
-    }
+    fun loadAndResetNestedTo(defaultRoute: Route, nestedRoutes: List<Route>): Route = RouteFactory().loadAndResetNestedTo(defaultRoute, nestedRoutes)
 }

@@ -74,7 +74,8 @@ fun LockView(
 
     val promptInfo =
         remember {
-            PromptInfo.Builder()
+            PromptInfo
+                .Builder()
                 .setTitle("Unlock Cove")
                 .setSubtitle("Use your biometric to unlock")
                 .setNegativeButtonText("Cancel")

@@ -306,8 +306,7 @@ private fun FeeOptionCard(
                                 .background(
                                     color = if (isSelected) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.outlineVariant,
                                     shape = RoundedCornerShape(12.dp),
-                                )
-                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                                ).padding(horizontal = 8.dp, vertical = 4.dp),
                     ) {
                         Box(
                             modifier =
@@ -418,8 +417,7 @@ fun CustomNetworkFeeBottomSheet(
                         .background(
                             color = MaterialTheme.colorScheme.outlineVariant,
                             shape = RoundedCornerShape(12.dp),
-                        )
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                        ).padding(horizontal = 8.dp, vertical = 4.dp),
             ) {
                 Box(
                     modifier =

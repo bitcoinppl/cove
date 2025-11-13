@@ -61,11 +61,10 @@ class AuthManager private constructor() : AuthManagerReconciler {
         @Volatile
         private var instance: AuthManager? = null
 
-        fun getInstance(): AuthManager {
-            return instance ?: synchronized(this) {
+        fun getInstance(): AuthManager =
+            instance ?: synchronized(this) {
                 instance ?: AuthManager().also { instance = it }
             }
-        }
     }
 
     private fun logDebug(message: String) {
@@ -102,30 +101,22 @@ class AuthManager private constructor() : AuthManagerReconciler {
     /**
      * check if in decoy mode
      */
-    fun isInDecoyMode(): Boolean {
-        return rust.isInDecoyMode()
-    }
+    fun isInDecoyMode(): Boolean = rust.isInDecoyMode()
 
     /**
      * check if PIN matches main wallet PIN
      */
-    fun checkPin(pin: String): Boolean {
-        return AuthPin().check(pin)
-    }
+    fun checkPin(pin: String): Boolean = AuthPin().check(pin)
 
     /**
      * check if PIN is decoy PIN
      */
-    fun checkDecoyPin(pin: String): Boolean {
-        return rust.checkDecoyPin(pin)
-    }
+    fun checkDecoyPin(pin: String): Boolean = rust.checkDecoyPin(pin)
 
     /**
      * check if PIN is wipe data PIN
      */
-    fun checkWipeDataPin(pin: String): Boolean {
-        return rust.checkWipeDataPin(pin)
-    }
+    fun checkWipeDataPin(pin: String): Boolean = rust.checkWipeDataPin(pin)
 
     /**
      * reset app and select wallet (helper to avoid duplication)

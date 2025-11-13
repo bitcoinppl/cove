@@ -93,11 +93,10 @@ class AppManager private constructor() : FfiReconcile {
         @Volatile
         private var instance: AppManager? = null
 
-        fun getInstance(): AppManager {
-            return instance ?: synchronized(this) {
+        fun getInstance(): AppManager =
+            instance ?: synchronized(this) {
                 instance ?: AppManager().also { instance = it }
             }
-        }
     }
 
     private fun logDebug(message: String) {
@@ -178,17 +177,11 @@ class AppManager private constructor() : FfiReconcile {
             return "v$appVersion (${rust.gitShortHash()})"
         }
 
-    fun findTapSignerWallet(ts: TapSigner): WalletMetadata? {
-        return rust.findTapSignerWallet(ts)
-    }
+    fun findTapSignerWallet(ts: TapSigner): WalletMetadata? = rust.findTapSignerWallet(ts)
 
-    fun getTapSignerBackup(ts: TapSigner): ByteArray? {
-        return rust.getTapSignerBackup(ts)
-    }
+    fun getTapSignerBackup(ts: TapSigner): ByteArray? = rust.getTapSignerBackup(ts)
 
-    fun saveTapSignerBackup(ts: TapSigner, backup: ByteArray): Boolean {
-        return rust.saveTapSignerBackup(ts, backup)
-    }
+    fun saveTapSignerBackup(ts: TapSigner, backup: ByteArray): Boolean = rust.saveTapSignerBackup(ts, backup)
 
     /**
      * reset the manager state

@@ -84,7 +84,10 @@ fun SettingsScreen(
                             title = stringResource(R.string.title_settings_network),
                             icon = Icons.Default.Wifi,
                             onClick = {
-                                app.pushRoute(org.bitcoinppl.cove_core.Route.Settings(org.bitcoinppl.cove_core.SettingsRoute.Network))
+                                app.pushRoute(
+                                    org.bitcoinppl.cove_core.Route
+                                        .Settings(org.bitcoinppl.cove_core.SettingsRoute.Network),
+                                )
                             },
                         )
                         MaterialDivider()
@@ -92,7 +95,10 @@ fun SettingsScreen(
                             title = stringResource(R.string.title_settings_appearance),
                             icon = Icons.Default.Palette,
                             onClick = {
-                                app.pushRoute(org.bitcoinppl.cove_core.Route.Settings(org.bitcoinppl.cove_core.SettingsRoute.Appearance))
+                                app.pushRoute(
+                                    org.bitcoinppl.cove_core.Route
+                                        .Settings(org.bitcoinppl.cove_core.SettingsRoute.Appearance),
+                                )
                             },
                         )
                         MaterialDivider()
@@ -100,7 +106,10 @@ fun SettingsScreen(
                             title = stringResource(R.string.title_settings_node),
                             icon = Icons.Default.Hub,
                             onClick = {
-                                app.pushRoute(org.bitcoinppl.cove_core.Route.Settings(org.bitcoinppl.cove_core.SettingsRoute.Node))
+                                app.pushRoute(
+                                    org.bitcoinppl.cove_core.Route
+                                        .Settings(org.bitcoinppl.cove_core.SettingsRoute.Node),
+                                )
                             },
                         )
                         MaterialDivider()
@@ -108,7 +117,10 @@ fun SettingsScreen(
                             title = stringResource(R.string.title_settings_currency),
                             icon = Icons.Default.AttachMoney,
                             onClick = {
-                                app.pushRoute(org.bitcoinppl.cove_core.Route.Settings(org.bitcoinppl.cove_core.SettingsRoute.FiatCurrency))
+                                app.pushRoute(
+                                    org.bitcoinppl.cove_core.Route
+                                        .Settings(org.bitcoinppl.cove_core.SettingsRoute.FiatCurrency),
+                                )
                             },
                         )
                     }

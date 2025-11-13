@@ -172,8 +172,7 @@ fun SidebarView(
                                 app.pushRoute(RouteFactory().newWalletSelect())
                             }
                         }
-                    }
-                    .padding(vertical = 8.dp),
+                    }.padding(vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(20.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -203,8 +202,7 @@ fun SidebarView(
                             delay(300)
                             app.pushRoute(Route.Settings(SettingsRoute.Main))
                         }
-                    }
-                    .padding(vertical = 8.dp),
+                    }.padding(vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(20.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -261,8 +259,8 @@ private fun WalletItem(
 }
 
 // convert wallet color to compose color
-private fun WalletColor.toComposeColor(): Color {
-    return when (this) {
+private fun WalletColor.toComposeColor(): Color =
+    when (this) {
         is WalletColor.Red -> CoveColor.pastelRed
         is WalletColor.Blue -> CoveColor.pastelBlue
         is WalletColor.Green -> CoveColor.walletGreen
@@ -283,4 +281,3 @@ private fun WalletColor.toComposeColor(): Color {
         is WalletColor.WAlmostWhite -> CoveColor.almostWhite
         is WalletColor.Custom -> Color.Gray
     }
-}

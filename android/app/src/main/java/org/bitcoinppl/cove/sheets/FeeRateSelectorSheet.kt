@@ -211,8 +211,7 @@ private fun FeeOptionCard(
                     width = 1.dp,
                     color = borderColor,
                     shape = RoundedCornerShape(12.dp),
-                )
-                .background(backgroundColor)
+                ).background(backgroundColor)
                 .clickable(onClick = onSelect)
                 .padding(16.dp),
     ) {

@@ -52,9 +52,7 @@ class SendFlowPresenter(
             return this::class == other::class
         }
 
-        override fun hashCode(): Int {
-            return this::class.hashCode()
-        }
+        override fun hashCode(): Int = this::class.hashCode()
     }
 
     fun setDisappearing() {
@@ -68,16 +66,15 @@ class SendFlowPresenter(
     /**
      * get alert title based on alert state
      */
-    fun alertTitle(): String {
-        return when (val state = alertState?.item) {
+    fun alertTitle(): String =
+        when (val state = alertState?.item) {
             is SendFlowAlertState.Error -> errorAlertTitle(state.v1)
             is SendFlowAlertState.General -> state.title
             null -> ""
         }
-    }
 
-    private fun errorAlertTitle(error: SendFlowException): String {
-        return when (error) {
+    private fun errorAlertTitle(error: SendFlowException): String =
+        when (error) {
             is SendFlowException.EmptyAddress,
             is SendFlowException.InvalidAddress,
             is SendFlowException.WrongNetwork,
@@ -99,21 +96,19 @@ class SendFlowPresenter(
             is SendFlowException.WalletManager -> "Error"
             is SendFlowException.UnableToGetFeeDetails -> "Fee Details Error"
         }
-    }
 
     /**
      * get alert message text based on alert state
      */
-    fun alertMessage(): String {
-        return when (val state = alertState?.item) {
+    fun alertMessage(): String =
+        when (val state = alertState?.item) {
             is SendFlowAlertState.Error -> errorAlertMessage(state.v1)
             is SendFlowAlertState.General -> state.message
             null -> ""
         }
-    }
 
-    private fun errorAlertMessage(error: SendFlowException): String {
-        return when (error) {
+    private fun errorAlertMessage(error: SendFlowException): String =
+        when (error) {
             is SendFlowException.EmptyAddress ->
                 "Please enter an address"
 
@@ -156,23 +151,21 @@ class SendFlowPresenter(
             is SendFlowException.UnableToSaveUnsignedTransaction ->
                 error.v1
         }
-    }
 
     /**
      * get alert button action based on error type
      */
-    fun alertButtonAction(): (() -> Unit)? {
-        return when (val state = alertState?.item) {
+    fun alertButtonAction(): (() -> Unit)? =
+        when (val state = alertState?.item) {
             is SendFlowAlertState.Error -> errorAlertButtonAction(state.v1)
             is SendFlowAlertState.General -> {
                 { alertState = null }
             }
             null -> null
         }
-    }
 
-    private fun errorAlertButtonAction(error: SendFlowException): () -> Unit {
-        return when (error) {
+    private fun errorAlertButtonAction(error: SendFlowException): () -> Unit =
+        when (error) {
             is SendFlowException.EmptyAddress,
             is SendFlowException.WrongNetwork,
             is SendFlowException.InvalidAddress,
@@ -207,7 +200,6 @@ class SendFlowPresenter(
                 }
             }
         }
-    }
 
     override fun close() {
         if (!isClosed.compareAndSet(false, true)) return

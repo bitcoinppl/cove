@@ -222,7 +222,9 @@ fun HotWalletVerifyScreen(
                     .padding(padding)
                     .onGloballyPositioned { coords ->
                         val pos = coords.positionInRoot()
-                        rootOffset = androidx.compose.ui.geometry.Offset(pos.x, pos.y)
+                        rootOffset =
+                            androidx.compose.ui.geometry
+                                .Offset(pos.x, pos.y)
                     },
         ) {
             Image(
@@ -418,8 +420,7 @@ fun HotWalletVerifyScreen(
                                     animationX.value.roundToInt(),
                                     animationY.value.roundToInt(),
                                 )
-                            }
-                            .width(actualChipWidth)
+                            }.width(actualChipWidth)
                             .height(chipHeight)
                             .background(overlayBg, RoundedCornerShape(14.dp))
                             .zIndex(10f),

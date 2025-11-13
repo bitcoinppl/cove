@@ -69,8 +69,7 @@ fun BbqrExportView(
                     .background(
                         color = MaterialTheme.colorScheme.surface,
                         shape = RoundedCornerShape(8.dp),
-                    )
-                    .padding(16.dp),
+                    ).padding(16.dp),
             contentAlignment = Alignment.Center,
         ) {
             val bitmap =

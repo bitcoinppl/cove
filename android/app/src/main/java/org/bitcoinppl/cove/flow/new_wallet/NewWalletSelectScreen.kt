@@ -161,7 +161,10 @@ fun NewWalletSelectScreen(
 
     fun pasteFromClipboard(): String? {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        return clipboard.primaryClip?.getItemAt(0)?.text?.toString()
+        return clipboard.primaryClip
+            ?.getItemAt(0)
+            ?.text
+            ?.toString()
     }
 
     Scaffold(containerColor = CoveColor.midnightBlue, topBar = {
