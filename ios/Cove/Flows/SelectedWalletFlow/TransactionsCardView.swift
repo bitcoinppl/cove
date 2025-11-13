@@ -140,7 +140,7 @@ struct ConfirmedTransactionView: View {
         return privateShow(manager.rust.displayFiatAmount(amount: fiatAmount.amount))
     }
 
-    private func privateShow(_ text: String, placeholder: String = "*******") -> String {
+    private func privateShow(_ text: String, placeholder: String = "••••••") -> String {
         if !metadata.sensitiveVisible {
             placeholder
         } else {
@@ -219,7 +219,7 @@ struct UnconfirmedTransactionView: View {
     let txn: UnconfirmedTransaction
     let metadata: WalletMetadata
 
-    func privateShow(_ text: String, placeholder: String = "*******") -> String {
+    func privateShow(_ text: String, placeholder: String = "••••••") -> String {
         if !metadata.sensitiveVisible {
             placeholder
         } else {
@@ -289,7 +289,7 @@ struct UnsignedTransactionView: View {
     // private
     @State private var fiatAmount: Double? = nil
 
-    func privateShow(_ text: String, placeholder: String = "*******") -> String {
+    func privateShow(_ text: String, placeholder: String = "••••••") -> String {
         if !metadata.sensitiveVisible {
             placeholder
         } else {
