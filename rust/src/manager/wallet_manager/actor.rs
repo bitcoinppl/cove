@@ -675,7 +675,16 @@ impl WalletActor {
     }
 
     pub async fn check_node_connection(&mut self) -> ActorResult<()> {
-        self.node_client().await?.check_url().await.map_err_str(Error::NodeConnectionFailed)?;
+        let node_client = self.node_client().await?.clone();
+
+        let reconciler = self.reconciler.clone();
+        self.addr.send_fut(async move {
+            if let Err(error) = node_client.check_url().await {
+                let _ = reconciler.send(
+                    WalletManagerReconcileMessage::NodeConnectionFailed(error.to_string()).into(),
+                );
+            }
+        });
 
         Produces::ok(())
     }
