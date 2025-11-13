@@ -71,15 +71,13 @@ struct ReceiveView: View {
                             .foregroundStyle(.white)
                             .multilineTextAlignment(.center)
 
-                        VStack {
-                            AddressView(addressInfo: addressInfo)
+                        AddressView(addressInfo: addressInfo)
 
-                            if let path = addressInfo?.derivationPath() {
-                                Text("Derivation: \(path)")
-                                    .font(.footnote)
-                                    .foregroundStyle(.white.opacity(0.3))
-                                    .padding(.top, 6)
-                            }
+                        if let path = addressInfo?.derivationPath() {
+                            Text("Derivation: \(path)")
+                                .font(.footnote)
+                                .foregroundStyle(.white.opacity(0.3))
+                                .padding(.top, 6)
                         }
                     }
                     .frame(maxWidth: .infinity)
@@ -160,27 +158,26 @@ private struct AddressView: View {
     var body: some View {
         Group {
             if let addressInfo {
-                VStack {
-                    Image(uiImage: generateQRCode(from: addressInfo.addressUnformatted()))
-                        .interpolation(.none)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 250, height: 250)
-                        .padding(16)
-                }
-                .background(Color.white)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(Color.gray.opacity(0.2), lineWidth: 1)
-                )
+                Image(uiImage: generateQRCode(from: addressInfo.addressUnformatted()))
+                    .interpolation(.none)
+                    .resizable()
+                    .scaledToFit()
+                    .padding(8)
+                    .background(Color.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+                    )
+                    .padding(.horizontal, 16)
+                    .aspectRatio(1, contentMode: .fit)
             } else {
                 ProgressView(label: {
                     Text("Loading")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.white)
                 })
-                .tint(.primary)
+                .tint(.white)
                 .progressViewStyle(.circular)
             }
         }
