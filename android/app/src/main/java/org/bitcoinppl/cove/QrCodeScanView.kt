@@ -175,7 +175,6 @@ private fun QrScannerContent(
     LaunchedEffect(scannerState) {
         if (scannerState is QrCodeScannerState.Complete) {
             val data = (scannerState as QrCodeScannerState.Complete).data
-            onDismiss()
             onScanned(data)
         }
     }
