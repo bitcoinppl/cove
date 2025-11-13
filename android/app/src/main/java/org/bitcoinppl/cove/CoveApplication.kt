@@ -6,9 +6,9 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import org.bitcoinppl.cove_core.AuthType
-import org.bitcoinppl.cove_core.setRootDataDir
-import org.bitcoinppl.cove_core.device.Keychain
 import org.bitcoinppl.cove_core.device.Device
+import org.bitcoinppl.cove_core.device.Keychain
+import org.bitcoinppl.cove_core.setRootDataDir
 import java.time.Instant
 
 // auto-unlock time thresholds (in seconds) - matches iOS behavior
