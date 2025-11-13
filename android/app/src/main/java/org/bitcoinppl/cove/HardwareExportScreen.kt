@@ -563,26 +563,17 @@ fun HardwareExportScreen(
         QrCodeScanView(
             onScanned = { stringOrData ->
                 try {
-                    val transaction = BitcoinTransaction.tryFromStringOrData(stringOrData)
-                    val (txnRecord, signedTransaction) = txnRecordAndSignedTxn(transaction)
-
-                    val route =
-                        RouteFactory().sendConfirm(
-                            id = txnRecord.walletId(),
-                            details = txnRecord.confirmDetails(),
-                            signedTransaction = signedTransaction,
-                        )
-
+                    val multiFormat = stringOrDataTryIntoMultiFormat(stringOrData)
+                    app.handleMultiFormat(multiFormat)
                     showQrScanner = false
-                    app.pushRoute(route)
                 } catch (e: Exception) {
-                    Log.e("HardwareExportScreen", "Error importing transaction: $e")
+                    Log.e("HardwareExportScreen", "Error scanning QR code: $e")
                     showQrScanner = false
                     app.alertState =
                         TaggedItem(
                             AppAlertState.General(
                                 title = "Scan Failed",
-                                message = e.message ?: TransactionImportErrors.FAILED_TO_IMPORT,
+                                message = e.message ?: "Failed to scan QR code",
                             ),
                         )
                 }

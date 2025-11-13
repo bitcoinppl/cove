@@ -136,6 +136,7 @@ private fun SheetContent(
             ) {
                 QrCodeScanView(
                     onScanned = { stringOrData ->
+                        app.sheetState = null
                         try {
                             val multiFormat = stringOrDataTryIntoMultiFormat(stringOrData)
                             app.handleMultiFormat(multiFormat)

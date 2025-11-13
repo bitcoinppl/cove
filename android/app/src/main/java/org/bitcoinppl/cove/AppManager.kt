@@ -360,8 +360,8 @@ class AppManager private constructor() : FfiReconcile {
      * Import hot wallet from mnemonic words
      */
     private fun importHotWallet(words: List<String>) {
+        val manager = ImportWalletManager()
         try {
-            val manager = ImportWalletManager()
             val walletMetadata = manager.rust.importWallet(listOf(words))
             rust.selectWallet(walletMetadata.id)
         } catch (e: ImportWalletException.InvalidWordGroup) {
@@ -380,6 +380,8 @@ class AppManager private constructor() : FfiReconcile {
                 TaggedItem(
                     AppAlertState.ErrorImportingHotWallet(e.message ?: "Unknown error"),
                 )
+        } finally {
+            manager.close()
         }
     }
 
