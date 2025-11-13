@@ -21,7 +21,7 @@ struct SendFlowHeaderView: View {
     private var metadata: WalletMetadata { manager.walletMetadata }
     private var balanceString: String {
         if !metadata.sensitiveVisible {
-            return "************"
+            return "••••••"
         }
 
         // btc or sats

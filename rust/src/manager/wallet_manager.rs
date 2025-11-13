@@ -521,7 +521,7 @@ impl RustWalletManager {
         {
             let sensitive_visible = self.metadata.read().sensitive_visible;
             if !sensitive_visible {
-                return "**************".to_string();
+                return "••••••".to_string();
             }
         }
 
@@ -537,7 +537,7 @@ impl RustWalletManager {
         {
             let sensitive_visible = self.metadata.read().sensitive_visible;
             if !sensitive_visible {
-                return "**************".to_string();
+                return "••••••".to_string();
             }
         }
 
