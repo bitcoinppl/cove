@@ -8,13 +8,41 @@
 import SwiftUI
 
 struct FullPageLoadingView: View {
+    var backgroundColor: Color?
+    var spinnerTint: Color
+    var controlSize: ControlSize
+    var ignoresSafeArea: Bool
+
+    init(
+        backgroundColor: Color? = .white,
+        spinnerTint: Color = .primary,
+        controlSize: ControlSize = .extraLarge,
+        ignoresSafeArea: Bool = true
+    ) {
+        self.backgroundColor = backgroundColor
+        self.spinnerTint = spinnerTint
+        self.controlSize = controlSize
+        self.ignoresSafeArea = ignoresSafeArea
+    }
+
     var body: some View {
         ZStack {
-            Color.coveBg.edgesIgnoringSafeArea(.all)
+            if let backgroundColor {
+                if ignoresSafeArea {
+                    backgroundColor.edgesIgnoringSafeArea(.all)
+                } else {
+                    backgroundColor
+                }
+            }
+
             ProgressView()
-                .frame(width: 100, height: 100)
-                .tint(.primary)
+                .progressViewStyle(.circular)
+                .controlSize(controlSize)
+                .frame(width: 80, height: 80)
+                .tint(spinnerTint)
+                .accessibilityLabel(Text("Loading"))
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 

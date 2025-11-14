@@ -17,7 +17,6 @@ use derive_more::From;
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum Route {
     LoadAndReset { reset_to: Vec<Arc<BoxedRoute>>, after_millis: u32 },
-    ListWallets,
     SelectedWallet(WalletId),
     NewWallet(NewWalletRoute),
     Settings(SettingsRoute),
@@ -167,17 +166,14 @@ impl Router {
     pub fn new() -> Self {
         let database = Database::global();
 
-        let mut default_route = Route::ListWallets;
-
-        // when there are no wallets, show the new wallet screen
-        if database.wallets.is_empty().unwrap_or(true) {
-            default_route = Route::NewWallet(Default::default())
-        };
-
         // when there is a selected wallet, show the selected wallet screen
-        if let Some(selected_wallet) = database.global_config().selected_wallet() {
-            default_route = Route::SelectedWallet(selected_wallet);
-        };
+        let default_route =
+            if let Some(selected_wallet) = database.global_config().selected_wallet() {
+                Route::SelectedWallet(selected_wallet)
+            } else {
+                // when there are no wallets or no selected wallet, show the new wallet screen
+                Route::NewWallet(Default::default())
+            };
 
         Self { app: FfiApp::global(), default: default_route, routes: vec![] }
     }
@@ -258,8 +254,7 @@ impl RouteFactory {
 
         matches!(
             (route, route_to_check),
-            (Route::ListWallets, Route::ListWallets)
-                | (Route::SelectedWallet(_), Route::SelectedWallet(_))
+            (Route::SelectedWallet(_), Route::SelectedWallet(_))
                 | (Route::NewWallet(_), Route::NewWallet(_))
         )
     }

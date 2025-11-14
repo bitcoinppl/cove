@@ -26,6 +26,12 @@ impl BdkStore {
         let conn = bdk_wallet::rusqlite::Connection::open(&sqlite_data_path)
             .context("unable to open rusqlite connection")?;
 
+        conn.pragma_update(None, "journal_mode", "WAL")?;
+        conn.pragma_update(None, "synchronous", "NORMAL")?;
+
+        // in pages (4096 bytes) 2000 pages = 8MB
+        conn.pragma_update(None, "cache_size", 2000)?;
+
         let mut me = Self { id: id.clone(), network: network.into(), conn };
 
         if let Err(e) = me.check_and_migrate_from_file_store() {
