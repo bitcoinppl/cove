@@ -284,7 +284,10 @@ private suspend fun signAction(
 ) {
     try {
         val signedPsbt = nfc.sign(psbt, pin)
-        val db = org.bitcoinppl.cove_core.Database().unsignedTransactions()
+        val db =
+            org.bitcoinppl.cove_core
+                .Database()
+                .unsignedTransactions()
         val txId = psbt.txId()
         val record = db.getTxThrow(txId = txId)
         val route =

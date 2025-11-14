@@ -15,12 +15,16 @@ sealed class AppAlertState {
     data object ImportedLabelsSuccessfully : AppAlertState()
 
     // warn
-    data class DuplicateWallet(val walletId: WalletId) : AppAlertState()
+    data class DuplicateWallet(
+        val walletId: WalletId,
+    ) : AppAlertState()
 
     // errors
     data object InvalidWordGroup : AppAlertState()
 
-    data class ErrorImportingHotWallet(val message: String) : AppAlertState()
+    data class ErrorImportingHotWallet(
+        val message: String,
+    ) : AppAlertState()
 
     data class AddressWrongNetwork(
         val address: Address,
@@ -28,48 +32,80 @@ sealed class AppAlertState {
         val currentNetwork: Network,
     ) : AppAlertState()
 
-    data class FoundAddress(val address: Address, val amount: Amount?) : AppAlertState()
+    data class FoundAddress(
+        val address: Address,
+        val amount: Amount?,
+    ) : AppAlertState()
 
     data object UnableToSelectWallet : AppAlertState()
 
-    data class ErrorImportingHardwareWallet(val message: String) : AppAlertState()
+    data class ErrorImportingHardwareWallet(
+        val message: String,
+    ) : AppAlertState()
 
-    data class InvalidFileFormat(val message: String) : AppAlertState()
+    data class InvalidFileFormat(
+        val message: String,
+    ) : AppAlertState()
 
-    data class NoWalletSelected(val address: Address) : AppAlertState()
+    data class NoWalletSelected(
+        val address: Address,
+    ) : AppAlertState()
 
-    data class InvalidFormat(val message: String) : AppAlertState()
+    data class InvalidFormat(
+        val message: String,
+    ) : AppAlertState()
 
-    data class NoUnsignedTransactionFound(val txId: TxId) : AppAlertState()
+    data class NoUnsignedTransactionFound(
+        val txId: TxId,
+    ) : AppAlertState()
 
-    data class UnableToGetAddress(val error: String) : AppAlertState()
+    data class UnableToGetAddress(
+        val error: String,
+    ) : AppAlertState()
 
     data object NoCameraPermission : AppAlertState()
 
-    data class FailedToScanQr(val error: String) : AppAlertState()
+    data class FailedToScanQr(
+        val error: String,
+    ) : AppAlertState()
 
     data object CantSendOnWatchOnlyWallet : AppAlertState()
 
-    data class TapSignerSetupFailed(val message: String) : AppAlertState()
+    data class TapSignerSetupFailed(
+        val message: String,
+    ) : AppAlertState()
 
-    data class TapSignerDeriveFailed(val message: String) : AppAlertState()
+    data class TapSignerDeriveFailed(
+        val message: String,
+    ) : AppAlertState()
 
     data object TapSignerInvalidAuth : AppAlertState()
 
-    data class TapSignerNoBackup(val tapSigner: TapSigner) : AppAlertState()
+    data class TapSignerNoBackup(
+        val tapSigner: TapSigner,
+    ) : AppAlertState()
 
     // generic message or error
-    data class General(val title: String, val message: String) : AppAlertState()
+    data class General(
+        val title: String,
+        val message: String,
+    ) : AppAlertState()
 
     // action
-    data class UninitializedTapSigner(val tapSigner: TapSigner) : AppAlertState()
+    data class UninitializedTapSigner(
+        val tapSigner: TapSigner,
+    ) : AppAlertState()
 
-    data class TapSignerWalletFound(val walletId: WalletId) : AppAlertState()
+    data class TapSignerWalletFound(
+        val walletId: WalletId,
+    ) : AppAlertState()
 
-    data class InitializedTapSigner(val tapSigner: TapSigner) : AppAlertState()
+    data class InitializedTapSigner(
+        val tapSigner: TapSigner,
+    ) : AppAlertState()
 
-    fun title(): String {
-        return when (this) {
+    fun title(): String =
+        when (this) {
             is InvalidWordGroup -> "Words Not Valid"
             is DuplicateWallet -> "Duplicate Wallet"
             is ErrorImportingHotWallet -> "Error"
@@ -95,5 +131,4 @@ sealed class AppAlertState {
             is TapSignerNoBackup -> "No Backup Found"
             is General -> title
         }
-    }
 }

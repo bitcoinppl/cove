@@ -253,8 +253,7 @@ private fun ReceiveAddressSheetContent(
                             CoveColor.midnightBlue.copy(
                                 alpha = if (isDarkTheme) 0.4f else 0.95f,
                             ),
-                        )
-                        .padding(16.dp),
+                        ).padding(16.dp),
             ) {
                 Text(
                     text = "Wallet Address",

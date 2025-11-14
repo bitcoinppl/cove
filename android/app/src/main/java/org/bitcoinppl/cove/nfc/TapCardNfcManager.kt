@@ -45,11 +45,10 @@ class TapCardNfcManager private constructor() {
         // but not so long that they wonder if something is wrong
         private const val NFC_SCAN_TIMEOUT_MS = 60_000L
 
-        fun getInstance(): TapCardNfcManager {
-            return instance ?: synchronized(this) {
+        fun getInstance(): TapCardNfcManager =
+            instance ?: synchronized(this) {
                 instance ?: TapCardNfcManager().also { instance = it }
             }
-        }
     }
 
     fun initialize(activity: Activity) {

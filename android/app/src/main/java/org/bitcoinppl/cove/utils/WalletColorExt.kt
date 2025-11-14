@@ -7,8 +7,8 @@ import org.bitcoinppl.cove_core.types.*
 /**
  * extension to convert FFI WalletColor to Compose Color
  */
-fun WalletColor.toComposeColor(): Color {
-    return when (this) {
+fun WalletColor.toComposeColor(): Color =
+    when (this) {
         is WalletColor.Red -> Color(0xFFFF3B30)
         is WalletColor.Orange -> Color(0xFFFF9500)
         is WalletColor.Yellow -> Color(0xFFFFCC00)
@@ -34,4 +34,3 @@ fun WalletColor.toComposeColor(): Color {
         is WalletColor.WPastelTeal -> Color(0xFFB2DFDB)
         is WalletColor.WLightPastelYellow -> Color(0xFFFFFDE7)
     }
-}

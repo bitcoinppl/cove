@@ -9,5 +9,7 @@ import org.bitcoinppl.cove_core.*
 sealed class AppSheetState {
     data object Qr : AppSheetState()
 
-    data class TapSigner(val route: TapSignerRoute) : AppSheetState()
+    data class TapSigner(
+        val route: TapSignerRoute,
+    ) : AppSheetState()
 }

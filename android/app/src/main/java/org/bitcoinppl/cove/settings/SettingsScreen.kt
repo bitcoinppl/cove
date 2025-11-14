@@ -85,7 +85,10 @@ fun SettingsScreen(
                             stringResource(R.string.title_settings_network),
                             iconResId = R.drawable.icon_network,
                             onClick = {
-                                app.pushRoute(org.bitcoinppl.cove_core.Route.Settings(org.bitcoinppl.cove_core.SettingsRoute.Network))
+                                app.pushRoute(
+                                    org.bitcoinppl.cove_core.Route
+                                        .Settings(org.bitcoinppl.cove_core.SettingsRoute.Network),
+                                )
                             },
                         )
                         Spacer()
@@ -93,7 +96,10 @@ fun SettingsScreen(
                             stringResource(R.string.title_settings_appearance),
                             iconResId = R.drawable.icon_appearance,
                             onClick = {
-                                app.pushRoute(org.bitcoinppl.cove_core.Route.Settings(org.bitcoinppl.cove_core.SettingsRoute.Appearance))
+                                app.pushRoute(
+                                    org.bitcoinppl.cove_core.Route
+                                        .Settings(org.bitcoinppl.cove_core.SettingsRoute.Appearance),
+                                )
                             },
                         )
                         Spacer()
@@ -101,7 +107,10 @@ fun SettingsScreen(
                             stringResource(R.string.title_settings_node),
                             iconResId = R.drawable.icon_node,
                             onClick = {
-                                app.pushRoute(org.bitcoinppl.cove_core.Route.Settings(org.bitcoinppl.cove_core.SettingsRoute.Node))
+                                app.pushRoute(
+                                    org.bitcoinppl.cove_core.Route
+                                        .Settings(org.bitcoinppl.cove_core.SettingsRoute.Node),
+                                )
                             },
                         )
                         Spacer()
@@ -109,7 +118,10 @@ fun SettingsScreen(
                             stringResource(R.string.title_settings_currency),
                             iconResId = R.drawable.icon_currency,
                             onClick = {
-                                app.pushRoute(org.bitcoinppl.cove_core.Route.Settings(org.bitcoinppl.cove_core.SettingsRoute.FiatCurrency))
+                                app.pushRoute(
+                                    org.bitcoinppl.cove_core.Route
+                                        .Settings(org.bitcoinppl.cove_core.SettingsRoute.FiatCurrency),
+                                )
                             },
                         )
                     }

@@ -315,7 +315,7 @@ fun SelectedWalletContainer(
                     showReceiveSheet = true
                 },
                 onQrCode = {
-                    // TODO: implement QR code scanner
+                    app.scanQr()
                 },
                 onMore = {
                     showMoreOptions = true

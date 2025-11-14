@@ -461,8 +461,7 @@ private fun SwipeToSendStub(
                         targetContainerColor,
                         progress,
                     ),
-                )
-                .onGloballyPositioned { coords ->
+                ).onGloballyPositioned { coords ->
                     trackWidthPx = coords.size.width.toFloat()
                     rawOffset = rawOffset.coerceIn(0f, (trackWidthPx - knobSizePx).coerceAtLeast(0f))
                     scope.launch {
@@ -473,8 +472,7 @@ private fun SwipeToSendStub(
                             ),
                         )
                     }
-                }
-                .draggable(
+                }.draggable(
                     state = dragState,
                     orientation = Orientation.Horizontal,
                     enabled = sendState is SendState.Idle,
@@ -500,7 +498,9 @@ private fun SwipeToSendStub(
                 ),
         contentAlignment = Alignment.Center,
     ) {
-        val displayColor = androidx.compose.ui.graphics.lerp(textColor, targetTextColor, progress)
+        val displayColor =
+            androidx.compose.ui.graphics
+                .lerp(textColor, targetTextColor, progress)
 
         // show swipe text only when idle
         if (sendState is SendState.Idle) {
