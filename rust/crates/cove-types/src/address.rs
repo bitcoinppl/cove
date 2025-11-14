@@ -368,12 +368,10 @@ impl<'de> Deserialize<'de> for Address {
     }
 }
 
-pub mod ffi {
-    use super::*;
-
+mod ffi {
     use rand::seq::IndexedRandom;
 
-    fn random_address() -> &'static str {
+    pub fn random_address() -> &'static str {
         const ADDRESSES: [&str; 10] = [
             "tb1q2z9f42gfafthstgn34es2eamr2afv474sdsld8",
             "tb1p6vhsxjsszp63gedr8ywq8qx00wnkqx3pmuxatffh8za62v5uy0xqk92z4y",
@@ -389,20 +387,20 @@ pub mod ffi {
         let mut rng = rand::rng();
         ADDRESSES.choose(&mut rng).unwrap()
     }
+}
 
-    #[uniffi::export]
-    impl Address {
-        #[uniffi::constructor]
-        pub fn random() -> Self {
-            Self::new(BdkAddress::from_str(random_address()).unwrap().assume_checked())
-        }
+#[uniffi::export]
+impl Address {
+    #[uniffi::constructor]
+    pub fn random() -> Self {
+        Self::new(BdkAddress::from_str(ffi::random_address()).unwrap().assume_checked())
+    }
 
-        #[uniffi::method(name = "hashToUint")]
-        fn ffi_hash(&self) -> u64 {
-            let mut hasher = std::hash::DefaultHasher::new();
-            self.hash(&mut hasher);
-            hasher.finish()
-        }
+    #[uniffi::method(name = "hashToUint")]
+    fn ffi_hash(&self) -> u64 {
+        let mut hasher = std::hash::DefaultHasher::new();
+        self.hash(&mut hasher);
+        hasher.finish()
     }
 }
 

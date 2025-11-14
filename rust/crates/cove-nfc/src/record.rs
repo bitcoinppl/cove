@@ -9,28 +9,24 @@ pub struct NdefRecord {
 }
 
 // only used for uniffi
-mod ffi {
-    use super::*;
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Object)]
+pub struct NdefRecordReader {
+    record: NdefRecord,
+}
 
-    #[derive(Debug, Clone, PartialEq, Eq, uniffi::Object)]
-    pub struct NdefRecordReader {
-        record: NdefRecord,
+#[uniffi::export]
+impl NdefRecordReader {
+    #[uniffi::constructor]
+    pub fn new(record: NdefRecord) -> Self {
+        Self { record }
     }
 
-    #[uniffi::export]
-    impl NdefRecordReader {
-        #[uniffi::constructor]
-        pub fn new(record: NdefRecord) -> Self {
-            Self { record }
-        }
+    pub fn type_(&self) -> Option<String> {
+        String::from_utf8(self.record.type_.clone()).ok()
+    }
 
-        pub fn type_(&self) -> Option<String> {
-            String::from_utf8(self.record.type_.clone()).ok()
-        }
-
-        pub fn id(&self) -> Option<String> {
-            let id = self.record.id.as_ref()?;
-            String::from_utf8(id.clone()).ok()
-        }
+    pub fn id(&self) -> Option<String> {
+        let id = self.record.id.as_ref()?;
+        String::from_utf8(id.clone()).ok()
     }
 }

@@ -244,30 +244,30 @@ mod ffi_preview {
 
     use super::*;
 
-    #[uniffi::export]
-    impl ConfirmDetails {
-        #[uniffi::constructor(default(amount = 20448))]
-        pub fn preview_new(amount: u64) -> Self {
-            let psbt = psbt_preview_new();
-            let more_details = InputOutputDetails::new(&psbt, Network::Bitcoin);
-
-            Self {
-                spending_amount: Amount::from_sat(amount),
-                sending_amount: Amount::from_sat(amount - 658),
-                fee_total: Amount::from_sat(658),
-                fee_rate: BdkFeeRate::from_sat_per_vb_unchecked(3).into(),
-                fee_percentage: 3,
-                sending_to: Address::preview_new(),
-                psbt,
-                more_details,
-            }
-        }
-    }
-
-    fn psbt_preview_new() -> Psbt {
+    pub fn psbt_preview_new() -> Psbt {
         let psbt_hex = "70736274ff01009a020000000258e87a21b56daf0c23be8e7070456c336f7cbaa5c8757924f545887bb2abdd750000000000ffffffff838d0427d0ec650a68aa46bb0b098aea4422c071b2ca78352a077959d07cea1d0100000000ffffffff0270aaf00800000000160014d85c2b71d0060b09c9886aeb815e50991dda124d00e1f5050000000016001400aea9a2e5f0f876a588df5546e8742d1d87008f000000000000000000";
         let psbt_bytes = hex::decode(psbt_hex).expect("unable to decode psbt hex");
 
         BdkPsbt::deserialize(&psbt_bytes).expect("unable to deserialize psbt").into()
+    }
+}
+
+#[uniffi::export]
+impl ConfirmDetails {
+    #[uniffi::constructor(name = "previewNew", default(amount = 20448))]
+    pub fn _ffi_preview_new(amount: u64) -> Self {
+        let psbt = ffi_preview::psbt_preview_new();
+        let more_details = InputOutputDetails::new(&psbt, Network::Bitcoin);
+
+        Self {
+            spending_amount: Amount::from_sat(amount),
+            sending_amount: Amount::from_sat(amount - 658),
+            fee_total: Amount::from_sat(658),
+            fee_rate: BdkFeeRate::from_sat_per_vb_unchecked(3).into(),
+            fee_percentage: 3,
+            sending_to: Address::preview_new(),
+            psbt,
+            more_details,
+        }
     }
 }

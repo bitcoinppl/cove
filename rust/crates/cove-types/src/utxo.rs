@@ -180,7 +180,6 @@ pub mod ffi_preview {
     use super::*;
     use rand::random_range;
 
-    #[uniffi::export]
     pub fn preview_new_utxo_list(output_count: u8, change_count: u8) -> Vec<Utxo> {
         let mut utxos = Vec::with_capacity((output_count + change_count) as usize);
 
@@ -205,7 +204,7 @@ pub mod ffi_preview {
         }
 
         fn preview_new(type_: UtxoType) -> Self {
-            let outpoint = OutPoint::preview_new();
+            let outpoint = OutPoint::_ffi_preview_new();
 
             let random_sats = random_range(10_100..=10_000_000);
             let amount = Amount::from_sat(random_sats).into();
@@ -227,4 +226,9 @@ pub mod ffi_preview {
             }
         }
     }
+}
+
+#[uniffi::export(name = "previewNewUtxoList")]
+pub fn _ffi_preview_new_utxo_list(output_count: u8, change_count: u8) -> Vec<Utxo> {
+    ffi_preview::preview_new_utxo_list(output_count, change_count)
 }

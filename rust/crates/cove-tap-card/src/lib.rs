@@ -66,50 +66,44 @@ impl TapSigner {
 }
 
 // For uniffi
-pub mod ffi {
-    use super::{parse::Field, *};
+#[derive(Debug, Clone, thiserror::Error, PartialEq, Eq, uniffi::Error)]
+pub enum TapCardParseError {
+    #[error("not a valid url: {0}")]
+    InvalidUrl(String),
 
-    #[derive(Debug, Clone, thiserror::Error, PartialEq, Eq, uniffi::Error)]
-    pub enum TapCardParseError {
-        #[error("not a valid url: {0}")]
-        InvalidUrl(String),
+    #[error("not in encoded url format: {0}")]
+    NotUrlEncoded(String),
 
-        #[error("not in encoded url format: {0}")]
-        NotUrlEncoded(String),
+    #[error("missing field {0}")]
+    MissingField(parse::Field),
 
-        #[error("missing field {0}")]
-        MissingField(Field),
+    #[error("unknown card state {0}")]
+    UnknownCardState(String),
 
-        #[error("unknown card state {0}")]
-        UnknownCardState(String),
+    #[error("card state is empty")]
+    EmptyCardState,
 
-        #[error("card state is empty")]
-        EmptyCardState,
+    #[error("unable to parse slot number: {0}")]
+    ParseSlotNumberError(String),
 
-        #[error("unable to parse slot number: {0}")]
-        ParseSlotNumberError(String),
+    #[error("unable to parse signature: {0}")]
+    UnableToParseSignature(String),
 
-        #[error("unable to parse signature: {0}")]
-        UnableToParseSignature(String),
+    #[error("unable to recover pubkey from signature")]
+    UnableToRecoverPubkey,
+}
 
-        #[error("unable to recover pubkey from signature")]
-        UnableToRecoverPubkey,
-    }
-
-    impl From<parse::Error> for TapCardParseError {
-        fn from(error: parse::Error) -> Self {
-            use parse::Error;
-            match error {
-                Error::InvalidUrl(error) => Self::InvalidUrl(error.to_string()),
-                Error::NotUrlEncoded(error) => Self::NotUrlEncoded(error.to_string()),
-                Error::MissingField(field) => Self::MissingField(field),
-                Error::UnknownCardState(state) => Self::UnknownCardState(state.to_string()),
-                Error::EmptyCardState => Self::EmptyCardState,
-                Error::UnableToParseSlot(error) => Self::ParseSlotNumberError(error.to_string()),
-                Error::UnableToParseSignature(error) => {
-                    Self::UnableToParseSignature(error.to_string())
-                }
-            }
+impl From<parse::Error> for TapCardParseError {
+    fn from(error: parse::Error) -> Self {
+        use parse::Error;
+        match error {
+            Error::InvalidUrl(error) => Self::InvalidUrl(error.to_string()),
+            Error::NotUrlEncoded(error) => Self::NotUrlEncoded(error.to_string()),
+            Error::MissingField(field) => Self::MissingField(field),
+            Error::UnknownCardState(state) => Self::UnknownCardState(state.to_string()),
+            Error::EmptyCardState => Self::EmptyCardState,
+            Error::UnableToParseSlot(error) => Self::ParseSlotNumberError(error.to_string()),
+            Error::UnableToParseSignature(error) => Self::UnableToParseSignature(error.to_string()),
         }
     }
 }
