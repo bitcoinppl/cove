@@ -12,7 +12,7 @@ struct SidebarView: View {
     @Environment(\.navigate) private var navigate
 
     let currentRoute: Route
-    let wallets: [WalletMetadata]
+    @State var wallets: [WalletMetadata]
 
     init(currentRoute: Route, wallets: [WalletMetadata]? = nil) {
         self.currentRoute = currentRoute
@@ -21,13 +21,7 @@ struct SidebarView: View {
             return
         }
 
-        do {
-            self.wallets = try Database().wallets().all()
-            Log.debug("wallets: \(self.wallets)")
-        } catch {
-            Log.error("Failed to get wallets \(error)")
-            self.wallets = []
-        }
+        self.wallets = []
     }
 
     func setForeground(_ route: Route) -> LinearGradient {
@@ -154,31 +148,50 @@ struct SidebarView: View {
                 }
             }
         }
+        .onAppear {
+            do {
+                self.wallets = try Database().wallets().all()
+            } catch {
+                Log.error("Failed to get wallets \(error)")
+            }
+        }
         .padding(20)
         .frame(maxWidth: .infinity)
         .background(.midnightBlue)
     }
 
     func goTo(_ route: Route) {
-        app.isSidebarVisible = false
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            app.isSidebarVisible = false
+        }
 
         Task {
-            try? await Task.sleep(for: .milliseconds(300))
+            try? await Task.sleep(for: .milliseconds(200))
+            await navigateRoute(route)
+        }
+    }
 
-            do {
-                if case let Route.selectedWallet(id: id) = route {
-                    return try app.rust.selectWallet(id: id)
-                }
+    @MainActor
+    private func navigateRouteOnMain(_ route: Route) {
+        navigate(route)
+    }
 
-                if !app.hasWallets, route == Route.newWallet(.select) {
-                    return app.resetRoute(to: [RouteFactory().newWalletSelect()])
-                }
-            } catch {
-                Log.error("Failed to select wallet \(error)")
+    private func navigateRoute(_ route: Route) async {
+        do {
+            if case let Route.selectedWallet(id: id) = route {
+                try app.rust.selectWallet(id: id)
+                return
             }
 
-            navigate(route)
+            if !app.hasWallets, route == Route.newWallet(.select) {
+                app.resetRoute(to: [RouteFactory().newWalletSelect()])
+                return
+            }
+        } catch {
+            Log.error("Failed to select wallet \(error)")
         }
+
+        await navigateRouteOnMain(route)
     }
 }
 
