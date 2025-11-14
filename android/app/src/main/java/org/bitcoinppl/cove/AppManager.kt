@@ -325,7 +325,7 @@ class AppManager private constructor() : FfiReconcile {
 
                         // when labels are imported, refresh transactions with updated labels
                         walletManager?.let { wm ->
-                            mainScope.launch(Dispatchers.IO) {
+                            mainScope.launch {
                                 wm.rust.getTransactions()
                             }
                         }

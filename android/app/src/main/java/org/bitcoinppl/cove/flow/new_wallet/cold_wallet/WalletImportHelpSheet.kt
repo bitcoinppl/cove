@@ -31,7 +31,7 @@ fun WalletImportHelpSheet(onDismiss: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(24.dp),
         ) {
             Text(
-                text = "How to get my wallet export QR code?",
+                text = "How do I get my wallet export QR code?",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
             )

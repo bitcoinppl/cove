@@ -174,6 +174,7 @@ private fun QrScannerContent(
     val lifecycleOwner = LocalLifecycleOwner.current
 
     var scannerState by remember { mutableStateOf<QrCodeScannerState>(QrCodeScannerState.Idle) }
+    val scannedCodes = remember { mutableSetOf<String>() }
 
     // handle scan completion
     LaunchedEffect(scannerState) {
@@ -284,6 +285,7 @@ private fun QrScannerContent(
                                                                 handleQrCode(
                                                                     currentState = scannerState,
                                                                     barcode = barcode,
+                                                                    scannedCodes = scannedCodes,
                                                                     onStateUpdate = { scannerState = it },
                                                                 )
                                                                 break
@@ -313,6 +315,10 @@ private fun QrScannerContent(
                                 )
                             } catch (e: Exception) {
                                 Log.e("QrCodeScanView", "Camera binding failed", e)
+                                scannerState =
+                                    QrCodeScannerState.Error(
+                                        "Failed to initialize camera: ${e.message ?: "Unknown error"}",
+                                    )
                             }
                         }, ContextCompat.getMainExecutor(ctx))
 
@@ -395,8 +401,14 @@ private fun QrScannerContent(
 private fun handleQrCode(
     currentState: QrCodeScannerState,
     barcode: Barcode,
+    scannedCodes: MutableSet<String>,
     onStateUpdate: (QrCodeScannerState) -> Unit,
 ) {
+    // guard against reprocessing after completion or error
+    if (currentState is QrCodeScannerState.Complete || currentState is QrCodeScannerState.Error) {
+        return
+    }
+
     try {
         // check both rawBytes (binary) and rawValue (text)
         // prioritize rawValue (text) if available, fall back to rawBytes (binary)
@@ -406,6 +418,18 @@ private fun handleQrCode(
                 barcode.rawBytes != null -> StringOrData.Data(barcode.rawBytes!!)
                 else -> return // no data available
             }
+
+        // deduplication: check if this code was already scanned
+        val qrDataString =
+            when (qrData) {
+                is StringOrData.String -> qrData.v1
+                is StringOrData.Data -> qrData.v1.contentToString()
+            }
+
+        if (scannedCodes.contains(qrDataString)) {
+            return
+        }
+        scannedCodes.add(qrDataString)
 
         val scanningState =
             when (currentState) {
