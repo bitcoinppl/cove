@@ -215,11 +215,6 @@ struct SendFlowHardwareScreen: View {
                 actions: { MyAlert($0).actions },
                 message: { MyAlert($0).message }
             )
-            .confirmationDialog(
-                confirmationDialogTitle,
-                isPresented: confirmationDialogIsPresented,
-                actions: ConfirmationDialogView
-            )
             .fileImporter(
                 isPresented: $isPresentingFilePicker,
                 allowedContentTypes: [.plainText, .psbt, .txn],
@@ -371,6 +366,11 @@ struct SendFlowHardwareScreen: View {
                         .fontWeight(.medium)
                 }
             }
+            .confirmationDialog(
+                confirmationDialogTitle,
+                isPresented: confirmationDialogIsPresented,
+                actions: ConfirmationDialogView
+            )
         }
     }
 
