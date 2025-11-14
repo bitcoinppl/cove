@@ -4,6 +4,7 @@ use crate::{
     manager::wallet_manager::{Error, SendFlowErrorAlert, WalletManagerError},
     mnemonic,
     node::{
+        Node,
         client::{NodeClient, NodeClientOptions},
         client_builder::NodeClientBuilder,
     },
@@ -36,6 +37,7 @@ use bitcoin::{Amount, FeeRate as BdkFeeRate, OutPoint, TxIn, Txid};
 use bitcoin::{Transaction as BdkTransaction, params::Params};
 use cove_bdk::coin_selection::CoveDefaultCoinSelection;
 use cove_common::consts::{GAP_LIMIT, MIN_SEND_AMOUNT};
+use cove_tokio_ext::FutureTimeoutExt as _;
 use cove_types::{
     address::AddressInfoWithDerivation,
     confirm::{AddressAndAmount, ConfirmDetails, ExtraItem, InputOutputDetails, SplitOutput},
@@ -114,6 +116,7 @@ impl FullScanType {
 impl Actor for WalletActor {
     async fn started(&mut self, addr: Addr<Self>) -> ActorResult<()> {
         self.addr = addr.downgrade();
+        send!(addr.check_node_connection());
         Produces::ok(())
     }
 
@@ -674,10 +677,18 @@ impl WalletActor {
         Produces::ok(address)
     }
 
-    pub async fn check_node_connection(&mut self) -> ActorResult<()> {
-        self.node_client().await?.check_url().await.map_err_str(Error::NodeConnectionFailed)?;
+    #[into_actor_result]
+    pub async fn check_node_connection(&mut self) {
+        let node = Database::global().global_config.selected_node();
 
-        Produces::ok(())
+        let reconciler = self.reconciler.clone();
+        self.addr.send_fut(async move {
+            if let Err(error) = check_node_connection_inner(&node).await {
+                let _ = reconciler.send(
+                    WalletManagerReconcileMessage::NodeConnectionFailed(error).into(),
+                );
+            }
+        });
     }
 
     pub async fn wallet_scan_and_notify(&mut self, force_scan: bool) -> ActorResult<()> {
@@ -1353,11 +1364,14 @@ impl WalletActor {
         Some(())
     }
 
-    async fn node_client(&mut self) -> Result<&NodeClient> {
+    async fn node_client(&mut self) -> Result<&NodeClient, Error> {
         let node_client = self.node_client.as_ref();
         if node_client.is_none() {
             let node = Database::global().global_config.selected_node();
-            let node_client = NodeClient::new(&node).await?;
+            let node_client = NodeClient::new(&node).await.map_err(|err| {
+                Error::NodeConnectionFailed(format!("failed to create node client: {err}"))
+            })?;
+
             self.node_client = Some(node_client);
         };
 
@@ -1380,4 +1394,30 @@ impl Drop for WalletActor {
     fn drop(&mut self) {
         debug!("[DROP] Wallet Actor for {}", self.wallet.id);
     }
+}
+
+async fn check_node_connection_inner(node: &Node) -> Result<(), String> {
+    // Create a fresh client with its own TCP connection for this background check.
+    // We cannot reuse the actor's cached client because:
+    // 1. This runs in a background task (spawned via send_fut)
+    // 2. The actor continues processing messages with its own client
+    // 3. The underlying rust-electrum-client is NOT designed for concurrent access
+    //    (it uses a "reader thread" pattern with try_lock that fails on concurrent use)
+    // Creating a fresh connection ensures no shared state or concurrent access.
+    //
+    // TODO: We could optimize this to reuse the cached client when using esplora,
+    // since esplora uses HTTP and doesn't have the concurrent access limitations
+    // that electrum's persistent TCP connection has.
+    let node_client = NodeClient::new(node)
+        .await
+        .map_err(|_| "unable to create a connection to the node".to_string())?;
+
+    node_client
+        .check_url()
+        .with_timeout(Duration::from_secs(5))
+        .await
+        .map_err(|_| "unable to connect to node, timeout".to_string())?
+        .map_err(|err| err.to_string())?;
+
+    Ok(())
 }
