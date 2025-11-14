@@ -194,21 +194,18 @@ struct VerifyWordsScreen: View {
     @MainActor
     func checkWord(_ word: String) {
         if validator.isWordCorrect(word: word, for: UInt8(wordNumber)) {
-            withAnimation(Animation.spring().speed(3), completionCriteria: .removed) {
+            withAnimation(Animation.spring().speed(3), completionCriteria: .logicallyComplete) {
                 checkState = .correct(word)
             } completion: {
+                checkState = .none
                 nextWord()
             }
         } else {
+            incorrectGuesses += 1
             withAnimation(Animation.spring().speed(2)) {
                 checkState = .incorrect(word)
             } completion: {
-                deselectWord(
-                    .spring().speed(3),
-                    completion: {
-                        incorrectGuesses += 1
-                    }
-                )
+                deselectWord(.spring().speed(3))
             }
         }
     }
@@ -218,8 +215,6 @@ struct VerifyWordsScreen: View {
         if validator.isComplete(wordNumber: UInt8(wordNumber)) {
             withAnimation(.easeInOut(duration: 0.3)) {
                 verificationComplete = true
-            } completion: {
-                checkState = .none
             }
             return
         }
@@ -227,8 +222,6 @@ struct VerifyWordsScreen: View {
         withAnimation(.spring().speed(3)) {
             wordNumber += 1
             possibleWords = validator.possibleWords(for: UInt8(wordNumber))
-        } completion: {
-            checkState = .none
         }
     }
 
@@ -294,7 +287,7 @@ struct VerifyWordsScreen: View {
                     .matchedGeometryEffect(
                         id: matchedGeoId(for: checkingWord),
                         in: namespace,
-                        isSource: checkState != .none
+                        isSource: checkState != .none && checkState != .returning
                     )
                 } else {
                     // take up the same space
@@ -308,33 +301,28 @@ struct VerifyWordsScreen: View {
 
             LazyVGrid(columns: columns, spacing: 20) {
                 ForEach(Array(possibleWords.enumerated()), id: \.offset) { _, word in
-                    Group {
-                        if checkState.word ?? "" != word {
-                            Button(action: { selectWord(word) }) {
-                                Text(word)
-                                    .font(.caption)
-                                    .foregroundStyle(.midnightBlue.opacity(0.90))
-                                    .multilineTextAlignment(.center)
-                                    .frame(alignment: .leading)
-                                    .minimumScaleFactor(0.50)
-                                    .lineLimit(1)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                            .disabled(isDisabled)
-                            .contentShape(Rectangle())
-                            .padding(.horizontal)
-                            .padding(.vertical, 12)
-                            .background(Color.btnPrimary)
-                            .cornerRadius(10)
-                            .matchedGeometryEffect(
-                                id: matchedGeoId(for: word),
-                                in: namespace,
-                                isSource: checkState == .none
-                            )
-                        } else {
-                            Text(word).opacity(0)
-                        }
+                    Button(action: { selectWord(word) }) {
+                        Text(word)
+                            .font(.caption)
+                            .foregroundStyle(.midnightBlue.opacity(0.90))
+                            .multilineTextAlignment(.center)
+                            .frame(alignment: .leading)
+                            .minimumScaleFactor(0.50)
+                            .lineLimit(1)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
+                    .disabled(isDisabled || checkState.word == word)
+                    .contentShape(Rectangle())
+                    .padding(.horizontal)
+                    .padding(.vertical, 12)
+                    .background(Color.btnPrimary)
+                    .cornerRadius(10)
+                    .matchedGeometryEffect(
+                        id: matchedGeoId(for: word),
+                        in: namespace,
+                        isSource: checkState == .none || checkState == .returning
+                    )
+                    .opacity(checkState.word == word ? 0 : 1)
                 }
             }
             .padding(.vertical)
