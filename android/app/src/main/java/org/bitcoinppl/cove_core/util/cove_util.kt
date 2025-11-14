@@ -281,8 +281,9 @@ internal inline fun<T> uniffiTraitInterfaceCall(
     try {
         writeReturn(makeCall())
     } catch(e: kotlin.Exception) {
+        val err = try { e.stackTraceToString() } catch(_: Throwable) { "" }
         callStatus.code = UNIFFI_CALL_UNEXPECTED_ERROR
-        callStatus.error_buf = FfiConverterString.lower(e.toString())
+        callStatus.error_buf = FfiConverterString.lower(err)
     }
 }
 
@@ -299,8 +300,9 @@ internal inline fun<T, reified E: Throwable> uniffiTraitInterfaceCallWithError(
             callStatus.code = UNIFFI_CALL_ERROR
             callStatus.error_buf = lowerError(e)
         } else {
+            val err = try { e.stackTraceToString() } catch(_: Throwable) { "" }
             callStatus.code = UNIFFI_CALL_UNEXPECTED_ERROR
-            callStatus.error_buf = FfiConverterString.lower(e.toString())
+            callStatus.error_buf = FfiConverterString.lower(err)
         }
     }
 }
@@ -633,13 +635,13 @@ internal object IntegrityCheckingUniffiLib {
         uniffiCheckContractApiVersion(this)
         uniffiCheckApiChecksums(this)
     }
-    external fun uniffi_cove_util_checksum_func_generate_random_chain_code(
+    external fun uniffi_cove_util_checksum_func_generaterandomchaincode(
     ): Short
-    external fun uniffi_cove_util_checksum_func_hex_decode(
+    external fun uniffi_cove_util_checksum_func_hexdecode(
     ): Short
-    external fun uniffi_cove_util_checksum_func_hex_encode(
+    external fun uniffi_cove_util_checksum_func_hexencode(
     ): Short
-    external fun uniffi_cove_util_checksum_func_hex_to_utf8_string(
+    external fun uniffi_cove_util_checksum_func_hextoutf8string(
     ): Short
     external fun ffi_cove_util_uniffi_contract_version(
     ): Int
@@ -654,13 +656,13 @@ internal object UniffiLib {
         Native.register(UniffiLib::class.java, findLibraryName(componentName = "cove_util"))
         
     }
-    external fun uniffi_cove_util_fn_func_generate_random_chain_code(uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_util_fn_func_generaterandomchaincode(uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
-    external fun uniffi_cove_util_fn_func_hex_decode(`hex`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_util_fn_func_hexdecode(`hex`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
-    external fun uniffi_cove_util_fn_func_hex_encode(`bytes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_util_fn_func_hexencode(`bytes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
-    external fun uniffi_cove_util_fn_func_hex_to_utf8_string(`hex`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_util_fn_func_hextoutf8string(`hex`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun ffi_cove_util_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -781,16 +783,16 @@ private fun uniffiCheckContractApiVersion(lib: IntegrityCheckingUniffiLib) {
 }
 @Suppress("UNUSED_PARAMETER")
 private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
-    if (lib.uniffi_cove_util_checksum_func_generate_random_chain_code() != 48326.toShort()) {
+    if (lib.uniffi_cove_util_checksum_func_generaterandomchaincode() != 10336.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_util_checksum_func_hex_decode() != 30938.toShort()) {
+    if (lib.uniffi_cove_util_checksum_func_hexdecode() != 15286.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_util_checksum_func_hex_encode() != 50472.toShort()) {
+    if (lib.uniffi_cove_util_checksum_func_hexencode() != 43846.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_util_checksum_func_hex_to_utf8_string() != 7316.toShort()) {
+    if (lib.uniffi_cove_util_checksum_func_hextoutf8string() != 44131.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
 }
@@ -1027,7 +1029,7 @@ public object FfiConverterOptionalByteArray: FfiConverterRustBuffer<kotlin.ByteA
 } fun `generateRandomChainCode`(): kotlin.String {
             return FfiConverterString.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_util_fn_func_generate_random_chain_code(
+    UniffiLib.uniffi_cove_util_fn_func_generaterandomchaincode(
     
         _status)
 }
@@ -1037,7 +1039,7 @@ public object FfiConverterOptionalByteArray: FfiConverterRustBuffer<kotlin.ByteA
  fun `hexDecode`(`hex`: kotlin.String): kotlin.ByteArray? {
             return FfiConverterOptionalByteArray.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_util_fn_func_hex_decode(
+    UniffiLib.uniffi_cove_util_fn_func_hexdecode(
     
         FfiConverterString.lower(`hex`),_status)
 }
@@ -1047,7 +1049,7 @@ public object FfiConverterOptionalByteArray: FfiConverterRustBuffer<kotlin.ByteA
  fun `hexEncode`(`bytes`: kotlin.ByteArray): kotlin.String {
             return FfiConverterString.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_util_fn_func_hex_encode(
+    UniffiLib.uniffi_cove_util_fn_func_hexencode(
     
         FfiConverterByteArray.lower(`bytes`),_status)
 }
@@ -1057,7 +1059,7 @@ public object FfiConverterOptionalByteArray: FfiConverterRustBuffer<kotlin.ByteA
  fun `hexToUtf8String`(`hex`: kotlin.String): kotlin.String? {
             return FfiConverterOptionalString.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_util_fn_func_hex_to_utf8_string(
+    UniffiLib.uniffi_cove_util_fn_func_hextoutf8string(
     
         FfiConverterString.lower(`hex`),_status)
 }

@@ -614,6 +614,11 @@ public convenience init() {
 }
 
     deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
         try! rustCall { uniffi_cove_nfc_fn_free_ffinfcreader(handle, $0) }
     }
 
@@ -721,135 +726,6 @@ public func FfiConverterTypeFfiNfcReader_lower(_ value: FfiNfcReader) -> UInt64 
 
 
 
-public protocol NdefRecordReaderProtocol: AnyObject, Sendable {
-    
-    func id()  -> String?
-    
-    func type()  -> String?
-    
-}
-open class NdefRecordReader: NdefRecordReaderProtocol, @unchecked Sendable {
-    fileprivate let handle: UInt64
-
-    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public struct NoHandle {
-        public init() {}
-    }
-
-    // TODO: We'd like this to be `private` but for Swifty reasons,
-    // we can't implement `FfiConverter` without making this `required` and we can't
-    // make it `required` without making it `public`.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    required public init(unsafeFromHandle handle: UInt64) {
-        self.handle = handle
-    }
-
-    // This constructor can be used to instantiate a fake object.
-    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
-    //
-    // - Warning:
-    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public init(noHandle: NoHandle) {
-        self.handle = 0
-    }
-
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public func uniffiCloneHandle() -> UInt64 {
-        return try! rustCall { uniffi_cove_nfc_fn_clone_ndefrecordreader(self.handle, $0) }
-    }
-public convenience init(record: NdefRecord) {
-    let handle =
-        try! rustCall() {
-    uniffi_cove_nfc_fn_constructor_ndefrecordreader_new(
-        FfiConverterTypeNdefRecord_lower(record),$0
-    )
-}
-    self.init(unsafeFromHandle: handle)
-}
-
-    deinit {
-        try! rustCall { uniffi_cove_nfc_fn_free_ndefrecordreader(handle, $0) }
-    }
-
-    
-
-    
-open func id() -> String?  {
-    return try!  FfiConverterOptionString.lift(try! rustCall() {
-    uniffi_cove_nfc_fn_method_ndefrecordreader_id(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
-open func type() -> String?  {
-    return try!  FfiConverterOptionString.lift(try! rustCall() {
-    uniffi_cove_nfc_fn_method_ndefrecordreader_type_(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
-
-    
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeNdefRecordReader: FfiConverter {
-    typealias FfiType = UInt64
-    typealias SwiftType = NdefRecordReader
-
-    public static func lift(_ handle: UInt64) throws -> NdefRecordReader {
-        return NdefRecordReader(unsafeFromHandle: handle)
-    }
-
-    public static func lower(_ value: NdefRecordReader) -> UInt64 {
-        return value.uniffiCloneHandle()
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NdefRecordReader {
-        let handle: UInt64 = try readInt(&buf)
-        return try lift(handle)
-    }
-
-    public static func write(_ value: NdefRecordReader, into buf: inout [UInt8]) {
-        writeInt(&buf, lower(value))
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeNdefRecordReader_lift(_ handle: UInt64) throws -> NdefRecordReader {
-    return try FfiConverterTypeNdefRecordReader.lift(handle)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeNdefRecordReader_lower(_ value: NdefRecordReader) -> UInt64 {
-    return FfiConverterTypeNdefRecordReader.lower(value)
-}
-
-
-
-
-
-
 public protocol NfcConstProtocol: AnyObject, Sendable {
     
     func bytesPerBlock()  -> UInt16
@@ -908,6 +784,11 @@ public convenience init() {
 }
 
     deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
         try! rustCall { uniffi_cove_nfc_fn_free_nfcconst(handle, $0) }
     }
 
@@ -1043,6 +924,11 @@ open class NfcMessage: NfcMessageProtocol, @unchecked Sendable {
     // No primary constructor declared for this class.
 
     deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
         try! rustCall { uniffi_cove_nfc_fn_free_nfcmessage(handle, $0) }
     }
 
@@ -1122,133 +1008,119 @@ public func FfiConverterTypeNfcMessage_lower(_ value: NfcMessage) -> UInt64 {
 
 
 
-public struct MessageInfo: Equatable, Hashable {
-    /**
-     * The payload length of the message, including the header info
-     */
-    public var fullMessageLength: UInt16
-    /**
-     * The payload length of the message, reported in the info header
-     * This is the length of the payload, without the header info
-     */
-    public var payloadLength: UInt16
 
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(
-        /**
-         * The payload length of the message, including the header info
-         */fullMessageLength: UInt16, 
-        /**
-         * The payload length of the message, reported in the info header
-         * This is the length of the payload, without the header info
-         */payloadLength: UInt16) {
-        self.fullMessageLength = fullMessageLength
-        self.payloadLength = payloadLength
+
+public protocol NdefRecordReaderProtocol: AnyObject, Sendable {
+    
+    func id()  -> String?
+    
+    func type()  -> String?
+    
+}
+open class NdefRecordReader: NdefRecordReaderProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
     }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_cove_nfc_fn_clone_ndefrecordreader(self.handle, $0) }
+    }
+public convenience init(record: NdefRecord) {
+    let handle =
+        try! rustCall() {
+    uniffi_cove_nfc_fn_constructor_ndefrecordreader_new(
+        FfiConverterTypeNdefRecord_lower(record),$0
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_cove_nfc_fn_free_ndefrecordreader(handle, $0) }
+    }
+
+    
+
+    
+open func id() -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+    uniffi_cove_nfc_fn_method_ndefrecordreader_id(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+open func type() -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+    uniffi_cove_nfc_fn_method_ndefrecordreader_type_(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
 
     
 }
 
-#if compiler(>=6)
-extension MessageInfo: Sendable {}
-#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypeMessageInfo: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MessageInfo {
-        return
-            try MessageInfo(
-                fullMessageLength: FfiConverterUInt16.read(from: &buf), 
-                payloadLength: FfiConverterUInt16.read(from: &buf)
-        )
+public struct FfiConverterTypeNdefRecordReader: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = NdefRecordReader
+
+    public static func lift(_ handle: UInt64) throws -> NdefRecordReader {
+        return NdefRecordReader(unsafeFromHandle: handle)
     }
 
-    public static func write(_ value: MessageInfo, into buf: inout [UInt8]) {
-        FfiConverterUInt16.write(value.fullMessageLength, into: &buf)
-        FfiConverterUInt16.write(value.payloadLength, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeMessageInfo_lift(_ buf: RustBuffer) throws -> MessageInfo {
-    return try FfiConverterTypeMessageInfo.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeMessageInfo_lower(_ value: MessageInfo) -> RustBuffer {
-    return FfiConverterTypeMessageInfo.lower(value)
-}
-
-
-public struct NdefHeader: Equatable, Hashable {
-    public var messageBegin: Bool
-    public var messageEnd: Bool
-    public var chunked: Bool
-    public var shortRecord: Bool
-    public var hasIdLength: Bool
-    public var typeNameFormat: NdefType
-    public var typeLength: UInt8
-    public var payloadLength: UInt32
-    public var idLength: UInt8?
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(messageBegin: Bool, messageEnd: Bool, chunked: Bool, shortRecord: Bool, hasIdLength: Bool, typeNameFormat: NdefType, typeLength: UInt8, payloadLength: UInt32, idLength: UInt8?) {
-        self.messageBegin = messageBegin
-        self.messageEnd = messageEnd
-        self.chunked = chunked
-        self.shortRecord = shortRecord
-        self.hasIdLength = hasIdLength
-        self.typeNameFormat = typeNameFormat
-        self.typeLength = typeLength
-        self.payloadLength = payloadLength
-        self.idLength = idLength
+    public static func lower(_ value: NdefRecordReader) -> UInt64 {
+        return value.uniffiCloneHandle()
     }
 
-    
-}
-
-#if compiler(>=6)
-extension NdefHeader: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeNdefHeader: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NdefHeader {
-        return
-            try NdefHeader(
-                messageBegin: FfiConverterBool.read(from: &buf), 
-                messageEnd: FfiConverterBool.read(from: &buf), 
-                chunked: FfiConverterBool.read(from: &buf), 
-                shortRecord: FfiConverterBool.read(from: &buf), 
-                hasIdLength: FfiConverterBool.read(from: &buf), 
-                typeNameFormat: FfiConverterTypeNdefType.read(from: &buf), 
-                typeLength: FfiConverterUInt8.read(from: &buf), 
-                payloadLength: FfiConverterUInt32.read(from: &buf), 
-                idLength: FfiConverterOptionUInt8.read(from: &buf)
-        )
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NdefRecordReader {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
     }
 
-    public static func write(_ value: NdefHeader, into buf: inout [UInt8]) {
-        FfiConverterBool.write(value.messageBegin, into: &buf)
-        FfiConverterBool.write(value.messageEnd, into: &buf)
-        FfiConverterBool.write(value.chunked, into: &buf)
-        FfiConverterBool.write(value.shortRecord, into: &buf)
-        FfiConverterBool.write(value.hasIdLength, into: &buf)
-        FfiConverterTypeNdefType.write(value.typeNameFormat, into: &buf)
-        FfiConverterUInt8.write(value.typeLength, into: &buf)
-        FfiConverterUInt32.write(value.payloadLength, into: &buf)
-        FfiConverterOptionUInt8.write(value.idLength, into: &buf)
+    public static func write(_ value: NdefRecordReader, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
     }
 }
 
@@ -1256,76 +1128,18 @@ public struct FfiConverterTypeNdefHeader: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeNdefHeader_lift(_ buf: RustBuffer) throws -> NdefHeader {
-    return try FfiConverterTypeNdefHeader.lift(buf)
+public func FfiConverterTypeNdefRecordReader_lift(_ handle: UInt64) throws -> NdefRecordReader {
+    return try FfiConverterTypeNdefRecordReader.lift(handle)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeNdefHeader_lower(_ value: NdefHeader) -> RustBuffer {
-    return FfiConverterTypeNdefHeader.lower(value)
+public func FfiConverterTypeNdefRecordReader_lower(_ value: NdefRecordReader) -> UInt64 {
+    return FfiConverterTypeNdefRecordReader.lower(value)
 }
 
 
-public struct NdefRecord: Equatable, Hashable {
-    public var header: NdefHeader
-    public var type: Data
-    public var id: Data?
-    public var payload: NdefPayload
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(header: NdefHeader, type: Data, id: Data?, payload: NdefPayload) {
-        self.header = header
-        self.type = type
-        self.id = id
-        self.payload = payload
-    }
-
-    
-}
-
-#if compiler(>=6)
-extension NdefRecord: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeNdefRecord: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NdefRecord {
-        return
-            try NdefRecord(
-                header: FfiConverterTypeNdefHeader.read(from: &buf), 
-                type: FfiConverterData.read(from: &buf), 
-                id: FfiConverterOptionData.read(from: &buf), 
-                payload: FfiConverterTypeNdefPayload.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: NdefRecord, into buf: inout [UInt8]) {
-        FfiConverterTypeNdefHeader.write(value.header, into: &buf)
-        FfiConverterData.write(value.type, into: &buf)
-        FfiConverterOptionData.write(value.id, into: &buf)
-        FfiConverterTypeNdefPayload.write(value.payload, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeNdefRecord_lift(_ buf: RustBuffer) throws -> NdefRecord {
-    return try FfiConverterTypeNdefRecord.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeNdefRecord_lower(_ value: NdefRecord) -> RustBuffer {
-    return FfiConverterTypeNdefRecord.lower(value)
-}
 
 
 public struct ParsingContext: Equatable, Hashable {
@@ -1436,6 +1250,152 @@ public func FfiConverterTypeParsingMessage_lower(_ value: ParsingMessage) -> Rus
 }
 
 
+public struct NdefHeader: Equatable, Hashable {
+    public var messageBegin: Bool
+    public var messageEnd: Bool
+    public var chunked: Bool
+    public var shortRecord: Bool
+    public var hasIdLength: Bool
+    public var typeNameFormat: NdefType
+    public var typeLength: UInt8
+    public var payloadLength: UInt32
+    public var idLength: UInt8?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(messageBegin: Bool, messageEnd: Bool, chunked: Bool, shortRecord: Bool, hasIdLength: Bool, typeNameFormat: NdefType, typeLength: UInt8, payloadLength: UInt32, idLength: UInt8?) {
+        self.messageBegin = messageBegin
+        self.messageEnd = messageEnd
+        self.chunked = chunked
+        self.shortRecord = shortRecord
+        self.hasIdLength = hasIdLength
+        self.typeNameFormat = typeNameFormat
+        self.typeLength = typeLength
+        self.payloadLength = payloadLength
+        self.idLength = idLength
+    }
+
+    
+}
+
+#if compiler(>=6)
+extension NdefHeader: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNdefHeader: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NdefHeader {
+        return
+            try NdefHeader(
+                messageBegin: FfiConverterBool.read(from: &buf), 
+                messageEnd: FfiConverterBool.read(from: &buf), 
+                chunked: FfiConverterBool.read(from: &buf), 
+                shortRecord: FfiConverterBool.read(from: &buf), 
+                hasIdLength: FfiConverterBool.read(from: &buf), 
+                typeNameFormat: FfiConverterTypeNdefType.read(from: &buf), 
+                typeLength: FfiConverterUInt8.read(from: &buf), 
+                payloadLength: FfiConverterUInt32.read(from: &buf), 
+                idLength: FfiConverterOptionUInt8.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: NdefHeader, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.messageBegin, into: &buf)
+        FfiConverterBool.write(value.messageEnd, into: &buf)
+        FfiConverterBool.write(value.chunked, into: &buf)
+        FfiConverterBool.write(value.shortRecord, into: &buf)
+        FfiConverterBool.write(value.hasIdLength, into: &buf)
+        FfiConverterTypeNdefType.write(value.typeNameFormat, into: &buf)
+        FfiConverterUInt8.write(value.typeLength, into: &buf)
+        FfiConverterUInt32.write(value.payloadLength, into: &buf)
+        FfiConverterOptionUInt8.write(value.idLength, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNdefHeader_lift(_ buf: RustBuffer) throws -> NdefHeader {
+    return try FfiConverterTypeNdefHeader.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNdefHeader_lower(_ value: NdefHeader) -> RustBuffer {
+    return FfiConverterTypeNdefHeader.lower(value)
+}
+
+
+public struct MessageInfo: Equatable, Hashable {
+    /**
+     * The payload length of the message, including the header info
+     */
+    public var fullMessageLength: UInt16
+    /**
+     * The payload length of the message, reported in the info header
+     * This is the length of the payload, without the header info
+     */
+    public var payloadLength: UInt16
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The payload length of the message, including the header info
+         */fullMessageLength: UInt16, 
+        /**
+         * The payload length of the message, reported in the info header
+         * This is the length of the payload, without the header info
+         */payloadLength: UInt16) {
+        self.fullMessageLength = fullMessageLength
+        self.payloadLength = payloadLength
+    }
+
+    
+}
+
+#if compiler(>=6)
+extension MessageInfo: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMessageInfo: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MessageInfo {
+        return
+            try MessageInfo(
+                fullMessageLength: FfiConverterUInt16.read(from: &buf), 
+                payloadLength: FfiConverterUInt16.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: MessageInfo, into buf: inout [UInt8]) {
+        FfiConverterUInt16.write(value.fullMessageLength, into: &buf)
+        FfiConverterUInt16.write(value.payloadLength, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMessageInfo_lift(_ buf: RustBuffer) throws -> MessageInfo {
+    return try FfiConverterTypeMessageInfo.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMessageInfo_lower(_ value: MessageInfo) -> RustBuffer {
+    return FfiConverterTypeMessageInfo.lower(value)
+}
+
+
 public struct TextPayload: Equatable, Hashable {
     public var format: TextPayloadFormat
     public var language: String
@@ -1491,58 +1451,48 @@ public func FfiConverterTypeTextPayload_lower(_ value: TextPayload) -> RustBuffe
     return FfiConverterTypeTextPayload.lower(value)
 }
 
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum NdefPayload: Equatable, Hashable {
+public struct NdefRecord: Equatable, Hashable {
+    public var header: NdefHeader
+    public var type: Data
+    public var id: Data?
+    public var payload: NdefPayload
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(header: NdefHeader, type: Data, id: Data?, payload: NdefPayload) {
+        self.header = header
+        self.type = type
+        self.id = id
+        self.payload = payload
+    }
+
     
-    case text(TextPayload
-    )
-    case data(Data
-    )
-
-
-
 }
 
 #if compiler(>=6)
-extension NdefPayload: Sendable {}
+extension NdefRecord: Sendable {}
 #endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypeNdefPayload: FfiConverterRustBuffer {
-    typealias SwiftType = NdefPayload
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NdefPayload {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-        
-        case 1: return .text(try FfiConverterTypeTextPayload.read(from: &buf)
+public struct FfiConverterTypeNdefRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NdefRecord {
+        return
+            try NdefRecord(
+                header: FfiConverterTypeNdefHeader.read(from: &buf), 
+                type: FfiConverterData.read(from: &buf), 
+                id: FfiConverterOptionData.read(from: &buf), 
+                payload: FfiConverterTypeNdefPayload.read(from: &buf)
         )
-        
-        case 2: return .data(try FfiConverterData.read(from: &buf)
-        )
-        
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
     }
 
-    public static func write(_ value: NdefPayload, into buf: inout [UInt8]) {
-        switch value {
-        
-        
-        case let .text(v1):
-            writeInt(&buf, Int32(1))
-            FfiConverterTypeTextPayload.write(v1, into: &buf)
-            
-        
-        case let .data(v1):
-            writeInt(&buf, Int32(2))
-            FfiConverterData.write(v1, into: &buf)
-            
-        }
+    public static func write(_ value: NdefRecord, into buf: inout [UInt8]) {
+        FfiConverterTypeNdefHeader.write(value.header, into: &buf)
+        FfiConverterData.write(value.type, into: &buf)
+        FfiConverterOptionData.write(value.id, into: &buf)
+        FfiConverterTypeNdefPayload.write(value.payload, into: &buf)
     }
 }
 
@@ -1550,191 +1500,15 @@ public struct FfiConverterTypeNdefPayload: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeNdefPayload_lift(_ buf: RustBuffer) throws -> NdefPayload {
-    return try FfiConverterTypeNdefPayload.lift(buf)
+public func FfiConverterTypeNdefRecord_lift(_ buf: RustBuffer) throws -> NdefRecord {
+    return try FfiConverterTypeNdefRecord.lift(buf)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeNdefPayload_lower(_ value: NdefPayload) -> RustBuffer {
-    return FfiConverterTypeNdefPayload.lower(value)
-}
-
-
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
-
-public enum NdefType: Equatable, Hashable {
-    
-    case empty
-    case wellKnown
-    case mime
-    case absoluteUri
-    case external
-    case unknown
-    case unchanged
-    case reserved
-
-
-
-}
-
-#if compiler(>=6)
-extension NdefType: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeNdefType: FfiConverterRustBuffer {
-    typealias SwiftType = NdefType
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NdefType {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-        
-        case 1: return .empty
-        
-        case 2: return .wellKnown
-        
-        case 3: return .mime
-        
-        case 4: return .absoluteUri
-        
-        case 5: return .external
-        
-        case 6: return .unknown
-        
-        case 7: return .unchanged
-        
-        case 8: return .reserved
-        
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: NdefType, into buf: inout [UInt8]) {
-        switch value {
-        
-        
-        case .empty:
-            writeInt(&buf, Int32(1))
-        
-        
-        case .wellKnown:
-            writeInt(&buf, Int32(2))
-        
-        
-        case .mime:
-            writeInt(&buf, Int32(3))
-        
-        
-        case .absoluteUri:
-            writeInt(&buf, Int32(4))
-        
-        
-        case .external:
-            writeInt(&buf, Int32(5))
-        
-        
-        case .unknown:
-            writeInt(&buf, Int32(6))
-        
-        
-        case .unchanged:
-            writeInt(&buf, Int32(7))
-        
-        
-        case .reserved:
-            writeInt(&buf, Int32(8))
-        
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeNdefType_lift(_ buf: RustBuffer) throws -> NdefType {
-    return try FfiConverterTypeNdefType.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeNdefType_lower(_ value: NdefType) -> RustBuffer {
-    return FfiConverterTypeNdefType.lower(value)
-}
-
-
-
-public enum NfcMessageError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
-
-    
-    
-    case NoStringNorData
-
-    
-
-    
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-    
-}
-
-#if compiler(>=6)
-extension NfcMessageError: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeNfcMessageError: FfiConverterRustBuffer {
-    typealias SwiftType = NfcMessageError
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NfcMessageError {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-
-        
-
-        
-        case 1: return .NoStringNorData
-
-         default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: NfcMessageError, into buf: inout [UInt8]) {
-        switch value {
-
-        
-
-        
-        
-        case .NoStringNorData:
-            writeInt(&buf, Int32(1))
-        
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeNfcMessageError_lift(_ buf: RustBuffer) throws -> NfcMessageError {
-    return try FfiConverterTypeNfcMessageError.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeNfcMessageError_lower(_ value: NfcMessageError) -> RustBuffer {
-    return FfiConverterTypeNfcMessageError.lower(value)
+public func FfiConverterTypeNdefRecord_lower(_ value: NdefRecord) -> RustBuffer {
+    return FfiConverterTypeNdefRecord.lower(value)
 }
 
 
@@ -1975,6 +1749,317 @@ public func FfiConverterTypeParserState_lower(_ value: ParserState) -> RustBuffe
 
 
 
+public enum NfcMessageError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
+
+    
+    
+    case NoStringNorData
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
+}
+
+#if compiler(>=6)
+extension NfcMessageError: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNfcMessageError: FfiConverterRustBuffer {
+    typealias SwiftType = NfcMessageError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NfcMessageError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        
+
+        
+        case 1: return .NoStringNorData
+
+         default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: NfcMessageError, into buf: inout [UInt8]) {
+        switch value {
+
+        
+
+        
+        
+        case .NoStringNorData:
+            writeInt(&buf, Int32(1))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNfcMessageError_lift(_ buf: RustBuffer) throws -> NfcMessageError {
+    return try FfiConverterTypeNfcMessageError.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNfcMessageError_lower(_ value: NfcMessageError) -> RustBuffer {
+    return FfiConverterTypeNfcMessageError.lower(value)
+}
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum NdefType: Equatable, Hashable {
+    
+    case empty
+    case wellKnown
+    case mime
+    case absoluteUri
+    case external
+    case unknown
+    case unchanged
+    case reserved
+
+
+
+}
+
+#if compiler(>=6)
+extension NdefType: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNdefType: FfiConverterRustBuffer {
+    typealias SwiftType = NdefType
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NdefType {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .empty
+        
+        case 2: return .wellKnown
+        
+        case 3: return .mime
+        
+        case 4: return .absoluteUri
+        
+        case 5: return .external
+        
+        case 6: return .unknown
+        
+        case 7: return .unchanged
+        
+        case 8: return .reserved
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: NdefType, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .empty:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .wellKnown:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .mime:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .absoluteUri:
+            writeInt(&buf, Int32(4))
+        
+        
+        case .external:
+            writeInt(&buf, Int32(5))
+        
+        
+        case .unknown:
+            writeInt(&buf, Int32(6))
+        
+        
+        case .unchanged:
+            writeInt(&buf, Int32(7))
+        
+        
+        case .reserved:
+            writeInt(&buf, Int32(8))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNdefType_lift(_ buf: RustBuffer) throws -> NdefType {
+    return try FfiConverterTypeNdefType.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNdefType_lower(_ value: NdefType) -> RustBuffer {
+    return FfiConverterTypeNdefType.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum NdefPayload: Equatable, Hashable {
+    
+    case text(TextPayload
+    )
+    case data(Data
+    )
+
+
+
+}
+
+#if compiler(>=6)
+extension NdefPayload: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNdefPayload: FfiConverterRustBuffer {
+    typealias SwiftType = NdefPayload
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NdefPayload {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .text(try FfiConverterTypeTextPayload.read(from: &buf)
+        )
+        
+        case 2: return .data(try FfiConverterData.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: NdefPayload, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .text(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeTextPayload.write(v1, into: &buf)
+            
+        
+        case let .data(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterData.write(v1, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNdefPayload_lift(_ buf: RustBuffer) throws -> NdefPayload {
+    return try FfiConverterTypeNdefPayload.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNdefPayload_lower(_ value: NdefPayload) -> RustBuffer {
+    return FfiConverterTypeNdefPayload.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum TextPayloadFormat: Equatable, Hashable {
+    
+    case utf8
+    case utf16
+
+
+
+}
+
+#if compiler(>=6)
+extension TextPayloadFormat: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTextPayloadFormat: FfiConverterRustBuffer {
+    typealias SwiftType = TextPayloadFormat
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TextPayloadFormat {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .utf8
+        
+        case 2: return .utf16
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: TextPayloadFormat, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .utf8:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .utf16:
+            writeInt(&buf, Int32(2))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTextPayloadFormat_lift(_ buf: RustBuffer) throws -> TextPayloadFormat {
+    return try FfiConverterTypeTextPayloadFormat.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTextPayloadFormat_lower(_ value: TextPayloadFormat) -> RustBuffer {
+    return FfiConverterTypeTextPayloadFormat.lower(value)
+}
+
+
+
 public enum ResumeError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
@@ -2084,71 +2169,6 @@ public func FfiConverterTypeResumeError_lift(_ buf: RustBuffer) throws -> Resume
 public func FfiConverterTypeResumeError_lower(_ value: ResumeError) -> RustBuffer {
     return FfiConverterTypeResumeError.lower(value)
 }
-
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
-
-public enum TextPayloadFormat: Equatable, Hashable {
-    
-    case utf8
-    case utf16
-
-
-
-}
-
-#if compiler(>=6)
-extension TextPayloadFormat: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeTextPayloadFormat: FfiConverterRustBuffer {
-    typealias SwiftType = TextPayloadFormat
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TextPayloadFormat {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-        
-        case 1: return .utf8
-        
-        case 2: return .utf16
-        
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: TextPayloadFormat, into buf: inout [UInt8]) {
-        switch value {
-        
-        
-        case .utf8:
-            writeInt(&buf, Int32(1))
-        
-        
-        case .utf16:
-            writeInt(&buf, Int32(2))
-        
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeTextPayloadFormat_lift(_ buf: RustBuffer) throws -> TextPayloadFormat {
-    return try FfiConverterTypeTextPayloadFormat.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeTextPayloadFormat_lower(_ value: TextPayloadFormat) -> RustBuffer {
-    return FfiConverterTypeTextPayloadFormat.lower(value)
-}
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -2294,58 +2314,58 @@ private let initializationResult: InitializationResult = {
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
-    if (uniffi_cove_nfc_checksum_func_nfc_message_is_equal() != 47520) {
+    if (uniffi_cove_nfc_checksum_func_nfc_message_is_equal() != 46704) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_nfc_checksum_method_ffinfcreader_data_from_records() != 34072) {
+    if (uniffi_cove_nfc_checksum_method_ffinfcreader_data_from_records() != 47483) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_nfc_checksum_method_ffinfcreader_is_resumeable() != 15004) {
+    if (uniffi_cove_nfc_checksum_method_ffinfcreader_is_resumeable() != 29505) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_nfc_checksum_method_ffinfcreader_is_started() != 34307) {
+    if (uniffi_cove_nfc_checksum_method_ffinfcreader_is_started() != 48293) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_nfc_checksum_method_ffinfcreader_message_info() != 53340) {
+    if (uniffi_cove_nfc_checksum_method_ffinfcreader_message_info() != 39232) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_nfc_checksum_method_ffinfcreader_parse() != 62093) {
+    if (uniffi_cove_nfc_checksum_method_ffinfcreader_parse() != 50218) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_nfc_checksum_method_ffinfcreader_string_from_record() != 499) {
+    if (uniffi_cove_nfc_checksum_method_ffinfcreader_string_from_record() != 37789) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_nfc_checksum_method_ndefrecordreader_id() != 12646) {
+    if (uniffi_cove_nfc_checksum_method_nfcconst_bytes_per_block() != 58669) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_nfc_checksum_method_ndefrecordreader_type_() != 20702) {
+    if (uniffi_cove_nfc_checksum_method_nfcconst_number_of_blocks_per_chunk() != 30309) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_nfc_checksum_method_nfcconst_bytes_per_block() != 42358) {
+    if (uniffi_cove_nfc_checksum_method_nfcconst_total_bytes_per_chunk() != 10473) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_nfc_checksum_method_nfcconst_number_of_blocks_per_chunk() != 58624) {
+    if (uniffi_cove_nfc_checksum_method_nfcmessage_data() != 54544) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_nfc_checksum_method_nfcconst_total_bytes_per_chunk() != 25318) {
+    if (uniffi_cove_nfc_checksum_method_nfcmessage_string() != 16155) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_nfc_checksum_method_nfcmessage_data() != 1508) {
+    if (uniffi_cove_nfc_checksum_method_ndefrecordreader_id() != 35879) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_nfc_checksum_method_nfcmessage_string() != 21081) {
+    if (uniffi_cove_nfc_checksum_method_ndefrecordreader_type_() != 36739) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_nfc_checksum_constructor_ffinfcreader_new() != 61696) {
+    if (uniffi_cove_nfc_checksum_constructor_ffinfcreader_new() != 28355) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_nfc_checksum_constructor_ndefrecordreader_new() != 27665) {
+    if (uniffi_cove_nfc_checksum_constructor_nfcconst_new() != 10481) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_nfc_checksum_constructor_nfcconst_new() != 53215) {
+    if (uniffi_cove_nfc_checksum_constructor_nfcmessage_try_new() != 25513) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_nfc_checksum_constructor_nfcmessage_try_new() != 48899) {
+    if (uniffi_cove_nfc_checksum_constructor_ndefrecordreader_new() != 55572) {
         return InitializationResult.apiChecksumMismatch
     }
 

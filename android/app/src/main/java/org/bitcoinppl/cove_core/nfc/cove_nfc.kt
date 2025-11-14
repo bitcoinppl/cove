@@ -282,8 +282,9 @@ internal inline fun<T> uniffiTraitInterfaceCall(
     try {
         writeReturn(makeCall())
     } catch(e: kotlin.Exception) {
+        val err = try { e.stackTraceToString() } catch(_: Throwable) { "" }
         callStatus.code = UNIFFI_CALL_UNEXPECTED_ERROR
-        callStatus.error_buf = FfiConverterString.lower(e.toString())
+        callStatus.error_buf = FfiConverterString.lower(err)
     }
 }
 
@@ -300,8 +301,9 @@ internal inline fun<T, reified E: Throwable> uniffiTraitInterfaceCallWithError(
             callStatus.code = UNIFFI_CALL_ERROR
             callStatus.error_buf = lowerError(e)
         } else {
+            val err = try { e.stackTraceToString() } catch(_: Throwable) { "" }
             callStatus.code = UNIFFI_CALL_UNEXPECTED_ERROR
-            callStatus.error_buf = FfiConverterString.lower(e.toString())
+            callStatus.error_buf = FfiConverterString.lower(err)
         }
     }
 }
@@ -648,10 +650,6 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_nfc_checksum_method_ffinfcreader_string_from_record(
     ): Short
-    external fun uniffi_cove_nfc_checksum_method_ndefrecordreader_id(
-    ): Short
-    external fun uniffi_cove_nfc_checksum_method_ndefrecordreader_type_(
-    ): Short
     external fun uniffi_cove_nfc_checksum_method_nfcconst_bytes_per_block(
     ): Short
     external fun uniffi_cove_nfc_checksum_method_nfcconst_number_of_blocks_per_chunk(
@@ -662,13 +660,17 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_nfc_checksum_method_nfcmessage_string(
     ): Short
-    external fun uniffi_cove_nfc_checksum_constructor_ffinfcreader_new(
+    external fun uniffi_cove_nfc_checksum_method_ndefrecordreader_id(
     ): Short
-    external fun uniffi_cove_nfc_checksum_constructor_ndefrecordreader_new(
+    external fun uniffi_cove_nfc_checksum_method_ndefrecordreader_type_(
+    ): Short
+    external fun uniffi_cove_nfc_checksum_constructor_ffinfcreader_new(
     ): Short
     external fun uniffi_cove_nfc_checksum_constructor_nfcconst_new(
     ): Short
     external fun uniffi_cove_nfc_checksum_constructor_nfcmessage_try_new(
+    ): Short
+    external fun uniffi_cove_nfc_checksum_constructor_ndefrecordreader_new(
     ): Short
     external fun ffi_cove_nfc_uniffi_contract_version(
     ): Int
@@ -706,16 +708,6 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_nfc_fn_method_ffinfcreader_string_from_record(`ptr`: Long,`record`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
-    external fun uniffi_cove_nfc_fn_clone_ndefrecordreader(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-    ): Long
-    external fun uniffi_cove_nfc_fn_free_ndefrecordreader(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-    ): Unit
-    external fun uniffi_cove_nfc_fn_constructor_ndefrecordreader_new(`record`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-    ): Long
-    external fun uniffi_cove_nfc_fn_method_ndefrecordreader_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-    ): RustBuffer.ByValue
-    external fun uniffi_cove_nfc_fn_method_ndefrecordreader_type_(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-    ): RustBuffer.ByValue
     external fun uniffi_cove_nfc_fn_clone_nfcconst(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Long
     external fun uniffi_cove_nfc_fn_free_nfcconst(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -737,6 +729,16 @@ internal object UniffiLib {
     external fun uniffi_cove_nfc_fn_method_nfcmessage_data(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_cove_nfc_fn_method_nfcmessage_string(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_nfc_fn_clone_ndefrecordreader(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_nfc_fn_free_ndefrecordreader(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_cove_nfc_fn_constructor_ndefrecordreader_new(`record`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_nfc_fn_method_ndefrecordreader_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_nfc_fn_method_ndefrecordreader_type_(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_cove_nfc_fn_func_nfc_message_is_equal(`lhs`: Long,`rhs`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Byte
@@ -859,58 +861,58 @@ private fun uniffiCheckContractApiVersion(lib: IntegrityCheckingUniffiLib) {
 }
 @Suppress("UNUSED_PARAMETER")
 private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
-    if (lib.uniffi_cove_nfc_checksum_func_nfc_message_is_equal() != 47520.toShort()) {
+    if (lib.uniffi_cove_nfc_checksum_func_nfc_message_is_equal() != 46704.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_nfc_checksum_method_ffinfcreader_data_from_records() != 34072.toShort()) {
+    if (lib.uniffi_cove_nfc_checksum_method_ffinfcreader_data_from_records() != 47483.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_nfc_checksum_method_ffinfcreader_is_resumeable() != 15004.toShort()) {
+    if (lib.uniffi_cove_nfc_checksum_method_ffinfcreader_is_resumeable() != 29505.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_nfc_checksum_method_ffinfcreader_is_started() != 34307.toShort()) {
+    if (lib.uniffi_cove_nfc_checksum_method_ffinfcreader_is_started() != 48293.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_nfc_checksum_method_ffinfcreader_message_info() != 53340.toShort()) {
+    if (lib.uniffi_cove_nfc_checksum_method_ffinfcreader_message_info() != 39232.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_nfc_checksum_method_ffinfcreader_parse() != 62093.toShort()) {
+    if (lib.uniffi_cove_nfc_checksum_method_ffinfcreader_parse() != 50218.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_nfc_checksum_method_ffinfcreader_string_from_record() != 499.toShort()) {
+    if (lib.uniffi_cove_nfc_checksum_method_ffinfcreader_string_from_record() != 37789.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_nfc_checksum_method_ndefrecordreader_id() != 12646.toShort()) {
+    if (lib.uniffi_cove_nfc_checksum_method_nfcconst_bytes_per_block() != 58669.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_nfc_checksum_method_ndefrecordreader_type_() != 20702.toShort()) {
+    if (lib.uniffi_cove_nfc_checksum_method_nfcconst_number_of_blocks_per_chunk() != 30309.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_nfc_checksum_method_nfcconst_bytes_per_block() != 42358.toShort()) {
+    if (lib.uniffi_cove_nfc_checksum_method_nfcconst_total_bytes_per_chunk() != 10473.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_nfc_checksum_method_nfcconst_number_of_blocks_per_chunk() != 58624.toShort()) {
+    if (lib.uniffi_cove_nfc_checksum_method_nfcmessage_data() != 54544.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_nfc_checksum_method_nfcconst_total_bytes_per_chunk() != 25318.toShort()) {
+    if (lib.uniffi_cove_nfc_checksum_method_nfcmessage_string() != 16155.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_nfc_checksum_method_nfcmessage_data() != 1508.toShort()) {
+    if (lib.uniffi_cove_nfc_checksum_method_ndefrecordreader_id() != 35879.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_nfc_checksum_method_nfcmessage_string() != 21081.toShort()) {
+    if (lib.uniffi_cove_nfc_checksum_method_ndefrecordreader_type_() != 36739.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_nfc_checksum_constructor_ffinfcreader_new() != 61696.toShort()) {
+    if (lib.uniffi_cove_nfc_checksum_constructor_ffinfcreader_new() != 28355.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_nfc_checksum_constructor_ndefrecordreader_new() != 27665.toShort()) {
+    if (lib.uniffi_cove_nfc_checksum_constructor_nfcconst_new() != 10481.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_nfc_checksum_constructor_nfcconst_new() != 53215.toShort()) {
+    if (lib.uniffi_cove_nfc_checksum_constructor_nfcmessage_try_new() != 25513.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_nfc_checksum_constructor_nfcmessage_try_new() != 48899.toShort()) {
+    if (lib.uniffi_cove_nfc_checksum_constructor_ndefrecordreader_new() != 55572.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
 }
@@ -1374,7 +1376,7 @@ open class FfiNfcReader: Disposable, AutoCloseable, FfiNfcReaderInterface
     @Suppress("UNUSED_PARAMETER")
     constructor(noHandle: NoHandle) {
         this.handle = 0
-        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
+        this.cleanable = null
     }
     constructor() :
         this(UniffiWithHandle, 
@@ -1386,7 +1388,7 @@ open class FfiNfcReader: Disposable, AutoCloseable, FfiNfcReaderInterface
     )
 
     protected val handle: Long
-    protected val cleanable: UniffiCleaner.Cleanable
+    protected val cleanable: UniffiCleaner.Cleanable?
 
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
@@ -1397,7 +1399,7 @@ open class FfiNfcReader: Disposable, AutoCloseable, FfiNfcReaderInterface
         if (this.wasDestroyed.compareAndSet(false, true)) {
             // This decrement always matches the initial count of 1 given at creation time.
             if (this.callCounter.decrementAndGet() == 0L) {
-                cleanable.clean()
+                cleanable?.clean()
             }
         }
     }
@@ -1425,7 +1427,7 @@ open class FfiNfcReader: Disposable, AutoCloseable, FfiNfcReaderInterface
         } finally {
             // This decrement always matches the increment we performed above.
             if (this.callCounter.decrementAndGet() == 0L) {
-                cleanable.clean()
+                cleanable?.clean()
             }
         }
     }
@@ -1670,280 +1672,6 @@ public object FfiConverterTypeFfiNfcReader: FfiConverter<FfiNfcReader, Long> {
 
 
 //
-public interface NdefRecordReaderInterface {
-    
-    fun `id`(): kotlin.String?
-    
-    fun `type`(): kotlin.String?
-    
-    companion object
-}
-
-open class NdefRecordReader: Disposable, AutoCloseable, NdefRecordReaderInterface
-{
-
-    @Suppress("UNUSED_PARAMETER")
-    /**
-     * @suppress
-     */
-    constructor(withHandle: UniffiWithHandle, handle: Long) {
-        this.handle = handle
-        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
-    }
-
-    /**
-     * @suppress
-     *
-     * This constructor can be used to instantiate a fake object. Only used for tests. Any
-     * attempt to actually use an object constructed this way will fail as there is no
-     * connected Rust object.
-     */
-    @Suppress("UNUSED_PARAMETER")
-    constructor(noHandle: NoHandle) {
-        this.handle = 0
-        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
-    }
-    constructor(`record`: NdefRecord) :
-        this(UniffiWithHandle, 
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_nfc_fn_constructor_ndefrecordreader_new(
-    
-        FfiConverterTypeNdefRecord.lower(`record`),_status)
-}
-    )
-
-    protected val handle: Long
-    protected val cleanable: UniffiCleaner.Cleanable
-
-    private val wasDestroyed = AtomicBoolean(false)
-    private val callCounter = AtomicLong(1)
-
-    override fun destroy() {
-        // Only allow a single call to this method.
-        // TODO: maybe we should log a warning if called more than once?
-        if (this.wasDestroyed.compareAndSet(false, true)) {
-            // This decrement always matches the initial count of 1 given at creation time.
-            if (this.callCounter.decrementAndGet() == 0L) {
-                cleanable.clean()
-            }
-        }
-    }
-
-    @Synchronized
-    override fun close() {
-        this.destroy()
-    }
-
-    internal inline fun <R> callWithHandle(block: (handle: Long) -> R): R {
-        // Check and increment the call counter, to keep the object alive.
-        // This needs a compare-and-set retry loop in case of concurrent updates.
-        do {
-            val c = this.callCounter.get()
-            if (c == 0L) {
-                throw IllegalStateException("${this.javaClass.simpleName} object has already been destroyed")
-            }
-            if (c == Long.MAX_VALUE) {
-                throw IllegalStateException("${this.javaClass.simpleName} call counter would overflow")
-            }
-        } while (! this.callCounter.compareAndSet(c, c + 1L))
-        // Now we can safely do the method call without the handle being freed concurrently.
-        try {
-            return block(this.uniffiCloneHandle())
-        } finally {
-            // This decrement always matches the increment we performed above.
-            if (this.callCounter.decrementAndGet() == 0L) {
-                cleanable.clean()
-            }
-        }
-    }
-
-    // Use a static inner class instead of a closure so as not to accidentally
-    // capture `this` as part of the cleanable's action.
-    private class UniffiCleanAction(private val handle: Long) : Runnable {
-        override fun run() {
-            if (handle == 0.toLong()) {
-                // Fake object created with `NoHandle`, don't try to free.
-                return;
-            }
-            uniffiRustCall { status ->
-                UniffiLib.uniffi_cove_nfc_fn_free_ndefrecordreader(handle, status)
-            }
-        }
-    }
-
-    /**
-     * @suppress
-     */
-    fun uniffiCloneHandle(): Long {
-        if (handle == 0.toLong()) {
-            throw InternalException("uniffiCloneHandle() called on NoHandle object");
-        }
-        return uniffiRustCall() { status ->
-            UniffiLib.uniffi_cove_nfc_fn_clone_ndefrecordreader(handle, status)
-        }
-    }
-
-    override fun `id`(): kotlin.String? {
-            return FfiConverterOptionalString.lift(
-    callWithHandle {
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_nfc_fn_method_ndefrecordreader_id(
-        it,
-        _status)
-}
-    }
-    )
-    }
-    
-
-    override fun `type`(): kotlin.String? {
-            return FfiConverterOptionalString.lift(
-    callWithHandle {
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_nfc_fn_method_ndefrecordreader_type_(
-        it,
-        _status)
-}
-    }
-    )
-    }
-    
-
-    
-
-    
-
-
-    
-    
-    /**
-     * @suppress
-     */
-    companion object
-    
-}
-
-
-/**
- * @suppress
- */
-public object FfiConverterTypeNdefRecordReader: FfiConverter<NdefRecordReader, Long> {
-    override fun lower(value: NdefRecordReader): Long {
-        return value.uniffiCloneHandle()
-    }
-
-    override fun lift(value: Long): NdefRecordReader {
-        return NdefRecordReader(UniffiWithHandle, value)
-    }
-
-    override fun read(buf: ByteBuffer): NdefRecordReader {
-        return lift(buf.getLong())
-    }
-
-    override fun allocationSize(value: NdefRecordReader) = 8UL
-
-    override fun write(value: NdefRecordReader, buf: ByteBuffer) {
-        buf.putLong(lower(value))
-    }
-}
-
-
-// This template implements a class for working with a Rust struct via a handle
-// to the live Rust struct on the other side of the FFI.
-//
-// There's some subtlety here, because we have to be careful not to operate on a Rust
-// struct after it has been dropped, and because we must expose a public API for freeing
-// theq Kotlin wrapper object in lieu of reliable finalizers. The core requirements are:
-//
-//   * Each instance holds an opaque handle to the underlying Rust struct.
-//     Method calls need to read this handle from the object's state and pass it in to
-//     the Rust FFI.
-//
-//   * When an instance is no longer needed, its handle should be passed to a
-//     special destructor function provided by the Rust FFI, which will drop the
-//     underlying Rust struct.
-//
-//   * Given an instance, calling code is expected to call the special
-//     `destroy` method in order to free it after use, either by calling it explicitly
-//     or by using a higher-level helper like the `use` method. Failing to do so risks
-//     leaking the underlying Rust struct.
-//
-//   * We can't assume that calling code will do the right thing, and must be prepared
-//     to handle Kotlin method calls executing concurrently with or even after a call to
-//     `destroy`, and to handle multiple (possibly concurrent!) calls to `destroy`.
-//
-//   * We must never allow Rust code to operate on the underlying Rust struct after
-//     the destructor has been called, and must never call the destructor more than once.
-//     Doing so may trigger memory unsafety.
-//
-//   * To mitigate many of the risks of leaking memory and use-after-free unsafety, a `Cleaner`
-//     is implemented to call the destructor when the Kotlin object becomes unreachable.
-//     This is done in a background thread. This is not a panacea, and client code should be aware that
-//      1. the thread may starve if some there are objects that have poorly performing
-//     `drop` methods or do significant work in their `drop` methods.
-//      2. the thread is shared across the whole library. This can be tuned by using `android_cleaner = true`,
-//         or `android = true` in the [`kotlin` section of the `uniffi.toml` file](https://mozilla.github.io/uniffi-rs/kotlin/configuration.html).
-//
-// If we try to implement this with mutual exclusion on access to the handle, there is the
-// possibility of a race between a method call and a concurrent call to `destroy`:
-//
-//    * Thread A starts a method call, reads the value of the handle, but is interrupted
-//      before it can pass the handle over the FFI to Rust.
-//    * Thread B calls `destroy` and frees the underlying Rust struct.
-//    * Thread A resumes, passing the already-read handle value to Rust and triggering
-//      a use-after-free.
-//
-// One possible solution would be to use a `ReadWriteLock`, with each method call taking
-// a read lock (and thus allowed to run concurrently) and the special `destroy` method
-// taking a write lock (and thus blocking on live method calls). However, we aim not to
-// generate methods with any hidden blocking semantics, and a `destroy` method that might
-// block if called incorrectly seems to meet that bar.
-//
-// So, we achieve our goals by giving each instance an associated `AtomicLong` counter to track
-// the number of in-flight method calls, and an `AtomicBoolean` flag to indicate whether `destroy`
-// has been called. These are updated according to the following rules:
-//
-//    * The initial value of the counter is 1, indicating a live object with no in-flight calls.
-//      The initial value for the flag is false.
-//
-//    * At the start of each method call, we atomically check the counter.
-//      If it is 0 then the underlying Rust struct has already been destroyed and the call is aborted.
-//      If it is nonzero them we atomically increment it by 1 and proceed with the method call.
-//
-//    * At the end of each method call, we atomically decrement and check the counter.
-//      If it has reached zero then we destroy the underlying Rust struct.
-//
-//    * When `destroy` is called, we atomically flip the flag from false to true.
-//      If the flag was already true we silently fail.
-//      Otherwise we atomically decrement and check the counter.
-//      If it has reached zero then we destroy the underlying Rust struct.
-//
-// Astute readers may observe that this all sounds very similar to the way that Rust's `Arc<T>` works,
-// and indeed it is, with the addition of a flag to guard against multiple calls to `destroy`.
-//
-// The overall effect is that the underlying Rust struct is destroyed only when `destroy` has been
-// called *and* all in-flight method calls have completed, avoiding violating any of the expectations
-// of the underlying Rust code.
-//
-// This makes a cleaner a better alternative to _not_ calling `destroy()` as
-// and when the object is finished with, but the abstraction is not perfect: if the Rust object's `drop`
-// method is slow, and/or there are many objects to cleanup, and it's on a low end Android device, then the cleaner
-// thread may be starved, and the app will leak memory.
-//
-// In this case, `destroy`ing manually may be a better solution.
-//
-// The cleaner can live side by side with the manual calling of `destroy`. In the order of responsiveness, uniffi objects
-// with Rust peers are reclaimed:
-//
-// 1. By calling the `destroy` method of the object, which calls `rustObject.free()`. If that doesn't happen:
-// 2. When the object becomes unreachable, AND the Cleaner thread gets to call `rustObject.free()`. If the thread is starved then:
-// 3. The memory is reclaimed when the process terminates.
-//
-// [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
-//
-
-
-//
 public interface NfcConstInterface {
     
     fun `bytesPerBlock`(): kotlin.UShort
@@ -1977,7 +1705,7 @@ open class NfcConst: Disposable, AutoCloseable, NfcConstInterface
     @Suppress("UNUSED_PARAMETER")
     constructor(noHandle: NoHandle) {
         this.handle = 0
-        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
+        this.cleanable = null
     }
     constructor() :
         this(UniffiWithHandle, 
@@ -1989,7 +1717,7 @@ open class NfcConst: Disposable, AutoCloseable, NfcConstInterface
     )
 
     protected val handle: Long
-    protected val cleanable: UniffiCleaner.Cleanable
+    protected val cleanable: UniffiCleaner.Cleanable?
 
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
@@ -2000,7 +1728,7 @@ open class NfcConst: Disposable, AutoCloseable, NfcConstInterface
         if (this.wasDestroyed.compareAndSet(false, true)) {
             // This decrement always matches the initial count of 1 given at creation time.
             if (this.callCounter.decrementAndGet() == 0L) {
-                cleanable.clean()
+                cleanable?.clean()
             }
         }
     }
@@ -2028,7 +1756,7 @@ open class NfcConst: Disposable, AutoCloseable, NfcConstInterface
         } finally {
             // This decrement always matches the increment we performed above.
             if (this.callCounter.decrementAndGet() == 0L) {
-                cleanable.clean()
+                cleanable?.clean()
             }
         }
     }
@@ -2270,11 +1998,11 @@ open class NfcMessage: Disposable, AutoCloseable, NfcMessageInterface
     @Suppress("UNUSED_PARAMETER")
     constructor(noHandle: NoHandle) {
         this.handle = 0
-        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
+        this.cleanable = null
     }
 
     protected val handle: Long
-    protected val cleanable: UniffiCleaner.Cleanable
+    protected val cleanable: UniffiCleaner.Cleanable?
 
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
@@ -2285,7 +2013,7 @@ open class NfcMessage: Disposable, AutoCloseable, NfcMessageInterface
         if (this.wasDestroyed.compareAndSet(false, true)) {
             // This decrement always matches the initial count of 1 given at creation time.
             if (this.callCounter.decrementAndGet() == 0L) {
-                cleanable.clean()
+                cleanable?.clean()
             }
         }
     }
@@ -2313,7 +2041,7 @@ open class NfcMessage: Disposable, AutoCloseable, NfcMessageInterface
         } finally {
             // This decrement always matches the increment we performed above.
             if (this.callCounter.decrementAndGet() == 0L) {
-                cleanable.clean()
+                cleanable?.clean()
             }
         }
     }
@@ -2419,162 +2147,276 @@ public object FfiConverterTypeNfcMessage: FfiConverter<NfcMessage, Long> {
 }
 
 
+// This template implements a class for working with a Rust struct via a handle
+// to the live Rust struct on the other side of the FFI.
+//
+// There's some subtlety here, because we have to be careful not to operate on a Rust
+// struct after it has been dropped, and because we must expose a public API for freeing
+// theq Kotlin wrapper object in lieu of reliable finalizers. The core requirements are:
+//
+//   * Each instance holds an opaque handle to the underlying Rust struct.
+//     Method calls need to read this handle from the object's state and pass it in to
+//     the Rust FFI.
+//
+//   * When an instance is no longer needed, its handle should be passed to a
+//     special destructor function provided by the Rust FFI, which will drop the
+//     underlying Rust struct.
+//
+//   * Given an instance, calling code is expected to call the special
+//     `destroy` method in order to free it after use, either by calling it explicitly
+//     or by using a higher-level helper like the `use` method. Failing to do so risks
+//     leaking the underlying Rust struct.
+//
+//   * We can't assume that calling code will do the right thing, and must be prepared
+//     to handle Kotlin method calls executing concurrently with or even after a call to
+//     `destroy`, and to handle multiple (possibly concurrent!) calls to `destroy`.
+//
+//   * We must never allow Rust code to operate on the underlying Rust struct after
+//     the destructor has been called, and must never call the destructor more than once.
+//     Doing so may trigger memory unsafety.
+//
+//   * To mitigate many of the risks of leaking memory and use-after-free unsafety, a `Cleaner`
+//     is implemented to call the destructor when the Kotlin object becomes unreachable.
+//     This is done in a background thread. This is not a panacea, and client code should be aware that
+//      1. the thread may starve if some there are objects that have poorly performing
+//     `drop` methods or do significant work in their `drop` methods.
+//      2. the thread is shared across the whole library. This can be tuned by using `android_cleaner = true`,
+//         or `android = true` in the [`kotlin` section of the `uniffi.toml` file](https://mozilla.github.io/uniffi-rs/kotlin/configuration.html).
+//
+// If we try to implement this with mutual exclusion on access to the handle, there is the
+// possibility of a race between a method call and a concurrent call to `destroy`:
+//
+//    * Thread A starts a method call, reads the value of the handle, but is interrupted
+//      before it can pass the handle over the FFI to Rust.
+//    * Thread B calls `destroy` and frees the underlying Rust struct.
+//    * Thread A resumes, passing the already-read handle value to Rust and triggering
+//      a use-after-free.
+//
+// One possible solution would be to use a `ReadWriteLock`, with each method call taking
+// a read lock (and thus allowed to run concurrently) and the special `destroy` method
+// taking a write lock (and thus blocking on live method calls). However, we aim not to
+// generate methods with any hidden blocking semantics, and a `destroy` method that might
+// block if called incorrectly seems to meet that bar.
+//
+// So, we achieve our goals by giving each instance an associated `AtomicLong` counter to track
+// the number of in-flight method calls, and an `AtomicBoolean` flag to indicate whether `destroy`
+// has been called. These are updated according to the following rules:
+//
+//    * The initial value of the counter is 1, indicating a live object with no in-flight calls.
+//      The initial value for the flag is false.
+//
+//    * At the start of each method call, we atomically check the counter.
+//      If it is 0 then the underlying Rust struct has already been destroyed and the call is aborted.
+//      If it is nonzero them we atomically increment it by 1 and proceed with the method call.
+//
+//    * At the end of each method call, we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+//    * When `destroy` is called, we atomically flip the flag from false to true.
+//      If the flag was already true we silently fail.
+//      Otherwise we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+// Astute readers may observe that this all sounds very similar to the way that Rust's `Arc<T>` works,
+// and indeed it is, with the addition of a flag to guard against multiple calls to `destroy`.
+//
+// The overall effect is that the underlying Rust struct is destroyed only when `destroy` has been
+// called *and* all in-flight method calls have completed, avoiding violating any of the expectations
+// of the underlying Rust code.
+//
+// This makes a cleaner a better alternative to _not_ calling `destroy()` as
+// and when the object is finished with, but the abstraction is not perfect: if the Rust object's `drop`
+// method is slow, and/or there are many objects to cleanup, and it's on a low end Android device, then the cleaner
+// thread may be starved, and the app will leak memory.
+//
+// In this case, `destroy`ing manually may be a better solution.
+//
+// The cleaner can live side by side with the manual calling of `destroy`. In the order of responsiveness, uniffi objects
+// with Rust peers are reclaimed:
+//
+// 1. By calling the `destroy` method of the object, which calls `rustObject.free()`. If that doesn't happen:
+// 2. When the object becomes unreachable, AND the Cleaner thread gets to call `rustObject.free()`. If the thread is starved then:
+// 3. The memory is reclaimed when the process terminates.
+//
+// [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
+//
 
-data class MessageInfo (
+
+//
+public interface NdefRecordReaderInterface {
+    
+    fun `id`(): kotlin.String?
+    
+    fun `type`(): kotlin.String?
+    
+    companion object
+}
+
+open class NdefRecordReader: Disposable, AutoCloseable, NdefRecordReaderInterface
+{
+
+    @Suppress("UNUSED_PARAMETER")
     /**
-     * The payload length of the message, including the header info
+     * @suppress
      */
-    var `fullMessageLength`: kotlin.UShort
-    , 
+    constructor(withHandle: UniffiWithHandle, handle: Long) {
+        this.handle = handle
+        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
+    }
+
     /**
-     * The payload length of the message, reported in the info header
-     * This is the length of the payload, without the header info
+     * @suppress
+     *
+     * This constructor can be used to instantiate a fake object. Only used for tests. Any
+     * attempt to actually use an object constructed this way will fail as there is no
+     * connected Rust object.
      */
-    var `payloadLength`: kotlin.UShort
+    @Suppress("UNUSED_PARAMETER")
+    constructor(noHandle: NoHandle) {
+        this.handle = 0
+        this.cleanable = null
+    }
+    constructor(`record`: NdefRecord) :
+        this(UniffiWithHandle, 
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_nfc_fn_constructor_ndefrecordreader_new(
     
-){
+        FfiConverterTypeNdefRecord.lower(`record`),_status)
+}
+    )
+
+    protected val handle: Long
+    protected val cleanable: UniffiCleaner.Cleanable?
+
+    private val wasDestroyed = AtomicBoolean(false)
+    private val callCounter = AtomicLong(1)
+
+    override fun destroy() {
+        // Only allow a single call to this method.
+        // TODO: maybe we should log a warning if called more than once?
+        if (this.wasDestroyed.compareAndSet(false, true)) {
+            // This decrement always matches the initial count of 1 given at creation time.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    @Synchronized
+    override fun close() {
+        this.destroy()
+    }
+
+    internal inline fun <R> callWithHandle(block: (handle: Long) -> R): R {
+        // Check and increment the call counter, to keep the object alive.
+        // This needs a compare-and-set retry loop in case of concurrent updates.
+        do {
+            val c = this.callCounter.get()
+            if (c == 0L) {
+                throw IllegalStateException("${this.javaClass.simpleName} object has already been destroyed")
+            }
+            if (c == Long.MAX_VALUE) {
+                throw IllegalStateException("${this.javaClass.simpleName} call counter would overflow")
+            }
+        } while (! this.callCounter.compareAndSet(c, c + 1L))
+        // Now we can safely do the method call without the handle being freed concurrently.
+        try {
+            return block(this.uniffiCloneHandle())
+        } finally {
+            // This decrement always matches the increment we performed above.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    // Use a static inner class instead of a closure so as not to accidentally
+    // capture `this` as part of the cleanable's action.
+    private class UniffiCleanAction(private val handle: Long) : Runnable {
+        override fun run() {
+            if (handle == 0.toLong()) {
+                // Fake object created with `NoHandle`, don't try to free.
+                return;
+            }
+            uniffiRustCall { status ->
+                UniffiLib.uniffi_cove_nfc_fn_free_ndefrecordreader(handle, status)
+            }
+        }
+    }
+
+    /**
+     * @suppress
+     */
+    fun uniffiCloneHandle(): Long {
+        if (handle == 0.toLong()) {
+            throw InternalException("uniffiCloneHandle() called on NoHandle object");
+        }
+        return uniffiRustCall() { status ->
+            UniffiLib.uniffi_cove_nfc_fn_clone_ndefrecordreader(handle, status)
+        }
+    }
+
+    override fun `id`(): kotlin.String? {
+            return FfiConverterOptionalString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_nfc_fn_method_ndefrecordreader_id(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    override fun `type`(): kotlin.String? {
+            return FfiConverterOptionalString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_nfc_fn_method_ndefrecordreader_type_(
+        it,
+        _status)
+}
+    }
+    )
+    }
     
 
     
+
+    
+
+
+    
+    
+    /**
+     * @suppress
+     */
     companion object
+    
 }
+
 
 /**
  * @suppress
  */
-public object FfiConverterTypeMessageInfo: FfiConverterRustBuffer<MessageInfo> {
-    override fun read(buf: ByteBuffer): MessageInfo {
-        return MessageInfo(
-            FfiConverterUShort.read(buf),
-            FfiConverterUShort.read(buf),
-        )
+public object FfiConverterTypeNdefRecordReader: FfiConverter<NdefRecordReader, Long> {
+    override fun lower(value: NdefRecordReader): Long {
+        return value.uniffiCloneHandle()
     }
 
-    override fun allocationSize(value: MessageInfo) = (
-            FfiConverterUShort.allocationSize(value.`fullMessageLength`) +
-            FfiConverterUShort.allocationSize(value.`payloadLength`)
-    )
-
-    override fun write(value: MessageInfo, buf: ByteBuffer) {
-            FfiConverterUShort.write(value.`fullMessageLength`, buf)
-            FfiConverterUShort.write(value.`payloadLength`, buf)
-    }
-}
-
-
-
-data class NdefHeader (
-    var `messageBegin`: kotlin.Boolean
-    , 
-    var `messageEnd`: kotlin.Boolean
-    , 
-    var `chunked`: kotlin.Boolean
-    , 
-    var `shortRecord`: kotlin.Boolean
-    , 
-    var `hasIdLength`: kotlin.Boolean
-    , 
-    var `typeNameFormat`: NdefType
-    , 
-    var `typeLength`: kotlin.UByte
-    , 
-    var `payloadLength`: kotlin.UInt
-    , 
-    var `idLength`: kotlin.UByte?
-    
-){
-    
-
-    
-    companion object
-}
-
-/**
- * @suppress
- */
-public object FfiConverterTypeNdefHeader: FfiConverterRustBuffer<NdefHeader> {
-    override fun read(buf: ByteBuffer): NdefHeader {
-        return NdefHeader(
-            FfiConverterBoolean.read(buf),
-            FfiConverterBoolean.read(buf),
-            FfiConverterBoolean.read(buf),
-            FfiConverterBoolean.read(buf),
-            FfiConverterBoolean.read(buf),
-            FfiConverterTypeNdefType.read(buf),
-            FfiConverterUByte.read(buf),
-            FfiConverterUInt.read(buf),
-            FfiConverterOptionalUByte.read(buf),
-        )
+    override fun lift(value: Long): NdefRecordReader {
+        return NdefRecordReader(UniffiWithHandle, value)
     }
 
-    override fun allocationSize(value: NdefHeader) = (
-            FfiConverterBoolean.allocationSize(value.`messageBegin`) +
-            FfiConverterBoolean.allocationSize(value.`messageEnd`) +
-            FfiConverterBoolean.allocationSize(value.`chunked`) +
-            FfiConverterBoolean.allocationSize(value.`shortRecord`) +
-            FfiConverterBoolean.allocationSize(value.`hasIdLength`) +
-            FfiConverterTypeNdefType.allocationSize(value.`typeNameFormat`) +
-            FfiConverterUByte.allocationSize(value.`typeLength`) +
-            FfiConverterUInt.allocationSize(value.`payloadLength`) +
-            FfiConverterOptionalUByte.allocationSize(value.`idLength`)
-    )
-
-    override fun write(value: NdefHeader, buf: ByteBuffer) {
-            FfiConverterBoolean.write(value.`messageBegin`, buf)
-            FfiConverterBoolean.write(value.`messageEnd`, buf)
-            FfiConverterBoolean.write(value.`chunked`, buf)
-            FfiConverterBoolean.write(value.`shortRecord`, buf)
-            FfiConverterBoolean.write(value.`hasIdLength`, buf)
-            FfiConverterTypeNdefType.write(value.`typeNameFormat`, buf)
-            FfiConverterUByte.write(value.`typeLength`, buf)
-            FfiConverterUInt.write(value.`payloadLength`, buf)
-            FfiConverterOptionalUByte.write(value.`idLength`, buf)
-    }
-}
-
-
-
-data class NdefRecord (
-    var `header`: NdefHeader
-    , 
-    var `type`: kotlin.ByteArray
-    , 
-    var `id`: kotlin.ByteArray?
-    , 
-    var `payload`: NdefPayload
-    
-){
-    
-
-    
-    companion object
-}
-
-/**
- * @suppress
- */
-public object FfiConverterTypeNdefRecord: FfiConverterRustBuffer<NdefRecord> {
-    override fun read(buf: ByteBuffer): NdefRecord {
-        return NdefRecord(
-            FfiConverterTypeNdefHeader.read(buf),
-            FfiConverterByteArray.read(buf),
-            FfiConverterOptionalByteArray.read(buf),
-            FfiConverterTypeNdefPayload.read(buf),
-        )
+    override fun read(buf: ByteBuffer): NdefRecordReader {
+        return lift(buf.getLong())
     }
 
-    override fun allocationSize(value: NdefRecord) = (
-            FfiConverterTypeNdefHeader.allocationSize(value.`header`) +
-            FfiConverterByteArray.allocationSize(value.`type`) +
-            FfiConverterOptionalByteArray.allocationSize(value.`id`) +
-            FfiConverterTypeNdefPayload.allocationSize(value.`payload`)
-    )
+    override fun allocationSize(value: NdefRecordReader) = 8UL
 
-    override fun write(value: NdefRecord, buf: ByteBuffer) {
-            FfiConverterTypeNdefHeader.write(value.`header`, buf)
-            FfiConverterByteArray.write(value.`type`, buf)
-            FfiConverterOptionalByteArray.write(value.`id`, buf)
-            FfiConverterTypeNdefPayload.write(value.`payload`, buf)
+    override fun write(value: NdefRecordReader, buf: ByteBuffer) {
+        buf.putLong(lower(value))
     }
 }
 
@@ -2657,6 +2499,120 @@ public object FfiConverterTypeParsingMessage: FfiConverterRustBuffer<ParsingMess
 
 
 
+data class NdefHeader (
+    var `messageBegin`: kotlin.Boolean
+    , 
+    var `messageEnd`: kotlin.Boolean
+    , 
+    var `chunked`: kotlin.Boolean
+    , 
+    var `shortRecord`: kotlin.Boolean
+    , 
+    var `hasIdLength`: kotlin.Boolean
+    , 
+    var `typeNameFormat`: NdefType
+    , 
+    var `typeLength`: kotlin.UByte
+    , 
+    var `payloadLength`: kotlin.UInt
+    , 
+    var `idLength`: kotlin.UByte?
+    
+){
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeNdefHeader: FfiConverterRustBuffer<NdefHeader> {
+    override fun read(buf: ByteBuffer): NdefHeader {
+        return NdefHeader(
+            FfiConverterBoolean.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterTypeNdefType.read(buf),
+            FfiConverterUByte.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterOptionalUByte.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: NdefHeader) = (
+            FfiConverterBoolean.allocationSize(value.`messageBegin`) +
+            FfiConverterBoolean.allocationSize(value.`messageEnd`) +
+            FfiConverterBoolean.allocationSize(value.`chunked`) +
+            FfiConverterBoolean.allocationSize(value.`shortRecord`) +
+            FfiConverterBoolean.allocationSize(value.`hasIdLength`) +
+            FfiConverterTypeNdefType.allocationSize(value.`typeNameFormat`) +
+            FfiConverterUByte.allocationSize(value.`typeLength`) +
+            FfiConverterUInt.allocationSize(value.`payloadLength`) +
+            FfiConverterOptionalUByte.allocationSize(value.`idLength`)
+    )
+
+    override fun write(value: NdefHeader, buf: ByteBuffer) {
+            FfiConverterBoolean.write(value.`messageBegin`, buf)
+            FfiConverterBoolean.write(value.`messageEnd`, buf)
+            FfiConverterBoolean.write(value.`chunked`, buf)
+            FfiConverterBoolean.write(value.`shortRecord`, buf)
+            FfiConverterBoolean.write(value.`hasIdLength`, buf)
+            FfiConverterTypeNdefType.write(value.`typeNameFormat`, buf)
+            FfiConverterUByte.write(value.`typeLength`, buf)
+            FfiConverterUInt.write(value.`payloadLength`, buf)
+            FfiConverterOptionalUByte.write(value.`idLength`, buf)
+    }
+}
+
+
+
+data class MessageInfo (
+    /**
+     * The payload length of the message, including the header info
+     */
+    var `fullMessageLength`: kotlin.UShort
+    , 
+    /**
+     * The payload length of the message, reported in the info header
+     * This is the length of the payload, without the header info
+     */
+    var `payloadLength`: kotlin.UShort
+    
+){
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeMessageInfo: FfiConverterRustBuffer<MessageInfo> {
+    override fun read(buf: ByteBuffer): MessageInfo {
+        return MessageInfo(
+            FfiConverterUShort.read(buf),
+            FfiConverterUShort.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: MessageInfo) = (
+            FfiConverterUShort.allocationSize(value.`fullMessageLength`) +
+            FfiConverterUShort.allocationSize(value.`payloadLength`)
+    )
+
+    override fun write(value: MessageInfo, buf: ByteBuffer) {
+            FfiConverterUShort.write(value.`fullMessageLength`, buf)
+            FfiConverterUShort.write(value.`payloadLength`, buf)
+    }
+}
+
+
+
 data class TextPayload (
     var `format`: TextPayloadFormat
     , 
@@ -2698,174 +2654,48 @@ public object FfiConverterTypeTextPayload: FfiConverterRustBuffer<TextPayload> {
 
 
 
-sealed class NdefPayload {
+data class NdefRecord (
+    var `header`: NdefHeader
+    , 
+    var `type`: kotlin.ByteArray
+    , 
+    var `id`: kotlin.ByteArray?
+    , 
+    var `payload`: NdefPayload
     
-    data class Text(
-        val v1: org.bitcoinppl.cove_core.nfc.TextPayload) : NdefPayload()
-        
-    {
-        
-
-        companion object
-    }
-    
-    data class Data(
-        val v1: kotlin.ByteArray) : NdefPayload()
-        
-    {
-        
-
-        companion object
-    }
+){
     
 
     
-
-
     companion object
 }
 
 /**
  * @suppress
  */
-public object FfiConverterTypeNdefPayload : FfiConverterRustBuffer<NdefPayload>{
-    override fun read(buf: ByteBuffer): NdefPayload {
-        return when(buf.getInt()) {
-            1 -> NdefPayload.Text(
-                FfiConverterTypeTextPayload.read(buf),
-                )
-            2 -> NdefPayload.Data(
-                FfiConverterByteArray.read(buf),
-                )
-            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
-        }
+public object FfiConverterTypeNdefRecord: FfiConverterRustBuffer<NdefRecord> {
+    override fun read(buf: ByteBuffer): NdefRecord {
+        return NdefRecord(
+            FfiConverterTypeNdefHeader.read(buf),
+            FfiConverterByteArray.read(buf),
+            FfiConverterOptionalByteArray.read(buf),
+            FfiConverterTypeNdefPayload.read(buf),
+        )
     }
 
-    override fun allocationSize(value: NdefPayload) = when(value) {
-        is NdefPayload.Text -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterTypeTextPayload.allocationSize(value.v1)
-            )
-        }
-        is NdefPayload.Data -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterByteArray.allocationSize(value.v1)
-            )
-        }
+    override fun allocationSize(value: NdefRecord) = (
+            FfiConverterTypeNdefHeader.allocationSize(value.`header`) +
+            FfiConverterByteArray.allocationSize(value.`type`) +
+            FfiConverterOptionalByteArray.allocationSize(value.`id`) +
+            FfiConverterTypeNdefPayload.allocationSize(value.`payload`)
+    )
+
+    override fun write(value: NdefRecord, buf: ByteBuffer) {
+            FfiConverterTypeNdefHeader.write(value.`header`, buf)
+            FfiConverterByteArray.write(value.`type`, buf)
+            FfiConverterOptionalByteArray.write(value.`id`, buf)
+            FfiConverterTypeNdefPayload.write(value.`payload`, buf)
     }
-
-    override fun write(value: NdefPayload, buf: ByteBuffer) {
-        when(value) {
-            is NdefPayload.Text -> {
-                buf.putInt(1)
-                FfiConverterTypeTextPayload.write(value.v1, buf)
-                Unit
-            }
-            is NdefPayload.Data -> {
-                buf.putInt(2)
-                FfiConverterByteArray.write(value.v1, buf)
-                Unit
-            }
-        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
-    }
-}
-
-
-
-
-
-
-enum class NdefType {
-    
-    EMPTY,
-    WELL_KNOWN,
-    MIME,
-    ABSOLUTE_URI,
-    EXTERNAL,
-    UNKNOWN,
-    UNCHANGED,
-    RESERVED;
-
-
-    companion object
-}
-
-
-/**
- * @suppress
- */
-public object FfiConverterTypeNdefType: FfiConverterRustBuffer<NdefType> {
-    override fun read(buf: ByteBuffer) = try {
-        NdefType.values()[buf.getInt() - 1]
-    } catch (e: IndexOutOfBoundsException) {
-        throw RuntimeException("invalid enum value, something is very wrong!!", e)
-    }
-
-    override fun allocationSize(value: NdefType) = 4UL
-
-    override fun write(value: NdefType, buf: ByteBuffer) {
-        buf.putInt(value.ordinal + 1)
-    }
-}
-
-
-
-
-
-
-
-sealed class NfcMessageException: kotlin.Exception() {
-    
-    class NoStringNorData(
-        ) : NfcMessageException() {
-        override val message
-            get() = ""
-    }
-    
-
-
-    companion object ErrorHandler : UniffiRustCallStatusErrorHandler<NfcMessageException> {
-        override fun lift(error_buf: RustBuffer.ByValue): NfcMessageException = FfiConverterTypeNfcMessageError.lift(error_buf)
-    }
-
-    
-}
-
-/**
- * @suppress
- */
-public object FfiConverterTypeNfcMessageError : FfiConverterRustBuffer<NfcMessageException> {
-    override fun read(buf: ByteBuffer): NfcMessageException {
-        
-
-        return when(buf.getInt()) {
-            1 -> NfcMessageException.NoStringNorData()
-            else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
-        }
-    }
-
-    override fun allocationSize(value: NfcMessageException): ULong {
-        return when(value) {
-            is NfcMessageException.NoStringNorData -> (
-                // Add the size for the Int that specifies the variant plus the size needed for all fields
-                4UL
-            )
-        }
-    }
-
-    override fun write(value: NfcMessageException, buf: ByteBuffer) {
-        when(value) {
-            is NfcMessageException.NoStringNorData -> {
-                buf.putInt(1)
-                Unit
-            }
-        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
-    }
-
 }
 
 
@@ -3136,6 +2966,210 @@ public object FfiConverterTypeParserState : FfiConverterRustBuffer<ParserState>{
 
 
 
+sealed class NfcMessageException: kotlin.Exception() {
+    
+    class NoStringNorData(
+        ) : NfcMessageException() {
+        override val message
+            get() = ""
+    }
+    
+
+
+    companion object ErrorHandler : UniffiRustCallStatusErrorHandler<NfcMessageException> {
+        override fun lift(error_buf: RustBuffer.ByValue): NfcMessageException = FfiConverterTypeNfcMessageError.lift(error_buf)
+    }
+
+    
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeNfcMessageError : FfiConverterRustBuffer<NfcMessageException> {
+    override fun read(buf: ByteBuffer): NfcMessageException {
+        
+
+        return when(buf.getInt()) {
+            1 -> NfcMessageException.NoStringNorData()
+            else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: NfcMessageException): ULong {
+        return when(value) {
+            is NfcMessageException.NoStringNorData -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+        }
+    }
+
+    override fun write(value: NfcMessageException, buf: ByteBuffer) {
+        when(value) {
+            is NfcMessageException.NoStringNorData -> {
+                buf.putInt(1)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+
+}
+
+
+
+
+enum class NdefType {
+    
+    EMPTY,
+    WELL_KNOWN,
+    MIME,
+    ABSOLUTE_URI,
+    EXTERNAL,
+    UNKNOWN,
+    UNCHANGED,
+    RESERVED;
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeNdefType: FfiConverterRustBuffer<NdefType> {
+    override fun read(buf: ByteBuffer) = try {
+        NdefType.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: NdefType) = 4UL
+
+    override fun write(value: NdefType, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+sealed class NdefPayload {
+    
+    data class Text(
+        val v1: org.bitcoinppl.cove_core.nfc.TextPayload) : NdefPayload()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class Data(
+        val v1: kotlin.ByteArray) : NdefPayload()
+        
+    {
+        
+
+        companion object
+    }
+    
+
+    
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeNdefPayload : FfiConverterRustBuffer<NdefPayload>{
+    override fun read(buf: ByteBuffer): NdefPayload {
+        return when(buf.getInt()) {
+            1 -> NdefPayload.Text(
+                FfiConverterTypeTextPayload.read(buf),
+                )
+            2 -> NdefPayload.Data(
+                FfiConverterByteArray.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: NdefPayload) = when(value) {
+        is NdefPayload.Text -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeTextPayload.allocationSize(value.v1)
+            )
+        }
+        is NdefPayload.Data -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterByteArray.allocationSize(value.v1)
+            )
+        }
+    }
+
+    override fun write(value: NdefPayload, buf: ByteBuffer) {
+        when(value) {
+            is NdefPayload.Text -> {
+                buf.putInt(1)
+                FfiConverterTypeTextPayload.write(value.v1, buf)
+                Unit
+            }
+            is NdefPayload.Data -> {
+                buf.putInt(2)
+                FfiConverterByteArray.write(value.v1, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+
+enum class TextPayloadFormat {
+    
+    UTF8,
+    UTF16;
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeTextPayloadFormat: FfiConverterRustBuffer<TextPayloadFormat> {
+    override fun read(buf: ByteBuffer) = try {
+        TextPayloadFormat.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: TextPayloadFormat) = 4UL
+
+    override fun write(value: TextPayloadFormat, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
+
 sealed class ResumeException: kotlin.Exception() {
     
     /**
@@ -3271,38 +3305,6 @@ public object FfiConverterTypeResumeError : FfiConverterRustBuffer<ResumeExcepti
     }
 
 }
-
-
-
-
-enum class TextPayloadFormat {
-    
-    UTF8,
-    UTF16;
-
-
-    companion object
-}
-
-
-/**
- * @suppress
- */
-public object FfiConverterTypeTextPayloadFormat: FfiConverterRustBuffer<TextPayloadFormat> {
-    override fun read(buf: ByteBuffer) = try {
-        TextPayloadFormat.values()[buf.getInt() - 1]
-    } catch (e: IndexOutOfBoundsException) {
-        throw RuntimeException("invalid enum value, something is very wrong!!", e)
-    }
-
-    override fun allocationSize(value: TextPayloadFormat) = 4UL
-
-    override fun write(value: TextPayloadFormat, buf: ByteBuffer) {
-        buf.putInt(value.ordinal + 1)
-    }
-}
-
-
 
 
 
