@@ -1,15 +1,14 @@
 {
+  "color-space-for-untagged-svg-colors" : "display-p3",
   "fill" : {
-    "automatic-gradient" : "extended-srgb:0.00000,0.47843,1.00000,1.00000"
+    "automatic-gradient" : "extended-srgb:0.00000,0.53333,1.00000,1.00000"
   },
   "groups" : [
     {
       "layers" : [
         {
-          "blend-mode" : "normal",
-          "fill" : "none",
-          "glass" : false,
-          "hidden" : false,
+          "fill" : "automatic",
+          "glass" : true,
           "image-name" : "logo.svg",
           "name" : "logo",
           "opacity" : 1,
@@ -23,17 +22,8 @@
         },
         {
           "blend-mode" : "normal",
-          "glass" : true,
-          "hidden" : false,
           "image-name" : "background.svg",
-          "name" : "background",
-          "position" : {
-            "scale" : 2,
-            "translation-in-points" : [
-              0,
-              0
-            ]
-          }
+          "name" : "background"
         }
       ],
       "shadow" : {
