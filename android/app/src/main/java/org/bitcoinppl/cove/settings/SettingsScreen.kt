@@ -2,7 +2,6 @@ package org.bitcoinppl.cove.settings
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -27,9 +26,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.R
-import org.bitcoinppl.cove.views.CardItem
-import org.bitcoinppl.cove.views.CustomSpacer
-import org.bitcoinppl.cove.views.SettingsItem
+import org.bitcoinppl.cove.ui.theme.MaterialSpacing
+import org.bitcoinppl.cove.views.MaterialDivider
+import org.bitcoinppl.cove.views.MaterialSection
+import org.bitcoinppl.cove.views.MaterialSettingsItem
+import org.bitcoinppl.cove.views.SectionHeader
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -71,42 +72,37 @@ fun SettingsScreen(
                     Modifier
                         .fillMaxSize()
                         .verticalScroll(rememberScrollState())
-                        .padding(paddingValues)
-                        .padding(horizontal = 16.dp),
+                        .padding(paddingValues),
             ) {
-                CardItem(stringResource(R.string.title_settings_general)) {
-                    Column(
-                        modifier =
-                            Modifier
-                                .padding(vertical = 8.dp)
-                                .padding(start = 8.dp),
-                    ) {
-                        SettingsItem(
-                            stringResource(R.string.title_settings_network),
+                SectionHeader(stringResource(R.string.title_settings_general))
+                MaterialSection {
+                    Column {
+                        MaterialSettingsItem(
+                            title = stringResource(R.string.title_settings_network),
                             iconResId = R.drawable.icon_network,
                             onClick = {
                                 app.pushRoute(org.bitcoinppl.cove_core.Route.Settings(org.bitcoinppl.cove_core.SettingsRoute.Network))
                             },
                         )
-                        Spacer()
-                        SettingsItem(
-                            stringResource(R.string.title_settings_appearance),
+                        MaterialDivider(indent = MaterialSpacing.dividerIndent)
+                        MaterialSettingsItem(
+                            title = stringResource(R.string.title_settings_appearance),
                             iconResId = R.drawable.icon_appearance,
                             onClick = {
                                 app.pushRoute(org.bitcoinppl.cove_core.Route.Settings(org.bitcoinppl.cove_core.SettingsRoute.Appearance))
                             },
                         )
-                        Spacer()
-                        SettingsItem(
-                            stringResource(R.string.title_settings_node),
+                        MaterialDivider(indent = MaterialSpacing.dividerIndent)
+                        MaterialSettingsItem(
+                            title = stringResource(R.string.title_settings_node),
                             iconResId = R.drawable.icon_node,
                             onClick = {
                                 app.pushRoute(org.bitcoinppl.cove_core.Route.Settings(org.bitcoinppl.cove_core.SettingsRoute.Node))
                             },
                         )
-                        Spacer()
-                        SettingsItem(
-                            stringResource(R.string.title_settings_currency),
+                        MaterialDivider(indent = MaterialSpacing.dividerIndent)
+                        MaterialSettingsItem(
+                            title = stringResource(R.string.title_settings_currency),
                             iconResId = R.drawable.icon_currency,
                             onClick = {
                                 app.pushRoute(org.bitcoinppl.cove_core.Route.Settings(org.bitcoinppl.cove_core.SettingsRoute.FiatCurrency))
@@ -117,9 +113,4 @@ fun SettingsScreen(
             }
         },
     )
-}
-
-@Composable
-private fun Spacer() {
-    CustomSpacer(paddingValues = PaddingValues(start = 56.dp))
 }

@@ -14,8 +14,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -34,6 +36,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.ui.theme.MaterialSpacing
 
 @Preview
 @Composable
@@ -60,6 +63,18 @@ fun ThemedSwitch(
     )
 }
 
+// Material Design divider with optional indent
+@Composable
+fun MaterialDivider(
+    indent: Dp = 0.dp,
+) {
+    HorizontalDivider(
+        modifier = Modifier.padding(start = indent),
+        color = MaterialTheme.colorScheme.outlineVariant,
+    )
+}
+
+// Deprecated: Use MaterialDivider instead
 @Composable
 fun CustomSpacer(
     height: Dp? = 1.dp,
@@ -87,6 +102,12 @@ fun CustomSpacer(
 @Composable
 fun CustomSpacerPreview() {
     CustomSpacer(paddingValues = PaddingValues(start = 54.dp))
+}
+
+@Preview
+@Composable
+fun MaterialDividerPreview() {
+    MaterialDivider(indent = MaterialSpacing.dividerIndent)
 }
 
 @Composable
@@ -213,6 +234,65 @@ fun CardItem(
 @Composable
 fun CardItemPreview() {
     CardItem("name") { Text("hello") }
+}
+
+// Material Design section header for settings
+@Composable
+fun SectionHeader(
+    title: String,
+    modifier: Modifier = Modifier,
+) {
+    Text(
+        text = title.uppercase(),
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .padding(
+                    horizontal = MaterialSpacing.sectionHeaderPadding,
+                    vertical = MaterialSpacing.small,
+                ),
+    )
+}
+
+@Preview
+@Composable
+fun SectionHeaderPreview() {
+    SectionHeader("General")
+}
+
+// Material Design section with surface background
+@Composable
+fun MaterialSection(
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    Surface(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .padding(vertical = MaterialSpacing.small),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 1.dp,
+    ) {
+        content()
+    }
+}
+
+@Preview
+@Composable
+fun MaterialSectionPreview() {
+    Column {
+        SectionHeader("General")
+        MaterialSection {
+            Column {
+                Text("Item 1", modifier = Modifier.padding(MaterialSpacing.medium))
+                MaterialDivider(indent = MaterialSpacing.dividerIndent)
+                Text("Item 2", modifier = Modifier.padding(MaterialSpacing.medium))
+            }
+        }
+    }
 }
 
 @Preview

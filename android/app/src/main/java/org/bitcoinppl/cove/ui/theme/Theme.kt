@@ -17,27 +17,98 @@ import androidx.core.view.WindowCompat
 
 private val DarkColorScheme =
     darkColorScheme(
+        // Primary colors
         primary = CoveColor.midnightBlue,
-        secondary = CoveColor.duskBlue,
-        tertiary = CoveColor.btnPrimary,
+        onPrimary = CoveColor.almostWhite,
+        primaryContainer = CoveColor.duskBlue,
+        onPrimaryContainer = CoveColor.almostWhite,
+        // Secondary colors
+        secondary = CoveColor.pastelBlue,
+        onSecondary = CoveColor.midnightBlue,
+        secondaryContainer = CoveColor.duskBlue,
+        onSecondaryContainer = CoveColor.almostWhite,
+        // Tertiary colors
+        tertiary = CoveColor.pastelTeal,
+        onTertiary = CoveColor.midnightBlue,
+        tertiaryContainer = CoveColor.duskBlue,
+        onTertiaryContainer = CoveColor.almostWhite,
+        // Error colors
+        error = CoveColor.ErrorRed,
+        onError = CoveColor.BackgroundLight,
+        errorContainer = CoveColor.pastelRed,
+        onErrorContainer = CoveColor.BackgroundLight,
+        // Background & Surface
+        background = CoveColor.ListBackgroundDark,
+        onBackground = CoveColor.TextPrimaryDark,
+        surface = CoveColor.BackgroundDark,
+        onSurface = CoveColor.TextPrimaryDark,
+        // Surface variants
+        surfaceVariant = CoveColor.SurfaceDark,
+        onSurfaceVariant = CoveColor.TextSecondary,
+        surfaceTint = CoveColor.pastelBlue,
+        // Surface containers
+        surfaceContainerLowest = CoveColor.BackgroundDark,
+        surfaceContainerLow = CoveColor.ListCardDark,
         surfaceContainer = CoveColor.ListCardDark,
+        surfaceContainerHigh = CoveColor.ListCardAlternative,
+        surfaceContainerHighest = CoveColor.SurfaceDark,
+        // Outlines
+        outline = CoveColor.BorderDark,
+        outlineVariant = CoveColor.DividerDarkAlpha,
+        // Inverse colors
+        inverseSurface = CoveColor.BackgroundLight,
+        inverseOnSurface = CoveColor.TextPrimary,
+        inversePrimary = CoveColor.pastelBlue,
+        // Scrim
+        scrim = CoveColor.midnightBlue,
     )
 
 private val LightColorScheme =
     lightColorScheme(
+        // Primary colors
         primary = CoveColor.midnightBlue,
-        secondary = CoveColor.btnPrimary,
-        tertiary = CoveColor.coveLightGray,
+        onPrimary = CoveColor.BackgroundLight,
+        primaryContainer = CoveColor.coveLightGray,
+        onPrimaryContainer = CoveColor.midnightBlue,
+        // Secondary colors
+        secondary = CoveColor.pastelNavy,
+        onSecondary = CoveColor.BackgroundLight,
+        secondaryContainer = CoveColor.btnPrimary,
+        onSecondaryContainer = CoveColor.midnightBlue,
+        // Tertiary colors
+        tertiary = CoveColor.pastelTeal,
+        onTertiary = CoveColor.BackgroundLight,
+        tertiaryContainer = CoveColor.lightMint,
+        onTertiaryContainer = CoveColor.midnightBlue,
+        // Error colors
+        error = CoveColor.ErrorRed,
+        onError = CoveColor.BackgroundLight,
+        errorContainer = CoveColor.pastelRed,
+        onErrorContainer = CoveColor.midnightBlue,
+        // Background & Surface
+        background = CoveColor.ListBackgroundLight,
+        onBackground = CoveColor.TextPrimaryLight,
+        surface = CoveColor.BackgroundLight,
+        onSurface = CoveColor.TextPrimaryLight,
+        // Surface variants
+        surfaceVariant = CoveColor.SurfaceLight,
+        onSurfaceVariant = CoveColor.TextSecondary,
+        surfaceTint = CoveColor.pastelNavy,
+        // Surface containers
+        surfaceContainerLowest = CoveColor.BackgroundLight,
+        surfaceContainerLow = CoveColor.almostWhite,
         surfaceContainer = CoveColor.ListCardLight,
-    /* Other default colors to override
-    background = Color(0xFFFFFBFE),
-    surface = Color(0xFFFFFBFE),
-    onPrimary = Color.White,
-    onSecondary = Color.White,
-    onTertiary = Color.White,
-    onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F),
-     */
+        surfaceContainerHigh = CoveColor.SurfaceLight,
+        surfaceContainerHighest = CoveColor.coveLightGray,
+        // Outlines
+        outline = CoveColor.BorderLight,
+        outlineVariant = CoveColor.DividerLight,
+        // Inverse colors
+        inverseSurface = CoveColor.BackgroundDark,
+        inverseOnSurface = CoveColor.TextPrimaryDark,
+        inversePrimary = CoveColor.pastelBlue,
+        // Scrim
+        scrim = CoveColor.midnightBlue,
     )
 
 @Composable

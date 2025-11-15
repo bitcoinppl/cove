@@ -53,8 +53,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.R
-import org.bitcoinppl.cove.views.CardItem
-import org.bitcoinppl.cove.views.CustomSpacer
+import org.bitcoinppl.cove.ui.theme.MaterialSpacing
+import org.bitcoinppl.cove.views.MaterialDivider
+import org.bitcoinppl.cove.views.MaterialSection
+import org.bitcoinppl.cove.views.SectionHeader
 import org.bitcoinppl.cove_core.ApiType
 import org.bitcoinppl.cove_core.NodeSelection
 import org.bitcoinppl.cove_core.NodeSelector
@@ -256,13 +258,11 @@ fun NodeSettingsScreen(
                     Modifier
                         .fillMaxSize()
                         .verticalScroll(rememberScrollState())
-                        .padding(paddingValues)
-                        .padding(horizontal = 16.dp),
+                        .padding(paddingValues),
             ) {
-                CardItem(stringResource(R.string.title_settings_node)) {
-                    Column(
-                        modifier = Modifier.padding(vertical = 8.dp),
-                    ) {
+                SectionHeader(stringResource(R.string.title_settings_node))
+                MaterialSection {
+                    Column {
                         // preset nodes
                         nodeList.forEachIndexed { index, nodeSelection ->
                             val node = nodeSelectionToNode(nodeSelection)
@@ -273,13 +273,13 @@ fun NodeSettingsScreen(
                             )
 
                             if (index < nodeList.size - 1) {
-                                CustomSpacer(paddingValues = PaddingValues(start = 16.dp))
+                                MaterialDivider(indent = MaterialSpacing.medium)
                             }
                         }
 
                         // add divider before custom options
                         if (nodeList.isNotEmpty()) {
-                            CustomSpacer(paddingValues = PaddingValues(start = 16.dp))
+                            MaterialDivider(indent = MaterialSpacing.medium)
                         }
 
                         // custom electrum
@@ -291,7 +291,7 @@ fun NodeSettingsScreen(
                             },
                         )
 
-                        CustomSpacer(paddingValues = PaddingValues(start = 16.dp))
+                        MaterialDivider(indent = MaterialSpacing.medium)
 
                         // custom esplora
                         NodeRow(
@@ -306,14 +306,15 @@ fun NodeSettingsScreen(
 
                 // custom node input fields
                 if (showCustomFields) {
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(MaterialSpacing.medium))
 
-                    CardItem(selectedNodeName) {
+                    SectionHeader(selectedNodeName)
+                    MaterialSection {
                         Column(
                             modifier =
                                 Modifier
                                     .fillMaxWidth()
-                                    .padding(16.dp),
+                                    .padding(MaterialSpacing.medium),
                             verticalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
                             OutlinedTextField(

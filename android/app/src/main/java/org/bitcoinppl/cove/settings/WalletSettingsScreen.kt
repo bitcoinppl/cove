@@ -54,11 +54,13 @@ import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletManager
+import org.bitcoinppl.cove.ui.theme.MaterialSpacing
 import org.bitcoinppl.cove.utils.toComposeColor
-import org.bitcoinppl.cove.views.CardItem
 import org.bitcoinppl.cove.views.ClickableInfoRow
-import org.bitcoinppl.cove.views.CustomSpacer
 import org.bitcoinppl.cove.views.InfoRow
+import org.bitcoinppl.cove.views.MaterialDivider
+import org.bitcoinppl.cove.views.MaterialSection
+import org.bitcoinppl.cove.views.SectionHeader
 import org.bitcoinppl.cove.views.SwitchRow
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.SettingsRoute
@@ -102,7 +104,7 @@ fun WalletSettingsScreen(
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.error,
                 )
-                CustomSpacer(height = 16.dp, paddingValues = PaddingValues())
+                androidx.compose.foundation.layout.Spacer(modifier = Modifier.height(MaterialSpacing.medium))
                 TextButton(onClick = { app.popRoute() }) {
                     Text("Go Back")
                 }
@@ -147,16 +149,11 @@ fun WalletSettingsScreen(
                     Modifier
                         .fillMaxSize()
                         .verticalScroll(rememberScrollState())
-                        .padding(paddingValues)
-                        .padding(horizontal = 16.dp),
+                        .padding(paddingValues),
             ) {
-                CardItem(stringResource(R.string.title_wallet_information), allCaps = true) {
-                    Column(
-                        modifier =
-                            Modifier
-                                .padding(vertical = 8.dp)
-                                .padding(start = 8.dp),
-                    ) {
+                SectionHeader(stringResource(R.string.title_wallet_information))
+                MaterialSection {
+                    Column {
                         InfoRow(
                             stringResource(R.string.label_wallet_network),
                             metadata.network.toString(),
@@ -173,13 +170,10 @@ fun WalletSettingsScreen(
                         )
                     }
                 }
-                CardItem(title = stringResource(R.string.title_wallet_settings), allCaps = true) {
-                    Column(
-                        modifier =
-                            Modifier
-                                .padding(vertical = 8.dp)
-                                .padding(start = 8.dp),
-                    ) {
+
+                SectionHeader(stringResource(R.string.title_wallet_settings))
+                MaterialSection {
+                    Column {
                         ClickableInfoRow(
                             stringResource(R.string.label_wallet_name),
                             metadata.name,
@@ -211,17 +205,9 @@ fun WalletSettingsScreen(
                     }
                 }
 
-                CardItem(
-                    title = stringResource(R.string.title_wallet_danger_zone),
-                    allCaps = true,
-                    titleColor = Color.Black,
-                ) {
-                    Column(
-                        modifier =
-                            Modifier
-                                .padding(vertical = 8.dp)
-                                .padding(start = 8.dp),
-                    ) {
+                SectionHeader(stringResource(R.string.title_wallet_danger_zone))
+                MaterialSection {
+                    Column {
                         // only show for hot wallets that have a mnemonic
                         if (metadata.walletType == WalletType.HOT) {
                             Text(
@@ -433,5 +419,5 @@ private fun WalletColorSelector(
 
 @Composable
 private fun ListSpacer() {
-    CustomSpacer(height = 8.dp, paddingValues = PaddingValues(start = 8.dp))
+    MaterialDivider(indent = MaterialSpacing.small)
 }

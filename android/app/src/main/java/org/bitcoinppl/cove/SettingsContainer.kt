@@ -34,7 +34,7 @@ fun SettingsContainer(
                     .zIndex(0f),
         )
 
-        // background pattern
+        // background pattern (subtle Material Design texture)
         Image(
             painter = painterResource(id = R.drawable.image_chain_code_pattern_horizontal),
             contentDescription = null,
@@ -42,7 +42,7 @@ fun SettingsContainer(
             modifier =
                 Modifier
                     .fillMaxSize()
-                    .graphicsLayer(alpha = 0.25f)
+                    .graphicsLayer(alpha = 0.08f)
                     .zIndex(1f),
         )
 
