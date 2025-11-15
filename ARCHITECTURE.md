@@ -104,6 +104,14 @@ This pattern is used throughout the codebase for shared resources and is safe to
 
 ## Mobile Frontends
 
+> We aim for shared structure and terminology across platforms (same manager names, reconcile shapes, etc.) while still embracing each platform's native idioms for UI, navigation, typography, and interactions. Think "consistent architecture, platform-native experience."
+
+**Platform-specific UI examples:**
+- Settings rows: iOS favors inset grouped lists with `NavigationLink` chevrons, while Android uses full-width Material list items with ripple feedback and trailing metadata icons instead of chevrons.
+- Toggles: SwiftUI `Toggle` mirrors the iOS switch with a circular thumb and elastic animation; Compose uses `Switch` with a rectangular track, Material colors, and larger touch ripples.
+- Typography: iOS leans on SF Pro text styles (Title, Body, Footnote) and tighter letter spacing; Android uses Material 3 `TitleLarge`, `BodyMedium`, etc., aligning baseline grids to 4dp spacing.
+- Background treatments: iOS often uses blurred/grouped surfaces floating above a tinted system background; Android prefers flat `colorSurface` backgrounds with tonal elevation for cards or sections so dynamic color and dark theme transitions stay consistent.
+
 ### iOS (SwiftUI)
 
 - The Swift Package `ios/CoveCore` wraps the generated bindings. `scripts/build-ios.sh` creates an XCFramework (`cove_core_ffi.xcframework`) and deposits generated Swift sources into the package.

@@ -4,7 +4,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -33,8 +32,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.R
-import org.bitcoinppl.cove.views.CardItem
-import org.bitcoinppl.cove.views.CustomSpacer
+import org.bitcoinppl.cove.views.MaterialDivider
+import org.bitcoinppl.cove.views.MaterialSection
+import org.bitcoinppl.cove.views.SectionHeader
 import org.bitcoinppl.cove_core.AppAction
 import org.bitcoinppl.cove_core.FiatCurrency
 import org.bitcoinppl.cove_core.allFiatCurrencies
@@ -84,15 +84,11 @@ fun FiatCurrencySettingsScreen(
                     Modifier
                         .fillMaxSize()
                         .verticalScroll(rememberScrollState())
-                        .padding(paddingValues)
-                        .padding(horizontal = 16.dp),
+                        .padding(paddingValues),
             ) {
-                CardItem(stringResource(R.string.title_settings_currency)) {
-                    Column(
-                        modifier =
-                            Modifier
-                                .padding(vertical = 8.dp),
-                    ) {
+                SectionHeader(stringResource(R.string.title_settings_currency))
+                MaterialSection {
+                    Column {
                         fiatCurrencies.forEachIndexed { index, fiatCurrency ->
                             FiatCurrencyRow(
                                 fiatCurrency = fiatCurrency,
@@ -104,7 +100,7 @@ fun FiatCurrencySettingsScreen(
 
                             // add divider between items, but not after the last one
                             if (index < fiatCurrencies.size - 1) {
-                                CustomSpacer(paddingValues = PaddingValues(start = 16.dp))
+                                MaterialDivider()
                             }
                         }
                     }

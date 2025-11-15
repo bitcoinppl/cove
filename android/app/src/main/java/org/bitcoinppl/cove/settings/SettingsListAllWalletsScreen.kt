@@ -44,7 +44,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.utils.toComposeColor
 import org.bitcoinppl.cove.views.RoundRectImage
 import org.bitcoinppl.cove_core.Database
@@ -133,7 +132,7 @@ fun SettingsListAllWalletsScreen(
                         Text(
                             text = if (searchText.isEmpty()) "No wallets found" else "No wallets match your search",
                             style = MaterialTheme.typography.bodyLarge,
-                            color = CoveColor.TextSecondary,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 } else {
@@ -167,7 +166,7 @@ private fun SearchBar(
     query: String,
     onQueryChange: (String) -> Unit,
 ) {
-    val bg = CoveColor.SurfaceLight
+    val bg = MaterialTheme.colorScheme.surfaceVariant
     Row(
         modifier =
             Modifier
@@ -180,7 +179,7 @@ private fun SearchBar(
         Icon(
             imageVector = Icons.Filled.Search,
             contentDescription = null,
-            tint = CoveColor.BorderMedium,
+            tint = MaterialTheme.colorScheme.outline,
             modifier = Modifier.size(20.dp),
         )
         Spacer(Modifier.width(8.dp))
@@ -246,7 +245,7 @@ private fun WalletRow(
             modifier = Modifier.size(40.dp),
             imageVector = Icons.AutoMirrored.Default.KeyboardArrowRight,
             contentDescription = "Go",
-            tint = CoveColor.IconGray,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }

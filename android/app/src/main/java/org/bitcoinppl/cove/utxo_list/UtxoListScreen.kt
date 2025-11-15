@@ -176,9 +176,9 @@ private fun UtxoListScreenContent(
     var menuExpanded by remember { mutableStateOf(false) }
     val anySelected = selected.isNotEmpty()
 
-    val listBg = CoveColor.ListBackgroundLight
-    val listCard = CoveColor.ListCardLight
-    val secondaryText = CoveColor.TextSecondary
+    val listBg = MaterialTheme.colorScheme.background
+    val listCard = MaterialTheme.colorScheme.surface
+    val secondaryText = MaterialTheme.colorScheme.onSurfaceVariant
 
     Scaffold(
         containerColor = listBg,
@@ -187,8 +187,8 @@ private fun UtxoListScreenContent(
                 colors =
                     TopAppBarDefaults.centerAlignedTopAppBarColors(
                         containerColor = Color.Transparent,
-                        actionIconContentColor = CoveColor.TextPrimary,
-                        navigationIconContentColor = CoveColor.TextPrimary,
+                        actionIconContentColor = MaterialTheme.colorScheme.onSurface,
+                        navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
                     ),
                 title = { Text("") },
                 navigationIcon = {
@@ -250,7 +250,7 @@ private fun UtxoListScreenContent(
             Column(modifier = Modifier.fillMaxSize()) {
                 Text(
                     stringResource(R.string.title_manage_utxos),
-                    color = CoveColor.TextPrimary,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 32.sp,
                     fontWeight = FontWeight.Bold,
                     lineHeight = 36.sp,
@@ -339,7 +339,7 @@ private fun UtxoListScreenContent(
                                 )
                                 if (index != utxos.lastIndex) {
                                     HorizontalDivider(
-                                        color = CoveColor.DividerLight,
+                                        color = MaterialTheme.colorScheme.outlineVariant,
                                         thickness = 0.5.dp,
                                         modifier = Modifier.padding(start = 52.dp),
                                     )
@@ -407,8 +407,8 @@ private fun UtxoListScreenContent(
                         onClick = onContinue,
                         colors =
                             ButtonDefaults.buttonColors(
-                                containerColor = if (anySelected) CoveColor.midnightBlue else CoveColor.ButtonDisabled,
-                                contentColor = if (anySelected) Color.White else CoveColor.ButtonDisabledText,
+                                containerColor = if (anySelected) CoveColor.midnightBlue else MaterialTheme.colorScheme.surfaceVariant,
+                                contentColor = if (anySelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
                             ),
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -442,7 +442,7 @@ private fun UtxoItemRow(
                 Text(
                     text = utxo.displayName,
                     fontWeight = FontWeight.Normal,
-                    color = CoveColor.TextPrimary,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 14.sp,
                 )
                 if (utxo.type == org.bitcoinppl.cove_core.types.UtxoType.CHANGE) {
@@ -557,8 +557,8 @@ private fun SortChip(
     arrowUp: Boolean = false,
 ) {
     val bg =
-        if (selected) CoveColor.LinkBlue else CoveColor.SurfaceLight
-    val txt = if (selected) Color.White else CoveColor.ButtonDisabledText
+        if (selected) CoveColor.LinkBlue else MaterialTheme.colorScheme.surfaceVariant
+    val txt = if (selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
     Row(
         modifier =
             Modifier
@@ -595,7 +595,7 @@ private fun SearchBar(
     onQueryChange: (String) -> Unit,
 ) {
     var query by remember(initialQuery) { mutableStateOf(initialQuery) }
-    val bg = CoveColor.SurfaceLight
+    val bg = MaterialTheme.colorScheme.surfaceVariant
     Row(
         modifier =
             Modifier
@@ -608,7 +608,7 @@ private fun SearchBar(
         Icon(
             imageVector = Icons.Filled.Search,
             contentDescription = null,
-            tint = CoveColor.BorderMedium,
+            tint = MaterialTheme.colorScheme.outline,
             modifier = Modifier.size(20.dp),
         )
         Spacer(Modifier.width(8.dp))

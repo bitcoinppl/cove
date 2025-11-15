@@ -10,34 +10,38 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
 private val DarkColorScheme =
     darkColorScheme(
+        // Brand colors (Cove identity)
         primary = CoveColor.midnightBlue,
-        secondary = CoveColor.duskBlue,
-        tertiary = CoveColor.btnPrimary,
-        surfaceContainer = CoveColor.ListCardDark,
+        primaryContainer = CoveColor.duskBlue,
+        secondary = CoveColor.pastelBlue,
+        tertiary = CoveColor.pastelTeal,
+        // Error colors
+        error = CoveColor.ErrorRed,
+        errorContainer = CoveColor.pastelRed,
+        // Custom dark mode background (optional override)
+        background = CoveColor.coveBgDark,
+        // All other colors use Material Design defaults for native Android feel
     )
 
 private val LightColorScheme =
     lightColorScheme(
+        // Brand colors (Cove identity)
         primary = CoveColor.midnightBlue,
-        secondary = CoveColor.btnPrimary,
-        tertiary = CoveColor.coveLightGray,
-        surfaceContainer = CoveColor.ListCardLight,
-    /* Other default colors to override
-    background = Color(0xFFFFFBFE),
-    surface = Color(0xFFFFFBFE),
-    onPrimary = Color.White,
-    onSecondary = Color.White,
-    onTertiary = Color.White,
-    onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F),
-     */
+        primaryContainer = CoveColor.coveLightGray,
+        secondary = CoveColor.pastelNavy,
+        secondaryContainer = CoveColor.btnPrimary,
+        tertiary = CoveColor.pastelTeal,
+        tertiaryContainer = CoveColor.lightMint,
+        // Error colors
+        error = CoveColor.ErrorRed,
+        errorContainer = CoveColor.pastelRed,
+        // All other colors use Material Design defaults for native Android feel
     )
 
 @Composable
@@ -61,7 +65,6 @@ fun CoveTheme(
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            window.statusBarColor = colorScheme.primary.toArgb()
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = darkTheme
         }
     }

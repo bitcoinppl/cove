@@ -32,7 +32,6 @@ import org.bitcoinppl.cove.AppSheetState
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.tapsigner.rememberBackupExportLauncher
-import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove_core.AfterPinAction
 import org.bitcoinppl.cove_core.CoinControlRoute
 import org.bitcoinppl.cove_core.HardwareWalletMetadata
@@ -95,7 +94,7 @@ fun WalletMoreOptionsSheet(
                 },
             )
 
-            HorizontalDivider(color = CoveColor.DividerLightAlpha.copy(alpha = 0.3f))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
 
             // import labels
             MenuOption(
@@ -107,7 +106,7 @@ fun WalletMoreOptionsSheet(
                 },
             )
 
-            HorizontalDivider(color = CoveColor.DividerLightAlpha.copy(alpha = 0.3f))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
 
             // export labels (conditional)
             if (hasLabels) {
@@ -120,7 +119,7 @@ fun WalletMoreOptionsSheet(
                     },
                 )
 
-                HorizontalDivider(color = CoveColor.DividerLightAlpha.copy(alpha = 0.3f))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
             }
 
             // export transactions (conditional)
@@ -134,7 +133,7 @@ fun WalletMoreOptionsSheet(
                     },
                 )
 
-                HorizontalDivider(color = CoveColor.DividerLightAlpha.copy(alpha = 0.3f))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
             }
 
             // TapSigner options
@@ -163,7 +162,7 @@ fun WalletMoreOptionsSheet(
                     },
                 )
 
-                HorizontalDivider(color = CoveColor.DividerLightAlpha.copy(alpha = 0.3f))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
 
                 // download backup
                 MenuOption(
@@ -188,7 +187,7 @@ fun WalletMoreOptionsSheet(
                     },
                 )
 
-                HorizontalDivider(color = CoveColor.DividerLightAlpha.copy(alpha = 0.3f))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
             }
 
             // manage UTXOs (conditional)
@@ -206,7 +205,7 @@ fun WalletMoreOptionsSheet(
                     },
                 )
 
-                HorizontalDivider(color = CoveColor.DividerLightAlpha.copy(alpha = 0.3f))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
             }
 
             // wallet settings (always visible)

@@ -130,11 +130,12 @@ fun WalletTransactionsScreen(
             else -> emptyList()
         }
 
-    val listBg = if (isDarkList) CoveColor.ListBackgroundDark else CoveColor.ListBackgroundLight
-    val listCard = if (isDarkList) CoveColor.ListCardDark else CoveColor.ListCardAlternative
-    val primaryText = if (isDarkList) CoveColor.TextPrimaryDark else CoveColor.TextPrimaryLight
-    val secondaryText = CoveColor.TextSecondary
-    val dividerColor = if (isDarkList) CoveColor.DividerDarkAlpha else CoveColor.DividerLightAlpha
+    // use Material Design system colors for native Android feel
+    val listBg = MaterialTheme.colorScheme.background
+    val listCard = MaterialTheme.colorScheme.surface
+    val primaryText = MaterialTheme.colorScheme.onSurface
+    val secondaryText = MaterialTheme.colorScheme.onSurfaceVariant
+    val dividerColor = MaterialTheme.colorScheme.outlineVariant
 
     Scaffold(
         containerColor = CoveColor.midnightBlue,

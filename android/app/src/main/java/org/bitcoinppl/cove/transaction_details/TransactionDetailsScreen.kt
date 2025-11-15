@@ -37,6 +37,7 @@ import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -144,10 +145,7 @@ fun TransactionDetailsScreen(
         while (true) {
             try {
                 // refresh transaction details
-                val updated = manager.rust.transactionDetails(txId = transactionDetails.txId())
-                if (updated != null) {
-                    transactionDetails = updated
-                }
+                transactionDetails = manager.rust.transactionDetails(txId = transactionDetails.txId())
 
                 // get confirmations
                 val blockNumber = transactionDetails.blockNumber()
@@ -448,8 +446,8 @@ fun TransactionDetailsScreen(
                         },
                         colors =
                             ButtonDefaults.buttonColors(
-                                containerColor = if (isDark) CoveColor.SurfaceDark else CoveColor.midnightBlue,
-                                contentColor = if (isDark) CoveColor.BorderLight else Color.White,
+                                containerColor = if (isDark) MaterialTheme.colorScheme.surfaceVariant else CoveColor.midnightBlue,
+                                contentColor = if (isDark) MaterialTheme.colorScheme.outline else Color.White,
                             ),
                         modifier =
                             Modifier
