@@ -1,14 +1,30 @@
 {
   "color-space-for-untagged-svg-colors" : "display-p3",
   "fill" : {
-    "automatic-gradient" : "extended-srgb:0.00000,0.53333,1.00000,1.00000"
+    "linear-gradient" : [
+      "display-p3:0.07224,0.12067,0.30311,1.00000",
+      "display-p3:0.00000,0.12095,0.33463,1.00000"
+    ],
+    "orientation" : {
+      "start" : {
+        "x" : 0.5,
+        "y" : 0
+      },
+      "stop" : {
+        "x" : 0.5,
+        "y" : 0.7
+      }
+    }
   },
   "groups" : [
     {
+      "blend-mode" : "normal",
+      "blur-material" : 0.5,
       "layers" : [
         {
           "fill" : "automatic",
           "glass" : true,
+          "hidden" : false,
           "image-name" : "logo.svg",
           "name" : "logo",
           "opacity" : 1,
@@ -19,20 +35,19 @@
               0
             ]
           }
-        },
-        {
-          "blend-mode" : "normal",
-          "image-name" : "background.svg",
-          "name" : "background"
         }
       ],
+      "lighting" : "individual",
+      "name" : "logo",
+      "opacity" : 1,
       "shadow" : {
         "kind" : "neutral",
-        "opacity" : 0.5
+        "opacity" : 0.6
       },
+      "specular" : true,
       "translucency" : {
         "enabled" : true,
-        "value" : 0.5
+        "value" : 0.2
       }
     }
   ],
