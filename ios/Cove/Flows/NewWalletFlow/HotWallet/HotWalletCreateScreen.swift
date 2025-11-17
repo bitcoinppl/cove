@@ -161,7 +161,7 @@ struct WordsView: View {
         }
         .padding()
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(Color.midnightBlue, for: .navigationBar)
+        .adaptiveToolbarStyle()
         .frame(maxHeight: .infinity)
         .background(
             Image(.newWalletPattern)

@@ -66,7 +66,7 @@ struct VerifyWordsContainer: View {
                         Color.midnightBlue
                             .ignoresSafeArea(.all)
                     )
-                    .toolbarBackground(Color.midnightBlue, for: .navigationBar)
+                    .adaptiveToolbarStyle()
                 } else {
                     LoadedScreen(manager: manager, validator: validator)
                 }

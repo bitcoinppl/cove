@@ -230,9 +230,7 @@ struct SelectedWalletScreen: View {
         }
         .background(Color.coveBg)
         .toolbar { MainToolBar }
-        .toolbarColorScheme(.dark, for: .navigationBar)
-        .toolbarBackground(Color.midnightBlue, for: .navigationBar)
-        .toolbarBackground(shouldShowNavBar ? .visible : .hidden, for: .navigationBar)
+        .adaptiveToolbarStyle(showNavBar: shouldShowNavBar)
         .sheet(item: $sheetState, content: SheetContent)
         .fileImporter(
             isPresented: $isImportingLabels,
