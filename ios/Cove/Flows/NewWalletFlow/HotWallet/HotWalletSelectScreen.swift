@@ -73,6 +73,23 @@ struct HotWalletSelectScreen: View {
                         .foregroundColor(.white)
                 }
             }
+            .confirmationDialog("Select Number of Words", isPresented: $isSheetShown) {
+                if nextScreen == .import_ {
+                    NavigationLink(value: route(.twentyFour, importType: .qr)) {
+                        Text("Scan QR")
+                    }
+
+                    NavigationLink(value: route(.twentyFour, importType: .nfc)) {
+                        Text("NFC")
+                    }
+                }
+                NavigationLink(value: route(.twelve)) {
+                    Text("12 Words")
+                }
+                NavigationLink(value: route(.twentyFour)) {
+                    Text("24 Words")
+                }
+            }
         }
         .padding()
         .navigationBarTitleDisplayMode(.inline)
@@ -92,23 +109,6 @@ struct HotWalletSelectScreen: View {
                     .font(.callout)
                     .fontWeight(.semibold)
                     .foregroundStyle(.white)
-            }
-        }
-        .confirmationDialog("Select Number of Words", isPresented: $isSheetShown) {
-            if nextScreen == .import_ {
-                NavigationLink(value: route(.twentyFour, importType: .qr)) {
-                    Text("Scan QR")
-                }
-
-                NavigationLink(value: route(.twentyFour, importType: .nfc)) {
-                    Text("NFC")
-                }
-            }
-            NavigationLink(value: route(.twelve)) {
-                Text("12 Words")
-            }
-            NavigationLink(value: route(.twentyFour)) {
-                Text("24 Words")
             }
         }
     }

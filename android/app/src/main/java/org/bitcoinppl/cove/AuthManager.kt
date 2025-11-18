@@ -135,17 +135,8 @@ class AuthManager private constructor() : AuthManagerReconciler {
         app.reset()
         app.isLoading = true
 
-        val db = Database()
-        val selectedWalletId = db.globalConfig().selectedWallet()
-        if (selectedWalletId != null) {
-            try {
-                app.rust.selectWallet(selectedWalletId)
-            } catch (e: Exception) {
-                android.util.Log.e(tag, "failed to select wallet", e)
-            }
-        } else {
-            app.loadAndReset(Route.ListWallets)
-        }
+        // select the latest (most recently used) wallet or navigate to new wallet flow
+        app.rust.selectLatestOrNewWallet()
     }
 
     /**

@@ -20,7 +20,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.components.FullPageLoadingView
 import org.bitcoinppl.cove.nfc.NfcLabelImportSheet
-import org.bitcoinppl.cove.wallet_transactions.ReceiveAddressSheet
 import org.bitcoinppl.cove.wallet_transactions.WalletMoreOptionsSheet
 import org.bitcoinppl.cove.wallet_transactions.WalletTransactionsScreen
 import org.bitcoinppl.cove_core.*
@@ -134,7 +133,6 @@ fun SelectedWalletContainer(
 
     // state for more options sheet
     var showMoreOptions by remember { mutableStateOf(false) }
-    var showReceiveSheet by remember { mutableStateOf(false) }
     var showNfcScanner by remember { mutableStateOf(false) }
     var exportType by remember { mutableStateOf<ExportType?>(null) }
     var isExporting by remember { mutableStateOf(false) }
@@ -312,7 +310,7 @@ fun SelectedWalletContainer(
                     app.pushRoute(Route.Send(SendRoute.SetAmount(id, null, null)))
                 },
                 onReceive = {
-                    showReceiveSheet = true
+                    // TODO: implement receive address screen/sheet
                 },
                 onQrCode = {
                     // TODO: implement QR code scanner
@@ -354,15 +352,6 @@ fun SelectedWalletContainer(
                         val fileName = "${metadata?.name?.lowercase() ?: "wallet"}_transactions.csv"
                         exportFileLauncher.launch(fileName)
                     },
-                )
-            }
-
-            // show receive address sheet
-            if (showReceiveSheet) {
-                ReceiveAddressSheet(
-                    manager = wm,
-                    snackbarHostState = snackbarHostState,
-                    onDismiss = { showReceiveSheet = false },
                 )
             }
 

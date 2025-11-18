@@ -13,7 +13,7 @@ members = ["crates/*"]
 ## MARK: WORKSPACE DEPENDENCIES
 [workspace.dependencies]
 # bindings
-uniffi = { git = "https://github.com/praveenperera/uniffi-rs", branch = "dev", features = ["tokio"] }
+uniffi = { git = "https://github.com/mozilla/uniffi-rs", branch = "main", features = ["tokio"] }
 
 # sync
 parking_lot = { version = "0.12.3" }
@@ -105,6 +105,7 @@ cove-common = { path = "./crates/cove-common" }
 cove-bip39 = { path = "./crates/cove-bip39" }
 cove-device = { path = "./crates/cove-device" }
 cove-bdk = { path = "./crates/cove-bdk" }
+cove-tokio-ext = { path = "./crates/cove-tokio-ext" }
 
 # bitcoin
 bitcoin = { workspace = true }

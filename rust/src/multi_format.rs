@@ -48,7 +48,7 @@ pub enum MultiFormatError {
     UrFormatNotSupported,
 
     #[error("Invalid TapSigner {0}")]
-    InvalidTapSigner(cove_tap_card::ffi::TapCardParseError),
+    InvalidTapSigner(cove_tap_card::TapCardParseError),
 }
 
 type Result<T, E = MultiFormatError> = std::result::Result<T, E>;

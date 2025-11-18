@@ -20,6 +20,7 @@ use crate::{
     wallet::metadata::{WalletId, WalletMetadata, WalletType},
 };
 use cove_macros::impl_default_for;
+use eyre::{Context as _, ContextCompat as _};
 use flume::{Receiver, Sender};
 use once_cell::sync::OnceCell;
 use parking_lot::RwLock;
@@ -375,11 +376,19 @@ impl FfiApp {
         self.num_wallets() > 0
     }
 
+    /// Select the latest (most recently used) wallet or navigate to new wallet flow
+    /// This selects the wallet with the most recent scan activity
+    pub fn select_latest_or_new_wallet(&self) {
+        if let Err(error) = self.select_latest_wallet() {
+            debug!("unable to select latest wallet: {error}");
+            self.load_and_reset_default_route(Route::NewWallet(Default::default()));
+        }
+    }
+
     /// Number of wallets
     pub fn num_wallets(&self) -> u16 {
         let network = Database::global().global_config.selected_network();
         let mode = Database::global().global_config.wallet_mode();
-
         Database::global().wallets().len(network, mode).unwrap_or(0)
     }
 
@@ -421,12 +430,6 @@ impl FfiApp {
     /// Change the default route, and reset the routes
     pub fn reset_default_route_to(&self, route: Route) {
         debug!("changing default route to: {:?}", route);
-
-        if route == Route::ListWallets && Database::global().wallets().is_empty().unwrap_or(true) {
-            // if there are no wallets, we should go to the new wallet flow
-            self.reset_default_route_to(Route::NewWallet(Default::default()));
-            return;
-        }
 
         self.inner().state.write().router.reset_routes_to(route.clone());
 
@@ -544,6 +547,19 @@ impl FfiApp {
     /// Fetch global instance of the app, or create one if it doesn't exist
     fn inner(&self) -> &App {
         App::global()
+    }
+
+    fn select_latest_wallet(&self) -> Result<(), eyre::Error> {
+        let database = Database::global();
+
+        let wallets =
+            database.wallets().all_sorted_active().context("unable to get sorted wallets")?;
+        let latest_wallet = wallets.first().context("no wallets found")?;
+
+        self.select_wallet(latest_wallet.id.clone(), None)
+            .context("unable to select latest wallet")?;
+
+        Ok(())
     }
 }
 

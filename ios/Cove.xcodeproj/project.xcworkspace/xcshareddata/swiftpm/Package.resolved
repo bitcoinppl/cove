@@ -1,5 +1,5 @@
 {
-  "originHash" : "2ca49fe3da9b65595cd975397f2b34dbb1d09f11d720e81b063ab5d5d8d954b5",
+  "originHash" : "3ebfc8997f2b1d89f9a79ff66bba6d2fd72582adefe36abedc649d1a24f6e81b",
   "pins" : [
     {
       "identity" : "keychain-swift",
@@ -11,12 +11,12 @@
       }
     },
     {
-      "identity" : "popupview",
+      "identity" : "popups",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/Mijick/PopupView",
+      "location" : "https://github.com/Mijick/Popups",
       "state" : {
-        "revision" : "60ebc93bbcf06d78b0123389e641c3a451c80f65",
-        "version" : "2.7.1"
+        "revision" : "3aa55233eda7bbcbd98b52a6f63d5a7e1955189a",
+        "version" : "4.0.5"
       }
     }
   ],

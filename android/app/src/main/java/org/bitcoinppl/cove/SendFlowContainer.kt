@@ -89,7 +89,7 @@ fun SendFlowContainer(
             initCompleted = true
         } catch (e: Exception) {
             android.util.Log.e(tag, "something went very wrong", e)
-            app.pushRoute(Route.ListWallets)
+            app.popRoute()
         }
     }
 

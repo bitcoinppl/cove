@@ -5,7 +5,7 @@
 //  Created by Praveen Perera on 7/31/24.
 //
 
-import MijickPopupView
+import MijickPopups
 import SwiftUI
 
 struct TransactionsCardView: View {
@@ -81,7 +81,7 @@ struct TransactionsCardView: View {
             .padding(.top, 5)
         }
         .onDisappear {
-            PopupManager.dismiss()
+            Task { await dismissAllPopups() }
         }
     }
 }
@@ -154,12 +154,12 @@ struct ConfirmedTransactionView: View {
             return navigate(Route.transactionDetails(id: metadata.id, details: details))
         }
 
-        MiddlePopup(state: .loading).showAndStack()
         Task {
+            await MiddlePopup(state: .loading).present()
             do {
                 let details = try await manager.transactionDetails(for: txId)
                 await MainActor.run {
-                    PopupManager.dismiss()
+                    Task { await dismissAllPopups() }
                     navigate(Route.transactionDetails(id: metadata.id, details: details))
                 }
             } catch {
@@ -259,12 +259,12 @@ struct UnconfirmedTransactionView: View {
                     .foregroundStyle(amountColor(txn.sentAndReceived().direction()).opacity(0.65))
             }
         }.onTapGesture {
-            MiddlePopup(state: .loading).showAndStack()
             Task {
+                await MiddlePopup(state: .loading).present()
                 do {
                     let details = try await manager.rust.transactionDetails(txId: txn.id())
                     await MainActor.run {
-                        PopupManager.dismiss()
+                        Task { await dismissAllPopups() }
                         navigate(Route.transactionDetails(id: metadata.id, details: details))
                     }
                 } catch {

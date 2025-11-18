@@ -221,26 +221,24 @@ impl State {
     }
 }
 
-mod ffi {
-    use super::*;
-    use cove_types::utxo::ffi_preview::preview_new_utxo_list;
+use super::*;
+use cove_types::utxo::ffi_preview::preview_new_utxo_list;
 
-    #[uniffi::export]
-    impl CoinControlManagerState {
-        #[uniffi::constructor(default(output_count = 20, change_count = 4))]
-        pub fn preview_new(output_count: u8, change_count: u8) -> Self {
-            let metadata = WalletMetadata::preview_new();
+#[uniffi::export]
+impl CoinControlManagerState {
+    #[uniffi::constructor(default(output_count = 20, change_count = 4))]
+    pub fn preview_new(output_count: u8, change_count: u8) -> Self {
+        let metadata = WalletMetadata::preview_new();
 
-            let wallet_id = metadata.id.clone();
-            let unit = metadata.selected_unit;
-            let network = metadata.network;
-            let utxos = preview_new_utxo_list(output_count, change_count);
-            let sort = Default::default();
-            let selected_utxos = vec![];
-            let search = String::new();
-            let filtered_utxos = FilteredUtxos::All;
+        let wallet_id = metadata.id.clone();
+        let unit = metadata.selected_unit;
+        let network = metadata.network;
+        let utxos = preview_new_utxo_list(output_count, change_count);
+        let sort = Default::default();
+        let selected_utxos = vec![];
+        let search = String::new();
+        let filtered_utxos = FilteredUtxos::All;
 
-            Self { wallet_id, unit, network, utxos, sort, selected_utxos, search, filtered_utxos }
-        }
+        Self { wallet_id, unit, network, utxos, sort, selected_utxos, search, filtered_utxos }
     }
 }

@@ -43,7 +43,7 @@ public struct SendFlowContainer: View {
             self.sendFlowManager = sendFlowManager
         } catch {
             Log.error("Something went very wrong: \(error)")
-            navigate(Route.listWallets)
+            app.rust.selectLatestOrNewWallet()
         }
     }
 

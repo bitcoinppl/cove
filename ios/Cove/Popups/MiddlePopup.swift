@@ -5,43 +5,44 @@
 //  Created by Praveen Perera on 8/14/24.
 //
 
-import MijickPopupView
+import MijickPopups
 import SwiftUI
 
-struct MiddlePopup: CentrePopup {
+struct MiddlePopup: CenterPopup {
     // required
     var state: PopupState
 
     // optional
-    var configure: ((CentrePopupConfig) -> CentrePopupConfig)?
+    var configure: ((Config) -> Config)?
     var heading: String?
     var message: String?
     var buttonText: String = "OK"
     var onClose: () -> Void = {}
     @State var swipeToDismiss = true
 
-    func createContent() -> some View {
-        MiddlePopupView(state: state, dismiss: dismiss, heading: heading, message: message, buttonText: buttonText, onClose: onClose)
+    var body: some View {
+        MiddlePopupView(state: state, dismiss: { Task { await dismissLastPopup() } }, heading: heading, message: message, buttonText: buttonText, onClose: onClose)
             .padding(24)
             .gesture(
                 DragGesture()
                     .onEnded { gesture in
                         if abs(gesture.translation.width) > 40 || abs(gesture.translation.height) > 40 {
                             if swipeToDismiss {
-                                dismiss()
+                                Task { await dismissLastPopup() }
                             }
                         }
                     }
             )
     }
 
-    func configurePopup(popup: CentrePopupConfig) -> CentrePopupConfig {
+    func configurePopup(config: Config) -> Config {
         if let configure {
-            return configure(popup)
+            return configure(config)
         }
 
-        return popup.tapOutsideToDismiss(true)
-            .horizontalPadding(30)
-            .backgroundColour(.clear)
+        return config.tapOutsideToDismissPopup(true)
+            .popupHorizontalPadding(30)
+            .backgroundColor(.clear)
+            .overlayColor(.black.opacity(0.5))
     }
 }

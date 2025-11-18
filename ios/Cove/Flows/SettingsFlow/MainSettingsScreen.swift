@@ -326,7 +326,7 @@ struct MainSettingsScreen: View {
                 actions: {
                     Button("Yes, Change Network") {
                         app.confirmNetworkChange()
-                        app.loadAndReset(to: .listWallets)
+                        app.rust.selectLatestOrNewWallet()
                         dismiss()
                     }
                     Button("Cancel", role: .cancel) {

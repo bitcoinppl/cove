@@ -6,7 +6,7 @@
 //
 
 @_exported import CoveCore
-import MijickPopupView
+import MijickPopups
 import SwiftUI
 
 struct NavigateKey: EnvironmentKey {
@@ -44,6 +44,7 @@ public extension EnvironmentValues {
 
 @main
 struct CoveApp: App {
+    @UIApplicationDelegateAdaptor(CoveAppDelegate.self) var appDelegate
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.scenePhase) private var phase
 
@@ -79,7 +80,7 @@ struct CoveApp: App {
             case let .invalidFormat(error):
                 error
             case let .addressWrongNetwork(
-                address: address, network: network, currentNetwork: currentNetwork
+                address, network, currentNetwork
             ):
                 "The address \(address.string()) is on the wrong network. You are on \(currentNetwork), and the address was for \(network)."
             case let .noWalletSelected(address),
@@ -91,7 +92,7 @@ struct CoveApp: App {
                 "Error: \(error)"
             case let .noUnsignedTransactionFound(txId):
                 "No unsigned transaction found for transaction \(txId.asHashString())"
-            case let .unableToGetAddress(error: error):
+            case let .unableToGetAddress(error):
                 "Error: \(error)"
             case .cantSendOnWatchOnlyWallet:
                 "This is watch-only wallet and cannot send transactions. Please import this wallet again to enable sending transactions."
@@ -132,7 +133,7 @@ struct CoveApp: App {
                 app.isSidebarVisible = false
                 try? app.rust.selectWallet(id: walletId)
             }
-        case let .addressWrongNetwork(address: address, network: _, currentNetwork: _):
+        case .addressWrongNetwork(let address, network: _, currentNetwork: _):
             Button("Copy Address") {
                 UIPasteboard.general.string = String(address)
             }
@@ -501,10 +502,12 @@ struct CoveApp: App {
                                             }
                                         }) {
                                             Image(systemName: "line.horizontal.3")
-                                                .foregroundStyle(navBarColor)
+                                                .modifier(NavBarColorModifier(
+                                                    route: app.currentRoute,
+                                                    isPastHeader: app.isPastHeader
+                                                ))
                                         }
                                         .contentShape(Rectangle())
-                                        .foregroundStyle(navBarColor)
                                     }
                                 }
                         }
@@ -673,7 +676,6 @@ struct CoveApp: App {
     var body: some Scene {
         WindowGroup {
             BodyView
-                .implementPopupView()
                 .id(id)
                 .environment(\.navigate) { route in
                     app.pushRoute(route)
@@ -694,30 +696,34 @@ struct CoveApp: App {
                     message: alertMessage
                 )
                 .sheet(item: $app.sheetState, content: SheetContent)
-                .gesture(
-                    app.router.routes.isEmpty
-                        ? DragGesture()
-                        .onChanged { gesture in
-                            if gesture.startLocation.x < 25, gesture.translation.width > 100 {
-                                withAnimation(.spring()) {
-                                    app.isSidebarVisible = true
-                                }
-                            }
-                        }
-                        .onEnded { gesture in
-                            if gesture.startLocation.x < 20, gesture.translation.width > 50 {
-                                withAnimation(.spring()) {
-                                    app.isSidebarVisible = true
-                                }
-                            }
-                        } : nil
-                )
                 .task {
                     await app.rust.initOnStart()
                     await MainActor.run { app.asyncRuntimeReady = true }
                 }
                 .onOpenURL(perform: handleFileOpen)
                 .onChange(of: phase, initial: true, handleScenePhaseChange)
+        }
+    }
+}
+
+// MARK: - NavBar Color Modifier
+
+/// applies adaptive foreground styling to navigation bar items based on route and scroll state
+struct NavBarColorModifier: ViewModifier {
+    let route: Route
+    let isPastHeader: Bool
+
+    func body(content: Content) -> some View {
+        switch route {
+        case .selectedWallet:
+            // use scroll-based adaptive styling for selectedWallet route
+            content.adaptiveToolbarItemStyle(isPastHeader: isPastHeader)
+        case .newWallet(.hotWallet(.create)), .newWallet(.hotWallet(.verifyWords)):
+            // always white for these routes
+            content.foregroundStyle(.white)
+        default:
+            // blue for all other routes
+            content.foregroundStyle(.blue)
         }
     }
 }

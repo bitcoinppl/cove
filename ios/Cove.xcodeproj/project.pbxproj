@@ -9,7 +9,7 @@
 /* Begin PBXBuildFile section */
 		AC9AB5792C34956C00BAE3BE /* Logger.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC9AB5782C34956C00BAE3BE /* Logger.swift */; };
 		ACA4CBEF2C2365430008F63E /* KeychainSwift in Frameworks */ = {isa = PBXBuildFile; productRef = ACA4CBEE2C2365430008F63E /* KeychainSwift */; };
-		ACC1CD5D2C6D481400C7AD89 /* MijickPopupView in Frameworks */ = {isa = PBXBuildFile; productRef = ACC1CD5C2C6D481400C7AD89 /* MijickPopupView */; };
+		ACC61E2F2ECBD8BE00D13947 /* MijickPopups in Frameworks */ = {isa = PBXBuildFile; productRef = ACC61E2E2ECBD8BE00D13947 /* MijickPopups */; };
 		ACD0053C2DB5309A003DC493 /* CoveCore in Frameworks */ = {isa = PBXBuildFile; productRef = ACD0053B2DB5309A003DC493 /* CoveCore */; };
 /* End PBXBuildFile section */
 
@@ -53,7 +53,7 @@
 			files = (
 				ACD0053C2DB5309A003DC493 /* CoveCore in Frameworks */,
 				ACA4CBEF2C2365430008F63E /* KeychainSwift in Frameworks */,
-				ACC1CD5D2C6D481400C7AD89 /* MijickPopupView in Frameworks */,
+				ACC61E2F2ECBD8BE00D13947 /* MijickPopups in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -101,8 +101,8 @@
 			name = Cove;
 			packageProductDependencies = (
 				ACA4CBEE2C2365430008F63E /* KeychainSwift */,
-				ACC1CD5C2C6D481400C7AD89 /* MijickPopupView */,
 				ACD0053B2DB5309A003DC493 /* CoveCore */,
+				ACC61E2E2ECBD8BE00D13947 /* MijickPopups */,
 			);
 			productName = Cove;
 			productReference = D0245F4C2C0F7B4E0042B447 /* Cove.app */;
@@ -134,8 +134,8 @@
 			mainGroup = D0245F432C0F7B4E0042B447;
 			packageReferences = (
 				ACA4CBED2C2365430008F63E /* XCRemoteSwiftPackageReference "keychain-swift" */,
-				ACC1CD5B2C6D481400C7AD89 /* XCRemoteSwiftPackageReference "PopupView" */,
 				ACD0053A2DB5309A003DC493 /* XCLocalSwiftPackageReference "CoveCore" */,
+				ACC61E2D2ECBD8BE00D13947 /* XCRemoteSwiftPackageReference "Popups" */,
 			);
 			productRefGroup = D0245F4D2C0F7B4E0042B447 /* Products */;
 			projectDirPath = "";
@@ -424,12 +424,12 @@
 				minimumVersion = 24.0.0;
 			};
 		};
-		ACC1CD5B2C6D481400C7AD89 /* XCRemoteSwiftPackageReference "PopupView" */ = {
+		ACC61E2D2ECBD8BE00D13947 /* XCRemoteSwiftPackageReference "Popups" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/Mijick/PopupView";
+			repositoryURL = "https://github.com/Mijick/Popups";
 			requirement = {
 				kind = upToNextMajorVersion;
-				minimumVersion = 2.7.0;
+				minimumVersion = 4.0.5;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
@@ -440,10 +440,10 @@
 			package = ACA4CBED2C2365430008F63E /* XCRemoteSwiftPackageReference "keychain-swift" */;
 			productName = KeychainSwift;
 		};
-		ACC1CD5C2C6D481400C7AD89 /* MijickPopupView */ = {
+		ACC61E2E2ECBD8BE00D13947 /* MijickPopups */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = ACC1CD5B2C6D481400C7AD89 /* XCRemoteSwiftPackageReference "PopupView" */;
-			productName = MijickPopupView;
+			package = ACC61E2D2ECBD8BE00D13947 /* XCRemoteSwiftPackageReference "Popups" */;
+			productName = MijickPopups;
 		};
 		ACD0053B2DB5309A003DC493 /* CoveCore */ = {
 			isa = XCSwiftPackageProductDependency;

@@ -5,7 +5,7 @@
 //  Created by Praveen Perera on 8/14/24.
 //
 
-import MijickPopupView
+import MijickPopups
 import SwiftUI
 
 struct FloaterPopup: TopPopup {
@@ -18,20 +18,18 @@ struct FloaterPopup: TopPopup {
     let iconColor = Color.green
     let icon = "checkmark"
 
-    let configure: ((TopPopupConfig) -> TopPopupConfig)? = nil
-
-    func createContent() -> some View {
-        FloaterPopupView(text: text, backgroundColor: backgroundColor, textColor: textColor, iconColor: iconColor, icon: icon)
+    var body: some View {
+        FloaterPopupView(
+            text: text, backgroundColor: backgroundColor, textColor: textColor,
+            iconColor: iconColor, icon: icon
+        )
     }
 
-    func configurePopup(popup: TopPopupConfig) -> TopPopupConfig {
-        if let configure {
-            return configure(popup)
-        }
-
-        return popup
-            .tapOutsideToDismiss(true)
-            .horizontalPadding(30)
-            .backgroundColour(.clear)
+    func configurePopup(config: TopPopupConfig) -> TopPopupConfig {
+        config
+            .tapOutsideToDismissPopup(true)
+            .popupHorizontalPadding(30)
+            .overlayColor(.clear)
+            .backgroundColor(.clear)
     }
 }

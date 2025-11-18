@@ -691,8 +691,14 @@ impl RustWalletManager {
             _ => (),
         }
 
-        // reset the default route to list wallets
-        FfiApp::global().load_and_reset_default_route(Route::ListWallets);
+        // check if other wallets exist and select the first one, or go to new wallet flow
+        let remaining_wallets = database.wallets().all().unwrap_or_default();
+        if let Some(next_wallet) = remaining_wallets.first() {
+            let _ = FfiApp::global().select_wallet(next_wallet.id.clone(), None);
+        } else {
+            // no wallets remaining, go to new wallet flow
+            FfiApp::global().load_and_reset_default_route(Route::NewWallet(Default::default()));
+        }
 
         Ok(())
     }

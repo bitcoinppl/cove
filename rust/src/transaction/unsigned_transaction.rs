@@ -67,7 +67,7 @@ impl UnsignedTransaction {
         Self {
             wallet_id: WalletId::preview_new(),
             tx_id: TxId::preview_new(),
-            confirm_details: ConfirmDetails::preview_new(38588),
+            confirm_details: ConfirmDetails::_ffi_preview_new(38588),
             created_at: jiff::Timestamp::now().as_second() as u64,
         }
     }

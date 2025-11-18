@@ -19,10 +19,6 @@ import org.bitcoinppl.cove_core.types.*
 @Composable
 fun RouteView(app: AppManager, route: Route) {
     when (route) {
-        is Route.ListWallets -> {
-            ListWalletsScreen(app = app)
-        }
-
         is Route.SelectedWallet -> {
             SelectedWalletContainer(
                 app = app,

@@ -13,20 +13,14 @@ object QrCodeGenerator {
      * @param text The text to encode
      * @param size The size in pixels (QR codes are square)
      * @param errorCorrectionLevel Error correction level (L=7%, M=15%, Q=25%, H=30%)
-     * @param margin Quiet zone size in modules (0 = no quiet zone, removes padding)
      * @return Bitmap containing the QR code
      */
     fun generate(
         text: String,
         size: Int = 512,
         errorCorrectionLevel: ErrorCorrectionLevel = ErrorCorrectionLevel.L,
-        margin: Int = 0,
     ): Bitmap {
-        val hints =
-            mapOf(
-                EncodeHintType.ERROR_CORRECTION to errorCorrectionLevel,
-                EncodeHintType.MARGIN to margin,
-            )
+        val hints = mapOf(EncodeHintType.ERROR_CORRECTION to errorCorrectionLevel)
 
         val writer = QRCodeWriter()
         val bitMatrix = writer.encode(text, BarcodeFormat.QR_CODE, size, size, hints)
