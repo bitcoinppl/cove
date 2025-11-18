@@ -26,7 +26,7 @@ struct WalletBalanceHeaderView: View {
 
     private var primaryBalanceString: String {
         if !metadata.sensitiveVisible {
-            return "************"
+            return "••••••"
         }
 
         // fiat
@@ -41,7 +41,7 @@ struct WalletBalanceHeaderView: View {
 
     private var secondaryBalanceString: String {
         if !metadata.sensitiveVisible {
-            return "************"
+            return "••••••"
         }
 
         // fiat

@@ -162,10 +162,9 @@ private fun SendFlowRouteToScreen(
                     presenter.sheetState = TaggedItem(SendFlowPresenter.SheetState.Fee)
                 },
                 onToggleBalanceVisibility = {
-                    // TODO: implement balance visibility toggle
+                    walletManager.dispatch(WalletManagerAction.ToggleSensitiveVisibility)
                 },
-                // TODO: get from app preferences
-                isBalanceHidden = false,
+                isBalanceHidden = !(walletManager.walletMetadata?.sensitiveVisible ?: true),
                 balanceAmount = walletManager.amountFmt(walletManager.balance.spendable()),
                 balanceDenomination = walletManager.unit,
                 amountText =
@@ -226,7 +225,7 @@ private fun SendFlowRouteToScreen(
                     presenter.sheetState = TaggedItem(SendFlowPresenter.SheetState.Fee)
                 },
                 onToggleBalanceVisibility = {
-                    // TODO: implement balance visibility toggle
+                    walletManager.dispatch(WalletManagerAction.ToggleSensitiveVisibility)
                 },
                 onAmountTap = {
                     presenter.sheetState = TaggedItem(SendFlowPresenter.SheetState.CoinControlCustomAmount)
@@ -234,8 +233,7 @@ private fun SendFlowRouteToScreen(
                 onUtxoDetailsClick = {
                     presenter.sheetState = TaggedItem(SendFlowPresenter.SheetState.CoinControlCustomAmount)
                 },
-                // TODO: get from app preferences
-                isBalanceHidden = false,
+                isBalanceHidden = !(walletManager.walletMetadata?.sensitiveVisible ?: true),
                 balanceAmount = walletManager.amountFmt(walletManager.balance.spendable()),
                 balanceDenomination = walletManager.unit,
                 sendingAmount = sendFlowManager.sendAmountBtc,
@@ -301,10 +299,9 @@ private fun SendFlowRouteToScreen(
                     }
                 },
                 onToggleBalanceVisibility = {
-                    // TODO: implement balance visibility toggle
+                    walletManager.dispatch(WalletManagerAction.ToggleSensitiveVisibility)
                 },
-                // TODO: get from app preferences
-                isBalanceHidden = false,
+                isBalanceHidden = !(walletManager.walletMetadata?.sensitiveVisible ?: true),
                 balanceAmount = walletManager.amountFmt(walletManager.balance.spendable()),
                 balanceDenomination = walletManager.unit,
                 sendingAmount = walletManager.amountFmt(details.sendingAmount()),
