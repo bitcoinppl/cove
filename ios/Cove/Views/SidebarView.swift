@@ -171,7 +171,6 @@ struct SidebarView: View {
         }
     }
 
-    @MainActor
     private func navigateRouteOnMain(_ route: Route) {
         navigate(route)
     }
@@ -191,26 +190,6 @@ struct SidebarView: View {
             Log.error("Failed to select wallet \(error)")
         }
 
-        await navigateRouteOnMain(route)
+        navigateRouteOnMain(route)
     }
 }
-
-#if DEBUG
-    #Preview {
-        HStack {
-            SidebarView(
-                currentRoute: Route.listWallets,
-                wallets: [
-                    WalletMetadata("Test Wallet", preview: true),
-                    WalletMetadata("Second Wallet", preview: true),
-                    WalletMetadata("Coldcard Q1", preview: true),
-                ]
-            )
-            .environment(AppManager.shared)
-            .background(Color.white)
-            .frame(width: 280)
-
-            Spacer()
-        }
-    }
-#endif

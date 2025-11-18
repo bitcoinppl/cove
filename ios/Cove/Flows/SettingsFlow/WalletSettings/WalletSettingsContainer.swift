@@ -59,7 +59,7 @@ struct WalletSettingsContainer: View {
             guard let error else { return }
             Log.error(error)
             try? await Task.sleep(for: .seconds(5))
-            app.resetRoute(to: .listWallets)
+            app.rust.selectLatestOrNewWallet()
         }
         .onAppear(perform: initOnAppear)
     }

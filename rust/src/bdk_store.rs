@@ -1,4 +1,5 @@
-use std::path::PathBuf;
+use std::io::ErrorKind;
+use std::path::{Path, PathBuf};
 
 use bdk_file_store::Store as FileStore;
 use bdk_wallet::{KeychainKind, Wallet};
@@ -27,7 +28,11 @@ impl BdkStore {
             .context("unable to open rusqlite connection")?;
 
         conn.pragma_update(None, "journal_mode", "WAL")?;
-        conn.pragma_update(None, "synchronous", "NORMAL")?;
+        conn.pragma_update(None, "synchronous", "FULL")?;
+        #[cfg(any(target_os = "macos", target_os = "ios"))]
+        {
+            conn.pragma_update(None, "fullfsync", 1)?;
+        }
 
         // in pages (4096 bytes) 2000 pages = 8MB
         conn.pragma_update(None, "cache_size", 2000)?;
@@ -103,9 +108,7 @@ impl BdkStore {
 
         Updater::send_update(AppStateReconcileMessage::DatabaseUpdated);
 
-        // TODO: put back when we are sure this works
-        // std::fs::remove_file(file_store_data_path(id)).context("unable to delete filestore")?;
-
+        std::fs::remove_file(file_store_data_path(id)).context("unable to delete filestore")?;
         info!("completed migrating from file store to sqlite store");
 
         Ok(true)
@@ -120,7 +123,8 @@ impl BdkStore {
         }
 
         if sqlite_data_path.exists() {
-            std::fs::remove_file(sqlite_data_path).context("unable to delete sqlite store")?;
+            std::fs::remove_file(&sqlite_data_path).context("unable to delete sqlite store")?;
+            remove_sqlite_auxiliary_files(&sqlite_data_path);
         }
 
         Ok(())
@@ -130,10 +134,37 @@ impl BdkStore {
         let sqlite_data_path = sqlite_data_path(wallet_id);
 
         if sqlite_data_path.exists() {
-            std::fs::remove_file(sqlite_data_path).context("unable to delete sqlite store")?;
+            std::fs::remove_file(&sqlite_data_path).context("unable to delete sqlite store")?;
         }
 
+        remove_sqlite_auxiliary_files(&sqlite_data_path);
+
         Ok(())
+    }
+}
+
+fn remove_sqlite_auxiliary_files(db_path: &Path) {
+    for suffix in ["wal", "shm"] {
+        let aux_path = sqlite_auxiliary_path(db_path, suffix);
+        match std::fs::remove_file(&aux_path) {
+            Ok(_) => {}
+            Err(e) if e.kind() == ErrorKind::NotFound => {}
+            Err(e) => warn!("unable to delete sqlite {suffix} file {}: {e}", aux_path.display()),
+        }
+    }
+}
+
+fn sqlite_auxiliary_path(db_path: &Path, suffix: &str) -> PathBuf {
+    if let Some(ext) = db_path.extension() {
+        let mut ext_string = ext.to_os_string();
+        ext_string.push("-");
+        ext_string.push(suffix);
+        db_path.with_extension(ext_string)
+    } else {
+        let mut name = db_path.as_os_str().to_os_string();
+        name.push("-");
+        name.push(suffix);
+        PathBuf::from(name)
     }
 }
 

@@ -22,8 +22,3 @@ struct LoadAndResetContainer: View {
             .tint(.primary)
     }
 }
-
-#Preview {
-    LoadAndResetContainer(nextRoute: [.listWallets], loadingTimeMs: 100).environment(
-        AppManager.shared)
-}

@@ -29,7 +29,7 @@ struct TransactionsDetailScreen: View {
             manager = try app.getWalletManager(id: id)
         } catch {
             Log.error("Something went very wrong: \(error)")
-            navigate(Route.listWallets)
+            app.rust.selectLatestOrNewWallet()
         }
     }
 

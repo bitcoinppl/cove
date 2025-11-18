@@ -29,7 +29,7 @@ struct FullPageLoadingView: View {
         ZStack {
             if let backgroundColor {
                 if ignoresSafeArea {
-                    backgroundColor.edgesIgnoringSafeArea(.all)
+                    backgroundColor.ignoresSafeArea()
                 } else {
                     backgroundColor
                 }

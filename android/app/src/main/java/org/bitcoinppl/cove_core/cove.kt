@@ -1121,6 +1121,8 @@ external fun uniffi_cove_checksum_method_ffiapp_reset_nested_routes_to(
 ): Short
 external fun uniffi_cove_checksum_method_ffiapp_save_tap_signer_backup(
 ): Short
+external fun uniffi_cove_checksum_method_ffiapp_select_latest_or_new_wallet(
+): Short
 external fun uniffi_cove_checksum_method_ffiapp_select_wallet(
 ): Short
 external fun uniffi_cove_checksum_method_ffiapp_state(
@@ -1872,6 +1874,8 @@ external fun uniffi_cove_fn_method_ffiapp_reset_nested_routes_to(`ptr`: Long,`de
 ): Unit
 external fun uniffi_cove_fn_method_ffiapp_save_tap_signer_backup(`ptr`: Long,`tapSigner`: Long,`backup`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
+external fun uniffi_cove_fn_method_ffiapp_select_latest_or_new_wallet(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
 external fun uniffi_cove_fn_method_ffiapp_select_wallet(`ptr`: Long,`id`: RustBufferWalletId.ByValue,`nextRoute`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
 external fun uniffi_cove_fn_method_ffiapp_state(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -3280,6 +3284,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_ffiapp_save_tap_signer_backup() != 24217.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_ffiapp_select_latest_or_new_wallet() != 31849.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_ffiapp_select_wallet() != 51673.toShort()) {
@@ -5083,6 +5090,12 @@ public interface FfiAppInterface {
     fun `saveTapSignerBackup`(`tapSigner`: TapSigner, `backup`: kotlin.ByteArray): kotlin.Boolean
     
     /**
+     * Select the latest (most recently used) wallet or navigate to new wallet flow
+     * This selects the wallet with the most recent scan activity
+     */
+    fun `selectLatestOrNewWallet`()
+    
+    /**
      * Select a wallet
      */
     fun `selectWallet`(`id`: WalletId, `nextRoute`: Route? = null)
@@ -5527,6 +5540,22 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
     }
     )
     }
+    
+
+    
+    /**
+     * Select the latest (most recently used) wallet or navigate to new wallet flow
+     * This selects the wallet with the most recent scan activity
+     */override fun `selectLatestOrNewWallet`()
+        = 
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_ffiapp_select_latest_or_new_wallet(
+        it,
+        _status)
+}
+    }
+    
     
 
     

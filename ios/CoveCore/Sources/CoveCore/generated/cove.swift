@@ -740,6 +740,12 @@ public protocol FfiAppProtocol: AnyObject, Sendable {
     func saveTapSignerBackup(tapSigner: TapSigner, backup: Data)  -> Bool
     
     /**
+     * Select the latest (most recently used) wallet or navigate to new wallet flow
+     * This selects the wallet with the most recent scan activity
+     */
+    func selectLatestOrNewWallet() 
+    
+    /**
      * Select a wallet
      */
     func selectWallet(id: WalletId, nextRoute: Route?) throws 
@@ -1046,6 +1052,17 @@ open func saveTapSignerBackup(tapSigner: TapSigner, backup: Data) -> Bool  {
         FfiConverterData.lower(backup),$0
     )
 })
+}
+    
+    /**
+     * Select the latest (most recently used) wallet or navigate to new wallet flow
+     * This selects the wallet with the most recent scan activity
+     */
+open func selectLatestOrNewWallet()  {try! rustCall() {
+    uniffi_cove_fn_method_ffiapp_select_latest_or_new_wallet(
+            self.uniffiCloneHandle(),$0
+    )
+}
 }
     
     /**
@@ -20021,7 +20038,6 @@ public enum Route {
     
     case loadAndReset(resetTo: [BoxedRoute], afterMillis: UInt32
     )
-    case listWallets
     case selectedWallet(WalletId
     )
     case newWallet(NewWalletRoute
@@ -20058,27 +20074,25 @@ public struct FfiConverterTypeRoute: FfiConverterRustBuffer {
         case 1: return .loadAndReset(resetTo: try FfiConverterSequenceTypeBoxedRoute.read(from: &buf), afterMillis: try FfiConverterUInt32.read(from: &buf)
         )
         
-        case 2: return .listWallets
-        
-        case 3: return .selectedWallet(try FfiConverterTypeWalletId.read(from: &buf)
+        case 2: return .selectedWallet(try FfiConverterTypeWalletId.read(from: &buf)
         )
         
-        case 4: return .newWallet(try FfiConverterTypeNewWalletRoute.read(from: &buf)
+        case 3: return .newWallet(try FfiConverterTypeNewWalletRoute.read(from: &buf)
         )
         
-        case 5: return .settings(try FfiConverterTypeSettingsRoute.read(from: &buf)
+        case 4: return .settings(try FfiConverterTypeSettingsRoute.read(from: &buf)
         )
         
-        case 6: return .secretWords(try FfiConverterTypeWalletId.read(from: &buf)
+        case 5: return .secretWords(try FfiConverterTypeWalletId.read(from: &buf)
         )
         
-        case 7: return .transactionDetails(id: try FfiConverterTypeWalletId.read(from: &buf), details: try FfiConverterTypeTransactionDetails.read(from: &buf)
+        case 6: return .transactionDetails(id: try FfiConverterTypeWalletId.read(from: &buf), details: try FfiConverterTypeTransactionDetails.read(from: &buf)
         )
         
-        case 8: return .send(try FfiConverterTypeSendRoute.read(from: &buf)
+        case 7: return .send(try FfiConverterTypeSendRoute.read(from: &buf)
         )
         
-        case 9: return .coinControl(try FfiConverterTypeCoinControlRoute.read(from: &buf)
+        case 8: return .coinControl(try FfiConverterTypeCoinControlRoute.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -20095,43 +20109,39 @@ public struct FfiConverterTypeRoute: FfiConverterRustBuffer {
             FfiConverterUInt32.write(afterMillis, into: &buf)
             
         
-        case .listWallets:
-            writeInt(&buf, Int32(2))
-        
-        
         case let .selectedWallet(v1):
-            writeInt(&buf, Int32(3))
+            writeInt(&buf, Int32(2))
             FfiConverterTypeWalletId.write(v1, into: &buf)
             
         
         case let .newWallet(v1):
-            writeInt(&buf, Int32(4))
+            writeInt(&buf, Int32(3))
             FfiConverterTypeNewWalletRoute.write(v1, into: &buf)
             
         
         case let .settings(v1):
-            writeInt(&buf, Int32(5))
+            writeInt(&buf, Int32(4))
             FfiConverterTypeSettingsRoute.write(v1, into: &buf)
             
         
         case let .secretWords(v1):
-            writeInt(&buf, Int32(6))
+            writeInt(&buf, Int32(5))
             FfiConverterTypeWalletId.write(v1, into: &buf)
             
         
         case let .transactionDetails(id,details):
-            writeInt(&buf, Int32(7))
+            writeInt(&buf, Int32(6))
             FfiConverterTypeWalletId.write(id, into: &buf)
             FfiConverterTypeTransactionDetails.write(details, into: &buf)
             
         
         case let .send(v1):
-            writeInt(&buf, Int32(8))
+            writeInt(&buf, Int32(7))
             FfiConverterTypeSendRoute.write(v1, into: &buf)
             
         
         case let .coinControl(v1):
-            writeInt(&buf, Int32(9))
+            writeInt(&buf, Int32(8))
             FfiConverterTypeCoinControlRoute.write(v1, into: &buf)
             
         }
@@ -26621,6 +26631,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_save_tap_signer_backup() != 24217) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_ffiapp_select_latest_or_new_wallet() != 31849) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_select_wallet() != 51673) {
