@@ -705,3 +705,25 @@ struct CoveApp: App {
         }
     }
 }
+
+// MARK: - NavBar Color Modifier
+
+/// applies adaptive foreground styling to navigation bar items based on route and scroll state
+struct NavBarColorModifier: ViewModifier {
+    let route: Route
+    let isPastHeader: Bool
+
+    func body(content: Content) -> some View {
+        switch route {
+        case .selectedWallet:
+            // use scroll-based adaptive styling for selectedWallet route
+            content.adaptiveToolbarItemStyle(isPastHeader: isPastHeader)
+        case .newWallet(.hotWallet(.create)), .newWallet(.hotWallet(.verifyWords)):
+            // always white for these routes
+            content.foregroundStyle(.white)
+        default:
+            // blue for all other routes
+            content.foregroundStyle(.blue)
+        }
+    }
+}

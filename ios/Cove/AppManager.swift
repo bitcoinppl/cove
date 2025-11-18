@@ -15,6 +15,9 @@ import SwiftUI
     var alertState: TaggedItem<AppAlertState>? = .none
     var sheetState: TaggedItem<AppSheetState>? = .none
 
+    // tracks if current screen is scrolled past header for adaptive nav styling
+    var isPastHeader = false
+
     var isTermsAccepted: Bool = Database().globalFlag().isTermsAccepted()
     var selectedNetwork = Database().globalConfig().selectedNetwork()
     var previousSelectedNetwork: Network? = nil
