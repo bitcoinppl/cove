@@ -8,7 +8,7 @@ crate-type = ["lib", "staticlib", "cdylib"]
 name = "cove"
 
 [workspace]
-members = ["crates/*"]
+members = ["crates/*", "xtask"]
 
 ## MARK: WORKSPACE DEPENDENCIES
 [workspace.dependencies]

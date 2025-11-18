@@ -67,6 +67,9 @@ lint-android *flags="":
 update pkg="":
     cd rust && cargo update {{pkg}}
 
+bump type targets="rust,ios,android":
+    cd rust && cargo xtask bump-version {{type}} --targets {{targets}}
+
 xcode-clean:
     rm -rf ~/Library/Caches/org.swift.swiftpm
     cd ios && xcodebuild clean
