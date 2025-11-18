@@ -5,7 +5,7 @@
 //  Created by Praveen Perera on 7/18/24.
 //
 
-import MijickPopupView
+import MijickPopups
 import SwiftUI
 
 struct NodeSelectionView: View {
@@ -42,29 +42,30 @@ struct NodeSelectionView: View {
     private func showLoadingPopup() {
         cancelCheckUrlTask()
 
-        MiddlePopup(state: .loading, onClose: cancelCheckUrlTask)
-            .showAndStack()
+        Task { @MainActor in
+            await MiddlePopup(state: .loading, onClose: cancelCheckUrlTask)
+                .present()
+        }
     }
 
     private func completeLoading(_ state: PopupState) {
         checkUrlTask = nil
-        PopupManager.dismiss()
 
-        let dismissAfter: Double = switch state {
-        case .failure:
-            7
-        case .success:
-            2
-        default: 0
-        }
+        Task { @MainActor in
+            await dismissAllPopups()
 
-        Task {
-            try? await Task.sleep(for: .seconds(1))
-            await MainActor.run {
-                let _ = MiddlePopup(state: state)
-                    .showAndReplace()
-                    .dismissAfter(dismissAfter)
+            let dismissAfter: Double = switch state {
+            case .failure:
+                7
+            case .success:
+                2
+            default: 0
             }
+
+            try? await Task.sleep(for: .seconds(1))
+            await MiddlePopup(state: state)
+                .dismissAfter(dismissAfter)
+                .present()
         }
     }
 
@@ -232,7 +233,7 @@ struct NodeSelectionView: View {
                 dismissButton: .default(Text("OK")) {
                     showParseUrlAlert = false
                     parseUrlMessage = ""
-                    PopupManager.dismiss()
+                    Task { await dismissAllPopups() }
                 }
             )
         }

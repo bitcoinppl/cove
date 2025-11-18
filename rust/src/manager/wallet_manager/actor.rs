@@ -684,9 +684,8 @@ impl WalletActor {
         let reconciler = self.reconciler.clone();
         self.addr.send_fut(async move {
             if let Err(error) = check_node_connection_inner(&node).await {
-                let _ = reconciler.send(
-                    WalletManagerReconcileMessage::NodeConnectionFailed(error).into(),
-                );
+                let _ = reconciler
+                    .send(WalletManagerReconcileMessage::NodeConnectionFailed(error).into());
             }
         });
     }

@@ -6,6 +6,7 @@
 //
 
 import CoreImage.CIFilterBuiltins
+import MijickPopups
 import SwiftUI
 
 struct ReceiveView: View {
@@ -28,9 +29,11 @@ struct ReceiveView: View {
 
         if let addressInfo {
             pasteboard.string = addressInfo.addressUnformatted()
-            FloaterPopup(text: "Address Copied")
-                .showAndStack()
-                .dismissAfter(2)
+            Task { @MainActor in
+                await FloaterPopup(text: "Address Copied")
+                    .dismissAfter(2)
+                    .present()
+            }
         }
     }
 

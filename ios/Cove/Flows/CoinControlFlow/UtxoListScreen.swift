@@ -5,7 +5,7 @@
 //  Created by Praveen Perera on 5/19/25.
 //
 
-import MijickPopupView
+import MijickPopups
 import SwiftUI
 
 // MARK: - View
@@ -28,12 +28,12 @@ struct UtxoListScreen: View {
             return navigate(Route.transactionDetails(id: walletId, details: details))
         }
 
-        MiddlePopup(state: .loading).showAndStack()
         Task {
+            await MiddlePopup(state: .loading).present()
             do {
                 let details = try await walletManager.transactionDetails(for: txId)
                 await MainActor.run {
-                    PopupManager.dismiss()
+                    Task { await dismissAllPopups() }
                     navigate(Route.transactionDetails(id: walletId, details: details))
                 }
             } catch {

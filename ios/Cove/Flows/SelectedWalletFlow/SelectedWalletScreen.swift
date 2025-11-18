@@ -186,7 +186,7 @@ struct SelectedWalletScreen: View {
                     app.sheetState = .init(.qr)
                 }) {
                     Image(systemName: "qrcode")
-                        .foregroundStyle(.white)
+                        .adaptiveToolbarItemStyle(isPastHeader: shouldShowNavBar)
                         .font(.callout)
                 }
 
@@ -198,7 +198,7 @@ struct SelectedWalletScreen: View {
                     )
                 } label: {
                     Image(systemName: "ellipsis.circle")
-                        .foregroundStyle(.white)
+                        .adaptiveToolbarItemStyle(isPastHeader: shouldShowNavBar)
                         .font(.callout)
                 }
             }
@@ -321,6 +321,7 @@ struct SelectedWalletScreen: View {
                 geometry.contentOffset.y > (geometry.contentInsets.top + safeAreaInsets.top - 5)
             } action: { _, pastTop in
                 shouldShowNavBar = pastTop
+                app.isPastHeader = pastTop
             }
         }
         .ignoresSafeArea(edges: .top)
@@ -338,6 +339,10 @@ struct SelectedWalletScreen: View {
             }
         }
         .onAppear(perform: manager.validateMetadata)
+        .onDisappear {
+            // reset scroll state when leaving this screen
+            app.isPastHeader = false
+        }
         .alert(
             item: Binding(get: { manager.errorAlert }, set: { manager.errorAlert = $0 }),
             content: DisplayErrorAlert
