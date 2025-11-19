@@ -58,7 +58,7 @@ fun SidebarContainer(
     val openPercentage = (currentOffset / sidebarWidthPx).coerceIn(0f, 1f)
 
     // only enable gestures when at root (no routes)
-    val gesturesEnabled = app.router.routes.isEmpty()
+    val gesturesEnabled = app.rust.isAtRoot()
 
     Box(
         modifier = Modifier.fillMaxSize(),

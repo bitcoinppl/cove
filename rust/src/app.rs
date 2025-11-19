@@ -440,6 +440,16 @@ impl FfiApp {
         self.inner().get_state()
     }
 
+    /// check if the router has any routes to go back to
+    pub fn can_go_back(&self) -> bool {
+        !self.state().router.routes.is_empty()
+    }
+
+    /// check if the router is at the root route (no routes to go back to)
+    pub fn is_at_root(&self) -> bool {
+        self.state().router.routes.is_empty()
+    }
+
     pub fn network(&self) -> Network {
         Database::global().global_config.selected_network()
     }

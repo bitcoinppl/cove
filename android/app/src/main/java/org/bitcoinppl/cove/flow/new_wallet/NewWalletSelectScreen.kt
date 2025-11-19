@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.InsertDriveFile
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -68,6 +69,7 @@ private fun NewWalletSelectScreenPreview() {
     NewWalletSelectScreen(
         app = App,
         onBack = {},
+        canGoBack = false,
         onOpenNewHotWallet = {},
         onOpenQrScan = {},
         onOpenNfcScan = {},
@@ -80,6 +82,7 @@ private fun NewWalletSelectScreenPreview() {
 fun NewWalletSelectScreen(
     app: AppManager,
     onBack: () -> Unit,
+    canGoBack: Boolean,
     onOpenNewHotWallet: () -> Unit,
     onOpenQrScan: () -> Unit,
     onOpenNfcScan: () -> Unit,
@@ -179,11 +182,20 @@ fun NewWalletSelectScreen(
                 )
             },
             navigationIcon = {
-                IconButton(onClick = onBack) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Default.ArrowBack,
-                        contentDescription = "Back",
-                    )
+                if (canGoBack) {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Default.ArrowBack,
+                            contentDescription = "Back",
+                        )
+                    }
+                } else {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            imageVector = Icons.Filled.Menu,
+                            contentDescription = "Menu",
+                        )
+                    }
                 }
             },
             actions = {

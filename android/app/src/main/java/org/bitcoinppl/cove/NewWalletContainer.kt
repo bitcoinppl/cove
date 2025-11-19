@@ -19,9 +19,18 @@ fun NewWalletContainer(
 ) {
     when (route) {
         is NewWalletRoute.Select -> {
+            val canGoBack = app.rust.canGoBack()
+
             NewWalletSelectScreen(
                 app = app,
-                onBack = { app.popRoute() },
+                onBack = {
+                    if (canGoBack) {
+                        app.popRoute()
+                    } else {
+                        app.toggleSidebar()
+                    }
+                },
+                canGoBack = canGoBack,
                 onOpenNewHotWallet = {
                     app.pushRoute(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Select)))
                 },

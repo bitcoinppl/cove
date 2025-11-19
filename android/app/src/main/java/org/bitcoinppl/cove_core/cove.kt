@@ -1081,6 +1081,8 @@ external fun uniffi_cove_checksum_func_wallet_metadata_preview(
 ): Short
 external fun uniffi_cove_checksum_method_ffiapp_auth_type(
 ): Short
+external fun uniffi_cove_checksum_method_ffiapp_can_go_back(
+): Short
 external fun uniffi_cove_checksum_method_ffiapp_dangerous_wipe_all_data(
 ): Short
 external fun uniffi_cove_checksum_method_ffiapp_debug_or_release(
@@ -1102,6 +1104,8 @@ external fun uniffi_cove_checksum_method_ffiapp_go_to_selected_wallet(
 external fun uniffi_cove_checksum_method_ffiapp_has_wallets(
 ): Short
 external fun uniffi_cove_checksum_method_ffiapp_init_on_start(
+): Short
+external fun uniffi_cove_checksum_method_ffiapp_is_at_root(
 ): Short
 external fun uniffi_cove_checksum_method_ffiapp_listen_for_updates(
 ): Short
@@ -1834,6 +1838,8 @@ external fun uniffi_cove_fn_constructor_ffiapp_new(uniffi_out_err: UniffiRustCal
 ): Long
 external fun uniffi_cove_fn_method_ffiapp_auth_type(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_ffiapp_can_go_back(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Byte
 external fun uniffi_cove_fn_method_ffiapp_dangerous_wipe_all_data(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
 external fun uniffi_cove_fn_method_ffiapp_debug_or_release(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -1856,6 +1862,8 @@ external fun uniffi_cove_fn_method_ffiapp_has_wallets(`ptr`: Long,uniffi_out_err
 ): Byte
 external fun uniffi_cove_fn_method_ffiapp_init_on_start(`ptr`: Long,
 ): Long
+external fun uniffi_cove_fn_method_ffiapp_is_at_root(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Byte
 external fun uniffi_cove_fn_method_ffiapp_listen_for_updates(`ptr`: Long,`updater`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
 external fun uniffi_cove_fn_method_ffiapp_load_and_reset_default_route(`ptr`: Long,`route`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -3226,6 +3234,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_ffiapp_auth_type() != 36896.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_method_ffiapp_can_go_back() != 19459.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_method_ffiapp_dangerous_wipe_all_data() != 40843.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -3257,6 +3268,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_ffiapp_init_on_start() != 30417.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_ffiapp_is_at_root() != 23036.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_ffiapp_listen_for_updates() != 31459.toShort()) {
@@ -5009,6 +5023,11 @@ public interface FfiAppInterface {
     fun `authType`(): AuthType
     
     /**
+     * check if the router has any routes to go back to
+     */
+    fun `canGoBack`(): kotlin.Boolean
+    
+    /**
      * DANGER: This will wipe all wallet data on this device
      */
     fun `dangerousWipeAllData`()
@@ -5051,6 +5070,11 @@ public interface FfiAppInterface {
      * run all initialization tasks here, only called once
      */
     suspend fun `initOnStart`()
+    
+    /**
+     * check if the router is at the root route (no routes to go back to)
+     */
+    fun `isAtRoot`(): kotlin.Boolean
     
     fun `listenForUpdates`(`updater`: FfiReconcile)
     
@@ -5240,6 +5264,22 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
 
     
     /**
+     * check if the router has any routes to go back to
+     */override fun `canGoBack`(): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_ffiapp_can_go_back(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
      * DANGER: This will wipe all wallet data on this device
      */override fun `dangerousWipeAllData`()
         = 
@@ -5409,6 +5449,22 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
         UniffiNullRustCallStatusErrorHandler,
     )
     }
+
+    
+    /**
+     * check if the router is at the root route (no routes to go back to)
+     */override fun `isAtRoot`(): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_ffiapp_is_at_root(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
 
     override fun `listenForUpdates`(`updater`: FfiReconcile)
         = 

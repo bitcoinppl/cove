@@ -258,7 +258,7 @@ class AppManager private constructor() : FfiReconcile {
 
     fun popRoute() {
         logDebug("popRoute")
-        if (router.routes.isNotEmpty()) {
+        if (rust.canGoBack()) {
             val newRoutes = router.routes.dropLast(1)
 
             // only dispatch if routes actually changed
