@@ -418,13 +418,9 @@ impl FfiApp {
     // MARK: Routes
     /// Reset the default route, with a nested route
     pub fn reset_nested_routes_to(&self, default_route: Route, nested_routes: Vec<Route>) {
-        self.inner()
-            .state
-            .write()
-            .router
-            .reset_nested_routes_to(default_route.clone(), nested_routes.clone());
-
-        Updater::send_update(AppMessage::DefaultRouteChanged(default_route, nested_routes));
+        // automatically wrap in LoadAndReset to give SwiftUI time to initialize base route
+        let loading_route = RouteFactory.load_and_reset_nested_to(default_route, nested_routes);
+        self.reset_default_route_to(loading_route);
     }
 
     /// Change the default route, and reset the routes
