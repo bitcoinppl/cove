@@ -11,7 +11,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Error
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -19,7 +18,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
@@ -55,10 +53,6 @@ private sealed class QrCodeScannerState {
             get() = totalParts != null && partsLeft != null
     }
 
-    data class Error(
-        val message: String,
-    ) : QrCodeScannerState()
-
     data class Complete(
         val data: StringOrData,
     ) : QrCodeScannerState()
@@ -69,6 +63,7 @@ private sealed class QrCodeScannerState {
 fun QrCodeScanView(
     onScanned: (StringOrData) -> Unit,
     onDismiss: () -> Unit,
+    app: AppManager,
     modifier: Modifier = Modifier,
 ) {
     val cameraPermissionState = rememberPermissionState(Manifest.permission.CAMERA)
@@ -101,6 +96,7 @@ fun QrCodeScanView(
                     QrScannerContent(
                         onScanned = onScanned,
                         onDismiss = onDismiss,
+                        app = app,
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
@@ -168,6 +164,7 @@ private fun PermissionDeniedContent(
 private fun QrScannerContent(
     onScanned: (StringOrData) -> Unit,
     onDismiss: () -> Unit,
+    app: AppManager,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -194,52 +191,6 @@ private fun QrScannerContent(
 
     Box(modifier = modifier) {
         when (val state = scannerState) {
-            is QrCodeScannerState.Error -> {
-                // show error overlay with retry option
-                Column(
-                    modifier =
-                        Modifier
-                            .fillMaxSize()
-                            .background(Color.Black.copy(alpha = 0.9f))
-                            .padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center,
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Error,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(64.dp),
-                    )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Text(
-                        text = "Scan Failed",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Text(
-                        text = state.message,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White.copy(alpha = 0.7f),
-                        textAlign = TextAlign.Center,
-                    )
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    Button(
-                        onClick = { scannerState = QrCodeScannerState.Idle },
-                    ) {
-                        Text("Try Again")
-                    }
-                }
-            }
-
             is QrCodeScannerState.Complete -> {
                 // scanning complete, transitioning to onScanned callback
             }
@@ -287,6 +238,8 @@ private fun QrScannerContent(
                                                                     barcode = barcode,
                                                                     scannedCodes = scannedCodes,
                                                                     onStateUpdate = { scannerState = it },
+                                                                    onDismiss = onDismiss,
+                                                                    app = app,
                                                                 )
                                                                 break
                                                             }
@@ -315,9 +268,13 @@ private fun QrScannerContent(
                                 )
                             } catch (e: Exception) {
                                 Log.e("QrCodeScanView", "Camera binding failed", e)
-                                scannerState =
-                                    QrCodeScannerState.Error(
-                                        "Failed to initialize camera: ${e.message ?: "Unknown error"}",
+                                onDismiss()
+                                app.alertState =
+                                    TaggedItem(
+                                        AppAlertState.General(
+                                            title = "QR Scan Error",
+                                            message = "Failed to initialize camera: ${e.message ?: "Unknown error"}",
+                                        ),
                                     )
                             }
                         }, ContextCompat.getMainExecutor(ctx))
@@ -403,9 +360,11 @@ private fun handleQrCode(
     barcode: Barcode,
     scannedCodes: MutableSet<String>,
     onStateUpdate: (QrCodeScannerState) -> Unit,
+    onDismiss: () -> Unit,
+    app: AppManager,
 ) {
-    // guard against reprocessing after completion or error
-    if (currentState is QrCodeScannerState.Complete || currentState is QrCodeScannerState.Error) {
+    // guard against reprocessing after completion
+    if (currentState is QrCodeScannerState.Complete) {
         return
     }
 
@@ -492,6 +451,13 @@ private fun handleQrCode(
             onStateUpdate(QrCodeScannerState.Complete(StringOrData.String(finalData)))
         }
     } catch (e: Exception) {
-        onStateUpdate(QrCodeScannerState.Error(e.message ?: "Unknown scanning error"))
+        onDismiss()
+        app.alertState =
+            TaggedItem(
+                AppAlertState.General(
+                    title = "QR Scan Error",
+                    message = "Unable to scan QR code, error: ${e.message ?: "Unknown scanning error"}",
+                ),
+            )
     }
 }

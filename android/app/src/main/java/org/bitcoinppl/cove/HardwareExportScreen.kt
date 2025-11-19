@@ -579,6 +579,7 @@ fun HardwareExportScreen(
                 }
             },
             onDismiss = { showQrScanner = false },
+            app = app,
         )
     }
 }

@@ -132,6 +132,7 @@ fun ColdWalletQrScanScreen(app: AppManager, modifier: Modifier = Modifier) {
                     }
                 },
                 onDismiss = { app.popRoute() },
+                app = app,
                 modifier = Modifier.fillMaxSize(),
             )
         }

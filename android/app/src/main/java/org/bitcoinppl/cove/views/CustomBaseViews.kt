@@ -198,9 +198,7 @@ fun CardItem(
     title: String,
     titleColor: Color? = MaterialTheme.colorScheme.onSurfaceVariant,
     allCaps: Boolean? = false,
-    content:
-        @Composable()
-        () -> Unit,
+    content: @Composable () -> Unit,
 ) {
     Column(
         modifier =
