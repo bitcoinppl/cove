@@ -502,16 +502,17 @@ struct CoveApp: App {
                                             }
                                         }) {
                                             Image(systemName: "line.horizontal.3")
-                                                .modifier(NavBarColorModifier(
-                                                    route: app.currentRoute,
-                                                    isPastHeader: app.isPastHeader
-                                                ))
+                                                .modifier(
+                                                    NavBarColorModifier(
+                                                        route: app.currentRoute,
+                                                        isPastHeader: app.isPastHeader
+                                                    ))
                                         }
                                         .contentShape(Rectangle())
                                     }
                                 }
                         }
-                        .tint(routeToTint)
+                        .modifier(ConditionalRouteTintModifier(route: app.router.routes.last))
                     }
                 }
                 .fullScreenCover(isPresented: $app.isLoading) {
@@ -527,15 +528,6 @@ struct CoveApp: App {
         }
         .environment(app)
         .environment(auth)
-    }
-
-    var routeToTint: Color {
-        switch app.router.routes.last {
-        case .settings, .transactionDetails, .coinControl:
-            .blue
-        default:
-            .white
-        }
     }
 
     func onChangeRoute(_ old: [Route], _ new: [Route]) {
@@ -706,24 +698,3 @@ struct CoveApp: App {
     }
 }
 
-// MARK: - NavBar Color Modifier
-
-/// applies adaptive foreground styling to navigation bar items based on route and scroll state
-struct NavBarColorModifier: ViewModifier {
-    let route: Route
-    let isPastHeader: Bool
-
-    func body(content: Content) -> some View {
-        switch route {
-        case .selectedWallet:
-            // use scroll-based adaptive styling for selectedWallet route
-            content.adaptiveToolbarItemStyle(isPastHeader: isPastHeader)
-        case .newWallet(.hotWallet(.create)), .newWallet(.hotWallet(.verifyWords)):
-            // always white for these routes
-            content.foregroundStyle(.white)
-        default:
-            // blue for all other routes
-            content.foregroundStyle(.blue)
-        }
-    }
-}

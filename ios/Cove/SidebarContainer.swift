@@ -174,10 +174,6 @@ struct SidebarContainer<Content: View>: View {
                                 let adjustedTranslation = min(
                                     max(translation * 0.95, 0), sideBarWidth)
                                 dragTranslation = adjustedTranslation
-
-                                Log.debug(
-                                    "EDGE HANDLE: translation=\(translation), totalOffset=\(totalOffset), baseOffset=\(offset), isSidebarVisible=\(app.isSidebarVisible)"
-                                )
                             }
                             .onEnded(onDragEnded)
                     )

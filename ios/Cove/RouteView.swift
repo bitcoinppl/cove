@@ -27,8 +27,7 @@ struct RouteView: View {
         .onChange(of: app.router.default) { _, newRoute in
             route = newRoute
         }
-        .tint(.blue)
-        .accentColor(.blue)
+        .modifier(RouteViewTintModifier())
     }
 }
 
@@ -51,8 +50,12 @@ func routeToView(app: AppManager, route: Route) -> some View {
         case let .send(sendRoute):
             SendFlowContainer(sendRoute: sendRoute)
         case let .coinControl(route):
-            CoinControlContainer(route: route)
-                .tint(.blue)
+            if #available(iOS 26, *) {
+                CoinControlContainer(route: route)
+            } else {
+                CoinControlContainer(route: route)
+                    .tint(.blue)
+            }
         }
     }
     .environment(app)
