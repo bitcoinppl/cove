@@ -118,10 +118,6 @@ struct SidebarContainer<Content: View>: View {
 
                                 let translation = closingTranslation(from: value)
                                 dragTranslation = translation
-
-                                Log.debug(
-                                    "OVERLAY: translation=\(translation), totalOffset=\(totalOffset), baseOffset=\(offset), isSidebarVisible=\(app.isSidebarVisible)"
-                                )
                             }
                             .onEnded(onDragEnded)
                     )
@@ -144,10 +140,6 @@ struct SidebarContainer<Content: View>: View {
 
                             let translation = closingTranslation(from: value)
                             dragTranslation = translation
-
-                            Log.debug(
-                                "SIDEBAR: translation=\(translation), totalOffset=\(totalOffset), baseOffset=\(offset), isSidebarVisible=\(app.isSidebarVisible)"
-                            )
                         }
                         .onEnded(onDragEnded)
                 )
@@ -179,7 +171,8 @@ struct SidebarContainer<Content: View>: View {
                                     return
                                 }
 
-                                let adjustedTranslation = min(max(translation * 0.95, 0), sideBarWidth)
+                                let adjustedTranslation = min(
+                                    max(translation * 0.95, 0), sideBarWidth)
                                 dragTranslation = adjustedTranslation
 
                                 Log.debug(
