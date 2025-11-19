@@ -40,6 +40,7 @@ struct SendFlowHeaderView: View {
                 .frame(height: 225, alignment: .topTrailing)
                 .frame(maxWidth: .infinity)
                 .ignoresSafeArea(edges: .top)
+                .clipped()
 
             // content
             VStack {
