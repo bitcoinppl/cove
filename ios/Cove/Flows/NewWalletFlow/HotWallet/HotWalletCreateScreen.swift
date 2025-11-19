@@ -124,7 +124,7 @@ struct WordsView: View {
 
                                 app.resetRoute(to: [
                                     Route.selectedWallet(walletId),
-                                    HotWalletRoute.verifyWords(walletId).intoRoute()
+                                    HotWalletRoute.verifyWords(walletId).intoRoute(),
                                 ])
                             } catch {
                                 // TODO: handle, maybe show an alert?

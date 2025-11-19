@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 private let groupsOf = HotWalletImportScreen.GROUPS_OF
 
@@ -76,14 +77,31 @@ struct HotWalletImportScreen: View {
     @Environment(\.navigate) private var navigate
     @Environment(AppManager.self) private var app
 
-    // fade in keyboard
-    @State private var showScreen: Bool = false
-    @State private var showScreenOpacity: Double = 1
-
     @State private var tabIndex: Int = 0
+    @State private var hasStartedTyping: Bool = false
     @FocusState var focusField: ImportFieldNumber?
 
-    @State private var hasTypedInImportFields: Bool = false
+    @StateObject private var keyboardAccessoryController: KeyboardAccessoryController = .init()
+
+    private var accessoryHeight: CGFloat {
+        switch sizeCategory {
+        case .extraSmall, .small, .medium: 46
+        case .large: 48
+        case .extraLarge: 50
+        case .extraExtraLarge: 52
+        default: 54
+        }
+    }
+
+    private var accessoryMinWidth: CGFloat {
+        let maxWidth = screenWidth - 32
+        let target: CGFloat = 240 // three-chip feel
+        return min(maxWidth, target)
+    }
+
+    private var needsCustomToolbar: Bool {
+        if #available(iOS 26, *) { true } else { false }
+    }
 
     @State var manager: ImportWalletManager = .init()
     @State private var validator: WordValidator? = nil
@@ -111,7 +129,11 @@ struct HotWalletImportScreen: View {
 
         switch importType {
         case .manual:
-            focusField = .one
+            let task = Task {
+                try await Task.sleep(for: .milliseconds(800))
+                focusField = .one
+            }
+            tasks.append(task)
         case .qr:
             sheetState = .init(.qrCode)
         case .nfc:
@@ -145,10 +167,6 @@ struct HotWalletImportScreen: View {
         case .twentyFour:
             3
         }
-    }
-
-    var shouldShowKeyboardToolbar: Bool {
-        focusField != nil && !filteredSuggestions.isEmpty
     }
 
     private func handleScan(result: Result<ScanResult, ScanError>) {
@@ -283,11 +301,32 @@ struct HotWalletImportScreen: View {
 
     @ToolbarContentBuilder
     var ToolbarContent: some ToolbarContent {
-        if hasTypedInImportFields {
-            ToolbarItemGroup(placement: .keyboard) {
-                KeyboardToolbarContainer(isVisible: shouldShowKeyboardToolbar) {
-                    KeyboardAutoCompleteView
+        if !needsCustomToolbar, hasStartedTyping {
+            ToolbarItem(placement: .keyboard) {
+                HStack(spacing: 0) {
+                    Spacer(minLength: 8)
+                    ZStack {
+                        Capsule()
+                            .fill(.thickMaterial)
+                            .frame(minWidth: accessoryMinWidth, minHeight: accessoryHeight)
+                            .shadow(color: Color.black.opacity(0.18), radius: 8, x: 0, y: -1)
+
+                        KeyboardAutoCompleteView
+                            .foregroundStyle(.primary)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .opacity(!filteredSuggestions.isEmpty ? 1 : 0)
+                            .frame(minWidth: accessoryMinWidth, alignment: .center)
+                            .animation(.easeInOut(duration: 0.2), value: !filteredSuggestions.isEmpty)
+                            .allowsHitTesting(!filteredSuggestions.isEmpty)
+                    }
+
+                    Spacer(minLength: 8)
                 }
+                .padding(.horizontal, 12)
+                .frame(height: accessoryHeight, alignment: .center)
+                .background(Color.midnightBlue)
+                .contentShape(Rectangle())
             }
         }
 
@@ -316,23 +355,7 @@ struct HotWalletImportScreen: View {
     }
 
     var body: some View {
-        ZStack {
-            MainContent
-
-            if !showScreen {
-                Rectangle()
-                    .fill(.black)
-                    .opacity(showScreenOpacity)
-                    .ignoresSafeArea()
-            }
-        }
-        .onAppear {
-            withAnimation(.easeIn(duration: 1.60)) {
-                showScreenOpacity = 0
-            } completion: {
-                showScreen = true
-            }
-        }
+        MainContent
     }
 
     @ViewBuilder
@@ -399,17 +422,10 @@ struct HotWalletImportScreen: View {
             }
         }
         .onChange(of: focusField, initial: false, onChangeFocusField)
-        .onChange(of: enteredWords, initial: false) { _, newWords in
-            if hasTypedInImportFields { return }
-            hasTypedInImportFields = newWords.flatMap(\.self).contains { !$0.isEmpty }
-        }
         .onChange(of: nfcReader.scannedMessage, initial: false, onChangeNfcMessage)
+        .onChange(of: enteredWords, initial: false, onChangeEnteredWords)
         .onDisappear {
-            DispatchQueue.main.async {
-                focusField = nil
-                hasTypedInImportFields = false
-            }
-
+            focusField = nil
             nfcReader.resetReader()
             nfcReader.session = nil
             for task in tasks {
@@ -425,6 +441,40 @@ struct HotWalletImportScreen: View {
                 .opacity(0.5)
         )
         .background(Color.midnightBlue)
+        .background {
+            if needsCustomToolbar {
+                KeyboardAccessoryHost(
+                    controller: keyboardAccessoryController,
+                    isVisible: focusField != nil,
+                    height: accessoryHeight
+                ) {
+                    HStack(spacing: 0) {
+                        Spacer(minLength: 8)
+                        ZStack {
+                            Capsule()
+                                .fill(.thickMaterial)
+                                .frame(minWidth: accessoryMinWidth, minHeight: accessoryHeight)
+                                .shadow(color: Color.black.opacity(0.18), radius: 8, x: 0, y: -1)
+
+                            KeyboardAutoCompleteView
+                                .foregroundStyle(.primary)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 8)
+                                .opacity(!filteredSuggestions.isEmpty ? 1 : 0)
+                                .frame(minWidth: accessoryMinWidth, alignment: .center)
+                                .animation(.easeInOut(duration: 0.2), value: !filteredSuggestions.isEmpty)
+                                .allowsHitTesting(!filteredSuggestions.isEmpty)
+                        }
+
+                        Spacer(minLength: 8)
+                    }
+                    .padding(.horizontal, 12) // native toolbar side insets
+                    .frame(height: accessoryHeight, alignment: .center)
+                    .background(Color.midnightBlue)
+                    .contentShape(Rectangle())
+                }
+            }
+        }
         .tint(.white)
     }
 
@@ -498,11 +548,6 @@ struct HotWalletImportScreen: View {
     // MARK: OnChange Functions
 
     func onChangeFocusField(_ old: ImportFieldNumber?, _ new: ImportFieldNumber?) {
-        if new == nil, !hasTypedInImportFields {
-            focusField = old
-            return
-        }
-
         // clear suggestions when focus changes
         filteredSuggestions = []
 
@@ -537,6 +582,23 @@ struct HotWalletImportScreen: View {
         }
     }
 
+    func onChangeEnteredWords(_: [[String]], _ new: [[String]]) {
+        // early exit if already set to true
+        if hasStartedTyping {
+            return
+        }
+
+        // check if user has started typing
+        for group in new {
+            for word in group {
+                if !word.isEmpty {
+                    hasStartedTyping = true
+                    return
+                }
+            }
+        }
+    }
+
     func setWords(_ words: [[String]]) {
         let numberOfWords = words.compactMap(\.count).reduce(0, +)
         switch numberOfWords {
@@ -559,32 +621,6 @@ struct HotWalletImportScreen: View {
         enteredWords = words
         sheetState = .none
         tabIndex = lastIndex
-    }
-}
-
-private struct KeyboardToolbarContainer<Content: View>: View {
-    var isVisible: Bool
-    @ViewBuilder var content: () -> Content
-
-    var body: some View {
-        VStack(spacing: 0) {
-            ZStack {
-                Color.clear.frame(height: 30)
-                if isVisible {
-                    content()
-                        .transition(
-                            .move(edge: .bottom)
-                                .combined(with: .opacity)
-                        )
-                }
-            }
-            .frame(maxWidth: .infinity)
-        }
-        .animation(
-            .spring(response: 0.28, dampingFraction: 0.85, blendDuration: 0.1),
-            value: isVisible
-        )
-        .background(.clear)
     }
 }
 
