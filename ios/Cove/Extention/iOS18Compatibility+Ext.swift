@@ -90,14 +90,12 @@ struct ConditionalRouteTintModifier: ViewModifier {
             content
         } else {
             // iOS < 26: apply route-based tint colors
-            let tintColor: Color = {
-                switch route {
-                case .settings, .transactionDetails, .coinControl:
-                    return .blue
-                default:
-                    return .white
-                }
-            }()
+            let tintColor: Color = switch route {
+            case .settings, .transactionDetails, .coinControl:
+                .blue
+            default:
+                .white
+            }
             content.tint(tintColor)
         }
     }

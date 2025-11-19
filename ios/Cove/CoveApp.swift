@@ -697,4 +697,3 @@ struct CoveApp: App {
         }
     }
 }
-

@@ -172,7 +172,8 @@ struct SidebarContainer<Content: View>: View {
                                 }
 
                                 let adjustedTranslation = min(
-                                    max(translation * 0.95, 0), sideBarWidth)
+                                    max(translation * 0.95, 0), sideBarWidth
+                                )
                                 dragTranslation = adjustedTranslation
                             }
                             .onEnded(onDragEnded)
