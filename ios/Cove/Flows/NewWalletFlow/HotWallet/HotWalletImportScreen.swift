@@ -109,7 +109,14 @@ struct HotWalletImportScreen: View {
 
         switch importType {
         case .manual:
-            focusField = .one
+            // HACK: Bug in SwiftUI where keyboard toolbar is broken
+            let task = Task {
+                try await Task.sleep(for: .milliseconds(700))
+                await MainActor.run {
+                    focusField = .one
+                }
+            }
+            tasks.append(task)
         case .qr:
             sheetState = .init(.qrCode)
         case .nfc:
@@ -276,7 +283,9 @@ struct HotWalletImportScreen: View {
     @ToolbarContentBuilder
     var ToolbarContent: some ToolbarContent {
         ToolbarItemGroup(placement: .keyboard) {
-            KeyboardAutoCompleteView
+            if focusField != nil && !filteredSuggestions.isEmpty {
+                KeyboardAutoCompleteView
+            }
         }
 
         ToolbarItem(placement: .principal) {
@@ -383,10 +392,8 @@ struct HotWalletImportScreen: View {
         }
         .onChange(of: focusField, initial: false, onChangeFocusField)
         .onChange(of: nfcReader.scannedMessage, initial: false, onChangeNfcMessage)
-        .onChange(of: focusField, initial: false) { old, new in
-            if new == nil { focusField = old }
-        }
         .onDisappear {
+            focusField = nil
             nfcReader.resetReader()
             nfcReader.session = nil
             for task in tasks {
