@@ -1,8 +1,10 @@
 package org.bitcoinppl.cove.settings
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -66,51 +68,85 @@ fun SettingsScreen(
             )
         },
         content = { paddingValues ->
-            Column(
-                modifier =
-                    Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
-                        .padding(paddingValues)
-                        .padding(horizontal = 16.dp),
+            Box(
+                modifier = Modifier.fillMaxSize(),
             ) {
-                CardItem(stringResource(R.string.title_settings_general)) {
-                    Column(
-                        modifier =
-                            Modifier
-                                .padding(vertical = 8.dp)
-                                .padding(start = 8.dp),
-                    ) {
-                        SettingsItem(
-                            stringResource(R.string.title_settings_network),
-                            iconResId = R.drawable.icon_network,
-                            onClick = {
-                                app.pushRoute(org.bitcoinppl.cove_core.Route.Settings(org.bitcoinppl.cove_core.SettingsRoute.Network))
-                            },
+                Column(
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
+                            .padding(paddingValues)
+                            .padding(horizontal = 16.dp),
+                ) {
+                    CardItem(stringResource(R.string.title_settings_general)) {
+                        Column(
+                            modifier =
+                                Modifier
+                                    .padding(vertical = 8.dp)
+                                    .padding(start = 8.dp),
+                        ) {
+                            SettingsItem(
+                                stringResource(R.string.title_settings_network),
+                                iconResId = R.drawable.icon_network,
+                                onClick = {
+                                    app.pushRoute(org.bitcoinppl.cove_core.Route.Settings(org.bitcoinppl.cove_core.SettingsRoute.Network))
+                                },
+                            )
+                            Spacer()
+                            SettingsItem(
+                                stringResource(R.string.title_settings_appearance),
+                                iconResId = R.drawable.icon_appearance,
+                                onClick = {
+                                    app.pushRoute(org.bitcoinppl.cove_core.Route.Settings(org.bitcoinppl.cove_core.SettingsRoute.Appearance))
+                                },
+                            )
+                            Spacer()
+                            SettingsItem(
+                                stringResource(R.string.title_settings_node),
+                                iconResId = R.drawable.icon_node,
+                                onClick = {
+                                    app.pushRoute(org.bitcoinppl.cove_core.Route.Settings(org.bitcoinppl.cove_core.SettingsRoute.Node))
+                                },
+                            )
+                            Spacer()
+                            SettingsItem(
+                                stringResource(R.string.title_settings_currency),
+                                iconResId = R.drawable.icon_currency,
+                                onClick = {
+                                    app.pushRoute(org.bitcoinppl.cove_core.Route.Settings(org.bitcoinppl.cove_core.SettingsRoute.FiatCurrency))
+                                },
+                            )
+                        }
+                    }
+                }
+
+                Column(
+                    modifier =
+                        Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Row(horizontalArrangement = Arrangement.Center) {
+                        Text(
+                            text = app.rust.debugOrRelease(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                         )
-                        Spacer()
-                        SettingsItem(
-                            stringResource(R.string.title_settings_appearance),
-                            iconResId = R.drawable.icon_appearance,
-                            onClick = {
-                                app.pushRoute(org.bitcoinppl.cove_core.Route.Settings(org.bitcoinppl.cove_core.SettingsRoute.Appearance))
-                            },
+                    }
+                    Row(horizontalArrangement = Arrangement.Center) {
+                        Text(
+                            text = app.fullVersionId,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                         )
-                        Spacer()
-                        SettingsItem(
-                            stringResource(R.string.title_settings_node),
-                            iconResId = R.drawable.icon_node,
-                            onClick = {
-                                app.pushRoute(org.bitcoinppl.cove_core.Route.Settings(org.bitcoinppl.cove_core.SettingsRoute.Node))
-                            },
-                        )
-                        Spacer()
-                        SettingsItem(
-                            stringResource(R.string.title_settings_currency),
-                            iconResId = R.drawable.icon_currency,
-                            onClick = {
-                                app.pushRoute(org.bitcoinppl.cove_core.Route.Settings(org.bitcoinppl.cove_core.SettingsRoute.FiatCurrency))
-                            },
+                    }
+                    Row(horizontalArrangement = Arrangement.Center) {
+                        Text(
+                            text = "feedback@covebitcoinwallet.com",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                         )
                     }
                 }
