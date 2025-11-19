@@ -83,6 +83,8 @@ struct HotWalletImportScreen: View {
     @State private var tabIndex: Int = 0
     @FocusState var focusField: ImportFieldNumber?
 
+    @State private var hasTypedInImportFields: Bool = false
+
     @State var manager: ImportWalletManager = .init()
     @State private var validator: WordValidator? = nil
 
@@ -109,14 +111,7 @@ struct HotWalletImportScreen: View {
 
         switch importType {
         case .manual:
-            // HACK: Bug in SwiftUI where keyboard toolbar is broken
-            let task = Task {
-                try await Task.sleep(for: .milliseconds(700))
-                await MainActor.run {
-                    focusField = .one
-                }
-            }
-            tasks.append(task)
+            focusField = .one
         case .qr:
             sheetState = .init(.qrCode)
         case .nfc:
@@ -150,6 +145,10 @@ struct HotWalletImportScreen: View {
         case .twentyFour:
             3
         }
+    }
+
+    var shouldShowKeyboardToolbar: Bool {
+        focusField != nil && !filteredSuggestions.isEmpty
     }
 
     private func handleScan(result: Result<ScanResult, ScanError>) {
@@ -254,7 +253,8 @@ struct HotWalletImportScreen: View {
             ForEach(filteredSuggestions, id: \.self) { word in
                 Spacer()
                 Button(word, action: { selectWordInKeyboard(word) })
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.primary)
+
                 Spacer()
 
                 // only show divider in the middle
@@ -263,6 +263,7 @@ struct HotWalletImportScreen: View {
                 }
             }
         }
+        .frame(maxWidth: .infinity)
     }
 
     @ViewBuilder
@@ -282,9 +283,11 @@ struct HotWalletImportScreen: View {
 
     @ToolbarContentBuilder
     var ToolbarContent: some ToolbarContent {
-        ToolbarItemGroup(placement: .keyboard) {
-            if focusField != nil && !filteredSuggestions.isEmpty {
-                KeyboardAutoCompleteView
+        if hasTypedInImportFields {
+            ToolbarItemGroup(placement: .keyboard) {
+                KeyboardToolbarContainer(isVisible: shouldShowKeyboardToolbar) {
+                    KeyboardAutoCompleteView
+                }
             }
         }
 
@@ -326,7 +329,9 @@ struct HotWalletImportScreen: View {
         .onAppear {
             withAnimation(.easeIn(duration: 1.60)) {
                 showScreenOpacity = 0
-            } completion: { showScreen = true }
+            } completion: {
+                showScreen = true
+            }
         }
     }
 
@@ -375,11 +380,14 @@ struct HotWalletImportScreen: View {
             actions: { MyAlert($0).actions },
             message: { MyAlert($0).message }
         )
-        .tint(.blue)
+        .modifier(ConditionalTintModifier())
         .onAppear(perform: initOnAppear)
         .onChange(of: sheetState, initial: true) { oldState, newState in
             if oldState != nil, newState == nil {
-                if enteredWords[0][0] == "" { return focusField = ImportFieldNumber(0) }
+                if enteredWords[0][0] == "" {
+                    focusField = ImportFieldNumber(0)
+                    return
+                }
 
                 let focusField =
                     autocomplete.nextFieldNumber(
@@ -391,9 +399,17 @@ struct HotWalletImportScreen: View {
             }
         }
         .onChange(of: focusField, initial: false, onChangeFocusField)
+        .onChange(of: enteredWords, initial: false) { _, newWords in
+            if hasTypedInImportFields { return }
+            hasTypedInImportFields = newWords.flatMap(\.self).contains { !$0.isEmpty }
+        }
         .onChange(of: nfcReader.scannedMessage, initial: false, onChangeNfcMessage)
         .onDisappear {
-            focusField = nil
+            DispatchQueue.main.async {
+                focusField = nil
+                hasTypedInImportFields = false
+            }
+
             nfcReader.resetReader()
             nfcReader.session = nil
             for task in tasks {
@@ -482,6 +498,11 @@ struct HotWalletImportScreen: View {
     // MARK: OnChange Functions
 
     func onChangeFocusField(_ old: ImportFieldNumber?, _ new: ImportFieldNumber?) {
+        if new == nil, !hasTypedInImportFields {
+            focusField = old
+            return
+        }
+
         // clear suggestions when focus changes
         filteredSuggestions = []
 
@@ -538,6 +559,32 @@ struct HotWalletImportScreen: View {
         enteredWords = words
         sheetState = .none
         tabIndex = lastIndex
+    }
+}
+
+private struct KeyboardToolbarContainer<Content: View>: View {
+    var isVisible: Bool
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ZStack {
+                Color.clear.frame(height: 30)
+                if isVisible {
+                    content()
+                        .transition(
+                            .move(edge: .bottom)
+                                .combined(with: .opacity)
+                        )
+                }
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .animation(
+            .spring(response: 0.28, dampingFraction: 0.85, blendDuration: 0.1),
+            value: isVisible
+        )
+        .background(.clear)
     }
 }
 
