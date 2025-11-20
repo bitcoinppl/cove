@@ -33,6 +33,7 @@ struct WordsView: View {
     @State private var showConfirmationAlert = false
     @Environment(\.dismiss) private var dismiss
     @Environment(\.navigate) private var navigate
+    @Environment(AppManager.self) private var app
 
     init(manager: PendingWalletManager) {
         self.manager = manager
@@ -121,9 +122,10 @@ struct WordsView: View {
                                 // save the wallet
                                 let walletId = try manager.rust.saveWallet().id
 
-                                navigate(
-                                    HotWalletRoute.verifyWords(walletId).intoRoute()
-                                )
+                                app.resetRoute(to: [
+                                    Route.selectedWallet(walletId),
+                                    HotWalletRoute.verifyWords(walletId).intoRoute(),
+                                ])
                             } catch {
                                 // TODO: handle, maybe show an alert?
                                 Log.error("Error \(error)")

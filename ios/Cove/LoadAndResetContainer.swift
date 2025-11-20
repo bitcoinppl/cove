@@ -16,7 +16,7 @@ struct LoadAndResetContainer: View {
             .task {
                 do {
                     try await Task.sleep(for: .milliseconds(loadingTimeMs))
-                    app.resetRoute(to: nextRoute)
+                    app.rust.resetAfterLoading(to: nextRoute)
                 } catch {}
             }
             .tint(.primary)

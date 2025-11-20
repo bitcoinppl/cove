@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 private let groupsOf = HotWalletImportScreen.GROUPS_OF
 
@@ -76,12 +77,31 @@ struct HotWalletImportScreen: View {
     @Environment(\.navigate) private var navigate
     @Environment(AppManager.self) private var app
 
-    // fade in keyboard
-    @State private var showScreen: Bool = false
-    @State private var showScreenOpacity: Double = 1
-
     @State private var tabIndex: Int = 0
+    @State private var hasStartedTyping: Bool = false
     @FocusState var focusField: ImportFieldNumber?
+
+    @StateObject private var keyboardAccessoryController: KeyboardAccessoryController = .init()
+
+    private var accessoryHeight: CGFloat {
+        switch sizeCategory {
+        case .extraSmall, .small, .medium: 46
+        case .large: 48
+        case .extraLarge: 50
+        case .extraExtraLarge: 52
+        default: 54
+        }
+    }
+
+    private var accessoryMinWidth: CGFloat {
+        let maxWidth = screenWidth - 32
+        let target: CGFloat = 240 // three-chip feel
+        return min(maxWidth, target)
+    }
+
+    private var needsCustomToolbar: Bool {
+        if #available(iOS 26, *) { true } else { false }
+    }
 
     @State var manager: ImportWalletManager = .init()
     @State private var validator: WordValidator? = nil
@@ -109,7 +129,11 @@ struct HotWalletImportScreen: View {
 
         switch importType {
         case .manual:
-            focusField = .one
+            let task = Task {
+                try await Task.sleep(for: .milliseconds(800))
+                focusField = .one
+            }
+            tasks.append(task)
         case .qr:
             sheetState = .init(.qrCode)
         case .nfc:
@@ -247,7 +271,8 @@ struct HotWalletImportScreen: View {
             ForEach(filteredSuggestions, id: \.self) { word in
                 Spacer()
                 Button(word, action: { selectWordInKeyboard(word) })
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.primary)
+
                 Spacer()
 
                 // only show divider in the middle
@@ -256,6 +281,7 @@ struct HotWalletImportScreen: View {
                 }
             }
         }
+        .frame(maxWidth: .infinity)
     }
 
     @ViewBuilder
@@ -275,8 +301,33 @@ struct HotWalletImportScreen: View {
 
     @ToolbarContentBuilder
     var ToolbarContent: some ToolbarContent {
-        ToolbarItemGroup(placement: .keyboard) {
-            KeyboardAutoCompleteView
+        if !needsCustomToolbar, hasStartedTyping {
+            ToolbarItem(placement: .keyboard) {
+                HStack(spacing: 0) {
+                    Spacer(minLength: 8)
+                    ZStack {
+                        Capsule()
+                            .fill(.thickMaterial)
+                            .frame(minWidth: accessoryMinWidth, minHeight: accessoryHeight)
+                            .shadow(color: Color.black.opacity(0.18), radius: 8, x: 0, y: -1)
+
+                        KeyboardAutoCompleteView
+                            .foregroundStyle(.primary)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .opacity(!filteredSuggestions.isEmpty ? 1 : 0)
+                            .frame(minWidth: accessoryMinWidth, alignment: .center)
+                            .animation(.easeInOut(duration: 0.2), value: !filteredSuggestions.isEmpty)
+                            .allowsHitTesting(!filteredSuggestions.isEmpty)
+                    }
+
+                    Spacer(minLength: 8)
+                }
+                .padding(.horizontal, 12)
+                .frame(height: accessoryHeight, alignment: .center)
+                .background(Color.midnightBlue)
+                .contentShape(Rectangle())
+            }
         }
 
         ToolbarItem(placement: .principal) {
@@ -304,21 +355,7 @@ struct HotWalletImportScreen: View {
     }
 
     var body: some View {
-        ZStack {
-            MainContent
-
-            if !showScreen {
-                Rectangle()
-                    .fill(.black)
-                    .opacity(showScreenOpacity)
-                    .ignoresSafeArea()
-            }
-        }
-        .onAppear {
-            withAnimation(.easeIn(duration: 1.60)) {
-                showScreenOpacity = 0
-            } completion: { showScreen = true }
-        }
+        MainContent
     }
 
     @ViewBuilder
@@ -366,11 +403,14 @@ struct HotWalletImportScreen: View {
             actions: { MyAlert($0).actions },
             message: { MyAlert($0).message }
         )
-        .tint(.blue)
+        .modifier(ConditionalTintModifier())
         .onAppear(perform: initOnAppear)
         .onChange(of: sheetState, initial: true) { oldState, newState in
             if oldState != nil, newState == nil {
-                if enteredWords[0][0] == "" { return focusField = ImportFieldNumber(0) }
+                if enteredWords[0][0] == "" {
+                    focusField = ImportFieldNumber(0)
+                    return
+                }
 
                 let focusField =
                     autocomplete.nextFieldNumber(
@@ -383,10 +423,9 @@ struct HotWalletImportScreen: View {
         }
         .onChange(of: focusField, initial: false, onChangeFocusField)
         .onChange(of: nfcReader.scannedMessage, initial: false, onChangeNfcMessage)
-        .onChange(of: focusField, initial: false) { old, new in
-            if new == nil { focusField = old }
-        }
+        .onChange(of: enteredWords, initial: false, onChangeEnteredWords)
         .onDisappear {
+            focusField = nil
             nfcReader.resetReader()
             nfcReader.session = nil
             for task in tasks {
@@ -402,6 +441,40 @@ struct HotWalletImportScreen: View {
                 .opacity(0.5)
         )
         .background(Color.midnightBlue)
+        .background {
+            if needsCustomToolbar {
+                KeyboardAccessoryHost(
+                    controller: keyboardAccessoryController,
+                    isVisible: focusField != nil,
+                    height: accessoryHeight
+                ) {
+                    HStack(spacing: 0) {
+                        Spacer(minLength: 8)
+                        ZStack {
+                            Capsule()
+                                .fill(.thickMaterial)
+                                .frame(minWidth: accessoryMinWidth, minHeight: accessoryHeight)
+                                .shadow(color: Color.black.opacity(0.18), radius: 8, x: 0, y: -1)
+
+                            KeyboardAutoCompleteView
+                                .foregroundStyle(.primary)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 8)
+                                .opacity(!filteredSuggestions.isEmpty ? 1 : 0)
+                                .frame(minWidth: accessoryMinWidth, alignment: .center)
+                                .animation(.easeInOut(duration: 0.2), value: !filteredSuggestions.isEmpty)
+                                .allowsHitTesting(!filteredSuggestions.isEmpty)
+                        }
+
+                        Spacer(minLength: 8)
+                    }
+                    .padding(.horizontal, 12) // native toolbar side insets
+                    .frame(height: accessoryHeight, alignment: .center)
+                    .background(Color.midnightBlue)
+                    .contentShape(Rectangle())
+                }
+            }
+        }
         .tint(.white)
     }
 
@@ -506,6 +579,23 @@ struct HotWalletImportScreen: View {
             setWords(words)
         } catch {
             Log.error("Error NFC word parsing from data: \(error)")
+        }
+    }
+
+    func onChangeEnteredWords(_: [[String]], _ new: [[String]]) {
+        // early exit if already set to true
+        if hasStartedTyping {
+            return
+        }
+
+        // check if user has started typing
+        for group in new {
+            for word in group {
+                if !word.isEmpty {
+                    hasStartedTyping = true
+                    return
+                }
+            }
         }
     }
 

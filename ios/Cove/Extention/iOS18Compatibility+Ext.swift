@@ -77,3 +77,72 @@ extension View {
         }
     }
 }
+
+// MARK: - iOS 26 Tint Compatibility Modifiers
+
+/// applies route-based tint colors only on iOS < 26
+struct ConditionalRouteTintModifier: ViewModifier {
+    let route: Route?
+
+    func body(content: Content) -> some View {
+        if #available(iOS 26, *) {
+            // iOS 26+: no tint applied, use system defaults (keeps toggles green)
+            content
+        } else {
+            // iOS < 26: apply route-based tint colors
+            let tintColor: Color = switch route {
+            case .settings, .transactionDetails, .coinControl:
+                .blue
+            default:
+                .white
+            }
+            content.tint(tintColor)
+        }
+    }
+}
+
+/// applies blue tint and accent color only on iOS < 26
+struct RouteViewTintModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26, *) {
+            content
+        } else {
+            content
+                .tint(.blue)
+                .accentColor(.blue)
+        }
+    }
+}
+
+/// applies blue tint only on iOS < 26
+struct ConditionalTintModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26, *) {
+            content
+        } else {
+            content.tint(.blue)
+        }
+    }
+}
+
+// MARK: - NavBar Color Modifier
+
+/// applies adaptive foreground styling to navigation bar items based on route and scroll state
+struct NavBarColorModifier: ViewModifier {
+    let route: Route
+    let isPastHeader: Bool
+
+    func body(content: Content) -> some View {
+        switch route {
+        case .selectedWallet:
+            // use scroll-based adaptive styling for selectedWallet route
+            content.adaptiveToolbarItemStyle(isPastHeader: isPastHeader)
+        case .newWallet(.hotWallet(.create)), .newWallet(.hotWallet(.verifyWords)):
+            // always white for these routes
+            content.foregroundStyle(.white)
+        default:
+            // always white for all other routes
+            content.foregroundStyle(.white)
+        }
+    }
+}

@@ -66,7 +66,10 @@ struct MainSettingsScreen: View {
                 return auth.type == AuthType.both || auth.type == AuthType.biometric
             },
             set: { enable in
-                if auth.isInDecoyMode() { return isFaceIdEnabled = enable }
+                if auth.isInDecoyMode() {
+                    isFaceIdEnabled = enable
+                    return
+                }
 
                 // disable
                 if !enable {
@@ -150,7 +153,10 @@ struct MainSettingsScreen: View {
             },
             set: { enable in
                 // pretend to turn it off if you are in decoy mode
-                if !enable, auth.isInDecoyMode() { return isDecoyPinEnabled = false }
+                if !enable, auth.isInDecoyMode() {
+                    isDecoyPinEnabled = false
+                    return
+                }
 
                 // enable
                 if enable {
@@ -245,15 +251,23 @@ struct MainSettingsScreen: View {
                             dismiss()
                         }
                     }) {
-                        HStack(spacing: 0) {
+                        if #available(iOS 26, *) {
                             Image(systemName: "chevron.left")
+                                .foregroundStyle(.primary)
                                 .fontWeight(.semibold)
+                                .tint(.primary)
+                        } else {
+                            HStack(spacing: 0) {
+                                Image(systemName: "chevron.left")
+                                    .fontWeight(.semibold)
 
-                            Text("Back")
-                                .offset(x: 5)
+                                Text("Back")
+                                    .offset(x: 5)
+                            }
+                            .offset(x: -8)
                         }
-                        .offset(x: -8)
                     }
+                    .tint(.primary)
                 } : nil
         }
         .fullScreenCover(item: $sheetState, content: SheetContent)
@@ -521,7 +535,8 @@ struct MainSettingsScreen: View {
                 onUnlock: { _ in
                     if auth.isInDecoyMode() {
                         sheetState = .none
-                        return isPinEnabled = false
+                        isPinEnabled = false
+                        return
                     }
 
                     auth.dispatch(action: .disablePin)
@@ -576,7 +591,10 @@ struct MainSettingsScreen: View {
                 },
                 backAction: { sheetState = .none },
                 onComplete: { pin in
-                    if auth.isInDecoyMode() { return sheetState = .none }
+                    if auth.isInDecoyMode() {
+                        sheetState = .none
+                        return
+                    }
 
                     sheetState = .none
                     if auth.checkWipeDataPin(pin) {
@@ -636,14 +654,20 @@ struct MainSettingsScreen: View {
     // MARK: Setter functions
 
     func setPin(_ pin: String) {
-        if auth.isInDecoyMode() { return isPinEnabled = true }
+        if auth.isInDecoyMode() {
+            isPinEnabled = true
+            return
+        }
         auth.dispatch(action: .setPin(pin))
         sheetState = .none
     }
 
     func setWipeDataPin(_ pin: String) {
         sheetState = .none
-        if auth.isInDecoyMode() { return isWipeDataPinEnabled = true }
+        if auth.isInDecoyMode() {
+            isWipeDataPinEnabled = true
+            return
+        }
 
         do { try auth.rust.setWipeDataPin(pin: pin) } catch {
             let error = error as! AuthManagerError
@@ -653,7 +677,10 @@ struct MainSettingsScreen: View {
 
     func setDecoyPin(_ pin: String) {
         sheetState = .none
-        if auth.isInDecoyMode() { return isDecoyPinEnabled = true }
+        if auth.isInDecoyMode() {
+            isDecoyPinEnabled = true
+            return
+        }
 
         do { try auth.rust.setDecoyPin(pin: pin) } catch {
             let error = error as! AuthManagerError

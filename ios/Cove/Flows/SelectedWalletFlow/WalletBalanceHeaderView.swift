@@ -20,10 +20,6 @@ struct WalletBalanceHeaderView: View {
     let updater: (WalletManagerAction) -> Void
     let showReceiveSheet: () -> Void
 
-    private var accentColor: Color {
-        metadata.swiftColor
-    }
-
     private var primaryBalanceString: String {
         if !metadata.sensitiveVisible {
             return "••••••"

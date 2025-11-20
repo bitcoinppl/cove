@@ -104,11 +104,7 @@ import SwiftUI
 
     public var fullVersionId: String {
         let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
-        if appVersion != rust.version() {
-            return "MISMATCH \(rust.version()) || \(appVersion) (\(rust.gitShortHash()))"
-        }
-
-        return "v\(rust.version()) (\(rust.gitShortHash()))"
+        return "v\(appVersion) (\(rust.gitShortHash()))"
     }
 
     public func updateWalletVm(_ vm: WalletManager) {

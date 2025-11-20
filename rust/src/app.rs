@@ -418,6 +418,19 @@ impl FfiApp {
     // MARK: Routes
     /// Reset the default route, with a nested route
     pub fn reset_nested_routes_to(&self, default_route: Route, nested_routes: Vec<Route>) {
+        let loading_route = RouteFactory.load_and_reset_nested_to(default_route, nested_routes);
+        debug!("loading and resetting default route to: {:?}", loading_route);
+        self.load_and_reset_default_route(loading_route);
+    }
+
+    /// Reset to the default route with nested routes, only used by the LoadigAndResetContainer
+    pub fn reset_after_loading(&self, to: Vec<Route>) {
+        let Some(default_route) = to.first().cloned() else {
+            return;
+        };
+
+        let nested_routes = to.into_iter().skip(1).collect::<Vec<_>>();
+
         self.inner()
             .state
             .write()
@@ -430,9 +443,7 @@ impl FfiApp {
     /// Change the default route, and reset the routes
     pub fn reset_default_route_to(&self, route: Route) {
         debug!("changing default route to: {:?}", route);
-
         self.inner().state.write().router.reset_routes_to(route.clone());
-
         Updater::send_update(AppMessage::DefaultRouteChanged(route, vec![]));
     }
 
