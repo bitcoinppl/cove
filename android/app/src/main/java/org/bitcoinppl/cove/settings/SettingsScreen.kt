@@ -1,10 +1,7 @@
 package org.bitcoinppl.cove.settings
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,6 +12,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AttachMoney
+import androidx.compose.material.icons.filled.Hub
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -29,9 +30,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.R
-import org.bitcoinppl.cove.views.CardItem
-import org.bitcoinppl.cove.views.CustomSpacer
-import org.bitcoinppl.cove.views.SettingsItem
+import org.bitcoinppl.cove.views.MaterialDivider
+import org.bitcoinppl.cove.views.MaterialSection
+import org.bitcoinppl.cove.views.MaterialSettingsItem
+import org.bitcoinppl.cove.views.SectionHeader
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -68,94 +70,50 @@ fun SettingsScreen(
             )
         },
         content = { paddingValues ->
-            Box(
-                modifier = Modifier.fillMaxSize(),
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(paddingValues),
             ) {
-                Column(
-                    modifier =
-                        Modifier
-                            .fillMaxSize()
-                            .verticalScroll(rememberScrollState())
-                            .padding(paddingValues)
-                            .padding(horizontal = 16.dp),
-                ) {
-                    CardItem(stringResource(R.string.title_settings_general)) {
-                        Column(
-                            modifier =
-                                Modifier
-                                    .padding(vertical = 8.dp)
-                                    .padding(start = 8.dp),
-                        ) {
-                            SettingsItem(
-                                stringResource(R.string.title_settings_network),
-                                iconResId = R.drawable.icon_network,
-                                onClick = {
-                                    app.pushRoute(org.bitcoinppl.cove_core.Route.Settings(org.bitcoinppl.cove_core.SettingsRoute.Network))
-                                },
-                            )
-                            Spacer()
-                            SettingsItem(
-                                stringResource(R.string.title_settings_appearance),
-                                iconResId = R.drawable.icon_appearance,
-                                onClick = {
-                                    app.pushRoute(org.bitcoinppl.cove_core.Route.Settings(org.bitcoinppl.cove_core.SettingsRoute.Appearance))
-                                },
-                            )
-                            Spacer()
-                            SettingsItem(
-                                stringResource(R.string.title_settings_node),
-                                iconResId = R.drawable.icon_node,
-                                onClick = {
-                                    app.pushRoute(org.bitcoinppl.cove_core.Route.Settings(org.bitcoinppl.cove_core.SettingsRoute.Node))
-                                },
-                            )
-                            Spacer()
-                            SettingsItem(
-                                stringResource(R.string.title_settings_currency),
-                                iconResId = R.drawable.icon_currency,
-                                onClick = {
-                                    app.pushRoute(org.bitcoinppl.cove_core.Route.Settings(org.bitcoinppl.cove_core.SettingsRoute.FiatCurrency))
-                                },
-                            )
-                        }
-                    }
-                }
-
-                Column(
-                    modifier =
-                        Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(bottom = 16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Row(horizontalArrangement = Arrangement.Center) {
-                        Text(
-                            text = app.rust.debugOrRelease(),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                SectionHeader(stringResource(R.string.title_settings_general))
+                MaterialSection {
+                    Column {
+                        MaterialSettingsItem(
+                            title = stringResource(R.string.title_settings_network),
+                            icon = Icons.Default.Wifi,
+                            onClick = {
+                                app.pushRoute(org.bitcoinppl.cove_core.Route.Settings(org.bitcoinppl.cove_core.SettingsRoute.Network))
+                            },
                         )
-                    }
-                    Row(horizontalArrangement = Arrangement.Center) {
-                        Text(
-                            text = app.fullVersionId,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                        MaterialDivider()
+                        MaterialSettingsItem(
+                            title = stringResource(R.string.title_settings_appearance),
+                            icon = Icons.Default.Palette,
+                            onClick = {
+                                app.pushRoute(org.bitcoinppl.cove_core.Route.Settings(org.bitcoinppl.cove_core.SettingsRoute.Appearance))
+                            },
                         )
-                    }
-                    Row(horizontalArrangement = Arrangement.Center) {
-                        Text(
-                            text = "feedback@covebitcoinwallet.com",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                        MaterialDivider()
+                        MaterialSettingsItem(
+                            title = stringResource(R.string.title_settings_node),
+                            icon = Icons.Default.Hub,
+                            onClick = {
+                                app.pushRoute(org.bitcoinppl.cove_core.Route.Settings(org.bitcoinppl.cove_core.SettingsRoute.Node))
+                            },
+                        )
+                        MaterialDivider()
+                        MaterialSettingsItem(
+                            title = stringResource(R.string.title_settings_currency),
+                            icon = Icons.Default.AttachMoney,
+                            onClick = {
+                                app.pushRoute(org.bitcoinppl.cove_core.Route.Settings(org.bitcoinppl.cove_core.SettingsRoute.FiatCurrency))
+                            },
                         )
                     }
                 }
             }
         },
     )
-}
-
-@Composable
-private fun Spacer() {
-    CustomSpacer(paddingValues = PaddingValues(start = 56.dp))
 }

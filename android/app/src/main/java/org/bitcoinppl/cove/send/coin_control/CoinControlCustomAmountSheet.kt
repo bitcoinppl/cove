@@ -201,13 +201,13 @@ fun CoinControlCustomAmountSheet(
                         "Sending UTXO Details",
                         fontSize = 18.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = CoveColor.TextPrimary,
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
                         "You are sending the following UTXOs to the recipient.",
                         fontSize = 12.sp,
-                        color = CoveColor.TextSecondary,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
 
@@ -215,14 +215,14 @@ fun CoinControlCustomAmountSheet(
                     Icon(
                         imageVector = Icons.Default.Close,
                         contentDescription = "Close",
-                        tint = CoveColor.TextPrimary.copy(alpha = 0.8f),
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
                         modifier = Modifier.size(20.dp),
                     )
                 }
             }
 
             Spacer(Modifier.height(16.dp))
-            HorizontalDivider(color = CoveColor.DividerLight, thickness = 1.dp)
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
             Spacer(Modifier.height(8.dp))
 
             // UTXO List
@@ -257,7 +257,7 @@ fun CoinControlCustomAmountSheet(
                         "Set Amount",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = CoveColor.TextPrimary,
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -276,7 +276,7 @@ fun CoinControlCustomAmountSheet(
                                 TextStyle(
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = CoveColor.TextPrimary,
+                                    color = MaterialTheme.colorScheme.onSurface,
                                     textAlign = TextAlign.End,
                                 ),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
@@ -288,7 +288,7 @@ fun CoinControlCustomAmountSheet(
                             if (isSats) "SATS" else "BTC",
                             fontSize = 14.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = CoveColor.TextPrimary,
+                            color = MaterialTheme.colorScheme.onSurface,
                         )
                     }
                 }
@@ -298,7 +298,7 @@ fun CoinControlCustomAmountSheet(
                 Text(
                     "Use the slider to set the amount.",
                     fontSize = 12.sp,
-                    color = CoveColor.TextSecondary,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
 
                 Spacer(Modifier.height(12.dp))
@@ -321,9 +321,9 @@ fun CoinControlCustomAmountSheet(
                     },
                     colors =
                         SliderDefaults.colors(
-                            thumbColor = CoveColor.SliderActive,
-                            activeTrackColor = CoveColor.SliderActive,
-                            inactiveTrackColor = CoveColor.SliderInactive,
+                            thumbColor = MaterialTheme.colorScheme.primary,
+                            activeTrackColor = MaterialTheme.colorScheme.primary,
+                            inactiveTrackColor = MaterialTheme.colorScheme.outlineVariant,
                         ),
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -349,7 +349,7 @@ private fun UtxoDetailRow(
                 Text(
                     text = utxo.displayName,
                     fontWeight = FontWeight.Normal,
-                    color = CoveColor.TextPrimary,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 14.sp,
                 )
                 if (utxo.type == UtxoType.CHANGE) {
@@ -376,7 +376,7 @@ private fun UtxoDetailRow(
                 displayAmount,
                 fontWeight = FontWeight.Normal,
                 fontSize = 14.sp,
-                color = CoveColor.TextPrimary,
+                color = MaterialTheme.colorScheme.onSurface,
             )
             Spacer(Modifier.height(4.dp))
             Text(

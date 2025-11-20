@@ -137,7 +137,7 @@ fun FeeRateSelectorSheet(
                         .padding(horizontal = 24.dp),
                 colors =
                     ButtonDefaults.buttonColors(
-                        containerColor = if (isDark) CoveColor.SurfaceDark else CoveColor.midnightBlue,
+                        containerColor = CoveColor.midnightBlue,
                     ),
                 shape = RoundedCornerShape(10.dp),
             ) {
@@ -183,22 +183,14 @@ private fun FeeOptionCard(
 
     val backgroundColor =
         if (isSelected) {
-            if (isDark) {
-                CoveColor.SurfaceDark.copy(alpha = 0.8f)
-            } else {
-                CoveColor.midnightBlue.copy(alpha = 0.8f)
-            }
+            CoveColor.midnightBlue.copy(alpha = 0.8f)
         } else {
             MaterialTheme.colorScheme.surfaceVariant
         }
 
     val contentColor =
         if (isSelected) {
-            if (isDark) {
-                CoveColor.TextPrimaryDark
-            } else {
-                Color.White
-            }
+            Color.White
         } else {
             MaterialTheme.colorScheme.onSurface
         }

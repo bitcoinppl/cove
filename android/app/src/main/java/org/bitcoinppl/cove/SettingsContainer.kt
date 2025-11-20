@@ -4,13 +4,13 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.zIndex
-import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
 
@@ -30,11 +30,11 @@ fun SettingsContainer(
             modifier =
                 Modifier
                     .fillMaxSize()
-                    .background(CoveColor.ListBackgroundLight)
+                    .background(MaterialTheme.colorScheme.background)
                     .zIndex(0f),
         )
 
-        // background pattern
+        // background pattern (subtle Material Design texture)
         Image(
             painter = painterResource(id = R.drawable.image_chain_code_pattern_horizontal),
             contentDescription = null,
@@ -42,7 +42,7 @@ fun SettingsContainer(
             modifier =
                 Modifier
                     .fillMaxSize()
-                    .graphicsLayer(alpha = 0.25f)
+                    .graphicsLayer(alpha = 0.08f)
                     .zIndex(1f),
         )
 

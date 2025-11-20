@@ -66,7 +66,6 @@ import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
 import java.io.File
@@ -195,7 +194,7 @@ fun HardwareExportScreen(
         }
 
     Scaffold(
-        containerColor = CoveColor.BackgroundLight,
+        containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
             CenterAlignedTopAppBar(
                 colors =

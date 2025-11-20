@@ -1119,6 +1119,8 @@ external fun uniffi_cove_checksum_method_ffiapp_num_wallets(
 ): Short
 external fun uniffi_cove_checksum_method_ffiapp_prices(
 ): Short
+external fun uniffi_cove_checksum_method_ffiapp_reset_after_loading(
+): Short
 external fun uniffi_cove_checksum_method_ffiapp_reset_default_route_to(
 ): Short
 external fun uniffi_cove_checksum_method_ffiapp_reset_nested_routes_to(
@@ -1876,6 +1878,8 @@ external fun uniffi_cove_fn_method_ffiapp_num_wallets(`ptr`: Long,uniffi_out_err
 ): Short
 external fun uniffi_cove_fn_method_ffiapp_prices(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
+external fun uniffi_cove_fn_method_ffiapp_reset_after_loading(`ptr`: Long,`to`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
 external fun uniffi_cove_fn_method_ffiapp_reset_default_route_to(`ptr`: Long,`route`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
 external fun uniffi_cove_fn_method_ffiapp_reset_nested_routes_to(`ptr`: Long,`defaultRoute`: RustBuffer.ByValue,`nestedRoutes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -3289,6 +3293,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_ffiapp_prices() != 42098.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_ffiapp_reset_after_loading() != 45084.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_ffiapp_reset_default_route_to() != 31408.toShort()) {
@@ -5099,6 +5106,11 @@ public interface FfiAppInterface {
     fun `prices`(): PriceResponse
     
     /**
+     * Reset to the default route with nested routes, only used by the LoadigAndResetContainer
+     */
+    fun `resetAfterLoading`(`to`: List<Route>)
+    
+    /**
      * Change the default route, and reset the routes
      */
     fun `resetDefaultRouteTo`(`route`: Route)
@@ -5550,6 +5562,21 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
     }
     )
     }
+    
+
+    
+    /**
+     * Reset to the default route with nested routes, only used by the LoadigAndResetContainer
+     */override fun `resetAfterLoading`(`to`: List<Route>)
+        = 
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_ffiapp_reset_after_loading(
+        it,
+        FfiConverterSequenceTypeRoute.lower(`to`),_status)
+}
+    }
+    
     
 
     

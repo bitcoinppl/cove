@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -16,12 +17,11 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import org.bitcoinppl.cove.ui.theme.CoveColor
 
 @Composable
 fun RoundRectIcon(
     size: Dp? = 40.dp,
-    backgroundColor: Color? = CoveColor.TextSecondary,
+    backgroundColor: Color? = MaterialTheme.colorScheme.onSurfaceVariant,
     imageVector: ImageVector,
     contentDescription: String? = null,
     cornerRadius: Dp = 4.dp,

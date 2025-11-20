@@ -14,8 +14,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -34,6 +36,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.ui.theme.MaterialSpacing
 
 @Preview
 @Composable
@@ -60,6 +63,18 @@ fun ThemedSwitch(
     )
 }
 
+// Material Design divider (standard 16dp indent)
+@Composable
+fun MaterialDivider(
+    indent: Dp = MaterialSpacing.medium,
+) {
+    HorizontalDivider(
+        modifier = Modifier.padding(start = indent),
+        color = MaterialTheme.colorScheme.outlineVariant,
+    )
+}
+
+// Deprecated: Use MaterialDivider instead
 @Composable
 fun CustomSpacer(
     height: Dp? = 1.dp,
@@ -87,6 +102,12 @@ fun CustomSpacer(
 @Composable
 fun CustomSpacerPreview() {
     CustomSpacer(paddingValues = PaddingValues(start = 54.dp))
+}
+
+@Preview
+@Composable
+fun MaterialDividerPreview() {
+    MaterialDivider(indent = MaterialSpacing.dividerIndent)
 }
 
 @Composable
@@ -118,7 +139,7 @@ fun InfoRow(
                     .fillMaxWidth()
                     .weight(1f),
             style = MaterialTheme.typography.bodyLarge,
-            color = CoveColor.TextGray,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.End,
         )
     }
@@ -161,12 +182,12 @@ fun ClickableInfoRow(
                     .fillMaxWidth()
                     .weight(1f),
             style = MaterialTheme.typography.bodyLarge,
-            color = CoveColor.TextGray,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.End,
         )
         Icon(
             imageVector = icon,
-            tint = CoveColor.TextGray,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
             contentDescription = "Forward",
         )
     }
@@ -175,7 +196,7 @@ fun ClickableInfoRow(
 @Composable
 fun CardItem(
     title: String,
-    titleColor: Color? = CoveColor.TextGray,
+    titleColor: Color? = MaterialTheme.colorScheme.onSurfaceVariant,
     allCaps: Boolean? = false,
     content:
         @Composable()
@@ -213,6 +234,64 @@ fun CardItem(
 @Composable
 fun CardItemPreview() {
     CardItem("name") { Text("hello") }
+}
+
+// Material Design section header (sentence case, labelLarge)
+@Composable
+fun SectionHeader(
+    title: String,
+    modifier: Modifier = Modifier,
+) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .padding(
+                    horizontal = MaterialSpacing.medium,
+                    vertical = 12.dp,
+                ),
+    )
+}
+
+@Preview
+@Composable
+fun SectionHeaderPreview() {
+    SectionHeader("General")
+}
+
+// Material Design section (flat, no elevation)
+@Composable
+fun MaterialSection(
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    Surface(
+        modifier =
+            modifier
+                .fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 0.dp,
+    ) {
+        content()
+    }
+}
+
+@Preview
+@Composable
+fun MaterialSectionPreview() {
+    Column {
+        SectionHeader("General")
+        MaterialSection {
+            Column {
+                Text("Item 1", modifier = Modifier.padding(MaterialSpacing.medium))
+                MaterialDivider(indent = MaterialSpacing.dividerIndent)
+                Text("Item 2", modifier = Modifier.padding(MaterialSpacing.medium))
+            }
+        }
+    }
 }
 
 @Preview

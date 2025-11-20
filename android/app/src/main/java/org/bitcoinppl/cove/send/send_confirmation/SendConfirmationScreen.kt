@@ -99,7 +99,7 @@ fun SendConfirmationScreen(
     willPay: String,
 ) {
     Scaffold(
-        containerColor = CoveColor.BackgroundDark,
+        containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
             CenterAlignedTopAppBar(
                 colors =
@@ -145,7 +145,7 @@ fun SendConfirmationScreen(
                     modifier =
                         Modifier
                             .fillMaxHeight()
-                            .background(CoveColor.BackgroundLight)
+                            .background(MaterialTheme.colorScheme.surface)
                             .padding(horizontal = 16.dp),
                 ) {
                     AmountWidget(
@@ -154,7 +154,7 @@ fun SendConfirmationScreen(
                         dollarText = dollarEquivalentText,
                         accountShort = accountShort,
                     )
-                    HorizontalDivider(color = CoveColor.DividerLight, thickness = 1.dp)
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
                     SummaryWidget(
                         address = address,
                         networkFee = networkFee,
@@ -166,10 +166,10 @@ fun SendConfirmationScreen(
                         text = stringResource(R.string.action_swipe_to_send),
                         sendState = sendState,
                         onComplete = onSwipeToSend,
-                        containerColor = CoveColor.SurfaceLight,
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
                         targetContainerColor = SWIPE_BUTTON_BG_COLOR_TARGET,
-                        knobColor = CoveColor.BackgroundDark,
-                        textColor = CoveColor.BackgroundDark,
+                        knobColor = MaterialTheme.colorScheme.surface,
+                        textColor = MaterialTheme.colorScheme.onSurface,
                         targetTextColor = SWIPE_BUTTON_TEXT_COLOR_TARGET,
                         modifier =
                             Modifier
@@ -250,14 +250,14 @@ private fun AmountWidget(
         Spacer(Modifier.height(16.dp))
         Text(
             stringResource(R.string.label_you_are_sending),
-            color = CoveColor.TextPrimary,
+            color = MaterialTheme.colorScheme.onSurface,
             fontSize = 16.sp,
             fontWeight = FontWeight.SemiBold,
         )
         Spacer(Modifier.height(4.dp))
         Text(
             stringResource(R.string.label_amount_they_will_receive),
-            color = CoveColor.TextSecondary,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 14.sp,
         )
         Spacer(Modifier.height(24.dp))
@@ -268,7 +268,7 @@ private fun AmountWidget(
             Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
                 Text(
                     text = amount,
-                    color = CoveColor.TextPrimary,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 48.sp,
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Right,
@@ -277,12 +277,12 @@ private fun AmountWidget(
             }
             Spacer(Modifier.width(32.dp))
             Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.offset(y = (-4).dp)) {
-                Text(denomination, color = CoveColor.TextPrimary, fontSize = 18.sp, maxLines = 1)
+                Text(denomination, color = MaterialTheme.colorScheme.onSurface, fontSize = 18.sp, maxLines = 1)
                 Spacer(Modifier.width(4.dp))
                 Icon(
                     imageVector = Icons.Filled.ArrowDropDown,
                     contentDescription = null,
-                    tint = CoveColor.TextPrimary,
+                    tint = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.size(20.dp),
                 )
             }
@@ -290,7 +290,7 @@ private fun AmountWidget(
         Spacer(Modifier.height(12.dp))
         Text(
             dollarText,
-            color = CoveColor.TextSecondary,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 20.sp,
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth(),
@@ -308,11 +308,11 @@ private fun AmountWidget(
             )
             Spacer(Modifier.size(12.dp))
             Column(horizontalAlignment = Alignment.Start) {
-                Text(accountShort, color = CoveColor.TextSecondary, fontSize = 14.sp)
+                Text(accountShort, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
                 Spacer(Modifier.size(4.dp))
                 Text(
                     stringResource(R.string.label_main),
-                    color = CoveColor.TextPrimary,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -336,34 +336,34 @@ private fun SummaryWidget(
         KeyValueRow(
             key = stringResource(R.string.label_address),
             value = address,
-            valueColor = CoveColor.TextPrimary,
-            keyColor = CoveColor.TextSecondary,
+            valueColor = MaterialTheme.colorScheme.onSurface,
+            keyColor = MaterialTheme.colorScheme.onSurfaceVariant,
             boldValue = true,
         )
         Spacer(Modifier.height(20.dp))
         KeyValueRow(
             key = stringResource(R.string.label_network_fee),
             value = networkFee,
-            valueColor = CoveColor.TextSecondary,
-            keyColor = CoveColor.TextSecondary,
+            valueColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            keyColor = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(20.dp))
         KeyValueRow(
             key = stringResource(R.string.label_they_will_receive),
             value = willReceive,
-            valueColor = CoveColor.TextPrimary,
+            valueColor = MaterialTheme.colorScheme.onSurface,
             boldValue = true,
             boldKey = true,
-            keyColor = CoveColor.TextPrimary,
+            keyColor = MaterialTheme.colorScheme.onSurface,
         )
         Spacer(Modifier.height(20.dp))
         KeyValueRow(
             key = stringResource(R.string.label_you_will_pay),
             value = willPay,
-            valueColor = CoveColor.TextPrimary,
+            valueColor = MaterialTheme.colorScheme.onSurface,
             boldValue = true,
             boldKey = true,
-            keyColor = CoveColor.TextPrimary,
+            keyColor = MaterialTheme.colorScheme.onSurface,
         )
         Spacer(Modifier.height(20.dp))
     }
