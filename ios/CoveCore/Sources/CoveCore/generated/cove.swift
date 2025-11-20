@@ -725,6 +725,11 @@ public protocol FfiAppProtocol: AnyObject, Sendable {
     func prices() throws  -> PriceResponse
     
     /**
+     * Reset to the default route with nested routes, only used by the LoadigAndResetContainer
+     */
+    func resetAfterLoading(to: [Route]) 
+    
+    /**
      * Change the default route, and reset the routes
      */
     func resetDefaultRouteTo(route: Route) 
@@ -1016,6 +1021,17 @@ open func prices()throws  -> PriceResponse  {
             self.uniffiCloneHandle(),$0
     )
 })
+}
+    
+    /**
+     * Reset to the default route with nested routes, only used by the LoadigAndResetContainer
+     */
+open func resetAfterLoading(to: [Route])  {try! rustCall() {
+    uniffi_cove_fn_method_ffiapp_reset_after_loading(
+            self.uniffiCloneHandle(),
+        FfiConverterSequenceTypeRoute.lower(to),$0
+    )
+}
 }
     
     /**
@@ -26622,6 +26638,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_prices() != 42098) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_ffiapp_reset_after_loading() != 45084) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_reset_default_route_to() != 31408) {

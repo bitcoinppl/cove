@@ -182,6 +182,12 @@ impl Router {
         self.default = route;
         self.routes.clear();
     }
+
+    pub fn reset_nested_routes_to(&mut self, default: Route, nested_routes: Vec<Route>) {
+        self.default = default;
+        self.routes.clear();
+        self.routes = nested_routes;
+    }
 }
 
 #[derive(
