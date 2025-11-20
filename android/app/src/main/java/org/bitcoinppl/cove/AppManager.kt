@@ -284,7 +284,9 @@ class AppManager private constructor() : FfiReconcile {
         try {
             when (multiFormat) {
                 is MultiFormat.Mnemonic -> {
-                    importHotWallet(multiFormat.v1.words())
+                    multiFormat.v1.use { mnemonic ->
+                        importHotWallet(mnemonic.words())
+                    }
                 }
                 is MultiFormat.HardwareExport -> {
                     importColdWallet(multiFormat.v1)
@@ -358,7 +360,7 @@ class AppManager private constructor() : FfiReconcile {
             val walletMetadata = manager.rust.importWallet(listOf(words))
             rust.selectWallet(walletMetadata.id)
         } catch (e: ImportWalletException.InvalidWordGroup) {
-            logDebug("Invalid words: ${e.v1}")
+            logDebug("Invalid word group detected")
             alertState = TaggedItem(AppAlertState.InvalidWordGroup)
         } catch (e: ImportWalletException.WalletAlreadyExists) {
             alertState = TaggedItem(AppAlertState.DuplicateWallet(e.v1))
