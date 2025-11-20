@@ -211,7 +211,7 @@ fun HotWalletImportScreen(
             app.rust.selectWallet(walletMetadata.id)
             app.resetRoute(Route.SelectedWallet(walletMetadata.id))
         } catch (e: ImportWalletException.InvalidWordGroup) {
-            Log.d("HotWalletImport", "invalid words", e)
+            Log.d("HotWalletImport", "Invalid word group while importing hot wallet")
             alertState = AlertState.InvalidWords
         } catch (e: ImportWalletException.WalletAlreadyExists) {
             duplicateWalletId = e.v1

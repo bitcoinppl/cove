@@ -249,7 +249,7 @@ struct QrCodeImportScreen: View {
 private struct HelpView: View {
     var body: some View {
         VStack(spacing: 24) {
-            Text("How do get my wallet export QR code?")
+            Text("How do I get my wallet export QR code?")
                 .font(.title)
                 .fontWeight(.bold)
                 .multilineTextAlignment(.center)
@@ -295,6 +295,7 @@ private struct HelpView: View {
                         Text("2. Click on 'Export...' button at the bottom")
                         Text("3. Under 'Output Descriptor' click the 'Show...' button")
                         Text("4. Make sure 'Show BBQr' is selected")
+                        Text("5. Scan the generated QR code")
                     }
 
                     Divider()

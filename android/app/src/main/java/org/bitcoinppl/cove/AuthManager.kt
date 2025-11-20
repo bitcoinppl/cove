@@ -106,7 +106,7 @@ class AuthManager private constructor() : AuthManagerReconciler {
     /**
      * check if PIN matches main wallet PIN
      */
-    fun checkPin(pin: String): Boolean = AuthPin().check(pin)
+    fun checkPin(pin: String): Boolean = AuthPin().use { it.check(pin) }
 
     /**
      * check if PIN is decoy PIN
@@ -136,7 +136,7 @@ class AuthManager private constructor() : AuthManagerReconciler {
      */
     fun handleAndReturnUnlockMode(pin: String): UnlockMode {
         // check if PIN matches main wallet PIN
-        if (AuthPin().check(pin)) {
+        if (AuthPin().use { it.check(pin) }) {
             if (Database().globalConfig().isInDecoyMode()) {
                 switchToMainMode()
             }
