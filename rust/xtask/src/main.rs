@@ -11,6 +11,10 @@ mod flags {
                 /// Targets to bump (comma separated): 'rust', 'ios', 'android'. Defaults to all.
                 optional --targets targets: String
             }
+            cmd build-bump {
+                /// Targets to bump build numbers (comma separated): 'ios', 'android'. Defaults to both.
+                optional targets: String
+            }
         }
     }
 }
@@ -19,6 +23,7 @@ fn main() -> Result<()> {
     let flags = flags::Xtask::from_env_or_exit();
     match flags.subcommand {
         flags::XtaskCmd::BumpVersion(cmd) => bump_version(cmd.bump_type, cmd.targets),
+        flags::XtaskCmd::BuildBump(cmd) => build_bump(cmd.targets),
     }
 }
 
@@ -167,12 +172,10 @@ fn update_ios(sh: &Shell, bump_type: &str) -> Result<()> {
     // calculate new version
     let new_version = calculate_bumped_version(&current_ios_version, bump_type)?;
 
-    let mut new_pbx = pbx.replace(
+    let new_pbx = pbx.replace(
         &format!("MARKETING_VERSION = {current_ios_version};"),
         &format!("MARKETING_VERSION = {new_version};"),
     );
-
-    new_pbx = increment_and_replace_ios(new_pbx);
 
     sh.write_file(pbx_path, new_pbx)?;
     println!(
@@ -181,6 +184,10 @@ fn update_ios(sh: &Shell, bump_type: &str) -> Result<()> {
         current_ios_version,
         new_version
     );
+
+    // increment build number
+    bump_ios_build_number(sh)?;
+
     Ok(())
 }
 
@@ -201,12 +208,10 @@ fn update_android(sh: &Shell, bump_type: &str) -> Result<()> {
     let new_version = calculate_bumped_version(&current_android_version, bump_type)?;
 
     // update versionName
-    let mut new_gradle = gradle.replace(
+    let new_gradle = gradle.replace(
         &format!("versionName = \"{current_android_version}\""),
         &format!("versionName = \"{new_version}\""),
     );
-
-    new_gradle = increment_and_replace_android(new_gradle);
 
     sh.write_file(gradle_path, new_gradle)?;
     println!(
@@ -215,6 +220,73 @@ fn update_android(sh: &Shell, bump_type: &str) -> Result<()> {
         current_android_version,
         new_version
     );
+
+    // increment build number
+    bump_android_build_number(sh)?;
+
+    Ok(())
+}
+
+fn build_bump(targets_opt: Option<String>) -> Result<()> {
+    let sh = Shell::new()?;
+
+    // parse targets
+    let targets_str = targets_opt.as_deref().unwrap_or("ios,android");
+    let targets: Vec<&str> = targets_str.split(',').map(|s| s.trim()).collect();
+
+    // validate targets
+    for t in &targets {
+        if !["ios", "android"].contains(t) {
+            bail!("Unknown target: '{}'. Valid targets are: ios, android", t);
+        }
+    }
+
+    // we expect to be running from the 'rust' directory
+    if !sh.path_exists("Cargo.toml") {
+        bail!("Cargo.toml not found. Ensure you are running this from the 'rust' directory.");
+    }
+
+    println!("{} {:?}", "Bumping build numbers for:".blue().bold(), targets);
+
+    // bump iOS build number
+    if targets.contains(&"ios") {
+        bump_ios_build_number(&sh)?;
+    }
+
+    // bump Android build number
+    if targets.contains(&"android") {
+        bump_android_build_number(&sh)?;
+    }
+
+    println!("{} Build numbers bumped", "SUCCESS:".green().bold());
+    Ok(())
+}
+
+fn bump_ios_build_number(sh: &Shell) -> Result<()> {
+    let pbx_path = "../ios/Cove.xcodeproj/project.pbxproj";
+    if !sh.path_exists(pbx_path) {
+        println!("{} iOS project file not found at {pbx_path}", "!".yellow());
+        return Ok(());
+    }
+
+    let pbx = sh.read_file(pbx_path)?;
+    let new_pbx = increment_and_replace_ios(pbx);
+    sh.write_file(pbx_path, new_pbx)?;
+
+    Ok(())
+}
+
+fn bump_android_build_number(sh: &Shell) -> Result<()> {
+    let gradle_path = "../android/app/build.gradle.kts";
+    if !sh.path_exists(gradle_path) {
+        println!("{} Android build.gradle.kts not found at {gradle_path}", "!".yellow());
+        return Ok(());
+    }
+
+    let gradle = sh.read_file(gradle_path)?;
+    let new_gradle = increment_and_replace_android(gradle);
+    sh.write_file(gradle_path, new_gradle)?;
+
     Ok(())
 }
 

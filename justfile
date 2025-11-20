@@ -1,30 +1,19 @@
-export TMPDIR := "/tmp"
-
-# xcode aliases
-alias xc := xcode-clean
-alias xr := xcode-reset
-
-# watch aliases
-alias wt := watch-test
-alias wtest := watch-test
-alias wb := watch-build
-
-# build aliases ios
-alias bi := build-ios
-alias bir := build-ios-release
-alias bidd := build-ios-debug-device
-
-# build aliases android
-alias ba := build-android
-alias bar := build-android-release
-
-# full build alias
-alias f := full
+# Commonly used commands:
+#   just ba         - build android debug
+#   just bar        - build android release
+#   just bi         - build ios debug simulator
+#   just bir        - build ios release
+#   just bidd       - build ios debug device
+#   just bb [ios|android] - bump build numbers only (default: both)
+#   just bump <major|minor|patch> [targets] - bump version (default: all targets)
+#   just f          - full build and verification (all platforms)
+#   just ci         - run all CI checks
 
 default:
     just --list
 
 # full build and verification for all platforms
+alias f := full
 full:
     just bidd && just ba && just ci && just compile
 
@@ -70,6 +59,13 @@ update pkg="":
 bump type targets="rust,ios,android":
     cd rust && cargo xtask bump-version {{type}} --targets {{targets}}
 
+# bump build numbers only (ios, android, or both)
+alias bb := build-bump
+build-bump targets="ios,android":
+    cd rust && cargo xtask build-bump {{targets}}
+
+
+alias xc := xcode-clean
 xcode-clean:
     rm -rf ~/Library/Caches/org.swift.swiftpm
     cd ios && xcodebuild clean
@@ -85,6 +81,7 @@ ci:
     cd android && ./gradlew ktlintCheck
     just compile
 
+alias xr := xcode-reset
 xcode-reset:
     killAll Xcode || true
     rm -rf ios/Cove.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
@@ -95,6 +92,7 @@ xcode-reset:
     cd ios && xcode-build-server config -project *.xcodeproj -scheme Cove
     open ios/Cove.xcodeproj
 
+alias wb := watch-build
 watch-build profile="debug" device="false":
     watchexec --exts rs just build-ios {{profile}} {{device}}
 
@@ -107,6 +105,8 @@ ctest test="" flags="":
 btest test="":
     cd rust && bacon nextest -- {{test}} --workspace
 
+alias wt := watch-test
+alias wtest := watch-test
 watch-test test="" flags="":
     watchexec --exts rs just test {{test}} {{flags}}
 
@@ -114,10 +114,13 @@ watch-test test="" flags="":
 compile:
     just compile-ios && just compile-android
 
+
 # build android
+alias ba := build-android
 build-android:
     bash scripts/build-android.sh debug
 
+alias bar := build-android-release
 build-android-release:
     bash scripts/build-android.sh release
 
@@ -128,6 +131,7 @@ compile-android:
     cd android && ./gradlew assembleDebug
 
 # build ios
+alias bi := build-ios
 build-ios profile="debug" device="false" sign="false":
     #!/usr/bin/env bash
     if bash scripts/build-ios.sh {{profile}} {{device}} {{sign}}; then
@@ -136,9 +140,11 @@ build-ios profile="debug" device="false" sign="false":
         say "error"
     fi
 
+alias bir := build-ios-release
 build-ios-release:
     just build-ios release-smaller --device
 
+alias bidd := build-ios-debug-device
 build-ios-debug-device:
     just build-ios debug --device
 
@@ -147,4 +153,3 @@ run-ios: build-ios
 
 compile-ios:
     cd ios && xcodebuild -scheme Cove -sdk iphonesimulator -arch arm64 build
-
