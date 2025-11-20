@@ -303,30 +303,14 @@ struct HotWalletImportScreen: View {
     var ToolbarContent: some ToolbarContent {
         if !needsCustomToolbar, hasStartedTyping {
             ToolbarItem(placement: .keyboard) {
-                HStack(spacing: 0) {
-                    Spacer(minLength: 8)
-                    ZStack {
-                        Capsule()
-                            .fill(.thickMaterial)
-                            .frame(minWidth: accessoryMinWidth, minHeight: accessoryHeight)
-                            .shadow(color: Color.black.opacity(0.18), radius: 8, x: 0, y: -1)
-
-                        KeyboardAutoCompleteView
-                            .foregroundStyle(.primary)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
-                            .opacity(!filteredSuggestions.isEmpty ? 1 : 0)
-                            .frame(minWidth: accessoryMinWidth, alignment: .center)
-                            .animation(.easeInOut(duration: 0.2), value: !filteredSuggestions.isEmpty)
-                            .allowsHitTesting(!filteredSuggestions.isEmpty)
-                    }
-
-                    Spacer(minLength: 8)
-                }
-                .padding(.horizontal, 12)
-                .frame(height: accessoryHeight, alignment: .center)
-                .background(Color.midnightBlue)
-                .contentShape(Rectangle())
+                KeyboardAutoCompleteView
+                    .foregroundStyle(.primary)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .opacity(!filteredSuggestions.isEmpty ? 1 : 0)
+                    .frame(minWidth: accessoryMinWidth, alignment: .center)
+                    .animation(.easeInOut(duration: 0.2), value: !filteredSuggestions.isEmpty)
+                    .allowsHitTesting(!filteredSuggestions.isEmpty)
             }
         }
 

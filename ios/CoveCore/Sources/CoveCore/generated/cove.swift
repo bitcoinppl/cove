@@ -659,6 +659,11 @@ public protocol FfiAppProtocol: AnyObject, Sendable {
     func authType()  -> AuthType
     
     /**
+     * check if the router has any routes to go back to
+     */
+    func canGoBack()  -> Bool
+    
+    /**
      * DANGER: This will wipe all wallet data on this device
      */
     func dangerousWipeAllData() 
@@ -701,6 +706,11 @@ public protocol FfiAppProtocol: AnyObject, Sendable {
      * run all initialization tasks here, only called once
      */
     func initOnStart() async 
+    
+    /**
+     * check if the router is at the root route (no routes to go back to)
+     */
+    func isAtRoot()  -> Bool
     
     func listenForUpdates(updater: FfiReconcile) 
     
@@ -843,6 +853,17 @@ open func authType() -> AuthType  {
 }
     
     /**
+     * check if the router has any routes to go back to
+     */
+open func canGoBack() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_method_ffiapp_can_go_back(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+    /**
      * DANGER: This will wipe all wallet data on this device
      */
 open func dangerousWipeAllData()  {try! rustCall() {
@@ -962,6 +983,17 @@ open func initOnStart()async   {
             errorHandler: nil
             
         )
+}
+    
+    /**
+     * check if the router is at the root route (no routes to go back to)
+     */
+open func isAtRoot() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_method_ffiapp_is_at_root(
+            self.uniffiCloneHandle(),$0
+    )
+})
 }
     
 open func listenForUpdates(updater: FfiReconcile)  {try! rustCall() {
@@ -26589,6 +26621,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_ffiapp_auth_type() != 36896) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_ffiapp_can_go_back() != 19459) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_ffiapp_dangerous_wipe_all_data() != 40843) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -26620,6 +26655,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_init_on_start() != 30417) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_ffiapp_is_at_root() != 23036) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_listen_for_updates() != 31459) {
