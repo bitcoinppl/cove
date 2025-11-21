@@ -10,12 +10,21 @@ class NFCWriter: NSObject, NFCNDEFReaderSessionDelegate, ObservableObject {
     private let logger = Log(id: "NfcWriter")
     private var task: Task<Void, Never>?
 
+    deinit {
+        isScanning = false
+    }
+
     func writeToTag(data: Data) {
+        guard !isScanning else { return }
+
         isScanning = true
 
         Log.debug("Writing to NFC tag, with data of size: \(data.count)")
         self.data = data
-        guard NFCNDEFReaderSession.readingAvailable else { return }
+        guard NFCNDEFReaderSession.readingAvailable else {
+            isScanning = false
+            return
+        }
 
         session = NFCNDEFReaderSession(delegate: self, queue: nil, invalidateAfterFirstRead: false)
         session?.alertMessage = "Hold your iPhone near an NFC tag to write"

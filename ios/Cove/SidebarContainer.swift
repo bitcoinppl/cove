@@ -36,10 +36,6 @@ struct SidebarContainer<Content: View>: View {
         dragTranslation = 0
 
         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-            Log.debug(
-                "onDragEnded: offset: \(offset), predictedEnd: \(predictedEnd) dragStartedWithSidebarOpen: \(dragStartedWithSidebarOpen)"
-            )
-
             // started open
             if dragStartedWithSidebarOpen {
                 // started open - closing requires dragging below 70% (196px for 280px width)

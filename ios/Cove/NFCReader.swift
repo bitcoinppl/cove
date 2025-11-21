@@ -35,8 +35,14 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
         readBytes = Data()
     }
 
+    deinit {
+        isScanning = false
+    }
+
     func scan() {
         Log.info("started scanning")
+
+        guard !isScanning else { return }
 
         isScanning = true
         scannedMessage = nil

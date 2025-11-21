@@ -22,11 +22,16 @@ class TapSignerManager {
         initialRoute = route
     }
 
+    deinit {
+        AppManager.shared.tapSignerNfc = nil
+    }
+
     func getOrCreateNfc(_ tapSigner: TapSigner) -> TapSignerNFC {
         if let nfc { return nfc }
 
         let nfc = TapSignerNFC(tapSigner)
         self.nfc = nfc
+        AppManager.shared.tapSignerNfc = nfc
 
         return self.nfc!
     }

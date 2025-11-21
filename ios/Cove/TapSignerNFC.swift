@@ -19,6 +19,10 @@ class TapSignerNFC {
         nfc = TapCardNFC(tapcard: .tapSigner(card))
     }
 
+    var isScanning: Bool {
+        nfc.isScanning
+    }
+
     func setupTapSigner(factoryPin: String, newPin: String, chainCode: Data? = nil) async
         -> Result<SetupCmdResponse, TapSignerReaderError>
     {
@@ -79,7 +83,9 @@ class TapSignerNFC {
                                 continuation.resume(returning: .failure(error))
                                 self.nfc.session?.invalidate(errorMessage: error.description)
                             } else {
-                                Log.error("Unknown error response: \(String(describing: self.nfc.tapSignerResponse)), error: \(String(describing: self.nfc.tapSignerError))")
+                                Log.error(
+                                    "Unknown error response: \(String(describing: self.nfc.tapSignerResponse)), error: \(String(describing: self.nfc.tapSignerError))"
+                                )
                                 let error = TapSignerReaderError.Unknown("Unknown error occurred")
                                 continuation.resume(returning: .failure(error))
                                 self.nfc.session?.invalidate(errorMessage: error.description)
@@ -269,6 +275,10 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
         transport = nil
     }
 
+    deinit {
+        isScanning = false
+    }
+
     func scan() {
         guard let tapSignerCmd else { return Log.error("cmd not set") }
         switch tapSignerCmd {
@@ -279,6 +289,7 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
         case .sign: logger.info("started scanning for sign")
         }
 
+        isScanning = true
         session = NFCTagReaderSession(pollingOption: [.iso14443, .iso15693], delegate: self)
         session?.alertMessage = "Hold your iPhone near the NFC tag."
         session?.begin()
@@ -341,7 +352,6 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
                 )
 
                 self.tapSignerReader = tapSignerReader
-
                 let response = try await tapSignerReader.run()
                 tapSignerResponse = response
             }
@@ -363,6 +373,17 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
     }
 
     func tagReaderSession(_ session: NFCTagReaderSession, didInvalidateWithError error: any Error) {
+        isScanning = false
+
+        // check if this is a normal session completion (user canceled or programmatic invalidation)
+        if let nfcError = error as? NFCReaderError,
+           nfcError.code == .readerSessionInvalidationErrorUserCanceled
+        {
+            logger.debug("tapcard reader session ended normally: \(error.localizedDescription)")
+            return
+        }
+
+        // actual error occurred
         Log.error("tapcard reader session did invalidate with error: \(error.localizedDescription)")
         switch error as? NFCReaderError {
         case .none:
@@ -415,7 +436,8 @@ class TapCardTransport: TapcardTransportProtocol, @unchecked Sendable {
 
                 if let error {
                     logger.error("APDU error: \(error)")
-                    continuation.resume(throwing: TransportError.UnknownError(error.localizedDescription))
+                    continuation.resume(
+                        throwing: TransportError.UnknownError(error.localizedDescription))
                     return
                 }
 

@@ -28,6 +28,7 @@ import SwiftUI
 
     var nfcReader = NFCReader()
     var nfcWriter = NFCWriter()
+    var tapSignerNfc: TapSignerNFC?
 
     var prices: PriceResponse?
     var fees: FeeResponse?

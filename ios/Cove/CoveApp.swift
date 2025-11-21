@@ -602,7 +602,8 @@ struct CoveApp: App {
             Log.debug("[scene] app going inactive")
             coverClearTask?.cancel()
 
-            if !app.nfcWriter.isScanning, !app.nfcReader.isScanning { showCover = true }
+            let tapSignerScanning = app.tapSignerNfc?.isScanning ?? false
+            if !app.nfcWriter.isScanning, !app.nfcReader.isScanning, !tapSignerScanning { showCover = true }
 
             // prevent getting stuck on show cover
             coverClearTask = Task {
@@ -622,6 +623,13 @@ struct CoveApp: App {
         if auth.isAuthEnabled, newPhase == .background {
             Log.debug("[scene] app going into background")
             coverClearTask?.cancel()
+
+            // don't lock or dismiss sheets if any NFC operation is active
+            let tapSignerScanning = app.tapSignerNfc?.isScanning ?? false
+            if app.nfcWriter.isScanning || app.nfcReader.isScanning || tapSignerScanning {
+                Log.debug("[scene] NFC operation active, not dismissing sheets or locking")
+                return
+            }
 
             showCover = true
             if auth.lockState != .locked { auth.lock() }
