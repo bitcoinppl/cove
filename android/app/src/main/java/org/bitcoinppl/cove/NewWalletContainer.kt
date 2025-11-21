@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import org.bitcoinppl.cove.flow.new_wallet.NewWalletSelectScreen
 import org.bitcoinppl.cove.flow.new_wallet.cold_wallet.ColdWalletQrScanScreen
+import org.bitcoinppl.cove.utils.intoRoute
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
 
@@ -32,7 +33,7 @@ fun NewWalletContainer(
                 },
                 canGoBack = canGoBack,
                 onOpenNewHotWallet = {
-                    app.pushRoute(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Select)))
+                    app.pushRoute(HotWalletRoute.Select.intoRoute())
                 },
                 onOpenQrScan = {
                     app.pushRoute(Route.NewWallet(NewWalletRoute.ColdWallet(ColdWalletRoute.QR_CODE)))
