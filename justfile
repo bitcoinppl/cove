@@ -93,8 +93,8 @@ xcode-reset:
     open ios/Cove.xcodeproj
 
 alias wb := watch-build
-watch-build profile="debug" device="false":
-    watchexec --exts rs just build-ios {{profile}} {{device}}
+watch-build profile="debug" *flags="":
+    watchexec --exts rs just build-ios {{profile}} {{flags}}
 
 test test="" flags="":
     cd rust && cargo nextest run {{test}} --workspace {{flags}}
@@ -118,38 +118,36 @@ compile:
 # build android
 alias ba := build-android
 build-android:
-    bash scripts/build-android.sh debug
+    cd rust && cargo xtask build-android debug
 
 alias bar := build-android-release
 build-android-release:
-    bash scripts/build-android.sh release
+    cd rust && cargo xtask build-android release
 
-run-android: build-android
-    bash scripts/run-android.sh
+run-android:
+    cd rust && cargo xtask run-android
 
 compile-android:
     cd android && ./gradlew assembleDebug
 
 # build ios
 alias bi := build-ios
-build-ios profile="debug" device="false" sign="false":
-    #!/usr/bin/env bash
-    if bash scripts/build-ios.sh {{profile}} {{device}} {{sign}}; then
-        say "done"
-    else
-        say "error"
-    fi
+build-ios profile="debug" *flags="":
+    cd rust && cargo xtask build-ios {{profile}} {{flags}}
 
 alias bir := build-ios-release
 build-ios-release:
-    just build-ios release-smaller --device
+    cd rust && cargo xtask build-ios release-smaller --device
 
 alias bidd := build-ios-debug-device
 build-ios-debug-device:
-    just build-ios debug --device
+    cd rust && cargo xtask build-ios debug --device
 
-run-ios: build-ios
-    bash scripts/run-ios.sh
+run-ios:
+    cd rust && cargo xtask run-ios
 
 compile-ios:
     cd ios && xcodebuild -scheme Cove -sdk iphonesimulator -arch arm64 build
+
+xtask *args:
+    cd rust && cargo xtask {{args}}
