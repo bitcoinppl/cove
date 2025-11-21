@@ -227,8 +227,7 @@ fun NumberPadPinView(
                                 onClick = { if (pin.isNotEmpty()) pin = pin.dropLast(1) },
                                 indication = null,
                                 interactionSource = remember { MutableInteractionSource() },
-                            )
-                            .padding(vertical = 20.dp),
+                            ).padding(vertical = 20.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
@@ -256,8 +255,7 @@ private fun NumberButton(
                     onClick = onClick,
                     indication = null,
                     interactionSource = remember { MutableInteractionSource() },
-                )
-                .padding(vertical = 20.dp),
+                ).padding(vertical = 20.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(

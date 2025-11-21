@@ -25,7 +25,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 class SendFlowManager(
     internal val rust: RustSendFlowManager,
     var presenter: SendFlowPresenter,
-) : SendFlowManagerReconciler, Closeable {
+) : SendFlowManagerReconciler,
+    Closeable {
     private val tag = "SendFlowManager"
 
     // Scope for UI-bound work; reconcile and UI updates run on Main
@@ -129,23 +130,16 @@ class SendFlowManager(
     /**
      * validate entire send flow
      */
-    fun validate(displayAlert: Boolean = false): Boolean {
-        return validateAmount(displayAlert) &&
+    fun validate(displayAlert: Boolean = false): Boolean =
+        validateAmount(displayAlert) &&
             validateAddress(displayAlert) &&
             validateFeePercentage(displayAlert)
-    }
 
-    fun validateAddress(displayAlert: Boolean = false): Boolean {
-        return rust.validateAddress(displayAlert)
-    }
+    fun validateAddress(displayAlert: Boolean = false): Boolean = rust.validateAddress(displayAlert)
 
-    fun validateAmount(displayAlert: Boolean = false): Boolean {
-        return rust.validateAmount(displayAlert)
-    }
+    fun validateAmount(displayAlert: Boolean = false): Boolean = rust.validateAmount(displayAlert)
 
-    fun validateFeePercentage(displayAlert: Boolean = false): Boolean {
-        return rust.validateFeePercentage(displayAlert)
-    }
+    fun validateFeePercentage(displayAlert: Boolean = false): Boolean = rust.validateFeePercentage(displayAlert)
 
     fun updateAddress(address: Address) {
         _enteringAddress = address.string()
@@ -169,9 +163,7 @@ class SendFlowManager(
     suspend fun getNewCustomFeeRateWithTotal(
         feeRate: FeeRate,
         feeSpeed: FeeSpeed,
-    ): FeeRateOptionWithTotalFee {
-        return rust.getCustomFeeOption(feeRate, feeSpeed)
-    }
+    ): FeeRateOptionWithTotalFee = rust.getCustomFeeOption(feeRate, feeSpeed)
 
     private fun apply(message: SendFlowManagerReconcileMessage) {
         when (message) {

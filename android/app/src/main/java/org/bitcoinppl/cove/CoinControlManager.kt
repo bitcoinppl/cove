@@ -25,7 +25,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 @Stable
 class CoinControlManager(
     val rust: RustCoinControlManager,
-) : CoinControlManagerReconciler, Closeable {
+) : CoinControlManagerReconciler,
+    Closeable {
     private val tag = "CoinControlManager"
 
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -82,28 +83,26 @@ class CoinControlManager(
     /**
      * get button color based on sort state
      */
-    fun buttonColor(key: CoinControlListSortKey): Color {
-        return when (rust.buttonPresentation(key)) {
+    fun buttonColor(key: CoinControlListSortKey): Color =
+        when (rust.buttonPresentation(key)) {
             is ButtonPresentation.NotSelected -> Color(0xFFD1D1D6) // systemGray5 equivalent
             is ButtonPresentation.Selected -> Color(0xFF007AFF) // iOS blue
         }
-    }
 
     /**
      * get button text color based on sort state
      */
-    fun buttonTextColor(key: CoinControlListSortKey): Color {
-        return when (rust.buttonPresentation(key)) {
+    fun buttonTextColor(key: CoinControlListSortKey): Color =
+        when (rust.buttonPresentation(key)) {
             is ButtonPresentation.NotSelected -> Color(0xFF8E8E93).copy(alpha = 0.6f) // secondary with opacity
             is ButtonPresentation.Selected -> Color.White
         }
-    }
 
     /**
      * get button arrow icon based on sort state
      */
-    fun buttonArrow(key: CoinControlListSortKey): String? {
-        return when (val presentation = rust.buttonPresentation(key)) {
+    fun buttonArrow(key: CoinControlListSortKey): String? =
+        when (val presentation = rust.buttonPresentation(key)) {
             is ButtonPresentation.Selected -> {
                 when (presentation.v1) {
                     ListSortDirection.ASCENDING -> "arrow_upward"
@@ -112,7 +111,6 @@ class CoinControlManager(
             }
             is ButtonPresentation.NotSelected -> null
         }
-    }
 
     val totalSelectedAmount: String
         get() = displayAmount(totalSelected)
@@ -180,15 +178,14 @@ class CoinControlManager(
         }
     }
 
-    fun displayAmount(amount: Amount, showUnit: Boolean = true): String {
-        return when (unit to showUnit) {
+    fun displayAmount(amount: Amount, showUnit: Boolean = true): String =
+        when (unit to showUnit) {
             BitcoinUnit.BTC to true -> amount.btcStringWithUnit()
             BitcoinUnit.BTC to false -> amount.btcString()
             BitcoinUnit.SAT to true -> amount.satsStringWithUnit()
             BitcoinUnit.SAT to false -> amount.satsString()
             else -> amount.satsStringWithUnit()
         }
-    }
 
     override fun reconcile(message: CoinControlManagerReconcileMessage) {
         logDebug("reconcile: $message")

@@ -33,7 +33,9 @@ sealed interface SendState {
 
     data object Sent : SendState
 
-    data class Error(val message: String) : SendState
+    data class Error(
+        val message: String,
+    ) : SendState
 }
 
 /**
@@ -185,7 +187,11 @@ private fun SendFlowRouteToScreen(
                         else -> sendFlowManager.sendAmountFiat
                     },
                 initialAddress = sendFlowManager.enteringAddress,
-                accountShort = walletManager.walletMetadata?.masterFingerprint?.asUppercase()?.take(8) ?: "",
+                accountShort =
+                    walletManager.walletMetadata
+                        ?.masterFingerprint
+                        ?.asUppercase()
+                        ?.take(8) ?: "",
                 feeEta =
                     sendFlowManager.selectedFeeRate?.let {
                         when (it.feeSpeed()) {
@@ -240,7 +246,11 @@ private fun SendFlowRouteToScreen(
                 sendingDenomination = walletManager.unit,
                 dollarEquivalentText = sendFlowManager.sendAmountFiat,
                 initialAddress = sendFlowManager.enteringAddress,
-                accountShort = walletManager.walletMetadata?.masterFingerprint?.asUppercase()?.take(8) ?: "",
+                accountShort =
+                    walletManager.walletMetadata
+                        ?.masterFingerprint
+                        ?.asUppercase()
+                        ?.take(8) ?: "",
                 feeEta =
                     sendFlowManager.selectedFeeRate?.let {
                         when (it.feeSpeed()) {
@@ -307,7 +317,11 @@ private fun SendFlowRouteToScreen(
                 sendingAmount = walletManager.amountFmt(details.sendingAmount()),
                 sendingAmountDenomination = walletManager.unit,
                 dollarEquivalentText = sendFlowManager.sendAmountFiat,
-                accountShort = walletManager.walletMetadata?.masterFingerprint?.asUppercase()?.take(8) ?: "",
+                accountShort =
+                    walletManager.walletMetadata
+                        ?.masterFingerprint
+                        ?.asUppercase()
+                        ?.take(8) ?: "",
                 address = details.sendingTo().string(),
                 networkFee = walletManager.amountFmtUnit(details.feeTotal()),
                 willReceive = walletManager.amountFmtUnit(details.sendingAmount()),

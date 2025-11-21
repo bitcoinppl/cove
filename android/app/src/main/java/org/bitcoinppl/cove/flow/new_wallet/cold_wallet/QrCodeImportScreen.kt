@@ -19,11 +19,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.PermissionState
 import com.google.accompanist.permissions.isGranted
@@ -181,6 +181,7 @@ private fun QrScannerContent(
             try {
                 val wallet = Wallet.newFromXpub(xpub = xpub)
                 val id = wallet.id()
+                wallet.close()
                 Log.d("QrCodeImportScreen", "Imported Wallet: $id")
 
                 app.rust.selectWallet(id = id)
@@ -212,11 +213,16 @@ private fun QrScannerContent(
                         )
                     app.popRoute()
                 } catch (selectError: Exception) {
+                    Log.e(
+                        "QrCodeImportScreen",
+                        "Unable to select existing wallet",
+                        selectError,
+                    )
                     app.popRoute()
                     app.alertState =
                         TaggedItem(
                             AppAlertState.ErrorImportingHardwareWallet(
-                                message = "Unable to select wallet",
+                                message = selectError.message ?: "Unable to select wallet",
                             ),
                         )
                 }
@@ -258,7 +264,8 @@ private fun QrScannerContent(
                         previewRef.value = preview
 
                         val imageAnalysis =
-                            ImageAnalysis.Builder()
+                            ImageAnalysis
+                                .Builder()
                                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                                 .build()
                                 .also { analysis ->
@@ -272,7 +279,8 @@ private fun QrScannerContent(
                                                 )
 
                                             val mainExecutor = ContextCompat.getMainExecutor(ctx)
-                                            barcodeScanner.process(image)
+                                            barcodeScanner
+                                                .process(image)
                                                 .addOnSuccessListener(mainExecutor) { barcodes ->
                                                     for (barcode in barcodes) {
                                                         if (barcode.format == Barcode.FORMAT_QR_CODE) {
@@ -300,11 +308,9 @@ private fun QrScannerContent(
                                                             break
                                                         }
                                                     }
-                                                }
-                                                .addOnFailureListener(mainExecutor) { e ->
+                                                }.addOnFailureListener(mainExecutor) { e ->
                                                     Log.e("QrCodeImportScreen", "Barcode processing failed", e)
-                                                }
-                                                .addOnCompleteListener {
+                                                }.addOnCompleteListener {
                                                     imageProxy.close()
                                                 }
                                         } else {
@@ -462,7 +468,7 @@ private fun HelpSheet(onDismiss: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(24.dp),
         ) {
             Text(
-                text = "How do get my wallet export QR code?",
+                text = "How do I get my wallet export QR code?",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
             )
@@ -509,6 +515,7 @@ private fun HelpSheet(onDismiss: () -> Unit) {
                     Text("2. Click on 'Export...' button at the bottom")
                     Text("3. Under 'Output Descriptor' click the 'Show...' button")
                     Text("4. Make sure 'Show BBQr' is selected")
+                    Text("5. Scan the generated QR code")
                 }
 
                 HorizontalDivider()

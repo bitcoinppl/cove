@@ -8,7 +8,9 @@ import java.io.Closeable
 import java.util.concurrent.atomic.AtomicBoolean
 
 @Stable
-class ImportWalletManager : ImportWalletManagerReconciler, Closeable {
+class ImportWalletManager :
+    ImportWalletManagerReconciler,
+    Closeable {
     private val tag = "ImportWalletManager"
     private val isClosed = AtomicBoolean(false)
 

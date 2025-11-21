@@ -20,17 +20,16 @@ class TapSignerNfcHelper(
         factoryPin: String,
         newPin: String,
         chainCode: ByteArray? = null,
-    ): SetupCmdResponse {
-        return try {
+    ): SetupCmdResponse =
+        try {
             doSetupTapSigner(factoryPin, newPin, chainCode)
         } catch (e: Exception) {
             Log.e(tag, "Setup failed", e)
             throw e
         }
-    }
 
-    suspend fun derive(pin: String): DeriveInfo {
-        return performTapSignerCmd(TapSignerCmd.Derive(pin)) { response ->
+    suspend fun derive(pin: String): DeriveInfo =
+        performTapSignerCmd(TapSignerCmd.Derive(pin)) { response ->
             // NOTE: Derive returns Import response in Rust (see tap_signer_reader.rs)
             when (response) {
                 is TapSignerResponse.Import -> response.v1
@@ -39,7 +38,6 @@ class TapSignerNfcHelper(
                 )
             }
         }
-    }
 
     suspend fun changePin(
         currentPin: String,
@@ -55,8 +53,8 @@ class TapSignerNfcHelper(
         }
     }
 
-    suspend fun backup(pin: String): ByteArray {
-        return performTapSignerCmd(TapSignerCmd.Backup(pin)) { response ->
+    suspend fun backup(pin: String): ByteArray =
+        performTapSignerCmd(TapSignerCmd.Backup(pin)) { response ->
             when (response) {
                 is TapSignerResponse.Backup -> response.v1
                 else -> throw Exception(
@@ -64,13 +62,12 @@ class TapSignerNfcHelper(
                 )
             }
         }
-    }
 
     suspend fun sign(
         psbt: Psbt,
         pin: String,
-    ): Psbt {
-        return performTapSignerCmd(TapSignerCmd.Sign(psbt, pin)) { response ->
+    ): Psbt =
+        performTapSignerCmd(TapSignerCmd.Sign(psbt, pin)) { response ->
             when (response) {
                 is TapSignerResponse.Sign -> response.v1
                 else -> throw Exception(
@@ -78,7 +75,6 @@ class TapSignerNfcHelper(
                 )
             }
         }
-    }
 
     fun lastResponse(): TapSignerResponse? = lastResponse
 

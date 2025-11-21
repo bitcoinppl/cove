@@ -193,8 +193,8 @@ fun HotWalletImportScreen(
         focusedField = totalWords - 1
     }
 
-    fun isAllWordsValid(): Boolean {
-        return enteredWords
+    fun isAllWordsValid(): Boolean =
+        enteredWords
             .flatten()
             .withIndex()
             .all { (idx, word) ->
@@ -204,7 +204,6 @@ fun HotWalletImportScreen(
                         numberOfWords = numberOfWords,
                     ).isBip39Word(word)
             }
-    }
 
     fun importWallet() {
         try {
@@ -212,7 +211,7 @@ fun HotWalletImportScreen(
             app.rust.selectWallet(walletMetadata.id)
             app.resetRoute(Route.SelectedWallet(walletMetadata.id))
         } catch (e: ImportWalletException.InvalidWordGroup) {
-            Log.d("HotWalletImport", "invalid words", e)
+            Log.d("HotWalletImport", "Invalid word group while importing hot wallet")
             alertState = AlertState.InvalidWords
         } catch (e: ImportWalletException.WalletAlreadyExists) {
             duplicateWalletId = e.v1
@@ -559,13 +558,11 @@ private fun WordInputField(
                 .background(
                     color = Color.White.copy(alpha = 0.08f),
                     shape = RoundedCornerShape(8.dp),
-                )
-                .border(
+                ).border(
                     width = if (borderColor != Color.Transparent) 2.dp else 0.dp,
                     color = borderColor,
                     shape = RoundedCornerShape(8.dp),
-                )
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+                ).padding(horizontal = 12.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -723,7 +720,8 @@ private fun QrScannerContent(
                         previewRef.value = preview
 
                         val imageAnalysis =
-                            ImageAnalysis.Builder()
+                            ImageAnalysis
+                                .Builder()
                                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                                 .build()
                                 .also { analysis ->
@@ -737,7 +735,8 @@ private fun QrScannerContent(
                                                 )
 
                                             val mainExecutor = ContextCompat.getMainExecutor(ctx)
-                                            barcodeScanner.process(image)
+                                            barcodeScanner
+                                                .process(image)
                                                 .addOnSuccessListener(mainExecutor) { barcodes ->
                                                     for (barcode in barcodes) {
                                                         if (barcode.format == Barcode.FORMAT_QR_CODE) {
@@ -760,11 +759,9 @@ private fun QrScannerContent(
                                                             break
                                                         }
                                                     }
-                                                }
-                                                .addOnFailureListener(mainExecutor) { e ->
+                                                }.addOnFailureListener(mainExecutor) { e ->
                                                     Log.e("QrScannerSheet", "Barcode processing failed", e)
-                                                }
-                                                .addOnCompleteListener {
+                                                }.addOnCompleteListener {
                                                     imageProxy.close()
                                                 }
                                         } else {
@@ -974,7 +971,11 @@ private fun NfcScannerSheet(
         return
     }
 
-    val nfcReader = remember(activity) { org.bitcoinppl.cove.nfc.NfcReader(activity) }
+    val nfcReader =
+        remember(activity) {
+            org.bitcoinppl.cove.nfc
+                .NfcReader(activity)
+        }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     // start scanning when sheet opens

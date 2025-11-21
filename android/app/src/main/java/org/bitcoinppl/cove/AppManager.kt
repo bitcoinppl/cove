@@ -93,11 +93,10 @@ class AppManager private constructor() : FfiReconcile {
         @Volatile
         private var instance: AppManager? = null
 
-        fun getInstance(): AppManager {
-            return instance ?: synchronized(this) {
+        fun getInstance(): AppManager =
+            instance ?: synchronized(this) {
                 instance ?: AppManager().also { instance = it }
             }
-        }
     }
 
     private fun logDebug(message: String) {
@@ -178,17 +177,11 @@ class AppManager private constructor() : FfiReconcile {
             return "v$appVersion (${rust.gitShortHash()})"
         }
 
-    fun findTapSignerWallet(ts: TapSigner): WalletMetadata? {
-        return rust.findTapSignerWallet(ts)
-    }
+    fun findTapSignerWallet(ts: TapSigner): WalletMetadata? = rust.findTapSignerWallet(ts)
 
-    fun getTapSignerBackup(ts: TapSigner): ByteArray? {
-        return rust.getTapSignerBackup(ts)
-    }
+    fun getTapSignerBackup(ts: TapSigner): ByteArray? = rust.getTapSignerBackup(ts)
 
-    fun saveTapSignerBackup(ts: TapSigner, backup: ByteArray): Boolean {
-        return rust.saveTapSignerBackup(ts, backup)
-    }
+    fun saveTapSignerBackup(ts: TapSigner, backup: ByteArray): Boolean = rust.saveTapSignerBackup(ts, backup)
 
     /**
      * reset the manager state
@@ -281,6 +274,196 @@ class AppManager private constructor() : FfiReconcile {
 
     fun scanQr() {
         sheetState = TaggedItem(AppSheetState.Qr)
+    }
+
+    /**
+     * Handle scanned QR code data by parsing and routing based on content type
+     * Matches iOS implementation in CoveApp.swift
+     */
+    fun handleMultiFormat(multiFormat: MultiFormat) {
+        try {
+            when (multiFormat) {
+                is MultiFormat.Mnemonic -> {
+                    multiFormat.v1.use { mnemonic ->
+                        importHotWallet(mnemonic.words())
+                    }
+                }
+                is MultiFormat.HardwareExport -> {
+                    importColdWallet(multiFormat.v1)
+                }
+                is MultiFormat.Address -> {
+                    handleAddress(multiFormat.v1)
+                }
+                is MultiFormat.Transaction -> {
+                    handleTransaction(multiFormat.v1)
+                }
+                is MultiFormat.TapSignerUnused -> {
+                    alertState = TaggedItem(AppAlertState.UninitializedTapSigner(multiFormat.v1))
+                }
+                is MultiFormat.TapSignerReady -> {
+                    val wallet = findTapSignerWallet(multiFormat.v1)
+                    if (wallet != null) {
+                        alertState = TaggedItem(AppAlertState.TapSignerWalletFound(wallet.id))
+                    } else {
+                        alertState = TaggedItem(AppAlertState.InitializedTapSigner(multiFormat.v1))
+                    }
+                }
+                is MultiFormat.Bip329Labels -> {
+                    val selectedWallet = database.globalConfig().selectedWallet()
+                    if (selectedWallet == null) {
+                        alertState =
+                            TaggedItem(
+                                AppAlertState.InvalidFileFormat(
+                                    "Currently BIP329 labels must be imported through the wallet actions",
+                                ),
+                            )
+                        return
+                    }
+
+                    // import the labels
+                    try {
+                        LabelManager(id = selectedWallet).importLabels(multiFormat.v1)
+                        alertState = TaggedItem(AppAlertState.ImportedLabelsSuccessfully)
+
+                        // when labels are imported, refresh transactions with updated labels
+                        walletManager?.let { wm ->
+                            mainScope.launch {
+                                wm.rust.getTransactions()
+                            }
+                        }
+                    } catch (e: Exception) {
+                        logError("Failed to import labels", e)
+                        alertState =
+                            TaggedItem(
+                                AppAlertState.InvalidFileFormat(
+                                    e.message ?: "Failed to import labels",
+                                ),
+                            )
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            logError("Unable to handle scanned code", e)
+            alertState =
+                TaggedItem(
+                    AppAlertState.InvalidFileFormat(e.message ?: "Unknown error"),
+                )
+        }
+    }
+
+    /**
+     * Import hot wallet from mnemonic words
+     */
+    private fun importHotWallet(words: List<String>) {
+        val manager = ImportWalletManager()
+        try {
+            val walletMetadata = manager.rust.importWallet(listOf(words))
+            rust.selectWallet(walletMetadata.id)
+        } catch (e: ImportWalletException.InvalidWordGroup) {
+            logDebug("Invalid word group detected")
+            alertState = TaggedItem(AppAlertState.InvalidWordGroup)
+        } catch (e: ImportWalletException.WalletAlreadyExists) {
+            alertState = TaggedItem(AppAlertState.DuplicateWallet(e.v1))
+            try {
+                rust.selectWallet(e.v1)
+            } catch (selectError: Exception) {
+                logError("Unable to select existing wallet", selectError)
+            }
+        } catch (e: Exception) {
+            logError("Unable to import wallet", e)
+            alertState =
+                TaggedItem(
+                    AppAlertState.ErrorImportingHotWallet(e.message ?: "Unknown error"),
+                )
+        } finally {
+            manager.close()
+        }
+    }
+
+    /**
+     * Import cold wallet from hardware export
+     */
+    private fun importColdWallet(export: HardwareExport) {
+        try {
+            val wallet = Wallet.newFromExport(export)
+            try {
+                val id = wallet.id()
+                logDebug("Imported Wallet: $id")
+                alertState = TaggedItem(AppAlertState.ImportedSuccessfully)
+                rust.selectWallet(id)
+            } finally {
+                wallet.close()
+            }
+        } catch (e: WalletException.WalletAlreadyExists) {
+            alertState = TaggedItem(AppAlertState.DuplicateWallet(e.v1))
+            try {
+                rust.selectWallet(e.v1)
+            } catch (selectError: Exception) {
+                logError("Unable to select existing wallet", selectError)
+                alertState = TaggedItem(AppAlertState.UnableToSelectWallet)
+            }
+        } catch (e: Exception) {
+            logError("Error importing hardware wallet", e)
+            alertState =
+                TaggedItem(
+                    AppAlertState.ErrorImportingHardwareWallet(e.message ?: "Unknown error"),
+                )
+        }
+    }
+
+    /**
+     * Handle scanned bitcoin address
+     */
+    private fun handleAddress(addressWithNetwork: AddressWithNetwork) {
+        val currentNetwork = database.globalConfig().selectedNetwork()
+        val address = addressWithNetwork.address()
+        val network = addressWithNetwork.network()
+        val selectedWallet = database.globalConfig().selectedWallet()
+
+        if (selectedWallet == null) {
+            alertState = TaggedItem(AppAlertState.NoWalletSelected(address))
+            return
+        }
+
+        if (!addressWithNetwork.isValidForNetwork(currentNetwork)) {
+            alertState =
+                TaggedItem(
+                    AppAlertState.AddressWrongNetwork(
+                        address = address,
+                        network = network,
+                        currentNetwork = currentNetwork,
+                    ),
+                )
+            return
+        }
+
+        val amount = addressWithNetwork.amount()
+        alertState = TaggedItem(AppAlertState.FoundAddress(address, amount))
+    }
+
+    /**
+     * Handle scanned signed transaction
+     */
+    private fun handleTransaction(transaction: BitcoinTransaction) {
+        logDebug("Received BitcoinTransaction: $transaction: ${transaction.txIdHash()}")
+
+        val db = database.unsignedTransactions()
+        val txnRecord = db.getTx(transaction.txId())
+
+        if (txnRecord == null) {
+            logError("No unsigned transaction found for ${transaction.txId()}")
+            alertState = TaggedItem(AppAlertState.NoUnsignedTransactionFound(transaction.txId()))
+            return
+        }
+
+        val route =
+            RouteFactory().sendConfirm(
+                id = txnRecord.walletId(),
+                details = txnRecord.confirmDetails(),
+                signedTransaction = transaction,
+            )
+
+        pushRoute(route)
     }
 
     fun resetRoute(to: List<Route>) {

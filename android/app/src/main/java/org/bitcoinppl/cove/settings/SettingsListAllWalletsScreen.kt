@@ -224,7 +224,9 @@ private fun WalletRow(
         RoundRectImage(
             size = 40.dp,
             backgroundColor = wallet.color.toComposeColor(),
-            painter = androidx.compose.ui.graphics.vector.rememberVectorPainter(Icons.Default.AccountBalanceWallet),
+            painter =
+                androidx.compose.ui.graphics.vector
+                    .rememberVectorPainter(Icons.Default.AccountBalanceWallet),
             contentDescription = null,
             cornerRadius = 8.dp,
             imageTint = Color.White,

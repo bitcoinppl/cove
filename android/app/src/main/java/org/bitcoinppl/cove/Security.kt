@@ -9,13 +9,16 @@ import org.bitcoinppl.cove_core.device.KeychainAccess
 import org.bitcoinppl.cove_core.device.KeychainException
 import java.util.TimeZone
 
-class KeychainAccessor(context: Context) : KeychainAccess {
+class KeychainAccessor(
+    context: Context,
+) : KeychainAccess {
     private val sharedPreferences: SharedPreferences
 
     init {
         // create or retrieve the master key for encryption
         val masterKey =
-            MasterKey.Builder(context)
+            MasterKey
+                .Builder(context)
                 .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
                 .build()
 
@@ -32,7 +35,8 @@ class KeychainAccessor(context: Context) : KeychainAccess {
 
     override fun save(key: String, value: String) {
         val success =
-            sharedPreferences.edit()
+            sharedPreferences
+                .edit()
                 .putString(key, value)
                 .commit()
 
@@ -41,19 +45,15 @@ class KeychainAccessor(context: Context) : KeychainAccess {
         }
     }
 
-    override fun get(key: String): String? {
-        return sharedPreferences.getString(key, null)
-    }
+    override fun get(key: String): String? = sharedPreferences.getString(key, null)
 
-    override fun delete(key: String): Boolean {
-        return sharedPreferences.edit()
+    override fun delete(key: String): Boolean =
+        sharedPreferences
+            .edit()
             .remove(key)
             .commit()
-    }
 }
 
 class DeviceAccessor : DeviceAccess {
-    override fun timezone(): String {
-        return TimeZone.getDefault().id
-    }
+    override fun timezone(): String = TimeZone.getDefault().id
 }

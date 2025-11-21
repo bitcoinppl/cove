@@ -313,7 +313,7 @@ fun SelectedWalletContainer(
                     // TODO: implement receive address screen/sheet
                 },
                 onQrCode = {
-                    // TODO: implement QR code scanner
+                    app.scanQr()
                 },
                 onMore = {
                     showMoreOptions = true

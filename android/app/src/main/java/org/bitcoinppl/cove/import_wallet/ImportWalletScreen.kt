@@ -126,8 +126,7 @@ fun ImportWalletScreen(
                                         } else {
                                             MaterialTheme.colorScheme.onBackground.copy(alpha = 0.33f)
                                         },
-                                    )
-                                    .clickable { tabIndex = i },
+                                    ).clickable { tabIndex = i },
                         )
                     }
                 }

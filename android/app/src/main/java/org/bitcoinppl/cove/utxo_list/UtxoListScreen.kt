@@ -142,7 +142,10 @@ fun UtxoListScreen(
                     UtxoSort.AMOUNT -> org.bitcoinppl.cove_core.CoinControlListSortKey.AMOUNT
                     UtxoSort.CHANGE -> org.bitcoinppl.cove_core.CoinControlListSortKey.CHANGE
                 }
-            manager.dispatch(org.bitcoinppl.cove_core.CoinControlManagerAction.ChangeSort(sortKey))
+            manager.dispatch(
+                org.bitcoinppl.cove_core.CoinControlManagerAction
+                    .ChangeSort(sortKey),
+            )
         },
         onContinue = {
             manager.continuePressed()
@@ -487,8 +490,7 @@ private fun SelectionCircle(selected: Boolean) {
                     width = 2.dp,
                     color = if (selected) Color(0xFF007AFF) else Color(0xFFD1D1D6),
                     shape = CircleShape,
-                )
-                .background(if (selected) Color(0xFF007AFF) else Color.Transparent),
+                ).background(if (selected) Color(0xFF007AFF) else Color.Transparent),
         contentAlignment = Alignment.Center,
     ) {
         if (selected) {

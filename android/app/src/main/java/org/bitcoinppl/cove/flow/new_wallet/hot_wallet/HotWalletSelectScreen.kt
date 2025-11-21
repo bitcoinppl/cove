@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.utils.intoRoute
 import org.bitcoinppl.cove.views.DashDotsIndicator
 import org.bitcoinppl.cove.views.ImageButton
 import org.bitcoinppl.cove_core.*
@@ -80,18 +81,8 @@ fun HotWalletSelectScreen(
     fun navigateToRoute(words: NumberOfBip39Words, importType: ImportType = ImportType.MANUAL) {
         val route =
             when (nextScreen) {
-                NextScreenDialog.Import ->
-                    Route.NewWallet(
-                        NewWalletRoute.HotWallet(
-                            HotWalletRoute.Import(words, importType),
-                        ),
-                    )
-                NextScreenDialog.Create ->
-                    Route.NewWallet(
-                        NewWalletRoute.HotWallet(
-                            HotWalletRoute.Create(words),
-                        ),
-                    )
+                NextScreenDialog.Import -> HotWalletRoute.Import(words, importType).intoRoute()
+                NextScreenDialog.Create -> HotWalletRoute.Create(words).intoRoute()
             }
         app.pushRoute(route)
     }

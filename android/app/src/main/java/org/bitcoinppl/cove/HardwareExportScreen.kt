@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -559,9 +560,26 @@ fun HardwareExportScreen(
 
     // fullscreen QR scanner
     if (showQrScanner) {
-        TransactionQrScannerScreen(
-            app = app,
+        QrCodeScanView(
+            onScanned = { stringOrData ->
+                try {
+                    val multiFormat = stringOrDataTryIntoMultiFormat(stringOrData)
+                    app.handleMultiFormat(multiFormat)
+                    showQrScanner = false
+                } catch (e: Exception) {
+                    Log.e("HardwareExportScreen", "Error scanning QR code: $e")
+                    showQrScanner = false
+                    app.alertState =
+                        TaggedItem(
+                            AppAlertState.General(
+                                title = "Scan Failed",
+                                message = e.message ?: "Failed to scan QR code",
+                            ),
+                        )
+                }
+            },
             onDismiss = { showQrScanner = false },
+            app = app,
         )
     }
 }
