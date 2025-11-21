@@ -3,6 +3,11 @@ use color_eyre::{eyre::ContextCompat, Result};
 use colored::Colorize;
 use xshell::{cmd, Shell};
 
+// Version file paths
+const CARGO_TOML_PATH: &str = "Cargo.toml";
+const IOS_PROJECT_PATH: &str = "../ios/Cove.xcodeproj/project.pbxproj";
+const ANDROID_GRADLE_PATH: &str = "../android/app/build.gradle.kts";
+
 pub fn bump_version(bump_type: String, targets_opt: Option<String>) -> Result<()> {
     let sh = Shell::new()?;
 
@@ -23,8 +28,7 @@ pub fn bump_version(bump_type: String, targets_opt: Option<String>) -> Result<()
     }
 
     // read current version (always read from Rust as source of truth)
-    let cargo_toml_path = "Cargo.toml";
-    let cargo_toml = sh.read_file(cargo_toml_path)?;
+    let cargo_toml = sh.read_file(CARGO_TOML_PATH)?;
 
     let current_version = cargo_toml
         .lines()
@@ -133,13 +137,12 @@ fn update_rust(
 }
 
 fn update_ios(sh: &Shell, bump_type: &str) -> Result<()> {
-    let pbx_path = "../ios/Cove.xcodeproj/project.pbxproj";
-    if !sh.path_exists(pbx_path) {
-        println!("{} iOS project file not found at {pbx_path}", "!".yellow());
+    if !sh.path_exists(IOS_PROJECT_PATH) {
+        println!("{} iOS project file not found at {}", "!".yellow(), IOS_PROJECT_PATH);
         return Ok(());
     }
 
-    let pbx = sh.read_file(pbx_path)?;
+    let pbx = sh.read_file(IOS_PROJECT_PATH)?;
 
     // extract current iOS version
     let current_ios_version = extract_version(&pbx, "MARKETING_VERSION = ", ';')
@@ -153,7 +156,7 @@ fn update_ios(sh: &Shell, bump_type: &str) -> Result<()> {
         &format!("MARKETING_VERSION = {new_version};"),
     );
 
-    sh.write_file(pbx_path, new_pbx)?;
+    sh.write_file(IOS_PROJECT_PATH, new_pbx)?;
     println!(
         "{} Updated iOS MARKETING_VERSION: {} -> {}",
         "✓".green(),
@@ -168,13 +171,12 @@ fn update_ios(sh: &Shell, bump_type: &str) -> Result<()> {
 }
 
 fn update_android(sh: &Shell, bump_type: &str) -> Result<()> {
-    let gradle_path = "../android/app/build.gradle.kts";
-    if !sh.path_exists(gradle_path) {
-        println!("{} Android build.gradle.kts not found at {gradle_path}", "!".yellow());
+    if !sh.path_exists(ANDROID_GRADLE_PATH) {
+        println!("{} Android build.gradle.kts not found at {}", "!".yellow(), ANDROID_GRADLE_PATH);
         return Ok(());
     }
 
-    let gradle = sh.read_file(gradle_path)?;
+    let gradle = sh.read_file(ANDROID_GRADLE_PATH)?;
 
     // extract current Android version
     let current_android_version = extract_version(&gradle, "versionName = \"", '"')
@@ -189,7 +191,7 @@ fn update_android(sh: &Shell, bump_type: &str) -> Result<()> {
         &format!("versionName = \"{new_version}\""),
     );
 
-    sh.write_file(gradle_path, new_gradle)?;
+    sh.write_file(ANDROID_GRADLE_PATH, new_gradle)?;
     println!(
         "{} Updated Android versionName: {} -> {}",
         "✓".green(),
@@ -236,29 +238,27 @@ pub fn build_bump(targets_opt: Option<String>) -> Result<()> {
 }
 
 fn bump_ios_build_number(sh: &Shell) -> Result<()> {
-    let pbx_path = "../ios/Cove.xcodeproj/project.pbxproj";
-    if !sh.path_exists(pbx_path) {
-        print_warning(&format!("iOS project file not found at {}", pbx_path));
+    if !sh.path_exists(IOS_PROJECT_PATH) {
+        print_warning(&format!("iOS project file not found at {}", IOS_PROJECT_PATH));
         return Ok(());
     }
 
-    let pbx = sh.read_file(pbx_path)?;
+    let pbx = sh.read_file(IOS_PROJECT_PATH)?;
     let new_pbx = increment_and_replace_ios(pbx);
-    sh.write_file(pbx_path, new_pbx)?;
+    sh.write_file(IOS_PROJECT_PATH, new_pbx)?;
 
     Ok(())
 }
 
 fn bump_android_build_number(sh: &Shell) -> Result<()> {
-    let gradle_path = "../android/app/build.gradle.kts";
-    if !sh.path_exists(gradle_path) {
-        print_warning(&format!("Android build.gradle.kts not found at {}", gradle_path));
+    if !sh.path_exists(ANDROID_GRADLE_PATH) {
+        print_warning(&format!("Android build.gradle.kts not found at {}", ANDROID_GRADLE_PATH));
         return Ok(());
     }
 
-    let gradle = sh.read_file(gradle_path)?;
+    let gradle = sh.read_file(ANDROID_GRADLE_PATH)?;
     let new_gradle = increment_and_replace_android(gradle);
-    sh.write_file(gradle_path, new_gradle)?;
+    sh.write_file(ANDROID_GRADLE_PATH, new_gradle)?;
 
     Ok(())
 }

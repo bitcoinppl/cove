@@ -3,6 +3,25 @@ use color_eyre::{eyre::Context, Result};
 use colored::Colorize;
 use xshell::{cmd, Shell};
 
+// iOS build constants
+const IOS_TARGET_DEVICE: &str = "aarch64-apple-ios";
+const IOS_TARGET_SIMULATOR: &str = "aarch64-apple-ios-sim";
+const IOS_LIB_NAME: &str = "libcove.a";
+const BINDINGS_DIR: &str = "./bindings";
+const UNIFFI_MODULE_NAME: &str = "cove_core_ffi";
+const MODULEMAP_FILENAME: &str = "module.modulemap";
+const SPM_PACKAGE_DIR: &str = "../ios/CoveCore/";
+const XCFRAMEWORK_NAME: &str = "cove_core_ffi.xcframework";
+const GENERATED_SOURCES_DIR: &str = "Sources/CoveCore/generated";
+const PACKAGE_SWIFT_PATH: &str = "Sources/CoveCore/Package.swift";
+
+// iOS run constants
+const IOS_SCHEME: &str = "Cove";
+const IOS_APP_NAME: &str = "Cove";
+const IOS_BUNDLE_ID: &str = "org.bitcoinppl.Cove";
+const IOS_SIMULATOR_DESTINATION: &str = "platform=iOS Simulator,name=iPhone 15 Pro,OS=latest";
+const XCODE_DERIVED_DATA_PATH: &str = "Library/Developer/Xcode/DerivedData";
+
 #[derive(Debug, Clone, Copy)]
 pub enum IosBuildType {
     Debug,
@@ -50,15 +69,15 @@ pub fn build_ios(build_type: IosBuildType, device: bool, _sign: bool, verbose: b
     let targets = match build_type {
         IosBuildType::Release | IosBuildType::Custom(_) => {
             // release builds only for actual device
-            vec!["aarch64-apple-ios"]
+            vec![IOS_TARGET_DEVICE]
         }
         IosBuildType::Debug => {
             if device {
                 // debug on device and simulator
-                vec!["aarch64-apple-ios", "aarch64-apple-ios-sim"]
+                vec![IOS_TARGET_DEVICE, IOS_TARGET_SIMULATOR]
             } else {
                 // debug on simulator only
-                vec!["aarch64-apple-ios-sim"]
+                vec![IOS_TARGET_SIMULATOR]
             }
         }
     };
@@ -104,38 +123,39 @@ pub fn build_ios(build_type: IosBuildType, device: bool, _sign: bool, verbose: b
                 .wrap_err_with(|| format!("Failed to build for target {}", target))?;
         }
 
-        let lib_path = format!("./target/{}/{}/libcove.a", target, build_dir);
+        let lib_path = format!("./target/{}/{}/{}", target, build_dir, IOS_LIB_NAME);
         if !sh.path_exists(&lib_path) {
             print_error(&format!("Missing static library at {}", lib_path));
             color_eyre::eyre::bail!("Build failed: missing library at {}", lib_path);
         }
 
-        library_flags.push(format!("-library {} -headers ./bindings", lib_path));
+        library_flags.push(format!("-library {} -headers {}", lib_path, BINDINGS_DIR));
         print_success(&format!("Built library for {}", target));
     }
 
     // generate headers, modulemap, and swift sources using UniFFI
     println!("{}", "Generating Swift bindings...".blue().bold());
-    let output_dir = "./bindings";
-    let static_lib_path = format!("./target/{}/{}/libcove.a", targets[0], build_dir);
+    let static_lib_path = format!("./target/{}/{}/{}", targets[0], build_dir, IOS_LIB_NAME);
 
-    sh.create_dir(output_dir).wrap_err("Failed to create bindings directory")?;
+    sh.create_dir(BINDINGS_DIR).wrap_err("Failed to create bindings directory")?;
 
-    print_info(&format!("Running uniffi-bindgen for {}, outputting to {}", targets[0], output_dir));
+    print_info(&format!(
+        "Running uniffi-bindgen for {}, outputting to {}",
+        targets[0], BINDINGS_DIR
+    ));
 
-    let _ = sh.remove_path(output_dir);
+    let _ = sh.remove_path(BINDINGS_DIR);
     cmd!(
         sh,
-        "cargo run -p uniffi_cli -- {static_lib_path} {output_dir} --swift-sources --headers --modulemap --module-name cove_core_ffi --modulemap-filename module.modulemap"
+        "cargo run -p uniffi_cli -- {static_lib_path} {BINDINGS_DIR} --swift-sources --headers --modulemap --module-name {UNIFFI_MODULE_NAME} --modulemap-filename {MODULEMAP_FILENAME}"
     )
     .run()
     .wrap_err("Failed to generate Swift bindings")?;
 
     // create XCFramework
     println!("{}", "Creating XCFramework...".blue().bold());
-    let spm_package = "../ios/CoveCore/";
-    let xcframework_output = format!("{}Sources/cove_core_ffi.xcframework", spm_package);
-    let generated_swift_sources = format!("{}Sources/CoveCore/generated", spm_package);
+    let xcframework_output = format!("{}Sources/{}", SPM_PACKAGE_DIR, XCFRAMEWORK_NAME);
+    let generated_swift_sources = format!("{}{}", SPM_PACKAGE_DIR, GENERATED_SOURCES_DIR);
 
     let _ = sh.remove_path(&xcframework_output);
 
@@ -158,15 +178,11 @@ pub fn build_ios(build_type: IosBuildType, device: bool, _sign: bool, verbose: b
         .wrap_err("Failed to create generated sources directory")?;
 
     // use sh -c to expand the glob properly
-    let copy_cmd = format!("cp -r {}/*.swift {}", output_dir, generated_swift_sources);
-    sh.cmd("sh")
-        .arg("-c")
-        .arg(&copy_cmd)
-        .run()
-        .wrap_err("Failed to copy Swift sources")?;
+    let copy_cmd = format!("cp -r {}/*.swift {}", BINDINGS_DIR, generated_swift_sources);
+    sh.cmd("sh").arg("-c").arg(&copy_cmd).run().wrap_err("Failed to copy Swift sources")?;
 
     // remove uniffi generated Package.swift file if it exists
-    let package_swift = format!("{}Sources/CoveCore/Package.swift", spm_package);
+    let package_swift = format!("{}{}", SPM_PACKAGE_DIR, PACKAGE_SWIFT_PATH);
     let _ = sh.remove_path(&package_swift);
 
     print_success("iOS build completed successfully!");
@@ -188,22 +204,17 @@ pub fn run_ios(verbose: bool) -> Result<()> {
         color_eyre::eyre::bail!("xcrun command not found");
     }
 
-    let scheme = "Cove";
-    let app_name = "Cove";
-    let bundle_id = "org.bitcoinppl.Cove";
-    let destination = "platform=iOS Simulator,name=iPhone 15 Pro,OS=latest";
-
     // change to ios directory
     sh.change_dir("../ios");
 
     // build the app
     print_info("Building iOS app...");
     if verbose {
-        cmd!(sh, "xcodebuild -scheme {scheme} -destination {destination} build")
+        cmd!(sh, "xcodebuild -scheme {IOS_SCHEME} -destination {IOS_SIMULATOR_DESTINATION} build")
             .run()
             .wrap_err("Failed to build iOS app")?;
     } else {
-        cmd!(sh, "xcodebuild -scheme {scheme} -destination {destination} build")
+        cmd!(sh, "xcodebuild -scheme {IOS_SCHEME} -destination {IOS_SIMULATOR_DESTINATION} build")
             .quiet()
             .run()
             .wrap_err("Failed to build iOS app")?;
@@ -213,9 +224,10 @@ pub fn run_ios(verbose: bool) -> Result<()> {
     // find the built app
     print_info("Finding built app...");
     let home_dir = std::env::var("HOME").wrap_err("Failed to get HOME environment variable")?;
-    let derived_data = format!("{}/Library/Developer/Xcode/DerivedData", home_dir);
+    let derived_data = format!("{}/{}", home_dir, XCODE_DERIVED_DATA_PATH);
 
-    let find_output = cmd!(sh, "find {derived_data} -name {app_name}.app")
+    let app_file = format!("{}.app", IOS_APP_NAME);
+    let find_output = cmd!(sh, "find {derived_data} -name {app_file}")
         .read()
         .wrap_err("Failed to find built app")?;
 
@@ -240,7 +252,9 @@ pub fn run_ios(verbose: bool) -> Result<()> {
 
     // launch the app
     print_info("Launching app...");
-    cmd!(sh, "xcrun simctl launch booted {bundle_id}").run().wrap_err("Failed to launch app")?;
+    cmd!(sh, "xcrun simctl launch booted {IOS_BUNDLE_ID}")
+        .run()
+        .wrap_err("Failed to launch app")?;
     print_success("App launched successfully");
 
     Ok(())

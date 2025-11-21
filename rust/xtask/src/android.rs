@@ -4,6 +4,21 @@ use colored::Colorize;
 use std::collections::HashMap;
 use xshell::{cmd, Shell};
 
+// Android build constants
+const ANDROID_TARGETS: &[&str] = &["aarch64-linux-android", "x86_64-linux-android"];
+const JNI_LIBS_DIR: &str = "../android/app/src/main/jniLibs";
+const ANDROID_KOTLIN_DIR: &str = "../android/app/src/main/java";
+const BINDINGS_DIR: &str = "./bindings/kotlin";
+const CFLAGS_VALUE: &str = "-D__ANDROID_MIN_SDK_VERSION__=21";
+const LIB_NAME: &str = "libcove.so";
+const OUTPUT_LIB_NAME: &str = "libcoveffi.so";
+const COVE_CORE_PACKAGE_PATH: &str = "org/bitcoinppl/cove_core";
+
+// Android run constants
+const ANDROID_PACKAGE_NAME: &str = "org.bitcoinppl.cove";
+const ANDROID_ACTIVITY_NAME: &str = ".MainActivity";
+const APK_PATH: &str = "app/build/outputs/apk/debug/app-debug.apk";
+
 #[derive(Debug, Clone, Copy)]
 pub enum BuildProfile {
     Debug,
@@ -38,8 +53,6 @@ impl BuildProfile {
     }
 }
 
-const ANDROID_TARGETS: &[&str] = &["aarch64-linux-android", "x86_64-linux-android"];
-
 fn get_abi_mapping() -> HashMap<&'static str, &'static str> {
     let mut map = HashMap::new();
     map.insert("aarch64-linux-android", "arm64-v8a");
@@ -57,22 +70,18 @@ pub fn build_android(profile: BuildProfile, verbose: bool) -> Result<()> {
         print_success("Installed cargo-ndk");
     }
 
-    let jni_libs_dir = "../android/app/src/main/jniLibs";
-    let android_kotlin_dir = "../android/app/src/main/java";
-    let bindings_dir = "./bindings/kotlin";
-
     // prepare directories
-    sh.create_dir(jni_libs_dir).wrap_err("Failed to create jniLibs directory")?;
-    sh.create_dir(android_kotlin_dir).wrap_err("Failed to create kotlin directory")?;
-    let _ = sh.remove_path(bindings_dir);
-    sh.create_dir(bindings_dir).wrap_err("Failed to create bindings directory")?;
+    sh.create_dir(JNI_LIBS_DIR).wrap_err("Failed to create jniLibs directory")?;
+    sh.create_dir(ANDROID_KOTLIN_DIR).wrap_err("Failed to create kotlin directory")?;
+    let _ = sh.remove_path(BINDINGS_DIR);
+    sh.create_dir(BINDINGS_DIR).wrap_err("Failed to create bindings directory")?;
 
     let abi_mapping = get_abi_mapping();
     let build_flag = profile.cargo_flag();
     let build_type = profile.target_dir_name();
 
     // set Android min SDK version
-    sh.set_var("CFLAGS", "-D__ANDROID_MIN_SDK_VERSION__=21");
+    sh.set_var("CFLAGS", CFLAGS_VALUE);
 
     // build for each target
     for target in ANDROID_TARGETS {
@@ -113,7 +122,7 @@ pub fn build_android(profile: BuildProfile, verbose: bool) -> Result<()> {
         }
 
         // verify the library was built
-        let dynamic_lib_path = format!("./target/{}/{}/libcove.so", target, build_type);
+        let dynamic_lib_path = format!("./target/{}/{}/{}", target, build_type, LIB_NAME);
         if !sh.path_exists(&dynamic_lib_path) {
             print_error(&format!("Missing dynamic library at {}", dynamic_lib_path));
             color_eyre::eyre::bail!("Build failed: missing library at {}", dynamic_lib_path);
@@ -124,11 +133,11 @@ pub fn build_android(profile: BuildProfile, verbose: bool) -> Result<()> {
             color_eyre::eyre::eyre!("Unable to map target {} to an Android ABI directory", target)
         })?;
 
-        let abi_dir = format!("{}/{}", jni_libs_dir, abi);
+        let abi_dir = format!("{}/{}", JNI_LIBS_DIR, abi);
         sh.create_dir(&abi_dir)
             .wrap_err_with(|| format!("Failed to create ABI directory {}", abi_dir))?;
 
-        let dest_path = format!("{}/libcoveffi.so", abi_dir);
+        let dest_path = format!("{}/{}", abi_dir, OUTPUT_LIB_NAME);
         sh.copy_file(&dynamic_lib_path, &dest_path).wrap_err_with(|| {
             format!("Failed to copy library from {} to {}", dynamic_lib_path, dest_path)
         })?;
@@ -139,7 +148,7 @@ pub fn build_android(profile: BuildProfile, verbose: bool) -> Result<()> {
     // generate UniFFI bindings
     println!("{}", "Generating Kotlin bindings...".blue().bold());
     let first_target = ANDROID_TARGETS[0];
-    let dynamic_lib_path = format!("./target/{}/{}/libcove.so", first_target, build_type);
+    let dynamic_lib_path = format!("./target/{}/{}/{}", first_target, build_type, LIB_NAME);
 
     if !sh.path_exists(&dynamic_lib_path) {
         print_error(&format!("Missing dynamic library at {}", dynamic_lib_path));
@@ -149,22 +158,22 @@ pub fn build_android(profile: BuildProfile, verbose: bool) -> Result<()> {
         );
     }
 
-    print_info(&format!("Generating Kotlin bindings into {}", bindings_dir));
+    print_info(&format!("Generating Kotlin bindings into {}", BINDINGS_DIR));
     cmd!(
         sh,
-        "cargo run -p uniffi_cli -- generate {dynamic_lib_path} --library --language kotlin --no-format --out-dir {bindings_dir}"
+        "cargo run -p uniffi_cli -- generate {dynamic_lib_path} --library --language kotlin --no-format --out-dir {BINDINGS_DIR}"
     )
     .run()
     .wrap_err("Failed to generate Kotlin bindings")?;
 
-    print_info(&format!("Copying Kotlin bindings into Android project at {}", android_kotlin_dir));
+    print_info(&format!("Copying Kotlin bindings into Android project at {}", ANDROID_KOTLIN_DIR));
 
     // remove only generated binding files, not user code
-    let cove_core_dir = format!("{}/org/bitcoinppl/cove_core", android_kotlin_dir);
+    let cove_core_dir = format!("{}/{}", ANDROID_KOTLIN_DIR, COVE_CORE_PACKAGE_PATH);
     let _ = sh.remove_path(&cove_core_dir);
 
     // copy bindings
-    cmd!(sh, "cp -R {bindings_dir}/. {android_kotlin_dir}/")
+    cmd!(sh, "cp -R {BINDINGS_DIR}/. {ANDROID_KOTLIN_DIR}/")
         .run()
         .wrap_err("Failed to copy Kotlin bindings to Android project")?;
 
@@ -181,10 +190,6 @@ pub fn run_android(verbose: bool) -> Result<()> {
         color_eyre::eyre::bail!("adb command not found");
     }
 
-    let package_name = "org.bitcoinppl.cove";
-    let activity_name = ".MainActivity";
-    let apk_path = "app/build/outputs/apk/debug/app-debug.apk";
-
     // change to android directory
     sh.change_dir("../android");
 
@@ -199,12 +204,12 @@ pub fn run_android(verbose: bool) -> Result<()> {
 
     // install the APK
     print_info("Installing APK on device/emulator...");
-    cmd!(sh, "adb install -r {apk_path}").run().wrap_err("Failed to install APK")?;
+    cmd!(sh, "adb install -r {APK_PATH}").run().wrap_err("Failed to install APK")?;
     print_success("App installed successfully");
 
     // launch the app
     print_info("Launching app...");
-    let full_activity = format!("{}{}", package_name, activity_name);
+    let full_activity = format!("{}{}", ANDROID_PACKAGE_NAME, ANDROID_ACTIVITY_NAME);
     cmd!(sh, "adb shell am start -n {full_activity}").run().wrap_err("Failed to launch app")?;
     print_success("App launched successfully");
 
