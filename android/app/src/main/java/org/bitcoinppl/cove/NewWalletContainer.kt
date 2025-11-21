@@ -36,10 +36,16 @@ fun NewWalletContainer(
                     app.pushRoute(HotWalletRoute.Select.intoRoute())
                 },
                 onOpenQrScan = {
-                    app.pushRoute(Route.NewWallet(NewWalletRoute.ColdWallet(ColdWalletRoute.QR_CODE)))
+                    app.pushRoute(RouteFactory().qrImport())
                 },
                 onOpenNfcScan = {
-                    // TODO: implement NFC scan route when available
+                    app.pushRoute(
+                        HotWalletRoute
+                            .Import(
+                                v1 = NumberOfBip39Words.TWENTY_FOUR,
+                                v2 = ImportType.NFC,
+                            ).intoRoute(),
+                    )
                 },
             )
         }
