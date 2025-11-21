@@ -3,7 +3,7 @@ package org.bitcoinppl.cove
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import org.bitcoinppl.cove.flow.new_wallet.NewWalletSelectScreen
-import org.bitcoinppl.cove.flow.new_wallet.cold_wallet.QrCodeImportScreen
+import org.bitcoinppl.cove.flow.new_wallet.cold_wallet.ColdWalletQrScanScreen
 import org.bitcoinppl.cove.utils.intoRoute
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
@@ -36,14 +36,15 @@ fun NewWalletContainer(
                     app.pushRoute(HotWalletRoute.Select.intoRoute())
                 },
                 onOpenQrScan = {
-                    app.pushRoute(Route.NewWallet(NewWalletRoute.ColdWallet(ColdWalletRoute.QR_CODE)))
+                    app.pushRoute(RouteFactory().qrImport())
                 },
                 onOpenNfcScan = {
                     app.pushRoute(
-                        HotWalletRoute.Import(
-                            v1 = NumberOfBip39Words.TWELVE,
-                            v2 = ImportType.NFC,
-                        ).intoRoute(),
+                        HotWalletRoute
+                            .Import(
+                                v1 = NumberOfBip39Words.TWENTY_FOUR,
+                                v2 = ImportType.NFC,
+                            ).intoRoute(),
                     )
                 },
             )
