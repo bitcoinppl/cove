@@ -624,10 +624,10 @@ struct CoveApp: App {
             Log.debug("[scene] app going into background")
             coverClearTask?.cancel()
 
-            // don't lock or dismiss sheets if TapSigner is scanning
+            // don't lock or dismiss sheets if any NFC operation is active
             let tapSignerScanning = app.tapSignerNfc?.isScanning ?? false
-            if tapSignerScanning {
-                Log.debug("[scene] TapSigner scanning active, not dismissing sheets or locking")
+            if app.nfcWriter.isScanning || app.nfcReader.isScanning || tapSignerScanning {
+                Log.debug("[scene] NFC operation active, not dismissing sheets or locking")
                 return
             }
 
