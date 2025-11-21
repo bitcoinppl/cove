@@ -118,14 +118,14 @@ compile:
 # build android
 alias ba := build-android
 build-android:
-    bash scripts/build-android.sh debug
+    cd rust && cargo xtask build-android debug
 
 alias bar := build-android-release
 build-android-release:
-    bash scripts/build-android.sh release
+    cd rust && cargo xtask build-android release
 
-run-android: build-android
-    bash scripts/run-android.sh
+run-android:
+    cd rust && cargo xtask run-android
 
 compile-android:
     cd android && ./gradlew assembleDebug
@@ -134,7 +134,15 @@ compile-android:
 alias bi := build-ios
 build-ios profile="debug" device="false" sign="false":
     #!/usr/bin/env bash
-    if bash scripts/build-ios.sh {{profile}} {{device}} {{sign}}; then
+    DEVICE_FLAG=""
+    SIGN_FLAG=""
+    if [ "{{device}}" = "true" ] || [ "{{device}}" = "--device" ]; then
+        DEVICE_FLAG="--device"
+    fi
+    if [ "{{sign}}" = "true" ] || [ "{{sign}}" = "--sign" ]; then
+        SIGN_FLAG="--sign"
+    fi
+    if cd rust && cargo xtask build-ios {{profile}} $DEVICE_FLAG $SIGN_FLAG; then
         say "done"
     else
         say "error"
@@ -142,14 +150,17 @@ build-ios profile="debug" device="false" sign="false":
 
 alias bir := build-ios-release
 build-ios-release:
-    just build-ios release-smaller --device
+    just build-ios release-smaller true
 
 alias bidd := build-ios-debug-device
 build-ios-debug-device:
-    just build-ios debug --device
+    just build-ios debug true
 
-run-ios: build-ios
-    bash scripts/run-ios.sh
+run-ios:
+    cd rust && cargo xtask run-ios
 
 compile-ios:
     cd ios && xcodebuild -scheme Cove -sdk iphonesimulator -arch arm64 build
+
+xtask *args:
+    cd rust && cargo xtask {{args}}
