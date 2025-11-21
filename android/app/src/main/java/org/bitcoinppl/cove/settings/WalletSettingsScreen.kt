@@ -103,7 +103,8 @@ fun WalletSettingsScreen(
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.error,
                 )
-                androidx.compose.foundation.layout.Spacer(modifier = Modifier.height(MaterialSpacing.medium))
+                androidx.compose.foundation.layout
+                    .Spacer(modifier = Modifier.height(MaterialSpacing.medium))
                 TextButton(onClick = { app.popRoute() }) {
                     Text("Go Back")
                 }

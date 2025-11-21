@@ -55,6 +55,7 @@ import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.PendingWalletManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.utils.intoRoute
 import org.bitcoinppl.cove.views.DashDotsIndicator
 import org.bitcoinppl.cove.views.DotsIndicator
 import org.bitcoinppl.cove.views.ImageButton
@@ -100,11 +101,10 @@ fun HotWalletCreateScreen(
     fun handleSaveWallet() {
         try {
             val walletId = manager.rust.saveWallet().id
-            app.pushRoute(
-                Route.NewWallet(
-                    NewWalletRoute.HotWallet(
-                        HotWalletRoute.VerifyWords(walletId),
-                    ),
+            app.resetRoute(
+                listOf(
+                    Route.SelectedWallet(walletId),
+                    HotWalletRoute.VerifyWords(walletId).intoRoute(),
                 ),
             )
         } catch (e: Exception) {
