@@ -1,6 +1,7 @@
 package org.bitcoinppl.cove
 
 import android.Manifest
+import android.util.Base64
 import android.util.Log
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
@@ -382,7 +383,7 @@ private fun handleQrCode(
         val qrDataString =
             when (qrData) {
                 is StringOrData.String -> qrData.v1
-                is StringOrData.Data -> qrData.v1.contentToString()
+                is StringOrData.Data -> Base64.encodeToString(qrData.v1, Base64.NO_WRAP)
             }
 
         if (scannedCodes.contains(qrDataString)) {
@@ -428,7 +429,6 @@ private fun handleQrCode(
                 is StringOrData.String -> qrData.v1
                 is StringOrData.Data -> {
                     // skip binary QR codes for multi-part BBQr, keep scanning
-                    Log.d("QrCodeScanView", "Skipping binary QR code in multi-part scan")
                     return
                 }
             }

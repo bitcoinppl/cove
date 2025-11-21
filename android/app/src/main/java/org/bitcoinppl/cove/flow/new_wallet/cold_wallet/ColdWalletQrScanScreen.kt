@@ -81,6 +81,7 @@ fun ColdWalletQrScanScreen(app: AppManager, modifier: Modifier = Modifier) {
 
                         val wallet = Wallet.newFromXpub(xpub = xpub)
                         val id = wallet.id()
+                        wallet.close()
                         Log.d("ColdWalletQrScanScreen", "Imported Wallet: $id")
 
                         app.rust.selectWallet(id = id)
@@ -112,11 +113,16 @@ fun ColdWalletQrScanScreen(app: AppManager, modifier: Modifier = Modifier) {
                                     ),
                                 )
                         } catch (selectError: Exception) {
+                            Log.w(
+                                "ColdWalletQrScanScreen",
+                                "Unable to select existing wallet",
+                                selectError,
+                            )
                             app.popRoute()
                             app.alertState =
                                 TaggedItem(
                                     AppAlertState.ErrorImportingHardwareWallet(
-                                        message = "Unable to select wallet",
+                                        message = selectError.message ?: "Unable to select wallet",
                                     ),
                                 )
                         }

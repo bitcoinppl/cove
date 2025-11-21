@@ -78,6 +78,7 @@ fun WalletImportHelpSheet(onDismiss: () -> Unit) {
                     Text("2. Click on 'Export...' button at the bottom")
                     Text("3. Under 'Output Descriptor' click the 'Show...' button")
                     Text("4. Make sure 'Show BBQr' is selected")
+                    Text("5. Scan the generated QR code")
                 }
 
                 HorizontalDivider()

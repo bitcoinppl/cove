@@ -386,10 +386,14 @@ class AppManager private constructor() : FfiReconcile {
     private fun importColdWallet(export: HardwareExport) {
         try {
             val wallet = Wallet.newFromExport(export)
-            val id = wallet.id()
-            logDebug("Imported Wallet: $id")
-            alertState = TaggedItem(AppAlertState.ImportedSuccessfully)
-            rust.selectWallet(id)
+            try {
+                val id = wallet.id()
+                logDebug("Imported Wallet: $id")
+                alertState = TaggedItem(AppAlertState.ImportedSuccessfully)
+                rust.selectWallet(id)
+            } finally {
+                wallet.close()
+            }
         } catch (e: WalletException.WalletAlreadyExists) {
             alertState = TaggedItem(AppAlertState.DuplicateWallet(e.v1))
             try {
