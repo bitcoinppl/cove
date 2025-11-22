@@ -87,7 +87,8 @@ class MainActivity : ComponentActivity() {
                         Box {
                             LockView {
                                 SidebarContainer(app = app) {
-                                    key(app.routeId) {
+                                    // reset view hierarchy when network changes or route changes
+                                    key(app.selectedNetwork, app.routeId) {
                                         RouteView(app = app, route = app.router.currentRoute)
                                     }
                                 }
