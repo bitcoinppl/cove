@@ -55,12 +55,10 @@ import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.ui.theme.MaterialSpacing
 import org.bitcoinppl.cove.utils.toComposeColor
-import org.bitcoinppl.cove.views.ClickableInfoRow
-import org.bitcoinppl.cove.views.InfoRow
 import org.bitcoinppl.cove.views.MaterialDivider
 import org.bitcoinppl.cove.views.MaterialSection
+import org.bitcoinppl.cove.views.MaterialSettingsItem
 import org.bitcoinppl.cove.views.SectionHeader
-import org.bitcoinppl.cove.views.SwitchRow
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.WalletColor
@@ -154,19 +152,19 @@ fun WalletSettingsScreen(
                 SectionHeader(stringResource(R.string.title_wallet_information))
                 MaterialSection {
                     Column {
-                        InfoRow(
-                            stringResource(R.string.label_wallet_network),
-                            metadata.network.toString(),
+                        MaterialSettingsItem(
+                            title = stringResource(R.string.label_wallet_network),
+                            subtitle = metadata.network.toString(),
                         )
-                        ListSpacer()
-                        InfoRow(
-                            stringResource(R.string.label_wallet_fingerprint),
-                            manager.rust.masterFingerprint() ?: "",
+                        MaterialDivider()
+                        MaterialSettingsItem(
+                            title = stringResource(R.string.label_wallet_fingerprint),
+                            subtitle = manager.rust.masterFingerprint() ?: "",
                         )
-                        ListSpacer()
-                        InfoRow(
-                            stringResource(R.string.label_wallet_type),
-                            metadata.walletType.toString(),
+                        MaterialDivider()
+                        MaterialSettingsItem(
+                            title = stringResource(R.string.label_wallet_type),
+                            subtitle = metadata.walletType.toString(),
                         )
                     }
                 }
@@ -174,68 +172,72 @@ fun WalletSettingsScreen(
                 SectionHeader(stringResource(R.string.title_wallet_settings))
                 MaterialSection {
                     Column {
-                        ClickableInfoRow(
-                            stringResource(R.string.label_wallet_name),
-                            metadata.name,
-                            Icons.AutoMirrored.Default.KeyboardArrowRight,
-                        ) {
-                            app.pushRoute(
-                                Route.Settings(
-                                    SettingsRoute.Wallet(
-                                        id = metadata.id,
-                                        route = WalletSettingsRoute.CHANGE_NAME,
+                        MaterialSettingsItem(
+                            title = stringResource(R.string.label_wallet_name),
+                            subtitle = metadata.name,
+                            trailingContent = {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Default.KeyboardArrowRight,
+                                    contentDescription = "Edit",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            },
+                            onClick = {
+                                app.pushRoute(
+                                    Route.Settings(
+                                        SettingsRoute.Wallet(
+                                            id = metadata.id,
+                                            route = WalletSettingsRoute.CHANGE_NAME,
+                                        ),
                                     ),
-                                ),
-                            )
-                        }
-                        ListSpacer()
+                                )
+                            },
+                        )
+                        MaterialDivider()
                         WalletColorSelector(
                             selectedWalletColor = metadata.color,
                             onColorChange = { color ->
                                 manager.dispatch(WalletManagerAction.UpdateColor(color))
                             },
                         )
-                        ListSpacer()
-                        SwitchRow(
-                            stringResource(R.string.label_wallet_show_transaction_labels),
-                            metadata.showLabels,
-                        ) { _ ->
-                            manager.dispatch(WalletManagerAction.ToggleShowLabels)
-                        }
+                        MaterialDivider()
+                        MaterialSettingsItem(
+                            title = stringResource(R.string.label_wallet_show_transaction_labels),
+                            trailingContent = {
+                                androidx.compose.material3.Switch(
+                                    checked = metadata.showLabels,
+                                    onCheckedChange = { _ ->
+                                        manager.dispatch(WalletManagerAction.ToggleShowLabels)
+                                    },
+                                )
+                            },
+                            onClick = {
+                                manager.dispatch(WalletManagerAction.ToggleShowLabels)
+                            },
+                        )
                     }
                 }
 
                 SectionHeader(stringResource(R.string.title_wallet_danger_zone))
                 MaterialSection {
                     Column {
+                        var dangerItemCount = 0
                         // only show for hot wallets that have a mnemonic
                         if (metadata.walletType == WalletType.HOT) {
-                            Text(
-                                modifier =
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .padding(all = 8.dp)
-                                        .clickable(true) {
-                                            app.pushRoute(Route.SecretWords(metadata.id))
-                                        },
-                                text = stringResource(R.string.label_wallet_view_secrets),
-                                style = MaterialTheme.typography.bodyMedium,
-                                textAlign = TextAlign.Start,
+                            MaterialSettingsItem(
+                                title = stringResource(R.string.label_wallet_view_secrets),
+                                onClick = {
+                                    app.pushRoute(Route.SecretWords(metadata.id))
+                                },
                             )
-                            ListSpacer()
+                            dangerItemCount++
                         }
-                        Text(
-                            modifier =
-                                Modifier
-                                    .fillMaxWidth()
-                                    .padding(all = 8.dp)
-                                    .clickable(true) {
-                                        showDeleteConfirmation = true
-                                    },
-                            text = stringResource(R.string.label_wallet_delete),
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.error,
-                            textAlign = TextAlign.Start,
+                        if (dangerItemCount > 0) MaterialDivider()
+                        MaterialSettingsItem(
+                            title = stringResource(R.string.label_wallet_delete),
+                            onClick = {
+                                showDeleteConfirmation = true
+                            },
                         )
                     }
                 }
@@ -415,9 +417,4 @@ private fun WalletColorSelector(
             }
         }
     }
-}
-
-@Composable
-private fun ListSpacer() {
-    MaterialDivider(indent = MaterialSpacing.small)
 }
