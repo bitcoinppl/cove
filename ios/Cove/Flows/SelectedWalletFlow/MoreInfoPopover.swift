@@ -59,7 +59,7 @@ struct MoreInfoPopover: View {
         Task {
             do {
                 let content = try labelManager.export()
-                let filename = labelManager.exportDefaultFileName(name: metadata.name)
+                let filename = "\(labelManager.exportDefaultFileName(name: metadata.name)).jsonl"
 
                 // cancel loading if not shown yet
                 showLoadingTask?.cancel()
