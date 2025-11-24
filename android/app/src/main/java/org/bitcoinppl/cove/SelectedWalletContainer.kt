@@ -20,6 +20,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.components.FullPageLoadingView
 import org.bitcoinppl.cove.nfc.NfcLabelImportSheet
+import org.bitcoinppl.cove.wallet_transactions.ReceiveAddressSheet
 import org.bitcoinppl.cove.wallet_transactions.WalletMoreOptionsSheet
 import org.bitcoinppl.cove.wallet_transactions.WalletTransactionsScreen
 import org.bitcoinppl.cove_core.*
@@ -131,8 +132,9 @@ fun SelectedWalletContainer(
         }
     }
 
-    // state for more options sheet
+    // state for sheets
     var showMoreOptions by remember { mutableStateOf(false) }
+    var showReceiveSheet by remember { mutableStateOf(false) }
     var showNfcScanner by remember { mutableStateOf(false) }
     var exportType by remember { mutableStateOf<ExportType?>(null) }
     var isExporting by remember { mutableStateOf(false) }
@@ -307,10 +309,18 @@ fun SelectedWalletContainer(
                 },
                 canGoBack = canGoBack,
                 onSend = {
-                    app.pushRoute(Route.Send(SendRoute.SetAmount(id, null, null)))
+                    // check balance before navigating to send flow
+                    val balance = wm.balance.spendable().asSats()
+                    if (balance > 0u.toULong()) {
+                        app.pushRoute(Route.Send(SendRoute.SetAmount(id, null, null)))
+                    } else {
+                        scope.launch {
+                            snackbarHostState.showSnackbar("No funds available to send")
+                        }
+                    }
                 },
                 onReceive = {
-                    // TODO: implement receive address screen/sheet
+                    showReceiveSheet = true
                 },
                 onQrCode = {
                     app.scanQr()
@@ -321,6 +331,7 @@ fun SelectedWalletContainer(
                 // TODO: get from theme
                 isDarkList = false,
                 manager = wm,
+                app = app,
                 snackbarHostState = snackbarHostState,
             )
 
@@ -394,6 +405,15 @@ fun SelectedWalletContainer(
                         },
                     )
                 }
+            }
+
+            // show receive address sheet
+            if (showReceiveSheet) {
+                ReceiveAddressSheet(
+                    manager = wm,
+                    snackbarHostState = snackbarHostState,
+                    onDismiss = { showReceiveSheet = false },
+                )
             }
         }
     }

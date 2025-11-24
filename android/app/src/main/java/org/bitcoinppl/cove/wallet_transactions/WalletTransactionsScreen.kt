@@ -2,6 +2,8 @@ package org.bitcoinppl.cove.wallet_transactions
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -39,6 +42,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,11 +56,16 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
+import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletLoadState
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.views.AutoSizeText
+import org.bitcoinppl.cove.views.BalanceAutoSizeText
 import org.bitcoinppl.cove.views.ImageButton
+import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.Transaction
 import org.bitcoinppl.cove_core.types.TransactionDirection
 import java.text.NumberFormat
@@ -106,6 +115,7 @@ fun WalletTransactionsScreen(
     onMore: () -> Unit,
     isDarkList: Boolean,
     manager: WalletManager? = null,
+    app: AppManager? = null,
     initialBalanceHidden: Boolean = false,
     usdAmount: String = "$1,351.93",
     satsAmount: String = "1,166,369 SATS",
@@ -137,24 +147,31 @@ fun WalletTransactionsScreen(
     val secondaryText = MaterialTheme.colorScheme.onSurfaceVariant
     val dividerColor = MaterialTheme.colorScheme.outlineVariant
 
+    // track scroll state to show wallet name in toolbar when scrolled
+    val listState = rememberLazyListState()
+    val isScrolled = listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0
+
     Scaffold(
         containerColor = CoveColor.midnightBlue,
         topBar = {
             CenterAlignedTopAppBar(
                 colors =
                     TopAppBarDefaults.centerAlignedTopAppBarColors(
-                        containerColor = Color.Transparent,
+                        containerColor = if (isScrolled) CoveColor.midnightBlue else Color.Transparent,
                         titleContentColor = Color.White,
                         actionIconContentColor = Color.White,
                         navigationIconContentColor = Color.White,
                     ),
                 title = {
-                    Text(
-                        actualWalletName,
-                        style = MaterialTheme.typography.titleMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    if (isScrolled) {
+                        AutoSizeText(
+                            text = actualWalletName,
+                            maxFontSize = 16.sp,
+                            minimumScaleFactor = 0.75f,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White,
+                        )
+                    }
                 },
                 navigationIcon = {
                     if (canGoBack) {
@@ -271,8 +288,8 @@ fun WalletTransactionsScreen(
                     Text(
                         text = stringResource(R.string.title_transactions),
                         color = secondaryText,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
                     )
 
                     // render real transactions or show empty state
@@ -294,6 +311,7 @@ fun WalletTransactionsScreen(
                     } else {
                         // render transactions dynamically in scrollable list
                         LazyColumn(
+                            state = listState,
                             modifier = Modifier.weight(1f),
                         ) {
                             itemsIndexed(transactions) { index, txn ->
@@ -322,6 +340,9 @@ fun WalletTransactionsScreen(
                                             listCard = listCard,
                                             primaryText = primaryText,
                                             secondaryText = secondaryText,
+                                            transaction = txn,
+                                            app = app,
+                                            manager = manager,
                                         )
                                     }
                                     is Transaction.Unconfirmed -> {
@@ -348,6 +369,9 @@ fun WalletTransactionsScreen(
                                             listCard = listCard,
                                             primaryText = primaryText,
                                             secondaryText = secondaryText,
+                                            transaction = txn,
+                                            app = app,
+                                            manager = manager,
                                         )
                                     }
                                 }
@@ -379,6 +403,9 @@ private fun TransactionWidget(
     listCard: Color,
     primaryText: Color,
     secondaryText: Color,
+    transaction: Transaction,
+    app: AppManager?,
+    manager: WalletManager?,
 ) {
     val title =
         stringResource(
@@ -388,19 +415,51 @@ private fun TransactionWidget(
             },
         )
 
+    val scope = rememberCoroutineScope()
+    val isDark = isSystemInDarkTheme()
+
+    // get transaction id for navigation
+    val txId = when (transaction) {
+        is Transaction.Confirmed -> transaction.v1.id()
+        is Transaction.Unconfirmed -> transaction.v1.id()
+    }
+
+    // icon background color based on dark mode
+    val iconBackground = if (isDark) {
+        Color.Gray.copy(alpha = 0.35f)
+    } else {
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.75f)
+    }
+
     Row(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .padding(vertical = 8.dp),
+                .clickable {
+                    // navigate to transaction details
+                    if (app != null && manager != null) {
+                        scope.launch {
+                            try {
+                                val details = manager.transactionDetails(txId)
+                                val walletId = manager.walletMetadata?.id
+                                if (walletId != null) {
+                                    app.pushRoute(Route.TransactionDetails(walletId, details))
+                                }
+                            } catch (e: Exception) {
+                                android.util.Log.e("TransactionWidget", "Failed to load transaction details", e)
+                            }
+                        }
+                    }
+                }
+                .padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
             modifier =
                 Modifier
-                    .size(48.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(listCard),
+                    .size(50.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(iconBackground),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
@@ -415,18 +474,19 @@ private fun TransactionWidget(
 
         Column(
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
             Text(
                 text = title,
                 color = primaryText,
-                fontSize = 16.sp,
+                fontSize = 15.sp,
                 fontWeight = FontWeight.Medium,
             )
-            Text(
+            AutoSizeText(
                 text = date,
                 color = secondaryText,
-                fontSize = 14.sp,
+                maxFontSize = 12.sp,
+                minimumScaleFactor = 0.90f,
                 fontWeight = FontWeight.Normal,
             )
         }
@@ -435,7 +495,7 @@ private fun TransactionWidget(
             Text(
                 text = amount,
                 color = if (type == TransactionType.RECEIVED) CoveColor.TransactionReceived else primaryText,
-                fontSize = 20.sp,
+                fontSize = 17.sp,
                 fontWeight = FontWeight.Normal,
             )
             Text(
@@ -456,21 +516,23 @@ private fun BalanceWidget(
 ) {
     var isHidden by remember { mutableStateOf(hidden) }
 
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
             text = if (isHidden) "$———" else usdAmount,
             color = Color.White.copy(alpha = 0.7f),
-            fontSize = 16.sp,
+            fontSize = 13.sp,
         )
 
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
+            BalanceAutoSizeText(
                 text = if (isHidden) "•••••• SATS" else satsAmount,
+                modifier = Modifier.padding(end = 12.dp),
                 color = Color.White,
-                fontSize = 36.sp,
+                baseFontSize = 34.sp,
+                minimumScaleFactor = 0.5f,
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f),
             )
+            Spacer(modifier = Modifier.weight(1f))
             IconButton(onClick = { isHidden = !isHidden }) {
                 Icon(
                     imageVector = if (isHidden) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,

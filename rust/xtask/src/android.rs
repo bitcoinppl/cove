@@ -17,7 +17,8 @@ const COVE_CORE_PACKAGE_PATH: &str = "org/bitcoinppl/cove_core";
 // Android run constants
 const ANDROID_PACKAGE_NAME: &str = "org.bitcoinppl.cove";
 const ANDROID_ACTIVITY_NAME: &str = ".MainActivity";
-const APK_PATH: &str = "app/build/outputs/apk/debug/app-debug.apk";
+const APK_PATH_DEBUG: &str = "app/build/outputs/apk/debug/app-debug.apk";
+const APK_PATH_RELEASE: &str = "app/build/outputs/apk/release/app-release.apk";
 
 #[derive(Debug, Clone, Copy)]
 pub enum BuildProfile {
@@ -29,8 +30,8 @@ pub enum BuildProfile {
 impl BuildProfile {
     pub fn from_str(s: &str) -> Self {
         match s {
-            "debug" | "--debug" => Self::Debug,
-            "release" | "--release" => Self::Release,
+            "debug" | "--debug" | "d" => Self::Debug,
+            "release" | "--release" | "rel" | "r" => Self::Release,
             "release-smaller" | "--release-smaller" => Self::Custom("release-smaller"),
             profile => Self::Custom(Box::leak(profile.to_string().into_boxed_str())),
         }
@@ -193,7 +194,7 @@ pub fn build_android(profile: BuildProfile, verbose: bool) -> Result<()> {
     Ok(())
 }
 
-pub fn run_android(verbose: bool) -> Result<()> {
+pub fn run_android(profile: BuildProfile, verbose: bool) -> Result<()> {
     let sh = Shell::new()?;
 
     // check for adb
@@ -205,23 +206,28 @@ pub fn run_android(verbose: bool) -> Result<()> {
     // change to android directory
     sh.change_dir("../android");
 
-    // build the debug version
-    print_info("Building debug APK...");
+    let (gradle_task, apk_path) = match profile {
+        BuildProfile::Release => ("assembleRelease", APK_PATH_RELEASE),
+        _ => ("assembleDebug", APK_PATH_DEBUG),
+    };
+
+    // build the APK
+    print_info(&format!("Building {} APK...", profile.target_dir_name()));
     if verbose {
-        cmd!(sh, "./gradlew assembleDebug").run().wrap_err("Failed to build APK")?;
+        cmd!(sh, "./gradlew {gradle_task}").run().wrap_err("Failed to build APK")?;
     } else {
-        cmd!(sh, "./gradlew assembleDebug").quiet().run().wrap_err("Failed to build APK")?;
+        cmd!(sh, "./gradlew {gradle_task}").quiet().run().wrap_err("Failed to build APK")?;
     }
     print_success("Build successful");
 
     // install the APK
     print_info("Installing APK on device/emulator...");
-    cmd!(sh, "adb install -r {APK_PATH}").run().wrap_err("Failed to install APK")?;
+    cmd!(sh, "adb install -r {apk_path}").run().wrap_err("Failed to install APK")?;
     print_success("App installed successfully");
 
     // launch the app
     print_info("Launching app...");
-    let full_activity = format!("{}{}", ANDROID_PACKAGE_NAME, ANDROID_ACTIVITY_NAME);
+    let full_activity = format!("{}/{}", ANDROID_PACKAGE_NAME, ANDROID_ACTIVITY_NAME);
     cmd!(sh, "adb shell am start -n {full_activity}").run().wrap_err("Failed to launch app")?;
     print_success("App launched successfully");
 

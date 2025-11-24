@@ -48,7 +48,11 @@ enum Commands {
 
     /// Build and run Android app on device/emulator
     #[command(name = "run-android")]
-    RunAndroid,
+    RunAndroid {
+        /// Build profile: 'debug' or 'release'
+        #[arg(default_value = "debug")]
+        profile: String,
+    },
 
     /// Build iOS library and generate Swift bindings
     #[command(name = "build-ios")]
@@ -90,7 +94,10 @@ fn main() -> Result<()> {
             android::build_android(build_profile, cli.verbose)
         }
 
-        Commands::RunAndroid => android::run_android(cli.verbose),
+        Commands::RunAndroid { profile } => {
+            let build_profile = android::BuildProfile::from_str(&profile);
+            android::run_android(build_profile, cli.verbose)
+        }
 
         Commands::BuildIos { build_type, device, sign } => {
             let ios_build_type = ios::IosBuildType::from_str(&build_type);

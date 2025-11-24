@@ -12,6 +12,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.outlined.CropFree
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -59,55 +60,52 @@ private sealed class QrCodeScannerState {
     ) : QrCodeScannerState()
 }
 
-@OptIn(ExperimentalPermissionsApi::class, ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun QrCodeScanView(
     onScanned: (StringOrData) -> Unit,
     onDismiss: () -> Unit,
     app: AppManager,
     modifier: Modifier = Modifier,
+    showTopBar: Boolean = true,
 ) {
     val cameraPermissionState = rememberPermissionState(Manifest.permission.CAMERA)
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { },
-                navigationIcon = {
-                    IconButton(onClick = onDismiss) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = Color.White,
-                        )
-                    }
-                },
-                colors =
-                    TopAppBarDefaults.topAppBarColors(
-                        containerColor = Color.Transparent,
-                    ),
-            )
-        },
-        containerColor = Color.Black,
-        modifier = modifier.fillMaxSize(),
-    ) { paddingValues ->
-        Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
-            when {
-                cameraPermissionState.status.isGranted -> {
-                    QrScannerContent(
-                        onScanned = onScanned,
-                        onDismiss = onDismiss,
-                        app = app,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
-                else -> {
-                    PermissionDeniedContent(
-                        permissionState = cameraPermissionState,
-                        onDismiss = onDismiss,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
+    Box(
+        modifier = modifier.fillMaxSize().background(Color.Black)
+    ) {
+        when {
+            cameraPermissionState.status.isGranted -> {
+                QrScannerContent(
+                    onScanned = onScanned,
+                    onDismiss = onDismiss,
+                    app = app,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            else -> {
+                PermissionDeniedContent(
+                    permissionState = cameraPermissionState,
+                    onDismiss = onDismiss,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+
+        // overlaid back button
+        if (showTopBar) {
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .statusBarsPadding()
+                    .padding(16.dp)
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back",
+                    tint = Color.White,
+                )
             }
         }
     }
@@ -283,6 +281,16 @@ private fun QrScannerContent(
                         previewView
                     },
                     modifier = Modifier.fillMaxSize(),
+                )
+
+                // viewfinder overlay - centered
+                Icon(
+                    imageVector = Icons.Outlined.CropFree,
+                    contentDescription = "Scan area",
+                    modifier = Modifier
+                        .size(200.dp)
+                        .align(Alignment.Center),
+                    tint = Color.White.copy(alpha = 0.7f),
                 )
 
                 // overlay content

@@ -28,12 +28,14 @@ fun ImageButton(
     leading: @Composable (() -> Unit)? = null,
     onClick: () -> Unit,
     colors: ButtonColors = ButtonDefaults.buttonColors(),
+    enabled: Boolean = true,
 ) {
     Button(
         onClick = onClick,
         shape = RoundedCornerShape(10.dp),
         colors = colors,
         modifier = modifier,
+        enabled = enabled,
         contentPadding = PaddingValues(vertical = 18.dp, horizontal = 12.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {

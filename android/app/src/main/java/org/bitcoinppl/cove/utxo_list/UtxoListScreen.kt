@@ -148,8 +148,7 @@ fun UtxoListScreen(
             )
         },
         onContinue = {
-            manager.continuePressed()
-            app.popRoute()
+            manager.continuePressed(app)
         },
         onSearchChange = { query ->
             manager.updateSearch(query)

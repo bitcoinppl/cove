@@ -5,6 +5,11 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -74,6 +79,8 @@ import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.components.ConfirmationIndicatorView
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.views.AutoSizeText
+import org.bitcoinppl.cove.views.BalanceAutoSizeText
 import org.bitcoinppl.cove.views.ImageButton
 import org.bitcoinppl.cove_core.TransactionDetails
 import org.bitcoinppl.cove_core.WalletManagerAction
@@ -240,7 +247,7 @@ fun TransactionDetailsScreen(
     val txAmountSecondary by androidx.compose.runtime.produceState(initialValue = "---") {
         value =
             try {
-                "≈ ${transactionDetails.amountFiatFmt()}"
+                transactionDetails.amountFiatFmt()
             } catch (e: Exception) {
                 "---"
             }
@@ -339,20 +346,22 @@ fun TransactionDetailsScreen(
 
                 Spacer(Modifier.height(32.dp))
 
-                Text(
+                BalanceAutoSizeText(
                     txAmountPrimary,
                     color = fg,
-                    fontSize = 36.sp,
+                    baseFontSize = 36.sp,
+                    minimumScaleFactor = 0.67f,
                     fontWeight = FontWeight.ExtraBold,
-                    lineHeight = 44.sp,
+                    modifier = Modifier.fillMaxWidth(),
                 )
 
                 Spacer(Modifier.height(4.dp))
 
-                Text(
+                AutoSizeText(
                     txAmountSecondary,
                     color = fg,
-                    fontSize = 18.sp,
+                    maxFontSize = 18.sp,
+                    minimumScaleFactor = 0.90f,
                 )
 
                 Spacer(Modifier.height(32.dp))
@@ -417,7 +426,11 @@ fun TransactionDetailsScreen(
                     )
                 }
 
-                if (isExpanded) {
+                AnimatedVisibility(
+                    visible = isExpanded,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut(),
+                ) {
                     TransactionDetailsWidget(
                         manager = manager,
                         transactionDetails = transactionDetails,
@@ -717,7 +730,7 @@ private fun DetailsWidget(
             }
         }
         Column(horizontalAlignment = Alignment.End) {
-            Text(primary, color = primaryColor, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+            AutoSizeText(primary, color = primaryColor, maxFontSize = 18.sp, minimumScaleFactor = 0.90f, fontWeight = FontWeight.SemiBold)
             if (!secondary.isNullOrEmpty()) {
                 Spacer(Modifier.height(6.dp))
                 Text(secondary, color = sub, fontSize = 14.sp)

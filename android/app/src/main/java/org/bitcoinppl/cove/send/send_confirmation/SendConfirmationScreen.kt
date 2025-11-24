@@ -45,6 +45,8 @@ import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.SendState
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.views.AutoSizeText
+import org.bitcoinppl.cove.views.BalanceAutoSizeText
 
 // Animation duration in milliseconds for swipe button returning to start position when swipe is incomplete.
 private const val SWIPE_RETURN_DURATION_MS = 500
@@ -266,12 +268,12 @@ private fun AmountWidget(
             verticalAlignment = Alignment.Bottom,
         ) {
             Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                Text(
+                BalanceAutoSizeText(
                     text = amount,
                     color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 48.sp,
+                    baseFontSize = 48.sp,
+                    minimumScaleFactor = 0.5f,
                     fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Right,
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
@@ -288,10 +290,11 @@ private fun AmountWidget(
             }
         }
         Spacer(Modifier.height(12.dp))
-        Text(
+        AutoSizeText(
             dollarText,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 20.sp,
+            maxFontSize = 20.sp,
+            minimumScaleFactor = 0.90f,
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth(),
         )

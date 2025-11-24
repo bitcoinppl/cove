@@ -90,6 +90,7 @@ fun HotWalletCreateScreen(
     var showBackConfirmation by remember { mutableStateOf(false) }
     var showSaveError by remember { mutableStateOf(false) }
     var saveErrorMessage by remember { mutableStateOf("") }
+    var isSaving by remember { mutableStateOf(false) }
 
     // sync page state
     LaunchedEffect(pagerState.currentPage) {
@@ -99,6 +100,10 @@ fun HotWalletCreateScreen(
     val isLastPage = currentPage == groupedWords.size - 1
 
     fun handleSaveWallet() {
+        // guard against multiple calls
+        if (isSaving) return
+        isSaving = true
+
         try {
             val walletId = manager.rust.saveWallet().id
             app.resetRoute(
@@ -111,6 +116,7 @@ fun HotWalletCreateScreen(
             Log.e("HotWalletCreate", "error saving wallet", e)
             saveErrorMessage = e.message ?: "Unknown error occurred"
             showSaveError = true
+            isSaving = false
         }
     }
 
@@ -274,6 +280,7 @@ fun HotWalletCreateScreen(
                                 }
                             }
                         },
+                        enabled = !isSaving,
                         colors =
                             ButtonDefaults.buttonColors(
                                 containerColor = CoveColor.btnPrimary,

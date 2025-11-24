@@ -27,11 +27,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.isSystemInDarkTheme
+import org.bitcoinppl.cove.navigation.CoveNavDisplay
 import org.bitcoinppl.cove.nfc.TapCardNfcManager
 import org.bitcoinppl.cove.sidebar.SidebarContainer
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove.views.LockView
 import org.bitcoinppl.cove_core.stringOrDataTryIntoMultiFormat
+import org.bitcoinppl.cove_core.types.ColorSchemeSelection
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -42,8 +45,17 @@ class MainActivity : ComponentActivity() {
         TapCardNfcManager.getInstance().initialize(this)
 
         setContent {
-            CoveTheme {
-                val app = remember { AppManager.getInstance() }
+            val app = remember { AppManager.getInstance() }
+
+            // compute dark theme based on user preference
+            val systemDarkTheme = isSystemInDarkTheme()
+            val darkTheme = when (app.colorSchemeSelection) {
+                ColorSchemeSelection.DARK -> true
+                ColorSchemeSelection.LIGHT -> false
+                ColorSchemeSelection.SYSTEM -> systemDarkTheme
+            }
+
+            CoveTheme(darkTheme = darkTheme) {
                 var initError by remember { mutableStateOf<String?>(null) }
 
                 // initialize async runtime on start
@@ -87,9 +99,10 @@ class MainActivity : ComponentActivity() {
                         Box {
                             LockView {
                                 SidebarContainer(app = app) {
-                                    // reset view hierarchy when network changes or route changes
+                                    // NavDisplay handles transitions and back gestures
+                                    // key resets view when network/routeId changes
                                     key(app.selectedNetwork, app.routeId) {
-                                        RouteView(app = app, route = app.router.currentRoute)
+                                        CoveNavDisplay(app = app)
                                     }
                                 }
                             }

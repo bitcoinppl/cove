@@ -120,15 +120,15 @@ class CoinControlManager(
 
     /**
      * called when user presses continue button
-     * applies selection to SendFlowManager
+     * navigates forward to CoinControlSetAmount screen with selected UTXOs
      */
-    fun continuePressed() {
-        val sfm = AppManager.getInstance().sendFlowManager ?: return
-        updateSendFlowManagerTask?.cancel()
-        updateSendFlowManagerTask = null
-
+    fun continuePressed(app: AppManager) {
+        val walletId = rust.id()
         val selectedUtxos = utxos.filter { selected.contains(it.outpoint) }
-        sfm.dispatch(SendFlowManagerAction.SetCoinControlMode(selectedUtxos))
+
+        // navigate forward to coin control set amount screen
+        val sendRoute = SendRoute.CoinControlSetAmount(walletId, selectedUtxos)
+        app.pushRoute(Route.Send(sendRoute))
     }
 
     private fun updateSendFlowManager() {

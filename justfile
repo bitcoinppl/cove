@@ -124,8 +124,9 @@ alias bar := build-android-release
 build-android-release:
     cd rust && cargo xtask build-android release
 
-run-android:
-    cd rust && cargo xtask run-android
+alias ra := run-android
+run-android profile="debug":
+    cd rust && cargo xtask run-android {{profile}}
 
 compile-android:
     cd android && ./gradlew assembleDebug

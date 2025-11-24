@@ -142,9 +142,12 @@ fun NodeSettingsScreen(
                 }
                 selectedNodeSelection = NodeSelection.Preset(node)
 
-                snackbarHostState.showSnackbar(
-                    successConnected.format(node.url),
-                )
+                // launch snackbar in separate coroutine so it doesn't block finally
+                scope.launch {
+                    snackbarHostState.showSnackbar(
+                        successConnected.format(node.url),
+                    )
+                }
             } catch (e: NodeSelectorException.NodeNotFound) {
                 errorTitle = errorTitleDefault
                 errorMessage = errorNotFound.format(e.v1)
@@ -189,7 +192,10 @@ fun NodeSettingsScreen(
                 selectedNodeSelection = NodeSelection.Custom(node)
                 selectedNodeName = node.name
 
-                snackbarHostState.showSnackbar(successSaved)
+                // launch snackbar in separate coroutine so it doesn't block finally
+                scope.launch {
+                    snackbarHostState.showSnackbar(successSaved)
+                }
             } catch (e: NodeSelectorException.ParseNodeUrlException) {
                 errorTitle = errorParseTitle
                 errorMessage = e.v1

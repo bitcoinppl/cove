@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.views.BalanceAutoSizeText
 import org.bitcoinppl.cove.views.ImageButton
 import java.util.Locale
 
@@ -404,10 +405,11 @@ fun CustomNetworkFeeBottomSheet(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Text(
+            BalanceAutoSizeText(
                 text = String.format(Locale.US, "%.2f", feeRate),
                 color = MaterialTheme.colorScheme.onSurface,
-                fontSize = 48.sp,
+                baseFontSize = 48.sp,
+                minimumScaleFactor = 0.5f,
                 fontWeight = FontWeight.Bold,
             )
             Row(

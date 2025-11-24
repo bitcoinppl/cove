@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.ImageButton
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -210,10 +211,11 @@ private fun BalanceWidget(
                 )
                 Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.Bottom) {
-                    Text(
+                    AutoSizeText(
                         text = if (isHidden) "••••••" else amount,
                         color = Color.White,
-                        fontSize = 24.sp,
+                        maxFontSize = 24.sp,
+                        minimumScaleFactor = 0.90f,
                         fontWeight = FontWeight.Bold,
                     )
                     Spacer(Modifier.size(6.dp))

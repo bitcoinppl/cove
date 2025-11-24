@@ -27,6 +27,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
@@ -37,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.ImageButton
 
 @Preview()
@@ -75,6 +77,8 @@ fun SendScreen(
     onScanQr: () -> Unit,
     onChangeSpeed: () -> Unit,
     onToggleBalanceVisibility: () -> Unit = {},
+    onUnitChange: (String) -> Unit = {},
+    isFiatMode: Boolean = false,
     isBalanceHidden: Boolean = false,
     balanceAmount: String,
     balanceDenomination: String,
@@ -129,11 +133,16 @@ fun SendScreen(
                         .graphicsLayer(alpha = 0.25f),
             )
             Column(modifier = Modifier.fillMaxSize()) {
+                val configuration = LocalConfiguration.current
+                val screenHeightDp = configuration.screenHeightDp.dp
+                val headerHeight = screenHeightDp * 0.145f
+
                 BalanceWidget(
                     amount = balanceAmount,
                     denomination = balanceDenomination,
                     isHidden = isBalanceHidden,
                     onToggleVisibility = onToggleBalanceVisibility,
+                    height = headerHeight,
                 )
                 Column(
                     modifier =
@@ -150,6 +159,8 @@ fun SendScreen(
                         denomination = amountDenomination,
                         dollarText = dollarEquivalentText,
                         onAmountChanged = onAmountChanged,
+                        onUnitChange = onUnitChange,
+                        isFiatMode = isFiatMode,
                     )
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
                     AddressWidget(
@@ -192,12 +203,13 @@ private fun BalanceWidget(
     denomination: String,
     isHidden: Boolean,
     onToggleVisibility: () -> Unit,
+    height: androidx.compose.ui.unit.Dp = 160.dp,
 ) {
     Box(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .height(160.dp)
+                .height(height)
                 .padding(horizontal = 16.dp, vertical = 20.dp),
     ) {
         Row(
@@ -214,10 +226,11 @@ private fun BalanceWidget(
                 )
                 Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.Bottom) {
-                    Text(
+                    AutoSizeText(
                         text = if (isHidden) "••••••" else amount,
                         color = Color.White,
-                        fontSize = 24.sp,
+                        maxFontSize = 24.sp,
+                        minimumScaleFactor = 0.90f,
                         fontWeight = FontWeight.Bold,
                     )
                     Spacer(Modifier.size(6.dp))
@@ -249,8 +262,11 @@ private fun AmountWidget(
     denomination: String,
     dollarText: String,
     onAmountChanged: (String) -> Unit,
+    onUnitChange: (String) -> Unit = {},
+    isFiatMode: Boolean = false,
 ) {
     var amount by remember { mutableStateOf(initialAmount) }
+    var showUnitMenu by remember { mutableStateOf(false) }
 
     // bidirectional sync: update local state when parent state changes
     androidx.compose.runtime.LaunchedEffect(initialAmount) {
@@ -297,15 +313,54 @@ private fun AmountWidget(
                 )
             }
             Spacer(Modifier.width(32.dp))
-            Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.offset(y = (-4).dp)) {
-                Text(denomination, color = MaterialTheme.colorScheme.onSurface, fontSize = 18.sp, maxLines = 1)
-                Spacer(Modifier.width(4.dp))
-                Icon(
-                    imageVector = Icons.Filled.ArrowDropDown,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.size(20.dp),
-                )
+            Box {
+                Row(
+                    verticalAlignment = Alignment.Bottom,
+                    modifier =
+                        Modifier
+                            .offset(y = (-4).dp)
+                            .then(
+                                // only clickable when in BTC mode
+                                if (!isFiatMode) {
+                                    Modifier.clickable { showUnitMenu = true }
+                                } else {
+                                    Modifier
+                                },
+                            ),
+                ) {
+                    Text(denomination, color = MaterialTheme.colorScheme.onSurface, fontSize = 18.sp, maxLines = 1)
+                    Spacer(Modifier.width(4.dp))
+                    if (!isFiatMode) {
+                        Icon(
+                            imageVector = Icons.Filled.ArrowDropDown,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                }
+                // dropdown menu for unit selection (only shown when in BTC mode)
+                if (!isFiatMode) {
+                    DropdownMenu(
+                        expanded = showUnitMenu,
+                        onDismissRequest = { showUnitMenu = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("sats") },
+                            onClick = {
+                                onUnitChange("sats")
+                                showUnitMenu = false
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("btc") },
+                            onClick = {
+                                onUnitChange("btc")
+                                showUnitMenu = false
+                            },
+                        )
+                    }
+                }
             }
         }
         Spacer(Modifier.height(8.dp))
