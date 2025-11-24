@@ -8,7 +8,6 @@
 import MijickPopups
 import SwiftUI
 
-@MainActor
 private class LoadingState {
     var popupWasShown = false
     var popupShownAt: Date?
