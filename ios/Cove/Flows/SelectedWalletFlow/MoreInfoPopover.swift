@@ -25,6 +25,7 @@ struct MoreInfoPopover: View {
 
     // state
     @State private var showLoadingTask: Task<Void, Never>?
+    @State private var exportTask: Task<Void, Never>?
 
     private var hasLabels: Bool {
         labelManager.hasLabels()
@@ -84,12 +85,15 @@ struct MoreInfoPopover: View {
         }
 
         // start export operation
-        Task {
+        exportTask = Task {
             do {
                 let (data, filename) = try await operation()
 
                 // cancel loading if not shown yet
                 showLoadingTask?.cancel()
+
+                // check if cancelled before continuing
+                if Task.isCancelled { return }
 
                 // if popup was shown, ensure minimum display time
                 if loadingState.popupWasShown, let shownAt = loadingState.popupShownAt {
@@ -103,6 +107,9 @@ struct MoreInfoPopover: View {
                     await dismissAllPopups()
                 }
 
+                // check if cancelled before showing share sheet
+                if Task.isCancelled { return }
+
                 // show ShareSheet
                 await MainActor.run {
                     ShareSheet.present(data: data, filename: filename) { success in
@@ -113,6 +120,9 @@ struct MoreInfoPopover: View {
                 }
             } catch {
                 showLoadingTask?.cancel()
+
+                // don't show error if cancelled
+                if Task.isCancelled { return }
 
                 await MainActor.run {
                     if loadingState.popupWasShown {
@@ -203,6 +213,7 @@ struct MoreInfoPopover: View {
         .tint(.primary)
         .onDisappear {
             showLoadingTask?.cancel()
+            exportTask?.cancel()
         }
     }
 }
