@@ -43,68 +43,34 @@ struct MoreInfoPopover: View {
     }
 
     func exportLabels() {
-        let loadingState = LoadingState()
-
-        // start delayed loading task
-        showLoadingTask = Task { @MainActor in
-            try? await Task.sleep(for: loadingPopupDelay)
-            if Task.isCancelled { return }
-
-            loadingState.popupWasShown = true
-            loadingState.popupShownAt = Date.now
-            await MiddlePopup(state: .loading).present()
-        }
-
-        // start export operation
-        Task {
-            do {
+        performExport(
+            operation: {
                 let content = try labelManager.export()
                 let filename = "\(labelManager.exportDefaultFileName(name: metadata.name)).jsonl"
-
-                // cancel loading if not shown yet
-                showLoadingTask?.cancel()
-
-                // if popup was shown, ensure minimum display time
-                if loadingState.popupWasShown, let shownAt = loadingState.popupShownAt {
-                    let elapsed = Date.now.timeIntervalSince(shownAt)
-                    let remaining = max(0, minimumPopupDisplayTime - elapsed)
-
-                    if remaining > 0 {
-                        try? await Task.sleep(for: .seconds(remaining))
-                    }
-
-                    await dismissAllPopups()
-                }
-
-                // show ShareSheet
-                await MainActor.run {
-                    ShareSheet.present(
-                        data: content,
-                        filename: filename
-                    ) { success in
-                        if !success {
-                            Log.warn("Label export was cancelled or failed")
-                        }
-                    }
-                }
-            } catch {
-                showLoadingTask?.cancel()
-
-                await MainActor.run {
-                    if loadingState.popupWasShown {
-                        Task { await dismissAllPopups() }
-                    }
-
-                    app.alertState = .init(.general(
-                        title: "Label Export Failed",
-                        message: "Unable to export labels: \(error.localizedDescription)"
-                    ))
-                }
-            }
-        }
+                return (content, filename)
+            },
+            errorTitle: "Label Export Failed",
+            errorPrefix: "Unable to export labels"
+        )
     }
 
     func exportTransactions() {
+        performExport(
+            operation: {
+                let csv = try await manager.rust.createTransactionsWithFiatExport()
+                let filename = "\(metadata.name.lowercased())_transactions.csv"
+                return (csv, filename)
+            },
+            errorTitle: "Transaction Export Failed",
+            errorPrefix: "Unable to export transactions"
+        )
+    }
+
+    private func performExport(
+        operation: @escaping () async throws -> (data: String, filename: String),
+        errorTitle: String,
+        errorPrefix: String
+    ) {
         let loadingState = LoadingState()
 
         // start delayed loading task
@@ -120,8 +86,7 @@ struct MoreInfoPopover: View {
         // start export operation
         Task {
             do {
-                let csv = try await manager.rust.createTransactionsWithFiatExport()
-                let filename = "\(metadata.name.lowercased())_transactions.csv"
+                let (data, filename) = try await operation()
 
                 // cancel loading if not shown yet
                 showLoadingTask?.cancel()
@@ -140,12 +105,9 @@ struct MoreInfoPopover: View {
 
                 // show ShareSheet
                 await MainActor.run {
-                    ShareSheet.present(
-                        data: csv,
-                        filename: filename
-                    ) { success in
+                    ShareSheet.present(data: data, filename: filename) { success in
                         if !success {
-                            Log.warn("Transaction export was cancelled or failed")
+                            Log.warn("\(errorTitle): cancelled or failed")
                         }
                     }
                 }
@@ -158,8 +120,8 @@ struct MoreInfoPopover: View {
                     }
 
                     app.alertState = .init(.general(
-                        title: "Transaction Export Failed",
-                        message: "Unable to export transactions: \(error.localizedDescription)"
+                        title: errorTitle,
+                        message: "\(errorPrefix): \(error.localizedDescription)"
                     ))
                 }
             }
@@ -239,6 +201,9 @@ struct MoreInfoPopover: View {
             }
         }
         .tint(.primary)
+        .onDisappear {
+            showLoadingTask?.cancel()
+        }
     }
 }
 
