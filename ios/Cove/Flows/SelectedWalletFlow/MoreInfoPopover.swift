@@ -153,21 +153,15 @@ struct MoreInfoPopover: View {
             } catch {
                 showLoadingTask?.cancel()
 
-                if loadingState.popupWasShown {
-                    await dismissAllPopups()
-                    try? await Task.sleep(for: .seconds(0.3))
-                    await MiddlePopup(
-                        state: .failure("Unable to export transactions: \(error.localizedDescription)")
-                    )
-                    .dismissAfter(7)
-                    .present()
-                } else {
-                    try? await Task.sleep(for: .seconds(0.3))
-                    await MiddlePopup(
-                        state: .failure("Unable to export transactions: \(error.localizedDescription)")
-                    )
-                    .dismissAfter(7)
-                    .present()
+                await MainActor.run {
+                    if loadingState.popupWasShown {
+                        Task { await dismissAllPopups() }
+                    }
+
+                    app.alertState = .init(.general(
+                        title: "Transaction Export Failed",
+                        message: "Unable to export transactions: \(error.localizedDescription)"
+                    ))
                 }
             }
         }

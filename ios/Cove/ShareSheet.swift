@@ -1,6 +1,37 @@
+import LinkPresentation
 import SwiftUI
 import UIKit
-import UniformTypeIdentifiers
+
+@MainActor
+private class ShareableFile: NSObject, UIActivityItemSource {
+    let url: URL
+    let iconImage: UIImage?
+
+    init(url: URL, iconImage: UIImage? = nil) {
+        self.url = url
+        self.iconImage = iconImage
+        super.init()
+    }
+
+    func activityViewControllerPlaceholderItem(_: UIActivityViewController) -> Any {
+        url
+    }
+
+    func activityViewController(_: UIActivityViewController, itemForActivityType _: UIActivity.ActivityType?) -> Any? {
+        url
+    }
+
+    func activityViewControllerLinkMetadata(_: UIActivityViewController) -> LPLinkMetadata? {
+        let metadata = LPLinkMetadata()
+        metadata.title = url.lastPathComponent
+
+        if let iconImage {
+            metadata.iconProvider = NSItemProvider(object: iconImage)
+        }
+
+        return metadata
+    }
+}
 
 enum ShareSheet {
     /// shows share sheet for the given file URL
@@ -15,8 +46,11 @@ enum ShareSheet {
             return
         }
 
+        // load Cove icon
+        let iconImage = UIImage(named: "icon")
+
         let activityViewController = UIActivityViewController(
-            activityItems: [url],
+            activityItems: [ShareableFile(url: url, iconImage: iconImage)],
             applicationActivities: nil
         )
 
@@ -35,17 +69,15 @@ enum ShareSheet {
         rootViewController.present(activityViewController, animated: true)
     }
 
-    /// presents share sheet with arbitrary data by writing to a temporary file
+    /// Presents share sheet with arbitrary data by writing to a temporary file
     /// - Parameters:
     ///   - data: the data to share
     ///   - filename: the filename to use for the temporary file
-    ///   - utType: the uniform type identifier for the file (defaults to .plainText)
     ///   - completion: called after the share sheet dismisses with success/failure result
     @MainActor
     static func present(
         data: String,
         filename: String,
-        utType _: UTType = .plainText,
         completion: @escaping (Bool) -> Void
     ) {
         guard let windowScene = UIApplication.shared.connectedScenes
@@ -70,8 +102,11 @@ enum ShareSheet {
             return
         }
 
+        // load Cove icon
+        let iconImage = UIImage(named: "icon")
+
         let activityViewController = UIActivityViewController(
-            activityItems: [fileURL],
+            activityItems: [ShareableFile(url: fileURL, iconImage: iconImage)],
             applicationActivities: nil
         )
 
