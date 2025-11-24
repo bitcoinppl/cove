@@ -74,6 +74,8 @@ import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.components.ConfirmationIndicatorView
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.views.AutoSizeText
+import org.bitcoinppl.cove.views.BalanceAutoSizeText
 import org.bitcoinppl.cove.views.ImageButton
 import org.bitcoinppl.cove_core.TransactionDetails
 import org.bitcoinppl.cove_core.WalletManagerAction
@@ -339,20 +341,21 @@ fun TransactionDetailsScreen(
 
                 Spacer(Modifier.height(32.dp))
 
-                Text(
+                BalanceAutoSizeText(
                     txAmountPrimary,
                     color = fg,
-                    fontSize = 36.sp,
+                    baseFontSize = 36.sp,
+                    minFontSize = 24.sp,
                     fontWeight = FontWeight.ExtraBold,
-                    lineHeight = 44.sp,
                 )
 
                 Spacer(Modifier.height(4.dp))
 
-                Text(
+                AutoSizeText(
                     txAmountSecondary,
                     color = fg,
-                    fontSize = 18.sp,
+                    maxFontSize = 18.sp,
+                    minimumScaleFactor = 0.90f,
                 )
 
                 Spacer(Modifier.height(32.dp))
@@ -717,7 +720,7 @@ private fun DetailsWidget(
             }
         }
         Column(horizontalAlignment = Alignment.End) {
-            Text(primary, color = primaryColor, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+            AutoSizeText(primary, color = primaryColor, maxFontSize = 18.sp, minimumScaleFactor = 0.90f, fontWeight = FontWeight.SemiBold)
             if (!secondary.isNullOrEmpty()) {
                 Spacer(Modifier.height(6.dp))
                 Text(secondary, color = sub, fontSize = 14.sp)

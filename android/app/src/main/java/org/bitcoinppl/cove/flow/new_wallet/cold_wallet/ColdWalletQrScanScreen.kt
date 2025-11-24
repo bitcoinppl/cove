@@ -69,6 +69,7 @@ fun ColdWalletQrScanScreen(app: AppManager, modifier: Modifier = Modifier) {
     ) { paddingValues ->
         Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
             QrCodeScanView(
+                showTopBar = false,
                 onScanned = { stringOrData ->
                     try {
                         // try to parse as string first for xpub/descriptor

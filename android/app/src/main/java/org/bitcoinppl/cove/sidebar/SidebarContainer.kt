@@ -1,7 +1,8 @@
 package org.bitcoinppl.cove.sidebar
 
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Box
@@ -24,7 +25,7 @@ import org.bitcoinppl.cove.AppManager
 import kotlin.math.roundToInt
 
 private const val SIDEBAR_WIDTH_DP = 280f
-private const val ANIMATION_DURATION_MS = 300
+private const val EDGE_SWIPE_THRESHOLD_DP = 50f
 
 @Composable
 fun SidebarContainer(
@@ -46,10 +47,13 @@ fun SidebarContainer(
     // calculate target offset based on sidebar visibility
     val targetOffset = if (app.isSidebarVisible) sidebarWidthPx else 0f
 
-    // animate the offset when not dragging
+    // animate the offset when not dragging - use spring for natural feel
     val animatedOffset by animateFloatAsState(
-        targetValue = if (isDragging) targetOffset else targetOffset,
-        animationSpec = tween(durationMillis = ANIMATION_DURATION_MS),
+        targetValue = targetOffset,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium,
+        ),
         label = "sidebarOffset",
     )
 
@@ -103,8 +107,8 @@ fun SidebarContainer(
                         if (gesturesEnabled) {
                             detectHorizontalDragGestures(
                                 onDragStart = { offset ->
-                                    // only start drag from left edge when closed
-                                    if (!app.isSidebarVisible && offset.x < 25.dp.toPx()) {
+                                    // only start drag from left edge when closed (using threshold constant)
+                                    if (!app.isSidebarVisible && offset.x < edgeThresholdPx) {
                                         isDragging = true
                                         gestureOffset = 0f
                                     } else if (app.isSidebarVisible) {
@@ -114,13 +118,18 @@ fun SidebarContainer(
                                 },
                                 onDragEnd = {
                                     if (isDragging) {
-                                        // determine if we should complete the open/close action
-                                        val threshold = sidebarWidthPx * 0.5f
-                                        val finalOffset = targetOffset + gestureOffset
-
-                                        app.isSidebarVisible = finalOffset > threshold
-
                                         isDragging = false
+
+                                        // determine if we should complete the open/close action
+                                        val threshold = sidebarWidthPx * 0.3f
+                                        val finalOffset = targetOffset + gestureOffset
+                                        val shouldBeOpen = finalOffset > threshold
+
+                                        // only update if state actually changes
+                                        if (app.isSidebarVisible != shouldBeOpen) {
+                                            app.isSidebarVisible = shouldBeOpen
+                                        }
+
                                         gestureOffset = 0f
                                     }
                                 },
@@ -130,8 +139,7 @@ fun SidebarContainer(
                                 },
                                 onHorizontalDrag = { _, dragAmount ->
                                     if (isDragging) {
-                                        // apply dampening factor (90%)
-                                        gestureOffset += dragAmount * 0.9f
+                                        gestureOffset += dragAmount
 
                                         // constrain gesture offset
                                         val proposedOffset = targetOffset + gestureOffset

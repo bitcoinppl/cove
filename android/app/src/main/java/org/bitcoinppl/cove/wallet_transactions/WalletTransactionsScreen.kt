@@ -56,6 +56,8 @@ import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletLoadState
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.views.AutoSizeText
+import org.bitcoinppl.cove.views.BalanceAutoSizeText
 import org.bitcoinppl.cove.views.ImageButton
 import org.bitcoinppl.cove_core.Transaction
 import org.bitcoinppl.cove_core.types.TransactionDirection
@@ -392,7 +394,7 @@ private fun TransactionWidget(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .padding(vertical = 8.dp),
+                .padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
@@ -415,7 +417,7 @@ private fun TransactionWidget(
 
         Column(
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
             Text(
                 text = title,
@@ -423,10 +425,11 @@ private fun TransactionWidget(
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Medium,
             )
-            Text(
+            AutoSizeText(
                 text = date,
                 color = secondaryText,
-                fontSize = 14.sp,
+                maxFontSize = 14.sp,
+                minimumScaleFactor = 0.90f,
                 fontWeight = FontWeight.Normal,
             )
         }
@@ -456,7 +459,7 @@ private fun BalanceWidget(
 ) {
     var isHidden by remember { mutableStateOf(hidden) }
 
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
             text = if (isHidden) "$———" else usdAmount,
             color = Color.White.copy(alpha = 0.7f),
@@ -464,10 +467,11 @@ private fun BalanceWidget(
         )
 
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
+            BalanceAutoSizeText(
                 text = if (isHidden) "•••••• SATS" else satsAmount,
                 color = Color.White,
-                fontSize = 36.sp,
+                baseFontSize = 34.sp,
+                minFontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f),
             )

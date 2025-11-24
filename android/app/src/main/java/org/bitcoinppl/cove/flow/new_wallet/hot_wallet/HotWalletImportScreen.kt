@@ -10,6 +10,7 @@ import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
@@ -482,6 +484,7 @@ private fun WordInputGrid(
                 number = index + 1,
                 word = word,
                 numberOfWords = numberOfWords,
+                allEnteredWords = enteredWords,
                 isFocused = focusedField == index,
                 onWordChanged = { newWord ->
                     val groupIndex = index / GROUPS_OF
@@ -510,6 +513,7 @@ private fun WordInputField(
     number: Int,
     word: String,
     numberOfWords: NumberOfBip39Words,
+    allEnteredWords: List<List<String>>,
     isFocused: Boolean,
     onWordChanged: (String) -> Unit,
     onFocusChanged: (Boolean) -> Unit,
@@ -522,6 +526,8 @@ private fun WordInputField(
                 numberOfWords = numberOfWords,
             )
         }
+
+    var suggestions by remember { mutableStateOf<List<String>>(emptyList()) }
 
     val isValid = word.isNotEmpty() && autocomplete.isBip39Word(word)
     val hasInput = word.isNotEmpty()
@@ -550,69 +556,118 @@ private fun WordInputField(
         }
     }
 
-    Row(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .height(40.dp)
-                .background(
-                    color = Color.White.copy(alpha = 0.08f),
-                    shape = RoundedCornerShape(8.dp),
-                ).border(
-                    width = if (borderColor != Color.Transparent) 2.dp else 0.dp,
-                    color = borderColor,
-                    shape = RoundedCornerShape(8.dp),
-                ).padding(horizontal = 12.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = "$number.",
-            color = CoveColor.coveLightGray.copy(alpha = 0.6f),
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.width(28.dp),
-        )
+    // update suggestions when word or focus changes
+    LaunchedEffect(word, isFocused) {
+        suggestions = if (isFocused && word.isNotEmpty()) {
+            autocomplete.autocomplete(word, allEnteredWords)
+        } else {
+            emptyList()
+        }
+    }
 
-        BasicTextField(
-            value = word,
-            onValueChange = { newValue ->
-                val trimmed = newValue.trim().lowercase()
-                onWordChanged(trimmed)
-
-                // auto-advance when word is complete and valid
-                if (trimmed.isNotEmpty() && autocomplete.isBip39Word(trimmed)) {
-                    onNext()
-                }
-            },
-            textStyle =
-                TextStyle(
-                    color = textColor,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                    textAlign = TextAlign.End,
-                ),
-            singleLine = true,
-            cursorBrush = SolidColor(Color.White),
-            keyboardOptions =
-                KeyboardOptions(
-                    capitalization = KeyboardCapitalization.None,
-                    autoCorrectEnabled = false,
-                    keyboardType = KeyboardType.Ascii,
-                    imeAction = ImeAction.Next,
-                ),
-            keyboardActions =
-                KeyboardActions(
-                    onNext = { onNext() },
-                ),
+    Column {
+        Row(
             modifier =
                 Modifier
-                    .weight(1f)
-                    .focusRequester(focusRequester)
-                    .onFocusChanged { focusState ->
-                        onFocusChanged(focusState.isFocused)
-                    },
-        )
+                    .fillMaxWidth()
+                    .height(40.dp)
+                    .background(
+                        color = Color.White.copy(alpha = 0.08f),
+                        shape = RoundedCornerShape(8.dp),
+                    ).border(
+                        width = if (borderColor != Color.Transparent) 2.dp else 0.dp,
+                        color = borderColor,
+                        shape = RoundedCornerShape(8.dp),
+                    ).padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "$number.",
+                color = CoveColor.coveLightGray.copy(alpha = 0.6f),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.width(28.dp),
+            )
+
+            BasicTextField(
+                value = word,
+                onValueChange = { newValue ->
+                    val trimmed = newValue.trim().lowercase()
+                    onWordChanged(trimmed)
+
+                    // auto-advance when word is complete and valid
+                    if (trimmed.isNotEmpty() && autocomplete.isBip39Word(trimmed)) {
+                        suggestions = emptyList()
+                        onNext()
+                    }
+                },
+                textStyle =
+                    TextStyle(
+                        color = textColor,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        textAlign = TextAlign.End,
+                    ),
+                singleLine = true,
+                cursorBrush = SolidColor(Color.White),
+                keyboardOptions =
+                    KeyboardOptions(
+                        capitalization = KeyboardCapitalization.None,
+                        autoCorrectEnabled = false,
+                        keyboardType = KeyboardType.Ascii,
+                        imeAction = ImeAction.Next,
+                    ),
+                keyboardActions =
+                    KeyboardActions(
+                        onNext = { onNext() },
+                    ),
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .focusRequester(focusRequester)
+                        .onFocusChanged { focusState ->
+                            onFocusChanged(focusState.isFocused)
+                            if (!focusState.isFocused) {
+                                suggestions = emptyList()
+                            }
+                        },
+            )
+        }
+
+        // suggestion dropdown
+        if (suggestions.isNotEmpty()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        color = CoveColor.midnightBlue.copy(alpha = 0.95f),
+                        shape = RoundedCornerShape(bottomStart = 8.dp, bottomEnd = 8.dp),
+                    )
+                    .border(
+                        width = 1.dp,
+                        color = CoveColor.coveLightGray.copy(alpha = 0.3f),
+                        shape = RoundedCornerShape(bottomStart = 8.dp, bottomEnd = 8.dp),
+                    ),
+            ) {
+                suggestions.forEach { suggestion ->
+                    Text(
+                        text = suggestion,
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                onWordChanged(suggestion)
+                                suggestions = emptyList()
+                                onNext()
+                            }
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                    )
+                }
+            }
+        }
     }
 }
 

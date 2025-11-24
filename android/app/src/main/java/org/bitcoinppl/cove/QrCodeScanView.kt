@@ -12,6 +12,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.outlined.CropFree
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -66,27 +67,30 @@ fun QrCodeScanView(
     onDismiss: () -> Unit,
     app: AppManager,
     modifier: Modifier = Modifier,
+    showTopBar: Boolean = true,
 ) {
     val cameraPermissionState = rememberPermissionState(Manifest.permission.CAMERA)
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { },
-                navigationIcon = {
-                    IconButton(onClick = onDismiss) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = Color.White,
-                        )
-                    }
-                },
-                colors =
-                    TopAppBarDefaults.topAppBarColors(
-                        containerColor = Color.Transparent,
-                    ),
-            )
+            if (showTopBar) {
+                TopAppBar(
+                    title = { },
+                    navigationIcon = {
+                        IconButton(onClick = onDismiss) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back",
+                                tint = Color.White,
+                            )
+                        }
+                    },
+                    colors =
+                        TopAppBarDefaults.topAppBarColors(
+                            containerColor = Color.Transparent,
+                        ),
+                )
+            }
         },
         containerColor = Color.Black,
         modifier = modifier.fillMaxSize(),
@@ -283,6 +287,16 @@ private fun QrScannerContent(
                         previewView
                     },
                     modifier = Modifier.fillMaxSize(),
+                )
+
+                // viewfinder overlay - centered
+                Icon(
+                    imageVector = Icons.Outlined.CropFree,
+                    contentDescription = "Scan area",
+                    modifier = Modifier
+                        .size(200.dp)
+                        .align(Alignment.Center),
+                    tint = Color.White.copy(alpha = 0.7f),
                 )
 
                 // overlay content
