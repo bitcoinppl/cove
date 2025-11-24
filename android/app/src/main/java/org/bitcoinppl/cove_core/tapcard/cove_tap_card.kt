@@ -1161,7 +1161,6 @@ public object FfiConverterString: FfiConverter<String, RustBuffer.ByValue> {
 //
 
 
-//
 public interface TapSignerInterface {
     
     fun `fullCardIdent`(): kotlin.String
@@ -1363,6 +1362,8 @@ data class SatsCard (
     
 
     
+
+    
     companion object
 }
 
@@ -1400,11 +1401,51 @@ public object FfiConverterTypeSatsCard: FfiConverterRustBuffer<SatsCard> {
 
 
 
+enum class Field {
+    
+    SIGNATURE,
+    IDENT,
+    STATE,
+    NONCE,
+    SLOT_NUMBER,
+    ADDRESS;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeField: FfiConverterRustBuffer<Field> {
+    override fun read(buf: ByteBuffer) = try {
+        Field.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: Field) = 4UL
+
+    override fun write(value: Field, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
 enum class SatsCardState {
     
     SEALED,
     UNSEALED,
     ERROR;
+
+    
 
 
     companion object
@@ -1473,6 +1514,9 @@ sealed class TapCard: Disposable  {
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
+    
+
+    
     
 
 
@@ -1595,6 +1639,8 @@ sealed class TapCardParseException: kotlin.Exception() {
         override val message
             get() = ""
     }
+    
+
     
 
 
@@ -1734,6 +1780,8 @@ enum class TapSignerState {
     UNUSED,
     ERROR;
 
+    
+
 
     companion object
 }
@@ -1752,42 +1800,6 @@ public object FfiConverterTypeTapSignerState: FfiConverterRustBuffer<TapSignerSt
     override fun allocationSize(value: TapSignerState) = 4UL
 
     override fun write(value: TapSignerState, buf: ByteBuffer) {
-        buf.putInt(value.ordinal + 1)
-    }
-}
-
-
-
-
-
-
-enum class Field {
-    
-    SIGNATURE,
-    IDENT,
-    STATE,
-    NONCE,
-    SLOT_NUMBER,
-    ADDRESS;
-
-
-    companion object
-}
-
-
-/**
- * @suppress
- */
-public object FfiConverterTypeField: FfiConverterRustBuffer<Field> {
-    override fun read(buf: ByteBuffer) = try {
-        Field.values()[buf.getInt() - 1]
-    } catch (e: IndexOutOfBoundsException) {
-        throw RuntimeException("invalid enum value, something is very wrong!!", e)
-    }
-
-    override fun allocationSize(value: Field) = 4UL
-
-    override fun write(value: Field, buf: ByteBuffer) {
         buf.putInt(value.ordinal + 1)
     }
 }

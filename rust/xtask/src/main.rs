@@ -1,362 +1,151 @@
-use anyhow::{bail, Context, Result};
-use colored::Colorize;
-use xshell::{cmd, Shell};
+use clap::{Parser, Subcommand};
+use color_eyre::Result;
 
-mod flags {
-    xflags::xflags! {
-        cmd xtask {
-            cmd bump-version {
-                /// Version component to bump: 'major', 'minor', or 'patch'
-                required bump_type: String
-                /// Targets to bump (comma separated): 'rust', 'ios', 'android'. Defaults to all.
-                optional --targets targets: String
-            }
-            cmd build-bump {
-                /// Targets to bump build numbers (comma separated): 'ios', 'android'. Defaults to both.
-                optional targets: String
-            }
-        }
-    }
+mod android;
+mod common;
+mod ios;
+mod version;
+
+#[derive(Parser)]
+#[command(name = "xtask")]
+#[command(about = "Build automation for Cove", long_about = None)]
+struct Cli {
+    /// Enable verbose output
+    #[arg(short, long, global = true)]
+    verbose: bool,
+
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Bump version for specified targets
+    #[command(name = "bump-version")]
+    BumpVersion {
+        /// Version component to bump: 'major', 'minor', or 'patch'
+        bump_type: String,
+
+        /// Targets to bump (comma separated): 'rust', 'ios', 'android'. Defaults to all.
+        #[arg(long)]
+        targets: Option<String>,
+    },
+
+    /// Bump build numbers for iOS and/or Android
+    #[command(name = "build-bump")]
+    BuildBump {
+        /// Targets to bump build numbers (comma separated): 'ios', 'android'. Defaults to both.
+        targets: Option<String>,
+    },
+
+    /// Build Android library and generate Kotlin bindings
+    #[command(name = "build-android")]
+    BuildAndroid {
+        /// Build profile: 'debug', 'release', or custom profile name
+        #[arg(default_value = "release")]
+        profile: String,
+    },
+
+    /// Build and run Android app on device/emulator
+    #[command(name = "run-android")]
+    RunAndroid,
+
+    /// Build iOS library and generate Swift bindings
+    #[command(name = "build-ios")]
+    BuildIos {
+        /// Build type: 'debug', 'release', or custom profile
+        #[arg(default_value = "debug")]
+        build_type: String,
+
+        /// Build for device (includes device and simulator for debug, device only for release)
+        #[arg(long)]
+        device: bool,
+
+        /// Sign the build
+        #[arg(long)]
+        sign: bool,
+    },
+
+    /// Build and run iOS app in simulator
+    #[command(name = "run-ios")]
+    RunIos,
+
+    /// Install required build dependencies (cargo-ndk, etc.)
+    #[command(name = "install-deps")]
+    InstallDeps,
 }
 
 fn main() -> Result<()> {
-    let flags = flags::Xtask::from_env_or_exit();
-    match flags.subcommand {
-        flags::XtaskCmd::BumpVersion(cmd) => bump_version(cmd.bump_type, cmd.targets),
-        flags::XtaskCmd::BuildBump(cmd) => build_bump(cmd.targets),
+    color_eyre::install()?;
+
+    let cli = Cli::parse();
+
+    match cli.command {
+        Commands::BumpVersion { bump_type, targets } => version::bump_version(bump_type, targets),
+
+        Commands::BuildBump { targets } => version::build_bump(targets),
+
+        Commands::BuildAndroid { profile } => {
+            let build_profile = android::BuildProfile::from_str(&profile);
+            android::build_android(build_profile, cli.verbose)
+        }
+
+        Commands::RunAndroid => android::run_android(cli.verbose),
+
+        Commands::BuildIos { build_type, device, sign } => {
+            let ios_build_type = ios::IosBuildType::from_str(&build_type);
+            ios::build_ios(ios_build_type, device, sign, cli.verbose)
+        }
+
+        Commands::RunIos => ios::run_ios(cli.verbose),
+
+        Commands::InstallDeps => install_deps(cli.verbose),
     }
 }
 
-fn bump_version(bump_type: String, targets_opt: Option<String>) -> Result<()> {
+fn install_deps(verbose: bool) -> Result<()> {
+    use crate::common::{command_exists, print_info, print_success, print_warning};
+    use colored::Colorize;
+    use xshell::{cmd, Shell};
+
     let sh = Shell::new()?;
 
-    // Parse targets
-    let targets_str = targets_opt.as_deref().unwrap_or("rust,ios,android");
-    let targets: Vec<&str> = targets_str.split(',').map(|s| s.trim()).collect();
+    println!("{}", "Checking and installing dependencies...".blue().bold());
 
-    // Validate targets
-    for t in &targets {
-        if !["rust", "ios", "android"].contains(t) {
-            bail!("Unknown target: '{}'. Valid targets are: rust, ios, android", t);
+    // check for cargo-ndk
+    if !command_exists("cargo-ndk") {
+        print_info("Installing cargo-ndk...");
+        if verbose {
+            cmd!(sh, "cargo install cargo-ndk").run()?;
+        } else {
+            cmd!(sh, "cargo install cargo-ndk").quiet().run()?;
         }
-    }
-
-    // We expect to be running from the 'rust' directory
-    if !sh.path_exists("Cargo.toml") {
-        bail!("Cargo.toml not found. Ensure you are running this from the 'rust' directory.");
-    }
-
-    // 1. Read Current Version (Always read from Rust as source of truth)
-    let cargo_toml_path = "Cargo.toml";
-    let cargo_toml = sh.read_file(cargo_toml_path)?;
-
-    let current_version = cargo_toml
-        .lines()
-        .find(|l| l.starts_with("version = "))
-        .context("Could not find version in Cargo.toml")?
-        .split('"')
-        .nth(1)
-        .context("Invalid version format")?;
-
-    println!("{} {current_version}", "Current version:".blue().bold());
-
-    // 2. Calculate New Version
-    let parts: Vec<&str> = current_version.split('.').collect();
-    if parts.len() != 3 {
-        bail!("Version must be x.y.z");
-    }
-
-    let (mut major, mut minor, mut patch) =
-        (parts[0].parse::<u32>()?, parts[1].parse::<u32>()?, parts[2].parse::<u32>()?);
-
-    match bump_type.as_str() {
-        "major" => {
-            major += 1;
-            minor = 0;
-            patch = 0;
-        }
-        "minor" => {
-            minor += 1;
-            patch = 0;
-        }
-        "patch" => {
-            patch += 1;
-        }
-        _ => bail!("Bump type must be 'major', 'minor', or 'patch'"),
-    }
-    let new_version = format!("{major}.{minor}.{patch}");
-    println!("{} {new_version}", "Bumping to:".green().bold());
-    println!("{} {:?}", "Targets:".blue(), targets);
-
-    // 3. Update Cargo.toml (Rust)
-    if targets.contains(&"rust") {
-        update_rust(&sh, &cargo_toml, current_version, &new_version)?;
-    }
-
-    // 4. Update iOS project.pbxproj
-    if targets.contains(&"ios") {
-        update_ios(&sh, &bump_type)?;
-    }
-
-    // 5. Update Android build.gradle.kts
-    if targets.contains(&"android") {
-        update_android(&sh, &bump_type)?;
-    }
-
-    // 6. Update Cargo.lock (Only if rust was updated)
-    if targets.contains(&"rust") {
-        println!("{}", "Updating Cargo.lock...".dimmed());
-        cmd!(sh, "cargo update -p cove").run()?;
-    }
-
-    println!("{} Version bumped to {new_version}", "SUCCESS:".green().bold());
-    Ok(())
-}
-
-fn calculate_bumped_version(current_version: &str, bump_type: &str) -> Result<String> {
-    let parts: Vec<&str> = current_version.split('.').collect();
-    if parts.len() != 3 {
-        bail!("Version must be x.y.z, got: {}", current_version);
-    }
-
-    let (mut major, mut minor, mut patch) =
-        (parts[0].parse::<u32>()?, parts[1].parse::<u32>()?, parts[2].parse::<u32>()?);
-
-    match bump_type {
-        "major" => {
-            major += 1;
-            minor = 0;
-            patch = 0;
-        }
-        "minor" => {
-            minor += 1;
-            patch = 0;
-        }
-        "patch" => {
-            patch += 1;
-        }
-        _ => bail!("Bump type must be 'major', 'minor', or 'patch'"),
-    }
-
-    Ok(format!("{major}.{minor}.{patch}"))
-}
-
-fn update_rust(
-    sh: &Shell,
-    cargo_toml: &str,
-    current_version: &str,
-    new_version: &str,
-) -> Result<()> {
-    let new_cargo_toml = cargo_toml.replace(
-        &format!("version = \"{current_version}\""),
-        &format!("version = \"{new_version}\""),
-    );
-    sh.write_file("Cargo.toml", new_cargo_toml)?;
-    println!("{} Updated rust/Cargo.toml", "✓".green());
-    Ok(())
-}
-
-fn update_ios(sh: &Shell, bump_type: &str) -> Result<()> {
-    let pbx_path = "../ios/Cove.xcodeproj/project.pbxproj";
-    if !sh.path_exists(pbx_path) {
-        println!("{} iOS project file not found at {pbx_path}", "!".yellow());
-        return Ok(());
-    }
-
-    let pbx = sh.read_file(pbx_path)?;
-
-    // extract current iOS version
-    let current_ios_version = extract_version(&pbx, "MARKETING_VERSION = ", ';')
-        .context("Could not extract iOS MARKETING_VERSION")?;
-
-    // calculate new version
-    let new_version = calculate_bumped_version(&current_ios_version, bump_type)?;
-
-    let new_pbx = pbx.replace(
-        &format!("MARKETING_VERSION = {current_ios_version};"),
-        &format!("MARKETING_VERSION = {new_version};"),
-    );
-
-    sh.write_file(pbx_path, new_pbx)?;
-    println!(
-        "{} Updated iOS MARKETING_VERSION: {} -> {}",
-        "✓".green(),
-        current_ios_version,
-        new_version
-    );
-
-    // increment build number
-    bump_ios_build_number(sh)?;
-
-    Ok(())
-}
-
-fn update_android(sh: &Shell, bump_type: &str) -> Result<()> {
-    let gradle_path = "../android/app/build.gradle.kts";
-    if !sh.path_exists(gradle_path) {
-        println!("{} Android build.gradle.kts not found at {gradle_path}", "!".yellow());
-        return Ok(());
-    }
-
-    let gradle = sh.read_file(gradle_path)?;
-
-    // extract current Android version
-    let current_android_version = extract_version(&gradle, "versionName = \"", '"')
-        .context("Could not extract Android versionName")?;
-
-    // calculate new version
-    let new_version = calculate_bumped_version(&current_android_version, bump_type)?;
-
-    // update versionName
-    let new_gradle = gradle.replace(
-        &format!("versionName = \"{current_android_version}\""),
-        &format!("versionName = \"{new_version}\""),
-    );
-
-    sh.write_file(gradle_path, new_gradle)?;
-    println!(
-        "{} Updated Android versionName: {} -> {}",
-        "✓".green(),
-        current_android_version,
-        new_version
-    );
-
-    // increment build number
-    bump_android_build_number(sh)?;
-
-    Ok(())
-}
-
-fn build_bump(targets_opt: Option<String>) -> Result<()> {
-    let sh = Shell::new()?;
-
-    // parse targets
-    let targets_str = targets_opt.as_deref().unwrap_or("ios,android");
-    let targets: Vec<&str> = targets_str.split(',').map(|s| s.trim()).collect();
-
-    // validate targets
-    for t in &targets {
-        if !["ios", "android"].contains(t) {
-            bail!("Unknown target: '{}'. Valid targets are: ios, android", t);
-        }
-    }
-
-    // we expect to be running from the 'rust' directory
-    if !sh.path_exists("Cargo.toml") {
-        bail!("Cargo.toml not found. Ensure you are running this from the 'rust' directory.");
-    }
-
-    println!("{} {:?}", "Bumping build numbers for:".blue().bold(), targets);
-
-    // bump iOS build number
-    if targets.contains(&"ios") {
-        bump_ios_build_number(&sh)?;
-    }
-
-    // bump Android build number
-    if targets.contains(&"android") {
-        bump_android_build_number(&sh)?;
-    }
-
-    println!("{} Build numbers bumped", "SUCCESS:".green().bold());
-    Ok(())
-}
-
-fn bump_ios_build_number(sh: &Shell) -> Result<()> {
-    let pbx_path = "../ios/Cove.xcodeproj/project.pbxproj";
-    if !sh.path_exists(pbx_path) {
-        println!("{} iOS project file not found at {pbx_path}", "!".yellow());
-        return Ok(());
-    }
-
-    let pbx = sh.read_file(pbx_path)?;
-    let new_pbx = increment_and_replace_ios(pbx);
-    sh.write_file(pbx_path, new_pbx)?;
-
-    Ok(())
-}
-
-fn bump_android_build_number(sh: &Shell) -> Result<()> {
-    let gradle_path = "../android/app/build.gradle.kts";
-    if !sh.path_exists(gradle_path) {
-        println!("{} Android build.gradle.kts not found at {gradle_path}", "!".yellow());
-        return Ok(());
-    }
-
-    let gradle = sh.read_file(gradle_path)?;
-    let new_gradle = increment_and_replace_android(gradle);
-    sh.write_file(gradle_path, new_gradle)?;
-
-    Ok(())
-}
-
-struct IncrementReplaceArgs<'a> {
-    key: &'a str,
-    terminator: char,
-    replace_suffix: &'a str,
-    platform: &'a str,
-    field_label: &'a str,
-}
-
-fn increment_and_replace(content: String, args: IncrementReplaceArgs) -> String {
-    if let Some(code) = extract_u32_value(&content, args.key, args.terminator) {
-        let new_code = code + 1;
-        let new_content = content.replace(
-            &format!("{}{}{}", args.key, code, args.replace_suffix),
-            &format!("{}{}{}", args.key, new_code, args.replace_suffix),
-        );
-        println!(
-            "{} Updated {} {}: {} -> {}",
-            "✓".green(),
-            args.platform,
-            args.field_label,
-            code,
-            new_code
-        );
-        new_content
+        print_success("Installed cargo-ndk");
     } else {
-        println!("{} Could not parse {} {}", "!".yellow(), args.platform, args.field_label);
-        content
+        print_success("cargo-ndk is already installed");
     }
-}
 
-fn increment_and_replace_ios(content: String) -> String {
-    increment_and_replace(
-        content,
-        IncrementReplaceArgs {
-            key: "CURRENT_PROJECT_VERSION = ",
-            terminator: ';',
-            replace_suffix: ";",
-            platform: "iOS",
-            field_label: "CURRENT_PROJECT_VERSION",
-        },
-    )
-}
+    // check for adb
+    if command_exists("adb") {
+        print_success("adb is installed");
+    } else {
+        print_warning("adb not found - install Android SDK platform-tools for Android development");
+    }
 
-fn increment_and_replace_android(content: String) -> String {
-    increment_and_replace(
-        content,
-        IncrementReplaceArgs {
-            key: "versionCode = ",
-            terminator: '\n',
-            replace_suffix: "",
-            platform: "Android",
-            field_label: "versionCode",
-        },
-    )
-}
+    // check for xcodebuild
+    if command_exists("xcodebuild") {
+        print_success("xcodebuild is installed");
+    } else {
+        print_warning("xcodebuild not found - install Xcode for iOS development");
+    }
 
-fn extract_version(content: &str, key: &str, terminator: char) -> Option<String> {
-    let start = content.find(key)?;
-    let after_key = &content[start + key.len()..];
-    let end = after_key.find(terminator)?;
-    let version = after_key[..end].trim().trim_matches('"').to_string();
-    Some(version)
-}
+    // check for xcrun
+    if command_exists("xcrun") {
+        print_success("xcrun is installed");
+    } else {
+        print_warning("xcrun not found - install Xcode command line tools for iOS development");
+    }
 
-fn extract_u32_value(content: &str, key: &str, terminator: char) -> Option<u32> {
-    let start = content.find(key)?;
-    let remainder = &content[start..];
-    let end = remainder.find(terminator)?;
-    remainder[..end].strip_prefix(key)?.trim().parse::<u32>().ok()
+    println!("{}", "Dependency check completed!".green().bold());
+    Ok(())
 }

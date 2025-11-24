@@ -1243,7 +1243,6 @@ public object FfiConverterString: FfiConverter<String, RustBuffer.ByValue> {
 //
 
 
-//
 public interface DeviceInterface {
     
     companion object
@@ -1487,7 +1486,6 @@ public object FfiConverterTypeDevice: FfiConverter<Device, Long> {
 //
 
 
-//
 public interface KeychainInterface {
     
     companion object
@@ -1676,6 +1674,8 @@ sealed class KeychainException: kotlin.Exception() {
         override val message
             get() = "v1=${ v1 }"
     }
+    
+
     
 
     // The local Rust `Display`/`Debug` implementation.
