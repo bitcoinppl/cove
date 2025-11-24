@@ -1844,112 +1844,6 @@ public func FfiConverterTypeConfirmDetails_lower(_ value: ConfirmDetails) -> UIn
 
 
 
-public protocol InputOutputDetailsProtocol: AnyObject, Sendable {
-    
-}
-open class InputOutputDetails: InputOutputDetailsProtocol, @unchecked Sendable {
-    fileprivate let handle: UInt64
-
-    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public struct NoHandle {
-        public init() {}
-    }
-
-    // TODO: We'd like this to be `private` but for Swifty reasons,
-    // we can't implement `FfiConverter` without making this `required` and we can't
-    // make it `required` without making it `public`.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    required public init(unsafeFromHandle handle: UInt64) {
-        self.handle = handle
-    }
-
-    // This constructor can be used to instantiate a fake object.
-    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
-    //
-    // - Warning:
-    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public init(noHandle: NoHandle) {
-        self.handle = 0
-    }
-
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public func uniffiCloneHandle() -> UInt64 {
-        return try! rustCall { uniffi_cove_types_fn_clone_inputoutputdetails(self.handle, $0) }
-    }
-    // No primary constructor declared for this class.
-
-    deinit {
-        if handle == 0 {
-            // Mock objects have handle=0 don't try to free them
-            return
-        }
-
-        try! rustCall { uniffi_cove_types_fn_free_inputoutputdetails(handle, $0) }
-    }
-
-    
-
-    
-
-    
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeInputOutputDetails: FfiConverter {
-    typealias FfiType = UInt64
-    typealias SwiftType = InputOutputDetails
-
-    public static func lift(_ handle: UInt64) throws -> InputOutputDetails {
-        return InputOutputDetails(unsafeFromHandle: handle)
-    }
-
-    public static func lower(_ value: InputOutputDetails) -> UInt64 {
-        return value.uniffiCloneHandle()
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> InputOutputDetails {
-        let handle: UInt64 = try readInt(&buf)
-        return try lift(handle)
-    }
-
-    public static func write(_ value: InputOutputDetails, into buf: inout [UInt8]) {
-        writeInt(&buf, lower(value))
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeInputOutputDetails_lift(_ handle: UInt64) throws -> InputOutputDetails {
-    return try FfiConverterTypeInputOutputDetails.lift(handle)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeInputOutputDetails_lower(_ value: InputOutputDetails) -> UInt64 {
-    return FfiConverterTypeInputOutputDetails.lower(value)
-}
-
-
-
-
-
-
 public protocol FeeRateProtocol: AnyObject, Sendable {
     
     func satPerVb()  -> Float
@@ -2796,30 +2690,10 @@ public func FfiConverterTypeFeeRateOptionsWithTotalFee_lower(_ value: FeeRateOpt
 
 
 
-public protocol PsbtProtocol: AnyObject, Sendable {
-    
-    /**
-     * Total fee in sats.
-     */
-    func fee() throws  -> Amount
-    
-    /**
-     * Get total sending amount of all outputs
-     */
-    func outputTotalAmount()  -> Amount
-    
-    /**
-     * Get the transaction id of the unsigned transaction
-     */
-    func txId()  -> TxId
-    
-    /**
-     * The virtual size of the transaction.
-     */
-    func weight()  -> UInt64
+public protocol InputOutputDetailsProtocol: AnyObject, Sendable {
     
 }
-open class Psbt: PsbtProtocol, @unchecked Sendable {
+open class InputOutputDetails: InputOutputDetailsProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
 
     /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
@@ -2856,17 +2730,9 @@ open class Psbt: PsbtProtocol, @unchecked Sendable {
     @_documentation(visibility: private)
 #endif
     public func uniffiCloneHandle() -> UInt64 {
-        return try! rustCall { uniffi_cove_types_fn_clone_psbt(self.handle, $0) }
+        return try! rustCall { uniffi_cove_types_fn_clone_inputoutputdetails(self.handle, $0) }
     }
-public convenience init(data: Data)throws  {
-    let handle =
-        try rustCallWithError(FfiConverterTypePsbtError_lift) {
-    uniffi_cove_types_fn_constructor_psbt_new(
-        FfiConverterData.lower(data),$0
-    )
-}
-    self.init(unsafeFromHandle: handle)
-}
+    // No primary constructor declared for this class.
 
     deinit {
         if handle == 0 {
@@ -2874,55 +2740,11 @@ public convenience init(data: Data)throws  {
             return
         }
 
-        try! rustCall { uniffi_cove_types_fn_free_psbt(handle, $0) }
+        try! rustCall { uniffi_cove_types_fn_free_inputoutputdetails(handle, $0) }
     }
 
     
 
-    
-    /**
-     * Total fee in sats.
-     */
-open func fee()throws  -> Amount  {
-    return try  FfiConverterTypeAmount_lift(try rustCallWithError(FfiConverterTypePsbtError_lift) {
-    uniffi_cove_types_fn_method_psbt_fee(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
-    /**
-     * Get total sending amount of all outputs
-     */
-open func outputTotalAmount() -> Amount  {
-    return try!  FfiConverterTypeAmount_lift(try! rustCall() {
-    uniffi_cove_types_fn_method_psbt_output_total_amount(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
-    /**
-     * Get the transaction id of the unsigned transaction
-     */
-open func txId() -> TxId  {
-    return try!  FfiConverterTypeTxId_lift(try! rustCall() {
-    uniffi_cove_types_fn_method_psbt_tx_id(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
-    /**
-     * The virtual size of the transaction.
-     */
-open func weight() -> UInt64  {
-    return try!  FfiConverterUInt64.lift(try! rustCall() {
-    uniffi_cove_types_fn_method_psbt_weight(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
     
 
     
@@ -2932,24 +2754,24 @@ open func weight() -> UInt64  {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypePsbt: FfiConverter {
+public struct FfiConverterTypeInputOutputDetails: FfiConverter {
     typealias FfiType = UInt64
-    typealias SwiftType = Psbt
+    typealias SwiftType = InputOutputDetails
 
-    public static func lift(_ handle: UInt64) throws -> Psbt {
-        return Psbt(unsafeFromHandle: handle)
+    public static func lift(_ handle: UInt64) throws -> InputOutputDetails {
+        return InputOutputDetails(unsafeFromHandle: handle)
     }
 
-    public static func lower(_ value: Psbt) -> UInt64 {
+    public static func lower(_ value: InputOutputDetails) -> UInt64 {
         return value.uniffiCloneHandle()
     }
 
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Psbt {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> InputOutputDetails {
         let handle: UInt64 = try readInt(&buf)
         return try lift(handle)
     }
 
-    public static func write(_ value: Psbt, into buf: inout [UInt8]) {
+    public static func write(_ value: InputOutputDetails, into buf: inout [UInt8]) {
         writeInt(&buf, lower(value))
     }
 }
@@ -2958,15 +2780,15 @@ public struct FfiConverterTypePsbt: FfiConverter {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypePsbt_lift(_ handle: UInt64) throws -> Psbt {
-    return try FfiConverterTypePsbt.lift(handle)
+public func FfiConverterTypeInputOutputDetails_lift(_ handle: UInt64) throws -> InputOutputDetails {
+    return try FfiConverterTypeInputOutputDetails.lift(handle)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypePsbt_lower(_ value: Psbt) -> UInt64 {
-    return FfiConverterTypePsbt.lower(value)
+public func FfiConverterTypeInputOutputDetails_lower(_ value: InputOutputDetails) -> UInt64 {
+    return FfiConverterTypeInputOutputDetails.lower(value)
 }
 
 
@@ -3139,6 +2961,184 @@ public func FfiConverterTypeOutPoint_lift(_ handle: UInt64) throws -> OutPoint {
 #endif
 public func FfiConverterTypeOutPoint_lower(_ value: OutPoint) -> UInt64 {
     return FfiConverterTypeOutPoint.lower(value)
+}
+
+
+
+
+
+
+public protocol PsbtProtocol: AnyObject, Sendable {
+    
+    /**
+     * Total fee in sats.
+     */
+    func fee() throws  -> Amount
+    
+    /**
+     * Get total sending amount of all outputs
+     */
+    func outputTotalAmount()  -> Amount
+    
+    /**
+     * Get the transaction id of the unsigned transaction
+     */
+    func txId()  -> TxId
+    
+    /**
+     * The virtual size of the transaction.
+     */
+    func weight()  -> UInt64
+    
+}
+open class Psbt: PsbtProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_cove_types_fn_clone_psbt(self.handle, $0) }
+    }
+public convenience init(data: Data)throws  {
+    let handle =
+        try rustCallWithError(FfiConverterTypePsbtError_lift) {
+    uniffi_cove_types_fn_constructor_psbt_new(
+        FfiConverterData.lower(data),$0
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_cove_types_fn_free_psbt(handle, $0) }
+    }
+
+    
+
+    
+    /**
+     * Total fee in sats.
+     */
+open func fee()throws  -> Amount  {
+    return try  FfiConverterTypeAmount_lift(try rustCallWithError(FfiConverterTypePsbtError_lift) {
+    uniffi_cove_types_fn_method_psbt_fee(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+    /**
+     * Get total sending amount of all outputs
+     */
+open func outputTotalAmount() -> Amount  {
+    return try!  FfiConverterTypeAmount_lift(try! rustCall() {
+    uniffi_cove_types_fn_method_psbt_output_total_amount(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+    /**
+     * Get the transaction id of the unsigned transaction
+     */
+open func txId() -> TxId  {
+    return try!  FfiConverterTypeTxId_lift(try! rustCall() {
+    uniffi_cove_types_fn_method_psbt_tx_id(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+    /**
+     * The virtual size of the transaction.
+     */
+open func weight() -> UInt64  {
+    return try!  FfiConverterUInt64.lift(try! rustCall() {
+    uniffi_cove_types_fn_method_psbt_weight(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePsbt: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = Psbt
+
+    public static func lift(_ handle: UInt64) throws -> Psbt {
+        return Psbt(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: Psbt) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Psbt {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: Psbt, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePsbt_lift(_ handle: UInt64) throws -> Psbt {
+    return try FfiConverterTypePsbt.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePsbt_lower(_ value: Psbt) -> UInt64 {
+    return FfiConverterTypePsbt.lower(value)
 }
 
 
@@ -3798,6 +3798,68 @@ public func FfiConverterTypeUtxoList_lower(_ value: UtxoList) -> UInt64 {
 
 
 
+public struct AddressAndAmount {
+    public var label: String?
+    public var utxoType: UtxoType?
+    public var address: Address
+    public var amount: Amount
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(label: String?, utxoType: UtxoType?, address: Address, amount: Amount) {
+        self.label = label
+        self.utxoType = utxoType
+        self.address = address
+        self.amount = amount
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension AddressAndAmount: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAddressAndAmount: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AddressAndAmount {
+        return
+            try AddressAndAmount(
+                label: FfiConverterOptionString.read(from: &buf), 
+                utxoType: FfiConverterOptionTypeUtxoType.read(from: &buf), 
+                address: FfiConverterTypeAddress.read(from: &buf), 
+                amount: FfiConverterTypeAmount.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: AddressAndAmount, into buf: inout [UInt8]) {
+        FfiConverterOptionString.write(value.label, into: &buf)
+        FfiConverterOptionTypeUtxoType.write(value.utxoType, into: &buf)
+        FfiConverterTypeAddress.write(value.address, into: &buf)
+        FfiConverterTypeAmount.write(value.amount, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAddressAndAmount_lift(_ buf: RustBuffer) throws -> AddressAndAmount {
+    return try FfiConverterTypeAddressAndAmount.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAddressAndAmount_lower(_ value: AddressAndAmount) -> RustBuffer {
+    return FfiConverterTypeAddressAndAmount.lower(value)
+}
+
+
 public struct AddressIndex: Equatable, Hashable {
     public var lastSeenIndex: UInt8
     public var addressListHash: UInt64
@@ -3808,6 +3870,8 @@ public struct AddressIndex: Equatable, Hashable {
         self.lastSeenIndex = lastSeenIndex
         self.addressListHash = addressListHash
     }
+
+    
 
     
 }
@@ -3860,6 +3924,8 @@ public struct BlockSizeLast: Equatable, Hashable {
         self.blockHeight = blockHeight
         self.lastSeen = lastSeen
     }
+
+    
 
     
 }
@@ -3916,6 +3982,8 @@ public struct Rgb: Equatable, Hashable {
     }
 
     
+
+    
 }
 
 #if compiler(>=6)
@@ -3958,66 +4026,6 @@ public func FfiConverterTypeRgb_lower(_ value: Rgb) -> RustBuffer {
 }
 
 
-public struct AddressAndAmount {
-    public var label: String?
-    public var utxoType: UtxoType?
-    public var address: Address
-    public var amount: Amount
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(label: String?, utxoType: UtxoType?, address: Address, amount: Amount) {
-        self.label = label
-        self.utxoType = utxoType
-        self.address = address
-        self.amount = amount
-    }
-
-    
-}
-
-#if compiler(>=6)
-extension AddressAndAmount: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeAddressAndAmount: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AddressAndAmount {
-        return
-            try AddressAndAmount(
-                label: FfiConverterOptionString.read(from: &buf), 
-                utxoType: FfiConverterOptionTypeUtxoType.read(from: &buf), 
-                address: FfiConverterTypeAddress.read(from: &buf), 
-                amount: FfiConverterTypeAmount.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: AddressAndAmount, into buf: inout [UInt8]) {
-        FfiConverterOptionString.write(value.label, into: &buf)
-        FfiConverterOptionTypeUtxoType.write(value.utxoType, into: &buf)
-        FfiConverterTypeAddress.write(value.address, into: &buf)
-        FfiConverterTypeAmount.write(value.amount, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeAddressAndAmount_lift(_ buf: RustBuffer) throws -> AddressAndAmount {
-    return try FfiConverterTypeAddressAndAmount.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeAddressAndAmount_lower(_ value: AddressAndAmount) -> RustBuffer {
-    return FfiConverterTypeAddressAndAmount.lower(value)
-}
-
-
 public struct SplitOutput {
     public var external: [AddressAndAmount]
     public var `internal`: [AddressAndAmount]
@@ -4028,6 +4036,8 @@ public struct SplitOutput {
         self.external = external
         self.`internal` = `internal`
     }
+
+    
 
     
 }
@@ -4092,6 +4102,8 @@ public struct Utxo: Equatable, Hashable {
         self.blockHeight = blockHeight
         self.type = type
     }
+
+    
 
     
 // The local Rust `Eq` implementation - only `eq` is used.
@@ -4180,6 +4192,8 @@ public enum AddressError: Swift.Error, Equatable, Hashable, Foundation.Localized
     case WrongNetwork(current: Network, validFor: Network
     )
     case EmptyAddress
+
+    
 
     
 
@@ -4278,6 +4292,325 @@ public func FfiConverterTypeAddressError_lower(_ value: AddressError) -> RustBuf
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum BitcoinUnit: Equatable, Hashable, CustomStringConvertible {
+    
+    case btc
+    case sat
+
+
+
+
+
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_types_fn_method_bitcoinunit_uniffi_trait_display(
+            FfiConverterTypeBitcoinUnit_lower(self),$0
+    )
+}
+    )
+}
+}
+
+#if compiler(>=6)
+extension BitcoinUnit: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBitcoinUnit: FfiConverterRustBuffer {
+    typealias SwiftType = BitcoinUnit
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BitcoinUnit {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .btc
+        
+        case 2: return .sat
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: BitcoinUnit, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .btc:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .sat:
+            writeInt(&buf, Int32(2))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBitcoinUnit_lift(_ buf: RustBuffer) throws -> BitcoinUnit {
+    return try FfiConverterTypeBitcoinUnit.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBitcoinUnit_lower(_ value: BitcoinUnit) -> RustBuffer {
+    return FfiConverterTypeBitcoinUnit.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum ColorSchemeSelection: Equatable, Hashable {
+    
+    case light
+    case dark
+    case system
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ColorSchemeSelection: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeColorSchemeSelection: FfiConverterRustBuffer {
+    typealias SwiftType = ColorSchemeSelection
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ColorSchemeSelection {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .light
+        
+        case 2: return .dark
+        
+        case 3: return .system
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ColorSchemeSelection, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .light:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .dark:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .system:
+            writeInt(&buf, Int32(3))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeColorSchemeSelection_lift(_ buf: RustBuffer) throws -> ColorSchemeSelection {
+    return try FfiConverterTypeColorSchemeSelection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeColorSchemeSelection_lower(_ value: ColorSchemeSelection) -> RustBuffer {
+    return FfiConverterTypeColorSchemeSelection.lower(value)
+}
+
+
+
+public enum ConfirmDetailsError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
+
+    
+    
+    case QrCodeCreation(String
+    )
+
+    
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
+}
+
+#if compiler(>=6)
+extension ConfirmDetailsError: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeConfirmDetailsError: FfiConverterRustBuffer {
+    typealias SwiftType = ConfirmDetailsError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ConfirmDetailsError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        
+
+        
+        case 1: return .QrCodeCreation(
+            try FfiConverterString.read(from: &buf)
+            )
+
+         default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ConfirmDetailsError, into buf: inout [UInt8]) {
+        switch value {
+
+        
+
+        
+        
+        case let .QrCodeCreation(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(v1, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeConfirmDetailsError_lift(_ buf: RustBuffer) throws -> ConfirmDetailsError {
+    return try FfiConverterTypeConfirmDetailsError.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeConfirmDetailsError_lower(_ value: ConfirmDetailsError) -> RustBuffer {
+    return FfiConverterTypeConfirmDetailsError.lower(value)
+}
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum FeeSpeed: Equatable, Hashable, CustomStringConvertible {
+    
+    case fast
+    case medium
+    case slow
+    case custom(durationMins: UInt32
+    )
+
+
+
+
+
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_types_fn_method_feespeed_uniffi_trait_display(
+            FfiConverterTypeFeeSpeed_lower(self),$0
+    )
+}
+    )
+}
+}
+
+#if compiler(>=6)
+extension FeeSpeed: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFeeSpeed: FfiConverterRustBuffer {
+    typealias SwiftType = FeeSpeed
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeeSpeed {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .fast
+        
+        case 2: return .medium
+        
+        case 3: return .slow
+        
+        case 4: return .custom(durationMins: try FfiConverterUInt32.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: FeeSpeed, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .fast:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .medium:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .slow:
+            writeInt(&buf, Int32(3))
+        
+        
+        case let .custom(durationMins):
+            writeInt(&buf, Int32(4))
+            FfiConverterUInt32.write(durationMins, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeeSpeed_lift(_ buf: RustBuffer) throws -> FeeSpeed {
+    return try FfiConverterTypeFeeSpeed.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeeSpeed_lower(_ value: FeeSpeed) -> RustBuffer {
+    return FfiConverterTypeFeeSpeed.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum FfiColor: Equatable, Hashable {
     
     case red(FfiOpacity
@@ -4304,6 +4637,8 @@ public enum FfiColor: Equatable, Hashable {
     )
     case custom(Rgb,FfiOpacity
     )
+
+
 
 
 
@@ -4450,82 +4785,12 @@ public func FfiConverterTypeFfiColor_lower(_ value: FfiColor) -> RustBuffer {
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum ColorSchemeSelection: Equatable, Hashable {
-    
-    case light
-    case dark
-    case system
-
-
-
-}
-
-#if compiler(>=6)
-extension ColorSchemeSelection: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeColorSchemeSelection: FfiConverterRustBuffer {
-    typealias SwiftType = ColorSchemeSelection
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ColorSchemeSelection {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-        
-        case 1: return .light
-        
-        case 2: return .dark
-        
-        case 3: return .system
-        
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: ColorSchemeSelection, into buf: inout [UInt8]) {
-        switch value {
-        
-        
-        case .light:
-            writeInt(&buf, Int32(1))
-        
-        
-        case .dark:
-            writeInt(&buf, Int32(2))
-        
-        
-        case .system:
-            writeInt(&buf, Int32(3))
-        
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeColorSchemeSelection_lift(_ buf: RustBuffer) throws -> ColorSchemeSelection {
-    return try FfiConverterTypeColorSchemeSelection.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeColorSchemeSelection_lower(_ value: ColorSchemeSelection) -> RustBuffer {
-    return FfiConverterTypeColorSchemeSelection.lower(value)
-}
-
-
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
-
 public enum FfiColorScheme: Equatable, Hashable {
     
     case light
     case dark
+
+
 
 
 
@@ -4584,170 +4849,6 @@ public func FfiConverterTypeFfiColorScheme_lower(_ value: FfiColorScheme) -> Rus
 }
 
 
-
-public enum ConfirmDetailsError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
-
-    
-    
-    case QrCodeCreation(String
-    )
-
-    
-
-    
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-    
-}
-
-#if compiler(>=6)
-extension ConfirmDetailsError: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeConfirmDetailsError: FfiConverterRustBuffer {
-    typealias SwiftType = ConfirmDetailsError
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ConfirmDetailsError {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-
-        
-
-        
-        case 1: return .QrCodeCreation(
-            try FfiConverterString.read(from: &buf)
-            )
-
-         default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: ConfirmDetailsError, into buf: inout [UInt8]) {
-        switch value {
-
-        
-
-        
-        
-        case let .QrCodeCreation(v1):
-            writeInt(&buf, Int32(1))
-            FfiConverterString.write(v1, into: &buf)
-            
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeConfirmDetailsError_lift(_ buf: RustBuffer) throws -> ConfirmDetailsError {
-    return try FfiConverterTypeConfirmDetailsError.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeConfirmDetailsError_lower(_ value: ConfirmDetailsError) -> RustBuffer {
-    return FfiConverterTypeConfirmDetailsError.lower(value)
-}
-
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
-
-public enum FeeSpeed: Equatable, Hashable, CustomStringConvertible {
-    
-    case fast
-    case medium
-    case slow
-    case custom(durationMins: UInt32
-    )
-
-
-
-// The local Rust `Display` implementation.
-public var description: String {
-    return try!  FfiConverterString.lift(
-        try! rustCall() {
-    uniffi_cove_types_fn_method_feespeed_uniffi_trait_display(
-            FfiConverterTypeFeeSpeed_lower(self),$0
-    )
-}
-    )
-}
-}
-
-#if compiler(>=6)
-extension FeeSpeed: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeFeeSpeed: FfiConverterRustBuffer {
-    typealias SwiftType = FeeSpeed
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeeSpeed {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-        
-        case 1: return .fast
-        
-        case 2: return .medium
-        
-        case 3: return .slow
-        
-        case 4: return .custom(durationMins: try FfiConverterUInt32.read(from: &buf)
-        )
-        
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: FeeSpeed, into buf: inout [UInt8]) {
-        switch value {
-        
-        
-        case .fast:
-            writeInt(&buf, Int32(1))
-        
-        
-        case .medium:
-            writeInt(&buf, Int32(2))
-        
-        
-        case .slow:
-            writeInt(&buf, Int32(3))
-        
-        
-        case let .custom(durationMins):
-            writeInt(&buf, Int32(4))
-            FfiConverterUInt32.write(durationMins, into: &buf)
-            
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeFeeSpeed_lift(_ buf: RustBuffer) throws -> FeeSpeed {
-    return try FfiConverterTypeFeeSpeed.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeFeeSpeed_lower(_ value: FeeSpeed) -> RustBuffer {
-    return FfiConverterTypeFeeSpeed.lower(value)
-}
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -4757,6 +4858,8 @@ public enum Network: Equatable, Hashable, CustomStringConvertible {
     case testnet
     case testnet4
     case signet
+
+
 
 
 
@@ -4851,6 +4954,8 @@ public enum PsbtError: Swift.Error, Equatable, Hashable, Foundation.LocalizedErr
     
 
     
+
+    
     public var errorDescription: String? {
         String(reflecting: self)
     }
@@ -4937,6 +5042,8 @@ public enum TransactionDirection: Equatable, Hashable {
 
 
 
+
+
 }
 
 #if compiler(>=6)
@@ -4995,85 +5102,12 @@ public func FfiConverterTypeTransactionDirection_lower(_ value: TransactionDirec
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum BitcoinUnit: Equatable, Hashable, CustomStringConvertible {
-    
-    case btc
-    case sat
-
-
-
-// The local Rust `Display` implementation.
-public var description: String {
-    return try!  FfiConverterString.lift(
-        try! rustCall() {
-    uniffi_cove_types_fn_method_bitcoinunit_uniffi_trait_display(
-            FfiConverterTypeBitcoinUnit_lower(self),$0
-    )
-}
-    )
-}
-}
-
-#if compiler(>=6)
-extension BitcoinUnit: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeBitcoinUnit: FfiConverterRustBuffer {
-    typealias SwiftType = BitcoinUnit
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BitcoinUnit {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-        
-        case 1: return .btc
-        
-        case 2: return .sat
-        
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: BitcoinUnit, into buf: inout [UInt8]) {
-        switch value {
-        
-        
-        case .btc:
-            writeInt(&buf, Int32(1))
-        
-        
-        case .sat:
-            writeInt(&buf, Int32(2))
-        
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeBitcoinUnit_lift(_ buf: RustBuffer) throws -> BitcoinUnit {
-    return try FfiConverterTypeBitcoinUnit.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeBitcoinUnit_lower(_ value: BitcoinUnit) -> RustBuffer {
-    return FfiConverterTypeBitcoinUnit.lower(value)
-}
-
-
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
-
 public enum UtxoType: Equatable, Hashable {
     
     case output
     case change
+
+
 
 
 
@@ -5306,6 +5340,31 @@ fileprivate struct FfiConverterSequenceTypeUtxo: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeBitcoinUnit: FfiConverterRustBuffer {
+    typealias SwiftType = [BitcoinUnit]
+
+    public static func write(_ value: [BitcoinUnit], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeBitcoinUnit.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [BitcoinUnit] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [BitcoinUnit]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeBitcoinUnit.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeColorSchemeSelection: FfiConverterRustBuffer {
     typealias SwiftType = [ColorSchemeSelection]
 
@@ -5348,31 +5407,6 @@ fileprivate struct FfiConverterSequenceTypeNetwork: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeNetwork.read(from: &buf))
-        }
-        return seq
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-fileprivate struct FfiConverterSequenceTypeBitcoinUnit: FfiConverterRustBuffer {
-    typealias SwiftType = [BitcoinUnit]
-
-    public static func write(_ value: [BitcoinUnit], into buf: inout [UInt8]) {
-        let len = Int32(value.count)
-        writeInt(&buf, len)
-        for item in value {
-            FfiConverterTypeBitcoinUnit.write(item, into: &buf)
-        }
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [BitcoinUnit] {
-        let len: Int32 = try readInt(&buf)
-        var seq = [BitcoinUnit]()
-        seq.reserveCapacity(Int(len))
-        for _ in 0 ..< len {
-            seq.append(try FfiConverterTypeBitcoinUnit.read(from: &buf))
         }
         return seq
     }

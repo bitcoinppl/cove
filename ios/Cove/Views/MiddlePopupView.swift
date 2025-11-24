@@ -120,11 +120,9 @@ struct MiddlePopupView: View {
                 ProgressView(label: {
                     Text("Working on it...")
                         .font(.caption)
-                        .padding(.vertical)
-
+                        .padding(.top, 6)
                 })
                 .progressViewStyle(.circular)
-                .frame(minWidth: screenWidth * 0.65, minHeight: screenHeight * 0.1)
                 .tint(.primary)
             }
         }

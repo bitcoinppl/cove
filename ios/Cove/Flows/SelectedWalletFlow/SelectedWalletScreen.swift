@@ -38,7 +38,6 @@ struct SelectedWalletScreen: View {
 
     // import / export
     @State var exportingBackup: ExportingBackup? = nil
-    @State var exporting: SelctedWalletScreenExporterView.Exporting? = nil
 
     @State private var scannedLabels: TaggedString? = nil
     @State private var isImportingLabels = false
@@ -193,7 +192,6 @@ struct SelectedWalletScreen: View {
                 Menu {
                     MoreInfoPopover(
                         manager: manager,
-                        exporting: $exporting,
                         isImportingLabels: $isImportingLabels
                     )
                 } label: {
@@ -223,10 +221,6 @@ struct SelectedWalletScreen: View {
 
             Transactions
                 .environment(manager)
-
-            SelctedWalletScreenExporterView(
-                labelManager: labelManager, metadata: metadata, exporting: $exporting
-            )
         }
         .background(Color.coveBg)
         .toolbar { MainToolBar }

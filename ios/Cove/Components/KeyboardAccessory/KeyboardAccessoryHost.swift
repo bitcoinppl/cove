@@ -2,7 +2,7 @@
 //  KeyboardAccessoryHost.swift
 //  Cove
 //
-//  Created by ChatGPT on 11/19/25.
+//  Created by Praveen Perera on 11/19/25.
 //
 
 import SwiftUI
@@ -61,7 +61,9 @@ final class KeyboardAccessoryController: ObservableObject {
         hosting.view.translatesAutoresizingMaskIntoConstraints = false
         hosting.view.isUserInteractionEnabled = true
 
-        let container = container ?? UIView(frame: CGRect(x: 0, y: 0, width: UIScreen.main.bounds.width, height: height))
+        let container =
+            container
+                ?? UIView(frame: CGRect(x: 0, y: 0, width: UIScreen.main.bounds.width, height: height))
         container.backgroundColor = .clear
         container.autoresizingMask = [.flexibleWidth]
         container.isUserInteractionEnabled = true
@@ -121,7 +123,9 @@ extension UIResponder {
     @discardableResult
     static func captureCurrentFirstResponder(from _: UIWindow?) -> UIResponder? {
         currentResponder = nil
-        UIApplication.shared.sendAction(#selector(findFirstResponder(_:)), to: nil, from: nil, for: nil)
+        UIApplication.shared.sendAction(
+            #selector(findFirstResponder(_:)), to: nil, from: nil, for: nil
+        )
         return currentResponder
     }
 

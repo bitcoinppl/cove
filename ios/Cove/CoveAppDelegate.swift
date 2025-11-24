@@ -2,7 +2,7 @@
 //  CoveAppDelegate.swift
 //  Cove
 //
-//  Created by Assistant on 11/18/25.
+//  Created by Praveen Perera on 11/18/25.
 //
 
 import UIKit

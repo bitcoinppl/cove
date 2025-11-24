@@ -21,7 +21,6 @@ struct TapSignerEnterPin: View {
     // private
     @State private var pin: String = ""
     @FocusState private var isFocused
-    @State private var exportingBackup: Data? = nil
 
     // confirmed pin is correct, now run the action
     func runAction(_ nfc: TapSignerNFC, _ pin: String) {
@@ -64,7 +63,17 @@ struct TapSignerEnterPin: View {
             switch await nfc.backup(pin: pin) {
             case let .success(backup):
                 let _ = app.saveTapSignerBackup(tapSigner, backup)
-                await MainActor.run { exportingBackup = backup }
+                await MainActor.run {
+                    self.pin = ""
+                    app.sheetState = .none
+
+                    // use imperative ShareSheet for automatic share after NFC read
+                    ShareSheet.present(
+                        data: hexEncode(bytes: backup),
+                        filename: "\(tapSigner.identFileNamePrefix())_backup.txt"
+                    ) { _ in }
+                }
+
             case let .failure(error):
                 if !error.isAuthError {
                     app.alertState = .init(
@@ -200,29 +209,6 @@ struct TapSignerEnterPin: View {
         }
         .scrollIndicators(.hidden)
         .navigationBarHidden(true)
-        .fileExporter(
-            isPresented: Binding(
-                get: { exportingBackup != nil },
-                set: { enabled in if !enabled { exportingBackup = nil } }
-            ),
-            document: TextDocument(text: hexEncode(bytes: exportingBackup ?? Data())),
-            contentType: .plainText,
-            defaultFilename: "\(tapSigner.identFileNamePrefix())_backup.txt"
-        ) { result in
-            switch result {
-            case .success:
-                app.sheetState = .none
-                app.alertState = .init(
-                    .general(
-                        title: "Backup Saved!",
-                        message: "Your backup has been save successfully!"
-                    )
-                )
-            case let .failure(error):
-                app.alertState = .init(
-                    .general(title: "Saving Backup Failed!", message: error.localizedDescription))
-            }
-        }
     }
 }
 

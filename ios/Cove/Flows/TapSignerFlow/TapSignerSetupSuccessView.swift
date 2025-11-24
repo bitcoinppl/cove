@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import UniformTypeIdentifiers
 
 struct TapSignerSetupSuccess: View {
     @Environment(AppManager.self) private var app
@@ -16,7 +15,6 @@ struct TapSignerSetupSuccess: View {
     let setup: TapSignerSetupComplete
 
     // private
-    @State private var isExportingBackup: Bool = false
     @State private var walletId: WalletId? = nil
 
     func saveWallet() {
@@ -76,7 +74,13 @@ struct TapSignerSetupSuccess: View {
                 .fixedSize(horizontal: false, vertical: true)
             }
 
-            Button(action: { isExportingBackup = true }) {
+            ShareLink(
+                item: BackupExport(
+                    content: hexEncode(bytes: setup.backup),
+                    filename: "\(tapSigner.identFileNamePrefix())_backup.txt"
+                ),
+                preview: SharePreview("\(tapSigner.identFileNamePrefix())_backup.txt")
+            ) {
                 HStack {
                     VStack(spacing: 4) {
                         HStack {
@@ -134,25 +138,6 @@ struct TapSignerSetupSuccess: View {
         .navigationBarHidden(true)
         .onAppear {
             saveWallet()
-        }
-        .fileExporter(
-            isPresented: $isExportingBackup,
-            document: TextDocument(text: hexEncode(bytes: setup.backup)),
-            contentType: .plainText,
-            defaultFilename: "\(tapSigner.identFileNamePrefix())_backup.txt"
-        ) { result in
-            switch result {
-            case .success:
-                app.alertState = .init(
-                    .general(
-                        title: "Backup Saved!",
-                        message: "Your backup has been save successfully!"
-                    )
-                )
-            case let .failure(error):
-                app.alertState = .init(
-                    .general(title: "Saving Backup Failed!", message: error.localizedDescription))
-            }
         }
     }
 }
