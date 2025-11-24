@@ -5,15 +5,27 @@
 //  Created by Praveen Perera on 2/11/25.
 //
 
+import MijickPopups
 import SwiftUI
+
+@MainActor
+private class LoadingState {
+    var popupWasShown = false
+    var popupShownAt: Date?
+}
+
+private let loadingPopupDelay: Duration = .milliseconds(250)
+private let minimumPopupDisplayTime: TimeInterval = 0.4
 
 struct MoreInfoPopover: View {
     @Environment(AppManager.self) private var app
 
     // args
     let manager: WalletManager
-    @Binding var exporting: SelctedWalletScreenExporterView.Exporting?
     @Binding var isImportingLabels: Bool
+
+    // state
+    @State private var showLoadingTask: Task<Void, Never>?
 
     private var hasLabels: Bool {
         labelManager.hasLabels()
@@ -32,47 +44,133 @@ struct MoreInfoPopover: View {
     }
 
     func exportLabels() {
-        exporting = .labels
+        let loadingState = LoadingState()
+
+        // start delayed loading task
+        showLoadingTask = Task { @MainActor in
+            try? await Task.sleep(for: loadingPopupDelay)
+            if Task.isCancelled { return }
+
+            loadingState.popupWasShown = true
+            loadingState.popupShownAt = Date.now
+            await MiddlePopup(state: .loading).present()
+        }
+
+        // start export operation
+        Task {
+            do {
+                let content = try labelManager.export()
+                let filename = labelManager.exportDefaultFileName(name: metadata.name)
+
+                // cancel loading if not shown yet
+                showLoadingTask?.cancel()
+
+                // if popup was shown, ensure minimum display time
+                if loadingState.popupWasShown, let shownAt = loadingState.popupShownAt {
+                    let elapsed = Date.now.timeIntervalSince(shownAt)
+                    let remaining = max(0, minimumPopupDisplayTime - elapsed)
+
+                    if remaining > 0 {
+                        try? await Task.sleep(for: .seconds(remaining))
+                    }
+
+                    await dismissAllPopups()
+                }
+
+                // show ShareSheet
+                await MainActor.run {
+                    ShareSheet.present(
+                        data: content,
+                        filename: filename
+                    ) { success in
+                        if !success {
+                            Log.warn("Label export was cancelled or failed")
+                        }
+                    }
+                }
+            } catch {
+                showLoadingTask?.cancel()
+
+                await MainActor.run {
+                    if loadingState.popupWasShown {
+                        Task { await dismissAllPopups() }
+                    }
+
+                    app.alertState = .init(.general(
+                        title: "Label Export Failed",
+                        message: "Unable to export labels: \(error.localizedDescription)"
+                    ))
+                }
+            }
+        }
     }
 
     func exportTransactions() {
-        // if task isnt cancelled in 0.5 seconds show alert about waiting
-        let alertTask = Task {
-            do {
-                try await Task.sleep(for: .seconds(0.5))
-                app.alertState = .init(
-                    .general(
-                        title: "Exporting, please wait...",
-                        message: "Creating a transaction export file. If this is the first time it might take a while"
-                    )
-                )
-            }
+        let loadingState = LoadingState()
+
+        // start delayed loading task
+        showLoadingTask = Task { @MainActor in
+            try? await Task.sleep(for: loadingPopupDelay)
+            if Task.isCancelled { return }
+
+            loadingState.popupWasShown = true
+            loadingState.popupShownAt = Date.now
+            await MiddlePopup(state: .loading).present()
         }
 
+        // start export operation
         Task {
             do {
                 let csv = try await manager.rust.createTransactionsWithFiatExport()
-                alertTask.cancel()
+                let filename = "\(metadata.name.lowercased())_transactions.csv"
 
-                if app.alertState != .none {
-                    await MainActor.run { app.alertState = .none }
-                    try? await Task.sleep(for: .seconds(0.5))
+                // cancel loading if not shown yet
+                showLoadingTask?.cancel()
+
+                // if popup was shown, ensure minimum display time
+                if loadingState.popupWasShown, let shownAt = loadingState.popupShownAt {
+                    let elapsed = Date.now.timeIntervalSince(shownAt)
+                    let remaining = max(0, minimumPopupDisplayTime - elapsed)
+
+                    if remaining > 0 {
+                        try? await Task.sleep(for: .seconds(remaining))
+                    }
+
+                    await dismissAllPopups()
                 }
 
-                await MainActor.run { exporting = .transactions(csv) }
+                // show ShareSheet
+                await MainActor.run {
+                    ShareSheet.present(
+                        data: csv,
+                        filename: filename
+                    ) { success in
+                        if !success {
+                            Log.warn("Transaction export was cancelled or failed")
+                        }
+                    }
+                }
             } catch {
-                app.alertState = .init(
-                    .general(
-                        title: "Ooops something went wrong!",
-                        message: "Unable to export transactions \(error.localizedDescription)"
+                showLoadingTask?.cancel()
+
+                if loadingState.popupWasShown {
+                    await dismissAllPopups()
+                    try? await Task.sleep(for: .seconds(0.3))
+                    await MiddlePopup(
+                        state: .failure("Unable to export transactions: \(error.localizedDescription)")
                     )
-                )
+                    .dismissAfter(7)
+                    .present()
+                } else {
+                    try? await Task.sleep(for: .seconds(0.3))
+                    await MiddlePopup(
+                        state: .failure("Unable to export transactions: \(error.localizedDescription)")
+                    )
+                    .dismissAfter(7)
+                    .present()
+                }
             }
         }
-    }
-
-    var defaultFileName: String {
-        labelManager.exportDefaultFileName(name: metadata.name)
     }
 
     @ViewBuilder
@@ -86,20 +184,24 @@ struct MoreInfoPopover: View {
 
     @ViewBuilder
     func DownloadBackupButton(_ t: TapSigner) -> some View {
-        let action = {
-            if let backup = app.getTapSignerBackup(t) {
-                return {
-                    Log.debug("Downloading backup...")
-                    exporting = .backup(ExportingBackup(tapSigner: t, backup: backup))
-                }
+        if let backup = app.getTapSignerBackup(t) {
+            let content = hexEncode(bytes: backup)
+            let prefix = t.identFileNamePrefix()
+            let filename = "\(prefix)_backup.txt"
+
+            ShareLink(
+                item: BackupExport(content: content, filename: filename),
+                preview: SharePreview(filename)
+            ) {
+                Label("Download Backup", systemImage: "square.and.arrow.down")
             }
-
-            let route = TapSignerRoute.enterPin(tapSigner: t, action: .backup)
-            return { app.sheetState = .init(.tapSigner(route)) }
-        }()
-
-        Button(action: action) {
-            Label("Download Backup", systemImage: "square.and.arrow.down")
+        } else {
+            Button(action: {
+                let route = TapSignerRoute.enterPin(tapSigner: t, action: .backup)
+                app.sheetState = .init(.tapSigner(route))
+            }) {
+                Label("Download Backup", systemImage: "square.and.arrow.down")
+            }
         }
     }
 
@@ -151,7 +253,6 @@ struct MoreInfoPopover: View {
     AsyncPreview {
         MoreInfoPopover(
             manager: WalletManager(preview: "preview_only"),
-            exporting: Binding.constant(nil),
             isImportingLabels: Binding.constant(false)
         )
         .environment(AppManager.shared)

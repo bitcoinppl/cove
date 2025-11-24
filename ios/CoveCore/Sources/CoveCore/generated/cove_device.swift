@@ -730,6 +730,8 @@ public enum KeychainError: Swift.Error, Equatable, Hashable, Foundation.Localize
     )
 
     
+
+    
 // The local Rust `Display` implementation.
 public var description: String {
     return try!  FfiConverterString.lift(
