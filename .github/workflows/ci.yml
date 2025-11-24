@@ -63,6 +63,9 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      - name: Install build dependencies
+        run: cd rust && cargo xtask install-deps
+
       - name: Build Rust FFI and generate Kotlin bindings
         run: just build-android
 
