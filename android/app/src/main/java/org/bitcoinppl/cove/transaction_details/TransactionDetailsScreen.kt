@@ -61,6 +61,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -219,13 +220,16 @@ fun TransactionDetailsScreen(
     val circleColor = presenter.backgroundColor(txState, direction, colorScheme, confirmationCount).toColor()
     val iconColor = presenter.iconColor(txState, direction, colorScheme, confirmationCount).toColor()
 
+    // get ring colors from presenter - apply opacity by multiplying with existing alpha
+    // iOS applies .opacity() which multiplies, so we do the same here
+    val ringOpacities = if (isDark) listOf(0.88f, 0.66f, 0.33f) else listOf(0.44f, 0.24f, 0.10f)
     val ringColors: List<Color> = listOf(
         presenter.ringColor(txState, colorScheme, direction, confirmationCount, 1L).toColor()
-            .copy(alpha = if (isDark) 0.88f else 0.44f),
+            .let { it.copy(alpha = it.alpha * ringOpacities[0]) },
         presenter.ringColor(txState, colorScheme, direction, confirmationCount, 2L).toColor()
-            .copy(alpha = if (isDark) 0.66f else 0.24f),
+            .let { it.copy(alpha = it.alpha * ringOpacities[1]) },
         presenter.ringColor(txState, colorScheme, direction, confirmationCount, 3L).toColor()
-            .copy(alpha = if (isDark) 0.33f else 0.10f),
+            .let { it.copy(alpha = it.alpha * ringOpacities[2]) },
     )
 
     val headerTitle =
@@ -308,7 +312,7 @@ fun TransactionDetailsScreen(
                         .fillMaxHeight()
                         .align(Alignment.TopCenter)
                         .offset(y = (-60).dp)
-                        .graphicsLayer(alpha = if (isDark) 1.0f else 0.40f),
+                        .alpha(if (isDark) 1.0f else 0.40f),
             )
 
             Column(
@@ -402,6 +406,7 @@ fun TransactionDetailsScreen(
                     baseFontSize = 36.sp,
                     minimumScaleFactor = 0.67f,
                     fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth(),
                 )
 
@@ -500,8 +505,8 @@ fun TransactionDetailsScreen(
                         },
                         colors =
                             ButtonDefaults.buttonColors(
-                                containerColor = if (isDark) MaterialTheme.colorScheme.surfaceVariant else CoveColor.midnightBlue,
-                                contentColor = if (isDark) MaterialTheme.colorScheme.outline else Color.White,
+                                containerColor = if (isDark) CoveColor.midnightBtnDark else CoveColor.midnightBlue,
+                                contentColor = Color.White,
                             ),
                         modifier =
                             Modifier
