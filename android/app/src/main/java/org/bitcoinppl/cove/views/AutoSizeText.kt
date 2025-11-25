@@ -117,6 +117,7 @@ fun BalanceAutoSizeText(
     baseFontSize: TextUnit = 34.sp,
     minimumScaleFactor: Float = 0.5f,
     fontWeight: FontWeight? = null,
+    textAlign: TextAlign? = null,
     style: TextStyle = LocalTextStyle.current,
     onTextLayout: ((TextLayoutResult) -> Unit)? = null,
 ) {
@@ -166,6 +167,7 @@ fun BalanceAutoSizeText(
             color = color,
             fontSize = finalFontSize,
             fontWeight = fontWeight,
+            textAlign = textAlign,
             style = style,
             maxLines = 1,
             softWrap = false,
