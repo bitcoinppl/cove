@@ -14,6 +14,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -32,6 +34,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.NorthEast
 import androidx.compose.material.icons.filled.SouthWest
@@ -64,6 +67,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -79,13 +83,18 @@ import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.components.ConfirmationIndicatorView
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.utils.toColor
 import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.BalanceAutoSizeText
 import org.bitcoinppl.cove.views.ImageButton
+import org.bitcoinppl.cove_core.HeaderIconPresenter
 import org.bitcoinppl.cove_core.TransactionDetails
+import org.bitcoinppl.cove_core.TransactionState
 import org.bitcoinppl.cove_core.WalletManagerAction
 import org.bitcoinppl.cove_core.WalletMetadata
 import org.bitcoinppl.cove_core.types.BitcoinUnit
+import org.bitcoinppl.cove_core.types.FfiColorScheme
+import org.bitcoinppl.cove_core.types.TransactionDirection
 import kotlin.math.min
 
 private const val INITIAL_DELAY_MS = 2000L
@@ -192,28 +201,32 @@ fun TransactionDetailsScreen(
     val bg = MaterialTheme.colorScheme.background
     val fg = MaterialTheme.colorScheme.onBackground
     val sub = MaterialTheme.colorScheme.onSurfaceVariant
-    val checkCircle = if (isDark) Color(0xFF0F0F12) else Color(0xFF0F1012)
     val chipBg = CoveColor.TransactionReceived
-
-    val ringColors: List<Color> =
-        if (isDark) {
-            listOf(
-                Color.White.copy(alpha = 0.60f),
-                Color.White.copy(alpha = 0.35f),
-                Color.White.copy(alpha = 0.18f),
-            )
-        } else {
-            listOf(
-                Color.Black.copy(alpha = 0.50f),
-                Color.Black.copy(alpha = 0.30f),
-                Color.Black.copy(alpha = 0.15f),
-            )
-        }
 
     // derive UI state from transaction details
     val isSent = transactionDetails.isSent()
     val isReceived = transactionDetails.isReceived()
     val isConfirmed = transactionDetails.isConfirmed()
+
+    // header icon presenter for dynamic colors
+    val presenter = remember { HeaderIconPresenter() }
+    val txState = if (isConfirmed) TransactionState.CONFIRMED else TransactionState.PENDING
+    val direction = if (isSent) TransactionDirection.OUTGOING else TransactionDirection.INCOMING
+    val colorScheme = if (isDark) FfiColorScheme.DARK else FfiColorScheme.LIGHT
+    val confirmationCount = numberOfConfirmations?.toLong() ?: if (isConfirmed) 5L else 0L
+
+    // get colors from presenter (matching iOS)
+    val circleColor = presenter.backgroundColor(txState, direction, colorScheme, confirmationCount).toColor()
+    val iconColor = presenter.iconColor(txState, direction, colorScheme, confirmationCount).toColor()
+
+    val ringColors: List<Color> = listOf(
+        presenter.ringColor(txState, colorScheme, direction, confirmationCount, 1L).toColor()
+            .copy(alpha = if (isDark) 0.88f else 0.44f),
+        presenter.ringColor(txState, colorScheme, direction, confirmationCount, 2L).toColor()
+            .copy(alpha = if (isDark) 0.66f else 0.24f),
+        presenter.ringColor(txState, colorScheme, direction, confirmationCount, 3L).toColor()
+            .copy(alpha = if (isDark) 0.33f else 0.10f),
+    )
 
     val headerTitle =
         stringResource(
@@ -295,7 +308,7 @@ fun TransactionDetailsScreen(
                         .fillMaxHeight()
                         .align(Alignment.TopCenter)
                         .offset(y = (-60).dp)
-                        .graphicsLayer(alpha = if (isDark) 0.75f else 0.15f),
+                        .graphicsLayer(alpha = if (isDark) 1.0f else 0.40f),
             )
 
             Column(
@@ -310,9 +323,10 @@ fun TransactionDetailsScreen(
 
                 CheckWithRingsWidget(
                     diameter = 180.dp,
-                    circleColor = checkCircle,
+                    circleColor = circleColor,
                     ringColors = ringColors,
-                    checkColor = Color.White,
+                    iconColor = iconColor,
+                    isConfirmed = isConfirmed,
                 )
 
                 Spacer(Modifier.height(16.dp))
@@ -320,9 +334,9 @@ fun TransactionDetailsScreen(
                 Text(
                     headerTitle,
                     color = fg,
-                    fontSize = 32.sp,
+                    fontSize = 28.sp,
                     fontWeight = FontWeight.SemiBold,
-                    lineHeight = 36.sp,
+                    lineHeight = 32.sp,
                 )
 
                 Spacer(Modifier.height(4.dp))
@@ -336,13 +350,49 @@ fun TransactionDetailsScreen(
 
                 Spacer(Modifier.height(24.dp))
 
-                Text(
-                    message,
-                    color = sub,
-                    fontSize = 16.sp,
-                    textAlign = TextAlign.Center,
-                    lineHeight = 22.sp,
-                )
+                // show status message with date
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    if (isConfirmed && formattedDate.isNotEmpty()) {
+                        Text(
+                            text =
+                                if (isSent) {
+                                    "Your transaction was sent on"
+                                } else {
+                                    "Your transaction was successfully received"
+                                },
+                            color = sub,
+                            fontSize = 16.sp,
+                            textAlign = TextAlign.Center,
+                            lineHeight = 22.sp,
+                        )
+                        Text(
+                            text = formattedDate,
+                            color = sub,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Center,
+                            lineHeight = 22.sp,
+                        )
+                    } else if (!isConfirmed) {
+                        Text(
+                            text = "Your transaction is pending.",
+                            color = sub,
+                            fontSize = 16.sp,
+                            textAlign = TextAlign.Center,
+                            lineHeight = 22.sp,
+                        )
+                        Text(
+                            text = "Please check back soon for an update.",
+                            color = sub,
+                            fontSize = 16.sp,
+                            textAlign = TextAlign.Center,
+                            lineHeight = 22.sp,
+                        )
+                    }
+                }
 
                 Spacer(Modifier.height(32.dp))
 
@@ -351,7 +401,7 @@ fun TransactionDetailsScreen(
                     color = fg,
                     baseFontSize = 36.sp,
                     minimumScaleFactor = 0.67f,
-                    fontWeight = FontWeight.ExtraBold,
+                    fontWeight = FontWeight.Bold,
                     modifier = Modifier.fillMaxWidth(),
                 )
 
@@ -366,48 +416,40 @@ fun TransactionDetailsScreen(
 
                 Spacer(Modifier.height(32.dp))
 
-                if (isDark) {
-                    OutlinedButton(
-                        onClick = {},
-                        shape = RoundedCornerShape(24.dp),
-                        border = BorderStroke(1.dp, fg),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = fg),
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(actionIcon, contentDescription = null)
-                            Spacer(Modifier.size(8.dp))
-                            Text(
-                                text = stringResource(actionLabelRes),
-                                fontWeight = FontWeight.Normal,
-                                fontSize = 16.sp,
+                // transaction status capsule matching iOS styling
+                val coolGray = Color(0xFF787880)
+                val capsuleConfig =
+                    when {
+                        isReceived && isConfirmed -> {
+                            Triple(
+                                Color(0xFF34C759).copy(alpha = 0.2f), // green with 20% opacity
+                                Color(0xFF34C759), // green text
+                                false,
+                            )
+                        }
+                        isSent && isConfirmed -> {
+                            Triple(
+                                Color.Black, // black background
+                                Color.White, // white text
+                                true,
+                            ) // white stroke
+                        }
+                        else -> {
+                            Triple(
+                                coolGray, // coolGray background for pending
+                                Color.Black.copy(alpha = 0.8f), // black text at 80% opacity
+                                false,
                             )
                         }
                     }
-                } else {
-                    Button(
-                        onClick = {},
-                        shape = RoundedCornerShape(24.dp),
-                        colors =
-                            ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.inverseSurface,
-                                contentColor = MaterialTheme.colorScheme.inverseOnSurface,
-                            ),
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(actionIcon, contentDescription = null)
-                            Spacer(Modifier.size(8.dp))
-                            Text(
-                                text = stringResource(actionLabelRes),
-                                fontWeight = FontWeight.Normal,
-                                fontSize = 16.sp,
-                            )
-                        }
-                    }
-                }
+
+                TransactionCapsule(
+                    text = stringResource(actionLabelRes),
+                    icon = actionIcon,
+                    backgroundColor = capsuleConfig.first,
+                    textColor = capsuleConfig.second,
+                    showStroke = capsuleConfig.third,
+                )
 
                 // show confirmation indicator if < 3 confirmations
                 if (numberOfConfirmations != null && numberOfConfirmations!! < 3) {
@@ -476,10 +518,10 @@ fun TransactionDetailsScreen(
                     ) {
                         Text(
                             text = stringResource(if (isExpanded) R.string.btn_hide_details else R.string.btn_show_details),
-                            color = sub,
-                            fontSize = 14.sp,
+                            color = sub.copy(alpha = 0.8f),
+                            fontSize = 13.sp,
                             textAlign = TextAlign.Center,
-                            fontWeight = FontWeight.SemiBold,
+                            fontWeight = FontWeight.Bold,
                         )
                     }
                 }
@@ -821,11 +863,60 @@ private fun ReceivedTransactionDetails(
 }
 
 @Composable
+private fun TransactionCapsule(
+    text: String,
+    icon: ImageVector,
+    backgroundColor: Color,
+    textColor: Color,
+    showStroke: Boolean = false,
+) {
+    Box(
+        modifier =
+            Modifier
+                .width(130.dp)
+                .height(30.dp)
+                .clip(RoundedCornerShape(15.dp))
+                .background(backgroundColor)
+                .then(
+                    if (showStroke) {
+                        Modifier.border(
+                            width = 1.dp,
+                            color = Color.White,
+                            shape = RoundedCornerShape(15.dp),
+                        )
+                    } else {
+                        Modifier
+                    },
+                ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = textColor,
+                modifier = Modifier.size(12.dp),
+            )
+            Spacer(Modifier.width(4.dp))
+            Text(
+                text = text,
+                color = textColor,
+                fontSize = 14.sp,
+            )
+        }
+    }
+}
+
+@Composable
 private fun CheckWithRingsWidget(
     diameter: Dp,
     circleColor: Color,
     ringColors: List<Color>,
-    checkColor: Color,
+    iconColor: Color,
+    isConfirmed: Boolean,
 ) {
     Box(
         contentAlignment = Alignment.Center,
@@ -862,23 +953,34 @@ private fun CheckWithRingsWidget(
                     .background(circleColor),
             contentAlignment = Alignment.Center,
         ) {
-            Canvas(modifier = Modifier.size(diameter * 0.36f)) {
-                val stroke = 3.dp.toPx()
-                val w = size.width
-                val h = size.height
-                drawLine(
-                    color = checkColor,
-                    start = Offset(w * 0.1f, h * 0.55f),
-                    end = Offset(w * 0.4f, h * 0.85f),
-                    strokeWidth = stroke,
-                    cap = StrokeCap.Round,
-                )
-                drawLine(
-                    color = checkColor,
-                    start = Offset(w * 0.4f, h * 0.85f),
-                    end = Offset(w * 0.9f, h * 0.15f),
-                    strokeWidth = stroke,
-                    cap = StrokeCap.Round,
+            if (isConfirmed) {
+                // draw checkmark with canvas for confirmed transactions
+                Canvas(modifier = Modifier.size(diameter * 0.36f)) {
+                    val stroke = 3.dp.toPx()
+                    val w = size.width
+                    val h = size.height
+                    drawLine(
+                        color = iconColor,
+                        start = Offset(w * 0.1f, h * 0.55f),
+                        end = Offset(w * 0.4f, h * 0.85f),
+                        strokeWidth = stroke,
+                        cap = StrokeCap.Round,
+                    )
+                    drawLine(
+                        color = iconColor,
+                        start = Offset(w * 0.4f, h * 0.85f),
+                        end = Offset(w * 0.9f, h * 0.15f),
+                        strokeWidth = stroke,
+                        cap = StrokeCap.Round,
+                    )
+                }
+            } else {
+                // show clock icon for pending transactions
+                Icon(
+                    imageVector = Icons.Default.AccessTime,
+                    contentDescription = null,
+                    tint = iconColor,
+                    modifier = Modifier.size(diameter * 0.36f),
                 )
             }
         }

@@ -66,13 +66,9 @@ fun CoveNavDisplay(
         }
     }
 
-    // handle hardware back button
-    BackHandler(enabled = true) {
-        if (app.rust.canGoBack()) {
-            app.popRoute()
-        } else {
-            app.toggleSidebar()
-        }
+    // handle hardware back button (only when navigation is possible)
+    BackHandler(enabled = app.rust.canGoBack()) {
+        app.popRoute()
     }
 
     NavDisplay(
