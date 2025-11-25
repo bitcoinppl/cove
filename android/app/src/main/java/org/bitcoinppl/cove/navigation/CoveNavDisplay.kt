@@ -3,6 +3,8 @@ package org.bitcoinppl.cove.navigation
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
@@ -64,9 +66,13 @@ fun CoveNavDisplay(
         }
     }
 
-    // handle hardware back button (only when there's more than one screen)
-    BackHandler(enabled = backStack.size > 1) {
-        app.popRoute()
+    // handle hardware back button
+    BackHandler(enabled = true) {
+        if (app.rust.canGoBack()) {
+            app.popRoute()
+        } else {
+            app.toggleSidebar()
+        }
     }
 
     NavDisplay(
@@ -89,29 +95,37 @@ fun CoveNavDisplay(
 }
 
 /**
- * Shared Axis X transition for forward navigation (push)
- * New screen slides in from right, old screen slides partially left
+ * Material SharedAxis X transition for forward navigation (push)
+ * Per spec: outgoing fades 0-100ms, incoming fades 100-300ms, both slide over 300ms
  */
 private fun forwardTransition(): ContentTransform =
     slideInHorizontally(
         initialOffsetX = { it },
-        animationSpec = tween(MaterialMotion.DURATION_MEDIUM_2, easing = MaterialMotion.emphasizedDecelerate),
+        animationSpec = tween(300, easing = MaterialMotion.emphasizedDecelerate),
+    ) + fadeIn(
+        animationSpec = tween(200, delayMillis = 100),
     ) togetherWith slideOutHorizontally(
         targetOffsetX = { -it / 3 },
-        animationSpec = tween(MaterialMotion.DURATION_MEDIUM_2, easing = MaterialMotion.emphasizedAccelerate),
+        animationSpec = tween(300, easing = MaterialMotion.emphasizedAccelerate),
+    ) + fadeOut(
+        animationSpec = tween(100),
     )
 
 /**
- * Shared Axis X transition for backward navigation (pop)
- * Previous screen slides in from left, current screen slides out to right
+ * Material SharedAxis X transition for backward navigation (pop)
+ * Per spec: outgoing fades 0-100ms, incoming fades 100-300ms, both slide over 300ms
  */
 private fun backwardTransition(): ContentTransform =
     slideInHorizontally(
         initialOffsetX = { -it / 3 },
-        animationSpec = tween(MaterialMotion.DURATION_MEDIUM_2, easing = MaterialMotion.emphasizedDecelerate),
+        animationSpec = tween(300, easing = MaterialMotion.emphasizedDecelerate),
+    ) + fadeIn(
+        animationSpec = tween(200, delayMillis = 100),
     ) togetherWith slideOutHorizontally(
         targetOffsetX = { it },
-        animationSpec = tween(MaterialMotion.DURATION_MEDIUM_2, easing = MaterialMotion.emphasizedAccelerate),
+        animationSpec = tween(300, easing = MaterialMotion.emphasizedAccelerate),
+    ) + fadeOut(
+        animationSpec = tween(100),
     )
 
 /**

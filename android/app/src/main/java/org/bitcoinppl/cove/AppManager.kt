@@ -233,6 +233,14 @@ class AppManager private constructor() : FfiReconcile {
         wallets = runCatching { database.wallets().all() }.getOrElse { emptyList() }
     }
 
+    fun closeSidebarAndNavigate(action: suspend () -> Unit) {
+        isSidebarVisible = false
+        mainScope.launch {
+            kotlinx.coroutines.delay(300)
+            action()
+        }
+    }
+
     fun pushRoute(route: Route) {
         logDebug("pushRoute: $route")
         isSidebarVisible = false
