@@ -98,13 +98,13 @@ fun AutoSizeText(
 
 /**
  * Balance text that uses digit-based font size reduction
- * Matches iOS implementation: base font reduces by 2sp per digit, minimum 20sp
+ * Matches iOS implementation: base font reduces by 2sp per digit
  *
  * @param text The balance text to display
  * @param modifier Modifier for the text
  * @param color Text color
  * @param baseFontSize Base font size (default 34.sp to match iOS)
- * @param minFontSize Minimum font size (default 20.sp to match iOS)
+ * @param minimumScaleFactor Minimum scale factor (0.0 to 1.0), text shrinks to this percentage of baseFontSize
  * @param fontWeight Font weight
  * @param style Additional text style
  * @param onTextLayout Callback for text layout
@@ -115,13 +115,14 @@ fun BalanceAutoSizeText(
     modifier: Modifier = Modifier,
     color: Color = Color.Unspecified,
     baseFontSize: TextUnit = 34.sp,
-    minFontSize: TextUnit = 20.sp,
+    minimumScaleFactor: Float = 0.5f,
     fontWeight: FontWeight? = null,
     style: TextStyle = LocalTextStyle.current,
     onTextLayout: ((TextLayoutResult) -> Unit)? = null,
 ) {
     val density = LocalDensity.current
     val fontFamilyResolver = LocalFontFamilyResolver.current
+    val minFontSize = baseFontSize * minimumScaleFactor
 
     // extract numeric value to count digits (matches iOS algorithm)
     val digits = remember(text) {

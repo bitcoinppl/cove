@@ -409,7 +409,7 @@ fun CustomNetworkFeeBottomSheet(
                 text = String.format(Locale.US, "%.2f", feeRate),
                 color = MaterialTheme.colorScheme.onSurface,
                 baseFontSize = 48.sp,
-                minFontSize = 24.sp,
+                minimumScaleFactor = 0.5f,
                 fontWeight = FontWeight.Bold,
             )
             Row(

@@ -5,6 +5,11 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -242,7 +247,7 @@ fun TransactionDetailsScreen(
     val txAmountSecondary by androidx.compose.runtime.produceState(initialValue = "---") {
         value =
             try {
-                "≈ ${transactionDetails.amountFiatFmt()}"
+                transactionDetails.amountFiatFmt()
             } catch (e: Exception) {
                 "---"
             }
@@ -345,8 +350,9 @@ fun TransactionDetailsScreen(
                     txAmountPrimary,
                     color = fg,
                     baseFontSize = 36.sp,
-                    minFontSize = 24.sp,
+                    minimumScaleFactor = 0.67f,
                     fontWeight = FontWeight.ExtraBold,
+                    modifier = Modifier.fillMaxWidth(),
                 )
 
                 Spacer(Modifier.height(4.dp))
@@ -420,7 +426,11 @@ fun TransactionDetailsScreen(
                     )
                 }
 
-                if (isExpanded) {
+                AnimatedVisibility(
+                    visible = isExpanded,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut(),
+                ) {
                     TransactionDetailsWidget(
                         manager = manager,
                         transactionDetails = transactionDetails,

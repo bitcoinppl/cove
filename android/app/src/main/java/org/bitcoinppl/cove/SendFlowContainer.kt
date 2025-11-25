@@ -166,6 +166,16 @@ private fun SendFlowRouteToScreen(
                 onToggleBalanceVisibility = {
                     walletManager.dispatch(WalletManagerAction.ToggleSensitiveVisibility)
                 },
+                onUnitChange = { unit ->
+                    val bitcoinUnit =
+                        when (unit.lowercase()) {
+                            "sats" -> org.bitcoinppl.cove_core.types.BitcoinUnit.SAT
+                            "btc" -> org.bitcoinppl.cove_core.types.BitcoinUnit.BTC
+                            else -> org.bitcoinppl.cove_core.types.BitcoinUnit.SAT
+                        }
+                    walletManager.dispatch(WalletManagerAction.UpdateUnit(bitcoinUnit))
+                },
+                isFiatMode = walletManager.walletMetadata?.fiatOrBtc == FiatOrBtc.FIAT,
                 isBalanceHidden = !(walletManager.walletMetadata?.sensitiveVisible ?: true),
                 balanceAmount = walletManager.amountFmt(walletManager.balance.spendable()),
                 balanceDenomination = walletManager.unit,

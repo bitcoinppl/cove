@@ -11,7 +11,7 @@ android {
 
     defaultConfig {
         applicationId = "org.bitcoinppl.cove"
-        minSdk = 24
+        minSdk = 33
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
@@ -106,6 +106,10 @@ dependencies {
     // Coil for image loading (including SVG support)
     implementation("io.coil-kt.coil3:coil-compose:3.0.4")
     implementation("io.coil-kt.coil3:coil-svg:3.0.4")
+
+    // Navigation 3 for idiomatic Android navigation
+    implementation("androidx.navigation3:navigation3-runtime:1.0.0")
+    implementation("androidx.navigation3:navigation3-ui:1.0.0")
 }
 
 ktlint {

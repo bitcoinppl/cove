@@ -272,7 +272,7 @@ private fun AmountWidget(
                     text = amount,
                     color = MaterialTheme.colorScheme.onSurface,
                     baseFontSize = 48.sp,
-                    minFontSize = 24.sp,
+                    minimumScaleFactor = 0.5f,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.fillMaxWidth(),
                 )

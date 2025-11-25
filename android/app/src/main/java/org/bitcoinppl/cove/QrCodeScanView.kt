@@ -60,7 +60,7 @@ private sealed class QrCodeScannerState {
     ) : QrCodeScannerState()
 }
 
-@OptIn(ExperimentalPermissionsApi::class, ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun QrCodeScanView(
     onScanned: (StringOrData) -> Unit,
@@ -71,47 +71,41 @@ fun QrCodeScanView(
 ) {
     val cameraPermissionState = rememberPermissionState(Manifest.permission.CAMERA)
 
-    Scaffold(
-        topBar = {
-            if (showTopBar) {
-                TopAppBar(
-                    title = { },
-                    navigationIcon = {
-                        IconButton(onClick = onDismiss) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Back",
-                                tint = Color.White,
-                            )
-                        }
-                    },
-                    colors =
-                        TopAppBarDefaults.topAppBarColors(
-                            containerColor = Color.Transparent,
-                        ),
+    Box(
+        modifier = modifier.fillMaxSize().background(Color.Black)
+    ) {
+        when {
+            cameraPermissionState.status.isGranted -> {
+                QrScannerContent(
+                    onScanned = onScanned,
+                    onDismiss = onDismiss,
+                    app = app,
+                    modifier = Modifier.fillMaxSize(),
                 )
             }
-        },
-        containerColor = Color.Black,
-        modifier = modifier.fillMaxSize(),
-    ) { paddingValues ->
-        Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
-            when {
-                cameraPermissionState.status.isGranted -> {
-                    QrScannerContent(
-                        onScanned = onScanned,
-                        onDismiss = onDismiss,
-                        app = app,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
-                else -> {
-                    PermissionDeniedContent(
-                        permissionState = cameraPermissionState,
-                        onDismiss = onDismiss,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
+            else -> {
+                PermissionDeniedContent(
+                    permissionState = cameraPermissionState,
+                    onDismiss = onDismiss,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+
+        // overlaid back button
+        if (showTopBar) {
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .statusBarsPadding()
+                    .padding(16.dp)
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back",
+                    tint = Color.White,
+                )
             }
         }
     }

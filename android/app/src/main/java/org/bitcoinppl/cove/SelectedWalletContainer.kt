@@ -331,6 +331,7 @@ fun SelectedWalletContainer(
                 // TODO: get from theme
                 isDarkList = false,
                 manager = wm,
+                app = app,
                 snackbarHostState = snackbarHostState,
             )
 

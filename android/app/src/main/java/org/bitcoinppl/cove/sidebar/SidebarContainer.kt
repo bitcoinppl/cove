@@ -1,19 +1,22 @@
 package org.bitcoinppl.cove.sidebar
 
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -35,7 +38,7 @@ fun SidebarContainer(
     val density = LocalDensity.current
     val sidebarWidthPx = with(density) { SIDEBAR_WIDTH_DP.dp.toPx() }
 
-    var gestureOffset by remember { mutableStateOf(0f) }
+    var gestureOffset by remember { mutableFloatStateOf(0f) }
     var isDragging by remember { mutableStateOf(false) }
 
     LaunchedEffect(app.isSidebarVisible) {
@@ -47,22 +50,29 @@ fun SidebarContainer(
     // calculate target offset based on sidebar visibility
     val targetOffset = if (app.isSidebarVisible) sidebarWidthPx else 0f
 
-    // animate the offset when not dragging - use spring for natural feel
-    val animatedOffset by animateFloatAsState(
-        targetValue = targetOffset,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMedium,
-        ),
-        label = "sidebarOffset",
-    )
+    // use Animatable for manual control over animation state
+    val animatedOffset = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
+
+    // animate when visibility changes from non-drag sources (backdrop tap, menu button, etc.)
+    LaunchedEffect(app.isSidebarVisible) {
+        if (!isDragging) {
+            animatedOffset.animateTo(
+                targetValue = targetOffset,
+                animationSpec = spring(
+                    dampingRatio = 0.8f,
+                    stiffness = 700f,
+                ),
+            )
+        }
+    }
 
     // current offset combines animated offset and gesture offset
     val currentOffset =
         if (isDragging) {
             (targetOffset + gestureOffset).coerceIn(0f, sidebarWidthPx)
         } else {
-            animatedOffset
+            animatedOffset.value
         }
 
     // calculate open percentage for backdrop opacity
@@ -81,17 +91,33 @@ fun SidebarContainer(
                     Modifier
                         .fillMaxSize()
                         .background(Color.Black.copy(alpha = 0.45f * openPercentage))
+                        .pointerInput(sidebarWidthPx) {
+                            detectTapGestures { offset ->
+                                // only close if tap is outside the sidebar area (to the right of it)
+                                if (offset.x > sidebarWidthPx) {
+                                    app.isSidebarVisible = false
+                                }
+                            }
+                        }
                         .pointerInput(Unit) {
+                            var totalDrag = 0f
                             detectHorizontalDragGestures(
-                                onDragStart = { },
+                                onDragStart = {
+                                    totalDrag = 0f
+                                },
                                 onDragEnd = {
-                                    // tap to close
-                                    if (!isDragging) {
+                                    // only close if swipe distance exceeded minimum threshold
+                                    if (totalDrag < -20f) {
                                         app.isSidebarVisible = false
                                     }
+                                    totalDrag = 0f
                                 },
-                                onDragCancel = { },
-                                onHorizontalDrag = { _, _ -> },
+                                onDragCancel = {
+                                    totalDrag = 0f
+                                },
+                                onHorizontalDrag = { _, dragAmount ->
+                                    totalDrag += dragAmount
+                                },
                             )
                         },
             )
@@ -118,24 +144,44 @@ fun SidebarContainer(
                                 },
                                 onDragEnd = {
                                     if (isDragging) {
-                                        isDragging = false
-
-                                        // determine if we should complete the open/close action
                                         val threshold = sidebarWidthPx * 0.3f
                                         val finalOffset = targetOffset + gestureOffset
                                         val shouldBeOpen = finalOffset > threshold
+                                        val currentDragPosition = finalOffset.coerceIn(0f, sidebarWidthPx)
 
-                                        // only update if state actually changes
-                                        if (app.isSidebarVisible != shouldBeOpen) {
-                                            app.isSidebarVisible = shouldBeOpen
-                                        }
-
+                                        isDragging = false
                                         gestureOffset = 0f
+                                        app.isSidebarVisible = shouldBeOpen
+
+                                        scope.launch {
+                                            animatedOffset.snapTo(currentDragPosition)
+                                            animatedOffset.animateTo(
+                                                targetValue = if (shouldBeOpen) sidebarWidthPx else 0f,
+                                                animationSpec = spring(
+                                                    dampingRatio = 0.8f,
+                                                    stiffness = 700f,
+                                                ),
+                                            )
+                                        }
                                     }
                                 },
                                 onDragCancel = {
-                                    isDragging = false
-                                    gestureOffset = 0f
+                                    if (isDragging) {
+                                        val currentDragPosition = (targetOffset + gestureOffset).coerceIn(0f, sidebarWidthPx)
+                                        isDragging = false
+                                        gestureOffset = 0f
+
+                                        scope.launch {
+                                            animatedOffset.snapTo(currentDragPosition)
+                                            animatedOffset.animateTo(
+                                                targetValue = targetOffset,
+                                                animationSpec = spring(
+                                                    dampingRatio = 0.8f,
+                                                    stiffness = 700f,
+                                                ),
+                                            )
+                                        }
+                                    }
                                 },
                                 onHorizontalDrag = { _, dragAmount ->
                                     if (isDragging) {

@@ -28,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.isSystemInDarkTheme
+import org.bitcoinppl.cove.navigation.CoveNavDisplay
 import org.bitcoinppl.cove.nfc.TapCardNfcManager
 import org.bitcoinppl.cove.sidebar.SidebarContainer
 import org.bitcoinppl.cove.ui.theme.CoveTheme
@@ -98,9 +99,10 @@ class MainActivity : ComponentActivity() {
                         Box {
                             LockView {
                                 SidebarContainer(app = app) {
-                                    // reset view hierarchy when network changes or route changes
+                                    // NavDisplay handles transitions and back gestures
+                                    // key resets view when network/routeId changes
                                     key(app.selectedNetwork, app.routeId) {
-                                        RouteView(app = app, route = app.router.currentRoute)
+                                        CoveNavDisplay(app = app)
                                     }
                                 }
                             }
