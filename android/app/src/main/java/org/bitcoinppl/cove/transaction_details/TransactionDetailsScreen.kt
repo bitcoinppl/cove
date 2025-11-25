@@ -189,9 +189,9 @@ fun TransactionDetailsScreen(
     val snackbarHostState = remember { SnackbarHostState() }
 
     // theme colors
-    val bg = if (isDark) Color(0xFF000000) else Color(0xFFFFFFFF)
-    val fg = if (isDark) Color(0xFFEFEFEF) else Color(0xFF101010)
-    val sub = if (isDark) Color(0xFFB8B8B8) else Color(0xFF8F8F95)
+    val bg = MaterialTheme.colorScheme.background
+    val fg = MaterialTheme.colorScheme.onBackground
+    val sub = MaterialTheme.colorScheme.onSurfaceVariant
     val checkCircle = if (isDark) Color(0xFF0F0F12) else Color(0xFF0F1012)
     val chipBg = CoveColor.TransactionReceived
 
@@ -391,8 +391,8 @@ fun TransactionDetailsScreen(
                         shape = RoundedCornerShape(24.dp),
                         colors =
                             ButtonDefaults.buttonColors(
-                                containerColor = Color.Black,
-                                contentColor = Color.White,
+                                containerColor = MaterialTheme.colorScheme.inverseSurface,
+                                contentColor = MaterialTheme.colorScheme.inverseOnSurface,
                             ),
                     ) {
                         Row(
@@ -417,7 +417,7 @@ fun TransactionDetailsScreen(
                             Modifier
                                 .fillMaxWidth()
                                 .height(1.dp)
-                                .background(if (isDark) Color(0xFF222428) else Color(0xFFE4E5E7)),
+                                .background(MaterialTheme.colorScheme.outlineVariant),
                     )
                     Spacer(Modifier.height(24.dp))
                     ConfirmationIndicatorView(
@@ -435,7 +435,6 @@ fun TransactionDetailsScreen(
                         manager = manager,
                         transactionDetails = transactionDetails,
                         numberOfConfirmations = numberOfConfirmations,
-                        isDark = isDark,
                         feeFiatFmt = feeFiatFmt,
                         sentSansFeeFiatFmt = sentSansFeeFiatFmt,
                         totalSpentFiatFmt = totalSpentFiatFmt,
@@ -494,15 +493,14 @@ private fun TransactionDetailsWidget(
     manager: WalletManager,
     transactionDetails: TransactionDetails,
     numberOfConfirmations: Int?,
-    isDark: Boolean,
     feeFiatFmt: String,
     sentSansFeeFiatFmt: String,
     totalSpentFiatFmt: String,
     metadata: WalletMetadata?,
 ) {
-    val dividerColor = if (isDark) Color(0xFF222428) else Color(0xFFE4E5E7)
-    val sub = if (isDark) Color(0xFFB8B8B8) else Color(0xFF8F8F95)
-    val fg = if (isDark) Color(0xFFEFEFEF) else Color(0xFF101010)
+    val dividerColor = MaterialTheme.colorScheme.outlineVariant
+    val sub = MaterialTheme.colorScheme.onSurfaceVariant
+    val fg = MaterialTheme.colorScheme.onBackground
     val isSent = transactionDetails.isSent()
     val isConfirmed = transactionDetails.isConfirmed()
 
@@ -521,7 +519,7 @@ private fun TransactionDetailsWidget(
         Column(modifier = Modifier.fillMaxWidth()) {
             Text(
                 stringResource(R.string.label_confirmations),
-                color = if (isDark) Color(0xFFB8B8B8) else Color(0xFF6F6F75),
+                color = sub,
                 fontSize = 14.sp,
             )
             Spacer(Modifier.height(8.dp))
@@ -537,7 +535,7 @@ private fun TransactionDetailsWidget(
 
             Text(
                 stringResource(R.string.label_block_number),
-                color = if (isDark) Color(0xFFB8B8B8) else Color(0xFF6F6F75),
+                color = sub,
                 fontSize = 14.sp,
             )
             Spacer(Modifier.height(8.dp))
@@ -567,7 +565,7 @@ private fun TransactionDetailsWidget(
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             addressLabel,
-            color = if (isDark) Color(0xFFB8B8B8) else Color(0xFF6F6F75),
+            color = sub,
             fontSize = 16.sp,
         )
         Spacer(Modifier.height(8.dp))
@@ -631,7 +629,6 @@ private fun TransactionDetailsWidget(
             label = stringResource(R.string.label_network_fee),
             primary = transactionDetails.feeFmt(unit = metadata?.selectedUnit ?: BitcoinUnit.SAT),
             secondary = "≈ $feeFiatFmt",
-            isDark = isDark,
             showInfoIcon = true,
             onInfoClick = { /* TODO: show fee info */ },
         )
@@ -641,7 +638,6 @@ private fun TransactionDetailsWidget(
             label = stringResource(R.string.label_recipient_receives),
             primary = transactionDetails.sentSansFeeFmt(unit = metadata?.selectedUnit ?: BitcoinUnit.SAT),
             secondary = "≈ $sentSansFeeFiatFmt",
-            isDark = isDark,
         )
         Spacer(Modifier.height(24.dp))
 
@@ -658,7 +654,6 @@ private fun TransactionDetailsWidget(
             label = stringResource(R.string.label_total_spent),
             primary = transactionDetails.amountFmt(unit = metadata?.selectedUnit ?: BitcoinUnit.SAT),
             secondary = "≈ $totalSpentFiatFmt",
-            isDark = isDark,
             isTotal = true,
         )
     } else {
@@ -666,9 +661,6 @@ private fun TransactionDetailsWidget(
         ReceivedTransactionDetails(
             transactionDetails = transactionDetails,
             numberOfConfirmations = numberOfConfirmations,
-            isDark = isDark,
-            sub = sub,
-            fg = fg,
         )
     }
 
@@ -680,28 +672,16 @@ private fun DetailsWidget(
     label: String,
     primary: String?,
     secondary: String?,
-    isDark: Boolean,
     isTotal: Boolean = false,
     showInfoIcon: Boolean = false,
     onInfoClick: () -> Unit = {},
 ) {
     if (primary == null) return
-    val sub = if (isDark) Color(0xFF8F8F95) else Color(0xFF6F6F75)
-    val fg = if (isDark) Color(0xFFEFEFEF) else Color(0xFF101010)
+    val sub = MaterialTheme.colorScheme.onSurfaceVariant
+    val fg = MaterialTheme.colorScheme.onBackground
 
-    val labelColor =
-        if (isTotal) {
-            if (isDark) Color(0xFFEFEFEF) else Color(0xFF101010)
-        } else {
-            if (isDark) Color(0xFFB8B8B8) else Color(0xFF9CA3AF)
-        }
-
-    val primaryColor =
-        if (isTotal) {
-            fg
-        } else {
-            if (isDark) Color(0xFFB8B8B8) else Color(0xFF9CA3AF)
-        }
+    val labelColor = if (isTotal) fg else sub
+    val primaryColor = if (isTotal) fg else sub
 
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
         Row(
@@ -722,7 +702,7 @@ private fun DetailsWidget(
                         Icon(
                             imageVector = Icons.Outlined.Info,
                             contentDescription = null,
-                            tint = if (isDark) Color(0xFFB8B8B8) else Color(0xFF9CA3AF),
+                            tint = sub,
                             modifier = Modifier.size(16.dp),
                         )
                     },
@@ -743,12 +723,11 @@ private fun DetailsWidget(
 private fun ReceivedTransactionDetails(
     transactionDetails: TransactionDetails,
     numberOfConfirmations: Int?,
-    isDark: Boolean,
-    sub: Color,
-    fg: Color,
 ) {
     val context = LocalContext.current
     var isCopied by remember { mutableStateOf(false) }
+    val sub = MaterialTheme.colorScheme.onSurfaceVariant
+    val fg = MaterialTheme.colorScheme.onBackground
 
     Column(modifier = Modifier.fillMaxWidth()) {
         // received at address with copy button
@@ -759,7 +738,7 @@ private fun ReceivedTransactionDetails(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     stringResource(R.string.label_received_at),
-                    color = if (isDark) Color(0xFFB8B8B8) else Color(0xFF6F6F75),
+                    color = sub,
                     fontSize = 16.sp,
                 )
                 Spacer(Modifier.height(8.dp))
@@ -783,7 +762,7 @@ private fun ReceivedTransactionDetails(
                     isCopied = true
                 },
                 shape = RoundedCornerShape(20.dp),
-                border = BorderStroke(1.dp, if (isDark) Color(0xFF4A4A4A) else Color(0xFFD1D1D6)),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
                 colors =
                     ButtonDefaults.outlinedButtonColors(
                         contentColor = fg,
