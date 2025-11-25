@@ -40,6 +40,7 @@ fun SidebarContainer(
 
     var gestureOffset by remember { mutableFloatStateOf(0f) }
     var isDragging by remember { mutableStateOf(false) }
+    var isValidDrag by remember { mutableStateOf(false) }
 
     LaunchedEffect(app.isSidebarVisible) {
         if (app.isSidebarVisible) {
@@ -69,7 +70,7 @@ fun SidebarContainer(
 
     // current offset combines animated offset and gesture offset
     val currentOffset =
-        if (isDragging) {
+        if (isDragging && isValidDrag) {
             (targetOffset + gestureOffset).coerceIn(0f, sidebarWidthPx)
         } else {
             animatedOffset.value
@@ -78,8 +79,8 @@ fun SidebarContainer(
     // calculate open percentage for backdrop opacity
     val openPercentage = (currentOffset / sidebarWidthPx).coerceIn(0f, 1f)
 
-    // only enable gestures when at root (no routes)
-    val gesturesEnabled = app.rust.isAtRoot()
+    // only enable gestures when at root (no routes) - use reactive state
+    val gesturesEnabled = app.router.routes.isEmpty()
 
     Box(
         modifier = Modifier.fillMaxSize(),
@@ -129,75 +130,79 @@ fun SidebarContainer(
                 Modifier
                     .fillMaxSize()
                     .offset { IntOffset(currentOffset.roundToInt(), 0) }
-                    .pointerInput(gesturesEnabled) {
-                        if (gesturesEnabled) {
-                            detectHorizontalDragGestures(
-                                onDragStart = { offset ->
-                                    // only start drag from left edge when closed (using threshold constant)
-                                    if (!app.isSidebarVisible && offset.x < edgeThresholdPx) {
-                                        isDragging = true
-                                        gestureOffset = 0f
-                                    } else if (app.isSidebarVisible) {
-                                        isDragging = true
-                                        gestureOffset = 0f
-                                    }
-                                },
-                                onDragEnd = {
-                                    if (isDragging) {
-                                        val threshold = sidebarWidthPx * 0.3f
-                                        val finalOffset = targetOffset + gestureOffset
-                                        val shouldBeOpen = finalOffset > threshold
-                                        val currentDragPosition = finalOffset.coerceIn(0f, sidebarWidthPx)
+                    .pointerInput(Unit) {
+                        detectHorizontalDragGestures(
+                            onDragStart = { offset ->
+                                // check gesture enabled at drag start (reactive state)
+                                if (!gesturesEnabled) return@detectHorizontalDragGestures
 
-                                        isDragging = false
-                                        gestureOffset = 0f
-                                        app.isSidebarVisible = shouldBeOpen
+                                isDragging = true
+                                gestureOffset = 0f
 
-                                        scope.launch {
-                                            animatedOffset.snapTo(currentDragPosition)
-                                            animatedOffset.animateTo(
-                                                targetValue = if (shouldBeOpen) sidebarWidthPx else 0f,
-                                                animationSpec = spring(
-                                                    dampingRatio = 0.8f,
-                                                    stiffness = 700f,
-                                                ),
-                                            )
-                                        }
-                                    }
-                                },
-                                onDragCancel = {
-                                    if (isDragging) {
-                                        val currentDragPosition = (targetOffset + gestureOffset).coerceIn(0f, sidebarWidthPx)
-                                        isDragging = false
-                                        gestureOffset = 0f
+                                // determine if this is a valid drag that should affect the sidebar
+                                isValidDrag = when {
+                                    app.isSidebarVisible -> true
+                                    offset.x < edgeThresholdPx -> true
+                                    else -> false
+                                }
+                            },
+                            onDragEnd = {
+                                if (isDragging && isValidDrag) {
+                                    val threshold = sidebarWidthPx * 0.3f
+                                    val finalOffset = targetOffset + gestureOffset
+                                    val shouldBeOpen = finalOffset > threshold
+                                    val currentDragPosition = finalOffset.coerceIn(0f, sidebarWidthPx)
 
-                                        scope.launch {
-                                            animatedOffset.snapTo(currentDragPosition)
-                                            animatedOffset.animateTo(
-                                                targetValue = targetOffset,
-                                                animationSpec = spring(
-                                                    dampingRatio = 0.8f,
-                                                    stiffness = 700f,
-                                                ),
-                                            )
-                                        }
-                                    }
-                                },
-                                onHorizontalDrag = { _, dragAmount ->
-                                    if (isDragging) {
-                                        gestureOffset += dragAmount
+                                    app.isSidebarVisible = shouldBeOpen
 
-                                        // constrain gesture offset
-                                        val proposedOffset = targetOffset + gestureOffset
-                                        if (proposedOffset < 0f) {
-                                            gestureOffset = -targetOffset
-                                        } else if (proposedOffset > sidebarWidthPx) {
-                                            gestureOffset = sidebarWidthPx - targetOffset
-                                        }
+                                    scope.launch {
+                                        animatedOffset.snapTo(currentDragPosition)
+                                        animatedOffset.animateTo(
+                                            targetValue = if (shouldBeOpen) sidebarWidthPx else 0f,
+                                            animationSpec = spring(
+                                                dampingRatio = 0.8f,
+                                                stiffness = 700f,
+                                            ),
+                                        )
                                     }
-                                },
-                            )
-                        }
+                                }
+                                isDragging = false
+                                isValidDrag = false
+                                gestureOffset = 0f
+                            },
+                            onDragCancel = {
+                                if (isDragging && isValidDrag) {
+                                    val currentDragPosition = (targetOffset + gestureOffset).coerceIn(0f, sidebarWidthPx)
+
+                                    scope.launch {
+                                        animatedOffset.snapTo(currentDragPosition)
+                                        animatedOffset.animateTo(
+                                            targetValue = targetOffset,
+                                            animationSpec = spring(
+                                                dampingRatio = 0.8f,
+                                                stiffness = 700f,
+                                            ),
+                                        )
+                                    }
+                                }
+                                isDragging = false
+                                isValidDrag = false
+                                gestureOffset = 0f
+                            },
+                            onHorizontalDrag = { _, dragAmount ->
+                                if (isDragging && isValidDrag) {
+                                    gestureOffset += dragAmount
+
+                                    // constrain gesture offset
+                                    val proposedOffset = targetOffset + gestureOffset
+                                    if (proposedOffset < 0f) {
+                                        gestureOffset = -targetOffset
+                                    } else if (proposedOffset > sidebarWidthPx) {
+                                        gestureOffset = sidebarWidthPx - targetOffset
+                                    }
+                                }
+                            },
+                        )
                     },
         ) {
             content()
