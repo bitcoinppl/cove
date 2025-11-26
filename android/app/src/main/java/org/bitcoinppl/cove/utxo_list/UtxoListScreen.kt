@@ -61,6 +61,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.ImageButton
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -98,21 +99,10 @@ fun UtxoListScreen(
             manager.selected.map { it.hashToUint() }.toSet()
         }
 
-    val currentSort =
-        listOf(
-            org.bitcoinppl.cove_core.CoinControlListSortKey.DATE to UtxoSort.DATE,
-            org.bitcoinppl.cove_core.CoinControlListSortKey.NAME to UtxoSort.NAME,
-            org.bitcoinppl.cove_core.CoinControlListSortKey.AMOUNT to UtxoSort.AMOUNT,
-            org.bitcoinppl.cove_core.CoinControlListSortKey.CHANGE to UtxoSort.CHANGE,
-        ).firstOrNull { (key, _) ->
-            manager.rust.buttonPresentation(key) is org.bitcoinppl.cove_core.ButtonPresentation.Selected
-        }?.second ?: UtxoSort.DATE
-
     UtxoListScreenContent(
         manager = manager,
         utxos = manager.utxos,
         selected = selected,
-        currentSort = currentSort,
         totalSelectedAmount = manager.totalSelectedAmount,
         searchQuery = manager.search,
         onBack = { app.popRoute() },
@@ -163,7 +153,6 @@ private fun UtxoListScreenContent(
     manager: org.bitcoinppl.cove.CoinControlManager,
     utxos: List<org.bitcoinppl.cove_core.types.Utxo>,
     selected: Set<ULong>,
-    currentSort: UtxoSort,
     totalSelectedAmount: String,
     searchQuery: String,
     onBack: () -> Unit,
@@ -273,7 +262,7 @@ private fun UtxoListScreenContent(
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     SortRow(
-                        currentSort = currentSort,
+                        manager = manager,
                         onSortChange = onSortChange,
                     )
                 }
@@ -407,6 +396,7 @@ private fun UtxoListScreenContent(
                                 stringResource(R.string.continue_button)
                             },
                         onClick = onContinue,
+                        enabled = anySelected,
                         colors =
                             ButtonDefaults.buttonColors(
                                 containerColor = if (anySelected) CoveColor.midnightBlue else MaterialTheme.colorScheme.surfaceVariant,
@@ -515,36 +505,49 @@ private fun ChangeBadge(tintColor: Color = CoveColor.WarningOrange) {
 
 @Composable
 private fun SortRow(
-    currentSort: UtxoSort,
+    manager: org.bitcoinppl.cove.CoinControlManager,
     onSortChange: (UtxoSort) -> Unit,
 ) {
+    // read sort state to trigger recomposition when it changes (same pattern as iOS: _ = self.sort)
+    @Suppress("UNUSED_VARIABLE")
+    val sort = manager.sort
+
+    val datePresentation = manager.rust.buttonPresentation(org.bitcoinppl.cove_core.CoinControlListSortKey.DATE)
+    val namePresentation = manager.rust.buttonPresentation(org.bitcoinppl.cove_core.CoinControlListSortKey.NAME)
+    val amountPresentation = manager.rust.buttonPresentation(org.bitcoinppl.cove_core.CoinControlListSortKey.AMOUNT)
+    val changePresentation = manager.rust.buttonPresentation(org.bitcoinppl.cove_core.CoinControlListSortKey.CHANGE)
+
     Row(
         horizontalArrangement = Arrangement.SpaceBetween,
         modifier = Modifier.fillMaxWidth(),
     ) {
         SortChip(
             label = stringResource(R.string.sort_date),
-            selected = currentSort == UtxoSort.DATE,
+            selected = datePresentation is org.bitcoinppl.cove_core.ButtonPresentation.Selected,
             onClick = { onSortChange(UtxoSort.DATE) },
-            showArrow = true,
-            arrowUp = false,
+            showArrow = datePresentation is org.bitcoinppl.cove_core.ButtonPresentation.Selected,
+            arrowUp = (datePresentation as? org.bitcoinppl.cove_core.ButtonPresentation.Selected)?.v1 == org.bitcoinppl.cove_core.ListSortDirection.ASCENDING,
         )
         SortChip(
             label = stringResource(R.string.sort_name),
-            selected = currentSort == UtxoSort.NAME,
+            selected = namePresentation is org.bitcoinppl.cove_core.ButtonPresentation.Selected,
             onClick = { onSortChange(UtxoSort.NAME) },
+            showArrow = namePresentation is org.bitcoinppl.cove_core.ButtonPresentation.Selected,
+            arrowUp = (namePresentation as? org.bitcoinppl.cove_core.ButtonPresentation.Selected)?.v1 == org.bitcoinppl.cove_core.ListSortDirection.ASCENDING,
         )
         SortChip(
             label = stringResource(R.string.sort_amount),
-            selected = currentSort == UtxoSort.AMOUNT,
+            selected = amountPresentation is org.bitcoinppl.cove_core.ButtonPresentation.Selected,
             onClick = { onSortChange(UtxoSort.AMOUNT) },
-            showArrow = true,
-            arrowUp = true,
+            showArrow = amountPresentation is org.bitcoinppl.cove_core.ButtonPresentation.Selected,
+            arrowUp = (amountPresentation as? org.bitcoinppl.cove_core.ButtonPresentation.Selected)?.v1 == org.bitcoinppl.cove_core.ListSortDirection.ASCENDING,
         )
         SortChip(
             label = stringResource(R.string.sort_change),
-            selected = currentSort == UtxoSort.CHANGE,
+            selected = changePresentation is org.bitcoinppl.cove_core.ButtonPresentation.Selected,
             onClick = { onSortChange(UtxoSort.CHANGE) },
+            showArrow = changePresentation is org.bitcoinppl.cove_core.ButtonPresentation.Selected,
+            arrowUp = (changePresentation as? org.bitcoinppl.cove_core.ButtonPresentation.Selected)?.v1 == org.bitcoinppl.cove_core.ListSortDirection.ASCENDING,
         )
     }
 }
@@ -572,9 +575,10 @@ private fun SortChip(
                 ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
+        AutoSizeText(
             text = label,
-            fontSize = 14.sp,
+            maxFontSize = 14.sp,
+            minimumScaleFactor = 0.01f,
             color = txt,
             fontWeight = FontWeight.Medium,
         )

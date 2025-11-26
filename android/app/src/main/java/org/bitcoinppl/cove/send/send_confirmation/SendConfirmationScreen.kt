@@ -33,6 +33,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -191,11 +192,14 @@ private fun BalanceWidget(
     isHidden: Boolean,
     onToggleVisibility: () -> Unit,
 ) {
+    val screenHeight = LocalConfiguration.current.screenHeightDp.dp
+    val balanceHeight = (screenHeight * 0.18f).coerceIn(100.dp, 160.dp)
+
     Box(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .height(160.dp)
+                .height(balanceHeight)
                 .padding(horizontal = 16.dp, vertical = 20.dp),
     ) {
         Row(

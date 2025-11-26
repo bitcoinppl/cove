@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.SouthWest
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -46,6 +47,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -64,9 +67,12 @@ import org.bitcoinppl.cove.ui.theme.isLight
 import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.BalanceAutoSizeText
 import org.bitcoinppl.cove.views.ImageButton
+import org.bitcoinppl.cove_core.HotWalletRoute
+import org.bitcoinppl.cove_core.NewWalletRoute
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.Transaction
 import org.bitcoinppl.cove_core.types.TransactionDirection
+import org.bitcoinppl.cove_core.types.WalletId
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -280,111 +286,123 @@ fun WalletTransactionsScreen(
                         Modifier
                             .fillMaxWidth()
                             .weight(1f) // Fill remaining space
-                            .background(listBg)
-                            .padding(horizontal = 20.dp, vertical = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                            .background(listBg),
                 ) {
-                    Text(
-                        text = stringResource(R.string.title_transactions),
-                        color = secondaryText,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
+                    VerifyReminder(
+                        walletId = manager?.walletMetadata?.id ?: "",
+                        isVerified = manager?.isVerified ?: true,
+                        app = app,
                     )
 
-                    // render real transactions or show empty state
-                    if (transactions.isEmpty()) {
-                        // empty state
-                        Box(
-                            modifier =
-                                Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 32.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                text = stringResource(R.string.no_transactions_yet),
-                                color = secondaryText,
-                                fontSize = 14.sp,
-                            )
-                        }
-                    } else {
-                        // render transactions dynamically in scrollable list
-                        LazyColumn(
-                            state = listState,
-                            modifier = Modifier.weight(1f),
-                        ) {
-                            itemsIndexed(transactions) { index, txn ->
-                                when (txn) {
-                                    is Transaction.Confirmed -> {
-                                        val direction = txn.v1.sentAndReceived().direction()
-                                        val txType =
-                                            when (direction) {
-                                                TransactionDirection.INCOMING -> TransactionType.RECEIVED
-                                                TransactionDirection.OUTGOING -> TransactionType.SENT
-                                            }
+                    Column(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 20.dp, vertical = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.title_transactions),
+                            color = secondaryText,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
 
-                                        // format amount with manager if available
-                                        val formattedAmount =
-                                            manager?.let {
-                                                val amount = txn.v1.sentAndReceived().amount()
-                                                val prefix = if (direction == TransactionDirection.OUTGOING) "-" else ""
-                                                prefix + it.displayAmount(amount, showUnit = true)
-                                            } ?: txn.v1.sentAndReceived().label()
-
-                                        TransactionWidget(
-                                            type = txType,
-                                            date = txn.v1.confirmedAtFmt(),
-                                            amount = formattedAmount,
-                                            balanceAfter = txn.v1.blockHeightFmt(),
-                                            listCard = listCard,
-                                            primaryText = primaryText,
-                                            secondaryText = secondaryText,
-                                            transaction = txn,
-                                            app = app,
-                                            manager = manager,
-                                        )
-                                    }
-
-                                    is Transaction.Unconfirmed -> {
-                                        val direction = txn.v1.sentAndReceived().direction()
-                                        val txType =
-                                            when (direction) {
-                                                TransactionDirection.INCOMING -> TransactionType.RECEIVED
-                                                TransactionDirection.OUTGOING -> TransactionType.SENT
-                                            }
-
-                                        // format amount with manager if available
-                                        val formattedAmount =
-                                            manager?.let {
-                                                val amount = txn.v1.sentAndReceived().amount()
-                                                val prefix = if (direction == TransactionDirection.OUTGOING) "-" else ""
-                                                prefix + it.displayAmount(amount, showUnit = true)
-                                            } ?: txn.v1.sentAndReceived().label()
-
-                                        TransactionWidget(
-                                            type = txType,
-                                            date = stringResource(R.string.pending),
-                                            amount = formattedAmount,
-                                            balanceAfter = stringResource(R.string.unconfirmed),
-                                            listCard = listCard,
-                                            primaryText = primaryText,
-                                            secondaryText = secondaryText,
-                                            transaction = txn,
-                                            app = app,
-                                            manager = manager,
-                                        )
-                                    }
-                                }
-
-                                // add divider between transactions (but not after the last one)
-                                if (index < transactions.size - 1) {
-                                    HorizontalDivider(color = dividerColor, thickness = 0.5.dp)
-                                }
+                        // render real transactions or show empty state
+                        if (transactions.isEmpty()) {
+                            // empty state
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 32.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.no_transactions_yet),
+                                    color = secondaryText,
+                                    fontSize = 14.sp,
+                                )
                             }
+                        } else {
+                            // render transactions dynamically in scrollable list
+                            LazyColumn(
+                                state = listState,
+                                modifier = Modifier.weight(1f),
+                            ) {
+                                itemsIndexed(transactions) { index, txn ->
+                                    when (txn) {
+                                        is Transaction.Confirmed -> {
+                                            val direction = txn.v1.sentAndReceived().direction()
+                                            val txType =
+                                                when (direction) {
+                                                    TransactionDirection.INCOMING -> TransactionType.RECEIVED
+                                                    TransactionDirection.OUTGOING -> TransactionType.SENT
+                                                }
 
-                            // add bottom spacing
-                            item {
-                                Spacer(Modifier.height(12.dp))
+                                            // format amount with manager if available
+                                            val formattedAmount =
+                                                manager?.let {
+                                                    val amount = txn.v1.sentAndReceived().amount()
+                                                    val prefix = if (direction == TransactionDirection.OUTGOING) "-" else ""
+                                                    prefix + it.displayAmount(amount, showUnit = true)
+                                                } ?: txn.v1.sentAndReceived().label()
+
+                                            TransactionWidget(
+                                                type = txType,
+                                                date = txn.v1.confirmedAtFmt(),
+                                                amount = formattedAmount,
+                                                balanceAfter = txn.v1.blockHeightFmt(),
+                                                listCard = listCard,
+                                                primaryText = primaryText,
+                                                secondaryText = secondaryText,
+                                                transaction = txn,
+                                                app = app,
+                                                manager = manager,
+                                            )
+                                        }
+
+                                        is Transaction.Unconfirmed -> {
+                                            val direction = txn.v1.sentAndReceived().direction()
+                                            val txType =
+                                                when (direction) {
+                                                    TransactionDirection.INCOMING -> TransactionType.RECEIVED
+                                                    TransactionDirection.OUTGOING -> TransactionType.SENT
+                                                }
+
+                                            // format amount with manager if available
+                                            val formattedAmount =
+                                                manager?.let {
+                                                    val amount = txn.v1.sentAndReceived().amount()
+                                                    val prefix = if (direction == TransactionDirection.OUTGOING) "-" else ""
+                                                    prefix + it.displayAmount(amount, showUnit = true)
+                                                } ?: txn.v1.sentAndReceived().label()
+
+                                            TransactionWidget(
+                                                type = txType,
+                                                date = stringResource(R.string.pending),
+                                                amount = formattedAmount,
+                                                balanceAfter = stringResource(R.string.unconfirmed),
+                                                listCard = listCard,
+                                                primaryText = primaryText,
+                                                secondaryText = secondaryText,
+                                                transaction = txn,
+                                                app = app,
+                                                manager = manager,
+                                            )
+                                        }
+                                    }
+
+                                    // add divider between transactions (but not after the last one)
+                                    if (index < transactions.size - 1) {
+                                        HorizontalDivider(color = dividerColor, thickness = 0.5.dp)
+                                    }
+                                }
+
+                                // add bottom spacing
+                                item {
+                                    Spacer(Modifier.height(12.dp))
+                                }
                             }
                         }
                     }
@@ -539,6 +557,64 @@ private fun BalanceWidget(
                     imageVector = if (isHidden) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
                     contentDescription = if (isHidden) "Show" else "Hide",
                     tint = Color.White.copy(alpha = 0.7f),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun VerifyReminder(
+    walletId: WalletId,
+    isVerified: Boolean,
+    app: AppManager?,
+) {
+    if (!isVerified) {
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        app?.pushRoute(
+                            Route.NewWallet(
+                                NewWalletRoute.HotWallet(
+                                    HotWalletRoute.VerifyWords(walletId),
+                                ),
+                            ),
+                        )
+                    }.background(
+                        brush =
+                            Brush.linearGradient(
+                                colors =
+                                    listOf(
+                                        Color(0xFFFF9800).copy(alpha = 0.67f),
+                                        Color(0xFFFFEB3B).copy(alpha = 0.96f),
+                                    ),
+                                start = Offset.Zero,
+                                end = Offset.Infinite,
+                            ),
+                    ).padding(vertical = 10.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = Color.Red.copy(alpha = 0.85f),
+                )
+                Text(
+                    text = "backup your wallet",
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 12.sp,
+                    color = Color.Black.copy(alpha = 0.66f),
+                )
+                Icon(
+                    imageVector = Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = Color.Red.copy(alpha = 0.85f),
                 )
             }
         }

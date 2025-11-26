@@ -32,9 +32,10 @@ class CoinControlManager(
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val isClosed = AtomicBoolean(false)
 
-    private var sort by mutableStateOf<CoinControlListSort?>(
+    var sort by mutableStateOf<CoinControlListSort?>(
         CoinControlListSort.Date(ListSortDirection.DESCENDING),
     )
+        private set
 
     var search by mutableStateOf("")
 

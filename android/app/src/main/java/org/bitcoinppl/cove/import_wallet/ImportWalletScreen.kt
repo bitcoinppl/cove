@@ -16,11 +16,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.ImportWalletManager
 import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import java.util.Locale
 
@@ -88,7 +90,7 @@ fun ImportWalletScreen(
                     ),
             )
         },
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = CoveColor.midnightBlue,
     ) { paddingValues ->
         Column(
             modifier =
@@ -167,17 +169,17 @@ fun ImportWalletScreen(
                     }
                 },
                 enabled = !isImporting && words.all { it.isNotBlank() },
-                shape = RoundedCornerShape(8.dp),
+                shape = RoundedCornerShape(10.dp),
                 colors =
                     ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                        containerColor = CoveColor.btnPrimary,
+                        contentColor = CoveColor.midnightBlue,
                     ),
             ) {
                 if (isImporting) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(24.dp),
-                        color = MaterialTheme.colorScheme.onPrimary,
+                        color = CoveColor.midnightBlue,
                     )
                 } else {
                     Text(
@@ -204,7 +206,7 @@ private fun EnterWordsWidget(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
+                .clip(RoundedCornerShape(10.dp))
                 .background(MaterialTheme.colorScheme.surfaceContainer)
                 .padding(start = 16.dp, top = 24.dp, end = 16.dp, bottom = 24.dp),
     ) {
@@ -260,7 +262,7 @@ private fun EnterWordWidget(
         Text(
             numberLabel,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            style = MaterialTheme.typography.bodyLarge,
+            style = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Monospace),
         )
         Spacer(Modifier.width(8.dp))
 

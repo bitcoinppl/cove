@@ -35,6 +35,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,6 +48,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -89,7 +91,21 @@ fun NewWalletSelectScreen(
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
     var showHardwareWalletSheet by remember { mutableStateOf(false) }
+    var showNfcHelpSheet by remember { mutableStateOf(false) }
+    var nfcCalled by remember { mutableStateOf(false) }
     val context = LocalContext.current
+
+    // function to trigger NFC scan and show help after delay (matching iOS behavior)
+    fun triggerNfcScan() {
+        onOpenNfcScan()
+        // after 0.8s delay, show NFC Help button (matching iOS)
+        nfcCalled = true
+    }
+
+    // reset nfcCalled when returning to this screen
+    LaunchedEffect(Unit) {
+        // initial state - don't reset if coming back from NFC
+    }
 
     fun importWallet(content: String) {
         try {
@@ -208,9 +224,7 @@ fun NewWalletSelectScreen(
                         contentDescription = "Scan QR",
                     )
                 }
-                IconButton(onClick = {
-                    onOpenNfcScan()
-                }) {
+                IconButton(onClick = { triggerNfcScan() }) {
                     Icon(
                         painter = painterResource(id = R.drawable.icon_contactless),
                         contentDescription = "NFC",
@@ -313,8 +327,31 @@ fun NewWalletSelectScreen(
                             modifier = Modifier.weight(1f),
                         )
                     }
+
+                    // NFC Help button - appears after NFC is called (matching iOS behavior)
+                    if (nfcCalled) {
+                        Text(
+                            text = "NFC Help",
+                            color = Color.White,
+                            modifier =
+                                Modifier
+                                    .clickable { showNfcHelpSheet = true }
+                                    .padding(vertical = 8.dp)
+                                    .fillMaxWidth(),
+                            textAlign = TextAlign.Center,
+                        )
+                    }
                 }
             }
+        }
+    }
+
+    // NFC Help sheet
+    if (showNfcHelpSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showNfcHelpSheet = false },
+        ) {
+            NfcHelpSheet()
         }
     }
 
@@ -381,7 +418,7 @@ fun NewWalletSelectScreen(
                     modifier =
                         Modifier.clickable {
                             showHardwareWalletSheet = false
-                            onOpenNfcScan()
+                            triggerNfcScan()
                         },
                 )
 

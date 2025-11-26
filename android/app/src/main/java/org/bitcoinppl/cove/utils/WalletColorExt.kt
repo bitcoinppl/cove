@@ -34,3 +34,10 @@ fun WalletColor.toComposeColor(): Color =
         is WalletColor.WPastelTeal -> Color(0xFFB2DFDB)
         is WalletColor.WLightPastelYellow -> Color(0xFFFFFDE7)
     }
+
+fun WalletColor.isLightColor(): Boolean =
+    when (this) {
+        is WalletColor.WAlmostWhite -> true
+        is WalletColor.WLightMint -> true
+        else -> false
+    }
