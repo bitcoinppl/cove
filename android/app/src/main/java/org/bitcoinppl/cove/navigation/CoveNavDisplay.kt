@@ -203,11 +203,6 @@ private fun LoadAndResetContent(
 
     LaunchedEffect(Unit) {
         delay(loadingTimeMs)
-
-        if (nextRoutes.size > 1) {
-            app.resetRoute(nextRoutes)
-        } else if (nextRoutes.isNotEmpty()) {
-            app.resetRoute(nextRoutes[0])
-        }
+        app.rust.resetAfterLoading(nextRoutes)
     }
 }

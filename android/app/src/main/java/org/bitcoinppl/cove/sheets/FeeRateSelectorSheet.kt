@@ -3,7 +3,6 @@ package org.bitcoinppl.cove.sheets
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -21,6 +20,7 @@ import org.bitcoinppl.cove.SendFlowManager
 import org.bitcoinppl.cove.SendFlowPresenter
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.ui.theme.isLight
 import org.bitcoinppl.cove_core.types.FeeRateOptionWithTotalFee
 import org.bitcoinppl.cove_core.types.FeeRateOptionsWithTotalFee
 import org.bitcoinppl.cove_core.types.FeeSpeed
@@ -128,7 +128,6 @@ fun FeeRateSelectorSheet(
             Spacer(modifier = Modifier.height(20.dp))
 
             // customize fee button
-            val isDark = isSystemInDarkTheme()
             Button(
                 onClick = { showCustomFeeSheet = true },
                 modifier =
@@ -179,8 +178,6 @@ private fun FeeOptionCard(
     isSelected: Boolean,
     onSelect: () -> Unit,
 ) {
-    val isDark = isSystemInDarkTheme()
-
     val backgroundColor =
         if (isSelected) {
             CoveColor.midnightBlue.copy(alpha = 0.8f)

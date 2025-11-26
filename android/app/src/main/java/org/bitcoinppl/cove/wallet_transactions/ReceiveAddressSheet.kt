@@ -4,7 +4,6 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -48,6 +47,7 @@ import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.QrCodeGenerator
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.ui.theme.isLight
 import org.bitcoinppl.cove_core.types.AddressInfoWithDerivation
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -60,7 +60,6 @@ fun ReceiveAddressSheet(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val tag = "ReceiveAddressSheet"
-    val isDarkTheme = isSystemInDarkTheme()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var addressInfo by remember { mutableStateOf<AddressInfoWithDerivation?>(null) }
     var isLoading by remember { mutableStateOf(true) }
@@ -147,7 +146,7 @@ private fun ReceiveAddressSheetContent(
     onCopyAddress: () -> Unit,
     onCreateNewAddress: () -> Unit,
 ) {
-    val isDarkTheme = isSystemInDarkTheme()
+    val isDarkTheme = !MaterialTheme.colorScheme.isLight
 
     Column(
         modifier =

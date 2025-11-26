@@ -3,7 +3,6 @@ package org.bitcoinppl.cove.wallet_transactions
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -62,6 +61,7 @@ import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletLoadState
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.ui.theme.isLight
 import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.BalanceAutoSizeText
 import org.bitcoinppl.cove.views.ImageButton
@@ -345,6 +345,7 @@ fun WalletTransactionsScreen(
                                             manager = manager,
                                         )
                                     }
+
                                     is Transaction.Unconfirmed -> {
                                         val direction = txn.v1.sentAndReceived().direction()
                                         val txType =
@@ -416,20 +417,22 @@ private fun TransactionWidget(
         )
 
     val scope = rememberCoroutineScope()
-    val isDark = isSystemInDarkTheme()
+    val isDark = !MaterialTheme.colorScheme.isLight
 
     // get transaction id for navigation
-    val txId = when (transaction) {
-        is Transaction.Confirmed -> transaction.v1.id()
-        is Transaction.Unconfirmed -> transaction.v1.id()
-    }
+    val txId =
+        when (transaction) {
+            is Transaction.Confirmed -> transaction.v1.id()
+            is Transaction.Unconfirmed -> transaction.v1.id()
+        }
 
     // icon background color based on dark mode
-    val iconBackground = if (isDark) {
-        Color.Gray.copy(alpha = 0.35f)
-    } else {
-        MaterialTheme.colorScheme.primary.copy(alpha = 0.75f)
-    }
+    val iconBackground =
+        if (isDark) {
+            Color.Gray.copy(alpha = 0.35f)
+        } else {
+            Color.Black.copy(alpha = 0.75f)
+        }
 
     Row(
         modifier =
@@ -450,8 +453,7 @@ private fun TransactionWidget(
                             }
                         }
                     }
-                }
-                .padding(vertical = 6.dp),
+                }.padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
@@ -470,15 +472,15 @@ private fun TransactionWidget(
             )
         }
 
-        Spacer(modifier = Modifier.size(16.dp))
+        Spacer(modifier = Modifier.size(12.dp))
 
         Column(
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(5.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             Text(
                 text = title,
-                color = primaryText,
+                color = primaryText.copy(alpha = 0.65f),
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Medium,
             )
@@ -494,14 +496,14 @@ private fun TransactionWidget(
         Column(horizontalAlignment = Alignment.End) {
             Text(
                 text = amount,
-                color = if (type == TransactionType.RECEIVED) CoveColor.TransactionReceived else primaryText,
+                color = if (type == TransactionType.RECEIVED) CoveColor.TransactionReceived else primaryText.copy(alpha = 0.8f),
                 fontSize = 17.sp,
                 fontWeight = FontWeight.Normal,
             )
             Text(
                 text = balanceAfter,
                 color = secondaryText,
-                fontSize = 14.sp,
+                fontSize = 12.sp,
                 fontWeight = FontWeight.Normal,
             )
         }

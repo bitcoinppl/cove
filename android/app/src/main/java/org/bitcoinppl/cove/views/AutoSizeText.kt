@@ -1,6 +1,7 @@
 package org.bitcoinppl.cove.views
 
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -146,24 +147,23 @@ fun BalanceAutoSizeText(
     BoxWithConstraints(modifier = modifier) {
         val maxWidthPx = with(density) { maxWidth.toPx() }
 
-        // ensure the calculated size still fits, otherwise shrink further
-        val finalFontSize = remember(text, maxWidthPx, digitBasedFontSize, minFontSize) {
-            calculateOptimalFontSize(
-                text = text,
-                maxFontSize = digitBasedFontSize,
-                minFontSize = minFontSize,
-                maxWidthPx = maxWidthPx,
-                style = style,
-                fontWeight = fontWeight,
-                fontStyle = null,
-                fontFamily = null,
-                density = density,
-                fontFamilyResolver = fontFamilyResolver,
-            )
-        }
+        // calculate optimal font size (no remember - needs fresh calculation based on actual width)
+        val finalFontSize = calculateOptimalFontSize(
+            text = text,
+            maxFontSize = digitBasedFontSize,
+            minFontSize = minFontSize,
+            maxWidthPx = maxWidthPx,
+            style = style,
+            fontWeight = fontWeight,
+            fontStyle = null,
+            fontFamily = null,
+            density = density,
+            fontFamilyResolver = fontFamilyResolver,
+        )
 
         Text(
             text = text,
+            modifier = Modifier.fillMaxWidth(),
             color = color,
             fontSize = finalFontSize,
             fontWeight = fontWeight,
