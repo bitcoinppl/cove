@@ -155,6 +155,14 @@ struct SidebarView: View {
                 Log.error("Failed to get wallets \(error)")
             }
         }
+        .onChange(of: app.isSidebarVisible) { _, visible in
+            guard visible else { return }
+            do {
+                self.wallets = try Database().wallets().all()
+            } catch {
+                Log.error("Failed to get wallets \(error)")
+            }
+        }
         .padding(20)
         .frame(maxWidth: .infinity)
         .background(.midnightBlue)
