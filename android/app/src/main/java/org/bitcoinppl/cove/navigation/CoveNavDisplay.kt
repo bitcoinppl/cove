@@ -1,6 +1,5 @@
 package org.bitcoinppl.cove.navigation
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -39,11 +38,9 @@ fun CoveNavDisplay(
     app: AppManager,
     modifier: Modifier = Modifier,
 ) {
-    // initialize backStack synchronously with current routes (NOT empty!)
-    // NavDisplay requires at least one entry or it crashes
+    // include default route at bottom so NavDisplay knows back is possible
     val initialRoutes = remember {
-        val routes = app.router.routes
-        if (routes.isEmpty()) listOf(app.router.default) else routes
+        listOf(app.router.default) + app.router.routes
     }
     val backStack = remember {
         mutableStateListOf<Route>().apply { addAll(initialRoutes) }
@@ -51,31 +48,23 @@ fun CoveNavDisplay(
 
     // sync back stack when FFI routes change
     LaunchedEffect(app.router.routes, app.router.default) {
-        val ffiRoutes = app.router.routes
-        val currentBackStack = backStack.toList()
-
-        // only update if different to avoid unnecessary recompositions
-        if (ffiRoutes != currentBackStack) {
+        val newBackStack = listOf(app.router.default) + app.router.routes
+        if (newBackStack != backStack.toList()) {
             backStack.clear()
-            if (ffiRoutes.isEmpty()) {
-                // if no routes, use default as the single route
-                backStack.add(app.router.default)
-            } else {
-                backStack.addAll(ffiRoutes)
-            }
+            backStack.addAll(newBackStack)
         }
     }
 
-    // handle hardware back button (only when navigation is possible)
-    BackHandler(enabled = app.rust.canGoBack()) {
-        app.popRoute()
-    }
+    // no BackHandler - let NavDisplay handle predictive back natively
 
     NavDisplay(
         backStack = backStack,
         onBack = {
-            // sync back to FFI when user navigates back
-            app.popRoute()
+            // directly modify backStack for predictive back support
+            if (backStack.size > 1) {
+                backStack.removeLast()
+                app.popRoute()
+            }
         },
         modifier = modifier,
         // Material Design Shared Axis X transitions (horizontal slide + fade)
