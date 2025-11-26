@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -70,11 +71,14 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -84,6 +88,7 @@ import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.components.ConfirmationIndicatorView
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.ui.theme.isLight
 import org.bitcoinppl.cove.utils.toColor
 import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.BalanceAutoSizeText
@@ -93,9 +98,14 @@ import org.bitcoinppl.cove_core.TransactionDetails
 import org.bitcoinppl.cove_core.TransactionState
 import org.bitcoinppl.cove_core.WalletManagerAction
 import org.bitcoinppl.cove_core.WalletMetadata
+import org.bitcoinppl.cove_core.NoHandle as CoreNoHandle
+import org.bitcoinppl.cove_core.types.NoHandle
 import org.bitcoinppl.cove_core.types.BitcoinUnit
 import org.bitcoinppl.cove_core.types.FfiColorScheme
 import org.bitcoinppl.cove_core.types.TransactionDirection
+import org.bitcoinppl.cove_core.types.Address
+import org.bitcoinppl.cove_core.types.Amount
+import org.bitcoinppl.cove_core.types.TxId
 import kotlin.math.min
 
 private const val INITIAL_DELAY_MS = 2000L
@@ -104,6 +114,101 @@ private const val NORMAL_POLL_INTERVAL_MS = 60000L
 private const val MAX_POLL_ERRORS = 10
 private const val CONFIRMATIONS_THRESHOLD = 3
 
+@Preview(name = "Confirmed Received", showBackground = true)
+@Composable
+private fun TransactionDetailsConfirmedReceivedPreview() {
+    TransactionDetailsPreviewContent(previewDetails(isSent = false, isConfirmed = true))
+}
+
+@Preview(name = "Confirmed Sent", showBackground = true)
+@Composable
+private fun TransactionDetailsConfirmedSentPreview() {
+    TransactionDetailsPreviewContent(previewDetails(isSent = true, isConfirmed = true))
+}
+
+@Preview(name = "Pending Received", showBackground = true)
+@Composable
+private fun TransactionDetailsPendingReceivedPreview() {
+    TransactionDetailsPreviewContent(previewDetails(isSent = false, isConfirmed = false))
+}
+
+@Preview(name = "Pending Sent", showBackground = true)
+@Composable
+private fun TransactionDetailsPendingSentPreview() {
+    TransactionDetailsPreviewContent(previewDetails(isSent = true, isConfirmed = false))
+}
+
+@Composable
+private fun TransactionDetailsPreviewContent(details: TransactionDetails) {
+    TransactionDetailsScreen(
+        app = null,
+        manager = null,
+        details = details,
+        isPreviewMode = true,
+    )
+}
+
+private fun previewDetails(isSent: Boolean, isConfirmed: Boolean): TransactionDetails =
+    PreviewTransactionDetails(
+        isSentTx = isSent,
+        isConfirmedTx = isConfirmed,
+        formattedDate = if (isConfirmed) "Nov 25, 2025 at 3:45 PM" else "",
+        address = "bc1q 4kmx 9uqq 0flm f232 0ntz 3apc z4en v97t",
+        amountPrimary = if (isSent) "-25,555 sats" else "+25,555 sats",
+        amountFiat = if (isSent) "-$28.88" else "$28.88",
+        feePrimary = if (isSent) "98 sats" else null,
+        feeFiat = if (isSent) "$0.02" else null,
+        sentSansFeePrimary = if (isSent) "25,457 sats" else null,
+        sentSansFeeFiat = if (isSent) "$28.86" else null,
+        totalSpentPrimary = if (isSent) "25,653 sats" else null,
+    )
+
+// Lightweight preview-safe TransactionDetails that avoids loading native libs.
+private class PreviewTransactionDetails(
+    private val isSentTx: Boolean,
+    private val isConfirmedTx: Boolean,
+    private val formattedDate: String,
+    private val address: String,
+    private val amountPrimary: String,
+    private val amountFiat: String,
+    private val feePrimary: String?,
+    private val feeFiat: String?,
+    private val sentSansFeePrimary: String?,
+    private val sentSansFeeFiat: String?,
+    private val totalSpentPrimary: String? = null,
+    private val url: String = "https://mempool.space/tx/preview",
+    private val txIdValue: String = "preview-tx-id",
+) : TransactionDetails(CoreNoHandle) {
+    override fun isSent(): Boolean = isSentTx
+    override fun isReceived(): Boolean = !isSentTx
+    override fun isConfirmed(): Boolean = isConfirmedTx
+    override fun confirmationDateTime(): String? = formattedDate
+    override fun transactionUrl(): String = url
+    override fun txId(): TxId = PreviewTxId(txIdValue)
+    override fun amountFmt(unit: BitcoinUnit): String = amountPrimary
+    override suspend fun amountFiatFmt(): String = amountFiat
+    override fun feeFmt(unit: BitcoinUnit): String? = feePrimary
+    override suspend fun feeFiatFmt(): String = feeFiat ?: ""
+    override fun sentSansFeeFmt(unit: BitcoinUnit): String? = sentSansFeePrimary
+    override suspend fun sentSansFeeFiatFmt(): String = sentSansFeeFiat ?: ""
+    override fun amount(): Amount = PreviewAmount()
+    override fun addressSpacedOut(): String = address
+    override fun address(): Address = PreviewAddress(address.replace(" ", ""))
+    override fun blockNumberFmt(): String? = "123456"
+    override fun blockNumber(): UInt? = 123456u
+    override fun transactionLabel(): String? = null
+}
+
+private class PreviewAmount : Amount(NoHandle)
+
+private class PreviewAddress(private val value: String) : Address(NoHandle) {
+    override fun string(): String = value
+}
+
+private class PreviewTxId(private val value: String = "preview") : TxId(NoHandle) {
+    override fun toString(): String = value
+}
+
 /**
  * transaction details screen - now using manager-based pattern
  * ported from iOS TransactionDetailsView.swift
@@ -111,12 +216,15 @@ private const val CONFIRMATIONS_THRESHOLD = 3
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TransactionDetailsScreen(
-    app: AppManager,
-    manager: WalletManager,
+    app: AppManager?,
+    manager: WalletManager?,
     details: TransactionDetails,
+    isPreviewMode: Boolean = false,
 ) {
     val context = LocalContext.current
-    val metadata = manager.walletMetadata
+    val inspectionMode = LocalInspectionMode.current
+    val isPreview = isPreviewMode || inspectionMode || app == null || manager == null
+    val metadata = manager?.walletMetadata
 
     // state for confirmation polling
     var numberOfConfirmations by remember { mutableStateOf<Int?>(null) }
@@ -125,8 +233,8 @@ fun TransactionDetailsScreen(
     var sentSansFeeFiatFmt by remember { mutableStateOf("---") }
     var totalSpentFiatFmt by remember { mutableStateOf("---") }
 
-    // get current color scheme
-    val isDark = androidx.compose.foundation.isSystemInDarkTheme()
+    // get current color scheme (respects in-app theme toggle)
+    val isDark = !MaterialTheme.colorScheme.isLight
 
     // load fiat amounts
     LaunchedEffect(transactionDetails) {
@@ -151,7 +259,9 @@ fun TransactionDetailsScreen(
     }
 
     // poll for confirmations if not fully confirmed
-    LaunchedEffect(transactionDetails.txId()) {
+    LaunchedEffect(transactionDetails, isPreview) {
+        if (isPreview || manager == null) return@LaunchedEffect
+
         if (!transactionDetails.isConfirmed()) {
             delay(INITIAL_DELAY_MS)
         }
@@ -210,27 +320,43 @@ fun TransactionDetailsScreen(
     val isConfirmed = transactionDetails.isConfirmed()
 
     // header icon presenter for dynamic colors
-    val presenter = remember { HeaderIconPresenter() }
+    val presenter = remember(isPreview) { if (isPreview) null else HeaderIconPresenter() }
     val txState = if (isConfirmed) TransactionState.CONFIRMED else TransactionState.PENDING
     val direction = if (isSent) TransactionDirection.OUTGOING else TransactionDirection.INCOMING
     val colorScheme = if (isDark) FfiColorScheme.DARK else FfiColorScheme.LIGHT
     val confirmationCount = numberOfConfirmations?.toLong() ?: if (isConfirmed) 5L else 0L
 
     // get colors from presenter (matching iOS)
-    val circleColor = presenter.backgroundColor(txState, direction, colorScheme, confirmationCount).toColor()
-    val iconColor = presenter.iconColor(txState, direction, colorScheme, confirmationCount).toColor()
+    val circleColor = presenter?.backgroundColor(txState, direction, colorScheme, confirmationCount)?.toColor()
+        ?: if (isSent) Color(0xFF0F0F12) else CoveColor.TransactionReceived
+    val iconColor = presenter?.iconColor(txState, direction, colorScheme, confirmationCount)?.toColor() ?: Color.White
 
-    // get ring colors from presenter - apply opacity by multiplying with existing alpha
-    // iOS applies .opacity() which multiplies, so we do the same here
+    // get ring colors; fall back to static values in preview (matching iOS opacities)
     val ringOpacities = if (isDark) listOf(0.88f, 0.66f, 0.33f) else listOf(0.44f, 0.24f, 0.10f)
-    val ringColors: List<Color> = listOf(
-        presenter.ringColor(txState, colorScheme, direction, confirmationCount, 1L).toColor()
-            .let { it.copy(alpha = it.alpha * ringOpacities[0]) },
-        presenter.ringColor(txState, colorScheme, direction, confirmationCount, 2L).toColor()
-            .let { it.copy(alpha = it.alpha * ringOpacities[1]) },
-        presenter.ringColor(txState, colorScheme, direction, confirmationCount, 3L).toColor()
-            .let { it.copy(alpha = it.alpha * ringOpacities[2]) },
-    )
+    val ringColors: List<Color> =
+        presenter?.let {
+            listOf(
+                it.ringColor(txState, colorScheme, direction, confirmationCount, 1L).toColor()
+                    .let { color -> color.copy(alpha = color.alpha * ringOpacities[0]) },
+                it.ringColor(txState, colorScheme, direction, confirmationCount, 2L).toColor()
+                    .let { color -> color.copy(alpha = color.alpha * ringOpacities[1]) },
+                it.ringColor(txState, colorScheme, direction, confirmationCount, 3L).toColor()
+                    .let { color -> color.copy(alpha = color.alpha * ringOpacities[2]) },
+            )
+        }
+            ?: if (isDark) {
+                listOf(
+                    Color.White.copy(alpha = 0.88f),
+                    Color.White.copy(alpha = 0.66f),
+                    Color.White.copy(alpha = 0.33f),
+                )
+            } else {
+                listOf(
+                    Color.Black.copy(alpha = 0.44f),
+                    Color.Black.copy(alpha = 0.24f),
+                    Color.Black.copy(alpha = 0.10f),
+                )
+            }
 
     val headerTitle =
         stringResource(
@@ -242,7 +368,12 @@ fun TransactionDetailsScreen(
                 },
         )
 
-    val actionLabelRes = if (isSent) R.string.label_transaction_sent else R.string.label_transaction_received
+    val actionLabelRes = when {
+        isConfirmed && isSent -> R.string.label_transaction_sent
+        isConfirmed && !isSent -> R.string.label_transaction_received
+        !isConfirmed && isSent -> R.string.label_transaction_sending
+        else -> R.string.label_transaction_receiving
+    }
     val actionIcon = if (isSent) Icons.Filled.NorthEast else Icons.Filled.SouthWest
 
     // format date
@@ -260,7 +391,12 @@ fun TransactionDetailsScreen(
         }
 
     // format amounts
-    val txAmountPrimary = manager.rust.displayAmount(amount = transactionDetails.amount())
+    val txAmountPrimary =
+        if (manager != null) {
+            manager.rust.displayAmount(amount = transactionDetails.amount())
+        } else {
+            transactionDetails.amountFmt(metadata?.selectedUnit ?: BitcoinUnit.SAT)
+        }
     val txAmountSecondary by androidx.compose.runtime.produceState(initialValue = "---") {
         value =
             try {
@@ -286,7 +422,7 @@ fun TransactionDetailsScreen(
                     ),
                 title = { Text("") },
                 navigationIcon = {
-                    IconButton(onClick = { app.popRoute() }) {
+                    IconButton(onClick = { app?.popRoute() }) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = null,
@@ -297,6 +433,12 @@ fun TransactionDetailsScreen(
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
+        // parallax + fade effect on background
+        val scrollState = rememberScrollState()
+        val scrollOffset = scrollState.value.toFloat()
+        val parallaxOffset = (-60).dp - (scrollOffset * 0.3f).dp
+        val fadeAlpha = (1f - (scrollOffset / 275f)).coerceIn(0f, if (isDark) 1.0f else 0.40f)
+
         Box(
             modifier =
                 Modifier
@@ -311,8 +453,8 @@ fun TransactionDetailsScreen(
                     Modifier
                         .fillMaxHeight()
                         .align(Alignment.TopCenter)
-                        .offset(y = (-60).dp)
-                        .alpha(if (isDark) 1.0f else 0.40f),
+                        .offset(y = parallaxOffset)
+                        .alpha(fadeAlpha),
             )
 
             Column(
@@ -320,13 +462,16 @@ fun TransactionDetailsScreen(
                     Modifier
                         .fillMaxSize()
                         .padding(horizontal = 20.dp)
-                        .verticalScroll(rememberScrollState()),
+                        .verticalScroll(scrollState),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Spacer(Modifier.height(16.dp))
 
+                val configuration = LocalConfiguration.current
+                val headerSize = (configuration.screenWidthDp * 0.33f).dp
+
                 CheckWithRingsWidget(
-                    diameter = 180.dp,
+                    diameter = headerSize,
                     circleColor = circleColor,
                     ringColors = ringColors,
                     iconColor = iconColor,
@@ -345,12 +490,14 @@ fun TransactionDetailsScreen(
 
                 Spacer(Modifier.height(4.dp))
 
-                TransactionLabelView(
-                    transactionDetails = transactionDetails,
-                    manager = manager,
-                    secondaryColor = sub,
-                    snackbarHostState = snackbarHostState,
-                )
+                if (!isPreview && manager != null) {
+                    TransactionLabelView(
+                        transactionDetails = transactionDetails,
+                        manager = manager,
+                        secondaryColor = sub,
+                        snackbarHostState = snackbarHostState,
+                    )
+                }
 
                 Spacer(Modifier.height(24.dp))
 
@@ -376,7 +523,7 @@ fun TransactionDetailsScreen(
                             text = formattedDate,
                             color = sub,
                             fontSize = 16.sp,
-                            fontWeight = FontWeight.SemiBold,
+                            fontWeight = if (isReceived) FontWeight.SemiBold else FontWeight.Normal,
                             textAlign = TextAlign.Center,
                             lineHeight = 22.sp,
                         )
@@ -392,6 +539,7 @@ fun TransactionDetailsScreen(
                             text = "Please check back soon for an update.",
                             color = sub,
                             fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold,
                             textAlign = TextAlign.Center,
                             lineHeight = 22.sp,
                         )
@@ -404,7 +552,7 @@ fun TransactionDetailsScreen(
                     txAmountPrimary,
                     color = fg,
                     baseFontSize = 36.sp,
-                    minimumScaleFactor = 0.67f,
+                    minimumScaleFactor = 0.01f,
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth(),
@@ -414,7 +562,7 @@ fun TransactionDetailsScreen(
 
                 AutoSizeText(
                     txAmountSecondary,
-                    color = fg,
+                    color = fg.copy(alpha = 0.8f),
                     maxFontSize = 18.sp,
                     minimumScaleFactor = 0.90f,
                 )
@@ -422,13 +570,13 @@ fun TransactionDetailsScreen(
                 Spacer(Modifier.height(32.dp))
 
                 // transaction status capsule matching iOS styling
-                val coolGray = Color(0xFF787880)
+                val systemGreen = if (isDark) CoveColor.SystemGreenDark else CoveColor.SystemGreenLight
                 val capsuleConfig =
                     when {
                         isReceived && isConfirmed -> {
                             Triple(
-                                Color(0xFF34C759).copy(alpha = 0.2f), // green with 20% opacity
-                                Color(0xFF34C759), // green text
+                                systemGreen.copy(alpha = 0.2f), // green with 20% opacity
+                                systemGreen, // green text
                                 false,
                             )
                         }
@@ -441,7 +589,7 @@ fun TransactionDetailsScreen(
                         }
                         else -> {
                             Triple(
-                                coolGray, // coolGray background for pending
+                                CoveColor.coolGray, // coolGray background for pending (iOS parity)
                                 Color.Black.copy(alpha = 0.8f), // black text at 80% opacity
                                 false,
                             )
@@ -456,21 +604,25 @@ fun TransactionDetailsScreen(
                     showStroke = capsuleConfig.third,
                 )
 
+                Spacer(Modifier.height(32.dp))
+
                 // show confirmation indicator if < 3 confirmations
                 if (numberOfConfirmations != null && numberOfConfirmations!! < 3) {
-                    Spacer(Modifier.height(24.dp))
-                    Box(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .height(1.dp)
-                                .background(MaterialTheme.colorScheme.outlineVariant),
-                    )
-                    Spacer(Modifier.height(24.dp))
-                    ConfirmationIndicatorView(
-                        current = numberOfConfirmations!!,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
+                    Column(modifier = Modifier.padding(horizontal = 28.dp)) {
+                        Spacer(Modifier.height(24.dp))
+                        Box(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height(1.dp)
+                                    .background(MaterialTheme.colorScheme.outlineVariant),
+                        )
+                        Spacer(Modifier.height(24.dp))
+                        ConfirmationIndicatorView(
+                            current = numberOfConfirmations!!,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
                 }
 
                 AnimatedVisibility(
@@ -479,7 +631,6 @@ fun TransactionDetailsScreen(
                     exit = shrinkVertically() + fadeOut(),
                 ) {
                     TransactionDetailsWidget(
-                        manager = manager,
                         transactionDetails = transactionDetails,
                         numberOfConfirmations = numberOfConfirmations,
                         feeFiatFmt = feeFiatFmt,
@@ -517,9 +668,11 @@ fun TransactionDetailsScreen(
 
                     TextButton(
                         onClick = {
-                            manager.dispatch(WalletManagerAction.ToggleDetailsExpanded)
+                            manager?.dispatch(WalletManagerAction.ToggleDetailsExpanded)
                         },
-                        modifier = Modifier.align(Alignment.CenterHorizontally),
+                        modifier = Modifier
+                            .align(Alignment.CenterHorizontally)
+                            .offset(y = (-20).dp),
                     ) {
                         Text(
                             text = stringResource(if (isExpanded) R.string.btn_hide_details else R.string.btn_show_details),
@@ -537,7 +690,6 @@ fun TransactionDetailsScreen(
 
 @Composable
 private fun TransactionDetailsWidget(
-    manager: WalletManager,
     transactionDetails: TransactionDetails,
     numberOfConfirmations: Int?,
     feeFiatFmt: String,
@@ -551,7 +703,8 @@ private fun TransactionDetailsWidget(
     val isSent = transactionDetails.isSent()
     val isConfirmed = transactionDetails.isConfirmed()
 
-    Spacer(Modifier.height(48.dp))
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Spacer(Modifier.height(48.dp))
     Box(
         modifier =
             Modifier
@@ -567,14 +720,14 @@ private fun TransactionDetailsWidget(
             Text(
                 stringResource(R.string.label_confirmations),
                 color = sub,
-                fontSize = 14.sp,
+                fontSize = 12.sp,
             )
             Spacer(Modifier.height(8.dp))
             if (numberOfConfirmations != null) {
                 Text(
                     numberOfConfirmations.toString(),
                     color = fg,
-                    fontSize = 16.sp,
+                    fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
             }
@@ -583,13 +736,13 @@ private fun TransactionDetailsWidget(
             Text(
                 stringResource(R.string.label_block_number),
                 color = sub,
-                fontSize = 14.sp,
+                fontSize = 12.sp,
             )
             Spacer(Modifier.height(8.dp))
             Text(
                 transactionDetails.blockNumberFmt() ?: "",
                 color = fg,
-                fontSize = 16.sp,
+                fontSize = 14.sp, // iOS footnote parity
                 fontWeight = FontWeight.SemiBold,
             )
         }
@@ -613,15 +766,15 @@ private fun TransactionDetailsWidget(
         Text(
             addressLabel,
             color = sub,
-            fontSize = 16.sp,
+            fontSize = 12.sp,
         )
         Spacer(Modifier.height(8.dp))
         Text(
             transactionDetails.addressSpacedOut(),
             color = fg,
-            fontSize = 20.sp,
+            fontSize = 14.sp,
             fontWeight = FontWeight.SemiBold,
-            lineHeight = 24.sp,
+            lineHeight = 18.sp,
         )
 
         // show block number and confirmations for confirmed sent transactions
@@ -711,7 +864,8 @@ private fun TransactionDetailsWidget(
         )
     }
 
-    Spacer(Modifier.height(72.dp))
+        Spacer(Modifier.height(72.dp))
+    }
 }
 
 @Composable
@@ -738,7 +892,7 @@ private fun DetailsWidget(
             Text(
                 label,
                 color = labelColor,
-                fontSize = 18.sp,
+                fontSize = 12.sp,
             )
             if (showInfoIcon) {
                 Spacer(Modifier.width(8.dp))
@@ -757,10 +911,10 @@ private fun DetailsWidget(
             }
         }
         Column(horizontalAlignment = Alignment.End) {
-            AutoSizeText(primary, color = primaryColor, maxFontSize = 18.sp, minimumScaleFactor = 0.90f, fontWeight = FontWeight.SemiBold)
+            AutoSizeText(primary, color = primaryColor, maxFontSize = 14.sp, minimumScaleFactor = 0.90f, fontWeight = FontWeight.SemiBold)
             if (!secondary.isNullOrEmpty()) {
                 Spacer(Modifier.height(6.dp))
-                Text(secondary, color = sub, fontSize = 14.sp)
+                Text(secondary, color = sub, fontSize = 12.sp)
             }
         }
     }
@@ -786,15 +940,15 @@ private fun ReceivedTransactionDetails(
                 Text(
                     stringResource(R.string.label_received_at),
                     color = sub,
-                    fontSize = 16.sp,
+                    fontSize = 12.sp,
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
                     transactionDetails.addressSpacedOut(),
                     color = fg,
-                    fontSize = 20.sp,
+                    fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
-                    lineHeight = 24.sp,
+                    lineHeight = 18.sp,
                 )
             }
 
@@ -923,25 +1077,26 @@ private fun CheckWithRingsWidget(
     iconColor: Color,
     isConfirmed: Boolean,
 ) {
+    val ringOffset = 10.dp
+    val totalSize = diameter + (ringOffset * ringColors.size * 2)
+
     Box(
         contentAlignment = Alignment.Center,
-        modifier = Modifier.size(diameter),
+        modifier = Modifier.size(totalSize),
     ) {
         Canvas(modifier = Modifier.matchParentSize()) {
-            val canvasMin = min(size.width, size.height)
+            val centerX = size.width / 2f
+            val centerY = size.height / 2f
+            val circleRadius = diameter.toPx() / 2f
             val stroke = 1.dp.toPx()
-
-            val centerRadius = canvasMin * 0.35f
-            val maxRadius = (canvasMin / 2f) - (stroke / 2f)
-            val ringCount = ringColors.size
-            val totalExtra = (maxRadius - centerRadius).coerceAtLeast(0f)
-            val spacing = if (ringCount > 0) totalExtra / ringCount else 0f
+            val ringOffsetPx = ringOffset.toPx()
 
             ringColors.forEachIndexed { index, color ->
-                val r = centerRadius + ((index + 1) * spacing)
+                val r = circleRadius + ((index + 1) * ringOffsetPx)
                 drawCircle(
                     color = color,
                     radius = r,
+                    center = Offset(centerX, centerY),
                     style =
                         Stroke(
                             width = stroke,
@@ -953,14 +1108,14 @@ private fun CheckWithRingsWidget(
         Box(
             modifier =
                 Modifier
-                    .size(diameter * 0.7f)
+                    .size(diameter)
                     .clip(CircleShape)
                     .background(circleColor),
             contentAlignment = Alignment.Center,
         ) {
             if (isConfirmed) {
                 // draw checkmark with canvas for confirmed transactions
-                Canvas(modifier = Modifier.size(diameter * 0.36f)) {
+                Canvas(modifier = Modifier.size(diameter * 0.5f)) {
                     val stroke = 3.dp.toPx()
                     val w = size.width
                     val h = size.height
@@ -985,7 +1140,7 @@ private fun CheckWithRingsWidget(
                     imageVector = Icons.Default.AccessTime,
                     contentDescription = null,
                     tint = iconColor,
-                    modifier = Modifier.size(diameter * 0.36f),
+                    modifier = Modifier.size(diameter * 0.5f),
                 )
             }
         }

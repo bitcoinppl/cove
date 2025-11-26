@@ -15,7 +15,12 @@ object CoveColor {
     val coveLightGray = ComposeColor(0xFFE5EAEF)
     val duskBlue = ComposeColor(0xFF3A4254)
 
-    // Neutral colors (iOS parity when needed)
+    // system green colors (theme-aware)
+    val SystemGreenLight = ComposeColor(0xFF34C759)
+    val SystemGreenDark = ComposeColor(0xFF30D158)
+
+    // Neutral colors
+    val coolGray = ComposeColor(0xFFD4D8D4)
     val almostGray = ComposeColor(0xFF787880)
     val almostWhite = ComposeColor(0xFFEBEDF0)
 

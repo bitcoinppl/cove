@@ -3,6 +3,7 @@ package org.bitcoinppl.cove.ui.theme
 import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
@@ -10,9 +11,17 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
+
+/**
+ * Extension to check if the current ColorScheme is light mode.
+ * Uses surface luminance to reliably detect theme (works with dynamic colors).
+ */
+val ColorScheme.isLight: Boolean
+    get() = this.surface.luminance() > 0.5f
 
 private val DarkColorScheme =
     darkColorScheme(

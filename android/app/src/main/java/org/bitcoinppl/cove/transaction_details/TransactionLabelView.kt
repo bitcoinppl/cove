@@ -181,7 +181,7 @@ fun TransactionLabelView(
                     textStyle =
                         LocalTextStyle.current.copy(
                             color = secondaryColor,
-                            fontSize = 14.sp,
+                            fontSize = 13.sp,
                         ),
                     cursorBrush = SolidColor(secondaryColor),
                     modifier =
@@ -225,7 +225,7 @@ fun TransactionLabelView(
                     Text(
                         text = currentLabel!!,
                         color = secondaryColor,
-                        fontSize = 14.sp,
+                        fontSize = 13.sp, // iOS footnote parity
                     )
 
                     if (isOperationInProgress) {
@@ -295,7 +295,7 @@ fun TransactionLabelView(
                     Text(
                         text = stringResource(R.string.btn_add_label),
                         color = secondaryColor,
-                        fontSize = 14.sp,
+                        fontSize = 13.sp, // iOS footnote parity
                     )
                 }
             }
