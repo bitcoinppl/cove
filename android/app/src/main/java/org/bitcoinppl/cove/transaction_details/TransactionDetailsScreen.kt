@@ -79,7 +79,10 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletManager
@@ -286,15 +289,20 @@ fun TransactionDetailsScreen(
         var needsFrequentCheck = true
         var errors = 0
 
-        while (true) {
+        while (isActive) {
             try {
+                ensureActive()
+
                 // refresh transaction details
-                transactionDetails = manager.rust.transactionDetails(txId = transactionDetails.txId())
+                val details = manager.rust.transactionDetails(txId = transactionDetails.txId())
+                if (!isActive) break
+                transactionDetails = details
 
                 // get confirmations
                 val blockNumber = transactionDetails.blockNumber()
                 if (blockNumber != null) {
                     val confirmations = manager.rust.numberOfConfirmations(blockHeight = blockNumber)
+                    if (!isActive) break
                     numberOfConfirmations = confirmations.toInt()
 
                     // if fully confirmed, slow down polling
@@ -312,6 +320,9 @@ fun TransactionDetailsScreen(
                 } else {
                     delay(NORMAL_POLL_INTERVAL_MS)
                 }
+            } catch (e: CancellationException) {
+                // composable left composition, exit gracefully
+                break
             } catch (e: Exception) {
                 android.util.Log.e("TransactionDetails", "error polling confirmations", e)
                 errors++

@@ -12,6 +12,7 @@
     <string name="label_wallet_type">Wallet type</string>
     <string name="title_wallet_settings">Settings</string>
     <string name="label_wallet_name">Name</string>
+    <string name="change_name">Change Name</string>
     <string name="label_wallet_color">Wallet color</string>
     <string name="label_wallet_show_transaction_labels">Show transaction labels</string>
     <string name="title_wallet_danger_zone">Danger zone</string>

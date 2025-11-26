@@ -13,6 +13,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -108,9 +109,13 @@ fun SelectedWalletContainer(
             try {
                 // small delay and then start scanning wallet
                 delay(WALLET_SCAN_DELAY_MS)
+                if (!isActive) return@LaunchedEffect
                 wm.rust.getTransactions()
                 wm.updateWalletBalance()
                 wm.rust.startWalletScan()
+            } catch (e: CancellationException) {
+                // composable left composition, this is expected
+                throw e
             } catch (e: Exception) {
                 android.util.Log.e(tag, "wallet scan failed: ${e.message}", e)
             }

@@ -56,6 +56,7 @@ import org.bitcoinppl.cove.PendingWalletManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.utils.intoRoute
+import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.DashDotsIndicator
 import org.bitcoinppl.cove.views.DotsIndicator
 import org.bitcoinppl.cove.views.ImageButton
@@ -364,18 +365,20 @@ private fun WordCardView(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text(
+                            AutoSizeText(
                                 text = "${groupedWord.number}.",
                                 color = Color.Black.copy(alpha = 0.5f),
                                 fontWeight = FontWeight.Medium,
-                                fontSize = 12.sp,
+                                maxFontSize = 12.sp,
+                                minimumScaleFactor = 0.8f,
                             )
                             Spacer(Modifier.weight(1f))
-                            Text(
+                            AutoSizeText(
                                 text = groupedWord.word,
                                 color = CoveColor.midnightBlue,
                                 fontWeight = FontWeight.Medium,
-                                fontSize = 14.sp,
+                                maxFontSize = 14.sp,
+                                minimumScaleFactor = 0.2f,
                             )
                             Spacer(Modifier.weight(1f))
                         }
