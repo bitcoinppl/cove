@@ -16,7 +16,6 @@ private enum SheetState: Equatable {
 }
 
 private enum AlertState: Equatable {
-    case networkChanged(Network)
     case unverifiedWallets(WalletId)
     case confirmEnableWipeMePin
     case confirmDecoyPin
@@ -45,11 +44,6 @@ struct MainSettingsScreen: View {
     @State private var isWipeDataPinEnabled: Bool = false
 
     let themes = allColorSchemes()
-
-    var networkChanged: Bool {
-        if app.previousSelectedNetwork == nil { return false }
-        return app.selectedNetwork != app.previousSelectedNetwork
-    }
 
     private func canUseBiometrics() -> Bool {
         let context = LAContext()
@@ -240,36 +234,6 @@ struct MainSettingsScreen: View {
         .scrollContentBackground(.hidden)
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(networkChanged)
-        .toolbar {
-            networkChanged
-                ? ToolbarItem(placement: .navigationBarLeading) {
-                    Button(action: {
-                        if networkChanged {
-                            alertState = .init(.networkChanged(app.selectedNetwork))
-                        } else {
-                            dismiss()
-                        }
-                    }) {
-                        if #available(iOS 26, *) {
-                            Image(systemName: "chevron.left")
-                                .foregroundStyle(.primary)
-                                .fontWeight(.semibold)
-                                .tint(.primary)
-                        } else {
-                            HStack(spacing: 0) {
-                                Image(systemName: "chevron.left")
-                                    .fontWeight(.semibold)
-
-                                Text("Back")
-                                    .offset(x: 5)
-                            }
-                            .offset(x: -8)
-                        }
-                    }
-                    .tint(.primary)
-                } : nil
-        }
         .fullScreenCover(item: $sheetState, content: SheetContent)
         .alert(
             alertTitle,
@@ -277,24 +241,6 @@ struct MainSettingsScreen: View {
             presenting: alertState,
             actions: { MyAlert($0).actions },
             message: { MyAlert($0).message }
-        )
-        .gesture(
-            networkChanged
-                ? DragGesture()
-                .onChanged { gesture in
-                    if gesture.startLocation.x < 25, gesture.translation.width > 100 {
-                        withAnimation(.spring()) {
-                            alertState = .init(.networkChanged(app.selectedNetwork))
-                        }
-                    }
-                }
-                .onEnded { gesture in
-                    if gesture.startLocation.x < 20, gesture.translation.width > 50 {
-                        withAnimation(.spring()) {
-                            alertState = .init(.networkChanged(app.selectedNetwork))
-                        }
-                    }
-                } : nil
         )
     }
 
@@ -333,22 +279,6 @@ struct MainSettingsScreen: View {
 
     private func MyAlert(_ alert: TaggedItem<AlertState>) -> AnyAlertBuilder {
         switch alert.item {
-        case let .networkChanged(network):
-            AlertBuilder(
-                title: "⚠️ Network Changed ⚠️",
-                message: "You've changed your network to \(network)",
-                actions: {
-                    Button("Yes, Change Network") {
-                        app.confirmNetworkChange()
-                        app.rust.selectLatestOrNewWallet()
-                        dismiss()
-                    }
-                    Button("Cancel", role: .cancel) {
-                        alertState = .none
-                    }
-                }
-            ).eraseToAny()
-
         case let .unverifiedWallets(walletId):
             AlertBuilder(
                 title: "Can't Enable Wipe Data PIN",

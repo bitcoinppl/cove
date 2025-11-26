@@ -11,11 +11,17 @@ struct SettingsContainer: View {
     @Environment(AppManager.self) private var app
     let route: SettingsRoute
 
+    @State private var showNetworkChangeAlert = false
+    @State private var pendingNetwork: Network? = nil
+
     var selectedNetwork: Binding<Network> {
         Binding(
             get: { app.selectedNetwork },
             set: { network in
-                app.dispatch(action: .changeNetwork(network: network))
+                if network != app.selectedNetwork {
+                    pendingNetwork = network
+                    showNetworkChangeAlert = true
+                }
             }
         )
     }
@@ -78,6 +84,22 @@ struct SettingsContainer: View {
                     .ignoresSafeArea(edges: .all)
             }
         )
+        .alert("Network Changed", isPresented: $showNetworkChangeAlert) {
+            Button("Yes, Change Network") {
+                if let network = pendingNetwork {
+                    app.dispatch(action: .changeNetwork(network: network))
+                    app.popRoute()
+                }
+                pendingNetwork = nil
+            }
+            Button("Cancel", role: .cancel) {
+                pendingNetwork = nil
+            }
+        } message: {
+            if let network = pendingNetwork {
+                Text("You've changed your network to \(network)")
+            }
+        }
     }
 }
 

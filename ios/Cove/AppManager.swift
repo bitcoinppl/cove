@@ -20,7 +20,6 @@ import SwiftUI
 
     var isTermsAccepted: Bool = Database().globalFlag().isTermsAccepted()
     var selectedNetwork = Database().globalConfig().selectedNetwork()
-    var previousSelectedNetwork: Network? = nil
 
     var colorSchemeSelection = Database().globalConfig().colorScheme()
     var selectedNode = Database().globalConfig().selectedNode()
@@ -197,10 +196,6 @@ import SwiftUI
         rust.loadAndResetDefaultRoute(route: route)
     }
 
-    func confirmNetworkChange() {
-        previousSelectedNetwork = nil
-    }
-
     func agreeToTerms() {
         self.dispatch(action: .acceptTerms)
         withAnimation { isTermsAccepted = true }
@@ -228,9 +223,6 @@ import SwiftUI
                     self.selectedNode = node
 
                 case let .selectedNetworkChanged(network):
-                    if previousSelectedNetwork == nil {
-                        self.previousSelectedNetwork = self.selectedNetwork
-                    }
                     self.selectedNetwork = network
 
                 case let .defaultRouteChanged(route, nestedRoutes):
