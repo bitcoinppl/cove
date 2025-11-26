@@ -20,7 +20,6 @@ import org.bitcoinppl.cove.SendFlowManager
 import org.bitcoinppl.cove.SendFlowPresenter
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.ui.theme.CoveColor
-import org.bitcoinppl.cove.ui.theme.isLight
 import org.bitcoinppl.cove_core.types.FeeRateOptionWithTotalFee
 import org.bitcoinppl.cove_core.types.FeeRateOptionsWithTotalFee
 import org.bitcoinppl.cove_core.types.FeeSpeed

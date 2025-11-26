@@ -29,7 +29,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -40,7 +39,6 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.NorthEast
 import androidx.compose.material.icons.filled.SouthWest
 import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -68,7 +66,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
@@ -98,15 +95,14 @@ import org.bitcoinppl.cove_core.TransactionDetails
 import org.bitcoinppl.cove_core.TransactionState
 import org.bitcoinppl.cove_core.WalletManagerAction
 import org.bitcoinppl.cove_core.WalletMetadata
-import org.bitcoinppl.cove_core.NoHandle as CoreNoHandle
-import org.bitcoinppl.cove_core.types.NoHandle
-import org.bitcoinppl.cove_core.types.BitcoinUnit
-import org.bitcoinppl.cove_core.types.FfiColorScheme
-import org.bitcoinppl.cove_core.types.TransactionDirection
 import org.bitcoinppl.cove_core.types.Address
 import org.bitcoinppl.cove_core.types.Amount
+import org.bitcoinppl.cove_core.types.BitcoinUnit
+import org.bitcoinppl.cove_core.types.FfiColorScheme
+import org.bitcoinppl.cove_core.types.NoHandle
+import org.bitcoinppl.cove_core.types.TransactionDirection
 import org.bitcoinppl.cove_core.types.TxId
-import kotlin.math.min
+import org.bitcoinppl.cove_core.NoHandle as CoreNoHandle
 
 private const val INITIAL_DELAY_MS = 2000L
 private const val FREQUENT_POLL_INTERVAL_MS = 30000L
@@ -180,32 +176,53 @@ private class PreviewTransactionDetails(
     private val txIdValue: String = "preview-tx-id",
 ) : TransactionDetails(CoreNoHandle) {
     override fun isSent(): Boolean = isSentTx
+
     override fun isReceived(): Boolean = !isSentTx
+
     override fun isConfirmed(): Boolean = isConfirmedTx
+
     override fun confirmationDateTime(): String? = formattedDate
+
     override fun transactionUrl(): String = url
+
     override fun txId(): TxId = PreviewTxId(txIdValue)
+
     override fun amountFmt(unit: BitcoinUnit): String = amountPrimary
+
     override suspend fun amountFiatFmt(): String = amountFiat
+
     override fun feeFmt(unit: BitcoinUnit): String? = feePrimary
+
     override suspend fun feeFiatFmt(): String = feeFiat ?: ""
+
     override fun sentSansFeeFmt(unit: BitcoinUnit): String? = sentSansFeePrimary
+
     override suspend fun sentSansFeeFiatFmt(): String = sentSansFeeFiat ?: ""
+
     override fun amount(): Amount = PreviewAmount()
+
     override fun addressSpacedOut(): String = address
+
     override fun address(): Address = PreviewAddress(address.replace(" ", ""))
+
     override fun blockNumberFmt(): String? = "123456"
+
     override fun blockNumber(): UInt? = 123456u
+
     override fun transactionLabel(): String? = null
 }
 
 private class PreviewAmount : Amount(NoHandle)
 
-private class PreviewAddress(private val value: String) : Address(NoHandle) {
+private class PreviewAddress(
+    private val value: String,
+) : Address(NoHandle) {
     override fun string(): String = value
 }
 
-private class PreviewTxId(private val value: String = "preview") : TxId(NoHandle) {
+private class PreviewTxId(
+    private val value: String = "preview",
+) : TxId(NoHandle) {
     override fun toString(): String = value
 }
 
@@ -327,8 +344,9 @@ fun TransactionDetailsScreen(
     val confirmationCount = numberOfConfirmations?.toLong() ?: if (isConfirmed) 5L else 0L
 
     // get colors from presenter (matching iOS)
-    val circleColor = presenter?.backgroundColor(txState, direction, colorScheme, confirmationCount)?.toColor()
-        ?: if (isSent) Color(0xFF0F0F12) else CoveColor.TransactionReceived
+    val circleColor =
+        presenter?.backgroundColor(txState, direction, colorScheme, confirmationCount)?.toColor()
+            ?: if (isSent) Color(0xFF0F0F12) else CoveColor.TransactionReceived
     val iconColor = presenter?.iconColor(txState, direction, colorScheme, confirmationCount)?.toColor() ?: Color.White
 
     // get ring colors; fall back to static values in preview (matching iOS opacities)
@@ -336,11 +354,17 @@ fun TransactionDetailsScreen(
     val ringColors: List<Color> =
         presenter?.let {
             listOf(
-                it.ringColor(txState, colorScheme, direction, confirmationCount, 1L).toColor()
+                it
+                    .ringColor(txState, colorScheme, direction, confirmationCount, 1L)
+                    .toColor()
                     .let { color -> color.copy(alpha = color.alpha * ringOpacities[0]) },
-                it.ringColor(txState, colorScheme, direction, confirmationCount, 2L).toColor()
+                it
+                    .ringColor(txState, colorScheme, direction, confirmationCount, 2L)
+                    .toColor()
                     .let { color -> color.copy(alpha = color.alpha * ringOpacities[1]) },
-                it.ringColor(txState, colorScheme, direction, confirmationCount, 3L).toColor()
+                it
+                    .ringColor(txState, colorScheme, direction, confirmationCount, 3L)
+                    .toColor()
                     .let { color -> color.copy(alpha = color.alpha * ringOpacities[2]) },
             )
         }
@@ -368,12 +392,13 @@ fun TransactionDetailsScreen(
                 },
         )
 
-    val actionLabelRes = when {
-        isConfirmed && isSent -> R.string.label_transaction_sent
-        isConfirmed && !isSent -> R.string.label_transaction_received
-        !isConfirmed && isSent -> R.string.label_transaction_sending
-        else -> R.string.label_transaction_receiving
-    }
+    val actionLabelRes =
+        when {
+            isConfirmed && isSent -> R.string.label_transaction_sent
+            isConfirmed && !isSent -> R.string.label_transaction_received
+            !isConfirmed && isSent -> R.string.label_transaction_sending
+            else -> R.string.label_transaction_receiving
+        }
     val actionIcon = if (isSent) Icons.Filled.NorthEast else Icons.Filled.SouthWest
 
     // format date
@@ -670,9 +695,10 @@ fun TransactionDetailsScreen(
                         onClick = {
                             manager?.dispatch(WalletManagerAction.ToggleDetailsExpanded)
                         },
-                        modifier = Modifier
-                            .align(Alignment.CenterHorizontally)
-                            .offset(y = (-20).dp),
+                        modifier =
+                            Modifier
+                                .align(Alignment.CenterHorizontally)
+                                .offset(y = (-20).dp),
                     ) {
                         Text(
                             text = stringResource(if (isExpanded) R.string.btn_hide_details else R.string.btn_show_details),
@@ -705,48 +731,6 @@ private fun TransactionDetailsWidget(
 
     Column(modifier = Modifier.fillMaxWidth()) {
         Spacer(Modifier.height(48.dp))
-    Box(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .height(1.dp)
-                .background(dividerColor),
-    )
-    Spacer(Modifier.height(24.dp))
-
-    // show confirmations if confirmed
-    if (isConfirmed) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Text(
-                stringResource(R.string.label_confirmations),
-                color = sub,
-                fontSize = 12.sp,
-            )
-            Spacer(Modifier.height(8.dp))
-            if (numberOfConfirmations != null) {
-                Text(
-                    numberOfConfirmations.toString(),
-                    color = fg,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
-            Spacer(Modifier.height(14.dp))
-
-            Text(
-                stringResource(R.string.label_block_number),
-                color = sub,
-                fontSize = 12.sp,
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                transactionDetails.blockNumberFmt() ?: "",
-                color = fg,
-                fontSize = 14.sp, // iOS footnote parity
-                fontWeight = FontWeight.SemiBold,
-            )
-        }
-        Spacer(Modifier.height(24.dp))
         Box(
             modifier =
                 Modifier
@@ -755,92 +739,107 @@ private fun TransactionDetailsWidget(
                     .background(dividerColor),
         )
         Spacer(Modifier.height(24.dp))
-    }
 
-    // address (sent to / received from)
-    val addressLabel =
-        stringResource(
-            if (isSent) R.string.label_sent_to else R.string.label_received_from,
-        )
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            addressLabel,
-            color = sub,
-            fontSize = 12.sp,
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            transactionDetails.addressSpacedOut(),
-            color = fg,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.SemiBold,
-            lineHeight = 18.sp,
-        )
-
-        // show block number and confirmations for confirmed sent transactions
-        if (isSent && isConfirmed) {
-            Spacer(Modifier.height(8.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
+        // show confirmations if confirmed
+        if (isConfirmed) {
+            Column(modifier = Modifier.fillMaxWidth()) {
                 Text(
-                    transactionDetails.blockNumberFmt() ?: "",
+                    stringResource(R.string.label_confirmations),
                     color = sub,
-                    fontSize = 14.sp,
+                    fontSize = 12.sp,
                 )
-                Text(" | ", color = sub, fontSize = 14.sp)
+                Spacer(Modifier.height(8.dp))
                 if (numberOfConfirmations != null) {
                     Text(
                         numberOfConfirmations.toString(),
+                        color = fg,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+                Spacer(Modifier.height(14.dp))
+
+                Text(
+                    stringResource(R.string.label_block_number),
+                    color = sub,
+                    fontSize = 12.sp,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    transactionDetails.blockNumberFmt() ?: "",
+                    color = fg,
+                    fontSize = 14.sp, // iOS footnote parity
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+            Spacer(Modifier.height(24.dp))
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .background(dividerColor),
+            )
+            Spacer(Modifier.height(24.dp))
+        }
+
+        // address (sent to / received from)
+        val addressLabel =
+            stringResource(
+                if (isSent) R.string.label_sent_to else R.string.label_received_from,
+            )
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Text(
+                addressLabel,
+                color = sub,
+                fontSize = 12.sp,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                transactionDetails.addressSpacedOut(),
+                color = fg,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                lineHeight = 18.sp,
+            )
+
+            // show block number and confirmations for confirmed sent transactions
+            if (isSent && isConfirmed) {
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        transactionDetails.blockNumberFmt() ?: "",
                         color = sub,
                         fontSize = 14.sp,
                     )
-                    Spacer(Modifier.size(4.dp))
-                    Box(
-                        modifier =
-                            Modifier
-                                .size(14.dp)
-                                .clip(CircleShape)
-                                .background(CoveColor.SuccessGreen),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Check,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(10.dp),
+                    Text(" | ", color = sub, fontSize = 14.sp)
+                    if (numberOfConfirmations != null) {
+                        Text(
+                            numberOfConfirmations.toString(),
+                            color = sub,
+                            fontSize = 14.sp,
                         )
+                        Spacer(Modifier.size(4.dp))
+                        Box(
+                            modifier =
+                                Modifier
+                                    .size(14.dp)
+                                    .clip(CircleShape)
+                                    .background(CoveColor.SuccessGreen),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(10.dp),
+                            )
+                        }
                     }
                 }
             }
         }
-    }
-    Spacer(Modifier.height(24.dp))
-    Box(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .height(1.dp)
-                .background(dividerColor),
-    )
-    Spacer(Modifier.height(24.dp))
-
-    // network fee (for sent transactions)
-    if (isSent) {
-        DetailsWidget(
-            label = stringResource(R.string.label_network_fee),
-            primary = transactionDetails.feeFmt(unit = metadata?.selectedUnit ?: BitcoinUnit.SAT),
-            secondary = "≈ $feeFiatFmt",
-            showInfoIcon = true,
-            onInfoClick = { /* TODO: show fee info */ },
-        )
         Spacer(Modifier.height(24.dp))
-
-        DetailsWidget(
-            label = stringResource(R.string.label_recipient_receives),
-            primary = transactionDetails.sentSansFeeFmt(unit = metadata?.selectedUnit ?: BitcoinUnit.SAT),
-            secondary = "≈ $sentSansFeeFiatFmt",
-        )
-        Spacer(Modifier.height(24.dp))
-
         Box(
             modifier =
                 Modifier
@@ -850,19 +849,46 @@ private fun TransactionDetailsWidget(
         )
         Spacer(Modifier.height(24.dp))
 
-        DetailsWidget(
-            label = stringResource(R.string.label_total_spent),
-            primary = transactionDetails.amountFmt(unit = metadata?.selectedUnit ?: BitcoinUnit.SAT),
-            secondary = "≈ $totalSpentFiatFmt",
-            isTotal = true,
-        )
-    } else {
-        // received transaction details
-        ReceivedTransactionDetails(
-            transactionDetails = transactionDetails,
-            numberOfConfirmations = numberOfConfirmations,
-        )
-    }
+        // network fee (for sent transactions)
+        if (isSent) {
+            DetailsWidget(
+                label = stringResource(R.string.label_network_fee),
+                primary = transactionDetails.feeFmt(unit = metadata?.selectedUnit ?: BitcoinUnit.SAT),
+                secondary = "≈ $feeFiatFmt",
+                showInfoIcon = true,
+                onInfoClick = { /* TODO: show fee info */ },
+            )
+            Spacer(Modifier.height(24.dp))
+
+            DetailsWidget(
+                label = stringResource(R.string.label_recipient_receives),
+                primary = transactionDetails.sentSansFeeFmt(unit = metadata?.selectedUnit ?: BitcoinUnit.SAT),
+                secondary = "≈ $sentSansFeeFiatFmt",
+            )
+            Spacer(Modifier.height(24.dp))
+
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .background(dividerColor),
+            )
+            Spacer(Modifier.height(24.dp))
+
+            DetailsWidget(
+                label = stringResource(R.string.label_total_spent),
+                primary = transactionDetails.amountFmt(unit = metadata?.selectedUnit ?: BitcoinUnit.SAT),
+                secondary = "≈ $totalSpentFiatFmt",
+                isTotal = true,
+            )
+        } else {
+            // received transaction details
+            ReceivedTransactionDetails(
+                transactionDetails = transactionDetails,
+                numberOfConfirmations = numberOfConfirmations,
+            )
+        }
 
         Spacer(Modifier.height(72.dp))
     }

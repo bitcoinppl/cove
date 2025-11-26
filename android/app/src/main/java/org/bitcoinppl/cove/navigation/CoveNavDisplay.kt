@@ -39,12 +39,14 @@ fun CoveNavDisplay(
     modifier: Modifier = Modifier,
 ) {
     // include default route at bottom so NavDisplay knows back is possible
-    val initialRoutes = remember {
-        listOf(app.router.default) + app.router.routes
-    }
-    val backStack = remember {
-        mutableStateListOf<Route>().apply { addAll(initialRoutes) }
-    }
+    val initialRoutes =
+        remember {
+            listOf(app.router.default) + app.router.routes
+        }
+    val backStack =
+        remember {
+            mutableStateListOf<Route>().apply { addAll(initialRoutes) }
+        }
 
     // sync back stack when FFI routes change
     LaunchedEffect(app.router.routes, app.router.default) {
@@ -87,14 +89,16 @@ private fun forwardTransition(): ContentTransform =
     slideInHorizontally(
         initialOffsetX = { it },
         animationSpec = tween(300, easing = MaterialMotion.emphasizedDecelerate),
-    ) + fadeIn(
-        animationSpec = tween(200, delayMillis = 100),
-    ) togetherWith slideOutHorizontally(
-        targetOffsetX = { -it / 3 },
-        animationSpec = tween(300, easing = MaterialMotion.emphasizedAccelerate),
-    ) + fadeOut(
-        animationSpec = tween(100),
-    )
+    ) +
+        fadeIn(
+            animationSpec = tween(200, delayMillis = 100),
+        ) togetherWith slideOutHorizontally(
+            targetOffsetX = { -it / 3 },
+            animationSpec = tween(300, easing = MaterialMotion.emphasizedAccelerate),
+        ) +
+        fadeOut(
+            animationSpec = tween(100),
+        )
 
 /**
  * Material SharedAxis X transition for backward navigation (pop)
@@ -104,14 +108,16 @@ private fun backwardTransition(): ContentTransform =
     slideInHorizontally(
         initialOffsetX = { -it / 3 },
         animationSpec = tween(300, easing = MaterialMotion.emphasizedDecelerate),
-    ) + fadeIn(
-        animationSpec = tween(200, delayMillis = 100),
-    ) togetherWith slideOutHorizontally(
-        targetOffsetX = { it },
-        animationSpec = tween(300, easing = MaterialMotion.emphasizedAccelerate),
-    ) + fadeOut(
-        animationSpec = tween(100),
-    )
+    ) +
+        fadeIn(
+            animationSpec = tween(200, delayMillis = 100),
+        ) togetherWith slideOutHorizontally(
+            targetOffsetX = { it },
+            animationSpec = tween(300, easing = MaterialMotion.emphasizedAccelerate),
+        ) +
+        fadeOut(
+            animationSpec = tween(100),
+        )
 
 /**
  * Maps FFI Route to screen content
