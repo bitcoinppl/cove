@@ -64,20 +64,21 @@ fun AutoSizeText(
         val maxWidthPx = with(density) { maxWidth.toPx() }
 
         // calculate optimal font size
-        val fontSize = remember(text, maxWidthPx, maxFontSize, minFontSize) {
-            calculateOptimalFontSize(
-                text = text,
-                maxFontSize = maxFontSize,
-                minFontSize = minFontSize,
-                maxWidthPx = maxWidthPx,
-                style = style,
-                fontWeight = fontWeight,
-                fontStyle = fontStyle,
-                fontFamily = fontFamily,
-                density = density,
-                fontFamilyResolver = fontFamilyResolver,
-            )
-        }
+        val fontSize =
+            remember(text, maxWidthPx, maxFontSize, minFontSize) {
+                calculateOptimalFontSize(
+                    text = text,
+                    maxFontSize = maxFontSize,
+                    minFontSize = minFontSize,
+                    maxWidthPx = maxWidthPx,
+                    style = style,
+                    fontWeight = fontWeight,
+                    fontStyle = fontStyle,
+                    fontFamily = fontFamily,
+                    density = density,
+                    fontFamilyResolver = fontFamilyResolver,
+                )
+            }
 
         Text(
             text = text,
@@ -127,39 +128,42 @@ fun BalanceAutoSizeText(
     val minFontSize = baseFontSize * minimumScaleFactor
 
     // extract numeric value to count digits (matches iOS algorithm)
-    val digits = remember(text) {
-        val numericText = text.replace(Regex("[^0-9.]"), "")
-        val number = numericText.toDoubleOrNull() ?: 0.0
-        if (number > 0) {
-            floor(log10(number)).toInt() + 1
-        } else {
-            1
+    val digits =
+        remember(text) {
+            val numericText = text.replace(Regex("[^0-9.]"), "")
+            val number = numericText.toDoubleOrNull() ?: 0.0
+            if (number > 0) {
+                floor(log10(number)).toInt() + 1
+            } else {
+                1
+            }
         }
-    }
 
     // calculate font size based on digits: max(baseFontSize - (digits - 1) * 2, minFontSize)
-    val digitBasedFontSize = remember(digits, baseFontSize, minFontSize) {
-        val reduction = (digits - 1) * 2
-        val calculated = baseFontSize.value - reduction
-        maxOf(calculated, minFontSize.value).sp
-    }
+    val digitBasedFontSize =
+        remember(digits, baseFontSize, minFontSize) {
+            val reduction = (digits - 1) * 2
+            val calculated = baseFontSize.value - reduction
+            maxOf(calculated, minFontSize.value).sp
+        }
 
     BoxWithConstraints(modifier = modifier) {
         val maxWidthPx = with(density) { maxWidth.toPx() }
 
         // calculate optimal font size (no remember - needs fresh calculation based on actual width)
-        val finalFontSize = calculateOptimalFontSize(
-            text = text,
-            maxFontSize = digitBasedFontSize,
-            minFontSize = minFontSize,
-            maxWidthPx = maxWidthPx,
-            style = style,
-            fontWeight = fontWeight,
-            fontStyle = null,
-            fontFamily = null,
-            density = density,
-            fontFamilyResolver = fontFamilyResolver,
-        )
+        val finalFontSize =
+            calculateOptimalFontSize(
+                text = text,
+                maxFontSize = digitBasedFontSize,
+                minFontSize = minFontSize,
+                maxWidthPx = maxWidthPx,
+                style = style,
+                fontWeight = fontWeight,
+                fontStyle = null,
+                fontFamily = null,
+                density = density,
+                fontFamilyResolver = fontFamilyResolver,
+            )
 
         Text(
             text = text,
@@ -199,21 +203,25 @@ private fun calculateOptimalFontSize(
     // binary search for optimal font size
     while (low <= high) {
         val mid = (low + high) / 2f
-        val testStyle = style.copy(
-            fontSize = mid.sp,
-            fontWeight = fontWeight,
-            fontStyle = fontStyle,
-            fontFamily = fontFamily,
-        )
+        val testStyle =
+            style.copy(
+                fontSize = mid.sp,
+                fontWeight = fontWeight,
+                fontStyle = fontStyle,
+                fontFamily = fontFamily,
+            )
 
         // measure text width at this font size
-        val paragraph = androidx.compose.ui.text.Paragraph(
-            text = text,
-            style = testStyle,
-            constraints = androidx.compose.ui.unit.Constraints(maxWidth = Int.MAX_VALUE),
-            density = density,
-            fontFamilyResolver = fontFamilyResolver,
-        )
+        val paragraph =
+            androidx.compose.ui.text.Paragraph(
+                text = text,
+                style = testStyle,
+                constraints =
+                    androidx.compose.ui.unit
+                        .Constraints(maxWidth = Int.MAX_VALUE),
+                density = density,
+                fontFamilyResolver = fontFamilyResolver,
+            )
 
         if (paragraph.minIntrinsicWidth <= maxWidthPx) {
             // text fits, try larger size

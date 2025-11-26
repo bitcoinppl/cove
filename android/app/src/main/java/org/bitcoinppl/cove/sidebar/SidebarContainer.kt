@@ -1,5 +1,7 @@
 package org.bitcoinppl.cove.sidebar
 
+import android.app.Activity
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
@@ -16,15 +18,17 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.roundToInt
 
 private const val SIDEBAR_WIDTH_DP = 280f
@@ -35,6 +39,7 @@ fun SidebarContainer(
     app: AppManager,
     content: @Composable () -> Unit,
 ) {
+    val context = LocalContext.current
     val density = LocalDensity.current
     val sidebarWidthPx = with(density) { SIDEBAR_WIDTH_DP.dp.toPx() }
 
@@ -60,10 +65,11 @@ fun SidebarContainer(
         if (!isDragging) {
             animatedOffset.animateTo(
                 targetValue = targetOffset,
-                animationSpec = spring(
-                    dampingRatio = 0.8f,
-                    stiffness = 700f,
-                ),
+                animationSpec =
+                    spring(
+                        dampingRatio = 0.8f,
+                        stiffness = 700f,
+                    ),
             )
         }
     }
@@ -82,6 +88,21 @@ fun SidebarContainer(
     // only enable gestures when at root (no routes) - use reactive state
     val gesturesEnabled = app.router.routes.isEmpty()
 
+    // at root: back opens sidebar, or exits app if sidebar already open
+    PredictiveBackHandler(enabled = gesturesEnabled) { backEvents ->
+        try {
+            backEvents.collect { }
+        } catch (e: CancellationException) {
+            throw e
+        }
+
+        if (app.isSidebarVisible) {
+            (context as? Activity)?.moveTaskToBack(true)
+        } else {
+            app.isSidebarVisible = true
+        }
+    }
+
     Box(
         modifier = Modifier.fillMaxSize(),
     ) {
@@ -99,8 +120,7 @@ fun SidebarContainer(
                                     app.isSidebarVisible = false
                                 }
                             }
-                        }
-                        .pointerInput(Unit) {
+                        }.pointerInput(Unit) {
                             var totalDrag = 0f
                             detectHorizontalDragGestures(
                                 onDragStart = {
@@ -139,11 +159,12 @@ fun SidebarContainer(
                                         gestureOffset = 0f
 
                                         // determine if this is a valid drag that should affect the sidebar
-                                        isValidDrag = when {
-                                            app.isSidebarVisible -> true
-                                            offset.x < edgeThresholdPx -> true
-                                            else -> false
-                                        }
+                                        isValidDrag =
+                                            when {
+                                                app.isSidebarVisible -> true
+                                                offset.x < edgeThresholdPx -> true
+                                                else -> false
+                                            }
                                     },
                                     onDragEnd = {
                                         if (isDragging && isValidDrag) {
@@ -158,10 +179,11 @@ fun SidebarContainer(
                                                 animatedOffset.snapTo(currentDragPosition)
                                                 animatedOffset.animateTo(
                                                     targetValue = if (shouldBeOpen) sidebarWidthPx else 0f,
-                                                    animationSpec = spring(
-                                                        dampingRatio = 0.8f,
-                                                        stiffness = 700f,
-                                                    ),
+                                                    animationSpec =
+                                                        spring(
+                                                            dampingRatio = 0.8f,
+                                                            stiffness = 700f,
+                                                        ),
                                                 )
                                             }
                                         }
@@ -177,10 +199,11 @@ fun SidebarContainer(
                                                 animatedOffset.snapTo(currentDragPosition)
                                                 animatedOffset.animateTo(
                                                     targetValue = targetOffset,
-                                                    animationSpec = spring(
-                                                        dampingRatio = 0.8f,
-                                                        stiffness = 700f,
-                                                    ),
+                                                    animationSpec =
+                                                        spring(
+                                                            dampingRatio = 0.8f,
+                                                            stiffness = 700f,
+                                                        ),
                                                 )
                                             }
                                         }
@@ -205,7 +228,7 @@ fun SidebarContainer(
                             }
                         } else {
                             Modifier
-                        }
+                        },
                     ),
         ) {
             content()

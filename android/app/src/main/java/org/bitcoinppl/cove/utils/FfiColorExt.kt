@@ -19,8 +19,8 @@ fun FfiColor.toColor(): Color = toColor(isDark = !MaterialTheme.colorScheme.isLi
  * Convert FfiColor from Rust to Android Compose Color with explicit dark mode flag.
  * Use this overload when not in a Composable context.
  */
-fun FfiColor.toColor(isDark: Boolean): Color {
-    return when (this) {
+fun FfiColor.toColor(isDark: Boolean): Color =
+    when (this) {
         is FfiColor.Red -> Color.Red.withOpacity(v1)
         is FfiColor.Blue -> Color.Blue.withOpacity(v1)
         is FfiColor.Green -> {
@@ -43,7 +43,6 @@ fun FfiColor.toColor(isDark: Boolean): Color {
             ).withOpacity(v2)
         }
     }
-}
 
 /**
  * Apply FfiOpacity (0-100) to a Color

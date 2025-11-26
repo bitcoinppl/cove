@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
@@ -558,11 +557,12 @@ private fun WordInputField(
 
     // update suggestions when word or focus changes
     LaunchedEffect(word, isFocused) {
-        suggestions = if (isFocused && word.isNotEmpty()) {
-            autocomplete.autocomplete(word, allEnteredWords)
-        } else {
-            emptyList()
-        }
+        suggestions =
+            if (isFocused && word.isNotEmpty()) {
+                autocomplete.autocomplete(word, allEnteredWords)
+            } else {
+                emptyList()
+            }
     }
 
     Column {
@@ -638,17 +638,17 @@ private fun WordInputField(
         // suggestion dropdown
         if (suggestions.isNotEmpty()) {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        color = CoveColor.midnightBlue.copy(alpha = 0.95f),
-                        shape = RoundedCornerShape(bottomStart = 8.dp, bottomEnd = 8.dp),
-                    )
-                    .border(
-                        width = 1.dp,
-                        color = CoveColor.coveLightGray.copy(alpha = 0.3f),
-                        shape = RoundedCornerShape(bottomStart = 8.dp, bottomEnd = 8.dp),
-                    ),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .background(
+                            color = CoveColor.midnightBlue.copy(alpha = 0.95f),
+                            shape = RoundedCornerShape(bottomStart = 8.dp, bottomEnd = 8.dp),
+                        ).border(
+                            width = 1.dp,
+                            color = CoveColor.coveLightGray.copy(alpha = 0.3f),
+                            shape = RoundedCornerShape(bottomStart = 8.dp, bottomEnd = 8.dp),
+                        ),
             ) {
                 suggestions.forEach { suggestion ->
                     Text(
@@ -656,14 +656,14 @@ private fun WordInputField(
                         color = Color.White,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                onWordChanged(suggestion)
-                                suggestions = emptyList()
-                                onNext()
-                            }
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    onWordChanged(suggestion)
+                                    suggestions = emptyList()
+                                    onNext()
+                                }.padding(horizontal = 12.dp, vertical = 10.dp),
                     )
                 }
             }

@@ -72,7 +72,7 @@ fun QrCodeScanView(
     val cameraPermissionState = rememberPermissionState(Manifest.permission.CAMERA)
 
     Box(
-        modifier = modifier.fillMaxSize().background(Color.Black)
+        modifier = modifier.fillMaxSize().background(Color.Black),
     ) {
         when {
             cameraPermissionState.status.isGranted -> {
@@ -96,10 +96,11 @@ fun QrCodeScanView(
         if (showTopBar) {
             IconButton(
                 onClick = onDismiss,
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .statusBarsPadding()
-                    .padding(16.dp)
+                modifier =
+                    Modifier
+                        .align(Alignment.TopStart)
+                        .statusBarsPadding()
+                        .padding(16.dp),
             ) {
                 Icon(
                     Icons.AutoMirrored.Filled.ArrowBack,
@@ -287,9 +288,10 @@ private fun QrScannerContent(
                 Icon(
                     imageVector = Icons.Outlined.CropFree,
                     contentDescription = "Scan area",
-                    modifier = Modifier
-                        .size(200.dp)
-                        .align(Alignment.Center),
+                    modifier =
+                        Modifier
+                            .size(200.dp)
+                            .align(Alignment.Center),
                     tint = Color.White.copy(alpha = 0.7f),
                 )
 
