@@ -29,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.navigation.CoveNavDisplay
+import org.bitcoinppl.cove.nfc.NfcScanSheet
 import org.bitcoinppl.cove.nfc.TapCardNfcManager
 import org.bitcoinppl.cove.sidebar.SidebarContainer
 import org.bitcoinppl.cove.ui.theme.CoveTheme
@@ -167,6 +168,12 @@ private fun SheetContent(
                     app = app,
                 )
             }
+        }
+        is AppSheetState.Nfc -> {
+            NfcScanSheet(
+                app = app,
+                onDismiss = onDismiss,
+            )
         }
         is AppSheetState.TapSigner -> {
             // TapSigner sheets would go here if needed

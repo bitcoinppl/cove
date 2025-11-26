@@ -1,17 +1,27 @@
 package org.bitcoinppl.cove
 
 import android.Manifest
+import android.content.Context
+import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.util.Base64
 import android.util.Log
+import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.FlashOff
+import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.outlined.CropFree
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -34,6 +44,31 @@ import com.google.mlkit.vision.common.InputImage
 import org.bitcoinppl.cove_core.MultiQr
 import org.bitcoinppl.cove_core.StringOrData
 import java.util.concurrent.Executors
+
+// haptic feedback helper
+private fun triggerHapticFeedback(context: Context) {
+    try {
+        val vibrator =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
+                vibratorManager?.defaultVibrator
+            } else {
+                @Suppress("DEPRECATION")
+                context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+            }
+
+        vibrator?.let {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                it.vibrate(VibrationEffect.createOneShot(50, VibrationEffect.DEFAULT_AMPLITUDE))
+            } else {
+                @Suppress("DEPRECATION")
+                it.vibrate(50)
+            }
+        }
+    } catch (e: Exception) {
+        Log.w("QrCodeScanView", "Failed to trigger haptic feedback", e)
+    }
+}
 
 private sealed class QrCodeScannerState {
     object Idle : QrCodeScannerState()
@@ -188,6 +223,27 @@ private fun QrScannerContent(
     val cameraProviderRef = remember { mutableStateOf<ProcessCameraProvider?>(null) }
     val previewRef = remember { mutableStateOf<Preview?>(null) }
     val analysisRef = remember { mutableStateOf<ImageAnalysis?>(null) }
+    val cameraRef = remember { mutableStateOf<Camera?>(null) }
+
+    // flashlight and zoom state
+    var isFlashOn by remember { mutableStateOf(false) }
+    var zoomLevel by remember { mutableStateOf(1.0f) } // 1.0 = 1x, 2.0 = 2x
+
+    // toggle flashlight
+    fun toggleFlash() {
+        cameraRef.value?.let { camera ->
+            isFlashOn = !isFlashOn
+            camera.cameraControl.enableTorch(isFlashOn)
+        }
+    }
+
+    // toggle zoom between 1x and 2x
+    fun toggleZoom() {
+        cameraRef.value?.let { camera ->
+            zoomLevel = if (zoomLevel == 1.0f) 2.0f else 1.0f
+            camera.cameraControl.setZoomRatio(zoomLevel)
+        }
+    }
 
     Box(modifier = modifier) {
         when (val state = scannerState) {
@@ -234,6 +290,7 @@ private fun QrScannerContent(
                                                         for (barcode in barcodes) {
                                                             if (barcode.format == Barcode.FORMAT_QR_CODE) {
                                                                 handleQrCode(
+                                                                    context = ctx,
                                                                     currentState = scannerState,
                                                                     barcode = barcode,
                                                                     scannedCodes = scannedCodes,
@@ -260,12 +317,14 @@ private fun QrScannerContent(
 
                             try {
                                 cameraProvider.unbindAll()
-                                cameraProvider.bindToLifecycle(
-                                    lifecycleOwner,
-                                    cameraSelector,
-                                    preview,
-                                    imageAnalysis,
-                                )
+                                val camera =
+                                    cameraProvider.bindToLifecycle(
+                                        lifecycleOwner,
+                                        cameraSelector,
+                                        preview,
+                                        imageAnalysis,
+                                    )
+                                cameraRef.value = camera
                             } catch (e: Exception) {
                                 Log.e("QrCodeScanView", "Camera binding failed", e)
                                 onDismiss()
@@ -283,6 +342,50 @@ private fun QrScannerContent(
                     },
                     modifier = Modifier.fillMaxSize(),
                 )
+
+                // flashlight and zoom controls - top of screen
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .align(Alignment.TopCenter)
+                            .statusBarsPadding()
+                            .padding(horizontal = 16.dp, vertical = 60.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    // flashlight toggle - top left
+                    Box(
+                        modifier =
+                            Modifier
+                                .size(44.dp)
+                                .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                                .clickable { toggleFlash() },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = if (isFlashOn) Icons.Filled.FlashOn else Icons.Filled.FlashOff,
+                            contentDescription = if (isFlashOn) "Turn off flashlight" else "Turn on flashlight",
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
+
+                    // zoom toggle - top right
+                    Box(
+                        modifier =
+                            Modifier
+                                .size(44.dp)
+                                .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                                .clickable { toggleZoom() },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = if (zoomLevel == 1.0f) "1x" else "2x",
+                            color = Color.White,
+                            fontWeight = FontWeight.Medium,
+                        )
+                    }
+                }
 
                 // viewfinder overlay - centered
                 Icon(
@@ -367,6 +470,7 @@ private fun QrScannerContent(
 }
 
 private fun handleQrCode(
+    context: Context,
     currentState: QrCodeScannerState,
     barcode: Barcode,
     scannedCodes: MutableSet<String>,
@@ -422,12 +526,14 @@ private fun handleQrCode(
             } catch (e: Exception) {
                 Log.d("QrCodeScanView", "Not a BBQr (single QR): ${e.message}")
                 // single QR code (not BBQr)
+                triggerHapticFeedback(context)
                 onStateUpdate(QrCodeScannerState.Complete(qrData))
                 return
             }
 
         // check if it's a BBQr
         if (!multiQr.isBbqr()) {
+            triggerHapticFeedback(context)
             onStateUpdate(QrCodeScannerState.Complete(qrData))
             return
         }
@@ -446,6 +552,9 @@ private fun handleQrCode(
         // add part to BBQr
         val result = multiQr.addPart(qr = qrString)
         val partsLeft = result.partsLeft()
+
+        // haptic feedback for each BBQr part scanned
+        triggerHapticFeedback(context)
 
         onStateUpdate(
             scanningState.copy(

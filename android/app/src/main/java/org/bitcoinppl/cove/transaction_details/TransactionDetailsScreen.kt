@@ -276,7 +276,7 @@ fun TransactionDetailsScreen(
     }
 
     // poll for confirmations if not fully confirmed
-    LaunchedEffect(transactionDetails, isPreview) {
+    LaunchedEffect(transactionDetails.txId(), isPreview) {
         if (isPreview || manager == null) return@LaunchedEffect
 
         if (!transactionDetails.isConfirmed()) {

@@ -81,9 +81,9 @@ fun SidebarView(
 
             IconButton(
                 onClick = {
-                    app.isSidebarVisible = false
-                    // TODO: implement NFC scanning
-                    // app.nfcReader.scan()
+                    app.closeSidebarAndNavigate {
+                        app.scanNfc()
+                    }
                 },
             ) {
                 Icon(

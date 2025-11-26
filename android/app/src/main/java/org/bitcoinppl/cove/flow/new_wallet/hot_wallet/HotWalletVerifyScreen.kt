@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -21,12 +20,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -123,6 +122,7 @@ fun HotWalletVerifyScreen(
 ) {
     var actualChipWidth by remember { mutableStateOf(80.dp) }
     val chipHeight = 46.dp
+    var showSkipAlert by remember { mutableStateOf(false) }
 
     var wordPositions by remember { mutableStateOf(mapOf<String, androidx.compose.ui.geometry.Offset>()) }
     var targetPosition by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
@@ -241,8 +241,9 @@ fun HotWalletVerifyScreen(
                 modifier =
                     Modifier
                         .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
                         .padding(vertical = 20.dp),
-                verticalArrangement = Arrangement.SpaceBetween,
+                verticalArrangement = Arrangement.spacedBy(24.dp),
             ) {
                 Column(
                     modifier =
@@ -304,43 +305,51 @@ fun HotWalletVerifyScreen(
                         val cellWidth = (maxWidth - 12.dp * 3) / 4
                         actualChipWidth = cellWidth
 
-                        LazyVerticalGrid(
-                            columns = GridCells.Fixed(4),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        // regular grid layout (not lazy) so we can scroll the whole screen
+                        Column(
                             verticalArrangement = Arrangement.spacedBy(12.dp),
-                            contentPadding = PaddingValues(0.dp),
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            itemsIndexed(
-                                options,
-                                key = { idx, value -> "word-$idx-$value" },
-                            ) { _, word ->
-                                if (animatingWord == word && overlayVisible) {
-                                    Box(
-                                        modifier =
-                                            Modifier
-                                                .fillMaxWidth()
-                                                .height(46.dp),
-                                    ) { }
-                                } else {
-                                    OptionChip(
-                                        text = word,
-                                        selected = false,
-                                        onClick = {
-                                            if (animatingWord == null) {
-                                                animatingWord = word
+                            options.chunked(4).forEach { rowItems ->
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    rowItems.forEach { word ->
+                                        Box(modifier = Modifier.weight(1f)) {
+                                            if (animatingWord == word && overlayVisible) {
+                                                Box(
+                                                    modifier =
+                                                        Modifier
+                                                            .fillMaxWidth()
+                                                            .height(46.dp),
+                                                ) { }
+                                            } else {
+                                                OptionChip(
+                                                    text = word,
+                                                    selected = false,
+                                                    onClick = {
+                                                        if (animatingWord == null) {
+                                                            animatingWord = word
+                                                        }
+                                                    },
+                                                    onPositionCaptured = { position ->
+                                                        wordPositions = wordPositions + (
+                                                            word to
+                                                                androidx.compose.ui.geometry.Offset(
+                                                                    position.x - rootOffset.x,
+                                                                    position.y - rootOffset.y,
+                                                                )
+                                                        )
+                                                    },
+                                                )
                                             }
-                                        },
-                                        onPositionCaptured = { position ->
-                                            wordPositions = wordPositions + (
-                                                word to
-                                                    androidx.compose.ui.geometry.Offset(
-                                                        position.x - rootOffset.x,
-                                                        position.y - rootOffset.y,
-                                                    )
-                                            )
-                                        },
-                                    )
+                                        }
+                                    }
+                                    // fill remaining slots if row is not complete
+                                    repeat(4 - rowItems.size) {
+                                        Spacer(modifier = Modifier.weight(1f))
+                                    }
                                 }
                             }
                         }
@@ -393,7 +402,7 @@ fun HotWalletVerifyScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.Center,
                     ) {
-                        TextButton(onClick = onSkip) {
+                        TextButton(onClick = { showSkipAlert = true }) {
                             Text(
                                 text = stringResource(R.string.btn_skip_verification),
                                 color = Color.White.copy(alpha = 0.9f),
@@ -401,6 +410,34 @@ fun HotWalletVerifyScreen(
                         }
                     }
                 }
+            }
+
+            // skip verification confirmation dialog
+            if (showSkipAlert) {
+                AlertDialog(
+                    onDismissRequest = { showSkipAlert = false },
+                    title = { Text("Skip verifying words?") },
+                    text = {
+                        Text(
+                            "Are you sure you want to skip verifying words? Without having a backup of these words, you could lose your bitcoin",
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                showSkipAlert = false
+                                onSkip()
+                            },
+                        ) {
+                            Text("Yes, Verify Later")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showSkipAlert = false }) {
+                            Text("Cancel")
+                        }
+                    },
+                )
             }
 
             if (animatingWord != null && overlayVisible) {
@@ -469,15 +506,48 @@ private fun OptionChip(
                     },
             contentAlignment = Alignment.Center,
         ) {
-            Text(
+            AutoSizeText(
                 text = text,
                 color = textColor,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.padding(horizontal = 14.dp),
+                modifier = Modifier.padding(horizontal = 6.dp),
             )
         }
     }
+}
+
+@Composable
+private fun AutoSizeText(
+    text: String,
+    modifier: Modifier = Modifier,
+    color: Color = Color.Unspecified,
+    fontWeight: FontWeight? = null,
+    maxLines: Int = Int.MAX_VALUE,
+    textAlign: TextAlign? = null,
+    maxFontSize: Int = 14,
+    minFontSize: Int = 8,
+) {
+    var fontSize by remember { mutableStateOf(maxFontSize) }
+    var readyToDraw by remember { mutableStateOf(false) }
+
+    Text(
+        text = text,
+        color = color,
+        fontWeight = fontWeight,
+        fontSize = fontSize.sp,
+        maxLines = maxLines,
+        overflow = TextOverflow.Ellipsis,
+        textAlign = textAlign,
+        softWrap = false,
+        modifier = modifier,
+        onTextLayout = { textLayoutResult ->
+            if (textLayoutResult.hasVisualOverflow && fontSize > minFontSize) {
+                fontSize -= 1
+            } else {
+                readyToDraw = true
+            }
+        },
+    )
 }

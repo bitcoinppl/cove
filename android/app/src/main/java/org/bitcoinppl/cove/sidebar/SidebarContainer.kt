@@ -106,44 +106,6 @@ fun SidebarContainer(
     Box(
         modifier = Modifier.fillMaxSize(),
     ) {
-        // backdrop overlay
-        if (openPercentage > 0f) {
-            Box(
-                modifier =
-                    Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.45f * openPercentage))
-                        .pointerInput(sidebarWidthPx) {
-                            detectTapGestures { offset ->
-                                // only close if tap is outside the sidebar area (to the right of it)
-                                if (offset.x > sidebarWidthPx) {
-                                    app.isSidebarVisible = false
-                                }
-                            }
-                        }.pointerInput(Unit) {
-                            var totalDrag = 0f
-                            detectHorizontalDragGestures(
-                                onDragStart = {
-                                    totalDrag = 0f
-                                },
-                                onDragEnd = {
-                                    // only close if swipe distance exceeded minimum threshold
-                                    if (totalDrag < -20f) {
-                                        app.isSidebarVisible = false
-                                    }
-                                    totalDrag = 0f
-                                },
-                                onDragCancel = {
-                                    totalDrag = 0f
-                                },
-                                onHorizontalDrag = { _, dragAmount ->
-                                    totalDrag += dragAmount
-                                },
-                            )
-                        },
-            )
-        }
-
         // main content
         Box(
             modifier =
@@ -168,7 +130,7 @@ fun SidebarContainer(
                                     },
                                     onDragEnd = {
                                         if (isDragging && isValidDrag) {
-                                            val threshold = sidebarWidthPx * 0.3f
+                                            val threshold = sidebarWidthPx * 0.15f
                                             val finalOffset = targetOffset + gestureOffset
                                             val shouldBeOpen = finalOffset > threshold
                                             val currentDragPosition = finalOffset.coerceIn(0f, sidebarWidthPx)
@@ -232,6 +194,44 @@ fun SidebarContainer(
                     ),
         ) {
             content()
+        }
+
+        // backdrop overlay - rendered after main content so it intercepts taps
+        if (openPercentage > 0f) {
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.45f * openPercentage))
+                        .pointerInput(sidebarWidthPx) {
+                            detectTapGestures { offset ->
+                                // only close if tap is outside the sidebar area (to the right of it)
+                                if (offset.x > sidebarWidthPx) {
+                                    app.isSidebarVisible = false
+                                }
+                            }
+                        }.pointerInput(Unit) {
+                            var totalDrag = 0f
+                            detectHorizontalDragGestures(
+                                onDragStart = {
+                                    totalDrag = 0f
+                                },
+                                onDragEnd = {
+                                    // only close if swipe distance exceeded minimum threshold
+                                    if (totalDrag < -10f) {
+                                        app.isSidebarVisible = false
+                                    }
+                                    totalDrag = 0f
+                                },
+                                onDragCancel = {
+                                    totalDrag = 0f
+                                },
+                                onHorizontalDrag = { _, dragAmount ->
+                                    totalDrag += dragAmount
+                                },
+                            )
+                        },
+            )
         }
 
         // sidebar view

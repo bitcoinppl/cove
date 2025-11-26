@@ -292,6 +292,10 @@ class AppManager private constructor() : FfiReconcile {
         sheetState = TaggedItem(AppSheetState.Qr)
     }
 
+    fun scanNfc() {
+        sheetState = TaggedItem(AppSheetState.Nfc)
+    }
+
     /**
      * Handle scanned QR code data by parsing and routing based on content type
      * Matches iOS implementation in CoveApp.swift

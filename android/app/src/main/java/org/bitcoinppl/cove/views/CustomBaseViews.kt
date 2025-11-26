@@ -5,8 +5,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -324,4 +326,36 @@ fun SwitchRow(
             onCheckChanged = onCheckChanged ?: {},
         )
     }
+}
+
+// SwiftUI-compatible VStack with default 8dp spacing between children
+@Composable
+fun VStack(
+    modifier: Modifier = Modifier,
+    spacing: Dp = 8.dp,
+    horizontalAlignment: Alignment.Horizontal = Alignment.Start,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = if (spacing > 0.dp) Arrangement.spacedBy(spacing) else Arrangement.Top,
+        horizontalAlignment = horizontalAlignment,
+        content = content,
+    )
+}
+
+// SwiftUI-compatible HStack with default 10dp spacing between children
+@Composable
+fun HStack(
+    modifier: Modifier = Modifier,
+    spacing: Dp = 10.dp,
+    verticalAlignment: Alignment.Vertical = Alignment.Top,
+    content: @Composable RowScope.() -> Unit,
+) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = if (spacing > 0.dp) Arrangement.spacedBy(spacing) else Arrangement.Start,
+        verticalAlignment = verticalAlignment,
+        content = content,
+    )
 }
