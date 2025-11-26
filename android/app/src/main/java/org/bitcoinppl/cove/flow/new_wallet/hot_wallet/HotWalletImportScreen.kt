@@ -9,7 +9,6 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -35,6 +34,8 @@ import androidx.compose.material.icons.filled.Nfc
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -66,10 +67,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -469,40 +470,52 @@ private fun WordInputGrid(
 
     val flatWords = enteredWords.flatten()
 
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(2),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+    Card(
         modifier = Modifier.fillMaxWidth(),
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainer,
+            ),
+        shape = RoundedCornerShape(10.dp),
     ) {
-        itemsIndexed(
-            items = flatWords,
-            key = { index, _ -> "word-input-$index" },
-        ) { index, word ->
-            WordInputField(
-                number = index + 1,
-                word = word,
-                numberOfWords = numberOfWords,
-                allEnteredWords = enteredWords,
-                isFocused = focusedField == index,
-                onWordChanged = { newWord ->
-                    val groupIndex = index / GROUPS_OF
-                    val wordIndex = index % GROUPS_OF
-                    val newWords = enteredWords.toMutableList()
-                    val newGroup = newWords[groupIndex].toMutableList()
-                    newGroup[wordIndex] = newWord
-                    newWords[groupIndex] = newGroup
-                    onWordsChanged(newWords)
-                },
-                onFocusChanged = { hasFocus ->
-                    if (hasFocus) onFocusChanged(index)
-                },
-                onNext = {
-                    if (index < wordCount - 1) {
-                        onFocusChanged(index + 1)
-                    }
-                },
-            )
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 24.dp),
+        ) {
+            itemsIndexed(
+                items = flatWords,
+                key = { index, _ -> "word-input-$index" },
+            ) { index, word ->
+                WordInputField(
+                    number = index + 1,
+                    word = word,
+                    numberOfWords = numberOfWords,
+                    allEnteredWords = enteredWords,
+                    isFocused = focusedField == index,
+                    onWordChanged = { newWord ->
+                        val groupIndex = index / GROUPS_OF
+                        val wordIndex = index % GROUPS_OF
+                        val newWords = enteredWords.toMutableList()
+                        val newGroup = newWords[groupIndex].toMutableList()
+                        newGroup[wordIndex] = newWord
+                        newWords[groupIndex] = newGroup
+                        onWordsChanged(newWords)
+                    },
+                    onFocusChanged = { hasFocus ->
+                        if (hasFocus) onFocusChanged(index)
+                    },
+                    onNext = {
+                        if (index < wordCount - 1) {
+                            onFocusChanged(index + 1)
+                        }
+                    },
+                )
+            }
         }
     }
 }
@@ -531,22 +544,31 @@ private fun WordInputField(
     val isValid = word.isNotEmpty() && autocomplete.isBip39Word(word)
     val hasInput = word.isNotEmpty()
 
-    val borderColor =
+    // underline color based on state (matching iOS)
+    val underlineColor =
         when {
-            !hasInput -> Color.Transparent
+            !hasInput && !isFocused -> MaterialTheme.colorScheme.onSurfaceVariant
+            !hasInput && isFocused -> MaterialTheme.colorScheme.onSurface
             isValid -> CoveColor.SuccessGreen.copy(alpha = 0.6f)
             else -> CoveColor.ErrorRed.copy(alpha = 0.7f)
         }
 
+    // text color based on state (matching iOS)
     val textColor =
         when {
-            !hasInput -> CoveColor.coveLightGray.copy(alpha = 0.45f)
+            !hasInput -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
             isValid -> CoveColor.SuccessGreen.copy(alpha = 0.8f)
             else -> CoveColor.ErrorRed
         }
 
+    // number color based on state
+    val numberColor =
+        when {
+            !hasInput -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+            else -> MaterialTheme.colorScheme.onSurfaceVariant
+        }
+
     val focusRequester = remember { FocusRequester() }
-    val focusManager = LocalFocusManager.current
 
     LaunchedEffect(isFocused) {
         if (isFocused) {
@@ -567,72 +589,74 @@ private fun WordInputField(
 
     Column {
         Row(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .height(40.dp)
-                    .background(
-                        color = Color.White.copy(alpha = 0.08f),
-                        shape = RoundedCornerShape(8.dp),
-                    ).border(
-                        width = if (borderColor != Color.Transparent) 2.dp else 0.dp,
-                        color = borderColor,
-                        shape = RoundedCornerShape(8.dp),
-                    ).padding(horizontal = 12.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Bottom,
         ) {
+            // number label with monospace font
             Text(
                 text = "$number.",
-                color = CoveColor.coveLightGray.copy(alpha = 0.6f),
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.width(28.dp),
+                style = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Monospace),
+                color = numberColor,
+                modifier = Modifier.width(32.dp),
             )
 
-            BasicTextField(
-                value = word,
-                onValueChange = { newValue ->
-                    val trimmed = newValue.trim().lowercase()
-                    onWordChanged(trimmed)
+            Spacer(Modifier.width(8.dp))
 
-                    // auto-advance when word is complete and valid
-                    if (trimmed.isNotEmpty() && autocomplete.isBip39Word(trimmed)) {
-                        suggestions = emptyList()
-                        onNext()
-                    }
-                },
-                textStyle =
-                    TextStyle(
-                        color = textColor,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium,
-                        textAlign = TextAlign.End,
-                    ),
-                singleLine = true,
-                cursorBrush = SolidColor(Color.White),
-                keyboardOptions =
-                    KeyboardOptions(
-                        capitalization = KeyboardCapitalization.None,
-                        autoCorrectEnabled = false,
-                        keyboardType = KeyboardType.Ascii,
-                        imeAction = ImeAction.Next,
-                    ),
-                keyboardActions =
-                    KeyboardActions(
-                        onNext = { onNext() },
-                    ),
-                modifier =
-                    Modifier
-                        .weight(1f)
-                        .focusRequester(focusRequester)
-                        .onFocusChanged { focusState ->
-                            onFocusChanged(focusState.isFocused)
-                            if (!focusState.isFocused) {
-                                suggestions = emptyList()
-                            }
-                        },
-            )
+            // text field with underline
+            Box(modifier = Modifier.weight(1f)) {
+                BasicTextField(
+                    value = word,
+                    onValueChange = { newValue ->
+                        val trimmed = newValue.trim().lowercase()
+                        onWordChanged(trimmed)
+
+                        // auto-advance when word is complete and valid
+                        if (trimmed.isNotEmpty() && autocomplete.isBip39Word(trimmed)) {
+                            suggestions = emptyList()
+                            onNext()
+                        }
+                    },
+                    textStyle =
+                        TextStyle(
+                            color = textColor,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                        ),
+                    singleLine = true,
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.onSurface),
+                    keyboardOptions =
+                        KeyboardOptions(
+                            capitalization = KeyboardCapitalization.None,
+                            autoCorrectEnabled = false,
+                            keyboardType = KeyboardType.Ascii,
+                            imeAction = ImeAction.Next,
+                        ),
+                    keyboardActions =
+                        KeyboardActions(
+                            onNext = { onNext() },
+                        ),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .focusRequester(focusRequester)
+                            .onFocusChanged { focusState ->
+                                onFocusChanged(focusState.isFocused)
+                                if (!focusState.isFocused) {
+                                    suggestions = emptyList()
+                                }
+                            },
+                )
+
+                // underline
+                Box(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .height(1.dp)
+                            .background(underlineColor)
+                            .align(Alignment.BottomStart),
+                )
+            }
         }
 
         // suggestion dropdown
@@ -642,18 +666,14 @@ private fun WordInputField(
                     Modifier
                         .fillMaxWidth()
                         .background(
-                            color = CoveColor.midnightBlue.copy(alpha = 0.95f),
-                            shape = RoundedCornerShape(bottomStart = 8.dp, bottomEnd = 8.dp),
-                        ).border(
-                            width = 1.dp,
-                            color = CoveColor.coveLightGray.copy(alpha = 0.3f),
+                            color = MaterialTheme.colorScheme.surfaceContainerHighest,
                             shape = RoundedCornerShape(bottomStart = 8.dp, bottomEnd = 8.dp),
                         ),
             ) {
                 suggestions.forEach { suggestion ->
                     Text(
                         text = suggestion,
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onSurface,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium,
                         modifier =

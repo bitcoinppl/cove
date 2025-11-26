@@ -230,7 +230,7 @@ struct WordCardView: View {
                         .foregroundStyle(.midnightBlue)
                         .multilineTextAlignment(.center)
                         .frame(alignment: .leading)
-                        .minimumScaleFactor(0.30)
+                        .minimumScaleFactor(0.2)
                         .lineLimit(sizeCategory >= .extraExtraLarge ? 5 : 1)
                         .font(isMiniDeviceOrLargeText(sizeCategory) ? .caption2 : .footnote)
 

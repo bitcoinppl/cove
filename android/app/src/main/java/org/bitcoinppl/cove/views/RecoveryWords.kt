@@ -129,9 +129,11 @@ fun RecoveryWordChip(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
+            AutoSizeText(
                 text = "$index.",
                 color = CoveColor.midnightBlue,
+                maxFontSize = 14.sp,
+                minimumScaleFactor = 0.5f,
             )
             Spacer(Modifier.width(8.dp))
             AutoSizeText(
@@ -141,7 +143,7 @@ fun RecoveryWordChip(
                 modifier = Modifier.weight(1f),
                 textAlign = TextAlign.Center,
                 maxFontSize = 14.sp,
-                minimumScaleFactor = 0.7f,
+                minimumScaleFactor = 0.75f,
             )
         }
     }

@@ -202,15 +202,21 @@ private fun EnterWordsWidget(
     val rightIndices = (6 until 12)
 
     fun numLabel(n: Int): String = String.format(Locale.US, "%2d.", n)
-    Box(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(10.dp))
-                .background(MaterialTheme.colorScheme.surfaceContainer)
-                .padding(start = 16.dp, top = 24.dp, end = 16.dp, bottom = 24.dp),
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainer,
+            ),
+        shape = RoundedCornerShape(10.dp),
     ) {
-        Row(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 24.dp),
+        ) {
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(16.dp),

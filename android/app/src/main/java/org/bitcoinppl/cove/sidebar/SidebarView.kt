@@ -232,7 +232,7 @@ private fun WalletItem(
             text = wallet.name ?: "Wallet",
             color = Color.White,
             maxFontSize = 17.sp,
-            minimumScaleFactor = 0.90f,
+            minimumScaleFactor = 0.80f,
             modifier = Modifier.weight(1f),
         )
     }

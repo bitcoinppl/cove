@@ -67,6 +67,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.DashDotsIndicator
 import org.bitcoinppl.cove.views.ImageButton
 import org.bitcoinppl.cove_core.WordValidator
@@ -510,44 +511,11 @@ private fun OptionChip(
                 text = text,
                 color = textColor,
                 fontWeight = FontWeight.Medium,
-                maxLines = 1,
+                maxFontSize = 14.sp,
+                minimumScaleFactor = 0.50f,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(horizontal = 6.dp),
             )
         }
     }
-}
-
-@Composable
-private fun AutoSizeText(
-    text: String,
-    modifier: Modifier = Modifier,
-    color: Color = Color.Unspecified,
-    fontWeight: FontWeight? = null,
-    maxLines: Int = Int.MAX_VALUE,
-    textAlign: TextAlign? = null,
-    maxFontSize: Int = 14,
-    minFontSize: Int = 8,
-) {
-    var fontSize by remember { mutableStateOf(maxFontSize) }
-    var readyToDraw by remember { mutableStateOf(false) }
-
-    Text(
-        text = text,
-        color = color,
-        fontWeight = fontWeight,
-        fontSize = fontSize.sp,
-        maxLines = maxLines,
-        overflow = TextOverflow.Ellipsis,
-        textAlign = textAlign,
-        softWrap = false,
-        modifier = modifier,
-        onTextLayout = { textLayoutResult ->
-            if (textLayoutResult.hasVisualOverflow && fontSize > minFontSize) {
-                fontSize -= 1
-            } else {
-                readyToDraw = true
-            }
-        },
-    )
 }

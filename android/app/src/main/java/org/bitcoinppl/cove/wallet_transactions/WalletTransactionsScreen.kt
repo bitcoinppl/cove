@@ -1,8 +1,10 @@
 package org.bitcoinppl.cove.wallet_transactions
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,6 +30,8 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -66,11 +70,15 @@ import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.isLight
 import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.BalanceAutoSizeText
+import org.bitcoinppl.cove.views.BitcoinShieldIcon
 import org.bitcoinppl.cove.views.ImageButton
 import org.bitcoinppl.cove_core.HotWalletRoute
 import org.bitcoinppl.cove_core.NewWalletRoute
 import org.bitcoinppl.cove_core.Route
+import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.Transaction
+import org.bitcoinppl.cove_core.WalletSettingsRoute
+import org.bitcoinppl.cove_core.WalletType
 import org.bitcoinppl.cove_core.types.TransactionDirection
 import org.bitcoinppl.cove_core.types.WalletId
 import java.text.NumberFormat
@@ -109,7 +117,7 @@ private fun WalletTransactionsDarkPreview() {
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun WalletTransactionsScreen(
     onBack: () -> Unit,
@@ -156,6 +164,10 @@ fun WalletTransactionsScreen(
     val listState = rememberLazyListState()
     val isScrolled = listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0
 
+    // state for wallet name rename dropdown
+    var showRenameMenu by remember { mutableStateOf(false) }
+    val isColdWallet = manager?.walletMetadata?.walletType == WalletType.COLD
+
     Scaffold(
         containerColor = CoveColor.midnightBlue,
         topBar = {
@@ -168,14 +180,53 @@ fun WalletTransactionsScreen(
                         navigationIconContentColor = Color.White,
                     ),
                 title = {
-                    if (isScrolled) {
-                        AutoSizeText(
-                            text = actualWalletName,
-                            maxFontSize = 16.sp,
-                            minimumScaleFactor = 0.75f,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color.White,
-                        )
+                    Box {
+                        Row(
+                            modifier = Modifier
+                                .combinedClickable(
+                                    onClick = {},
+                                    onLongClick = { showRenameMenu = true },
+                                )
+                                .padding(vertical = 8.dp, horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            if (isColdWallet) {
+                                BitcoinShieldIcon(
+                                    size = 13.dp,
+                                    color = Color.White,
+                                )
+                                Spacer(modifier = Modifier.size(8.dp))
+                            }
+                            AutoSizeText(
+                                text = actualWalletName,
+                                maxFontSize = 16.sp,
+                                minimumScaleFactor = 0.75f,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White,
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = showRenameMenu,
+                            onDismissRequest = { showRenameMenu = false },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.change_name)) },
+                                onClick = {
+                                    showRenameMenu = false
+                                    manager?.walletMetadata?.id?.let { id ->
+                                        app?.pushRoute(
+                                            Route.Settings(
+                                                SettingsRoute.Wallet(
+                                                    id = id,
+                                                    route = WalletSettingsRoute.CHANGE_NAME,
+                                                ),
+                                            ),
+                                        )
+                                    }
+                                },
+                            )
+                        }
                     }
                 },
                 navigationIcon = {

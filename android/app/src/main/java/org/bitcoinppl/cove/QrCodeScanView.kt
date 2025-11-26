@@ -14,6 +14,7 @@ import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -22,11 +23,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.FlashOff
 import androidx.compose.material.icons.filled.FlashOn
-import androidx.compose.material.icons.outlined.CropFree
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -227,7 +228,7 @@ private fun QrScannerContent(
 
     // flashlight and zoom state
     var isFlashOn by remember { mutableStateOf(false) }
-    var zoomLevel by remember { mutableStateOf(1.0f) } // 1.0 = 1x, 2.0 = 2x
+    var zoomLevel by remember { mutableStateOf(1.2f) } // 1.2 = "1x", 2.0 = 2x
 
     // toggle flashlight
     fun toggleFlash() {
@@ -237,10 +238,10 @@ private fun QrScannerContent(
         }
     }
 
-    // toggle zoom between 1x and 2x
+    // toggle zoom between 1x (1.2f) and 2x
     fun toggleZoom() {
         cameraRef.value?.let { camera ->
-            zoomLevel = if (zoomLevel == 1.0f) 2.0f else 1.0f
+            zoomLevel = if (zoomLevel == 1.2f) 2.0f else 1.2f
             camera.cameraControl.setZoomRatio(zoomLevel)
         }
     }
@@ -325,6 +326,7 @@ private fun QrScannerContent(
                                         imageAnalysis,
                                     )
                                 cameraRef.value = camera
+                                camera.cameraControl.setZoomRatio(zoomLevel)
                             } catch (e: Exception) {
                                 Log.e("QrCodeScanView", "Camera binding failed", e)
                                 onDismiss()
@@ -380,7 +382,7 @@ private fun QrScannerContent(
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
-                            text = if (zoomLevel == 1.0f) "1x" else "2x",
+                            text = if (zoomLevel == 1.2f) "1x" else "2x",
                             color = Color.White,
                             fontWeight = FontWeight.Medium,
                         )
@@ -388,15 +390,32 @@ private fun QrScannerContent(
                 }
 
                 // viewfinder overlay - centered
-                Icon(
-                    imageVector = Icons.Outlined.CropFree,
-                    contentDescription = "Scan area",
+                Canvas(
                     modifier =
                         Modifier
                             .size(200.dp)
                             .align(Alignment.Center),
-                    tint = Color.White.copy(alpha = 0.7f),
-                )
+                ) {
+                    val strokeWidth = 4.dp.toPx()
+                    val cornerLength = 40.dp.toPx()
+                    val color = Color.White.copy(alpha = 0.7f)
+
+                    // top-left corner
+                    drawLine(color, Offset(0f, cornerLength), Offset(0f, 0f), strokeWidth)
+                    drawLine(color, Offset(0f, 0f), Offset(cornerLength, 0f), strokeWidth)
+
+                    // top-right corner
+                    drawLine(color, Offset(size.width - cornerLength, 0f), Offset(size.width, 0f), strokeWidth)
+                    drawLine(color, Offset(size.width, 0f), Offset(size.width, cornerLength), strokeWidth)
+
+                    // bottom-left corner
+                    drawLine(color, Offset(0f, size.height - cornerLength), Offset(0f, size.height), strokeWidth)
+                    drawLine(color, Offset(0f, size.height), Offset(cornerLength, size.height), strokeWidth)
+
+                    // bottom-right corner
+                    drawLine(color, Offset(size.width - cornerLength, size.height), Offset(size.width, size.height), strokeWidth)
+                    drawLine(color, Offset(size.width, size.height - cornerLength), Offset(size.width, size.height), strokeWidth)
+                }
 
                 // overlay content
                 Column(

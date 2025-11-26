@@ -50,11 +50,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.ui.theme.MaterialSpacing
 import org.bitcoinppl.cove.utils.toComposeColor
+import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.MaterialDivider
 import org.bitcoinppl.cove.views.MaterialSection
 import org.bitcoinppl.cove.views.MaterialSettingsItem
@@ -123,9 +125,10 @@ fun WalletSettingsScreen(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text(
-                            style = MaterialTheme.typography.bodyLarge,
+                        AutoSizeText(
                             text = metadata.name,
+                            maxFontSize = 16.sp,
+                            minimumScaleFactor = 0.75f,
                             textAlign = TextAlign.Center,
                         )
                     }
