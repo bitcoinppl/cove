@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.views.AutoSizeText
+import org.bitcoinppl.cove.views.BalanceAutoSizeText
 import org.bitcoinppl.cove.views.ImageButton
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -70,7 +71,7 @@ fun CoinControlSetAmountScreen(
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = CoveColor.midnightBlue,
         topBar = {
             CenterAlignedTopAppBar(
                 colors =
@@ -271,15 +272,13 @@ private fun CoinControlAmountWidget(
             verticalAlignment = Alignment.Bottom,
         ) {
             Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                Text(
+                BalanceAutoSizeText(
                     text = amount,
-                    style =
-                        TextStyle(
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontSize = 48.sp,
-                            fontWeight = FontWeight.Bold,
-                            textAlign = TextAlign.Right,
-                        ),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    baseFontSize = 48.sp,
+                    minimumScaleFactor = 0.01f,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Right,
                     modifier = Modifier.fillMaxWidth(),
                 )
             }

@@ -182,12 +182,12 @@ fun WalletTransactionsScreen(
                 title = {
                     Box {
                         Row(
-                            modifier = Modifier
-                                .combinedClickable(
-                                    onClick = {},
-                                    onLongClick = { showRenameMenu = true },
-                                )
-                                .padding(vertical = 8.dp, horizontal = 16.dp),
+                            modifier =
+                                Modifier
+                                    .combinedClickable(
+                                        onClick = {},
+                                        onLongClick = { showRenameMenu = true },
+                                    ).padding(vertical = 8.dp, horizontal = 16.dp),
                             horizontalArrangement = Arrangement.Center,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {

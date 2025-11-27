@@ -96,7 +96,7 @@ fun SendScreen(
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.surface,
+        containerColor = CoveColor.midnightBlue,
         topBar = {
             CenterAlignedTopAppBar(
                 colors =
