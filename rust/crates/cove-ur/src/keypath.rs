@@ -172,7 +172,8 @@ impl CryptoKeypath {
                                 let hardened = decoder
                                     .bool()
                                     .map_err(|e| UrError::CborDecodeError(e.to_string()))?;
-                                let component = if hardened { index | HARDENED_FLAG } else { index };
+                                let component =
+                                    if hardened { index | HARDENED_FLAG } else { index };
                                 comp.push(component);
                                 i += 1;
                             } else {

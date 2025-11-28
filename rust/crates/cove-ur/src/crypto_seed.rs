@@ -311,4 +311,69 @@ mod tests {
         assert_eq!(cbor[1], 0x01);
         assert_eq!(cbor[2], 0x2C); // 0x012C = 300
     }
+
+    /// Test malformed CBOR: wrong tag
+    #[test]
+    fn test_crypto_seed_wrong_tag() {
+        use minicbor::{Encoder, data::Tag};
+
+        let mut cbor = Vec::new();
+        let mut encoder = Encoder::new(&mut cbor);
+
+        // use wrong tag (310 instead of 300)
+        encoder.tag(Tag::new(310)).unwrap();
+        encoder.map(1).unwrap();
+        encoder.u32(1).unwrap();
+        encoder.bytes(&[0xAB; 16]).unwrap();
+
+        let result = CryptoSeed::from_cbor(&cbor);
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), UrError::InvalidTag { expected: 300, actual: 310 }));
+    }
+
+    /// Test malformed CBOR: missing required field
+    #[test]
+    fn test_crypto_seed_missing_payload() {
+        use minicbor::{Encoder, data::Tag};
+
+        let mut cbor = Vec::new();
+        let mut encoder = Encoder::new(&mut cbor);
+
+        // correct tag but missing payload field
+        encoder.tag(Tag::new(300)).unwrap();
+        encoder.map(1).unwrap();
+        encoder.u32(2).unwrap(); // field 2 (creation_date) instead of 1 (payload)
+        encoder.u64(12345).unwrap();
+
+        let result = CryptoSeed::from_cbor(&cbor);
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            UrError::MissingField(field) => assert_eq!(field, "payload"),
+            _ => panic!("Expected MissingField error"),
+        }
+    }
+
+    /// Test malformed CBOR: corrupted CBOR structure
+    #[test]
+    fn test_crypto_seed_corrupted_cbor() {
+        // completely invalid CBOR
+        let invalid_cbor = vec![0xFF, 0xFF, 0xFF];
+        let result = CryptoSeed::from_cbor(&invalid_cbor);
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), UrError::CborDecodeError(_)));
+    }
+
+    /// Test malformed CBOR: truncated data
+    #[test]
+    fn test_crypto_seed_truncated_cbor() {
+        let entropy = vec![0xCD; 16];
+        let seed = CryptoSeed::new(entropy);
+        let cbor = seed.to_cbor().unwrap();
+
+        // truncate the CBOR data
+        let truncated = &cbor[..cbor.len() - 5];
+        let result = CryptoSeed::from_cbor(truncated);
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), UrError::CborDecodeError(_)));
+    }
 }
