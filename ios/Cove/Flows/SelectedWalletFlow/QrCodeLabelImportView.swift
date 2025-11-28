@@ -109,10 +109,9 @@ struct QrCodeLabelImportView: View {
                 switch try scanner.scan(qr: qr) {
                 case let .complete(_, rawData):
                     scanComplete = true
+                    // use rawData (the assembled string) - should always be available for labels
                     if let raw = rawData {
                         scannedCode = TaggedString(raw)
-                    } else if case let .string(str) = scanResult.data {
-                        scannedCode = TaggedString(str)
                     }
                     scanner.reset()
 
@@ -120,6 +119,7 @@ struct QrCodeLabelImportView: View {
                     progress = prog
                 }
             } catch {
+                scanner.reset()
                 app.alertState = TaggedItem(
                     .general(
                         title: "QR Scan Error",

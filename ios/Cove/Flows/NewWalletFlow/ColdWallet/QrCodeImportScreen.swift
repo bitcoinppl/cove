@@ -60,7 +60,7 @@ private enum AlertType {
 
 struct QrCodeImportScreen: View {
     @State private var scanner = QrScanner()
-    @State private var scannedCode: TaggedString?
+    @State private var scannedMultiFormat: TaggedItem<MultiFormat>?
     @State private var showingHelp = false
     @Environment(AppManager.self) var app
     @Environment(\.dismiss) private var dismiss
@@ -129,10 +129,22 @@ struct QrCodeImportScreen: View {
         .alert(item: $alert) { alert in
             alert.type.alert
         }
-        .onChange(of: scannedCode) { _, scannedCode in
-            guard let scannedCode else { return }
+        .onChange(of: scannedMultiFormat) { _, scannedMultiFormat in
+            guard let multiFormat = scannedMultiFormat?.item else { return }
             do {
-                let wallet = try Wallet.newFromXpub(xpub: scannedCode.value)
+                let wallet: Wallet
+                switch multiFormat {
+                case let .hardwareExport(export):
+                    wallet = try Wallet.newFromExport(export: export)
+                default:
+                    Log.warn("Unexpected format for wallet import: \(multiFormat)")
+                    alert = AlertItem(type: .error("Unexpected format for wallet import"))
+                    // reset state so user can retry
+                    scanComplete = false
+                    self.scannedMultiFormat = nil
+                    scanner.reset()
+                    return
+                }
                 let id = wallet.id()
                 Log.debug("Imported Wallet: \(id)")
                 alert = AlertItem(type: .success("Imported Wallet Successfully"))
@@ -176,20 +188,16 @@ struct QrCodeImportScreen: View {
 
             do {
                 switch try scanner.scan(qr: qr) {
-                case let .complete(_, rawData):
+                case let .complete(data, _):
                     scanComplete = true
-                    // use raw_data from completed scan (for multi-part) or original string
-                    if let raw = rawData {
-                        scannedCode = TaggedString(raw)
-                    } else if case let .string(str) = scanResult.data {
-                        scannedCode = TaggedString(str)
-                    }
+                    scannedMultiFormat = TaggedItem(data)
                     scanner.reset()
 
                 case let .inProgress(prog):
                     progress = prog
                 }
             } catch {
+                scanner.reset()
                 app.alertState = TaggedItem(
                     .general(
                         title: "QR Scan Error",

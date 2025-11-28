@@ -323,10 +323,11 @@ impl From<ExtendedDescriptor> for Descriptor {
 impl From<pubport::descriptor::Descriptors> for Descriptors {
     fn from(descriptors: pubport::descriptor::Descriptors) -> Self {
         // TODO: remove string round-trip once bdk_wallet updates to miniscript 0.13
+        // expect is okay: descriptor already validated by pubport, just bridging miniscript versions
         let external: ExtendedDescriptor =
-            descriptors.external.to_string().parse().expect("valid descriptor");
+            descriptors.external.to_string().parse().expect("pubport already validated");
         let internal: ExtendedDescriptor =
-            descriptors.internal.to_string().parse().expect("valid descriptor");
+            descriptors.internal.to_string().parse().expect("pubport already validated");
 
         Self { external: external.into(), internal: internal.into() }
     }

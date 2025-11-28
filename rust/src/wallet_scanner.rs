@@ -520,10 +520,11 @@ impl Wallets {
         ] {
             if let Some(json) = json {
                 // TODO: remove string round-trip once bdk_wallet updates to miniscript 0.13
+                // expect is okay: descriptor already validated by pubport, just bridging miniscript versions
                 let external: ExtendedDescriptor =
-                    json.external.to_string().parse().expect("valid descriptor");
+                    json.external.to_string().parse().expect("pubport already validated");
                 let internal: ExtendedDescriptor =
-                    json.internal.to_string().parse().expect("valid descriptor");
+                    json.internal.to_string().parse().expect("pubport already validated");
                 let params = BdkWallet::create(external, internal).network(network);
 
                 let wallet =

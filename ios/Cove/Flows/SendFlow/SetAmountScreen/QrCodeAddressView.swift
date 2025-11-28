@@ -96,19 +96,26 @@ struct QrCodeAddressView: View {
 
             do {
                 switch try scanner.scan(qr: qr) {
-                case let .complete(_, rawData):
-                    scanComplete = true
-                    if let raw = rawData {
-                        scannedCode = TaggedString(raw)
-                    } else if case let .string(str) = scanResult.data {
-                        scannedCode = TaggedString(str)
+                case let .complete(data, _):
+                    if case let .address(addr) = data {
+                        scannedCode = TaggedString(addr.address().string())
+                        scanComplete = true
+                    } else {
+                        // not an address - show error and allow retry
+                        scanner.reset()
+                        app.alertState = TaggedItem(
+                            .general(
+                                title: "Invalid QR Code",
+                                message: "Please scan a valid Bitcoin address QR code"
+                            )
+                        )
                     }
-                    scanner.reset()
 
                 case let .inProgress(prog):
                     progress = prog
                 }
             } catch {
+                scanner.reset()
                 dismiss()
                 app.alertState = TaggedItem(
                     .general(
