@@ -304,7 +304,7 @@ checksum = "5b5d691fd092aacec7e05046b7d04897d58d6d65ed3152cb6cf65dababcfabed"
 dependencies = [
  "bdk_core",
  "bitcoin",
- "miniscript",
+ "miniscript 12.3.5",
  "rusqlite",
  "serde",
 ]
@@ -363,7 +363,7 @@ dependencies = [
  "bdk_file_store",
  "bip39",
  "bitcoin",
- "miniscript",
+ "miniscript 12.3.5",
  "rand_core 0.6.4",
  "serde",
  "serde_json",
@@ -421,7 +421,7 @@ dependencies = [
  "bitcoin-io",
  "bitcoin-units",
  "bitcoin_hashes 0.14.0",
- "hex-conservative 0.2.1",
+ "hex-conservative 0.2.2",
  "hex_lit",
  "secp256k1",
  "serde",
@@ -475,8 +475,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bb18c03d0db0247e147a21a6faafd5a7eb851c743db062de72018b6b7e8e4d16"
 dependencies = [
  "bitcoin-io",
- "hex-conservative 0.2.1",
+ "hex-conservative 0.2.2",
  "serde",
+]
+
+[[package]]
+name = "bitcoin_hashes"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e0982261c82a50d89d1a411602afee0498b3e0debe3d36693f0c661352809639"
+dependencies = [
+ "hex-conservative 0.3.1",
 ]
 
 [[package]]
@@ -773,6 +782,7 @@ dependencies = [
  "cove-tap-card",
  "cove-tokio-ext",
  "cove-types",
+ "cove-ur",
  "cove-util",
  "csv",
  "data-encoding",
@@ -780,9 +790,10 @@ dependencies = [
  "dirs",
  "eyre",
  "flume",
+ "foundation-ur",
  "futures",
  "hex",
- "itertools",
+ "itertools 0.14.0",
  "jiff",
  "memchr",
  "nid",
@@ -924,8 +935,10 @@ dependencies = [
  "bdk_wallet",
  "bitcoin",
  "cove-macros",
+ "cove-ur",
  "derive_more",
  "eyre",
+ "foundation-ur",
  "hex",
  "jiff",
  "nid",
@@ -939,6 +952,22 @@ dependencies = [
  "tracing",
  "uniffi 0.30.0",
  "url",
+]
+
+[[package]]
+name = "cove-ur"
+version = "0.1.0"
+dependencies = [
+ "bip39",
+ "bitcoin",
+ "eyre",
+ "foundation-ur",
+ "hex",
+ "minicbor 2.1.3",
+ "pubport",
+ "serde_json",
+ "thiserror 2.0.17",
+ "uniffi 0.30.0",
 ]
 
 [[package]]
@@ -965,6 +994,21 @@ checksum = "59ed5838eebb26a2bb2e58f6d5b5316989ae9d08bab10e0e6d103e656d1b0280"
 dependencies = [
  "libc",
 ]
+
+[[package]]
+name = "crc"
+version = "3.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5eb8a2a1cd12ab0d987a5d5e825195d372001a4094a0376319d5a0ad71c1ba0d"
+dependencies = [
+ "crc-catalog",
+]
+
+[[package]]
+name = "crc-catalog"
+version = "2.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "19d374276b40fb8bbdee95aef7c7fa6b5316ec764510eb64b8dd0e2ed0d7e7f5"
 
 [[package]]
 name = "crc32fast"
@@ -1141,7 +1185,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a0af349d96a5d9ad77ba59f1437aa6f348b03c5865d4f7d6e7a662d60aedce39"
 dependencies = [
  "bitcoin",
- "hex-conservative 0.2.1",
+ "hex-conservative 0.2.2",
  "log",
  "reqwest",
  "serde",
@@ -1212,18 +1256,27 @@ dependencies = [
 ]
 
 [[package]]
-name = "fnv"
-version = "1.0.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
-
-[[package]]
 name = "form_urlencoded"
 version = "1.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb4cb245038516f5f85277875cdaa4f7d2c9a0fa0468de06ed190163b1581fcf"
 dependencies = [
  "percent-encoding",
+]
+
+[[package]]
+name = "foundation-ur"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "de4d0b63162220b26a3a955478ebc02e51fe77aa38181d058c55f3d1d6664428"
+dependencies = [
+ "bitcoin_hashes 0.15.0",
+ "crc",
+ "heapless",
+ "itertools 0.10.5",
+ "minicbor 0.24.4",
+ "phf",
+ "rand_xoshiro",
 ]
 
 [[package]]
@@ -1402,6 +1455,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "hash32"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "47d60b12902ba28e2730cd37e95b8c9223af2808df9e902d4df49588d1470606"
+dependencies = [
+ "byteorder",
+]
+
+[[package]]
 name = "hashbrown"
 version = "0.14.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1427,6 +1489,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "heapless"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0bfb9eb618601c89945a70e254898da93b13be0388091d42117462b265bb3fad"
+dependencies = [
+ "hash32",
+ "stable_deref_trait",
+]
+
+[[package]]
 name = "heck"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1446,12 +1518,27 @@ checksum = "212ab92002354b4819390025006c897e8140934349e8635c9b077f47b4dcbd20"
 
 [[package]]
 name = "hex-conservative"
-version = "0.2.1"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5313b072ce3c597065a808dbf612c4c8e8590bdbf8b579508bf7a762c5eae6cd"
+checksum = "fda06d18ac606267c40c04e41b9947729bf8b9efe74bd4e82b61a5f26a510b9f"
 dependencies = [
  "arrayvec",
 ]
+
+[[package]]
+name = "hex-conservative"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d2b9348ee0d8d4e3a894946c1ab104d08a2e44ca13656613afada8905ea609b6"
+dependencies = [
+ "arrayvec",
+]
+
+[[package]]
+name = "hex-conservative"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9ee770c000993d17c185713463d5ebfbd1af9afae4c17cc295640104383bfbf0"
 
 [[package]]
 name = "hex_lit"
@@ -1461,12 +1548,11 @@ checksum = "3011d1213f159867b13cfd6ac92d2cd5f1345762c63be3554e84092d85a50bbd"
 
 [[package]]
 name = "http"
-version = "1.3.1"
+version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f4a85d31aea989eead29a3aaf9e1115a180df8282431156e533de47660892565"
+checksum = "e3ba2a386d7f85a81f119ad7498ebe444d2e22c2af0b86b069416ace48b3311a"
 dependencies = [
  "bytes",
- "fnv",
  "itoa",
 ]
 
@@ -1714,6 +1800,15 @@ checksum = "a6cb138bb79a146c1bd460005623e142ef0181e3d0219cb493e02f7d08a35695"
 
 [[package]]
 name = "itertools"
+version = "0.10.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b0fd2260e829bddf4cb6ea802289de2f86d6a7a690192fbe91b3f46e0f2c8473"
+dependencies = [
+ "either",
+]
+
+[[package]]
+name = "itertools"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2b192c782037fadd9cfa75548310488aabdbf3d2da73885b31bd0abd03351285"
@@ -1869,6 +1964,46 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f52b00d39961fc5b2736ea853c9cc86238e165017a493d1d5c8eac6bdc4cc273"
 
 [[package]]
+name = "minicbor"
+version = "0.24.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "29be4f60e41fde478b36998b88821946aafac540e53591e76db53921a0cc225b"
+dependencies = [
+ "minicbor-derive 0.15.3",
+]
+
+[[package]]
+name = "minicbor"
+version = "2.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f9a1119e42fbacc2bb65d860de6eb7c930562bc71d42dca026d06b0228231f77"
+dependencies = [
+ "minicbor-derive 0.18.3",
+]
+
+[[package]]
+name = "minicbor-derive"
+version = "0.15.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bd2209fff77f705b00c737016a48e73733d7fbccb8b007194db148f03561fb70"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "minicbor-derive"
+version = "0.18.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "50fcf6ee04e942da7d65066bf427fe7bdd229256998809eeecee25db6dc9aac2"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "minimal-lexical"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1883,6 +2018,17 @@ dependencies = [
  "bech32",
  "bitcoin",
  "serde",
+]
+
+[[package]]
+name = "miniscript"
+version = "13.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "867b1f11e0545ad5ebbddd8a9f18756d9657a6758bf10d96cf15ddd0b726b650"
+dependencies = [
+ "bech32",
+ "bitcoin",
+ "hex-conservative 1.0.0",
 ]
 
 [[package]]
@@ -2079,6 +2225,48 @@ dependencies = [
 ]
 
 [[package]]
+name = "phf"
+version = "0.11.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1fd6780a80ae0c52cc120a26a1a42c1ae51b247a253e4e06113d23d2c2edd078"
+dependencies = [
+ "phf_macros",
+ "phf_shared",
+]
+
+[[package]]
+name = "phf_generator"
+version = "0.11.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c80231409c20246a13fddb31776fb942c38553c51e871f8cbd687a4cfb5843d"
+dependencies = [
+ "phf_shared",
+ "rand 0.8.5",
+]
+
+[[package]]
+name = "phf_macros"
+version = "0.11.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f84ac04429c13a7ff43785d75ad27569f2951ce0ffd30a3321230db2fc727216"
+dependencies = [
+ "phf_generator",
+ "phf_shared",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "phf_shared"
+version = "0.11.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "67eabc2ef2a60eb7faa00097bd1ffdb5bd28e62bf39990626a582201b7a754e5"
+dependencies = [
+ "siphasher 1.0.1",
+]
+
+[[package]]
 name = "pin-project-lite"
 version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2167,15 +2355,13 @@ dependencies = [
 
 [[package]]
 name = "pubport"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0f3d3922955cf3c57f1db242c1c71ba723cd91b854790723d9b04c638b6de37c"
+version = "0.5.0"
 dependencies = [
  "bitcoin",
  "derive_more",
  "log",
  "memchr",
- "miniscript",
+ "miniscript 13.0.0",
  "serde",
  "serde_json",
  "thiserror 2.0.17",
@@ -2320,6 +2506,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "99d9a13982dcf210057a8a78572b2217b667c3beacbf3a0d8b454f6f82837d38"
 dependencies = [
  "getrandom 0.3.4",
+]
+
+[[package]]
+name = "rand_xoshiro"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6f97cdb2a36ed4183de61b2f824cc45c9f1037f28afe0a322e9fff4c108b5aaa"
+dependencies = [
+ "rand_core 0.6.4",
 ]
 
 [[package]]
@@ -3013,9 +3208,9 @@ dependencies = [
 
 [[package]]
 name = "tower-http"
-version = "0.6.6"
+version = "0.6.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "adc82fd73de2a9722ac5da747f12383d2bfdb93591ee6c58486e0097890f05f2"
+checksum = "9cf146f99d442e8e68e585f5d798ccd3cad9a7835b917e09728880a862706456"
 dependencies = [
  "bitflags",
  "bytes",
@@ -3054,9 +3249,9 @@ dependencies = [
 
 [[package]]
 name = "tracing-attributes"
-version = "0.1.30"
+version = "0.1.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "81383ab64e72a7a8b8e13130c49e3dab29def6d0c7d76a03087b3cf71c5c6903"
+checksum = "7490cfa5ec963746568740651ac6781f701c9c5ea257c58e057f3ba8cf69e8da"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3065,9 +3260,9 @@ dependencies = [
 
 [[package]]
 name = "tracing-core"
-version = "0.1.34"
+version = "0.1.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b9d12581f227e93f094d3af2ae690a574abb8a2b9b7a96e7cfe9647b2b617678"
+checksum = "7a04e24fab5c89c6a36eb8558c9656f30d81de51dfa4d3b45f26b21d61fa0a6c"
 dependencies = [
  "once_cell",
  "valuable",
@@ -3173,7 +3368,7 @@ dependencies = [
 [[package]]
 name = "uniffi"
 version = "0.30.0"
-source = "git+https://github.com/mozilla/uniffi-rs?branch=main#a3c08b9f6e1a66ff66ca57f913dd0c3b1716655e"
+source = "git+https://github.com/mozilla/uniffi-rs?branch=main#1944b589988485cdb1c11e98e4e9ca62804e0308"
 dependencies = [
  "anyhow",
  "camino",
@@ -3215,7 +3410,7 @@ dependencies = [
 [[package]]
 name = "uniffi_bindgen"
 version = "0.30.0"
-source = "git+https://github.com/mozilla/uniffi-rs?branch=main#a3c08b9f6e1a66ff66ca57f913dd0c3b1716655e"
+source = "git+https://github.com/mozilla/uniffi-rs?branch=main#1944b589988485cdb1c11e98e4e9ca62804e0308"
 dependencies = [
  "anyhow",
  "askama",
@@ -3252,7 +3447,7 @@ dependencies = [
 [[package]]
 name = "uniffi_build"
 version = "0.30.0"
-source = "git+https://github.com/mozilla/uniffi-rs?branch=main#a3c08b9f6e1a66ff66ca57f913dd0c3b1716655e"
+source = "git+https://github.com/mozilla/uniffi-rs?branch=main#1944b589988485cdb1c11e98e4e9ca62804e0308"
 dependencies = [
  "anyhow",
  "camino",
@@ -3281,7 +3476,7 @@ dependencies = [
 [[package]]
 name = "uniffi_core"
 version = "0.30.0"
-source = "git+https://github.com/mozilla/uniffi-rs?branch=main#a3c08b9f6e1a66ff66ca57f913dd0c3b1716655e"
+source = "git+https://github.com/mozilla/uniffi-rs?branch=main#1944b589988485cdb1c11e98e4e9ca62804e0308"
 dependencies = [
  "anyhow",
  "async-compat",
@@ -3306,7 +3501,7 @@ dependencies = [
 [[package]]
 name = "uniffi_internal_macros"
 version = "0.30.0"
-source = "git+https://github.com/mozilla/uniffi-rs?branch=main#a3c08b9f6e1a66ff66ca57f913dd0c3b1716655e"
+source = "git+https://github.com/mozilla/uniffi-rs?branch=main#1944b589988485cdb1c11e98e4e9ca62804e0308"
 dependencies = [
  "anyhow",
  "indexmap",
@@ -3335,7 +3530,7 @@ dependencies = [
 [[package]]
 name = "uniffi_macros"
 version = "0.30.0"
-source = "git+https://github.com/mozilla/uniffi-rs?branch=main#a3c08b9f6e1a66ff66ca57f913dd0c3b1716655e"
+source = "git+https://github.com/mozilla/uniffi-rs?branch=main#1944b589988485cdb1c11e98e4e9ca62804e0308"
 dependencies = [
  "camino",
  "fs-err",
@@ -3363,7 +3558,7 @@ dependencies = [
 [[package]]
 name = "uniffi_meta"
 version = "0.30.0"
-source = "git+https://github.com/mozilla/uniffi-rs?branch=main#a3c08b9f6e1a66ff66ca57f913dd0c3b1716655e"
+source = "git+https://github.com/mozilla/uniffi-rs?branch=main#1944b589988485cdb1c11e98e4e9ca62804e0308"
 dependencies = [
  "anyhow",
  "siphasher 1.0.1",
@@ -3387,7 +3582,7 @@ dependencies = [
 [[package]]
 name = "uniffi_pipeline"
 version = "0.30.0"
-source = "git+https://github.com/mozilla/uniffi-rs?branch=main#a3c08b9f6e1a66ff66ca57f913dd0c3b1716655e"
+source = "git+https://github.com/mozilla/uniffi-rs?branch=main#1944b589988485cdb1c11e98e4e9ca62804e0308"
 dependencies = [
  "anyhow",
  "heck",
@@ -3399,7 +3594,7 @@ dependencies = [
 [[package]]
 name = "uniffi_testing"
 version = "0.30.0"
-source = "git+https://github.com/mozilla/uniffi-rs?branch=main#a3c08b9f6e1a66ff66ca57f913dd0c3b1716655e"
+source = "git+https://github.com/mozilla/uniffi-rs?branch=main#1944b589988485cdb1c11e98e4e9ca62804e0308"
 dependencies = [
  "anyhow",
  "camino",
@@ -3423,7 +3618,7 @@ dependencies = [
 [[package]]
 name = "uniffi_udl"
 version = "0.30.0"
-source = "git+https://github.com/mozilla/uniffi-rs?branch=main#a3c08b9f6e1a66ff66ca57f913dd0c3b1716655e"
+source = "git+https://github.com/mozilla/uniffi-rs?branch=main#1944b589988485cdb1c11e98e4e9ca62804e0308"
 dependencies = [
  "anyhow",
  "textwrap",
@@ -3618,7 +3813,7 @@ dependencies = [
 [[package]]
 name = "weedle2"
 version = "5.0.0"
-source = "git+https://github.com/mozilla/uniffi-rs?branch=main#a3c08b9f6e1a66ff66ca57f913dd0c3b1716655e"
+source = "git+https://github.com/mozilla/uniffi-rs?branch=main#1944b589988485cdb1c11e98e4e9ca62804e0308"
 dependencies = [
  "nom",
 ]
@@ -3818,9 +4013,9 @@ checksum = "d6bbff5f0aada427a1e5a6da5f1f98158182f26556f345ac9e04d36d0ebed650"
 
 [[package]]
 name = "winnow"
-version = "0.7.13"
+version = "0.7.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "21a0236b59786fed61e2a80582dd500fe61f18b5dca67a4a067d0bc9039339cf"
+checksum = "5a5364e9d77fcdeeaa6062ced926ee3381faa2ee02d3eb83a5c27a8825540829"
 dependencies = [
  "memchr",
 ]
@@ -3902,18 +4097,18 @@ dependencies = [
 
 [[package]]
 name = "zerocopy"
-version = "0.8.28"
+version = "0.8.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "43fa6694ed34d6e57407afbccdeecfa268c470a7d2a5b0cf49ce9fcc345afb90"
+checksum = "4ea879c944afe8a2b25fef16bb4ba234f47c694565e97383b36f3a878219065c"
 dependencies = [
  "zerocopy-derive",
 ]
 
 [[package]]
 name = "zerocopy-derive"
-version = "0.8.28"
+version = "0.8.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c640b22cd9817fae95be82f0d2f90b11f7605f6c319d16705c459b27ac2cbc26"
+checksum = "cf955aa904d6040f70dc8e9384444cb1030aed272ba3cb09bbc4ab9e7c1f34f5"
 dependencies = [
  "proc-macro2",
  "quote",
