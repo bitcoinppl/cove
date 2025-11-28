@@ -277,4 +277,62 @@ mod tests {
         let decoded = CryptoPsbt::from_ur_string(&ur_string).unwrap();
         assert_eq!(decoded.to_bytes(), psbt_bytes);
     }
+
+    /// Test malformed CBOR: wrong tag
+    #[test]
+    fn test_crypto_psbt_wrong_tag() {
+        use minicbor::{Encoder, data::Tag};
+
+        let mut cbor = Vec::new();
+        let mut encoder = Encoder::new(&mut cbor);
+
+        // use wrong tag (300 instead of 310)
+        encoder.tag(Tag::new(300)).unwrap();
+        encoder.bytes(&[0x70, 0x73, 0x62, 0x74, 0xff]).unwrap();
+
+        let result = CryptoPsbt::from_cbor(&cbor);
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), UrError::InvalidTag { expected: 310, actual: 300 }));
+    }
+
+    /// Test malformed CBOR: invalid PSBT data
+    #[test]
+    fn test_crypto_psbt_invalid_psbt_data() {
+        use minicbor::{Encoder, data::Tag};
+
+        let mut cbor = Vec::new();
+        let mut encoder = Encoder::new(&mut cbor);
+
+        // correct tag but invalid PSBT bytes (missing magic)
+        encoder.tag(Tag::new(310)).unwrap();
+        encoder.bytes(&[0x00, 0x00, 0x00]).unwrap();
+
+        let result = CryptoPsbt::from_cbor(&cbor);
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), UrError::CborDecodeError(_)));
+    }
+
+    /// Test malformed CBOR: corrupted structure
+    #[test]
+    fn test_crypto_psbt_corrupted_cbor() {
+        // completely invalid CBOR
+        let invalid_cbor = vec![0xFF, 0xFF, 0xFF];
+        let result = CryptoPsbt::from_cbor(&invalid_cbor);
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), UrError::CborDecodeError(_)));
+    }
+
+    /// Test malformed CBOR: truncated data
+    #[test]
+    fn test_crypto_psbt_truncated_cbor() {
+        let psbt = test_psbt();
+        let crypto_psbt = CryptoPsbt::new(psbt);
+        let cbor = crypto_psbt.to_cbor().unwrap();
+
+        // truncate the CBOR data
+        let truncated = &cbor[..cbor.len() - 10];
+        let result = CryptoPsbt::from_cbor(truncated);
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), UrError::CborDecodeError(_)));
+    }
 }

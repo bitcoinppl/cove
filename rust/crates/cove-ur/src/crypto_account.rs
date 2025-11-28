@@ -400,4 +400,67 @@ mod tests {
             "Empty account should return None for preferred descriptor"
         );
     }
+
+    /// Test malformed CBOR: wrong tag
+    #[test]
+    fn test_crypto_account_wrong_tag() {
+        use minicbor::{Encoder, data::Tag};
+
+        let mut cbor = Vec::new();
+        let mut encoder = Encoder::new(&mut cbor);
+
+        // use wrong tag (300 instead of 311)
+        encoder.tag(Tag::new(300)).unwrap();
+        encoder.map(1).unwrap();
+        encoder.u32(1).unwrap();
+        encoder.u32(0x12345678).unwrap();
+
+        let result = CryptoAccount::from_cbor(&cbor);
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), UrError::InvalidTag { expected: 311, actual: 300 }));
+    }
+
+    /// Test malformed CBOR: missing master fingerprint
+    #[test]
+    fn test_crypto_account_missing_fingerprint() {
+        use minicbor::{Encoder, data::Tag};
+
+        let mut cbor = Vec::new();
+        let mut encoder = Encoder::new(&mut cbor);
+
+        // correct tag but missing master fingerprint (key 1)
+        encoder.tag(Tag::new(311)).unwrap();
+        encoder.map(1).unwrap();
+        encoder.u32(2).unwrap(); // key 2 (output_descriptors) without key 1
+        encoder.array(0).unwrap();
+
+        let result = CryptoAccount::from_cbor(&cbor);
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            UrError::MissingField(field) => assert_eq!(field, "master_fingerprint"),
+            _ => panic!("Expected MissingField error"),
+        }
+    }
+
+    /// Test malformed CBOR: corrupted structure
+    #[test]
+    fn test_crypto_account_corrupted_cbor() {
+        // completely invalid CBOR
+        let invalid_cbor = vec![0xFF, 0xFF, 0xFF];
+        let result = CryptoAccount::from_cbor(&invalid_cbor);
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), UrError::CborDecodeError(_)));
+    }
+
+    /// Test malformed CBOR: truncated data
+    #[test]
+    fn test_crypto_account_truncated_cbor() {
+        let cbor = hex::decode(BCR_SPEC_CBOR_HEX).unwrap();
+
+        // truncate the CBOR data
+        let truncated = &cbor[..cbor.len() - 20];
+        let result = CryptoAccount::from_cbor_untagged(truncated);
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), UrError::CborDecodeError(_)));
+    }
 }

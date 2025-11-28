@@ -553,4 +553,87 @@ mod tests {
         let parsed_xpub = Xpub::from_str(&result).unwrap();
         assert_eq!(parsed_xpub.depth, 3, "should default to account level depth (3)");
     }
+
+    /// Test malformed CBOR: wrong tag
+    #[test]
+    fn test_crypto_hdkey_wrong_tag() {
+        use minicbor::{Encoder, data::Tag};
+
+        let mut cbor = Vec::new();
+        let mut encoder = Encoder::new(&mut cbor);
+
+        // use wrong tag (300 instead of 303)
+        encoder.tag(Tag::new(300)).unwrap();
+        encoder.map(3).unwrap();
+        encoder.u32(1).unwrap();
+        encoder.bool(false).unwrap();
+        encoder.u32(2).unwrap();
+        encoder.bool(false).unwrap();
+        encoder.u32(3).unwrap();
+        encoder.bytes(&vec![0x02; 33]).unwrap();
+
+        let result = CryptoHdkey::from_cbor(&cbor);
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), UrError::InvalidTag { expected: 303, actual: 300 }));
+    }
+
+    /// Test malformed CBOR: missing required field
+    #[test]
+    fn test_crypto_hdkey_missing_key_data() {
+        use minicbor::{Encoder, data::Tag};
+
+        let mut cbor = Vec::new();
+        let mut encoder = Encoder::new(&mut cbor);
+
+        // correct tag but missing key_data (field 3)
+        encoder.tag(Tag::new(303)).unwrap();
+        encoder.map(2).unwrap();
+        encoder.u32(1).unwrap();
+        encoder.bool(false).unwrap();
+        encoder.u32(2).unwrap();
+        encoder.bool(false).unwrap();
+
+        let result = CryptoHdkey::from_cbor(&cbor);
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            UrError::MissingField(field) => assert_eq!(field, "key_data"),
+            _ => panic!("Expected MissingField error"),
+        }
+    }
+
+    /// Test malformed CBOR: invalid key data length
+    #[test]
+    fn test_crypto_hdkey_invalid_key_data_length() {
+        use minicbor::{Encoder, data::Tag};
+
+        let mut cbor = Vec::new();
+        let mut encoder = Encoder::new(&mut cbor);
+
+        // correct tag but wrong key data length (32 bytes for public key, should be 33)
+        encoder.tag(Tag::new(303)).unwrap();
+        encoder.map(3).unwrap();
+        encoder.u32(1).unwrap();
+        encoder.bool(false).unwrap();
+        encoder.u32(2).unwrap();
+        encoder.bool(false).unwrap(); // public key
+        encoder.u32(3).unwrap();
+        encoder.bytes(&vec![0x02; 32]).unwrap(); // wrong length
+
+        let result = CryptoHdkey::from_cbor(&cbor);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            UrError::InvalidKeyDataLength { expected: 33, actual: 32 }
+        ));
+    }
+
+    /// Test malformed CBOR: corrupted structure
+    #[test]
+    fn test_crypto_hdkey_corrupted_cbor() {
+        // completely invalid CBOR
+        let invalid_cbor = vec![0xFF, 0xFF, 0xFF];
+        let result = CryptoHdkey::from_cbor(&invalid_cbor);
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), UrError::CborDecodeError(_)));
+    }
 }
