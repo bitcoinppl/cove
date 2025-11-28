@@ -27,10 +27,10 @@ impl<'a> Ur<'a> {
     }
 
     /// Get the UR type (e.g., "crypto-account", "crypto-psbt")
-    pub fn ur_type(&self) -> &str {
+    pub fn ur_type(&self) -> Result<&str> {
         match self {
             Ur::Normalized(inner) => inner.ur_type(),
-            Ur::Direct(ur) => ur.as_type(),
+            Ur::Direct(ur) => Ok(ur.as_type()),
         }
     }
 
@@ -58,10 +58,10 @@ impl<'a> Ur<'a> {
     }
 
     /// Get a foundation_ur::UR reference
-    pub fn to_foundation_ur(&self) -> FoundationUr<'_> {
+    pub fn to_foundation_ur(&self) -> Result<FoundationUr<'_>> {
         match self {
             Ur::Normalized(inner) => inner.to_foundation_ur(),
-            Ur::Direct(ur) => ur.clone(),
+            Ur::Direct(ur) => Ok(ur.clone()),
         }
     }
 }
@@ -82,17 +82,23 @@ impl UrNormalized {
     }
 
     /// Get the UR type (e.g., "crypto-account", "crypto-psbt")
-    pub fn ur_type(&self) -> &str {
-        self.normalized.strip_prefix("ur:").and_then(|s| s.split('/').next()).unwrap_or("unknown")
+    pub fn ur_type(&self) -> Result<&str> {
+        self.normalized
+            .strip_prefix("ur:")
+            .and_then(|s| s.split('/').next())
+            .ok_or_else(|| UrError::InvalidField(
+                "Failed to extract UR type from normalized string".into()
+            ))
     }
 
     /// Get a foundation_ur::UR that borrows from self
-    pub fn to_foundation_ur(&self) -> FoundationUr<'_> {
-        FoundationUr::parse(&self.normalized).expect("already validated")
+    pub fn to_foundation_ur(&self) -> Result<FoundationUr<'_>> {
+        FoundationUr::parse(&self.normalized)
+            .map_err(|e| UrError::UrParseError(e.to_string()))
     }
 
     /// Get message/fragment bytes (decoded from bytewords)
     pub fn message_bytes(&self) -> Option<Vec<u8>> {
-        Ur::extract_message_bytes(&self.to_foundation_ur())
+        self.to_foundation_ur().ok().and_then(|ur| Ur::extract_message_bytes(&ur))
     }
 }
