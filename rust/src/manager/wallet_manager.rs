@@ -967,8 +967,8 @@ impl RustWalletManager {
                 let next_index = (current_index + 1) % order.len();
                 let (fiat_or_btc, unit) = order[next_index];
 
-                self.dispatch(Action::UpdateFiatOrBtc(fiat_or_btc));
-                self.dispatch(Action::UpdateUnit(unit));
+                metadata.fiat_or_btc = fiat_or_btc;
+                metadata.selected_unit = unit;
             }
 
             Action::ToggleDetailsExpanded => {
