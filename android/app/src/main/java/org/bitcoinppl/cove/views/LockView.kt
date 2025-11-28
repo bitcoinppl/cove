@@ -28,11 +28,15 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -219,9 +223,21 @@ private fun BiometricView(
     onBiometricTap: () -> Unit,
     onEnterPinTap: () -> Unit,
 ) {
-    // auto-trigger biometric when view appears (like iOS .onAppear)
-    LaunchedEffect(Unit) {
-        onBiometricTap()
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    // trigger biometric only when Activity is RESUMED (not during onStart)
+    // BiometricPrompt fails silently if called during onStart, before onResume
+    DisposableEffect(lifecycleOwner) {
+        val observer =
+            LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_RESUME) {
+                    onBiometricTap()
+                }
+            }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
     }
 
     Column(
