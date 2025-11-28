@@ -48,6 +48,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import org.bitcoinppl.cove.Auth
@@ -63,66 +65,13 @@ import org.bitcoinppl.cove_core.AuthManagerException
 import org.bitcoinppl.cove_core.AuthType
 import org.bitcoinppl.cove_core.Database
 import org.bitcoinppl.cove_core.Route
+import org.bitcoinppl.cove_core.SecurityAlertState
+import org.bitcoinppl.cove_core.SecuritySettingsAction
+import org.bitcoinppl.cove_core.SecuritySettingsResult
+import org.bitcoinppl.cove_core.SecuritySheetState
 import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.WalletMetadata
 import org.bitcoinppl.cove_core.WalletSettingsRoute
-import org.bitcoinppl.cove_core.types.WalletId
-
-// sheet states for full-screen PIN flows
-private sealed class SecuritySheetState {
-    data object None : SecuritySheetState()
-
-    data object NewPin : SecuritySheetState()
-
-    data object RemovePin : SecuritySheetState()
-
-    data object ChangePin : SecuritySheetState()
-
-    data object EnableBiometric : SecuritySheetState()
-
-    data object DisableBiometric : SecuritySheetState()
-
-    data object EnableWipeDataPin : SecuritySheetState()
-
-    data class RemoveWipeDataPin(
-        val nextState: SecuritySheetState? = null,
-    ) : SecuritySheetState()
-
-    data object EnableDecoyPin : SecuritySheetState()
-
-    data class RemoveDecoyPin(
-        val nextState: SecuritySheetState? = null,
-    ) : SecuritySheetState()
-
-    data object RemoveAllTrickPins : SecuritySheetState()
-}
-
-// alert states for validation dialogs
-private sealed class SecurityAlertState {
-    data class UnverifiedWallets(
-        val walletId: WalletId,
-    ) : SecurityAlertState()
-
-    data object ConfirmEnableWipeMePin : SecurityAlertState()
-
-    data object ConfirmDecoyPin : SecurityAlertState()
-
-    data object NoteNoFaceIdWhenTrickPins : SecurityAlertState()
-
-    data object NoteNoFaceIdWhenWipeMePin : SecurityAlertState()
-
-    data object NoteNoFaceIdWhenDecoyPin : SecurityAlertState()
-
-    data object NotePinRequired : SecurityAlertState()
-
-    data class NoteFaceIdDisabling(
-        val nextAlert: SecurityAlertState,
-    ) : SecurityAlertState()
-
-    data class ExtraSetPinError(
-        val message: String,
-    ) : SecurityAlertState()
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -347,8 +296,8 @@ private fun SecuritySection(app: org.bitcoinppl.cove.AppManager) {
                 BiometricManager.BIOMETRIC_SUCCESS
         }
 
-    // sheet and alert state
-    var sheetState: SecuritySheetState by remember { mutableStateOf(SecuritySheetState.None) }
+    // sheet and alert state (using Rust enums)
+    var sheetState: SecuritySheetState by remember { mutableStateOf(SecuritySheetState.NONE) }
     var alertState: SecurityAlertState? by remember { mutableStateOf(null) }
 
     // local state for decoy mode (settings changes only affect UI, not persisted)
@@ -356,6 +305,9 @@ private fun SecuritySection(app: org.bitcoinppl.cove.AppManager) {
     var decoyModeFaceIdEnabled by remember { mutableStateOf(false) }
     var decoyModeWipeDataPinEnabled by remember { mutableStateOf(false) }
     var decoyModeDecoyPinEnabled by remember { mutableStateOf(false) }
+
+    // track which action triggered decoy mode update (for local state updates)
+    var lastDecoyAction: SecuritySettingsAction? by remember { mutableStateOf(null) }
 
     // computed toggle values
     val isBiometricEnabled =
@@ -386,111 +338,62 @@ private fun SecuritySection(app: org.bitcoinppl.cove.AppManager) {
             auth.isDecoyPinEnabled
         }
 
-    // toggle handlers
+    // handle security result from Rust validation
+    fun handleSecurityResult(result: SecuritySettingsResult, action: SecuritySettingsAction) {
+        when (result) {
+            is SecuritySettingsResult.ProceedToSheet -> sheetState = result.v1
+            is SecuritySettingsResult.ShowAlert -> alertState = result.v1
+            is SecuritySettingsResult.DecoyModeLocalUpdate -> {
+                lastDecoyAction = action
+                when (action) {
+                    is SecuritySettingsAction.ToggleBiometric -> decoyModeFaceIdEnabled = action.enable
+                    is SecuritySettingsAction.TogglePin -> decoyModePinEnabled = action.enable
+                    is SecuritySettingsAction.ToggleWipeDataPin -> decoyModeWipeDataPinEnabled = action.enable
+                    is SecuritySettingsAction.ToggleDecoyPin -> decoyModeDecoyPinEnabled = action.enable
+                    is SecuritySettingsAction.ChangePin -> {}
+                }
+            }
+        }
+    }
+
+    // toggle handlers using Rust validation
     fun onBiometricToggle(enable: Boolean) {
-        if (auth.isInDecoyMode()) {
-            decoyModeFaceIdEnabled = enable
-            return
-        }
-
-        if (!enable) {
-            sheetState = SecuritySheetState.DisableBiometric
-            return
-        }
-
-        // check trick PINs before enabling biometrics
-        when {
-            auth.isDecoyPinEnabled && auth.isWipeDataPinEnabled ->
-                alertState = SecurityAlertState.NoteNoFaceIdWhenTrickPins
-
-            auth.isWipeDataPinEnabled ->
-                alertState = SecurityAlertState.NoteNoFaceIdWhenWipeMePin
-
-            auth.isDecoyPinEnabled ->
-                alertState = SecurityAlertState.NoteNoFaceIdWhenDecoyPin
-
-            else ->
-                sheetState = SecuritySheetState.EnableBiometric
-        }
+        val action = SecuritySettingsAction.ToggleBiometric(enable)
+        val result = auth.rust.validateSecurityAction(action, app.rust.unverifiedWalletIds())
+        handleSecurityResult(result, action)
     }
 
     fun onPinToggle(enable: Boolean) {
-        if (auth.isInDecoyMode()) {
-            decoyModePinEnabled = enable
-            return
-        }
-
-        sheetState = if (enable) SecuritySheetState.NewPin else SecuritySheetState.RemovePin
+        val action = SecuritySettingsAction.TogglePin(enable)
+        val result = auth.rust.validateSecurityAction(action, app.rust.unverifiedWalletIds())
+        handleSecurityResult(result, action)
     }
 
     fun onWipeDataPinToggle(enable: Boolean) {
-        if (!enable) {
-            if (auth.isInDecoyMode()) {
-                decoyModeWipeDataPinEnabled = false
-                return
-            }
-            sheetState = SecuritySheetState.RemoveWipeDataPin()
-            return
-        }
-
-        // check unverified wallets
-        val unverified = app.rust.unverifiedWalletIds()
-        if (unverified.isNotEmpty()) {
-            alertState = SecurityAlertState.UnverifiedWallets(unverified.first())
-            return
-        }
-
-        // PIN is required
-        if (auth.type == AuthType.BIOMETRIC) {
-            alertState = SecurityAlertState.NotePinRequired
-            return
-        }
-
-        // must disable biometric first
-        if (auth.type == AuthType.BOTH) {
-            alertState = SecurityAlertState.NoteFaceIdDisabling(SecurityAlertState.ConfirmEnableWipeMePin)
-            return
-        }
-
-        alertState = SecurityAlertState.ConfirmEnableWipeMePin
+        val action = SecuritySettingsAction.ToggleWipeDataPin(enable)
+        val result = auth.rust.validateSecurityAction(action, app.rust.unverifiedWalletIds())
+        handleSecurityResult(result, action)
     }
 
     fun onDecoyPinToggle(enable: Boolean) {
-        if (!enable) {
-            if (auth.isInDecoyMode()) {
-                decoyModeDecoyPinEnabled = false
-                return
-            }
-            sheetState = SecuritySheetState.RemoveDecoyPin()
-            return
-        }
-
-        if (auth.type == AuthType.BIOMETRIC) {
-            alertState = SecurityAlertState.NotePinRequired
-            return
-        }
-
-        if (auth.type == AuthType.BOTH) {
-            alertState = SecurityAlertState.NoteFaceIdDisabling(SecurityAlertState.ConfirmDecoyPin)
-            return
-        }
-
-        alertState = SecurityAlertState.ConfirmDecoyPin
+        val action = SecuritySettingsAction.ToggleDecoyPin(enable)
+        val result = auth.rust.validateSecurityAction(action, app.rust.unverifiedWalletIds())
+        handleSecurityResult(result, action)
     }
 
     // setter functions
     fun setPin(pin: String) {
         if (auth.isInDecoyMode()) {
             decoyModePinEnabled = true
-            sheetState = SecuritySheetState.None
+            sheetState = SecuritySheetState.NONE
             return
         }
         auth.dispatch(AuthManagerAction.SetPin(pin))
-        sheetState = SecuritySheetState.None
+        sheetState = SecuritySheetState.NONE
     }
 
     fun setWipeDataPin(pin: String) {
-        sheetState = SecuritySheetState.None
+        sheetState = SecuritySheetState.NONE
         if (auth.isInDecoyMode()) {
             decoyModeWipeDataPinEnabled = true
             return
@@ -504,7 +407,7 @@ private fun SecuritySection(app: org.bitcoinppl.cove.AppManager) {
     }
 
     fun setDecoyPin(pin: String) {
-        sheetState = SecuritySheetState.None
+        sheetState = SecuritySheetState.NONE
         if (auth.isInDecoyMode()) {
             decoyModeDecoyPinEnabled = true
             return
@@ -528,13 +431,13 @@ private fun SecuritySection(app: org.bitcoinppl.cove.AppManager) {
                 object : BiometricPrompt.AuthenticationCallback() {
                     override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
                         super.onAuthenticationError(errorCode, errString)
-                        sheetState = SecuritySheetState.None
+                        sheetState = SecuritySheetState.NONE
                     }
 
                     override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                         super.onAuthenticationSucceeded(result)
                         auth.dispatch(AuthManagerAction.EnableBiometric)
-                        sheetState = SecuritySheetState.None
+                        sheetState = SecuritySheetState.NONE
                     }
 
                     override fun onAuthenticationFailed() {
@@ -556,7 +459,7 @@ private fun SecuritySection(app: org.bitcoinppl.cove.AppManager) {
 
     // trigger biometric prompt when entering EnableBiometric state
     LaunchedEffect(sheetState) {
-        if (sheetState == SecuritySheetState.EnableBiometric) {
+        if (sheetState == SecuritySheetState.ENABLE_BIOMETRIC) {
             biometricPrompt?.authenticate(promptInfo)
         }
     }
@@ -596,7 +499,7 @@ private fun SecuritySection(app: org.bitcoinppl.cove.AppManager) {
                 MaterialSettingsItem(
                     title = "Change PIN",
                     icon = Icons.Default.LockOpen,
-                    onClick = { sheetState = SecuritySheetState.ChangePin },
+                    onClick = { sheetState = SecuritySheetState.CHANGE_PIN },
                 )
                 itemCount++
 
@@ -629,12 +532,12 @@ private fun SecuritySection(app: org.bitcoinppl.cove.AppManager) {
         SecurityAlertDialog(
             state = state,
             onDismiss = { alertState = null },
-            onConfirm = { nextState ->
+            onConfirmSheet = { nextSheet ->
                 alertState = null
-                when (nextState) {
-                    is SecurityAlertState -> alertState = nextState
-                    is SecuritySheetState -> sheetState = nextState
-                }
+                sheetState = nextSheet
+            },
+            onConfirmAlert = { nextAlert ->
+                alertState = nextAlert
             },
             auth = auth,
             app = app,
@@ -642,10 +545,10 @@ private fun SecuritySection(app: org.bitcoinppl.cove.AppManager) {
     }
 
     // full-screen sheet dialogs
-    if (sheetState != SecuritySheetState.None && sheetState != SecuritySheetState.EnableBiometric) {
+    if (sheetState != SecuritySheetState.NONE && sheetState != SecuritySheetState.ENABLE_BIOMETRIC) {
         SecuritySheetDialog(
             state = sheetState,
-            onDismiss = { sheetState = SecuritySheetState.None },
+            onDismiss = { sheetState = SecuritySheetState.NONE },
             onNextState = { nextState -> sheetState = nextState },
             onSetPin = ::setPin,
             onSetWipeDataPin = ::setWipeDataPin,
@@ -660,7 +563,8 @@ private fun SecuritySection(app: org.bitcoinppl.cove.AppManager) {
 private fun SecurityAlertDialog(
     state: SecurityAlertState,
     onDismiss: () -> Unit,
-    onConfirm: (Any?) -> Unit,
+    onConfirmSheet: (SecuritySheetState) -> Unit,
+    onConfirmAlert: (SecurityAlertState) -> Unit,
     auth: org.bitcoinppl.cove.AuthManager,
     app: org.bitcoinppl.cove.AppManager,
 ) {
@@ -697,7 +601,7 @@ private fun SecurityAlertDialog(
             )
         }
 
-        is SecurityAlertState.ConfirmEnableWipeMePin -> {
+        SecurityAlertState.ConfirmEnableWipeMePin -> {
             AlertDialog(
                 onDismissRequest = onDismiss,
                 title = { Text("Are you sure?") },
@@ -710,7 +614,7 @@ private fun SecurityAlertDialog(
                     )
                 },
                 confirmButton = {
-                    TextButton(onClick = { onConfirm(SecuritySheetState.EnableWipeDataPin) }) {
+                    TextButton(onClick = { onConfirmSheet(SecuritySheetState.ENABLE_WIPE_DATA_PIN) }) {
                         Text("Yes, Enable Wipe Data PIN")
                     }
                 },
@@ -722,7 +626,7 @@ private fun SecurityAlertDialog(
             )
         }
 
-        is SecurityAlertState.ConfirmDecoyPin -> {
+        SecurityAlertState.ConfirmDecoyPin -> {
             AlertDialog(
                 onDismissRequest = onDismiss,
                 title = { Text("Are you sure?") },
@@ -735,7 +639,7 @@ private fun SecurityAlertDialog(
                     )
                 },
                 confirmButton = {
-                    TextButton(onClick = { onConfirm(SecuritySheetState.EnableDecoyPin) }) {
+                    TextButton(onClick = { onConfirmSheet(SecuritySheetState.ENABLE_DECOY_PIN) }) {
                         Text("Yes, Enable Decoy PIN")
                     }
                 },
@@ -747,7 +651,7 @@ private fun SecurityAlertDialog(
             )
         }
 
-        is SecurityAlertState.NotePinRequired -> {
+        SecurityAlertState.NotePinRequired -> {
             AlertDialog(
                 onDismissRequest = onDismiss,
                 title = { Text("PIN is required") },
@@ -760,7 +664,7 @@ private fun SecurityAlertDialog(
             )
         }
 
-        is SecurityAlertState.NoteFaceIdDisabling -> {
+        SecurityAlertState.NoteFaceIdDisablingForWipeMePin -> {
             AlertDialog(
                 onDismissRequest = onDismiss,
                 title = { Text("Disable Biometric Unlock?") },
@@ -774,7 +678,7 @@ private fun SecurityAlertDialog(
                     TextButton(
                         onClick = {
                             auth.dispatch(AuthManagerAction.DisableBiometric)
-                            onConfirm(state.nextAlert)
+                            onConfirmAlert(SecurityAlertState.ConfirmEnableWipeMePin)
                         },
                     ) {
                         Text("Disable Biometric")
@@ -788,7 +692,35 @@ private fun SecurityAlertDialog(
             )
         }
 
-        is SecurityAlertState.NoteNoFaceIdWhenTrickPins -> {
+        SecurityAlertState.NoteFaceIdDisablingForDecoyPin -> {
+            AlertDialog(
+                onDismissRequest = onDismiss,
+                title = { Text("Disable Biometric Unlock?") },
+                text = {
+                    Text(
+                        "Enabling this trick PIN will disable biometric unlock for Cove.\n\nGoing forward, you " +
+                            "will have to use your PIN to unlock Cove.",
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            auth.dispatch(AuthManagerAction.DisableBiometric)
+                            onConfirmAlert(SecurityAlertState.ConfirmDecoyPin)
+                        },
+                    ) {
+                        Text("Disable Biometric")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = onDismiss) {
+                        Text("Cancel")
+                    }
+                },
+            )
+        }
+
+        SecurityAlertState.NoteNoFaceIdWhenTrickPins -> {
             AlertDialog(
                 onDismissRequest = onDismiss,
                 title = { Text("Can't do that") },
@@ -799,7 +731,7 @@ private fun SecurityAlertDialog(
                     )
                 },
                 confirmButton = {
-                    TextButton(onClick = { onConfirm(SecuritySheetState.RemoveAllTrickPins) }) {
+                    TextButton(onClick = { onConfirmSheet(SecuritySheetState.REMOVE_ALL_TRICK_PINS) }) {
                         Text("Yes, Disable trick PINs")
                     }
                 },
@@ -811,7 +743,7 @@ private fun SecurityAlertDialog(
             )
         }
 
-        is SecurityAlertState.NoteNoFaceIdWhenWipeMePin -> {
+        SecurityAlertState.NoteNoFaceIdWhenWipeMePin -> {
             AlertDialog(
                 onDismissRequest = onDismiss,
                 title = { Text("Can't do that") },
@@ -819,13 +751,14 @@ private fun SecurityAlertDialog(
                 confirmButton = {
                     TextButton(
                         onClick = {
+                            // if no decoy PIN, we can enable biometric after removing wipe data PIN
                             val nextSheet =
                                 if (!auth.isDecoyPinEnabled) {
-                                    SecuritySheetState.EnableBiometric
+                                    SecuritySheetState.REMOVE_WIPE_DATA_PIN_THEN_ENABLE_BIOMETRIC
                                 } else {
-                                    null
+                                    SecuritySheetState.REMOVE_WIPE_DATA_PIN
                                 }
-                            onConfirm(SecuritySheetState.RemoveWipeDataPin(nextSheet))
+                            onConfirmSheet(nextSheet)
                         },
                     ) {
                         Text("Disable Wipe Data PIN")
@@ -839,7 +772,7 @@ private fun SecurityAlertDialog(
             )
         }
 
-        is SecurityAlertState.NoteNoFaceIdWhenDecoyPin -> {
+        SecurityAlertState.NoteNoFaceIdWhenDecoyPin -> {
             AlertDialog(
                 onDismissRequest = onDismiss,
                 title = { Text("Can't do that") },
@@ -847,13 +780,14 @@ private fun SecurityAlertDialog(
                 confirmButton = {
                     TextButton(
                         onClick = {
+                            // if no wipe data PIN, we can enable biometric after removing decoy PIN
                             val nextSheet =
                                 if (!auth.isWipeDataPinEnabled) {
-                                    SecuritySheetState.EnableBiometric
+                                    SecuritySheetState.REMOVE_DECOY_PIN_THEN_ENABLE_BIOMETRIC
                                 } else {
-                                    null
+                                    SecuritySheetState.REMOVE_DECOY_PIN
                                 }
-                            onConfirm(SecuritySheetState.RemoveDecoyPin(nextSheet))
+                            onConfirmSheet(nextSheet)
                         },
                     ) {
                         Text("Disable Decoy PIN")
@@ -893,139 +827,168 @@ private fun SecuritySheetDialog(
     auth: org.bitcoinppl.cove.AuthManager,
     onAlertState: (SecurityAlertState) -> Unit,
 ) {
-    Box(
-        modifier =
-            Modifier
-                .fillMaxSize()
-                .background(Color.Black),
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
-        when (state) {
-            is SecuritySheetState.NewPin -> {
-                NewPinView(
-                    onComplete = onSetPin,
-                    backAction = onDismiss,
-                )
-            }
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .background(Color.Black),
+        ) {
+            when (state) {
+                SecuritySheetState.NEW_PIN -> {
+                    NewPinView(
+                        onComplete = onSetPin,
+                        backAction = onDismiss,
+                    )
+                }
 
-            is SecuritySheetState.RemovePin -> {
-                NumberPadPinView(
-                    title = "Enter Current PIN",
-                    isPinCorrect = { pin ->
-                        if (auth.isInDecoyMode()) auth.checkDecoyPin(pin) else auth.checkPin(pin)
-                    },
-                    showPin = false,
-                    backAction = onDismiss,
-                    onUnlock = {
-                        if (auth.isInDecoyMode()) {
+                SecuritySheetState.REMOVE_PIN -> {
+                    NumberPadPinView(
+                        title = "Enter Current PIN",
+                        isPinCorrect = { pin ->
+                            if (auth.isInDecoyMode()) auth.checkDecoyPin(pin) else auth.checkPin(pin)
+                        },
+                        showPin = false,
+                        backAction = onDismiss,
+                        onUnlock = {
+                            if (auth.isInDecoyMode()) {
+                                onDismiss()
+                                return@NumberPadPinView
+                            }
+                            auth.dispatch(AuthManagerAction.DisablePin)
+                            auth.dispatch(AuthManagerAction.DisableWipeDataPin)
                             onDismiss()
-                            return@NumberPadPinView
-                        }
-                        auth.dispatch(AuthManagerAction.DisablePin)
-                        auth.dispatch(AuthManagerAction.DisableWipeDataPin)
-                        onDismiss()
-                    },
-                )
-            }
+                        },
+                    )
+                }
 
-            is SecuritySheetState.ChangePin -> {
-                ChangePinView(
-                    isPinCorrect = { pin ->
-                        if (auth.isInDecoyMode()) auth.checkDecoyPin(pin) else auth.checkPin(pin)
-                    },
-                    backAction = onDismiss,
-                    onComplete = { pin ->
-                        if (auth.isInDecoyMode()) {
+                SecuritySheetState.CHANGE_PIN -> {
+                    ChangePinView(
+                        isPinCorrect = { pin ->
+                            if (auth.isInDecoyMode()) auth.checkDecoyPin(pin) else auth.checkPin(pin)
+                        },
+                        backAction = onDismiss,
+                        onComplete = { pin ->
+                            if (auth.isInDecoyMode()) {
+                                onDismiss()
+                                return@ChangePinView
+                            }
+
+                            // use Rust validation for new PIN
+                            val error = auth.rust.validateNewPin(pin)
+                            if (error != null) {
+                                onDismiss()
+                                onAlertState(SecurityAlertState.ExtraSetPinError(error))
+                                return@ChangePinView
+                            }
+
+                            onSetPin(pin)
+                        },
+                    )
+                }
+
+                SecuritySheetState.DISABLE_BIOMETRIC -> {
+                    NumberPadPinView(
+                        title = "Enter Current PIN",
+                        isPinCorrect = { pin -> auth.checkPin(pin) },
+                        showPin = false,
+                        backAction = onDismiss,
+                        onUnlock = {
+                            auth.dispatch(AuthManagerAction.DisableBiometric)
                             onDismiss()
-                            return@ChangePinView
-                        }
+                        },
+                    )
+                }
 
-                        if (auth.checkWipeDataPin(pin)) {
+                SecuritySheetState.REMOVE_WIPE_DATA_PIN -> {
+                    NumberPadPinView(
+                        title = "Enter Current PIN",
+                        isPinCorrect = { pin -> auth.checkPin(pin) },
+                        showPin = false,
+                        backAction = onDismiss,
+                        onUnlock = {
+                            if (auth.isInDecoyMode()) {
+                                onDismiss()
+                                return@NumberPadPinView
+                            }
+                            auth.dispatch(AuthManagerAction.DisableWipeDataPin)
                             onDismiss()
-                            onAlertState(
-                                SecurityAlertState.ExtraSetPinError(
-                                    "Can't update PIN because it's the same as your wipe data PIN",
-                                ),
-                            )
-                            return@ChangePinView
-                        }
+                        },
+                    )
+                }
 
-                        onSetPin(pin)
-                    },
-                )
-            }
+                SecuritySheetState.REMOVE_WIPE_DATA_PIN_THEN_ENABLE_BIOMETRIC -> {
+                    NumberPadPinView(
+                        title = "Enter Current PIN",
+                        isPinCorrect = { pin -> auth.checkPin(pin) },
+                        showPin = false,
+                        backAction = onDismiss,
+                        onUnlock = {
+                            auth.dispatch(AuthManagerAction.DisableWipeDataPin)
+                            onNextState(SecuritySheetState.ENABLE_BIOMETRIC)
+                        },
+                    )
+                }
 
-            is SecuritySheetState.DisableBiometric -> {
-                NumberPadPinView(
-                    title = "Enter Current PIN",
-                    isPinCorrect = { pin -> auth.checkPin(pin) },
-                    showPin = false,
-                    backAction = onDismiss,
-                    onUnlock = {
-                        auth.dispatch(AuthManagerAction.DisableBiometric)
-                        onDismiss()
-                    },
-                )
-            }
-
-            is SecuritySheetState.RemoveWipeDataPin -> {
-                NumberPadPinView(
-                    title = "Enter Current PIN",
-                    isPinCorrect = { pin -> auth.checkPin(pin) },
-                    showPin = false,
-                    backAction = onDismiss,
-                    onUnlock = {
-                        if (auth.isInDecoyMode()) {
+                SecuritySheetState.REMOVE_DECOY_PIN -> {
+                    NumberPadPinView(
+                        title = "Enter Current PIN",
+                        isPinCorrect = { pin -> auth.checkPin(pin) },
+                        showPin = false,
+                        backAction = onDismiss,
+                        onUnlock = {
+                            auth.dispatch(AuthManagerAction.DisableDecoyPin)
                             onDismiss()
-                            return@NumberPadPinView
-                        }
-                        auth.dispatch(AuthManagerAction.DisableWipeDataPin)
-                        state.nextState?.let { onNextState(it) } ?: onDismiss()
-                    },
-                )
-            }
+                        },
+                    )
+                }
 
-            is SecuritySheetState.RemoveDecoyPin -> {
-                NumberPadPinView(
-                    title = "Enter Current PIN",
-                    isPinCorrect = { pin -> auth.checkPin(pin) },
-                    showPin = false,
-                    backAction = onDismiss,
-                    onUnlock = {
-                        auth.dispatch(AuthManagerAction.DisableDecoyPin)
-                        state.nextState?.let { onNextState(it) } ?: onDismiss()
-                    },
-                )
-            }
+                SecuritySheetState.REMOVE_DECOY_PIN_THEN_ENABLE_BIOMETRIC -> {
+                    NumberPadPinView(
+                        title = "Enter Current PIN",
+                        isPinCorrect = { pin -> auth.checkPin(pin) },
+                        showPin = false,
+                        backAction = onDismiss,
+                        onUnlock = {
+                            auth.dispatch(AuthManagerAction.DisableDecoyPin)
+                            onNextState(SecuritySheetState.ENABLE_BIOMETRIC)
+                        },
+                    )
+                }
 
-            is SecuritySheetState.RemoveAllTrickPins -> {
-                NumberPadPinView(
-                    title = "Enter Current PIN",
-                    isPinCorrect = { pin -> auth.checkPin(pin) },
-                    showPin = false,
-                    backAction = onDismiss,
-                    onUnlock = {
-                        auth.dispatch(AuthManagerAction.DisableDecoyPin)
-                        auth.dispatch(AuthManagerAction.DisableWipeDataPin)
-                        onNextState(SecuritySheetState.EnableBiometric)
-                    },
-                )
-            }
+                SecuritySheetState.REMOVE_ALL_TRICK_PINS -> {
+                    NumberPadPinView(
+                        title = "Enter Current PIN",
+                        isPinCorrect = { pin -> auth.checkPin(pin) },
+                        showPin = false,
+                        backAction = onDismiss,
+                        onUnlock = {
+                            auth.dispatch(AuthManagerAction.DisableDecoyPin)
+                            auth.dispatch(AuthManagerAction.DisableWipeDataPin)
+                            onNextState(SecuritySheetState.ENABLE_BIOMETRIC)
+                        },
+                    )
+                }
 
-            is SecuritySheetState.EnableWipeDataPin -> {
-                WipeDataPinView(
-                    onComplete = onSetWipeDataPin,
-                    backAction = onDismiss,
-                )
-            }
+                SecuritySheetState.ENABLE_WIPE_DATA_PIN -> {
+                    WipeDataPinView(
+                        onComplete = onSetWipeDataPin,
+                        backAction = onDismiss,
+                    )
+                }
 
-            is SecuritySheetState.EnableDecoyPin -> {
-                DecoyPinView(
-                    onComplete = onSetDecoyPin,
-                    backAction = onDismiss,
-                )
-            }
+                SecuritySheetState.ENABLE_DECOY_PIN -> {
+                    DecoyPinView(
+                        onComplete = onSetDecoyPin,
+                        backAction = onDismiss,
+                    )
+                }
 
-            else -> {}
+                else -> {}
+            }
         }
     }
 }

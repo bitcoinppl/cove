@@ -68,6 +68,12 @@ class CoveApplication : Application() {
     private fun handleBackground() {
         try {
             val auth = Auth
+
+            // reset biometric flag in case it got stuck from a failed prompt
+            if (auth.isUsingBiometrics) {
+                auth.isUsingBiometrics = false
+            }
+
             if (auth.isAuthEnabled && !auth.isLocked) {
                 Log.d(TAG, "[LIFECYCLE] App going to background, locking")
                 auth.lock()

@@ -6,6 +6,8 @@ use parking_lot::RwLock;
 use tap::TapFallible as _;
 use tracing::{debug, error};
 
+use cove_types::WalletId;
+
 use crate::{
     app::reconcile::{AppStateReconcileMessage, Updater},
     auth::{AuthPin, AuthType},
@@ -34,6 +36,70 @@ pub enum AuthManagerAction {
     SetPin(String),
     DisableWipeDataPin,
     DisableDecoyPin,
+}
+
+// MARK: Security Settings Validation
+
+/// Action the user wants to take on security settings
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum SecuritySettingsAction {
+    ToggleBiometric { enable: bool },
+    TogglePin { enable: bool },
+    ToggleWipeDataPin { enable: bool },
+    ToggleDecoyPin { enable: bool },
+    ChangePin,
+}
+
+/// What sheet to show for PIN entry flows
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum SecuritySheetState {
+    None,
+    NewPin,
+    RemovePin,
+    ChangePin,
+    EnableBiometric,
+    DisableBiometric,
+    EnableWipeDataPin,
+    RemoveWipeDataPin,
+    /// Remove wipe data PIN, then enable biometric
+    RemoveWipeDataPinThenEnableBiometric,
+    EnableDecoyPin,
+    RemoveDecoyPin,
+    /// Remove decoy PIN, then enable biometric
+    RemoveDecoyPinThenEnableBiometric,
+    RemoveAllTrickPins,
+}
+
+/// What alert to show for validation messages
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum SecurityAlertState {
+    UnverifiedWallets {
+        wallet_id: WalletId,
+    },
+    ConfirmEnableWipeMePin,
+    ConfirmDecoyPin,
+    NoteNoFaceIdWhenTrickPins,
+    NoteNoFaceIdWhenWipeMePin,
+    NoteNoFaceIdWhenDecoyPin,
+    NotePinRequired,
+    /// Disabling biometric, then show confirm for wipe me PIN
+    NoteFaceIdDisablingForWipeMePin,
+    /// Disabling biometric, then show confirm for decoy PIN
+    NoteFaceIdDisablingForDecoyPin,
+    ExtraSetPinError {
+        message: String,
+    },
+}
+
+/// Result of validating a security settings action
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum SecuritySettingsResult {
+    /// Proceed to show a sheet for PIN entry
+    ProceedToSheet(SecuritySheetState),
+    /// Show an alert dialog
+    ShowAlert(SecurityAlertState),
+    /// Decoy mode - just update local UI, don't persist
+    DecoyModeLocalUpdate,
 }
 
 #[derive(Clone, Debug, uniffi::Object)]
@@ -344,6 +410,123 @@ impl RustAuthManager {
             Action::DisableWipeDataPin => self.delete_wipe_data_pin(),
             Action::DisableDecoyPin => self.delete_decoy_pin(),
         }
+    }
+
+    // MARK: Security Settings Validation
+
+    /// Validate a security settings action and return what UI to show
+    pub fn validate_security_action(
+        &self,
+        action: SecuritySettingsAction,
+        unverified_wallet_ids: Vec<WalletId>,
+    ) -> SecuritySettingsResult {
+        use SecuritySettingsAction::*;
+        use SecuritySettingsResult::*;
+
+        match action {
+            ToggleBiometric { enable } => {
+                if self.is_in_decoy_mode() {
+                    return DecoyModeLocalUpdate;
+                }
+
+                if !enable {
+                    return ProceedToSheet(SecuritySheetState::DisableBiometric);
+                }
+
+                // check trick PINs before enabling biometrics
+                if self.is_decoy_pin_enabled() && self.is_wipe_data_pin_enabled() {
+                    return ShowAlert(SecurityAlertState::NoteNoFaceIdWhenTrickPins);
+                }
+
+                if self.is_wipe_data_pin_enabled() {
+                    return ShowAlert(SecurityAlertState::NoteNoFaceIdWhenWipeMePin);
+                }
+
+                if self.is_decoy_pin_enabled() {
+                    return ShowAlert(SecurityAlertState::NoteNoFaceIdWhenDecoyPin);
+                }
+
+                ProceedToSheet(SecuritySheetState::EnableBiometric)
+            }
+
+            TogglePin { enable } => {
+                if self.is_in_decoy_mode() {
+                    return DecoyModeLocalUpdate;
+                }
+
+                if enable {
+                    ProceedToSheet(SecuritySheetState::NewPin)
+                } else {
+                    ProceedToSheet(SecuritySheetState::RemovePin)
+                }
+            }
+
+            ToggleWipeDataPin { enable } => {
+                if !enable {
+                    if self.is_in_decoy_mode() {
+                        return DecoyModeLocalUpdate;
+                    }
+                    return ProceedToSheet(SecuritySheetState::RemoveWipeDataPin);
+                }
+
+                // check unverified wallets
+                if let Some(wallet_id) = unverified_wallet_ids.first() {
+                    return ShowAlert(SecurityAlertState::UnverifiedWallets {
+                        wallet_id: wallet_id.clone(),
+                    });
+                }
+
+                // PIN is required (biometric only = no PIN)
+                if self.auth_type() == AuthType::Biometric {
+                    return ShowAlert(SecurityAlertState::NotePinRequired);
+                }
+
+                // must disable biometric first
+                if self.auth_type() == AuthType::Both {
+                    return ShowAlert(SecurityAlertState::NoteFaceIdDisablingForWipeMePin);
+                }
+
+                ShowAlert(SecurityAlertState::ConfirmEnableWipeMePin)
+            }
+
+            ToggleDecoyPin { enable } => {
+                if !enable {
+                    if self.is_in_decoy_mode() {
+                        return DecoyModeLocalUpdate;
+                    }
+                    return ProceedToSheet(SecuritySheetState::RemoveDecoyPin);
+                }
+
+                // PIN is required
+                if self.auth_type() == AuthType::Biometric {
+                    return ShowAlert(SecurityAlertState::NotePinRequired);
+                }
+
+                // must disable biometric first
+                if self.auth_type() == AuthType::Both {
+                    return ShowAlert(SecurityAlertState::NoteFaceIdDisablingForDecoyPin);
+                }
+
+                ShowAlert(SecurityAlertState::ConfirmDecoyPin)
+            }
+
+            ChangePin => ProceedToSheet(SecuritySheetState::ChangePin),
+        }
+    }
+
+    /// Validate a new PIN doesn't conflict with existing PINs
+    pub fn validate_new_pin(&self, new_pin: String) -> Option<String> {
+        if self.check_wipe_data_pin(&new_pin) {
+            return Some(
+                "Can't update PIN because it's the same as your wipe data PIN".to_string(),
+            );
+        }
+
+        if self.check_decoy_pin(&new_pin) {
+            return Some("Can't update PIN because it's the same as your decoy PIN".to_string());
+        }
+
+        None
     }
 }
 

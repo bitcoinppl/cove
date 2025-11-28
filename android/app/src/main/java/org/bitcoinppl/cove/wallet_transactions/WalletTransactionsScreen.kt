@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -72,11 +73,13 @@ import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.BalanceAutoSizeText
 import org.bitcoinppl.cove.views.BitcoinShieldIcon
 import org.bitcoinppl.cove.views.ImageButton
+import org.bitcoinppl.cove_core.FiatOrBtc
 import org.bitcoinppl.cove_core.HotWalletRoute
 import org.bitcoinppl.cove_core.NewWalletRoute
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.Transaction
+import org.bitcoinppl.cove_core.WalletManagerAction
 import org.bitcoinppl.cove_core.WalletSettingsRoute
 import org.bitcoinppl.cove_core.WalletType
 import org.bitcoinppl.cove_core.types.TransactionDirection
@@ -193,6 +196,7 @@ fun WalletTransactionsScreen(
                         ) {
                             if (isColdWallet) {
                                 BitcoinShieldIcon(
+                                    modifier = Modifier.offset(y = (-5).dp),
                                     size = 13.dp,
                                     color = Color.White,
                                 )
@@ -290,10 +294,18 @@ fun WalletTransactionsScreen(
                             .padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 32.dp),
                     verticalArrangement = Arrangement.spacedBy(24.dp),
                 ) {
+                    val fiatOrBtc = manager?.walletMetadata?.fiatOrBtc ?: FiatOrBtc.BTC
+                    val (primaryAmount, secondaryAmount) =
+                        when (fiatOrBtc) {
+                            FiatOrBtc.FIAT -> actualUsdAmount to actualSatsAmount
+                            FiatOrBtc.BTC -> actualSatsAmount to actualUsdAmount
+                        }
+
                     BalanceWidget(
-                        usdAmount = actualUsdAmount,
-                        satsAmount = actualSatsAmount,
                         hidden = initialBalanceHidden,
+                        primaryAmount = primaryAmount,
+                        secondaryAmount = secondaryAmount,
+                        onToggle = { manager?.dispatch(WalletManagerAction.ToggleFiatBtcPrimarySecondary) },
                     )
 
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -581,21 +593,25 @@ private fun TransactionWidget(
 @Composable
 private fun BalanceWidget(
     hidden: Boolean,
-    usdAmount: String,
-    satsAmount: String,
+    primaryAmount: String,
+    secondaryAmount: String,
+    onToggle: () -> Unit,
 ) {
     var isHidden by remember { mutableStateOf(hidden) }
 
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(
+        modifier = Modifier.clickable { onToggle() },
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
         Text(
-            text = if (isHidden) "$———" else usdAmount,
+            text = if (isHidden) "••••••" else secondaryAmount,
             color = Color.White.copy(alpha = 0.7f),
             fontSize = 13.sp,
         )
 
         Row(verticalAlignment = Alignment.CenterVertically) {
             BalanceAutoSizeText(
-                text = if (isHidden) "•••••• SATS" else satsAmount,
+                text = if (isHidden) "••••••" else primaryAmount,
                 modifier = Modifier.padding(end = 12.dp),
                 color = Color.White,
                 baseFontSize = 34.sp,
@@ -603,13 +619,12 @@ private fun BalanceWidget(
                 fontWeight = FontWeight.Bold,
             )
             Spacer(modifier = Modifier.weight(1f))
-            IconButton(onClick = { isHidden = !isHidden }) {
-                Icon(
-                    imageVector = if (isHidden) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                    contentDescription = if (isHidden) "Show" else "Hide",
-                    tint = Color.White.copy(alpha = 0.7f),
-                )
-            }
+            Icon(
+                imageVector = if (isHidden) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                contentDescription = if (isHidden) "Show" else "Hide",
+                tint = Color.White.copy(alpha = 0.7f),
+                modifier = Modifier.clickable { isHidden = !isHidden },
+            )
         }
     }
 }
