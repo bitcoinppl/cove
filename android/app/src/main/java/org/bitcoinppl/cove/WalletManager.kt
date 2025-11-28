@@ -30,6 +30,7 @@ class WalletManager :
     private val tag = "WalletManager"
 
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val isClosed = AtomicBoolean(false)
 
     val id: WalletId
@@ -246,7 +247,7 @@ class WalletManager :
 
             is WalletManagerReconcileMessage.WalletMetadataChanged -> {
                 walletMetadata = message.v1
-                rust.setWalletMetadata(message.v1)
+                persistWalletMetadata(message.v1)
             }
 
             is WalletManagerReconcileMessage.WalletScannerResponse -> {
@@ -282,12 +283,16 @@ class WalletManager :
 
     override fun reconcile(message: WalletManagerReconcileMessage) {
         logDebug("reconcile: $message")
-        mainScope.launch { apply(message) }
+        ioScope.launch {
+            mainScope.launch { apply(message) }
+        }
     }
 
     override fun reconcileMany(messages: List<WalletManagerReconcileMessage>) {
         logDebug("reconcile_messages: ${messages.size} messages")
-        mainScope.launch { messages.forEach { apply(it) } }
+        ioScope.launch {
+            mainScope.launch { messages.forEach { apply(it) } }
+        }
     }
 
     fun dispatch(action: WalletManagerAction) {
@@ -295,11 +300,16 @@ class WalletManager :
         mainScope.launch(Dispatchers.IO) { rust.dispatch(action) }
     }
 
+    private fun persistWalletMetadata(metadata: WalletMetadata) {
+        ioScope.launch { rust.setWalletMetadata(metadata) }
+    }
+
     override fun close() {
         if (!isClosed.compareAndSet(false, true)) return
         logDebug("Closing WalletManager for $id")
-        mainScope.cancel() // stop callbacks into Rust
-        rust.close() // free Rust Arc
+        ioScope.cancel()
+        mainScope.cancel()
+        rust.close()
     }
 }
 

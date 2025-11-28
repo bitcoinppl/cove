@@ -183,10 +183,8 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
             self.unsignedTransactions = (try? rust.getUnsignedTransactions()) ?? []
 
         case let .walletMetadataChanged(metadata):
-            withAnimation {
-                self.walletMetadata = metadata
-                self.rust.setWalletMetadata(metadata: metadata)
-            }
+            withAnimation { self.walletMetadata = metadata }
+            setWalletMetadata(metadata)
 
         case let .walletScannerResponse(scannerResponse):
             self.logger.debug("walletScannerResponse: \(scannerResponse)")
@@ -214,6 +212,12 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
     private let rustBridge = DispatchQueue(
         label: "cove.walletmanager.rustbridge", qos: .userInitiated
     )
+
+    private func setWalletMetadata(_ metadata: WalletMetadata) {
+        rustBridge.async { [weak self] in
+            self?.rust.setWalletMetadata(metadata: metadata)
+        }
+    }
 
     func reconcile(message: Message) {
         rustBridge.async { [weak self] in
