@@ -463,8 +463,8 @@ mod tests {
     }
 
     #[test]
-    fn test_unsupported_ur_type() {
-        // crypto-hdkey not currently supported in try_from_ur_payload
+    fn test_malformed_crypto_hdkey_ur() {
+        // truncated/malformed crypto-hdkey UR should return error
         let ur_string =
             "ur:crypto-hdkey/oeadgdstaslplabghydrpfmkbggufgludprfgmaotpiecffltnlpqdenos";
 

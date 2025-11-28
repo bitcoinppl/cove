@@ -96,12 +96,10 @@ struct QrCodeAddressView: View {
 
             do {
                 switch try scanner.scan(qr: qr) {
-                case let .complete(_, rawData):
+                case let .complete(data, _):
                     scanComplete = true
-                    if let raw = rawData {
-                        scannedCode = TaggedString(raw)
-                    } else if case let .string(str) = scanResult.data {
-                        scannedCode = TaggedString(str)
+                    if case let .address(addr) = data {
+                        scannedCode = TaggedString(addr.address().string())
                     }
                     scanner.reset()
 
@@ -109,6 +107,7 @@ struct QrCodeAddressView: View {
                     progress = prog
                 }
             } catch {
+                scanner.reset()
                 dismiss()
                 app.alertState = TaggedItem(
                     .general(
