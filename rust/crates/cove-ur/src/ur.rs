@@ -27,10 +27,10 @@ impl<'a> Ur<'a> {
     }
 
     /// Get the UR type (e.g., "crypto-account", "crypto-psbt")
-    pub fn ur_type(&self) -> Result<&str> {
+    pub fn ur_type(&self) -> &str {
         match self {
             Ur::Normalized(inner) => inner.ur_type(),
-            Ur::Direct(ur) => Ok(ur.as_type()),
+            Ur::Direct(ur) => ur.as_type(),
         }
     }
 
@@ -71,6 +71,8 @@ impl<'a> Ur<'a> {
 pub struct UrNormalized {
     /// The normalized (lowercased) UR string
     normalized: String,
+    /// The UR type extracted at parse time
+    ur_type: String,
 }
 
 impl UrNormalized {
@@ -78,23 +80,25 @@ impl UrNormalized {
     pub fn parse(ur_string: &str) -> Result<Self> {
         let normalized = ur_string.to_ascii_lowercase();
         FoundationUr::parse(&normalized).map_err(|e| UrError::UrParseError(e.to_string()))?;
-        Ok(UrNormalized { normalized })
+
+        // extract type at parse time - fail here if malformed
+        let ur_type = normalized
+            .strip_prefix("ur:")
+            .and_then(|s| s.split('/').next())
+            .ok_or_else(|| UrError::InvalidField("Missing UR type".into()))?
+            .to_string();
+
+        Ok(UrNormalized { normalized, ur_type })
     }
 
     /// Get the UR type (e.g., "crypto-account", "crypto-psbt")
-    pub fn ur_type(&self) -> Result<&str> {
-        self.normalized
-            .strip_prefix("ur:")
-            .and_then(|s| s.split('/').next())
-            .ok_or_else(|| UrError::InvalidField(
-                "Failed to extract UR type from normalized string".into()
-            ))
+    pub fn ur_type(&self) -> &str {
+        &self.ur_type
     }
 
     /// Get a foundation_ur::UR that borrows from self
     pub fn to_foundation_ur(&self) -> Result<FoundationUr<'_>> {
-        FoundationUr::parse(&self.normalized)
-            .map_err(|e| UrError::UrParseError(e.to_string()))
+        FoundationUr::parse(&self.normalized).map_err(|e| UrError::UrParseError(e.to_string()))
     }
 
     /// Get message/fragment bytes (decoded from bytewords)
