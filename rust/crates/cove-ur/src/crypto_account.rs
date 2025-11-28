@@ -8,8 +8,8 @@ use crate::{
     crypto_hdkey::CryptoHdkey,
     error::*,
     registry::{
-        CRYPTO_ACCOUNT, CRYPTO_HDKEY, CRYPTO_OUTPUT, PAY_TO_PUBKEY_HASH, SCRIPT_HASH, TAPROOT,
-        WITNESS_PUBKEY_HASH,
+        account_keys, hdkey_keys, lengths, CRYPTO_ACCOUNT, CRYPTO_HDKEY, CRYPTO_OUTPUT,
+        PAY_TO_PUBKEY_HASH, SCRIPT_HASH, TAPROOT, WITNESS_PUBKEY_HASH,
     },
 };
 
@@ -67,12 +67,12 @@ impl CryptoAccount {
             let key = decoder.u32().map_err(|e| UrError::CborDecodeError(e.to_string()))?;
 
             match key {
-                1 => {
+                account_keys::MASTER_FINGERPRINT => {
                     // master fingerprint as uint32
                     let fp = decoder.u32().map_err(|e| UrError::CborDecodeError(e.to_string()))?;
                     master_fingerprint = Some(fp.to_be_bytes());
                 }
-                2 => {
+                account_keys::OUTPUT_DESCRIPTORS => {
                     // array of output descriptors
                     let arr_len = decoder
                         .array()
@@ -214,52 +214,52 @@ fn decode_hdkey_untagged(cbor: &[u8]) -> Result<CryptoHdkey> {
         let key = decoder.u32().map_err(|e| UrError::CborDecodeError(e.to_string()))?;
 
         match key {
-            1 => {
+            hdkey_keys::IS_MASTER => {
                 is_master =
                     Some(decoder.bool().map_err(|e| UrError::CborDecodeError(e.to_string()))?);
             }
-            2 => {
+            hdkey_keys::IS_PRIVATE => {
                 is_private =
                     Some(decoder.bool().map_err(|e| UrError::CborDecodeError(e.to_string()))?);
             }
-            3 => {
+            hdkey_keys::KEY_DATA => {
                 key_data = Some(
                     decoder.bytes().map_err(|e| UrError::CborDecodeError(e.to_string()))?.to_vec(),
                 );
             }
-            4 => {
+            hdkey_keys::CHAIN_CODE => {
                 chain_code = Some(
                     decoder.bytes().map_err(|e| UrError::CborDecodeError(e.to_string()))?.to_vec(),
                 );
             }
-            5 => {
+            hdkey_keys::USE_INFO => {
                 // use_info - skip for now
                 let pos = decoder.position();
                 use_info = Some(crate::coin_info::CryptoCoinInfo::from_cbor(&cbor[pos..]).ok());
                 decoder.skip().map_err(|e| UrError::CborDecodeError(e.to_string()))?;
             }
-            6 => {
+            hdkey_keys::ORIGIN => {
                 // origin - skip for now
                 let pos = decoder.position();
                 origin = Some(crate::keypath::CryptoKeypath::from_cbor(&cbor[pos..]).ok());
                 decoder.skip().map_err(|e| UrError::CborDecodeError(e.to_string()))?;
             }
-            7 => {
+            hdkey_keys::CHILDREN => {
                 // children - skip for now
                 let pos = decoder.position();
                 children = Some(crate::keypath::CryptoKeypath::from_cbor(&cbor[pos..]).ok());
                 decoder.skip().map_err(|e| UrError::CborDecodeError(e.to_string()))?;
             }
-            8 => {
+            hdkey_keys::PARENT_FINGERPRINT => {
                 let fp = decoder.u32().map_err(|e| UrError::CborDecodeError(e.to_string()))?;
                 parent_fingerprint = Some(fp.to_be_bytes());
             }
-            9 => {
+            hdkey_keys::NAME => {
                 name = Some(
                     decoder.str().map_err(|e| UrError::CborDecodeError(e.to_string()))?.to_string(),
                 );
             }
-            10 => {
+            hdkey_keys::SOURCE => {
                 source = Some(
                     decoder.str().map_err(|e| UrError::CborDecodeError(e.to_string()))?.to_string(),
                 );
@@ -277,7 +277,11 @@ fn decode_hdkey_untagged(cbor: &[u8]) -> Result<CryptoHdkey> {
 
     // validate key data length
     // private keys are 32 bytes, public keys are 33 bytes (compressed)
-    let expected_len = if is_private { 32 } else { 33 };
+    let expected_len = if is_private {
+        lengths::PRIVATE_KEY
+    } else {
+        lengths::COMPRESSED_PUBKEY
+    };
     if key_data.len() != expected_len {
         return Err(UrError::InvalidKeyDataLength {
             expected: expected_len as u64,
@@ -404,15 +408,16 @@ mod tests {
     /// Test malformed CBOR: wrong tag
     #[test]
     fn test_crypto_account_wrong_tag() {
+        use crate::registry::CRYPTO_SEED;
         use minicbor::{Encoder, data::Tag};
 
         let mut cbor = Vec::new();
         let mut encoder = Encoder::new(&mut cbor);
 
-        // use wrong tag (300 instead of 311)
-        encoder.tag(Tag::new(300)).unwrap();
+        // use wrong tag (CRYPTO_SEED instead of CRYPTO_ACCOUNT)
+        encoder.tag(Tag::new(CRYPTO_SEED)).unwrap();
         encoder.map(1).unwrap();
-        encoder.u32(1).unwrap();
+        encoder.u32(account_keys::MASTER_FINGERPRINT).unwrap();
         encoder.u32(0x12345678).unwrap();
 
         let result = CryptoAccount::from_cbor(&cbor);
@@ -428,10 +433,10 @@ mod tests {
         let mut cbor = Vec::new();
         let mut encoder = Encoder::new(&mut cbor);
 
-        // correct tag but missing master fingerprint (key 1)
-        encoder.tag(Tag::new(311)).unwrap();
+        // correct tag but missing master fingerprint
+        encoder.tag(Tag::new(CRYPTO_ACCOUNT)).unwrap();
         encoder.map(1).unwrap();
-        encoder.u32(2).unwrap(); // key 2 (output_descriptors) without key 1
+        encoder.u32(account_keys::OUTPUT_DESCRIPTORS).unwrap(); // only output_descriptors, no fingerprint
         encoder.array(0).unwrap();
 
         let result = CryptoAccount::from_cbor(&cbor);
