@@ -705,16 +705,28 @@ impl RustWalletManager {
 
     #[uniffi::method]
     pub fn validate_metadata(&self) {
-        if self.metadata.read().name.trim().is_empty() {
-            let name = self
-                .metadata
-                .read()
+        let name = {
+            let metadata = self.metadata.read();
+            if !metadata.name.trim().is_empty() {
+                return;
+            }
+            metadata
                 .master_fingerprint
                 .as_deref()
                 .map(Fingerprint::as_uppercase)
-                .unwrap_or_else(|| "Unnamed Wallet".to_string());
+                .unwrap_or_else(|| "Unnamed Wallet".to_string())
+        };
 
-            self.dispatch(Action::UpdateName(name));
+        let metadata = {
+            let mut metadata = self.metadata.write();
+            metadata.name = name;
+            metadata.clone()
+        };
+
+        self.reconciler.send(Message::WalletMetadataChanged(metadata.clone()));
+
+        if let Err(error) = Database::global().wallets.update_wallet_metadata(metadata) {
+            error!("Unable to update wallet metadata: {error:?}")
         }
     }
 
