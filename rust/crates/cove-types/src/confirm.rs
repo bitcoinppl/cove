@@ -147,6 +147,43 @@ impl ConfirmDetails {
 
         Ok(split.parts)
     }
+
+    /// Export PSBT as UR-encoded QR strings for animated display
+    pub fn psbt_to_ur(&self, max_fragment_len: u32) -> Result<Vec<String>> {
+        use cove_ur::CryptoPsbt;
+        use foundation_ur::Encoder as UrEncoder;
+
+        // wrap PSBT in CryptoPsbt and encode to tagged CBOR
+        let crypto_psbt = CryptoPsbt::from_psbt_bytes(self.psbt.0.serialize()).map_err(|e| {
+            ConfirmDetailsError::QrCodeCreation(format!("CryptoPsbt encoding failed: {}", e))
+        })?;
+
+        let cbor_psbt = crypto_psbt.encode().map_err(|e| {
+            ConfirmDetailsError::QrCodeCreation(format!("CBOR encoding failed: {}", e))
+        })?;
+
+        let mut encoder = UrEncoder::new();
+        encoder.start("crypto-psbt", &cbor_psbt, max_fragment_len as usize);
+
+        let sequence_count = encoder.sequence_count() as usize;
+        let mut parts = Vec::with_capacity(sequence_count);
+
+        for _ in 0..sequence_count {
+            let part = encoder.next_part();
+            parts.push(part.to_string());
+        }
+
+        Ok(parts)
+    }
+
+    /// Export PSBT as single UR string (for small PSBTs)
+    pub fn psbt_to_ur_single(&self) -> Result<String> {
+        let parts = self.psbt_to_ur(10000)?; // large fragment to get single part
+        parts
+            .into_iter()
+            .next()
+            .ok_or_else(|| ConfirmDetailsError::QrCodeCreation("No UR parts generated".into()))
+    }
 }
 
 impl AddressAndAmount {

@@ -7,6 +7,7 @@ edition = "2024"
 ## workspace dependencies
 # macros
 cove-macros = { path = "../cove-macros" }
+cove-ur = { path = "../cove-ur" }
 
 # bitcoin
 bitcoin = { workspace = true, features = ["serde"] }
@@ -25,6 +26,7 @@ serde_json = { workspace = true }
 
 # bbqr
 bbqr = { workspace = true }
+foundation-ur = { workspace = true }
 
 # database
 redb = { workspace = true }
