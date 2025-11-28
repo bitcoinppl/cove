@@ -601,7 +601,7 @@ private fun BalanceWidget(
 
     Column(
         modifier = Modifier.clickable { onToggle() },
-        verticalArrangement = Arrangement.spacedBy(2.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Text(
             text = if (isHidden) "••••••" else secondaryAmount,
