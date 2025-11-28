@@ -19,7 +19,7 @@ fun BitcoinShieldIcon(
     color: Color = Color.White,
 ) {
     Canvas(modifier = modifier.size(size)) {
-        val scaleFactor = size.toPx() / 103f
+        val scaleFactor = size.toPx() / 125f
         scale(scaleFactor, scaleFactor) {
             drawShield(color)
             drawBitcoin(color)

@@ -1303,7 +1303,11 @@ external fun uniffi_cove_checksum_method_rustauthmanager_switch_to_decoy_mode(
 ): Short
 external fun uniffi_cove_checksum_method_rustauthmanager_switch_to_main_mode(
 ): Short
+external fun uniffi_cove_checksum_method_rustauthmanager_validate_new_pin(
+): Short
 external fun uniffi_cove_checksum_method_rustauthmanager_validate_pin_settings(
+): Short
+external fun uniffi_cove_checksum_method_rustauthmanager_validate_security_action(
 ): Short
 external fun uniffi_cove_checksum_method_rustcoincontrolmanager_button_presentation(
 ): Short
@@ -2174,8 +2178,12 @@ external fun uniffi_cove_fn_method_rustauthmanager_switch_to_decoy_mode(`ptr`: L
 ): Unit
 external fun uniffi_cove_fn_method_rustauthmanager_switch_to_main_mode(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
+external fun uniffi_cove_fn_method_rustauthmanager_validate_new_pin(`ptr`: Long,`newPin`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_rustauthmanager_validate_pin_settings(`ptr`: Long,`pin`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
+external fun uniffi_cove_fn_method_rustauthmanager_validate_security_action(`ptr`: Long,`action`: RustBuffer.ByValue,`unverifiedWalletIds`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
 external fun uniffi_cove_fn_clone_rustcoincontrolmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
 external fun uniffi_cove_fn_free_rustcoincontrolmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -3571,7 +3579,13 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustauthmanager_switch_to_main_mode() != 36755.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_method_rustauthmanager_validate_new_pin() != 2677.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_method_rustauthmanager_validate_pin_settings() != 50929.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustauthmanager_validate_security_action() != 4302.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustcoincontrolmanager_button_presentation() != 24764.toShort()) {
@@ -16193,9 +16207,19 @@ public interface RustAuthManagerInterface {
     fun `switchToMainMode`()
     
     /**
+     * Validate a new PIN doesn't conflict with existing PINs
+     */
+    fun `validateNewPin`(`newPin`: kotlin.String): kotlin.String?
+    
+    /**
      * Validate if we have the correct settings to be able to set a decoy or wipe data pin
      */
     fun `validatePinSettings`(`pin`: kotlin.String)
+    
+    /**
+     * Validate a security settings action and return what UI to show
+     */
+    fun `validateSecurityAction`(`action`: SecuritySettingsAction, `unverifiedWalletIds`: List<WalletId>): SecuritySettingsResult
     
     companion object
 }
@@ -16571,6 +16595,22 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
 
     
     /**
+     * Validate a new PIN doesn't conflict with existing PINs
+     */override fun `validateNewPin`(`newPin`: kotlin.String): kotlin.String? {
+            return FfiConverterOptionalString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustauthmanager_validate_new_pin(
+        it,
+        FfiConverterString.lower(`newPin`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
      * Validate if we have the correct settings to be able to set a decoy or wipe data pin
      */
     @Throws(TrickPinException::class)override fun `validatePinSettings`(`pin`: kotlin.String)
@@ -16583,6 +16623,22 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
 }
     }
     
+    
+
+    
+    /**
+     * Validate a security settings action and return what UI to show
+     */override fun `validateSecurityAction`(`action`: SecuritySettingsAction, `unverifiedWalletIds`: List<WalletId>): SecuritySettingsResult {
+            return FfiConverterTypeSecuritySettingsResult.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustauthmanager_validate_security_action(
+        it,
+        FfiConverterTypeSecuritySettingsAction.lower(`action`),FfiConverterSequenceTypeWalletId.lower(`unverifiedWalletIds`),_status)
+}
+    }
+    )
+    }
     
 
     
@@ -32912,6 +32968,521 @@ public object FfiConverterTypeScannerResponse : FfiConverterRustBuffer<ScannerRe
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+/**
+ * What alert to show for validation messages
+ */
+sealed class SecurityAlertState {
+    
+    data class UnverifiedWallets(
+        val `walletId`: org.bitcoinppl.cove_core.types.WalletId) : SecurityAlertState()
+        
+    {
+        
+
+        companion object
+    }
+    
+    object ConfirmEnableWipeMePin : SecurityAlertState()
+    
+    
+    object ConfirmDecoyPin : SecurityAlertState()
+    
+    
+    object NoteNoFaceIdWhenTrickPins : SecurityAlertState()
+    
+    
+    object NoteNoFaceIdWhenWipeMePin : SecurityAlertState()
+    
+    
+    object NoteNoFaceIdWhenDecoyPin : SecurityAlertState()
+    
+    
+    object NotePinRequired : SecurityAlertState()
+    
+    
+    /**
+     * Disabling biometric, then show confirm for wipe me PIN
+     */
+    object NoteFaceIdDisablingForWipeMePin : SecurityAlertState()
+    
+    
+    /**
+     * Disabling biometric, then show confirm for decoy PIN
+     */
+    object NoteFaceIdDisablingForDecoyPin : SecurityAlertState()
+    
+    
+    data class ExtraSetPinError(
+        val `message`: kotlin.String) : SecurityAlertState()
+        
+    {
+        
+
+        companion object
+    }
+    
+
+    
+
+    
+    
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeSecurityAlertState : FfiConverterRustBuffer<SecurityAlertState>{
+    override fun read(buf: ByteBuffer): SecurityAlertState {
+        return when(buf.getInt()) {
+            1 -> SecurityAlertState.UnverifiedWallets(
+                FfiConverterTypeWalletId.read(buf),
+                )
+            2 -> SecurityAlertState.ConfirmEnableWipeMePin
+            3 -> SecurityAlertState.ConfirmDecoyPin
+            4 -> SecurityAlertState.NoteNoFaceIdWhenTrickPins
+            5 -> SecurityAlertState.NoteNoFaceIdWhenWipeMePin
+            6 -> SecurityAlertState.NoteNoFaceIdWhenDecoyPin
+            7 -> SecurityAlertState.NotePinRequired
+            8 -> SecurityAlertState.NoteFaceIdDisablingForWipeMePin
+            9 -> SecurityAlertState.NoteFaceIdDisablingForDecoyPin
+            10 -> SecurityAlertState.ExtraSetPinError(
+                FfiConverterString.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: SecurityAlertState) = when(value) {
+        is SecurityAlertState.UnverifiedWallets -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeWalletId.allocationSize(value.`walletId`)
+            )
+        }
+        is SecurityAlertState.ConfirmEnableWipeMePin -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is SecurityAlertState.ConfirmDecoyPin -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is SecurityAlertState.NoteNoFaceIdWhenTrickPins -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is SecurityAlertState.NoteNoFaceIdWhenWipeMePin -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is SecurityAlertState.NoteNoFaceIdWhenDecoyPin -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is SecurityAlertState.NotePinRequired -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is SecurityAlertState.NoteFaceIdDisablingForWipeMePin -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is SecurityAlertState.NoteFaceIdDisablingForDecoyPin -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is SecurityAlertState.ExtraSetPinError -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`message`)
+            )
+        }
+    }
+
+    override fun write(value: SecurityAlertState, buf: ByteBuffer) {
+        when(value) {
+            is SecurityAlertState.UnverifiedWallets -> {
+                buf.putInt(1)
+                FfiConverterTypeWalletId.write(value.`walletId`, buf)
+                Unit
+            }
+            is SecurityAlertState.ConfirmEnableWipeMePin -> {
+                buf.putInt(2)
+                Unit
+            }
+            is SecurityAlertState.ConfirmDecoyPin -> {
+                buf.putInt(3)
+                Unit
+            }
+            is SecurityAlertState.NoteNoFaceIdWhenTrickPins -> {
+                buf.putInt(4)
+                Unit
+            }
+            is SecurityAlertState.NoteNoFaceIdWhenWipeMePin -> {
+                buf.putInt(5)
+                Unit
+            }
+            is SecurityAlertState.NoteNoFaceIdWhenDecoyPin -> {
+                buf.putInt(6)
+                Unit
+            }
+            is SecurityAlertState.NotePinRequired -> {
+                buf.putInt(7)
+                Unit
+            }
+            is SecurityAlertState.NoteFaceIdDisablingForWipeMePin -> {
+                buf.putInt(8)
+                Unit
+            }
+            is SecurityAlertState.NoteFaceIdDisablingForDecoyPin -> {
+                buf.putInt(9)
+                Unit
+            }
+            is SecurityAlertState.ExtraSetPinError -> {
+                buf.putInt(10)
+                FfiConverterString.write(value.`message`, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+/**
+ * Action the user wants to take on security settings
+ */
+sealed class SecuritySettingsAction {
+    
+    data class ToggleBiometric(
+        val `enable`: kotlin.Boolean) : SecuritySettingsAction()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class TogglePin(
+        val `enable`: kotlin.Boolean) : SecuritySettingsAction()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class ToggleWipeDataPin(
+        val `enable`: kotlin.Boolean) : SecuritySettingsAction()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class ToggleDecoyPin(
+        val `enable`: kotlin.Boolean) : SecuritySettingsAction()
+        
+    {
+        
+
+        companion object
+    }
+    
+    object ChangePin : SecuritySettingsAction()
+    
+    
+
+    
+
+    
+    
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeSecuritySettingsAction : FfiConverterRustBuffer<SecuritySettingsAction>{
+    override fun read(buf: ByteBuffer): SecuritySettingsAction {
+        return when(buf.getInt()) {
+            1 -> SecuritySettingsAction.ToggleBiometric(
+                FfiConverterBoolean.read(buf),
+                )
+            2 -> SecuritySettingsAction.TogglePin(
+                FfiConverterBoolean.read(buf),
+                )
+            3 -> SecuritySettingsAction.ToggleWipeDataPin(
+                FfiConverterBoolean.read(buf),
+                )
+            4 -> SecuritySettingsAction.ToggleDecoyPin(
+                FfiConverterBoolean.read(buf),
+                )
+            5 -> SecuritySettingsAction.ChangePin
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: SecuritySettingsAction) = when(value) {
+        is SecuritySettingsAction.ToggleBiometric -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterBoolean.allocationSize(value.`enable`)
+            )
+        }
+        is SecuritySettingsAction.TogglePin -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterBoolean.allocationSize(value.`enable`)
+            )
+        }
+        is SecuritySettingsAction.ToggleWipeDataPin -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterBoolean.allocationSize(value.`enable`)
+            )
+        }
+        is SecuritySettingsAction.ToggleDecoyPin -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterBoolean.allocationSize(value.`enable`)
+            )
+        }
+        is SecuritySettingsAction.ChangePin -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+    }
+
+    override fun write(value: SecuritySettingsAction, buf: ByteBuffer) {
+        when(value) {
+            is SecuritySettingsAction.ToggleBiometric -> {
+                buf.putInt(1)
+                FfiConverterBoolean.write(value.`enable`, buf)
+                Unit
+            }
+            is SecuritySettingsAction.TogglePin -> {
+                buf.putInt(2)
+                FfiConverterBoolean.write(value.`enable`, buf)
+                Unit
+            }
+            is SecuritySettingsAction.ToggleWipeDataPin -> {
+                buf.putInt(3)
+                FfiConverterBoolean.write(value.`enable`, buf)
+                Unit
+            }
+            is SecuritySettingsAction.ToggleDecoyPin -> {
+                buf.putInt(4)
+                FfiConverterBoolean.write(value.`enable`, buf)
+                Unit
+            }
+            is SecuritySettingsAction.ChangePin -> {
+                buf.putInt(5)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+/**
+ * Result of validating a security settings action
+ */
+sealed class SecuritySettingsResult {
+    
+    /**
+     * Proceed to show a sheet for PIN entry
+     */
+    data class ProceedToSheet(
+        val v1: org.bitcoinppl.cove_core.SecuritySheetState) : SecuritySettingsResult()
+        
+    {
+        
+
+        companion object
+    }
+    
+    /**
+     * Show an alert dialog
+     */
+    data class ShowAlert(
+        val v1: org.bitcoinppl.cove_core.SecurityAlertState) : SecuritySettingsResult()
+        
+    {
+        
+
+        companion object
+    }
+    
+    /**
+     * Decoy mode - just update local UI, don't persist
+     */
+    object DecoyModeLocalUpdate : SecuritySettingsResult()
+    
+    
+
+    
+
+    
+    
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeSecuritySettingsResult : FfiConverterRustBuffer<SecuritySettingsResult>{
+    override fun read(buf: ByteBuffer): SecuritySettingsResult {
+        return when(buf.getInt()) {
+            1 -> SecuritySettingsResult.ProceedToSheet(
+                FfiConverterTypeSecuritySheetState.read(buf),
+                )
+            2 -> SecuritySettingsResult.ShowAlert(
+                FfiConverterTypeSecurityAlertState.read(buf),
+                )
+            3 -> SecuritySettingsResult.DecoyModeLocalUpdate
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: SecuritySettingsResult) = when(value) {
+        is SecuritySettingsResult.ProceedToSheet -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeSecuritySheetState.allocationSize(value.v1)
+            )
+        }
+        is SecuritySettingsResult.ShowAlert -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeSecurityAlertState.allocationSize(value.v1)
+            )
+        }
+        is SecuritySettingsResult.DecoyModeLocalUpdate -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+    }
+
+    override fun write(value: SecuritySettingsResult, buf: ByteBuffer) {
+        when(value) {
+            is SecuritySettingsResult.ProceedToSheet -> {
+                buf.putInt(1)
+                FfiConverterTypeSecuritySheetState.write(value.v1, buf)
+                Unit
+            }
+            is SecuritySettingsResult.ShowAlert -> {
+                buf.putInt(2)
+                FfiConverterTypeSecurityAlertState.write(value.v1, buf)
+                Unit
+            }
+            is SecuritySettingsResult.DecoyModeLocalUpdate -> {
+                buf.putInt(3)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+/**
+ * What sheet to show for PIN entry flows
+ */
+
+enum class SecuritySheetState {
+    
+    NONE,
+    NEW_PIN,
+    REMOVE_PIN,
+    CHANGE_PIN,
+    ENABLE_BIOMETRIC,
+    DISABLE_BIOMETRIC,
+    ENABLE_WIPE_DATA_PIN,
+    REMOVE_WIPE_DATA_PIN,
+    /**
+     * Remove wipe data PIN, then enable biometric
+     */
+    REMOVE_WIPE_DATA_PIN_THEN_ENABLE_BIOMETRIC,
+    ENABLE_DECOY_PIN,
+    REMOVE_DECOY_PIN,
+    /**
+     * Remove decoy PIN, then enable biometric
+     */
+    REMOVE_DECOY_PIN_THEN_ENABLE_BIOMETRIC,
+    REMOVE_ALL_TRICK_PINS;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeSecuritySheetState: FfiConverterRustBuffer<SecuritySheetState> {
+    override fun read(buf: ByteBuffer) = try {
+        SecuritySheetState.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: SecuritySheetState) = 4UL
+
+    override fun write(value: SecuritySheetState, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
     }
 }
 
