@@ -35,6 +35,42 @@ final class KeyboardAccessoryController: ObservableObject {
     private var container: UIView?
     private weak var currentResponder: UIView?
     private var isAttached: Bool = false
+    private var notificationObserver: NSObjectProtocol?
+
+    init() {
+        notificationObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.reattachIfNeeded()
+        }
+    }
+
+    /// Reattach the accessory view when app returns from background/notification center.
+    /// This handles the case where iOS clears the inputAccessoryView but SwiftUI doesn't trigger an update.
+    private func reattachIfNeeded() {
+        // small delay to let iOS complete its transition
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            guard let self,
+                  self.isAttached,
+                  let responder = self.currentResponder,
+                  let container = self.container
+            else {
+                return
+            }
+
+            // force rebuild: clear first, then re-set
+            self.setAccessory(on: responder, accessoryView: nil, forceReload: false)
+            self.setAccessory(on: responder, accessoryView: container, forceReload: true)
+        }
+    }
+
+    deinit {
+        if let observer = notificationObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
 
     func update(isVisible: Bool, height: CGFloat, @ViewBuilder accessory: () -> AnyView) {
         guard let responderView = UIResponder.currentFirstResponderView else {
