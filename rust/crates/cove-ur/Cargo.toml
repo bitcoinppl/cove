@@ -1,0 +1,21 @@
+[package]
+name = "cove-ur"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "MIT-licensed UR type implementations for Cove Bitcoin wallet"
+authors = ["Praveen Perera <me@praveenperera.com>"]
+
+[dependencies]
+minicbor = { workspace = true }
+bitcoin = { workspace = true }
+thiserror = { workspace = true }
+eyre = { workspace = true }
+uniffi = { workspace = true }
+bip39 = { workspace = true }
+foundation-ur = { workspace = true }
+pubport = { workspace = true }
+hex = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

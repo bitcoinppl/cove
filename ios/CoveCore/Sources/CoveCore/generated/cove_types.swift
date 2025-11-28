@@ -1606,6 +1606,16 @@ public protocol ConfirmDetailsProtocol: AnyObject, Sendable {
     
     func psbtToHex()  -> String
     
+    /**
+     * Export PSBT as UR-encoded QR strings for animated display
+     */
+    func psbtToUr(maxFragmentLen: UInt32) throws  -> [String]
+    
+    /**
+     * Export PSBT as single UR string (for small PSBTs)
+     */
+    func psbtToUrSingle() throws  -> String
+    
     func sendingAmount()  -> Amount
     
     func sendingTo()  -> Address
@@ -1765,6 +1775,29 @@ open func psbtToBbqr()throws  -> [String]  {
 open func psbtToHex() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_cove_types_fn_method_confirmdetails_psbt_to_hex(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+    /**
+     * Export PSBT as UR-encoded QR strings for animated display
+     */
+open func psbtToUr(maxFragmentLen: UInt32)throws  -> [String]  {
+    return try  FfiConverterSequenceString.lift(try rustCallWithError(FfiConverterTypeConfirmDetailsError_lift) {
+    uniffi_cove_types_fn_method_confirmdetails_psbt_to_ur(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt32.lower(maxFragmentLen),$0
+    )
+})
+}
+    
+    /**
+     * Export PSBT as single UR string (for small PSBTs)
+     */
+open func psbtToUrSingle()throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeConfirmDetailsError_lift) {
+    uniffi_cove_types_fn_method_confirmdetails_psbt_to_ur_single(
             self.uniffiCloneHandle(),$0
     )
 })
@@ -5791,6 +5824,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_confirmdetails_psbt_to_hex() != 28844) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_types_checksum_method_confirmdetails_psbt_to_ur() != 51534) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_types_checksum_method_confirmdetails_psbt_to_ur_single() != 27748) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_confirmdetails_sending_amount() != 32253) {
