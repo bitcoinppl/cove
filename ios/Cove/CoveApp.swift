@@ -54,7 +54,7 @@ struct CoveApp: App {
     @State var id = UUID()
 
     @State var showCover: Bool = true
-    @State var scannedCode: TaggedItem<StringOrData>? = .none
+    @State var scannedCode: TaggedItem<MultiFormat>? = .none
     @State var coverClearTask: Task<Void, Never>?
 
     @ViewBuilder
@@ -537,27 +537,13 @@ struct CoveApp: App {
     }
 
     func onChangeQr(
-        _: TaggedItem<StringOrData>?, _ scannedCode: TaggedItem<StringOrData>?
+        _: TaggedItem<MultiFormat>?, _ scannedCode: TaggedItem<MultiFormat>?
     ) {
         Log.debug("[COVE APP ROOT] onChangeQr")
         guard let scannedCode else { return }
         app.sheetState = .none
-        do {
-            let multiFormat = try scannedCode.item.toMultiFormat()
-            handleMultiFormat(multiFormat)
-        } catch {
-            switch error {
-            case let multiFormatError as MultiFormatError:
-                Log.error(
-                    "MultiFormat not recognized: \(multiFormatError): \(multiFormatError.description)"
-                )
-                app.alertState = TaggedItem(.invalidFormat(multiFormatError.description))
-
-            default:
-                Log.error("Unable to handle scanned code, error: \(error)")
-                app.alertState = TaggedItem(.invalidFileFormat(error.localizedDescription))
-            }
-        }
+        // Already have MultiFormat - no conversion needed!
+        handleMultiFormat(scannedCode.item)
     }
 
     func onChangeNfc(_: NfcMessage?, _ nfcMessage: NfcMessage?) {
