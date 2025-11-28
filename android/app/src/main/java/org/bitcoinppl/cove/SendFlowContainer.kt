@@ -116,6 +116,17 @@ fun SendFlowContainer(
                 }
             }
 
+            // observe unit changes and notify send flow manager (mirrors iOS .onChange)
+            var previousUnit by remember { mutableStateOf(wm.walletMetadata?.selectedUnit) }
+            LaunchedEffect(wm.walletMetadata?.selectedUnit) {
+                val currentUnit = wm.walletMetadata?.selectedUnit
+                val oldUnit = previousUnit
+                if (oldUnit != null && currentUnit != null && oldUnit != currentUnit) {
+                    sfm.dispatch(SendFlowManagerAction.NotifySelectedUnitedChanged(oldUnit, currentUnit))
+                }
+                previousUnit = currentUnit
+            }
+
             SendFlowRouteToScreen(
                 app = app,
                 sendRoute = sendRoute,
