@@ -1233,279 +1233,6 @@ public func FfiConverterTypeBalance_lower(_ value: Balance) -> UInt64 {
 
 
 
-public protocol BbqrJoinResultProtocol: AnyObject, Sendable {
-    
-    func finalResult() throws  -> String
-    
-    func isComplete()  -> Bool
-    
-    func partsLeft()  -> UInt32
-    
-}
-open class BbqrJoinResult: BbqrJoinResultProtocol, @unchecked Sendable {
-    fileprivate let handle: UInt64
-
-    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public struct NoHandle {
-        public init() {}
-    }
-
-    // TODO: We'd like this to be `private` but for Swifty reasons,
-    // we can't implement `FfiConverter` without making this `required` and we can't
-    // make it `required` without making it `public`.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    required public init(unsafeFromHandle handle: UInt64) {
-        self.handle = handle
-    }
-
-    // This constructor can be used to instantiate a fake object.
-    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
-    //
-    // - Warning:
-    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public init(noHandle: NoHandle) {
-        self.handle = 0
-    }
-
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public func uniffiCloneHandle() -> UInt64 {
-        return try! rustCall { uniffi_cove_fn_clone_bbqrjoinresult(self.handle, $0) }
-    }
-    // No primary constructor declared for this class.
-
-    deinit {
-        if handle == 0 {
-            // Mock objects have handle=0 don't try to free them
-            return
-        }
-
-        try! rustCall { uniffi_cove_fn_free_bbqrjoinresult(handle, $0) }
-    }
-
-    
-
-    
-open func finalResult()throws  -> String  {
-    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeMultiQrError_lift) {
-    uniffi_cove_fn_method_bbqrjoinresult_final_result(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
-open func isComplete() -> Bool  {
-    return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_cove_fn_method_bbqrjoinresult_is_complete(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
-open func partsLeft() -> UInt32  {
-    return try!  FfiConverterUInt32.lift(try! rustCall() {
-    uniffi_cove_fn_method_bbqrjoinresult_parts_left(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
-
-    
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeBbqrJoinResult: FfiConverter {
-    typealias FfiType = UInt64
-    typealias SwiftType = BbqrJoinResult
-
-    public static func lift(_ handle: UInt64) throws -> BbqrJoinResult {
-        return BbqrJoinResult(unsafeFromHandle: handle)
-    }
-
-    public static func lower(_ value: BbqrJoinResult) -> UInt64 {
-        return value.uniffiCloneHandle()
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BbqrJoinResult {
-        let handle: UInt64 = try readInt(&buf)
-        return try lift(handle)
-    }
-
-    public static func write(_ value: BbqrJoinResult, into buf: inout [UInt8]) {
-        writeInt(&buf, lower(value))
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeBbqrJoinResult_lift(_ handle: UInt64) throws -> BbqrJoinResult {
-    return try FfiConverterTypeBbqrJoinResult.lift(handle)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeBbqrJoinResult_lower(_ value: BbqrJoinResult) -> UInt64 {
-    return FfiConverterTypeBbqrJoinResult.lower(value)
-}
-
-
-
-
-
-
-public protocol BbqrJoinedProtocol: AnyObject, Sendable {
-    
-    func finalResult() throws  -> String
-    
-    func getGroupedWords(chunks: UInt8) throws  -> [[String]]
-    
-    func getSeedWords() throws  -> [String]
-    
-}
-open class BbqrJoined: BbqrJoinedProtocol, @unchecked Sendable {
-    fileprivate let handle: UInt64
-
-    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public struct NoHandle {
-        public init() {}
-    }
-
-    // TODO: We'd like this to be `private` but for Swifty reasons,
-    // we can't implement `FfiConverter` without making this `required` and we can't
-    // make it `required` without making it `public`.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    required public init(unsafeFromHandle handle: UInt64) {
-        self.handle = handle
-    }
-
-    // This constructor can be used to instantiate a fake object.
-    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
-    //
-    // - Warning:
-    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public init(noHandle: NoHandle) {
-        self.handle = 0
-    }
-
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public func uniffiCloneHandle() -> UInt64 {
-        return try! rustCall { uniffi_cove_fn_clone_bbqrjoined(self.handle, $0) }
-    }
-    // No primary constructor declared for this class.
-
-    deinit {
-        if handle == 0 {
-            // Mock objects have handle=0 don't try to free them
-            return
-        }
-
-        try! rustCall { uniffi_cove_fn_free_bbqrjoined(handle, $0) }
-    }
-
-    
-
-    
-open func finalResult()throws  -> String  {
-    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeMultiQrError_lift) {
-    uniffi_cove_fn_method_bbqrjoined_final_result(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
-open func getGroupedWords(chunks: UInt8)throws  -> [[String]]  {
-    return try  FfiConverterSequenceSequenceString.lift(try rustCallWithError(FfiConverterTypeMultiQrError_lift) {
-    uniffi_cove_fn_method_bbqrjoined_get_grouped_words(
-            self.uniffiCloneHandle(),
-        FfiConverterUInt8.lower(chunks),$0
-    )
-})
-}
-    
-open func getSeedWords()throws  -> [String]  {
-    return try  FfiConverterSequenceString.lift(try rustCallWithError(FfiConverterTypeMultiQrError_lift) {
-    uniffi_cove_fn_method_bbqrjoined_get_seed_words(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
-
-    
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeBbqrJoined: FfiConverter {
-    typealias FfiType = UInt64
-    typealias SwiftType = BbqrJoined
-
-    public static func lift(_ handle: UInt64) throws -> BbqrJoined {
-        return BbqrJoined(unsafeFromHandle: handle)
-    }
-
-    public static func lower(_ value: BbqrJoined) -> UInt64 {
-        return value.uniffiCloneHandle()
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BbqrJoined {
-        let handle: UInt64 = try readInt(&buf)
-        return try lift(handle)
-    }
-
-    public static func write(_ value: BbqrJoined, into buf: inout [UInt8]) {
-        writeInt(&buf, lower(value))
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeBbqrJoined_lift(_ handle: UInt64) throws -> BbqrJoined {
-    return try FfiConverterTypeBbqrJoined.lift(handle)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeBbqrJoined_lower(_ value: BbqrJoined) -> UInt64 {
-    return FfiConverterTypeBbqrJoined.lower(value)
-}
-
-
-
-
-
-
 public protocol Bip329LabelsProtocol: AnyObject, Sendable {
     
 }
@@ -5368,210 +5095,6 @@ public func FfiConverterTypeMnemonic_lift(_ handle: UInt64) throws -> Mnemonic {
 #endif
 public func FfiConverterTypeMnemonic_lower(_ value: Mnemonic) -> UInt64 {
     return FfiConverterTypeMnemonic.lower(value)
-}
-
-
-
-
-
-
-public protocol MultiQrProtocol: AnyObject, Sendable {
-    
-    func addPart(qr: String) throws  -> BbqrJoinResult
-    
-    func getGroupedWords(qr: StringOrData, groupsOf: UInt8) throws  -> [[String]]?
-    
-    func handleScanResult(qr: StringOrData) throws  -> MultiQrScanResult
-    
-    func isBbqr()  -> Bool
-    
-    func isSeedQr()  -> Bool
-    
-    func isUr()  -> Bool
-    
-    func totalParts()  -> UInt32
-    
-}
-open class MultiQr: MultiQrProtocol, @unchecked Sendable {
-    fileprivate let handle: UInt64
-
-    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public struct NoHandle {
-        public init() {}
-    }
-
-    // TODO: We'd like this to be `private` but for Swifty reasons,
-    // we can't implement `FfiConverter` without making this `required` and we can't
-    // make it `required` without making it `public`.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    required public init(unsafeFromHandle handle: UInt64) {
-        self.handle = handle
-    }
-
-    // This constructor can be used to instantiate a fake object.
-    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
-    //
-    // - Warning:
-    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public init(noHandle: NoHandle) {
-        self.handle = 0
-    }
-
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public func uniffiCloneHandle() -> UInt64 {
-        return try! rustCall { uniffi_cove_fn_clone_multiqr(self.handle, $0) }
-    }
-    // No primary constructor declared for this class.
-
-    deinit {
-        if handle == 0 {
-            // Mock objects have handle=0 don't try to free them
-            return
-        }
-
-        try! rustCall { uniffi_cove_fn_free_multiqr(handle, $0) }
-    }
-
-    
-public static func newFromString(qr: String) -> MultiQr  {
-    return try!  FfiConverterTypeMultiQr_lift(try! rustCall() {
-    uniffi_cove_fn_constructor_multiqr_new_from_string(
-        FfiConverterString.lower(qr),$0
-    )
-})
-}
-    
-public static func tryNew(qr: StringOrData)throws  -> MultiQr  {
-    return try  FfiConverterTypeMultiQr_lift(try rustCallWithError(FfiConverterTypeMultiQrError_lift) {
-    uniffi_cove_fn_constructor_multiqr_try_new(
-        FfiConverterTypeStringOrData_lower(qr),$0
-    )
-})
-}
-    
-public static func tryNewFromData(data: Data)throws  -> MultiQr  {
-    return try  FfiConverterTypeMultiQr_lift(try rustCallWithError(FfiConverterTypeMultiQrError_lift) {
-    uniffi_cove_fn_constructor_multiqr_try_new_from_data(
-        FfiConverterData.lower(data),$0
-    )
-})
-}
-    
-
-    
-open func addPart(qr: String)throws  -> BbqrJoinResult  {
-    return try  FfiConverterTypeBbqrJoinResult_lift(try rustCallWithError(FfiConverterTypeMultiQrError_lift) {
-    uniffi_cove_fn_method_multiqr_add_part(
-            self.uniffiCloneHandle(),
-        FfiConverterString.lower(qr),$0
-    )
-})
-}
-    
-open func getGroupedWords(qr: StringOrData, groupsOf: UInt8)throws  -> [[String]]?  {
-    return try  FfiConverterOptionSequenceSequenceString.lift(try rustCallWithError(FfiConverterTypeMultiQrError_lift) {
-    uniffi_cove_fn_method_multiqr_get_grouped_words(
-            self.uniffiCloneHandle(),
-        FfiConverterTypeStringOrData_lower(qr),
-        FfiConverterUInt8.lower(groupsOf),$0
-    )
-})
-}
-    
-open func handleScanResult(qr: StringOrData)throws  -> MultiQrScanResult  {
-    return try  FfiConverterTypeMultiQrScanResult_lift(try rustCallWithError(FfiConverterTypeMultiQrError_lift) {
-    uniffi_cove_fn_method_multiqr_handle_scan_result(
-            self.uniffiCloneHandle(),
-        FfiConverterTypeStringOrData_lower(qr),$0
-    )
-})
-}
-    
-open func isBbqr() -> Bool  {
-    return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_cove_fn_method_multiqr_is_bbqr(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
-open func isSeedQr() -> Bool  {
-    return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_cove_fn_method_multiqr_is_seed_qr(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
-open func isUr() -> Bool  {
-    return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_cove_fn_method_multiqr_is_ur(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
-open func totalParts() -> UInt32  {
-    return try!  FfiConverterUInt32.lift(try! rustCall() {
-    uniffi_cove_fn_method_multiqr_total_parts(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
-
-    
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeMultiQr: FfiConverter {
-    typealias FfiType = UInt64
-    typealias SwiftType = MultiQr
-
-    public static func lift(_ handle: UInt64) throws -> MultiQr {
-        return MultiQr(unsafeFromHandle: handle)
-    }
-
-    public static func lower(_ value: MultiQr) -> UInt64 {
-        return value.uniffiCloneHandle()
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MultiQr {
-        let handle: UInt64 = try readInt(&buf)
-        return try lift(handle)
-    }
-
-    public static func write(_ value: MultiQr, into buf: inout [UInt8]) {
-        writeInt(&buf, lower(value))
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeMultiQr_lift(_ handle: UInt64) throws -> MultiQr {
-    return try FfiConverterTypeMultiQr.lift(handle)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeMultiQr_lower(_ value: MultiQr) -> UInt64 {
-    return FfiConverterTypeMultiQr.lower(value)
 }
 
 
@@ -18063,13 +17586,8 @@ public enum MultiQrError: Swift.Error, Equatable, Hashable, Foundation.Localized
     case ParseError(String
     )
     case InvalidUtf8
-    case NotYetAvailable
     case CannotAddBinaryDataToBbqr
-    case BbqrDidNotContainSeedWords(String
-    )
     case InvalidSeedQr(SeedQrError
-    )
-    case InvalidPlainTextQr(String
     )
     case Ur(UrError
     )
@@ -18118,18 +17636,11 @@ public struct FfiConverterTypeMultiQrError: FfiConverterRustBuffer {
             try FfiConverterString.read(from: &buf)
             )
         case 4: return .InvalidUtf8
-        case 5: return .NotYetAvailable
-        case 6: return .CannotAddBinaryDataToBbqr
-        case 7: return .BbqrDidNotContainSeedWords(
-            try FfiConverterString.read(from: &buf)
-            )
-        case 8: return .InvalidSeedQr(
+        case 5: return .CannotAddBinaryDataToBbqr
+        case 6: return .InvalidSeedQr(
             try FfiConverterTypeSeedQrError.read(from: &buf)
             )
-        case 9: return .InvalidPlainTextQr(
-            try FfiConverterString.read(from: &buf)
-            )
-        case 10: return .Ur(
+        case 7: return .Ur(
             try FfiConverterTypeUrError.read(from: &buf)
             )
 
@@ -18161,31 +17672,17 @@ public struct FfiConverterTypeMultiQrError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(4))
         
         
-        case .NotYetAvailable:
+        case .CannotAddBinaryDataToBbqr:
             writeInt(&buf, Int32(5))
         
         
-        case .CannotAddBinaryDataToBbqr:
-            writeInt(&buf, Int32(6))
-        
-        
-        case let .BbqrDidNotContainSeedWords(v1):
-            writeInt(&buf, Int32(7))
-            FfiConverterString.write(v1, into: &buf)
-            
-        
         case let .InvalidSeedQr(v1):
-            writeInt(&buf, Int32(8))
+            writeInt(&buf, Int32(6))
             FfiConverterTypeSeedQrError.write(v1, into: &buf)
             
         
-        case let .InvalidPlainTextQr(v1):
-            writeInt(&buf, Int32(9))
-            FfiConverterString.write(v1, into: &buf)
-            
-        
         case let .Ur(v1):
-            writeInt(&buf, Int32(10))
+            writeInt(&buf, Int32(7))
             FfiConverterTypeUrError.write(v1, into: &buf)
             
         }
@@ -18206,119 +17703,6 @@ public func FfiConverterTypeMultiQrError_lift(_ buf: RustBuffer) throws -> Multi
 public func FfiConverterTypeMultiQrError_lower(_ value: MultiQrError) -> RustBuffer {
     return FfiConverterTypeMultiQrError.lower(value)
 }
-
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
-
-public enum MultiQrScanResult {
-    
-    case seedQr(SeedQr
-    )
-    case single(String
-    )
-    case completedBBqr(BbqrJoined
-    )
-    case inProgressBBqr(UInt32
-    )
-    case completedUr(MultiFormat
-    )
-    case inProgressUr(Double
-    )
-
-
-
-
-
-}
-
-#if compiler(>=6)
-extension MultiQrScanResult: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeMultiQrScanResult: FfiConverterRustBuffer {
-    typealias SwiftType = MultiQrScanResult
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MultiQrScanResult {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-        
-        case 1: return .seedQr(try FfiConverterTypeSeedQr.read(from: &buf)
-        )
-        
-        case 2: return .single(try FfiConverterString.read(from: &buf)
-        )
-        
-        case 3: return .completedBBqr(try FfiConverterTypeBbqrJoined.read(from: &buf)
-        )
-        
-        case 4: return .inProgressBBqr(try FfiConverterUInt32.read(from: &buf)
-        )
-        
-        case 5: return .completedUr(try FfiConverterTypeMultiFormat.read(from: &buf)
-        )
-        
-        case 6: return .inProgressUr(try FfiConverterDouble.read(from: &buf)
-        )
-        
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: MultiQrScanResult, into buf: inout [UInt8]) {
-        switch value {
-        
-        
-        case let .seedQr(v1):
-            writeInt(&buf, Int32(1))
-            FfiConverterTypeSeedQr.write(v1, into: &buf)
-            
-        
-        case let .single(v1):
-            writeInt(&buf, Int32(2))
-            FfiConverterString.write(v1, into: &buf)
-            
-        
-        case let .completedBBqr(v1):
-            writeInt(&buf, Int32(3))
-            FfiConverterTypeBbqrJoined.write(v1, into: &buf)
-            
-        
-        case let .inProgressBBqr(v1):
-            writeInt(&buf, Int32(4))
-            FfiConverterUInt32.write(v1, into: &buf)
-            
-        
-        case let .completedUr(v1):
-            writeInt(&buf, Int32(5))
-            FfiConverterTypeMultiFormat.write(v1, into: &buf)
-            
-        
-        case let .inProgressUr(v1):
-            writeInt(&buf, Int32(6))
-            FfiConverterDouble.write(v1, into: &buf)
-            
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeMultiQrScanResult_lift(_ buf: RustBuffer) throws -> MultiQrScanResult {
-    return try FfiConverterTypeMultiQrScanResult.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeMultiQrScanResult_lower(_ value: MultiQrScanResult) -> RustBuffer {
-    return FfiConverterTypeMultiQrScanResult.lower(value)
-}
-
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
@@ -19186,9 +18570,12 @@ public func FfiConverterTypeScanProgress_lower(_ value: ScanProgress) -> RustBuf
 public enum ScanResult {
     
     /**
-     * Scan complete - here's the parsed data
+     * Scan complete - here's the parsed data and optionally the raw string
      */
-    case complete(MultiFormat
+    case complete(data: MultiFormat, 
+        /**
+         * Raw string data (for screens that need the original string)
+         */rawData: String?
     )
     /**
      * Multi-part scan in progress
@@ -19216,7 +18603,7 @@ public struct FfiConverterTypeScanResult: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
         
-        case 1: return .complete(try FfiConverterTypeMultiFormat.read(from: &buf)
+        case 1: return .complete(data: try FfiConverterTypeMultiFormat.read(from: &buf), rawData: try FfiConverterOptionString.read(from: &buf)
         )
         
         case 2: return .inProgress(try FfiConverterTypeScanProgress.read(from: &buf)
@@ -19230,9 +18617,10 @@ public struct FfiConverterTypeScanResult: FfiConverterRustBuffer {
         switch value {
         
         
-        case let .complete(v1):
+        case let .complete(data,rawData):
             writeInt(&buf, Int32(1))
-            FfiConverterTypeMultiFormat.write(v1, into: &buf)
+            FfiConverterTypeMultiFormat.write(data, into: &buf)
+            FfiConverterOptionString.write(rawData, into: &buf)
             
         
         case let .inProgress(v1):
@@ -26332,30 +25720,6 @@ fileprivate struct FfiConverterOptionSequenceTypeUtxo: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterOptionSequenceSequenceString: FfiConverterRustBuffer {
-    typealias SwiftType = [[String]]?
-
-    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
-        guard let value = value else {
-            writeInt(&buf, Int8(0))
-            return
-        }
-        writeInt(&buf, Int8(1))
-        FfiConverterSequenceSequenceString.write(value, into: &buf)
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
-        switch try readInt(&buf) as Int8 {
-        case 0: return nil
-        case 1: return try FfiConverterSequenceSequenceString.read(from: &buf)
-        default: throw UniffiInternalError.unexpectedOptionalTag
-        }
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
 fileprivate struct FfiConverterOptionTypeWalletId: FfiConverterRustBuffer {
     typealias SwiftType = WalletId?
 
@@ -28228,51 +27592,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_mnemonic_words() != 8009) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_bbqrjoinresult_final_result() != 4512) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_bbqrjoinresult_is_complete() != 57834) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_bbqrjoinresult_parts_left() != 18009) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_bbqrjoined_final_result() != 48396) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_bbqrjoined_get_grouped_words() != 39118) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_bbqrjoined_get_seed_words() != 36742) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_multiqr_add_part() != 4791) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_multiqr_get_grouped_words() != 41176) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_multiqr_handle_scan_result() != 10107) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_multiqr_is_bbqr() != 45869) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_multiqr_is_seed_qr() != 47501) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_multiqr_is_ur() != 23465) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_multiqr_total_parts() != 39268) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_qrscanner_reset() != 14487) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_qrscanner_scan() != 41446) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_cove_checksum_method_nodeselector_check_and_save_node() != 9328) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -28289,6 +27608,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_nodeselector_selected_node() != 20791) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_qrscanner_reset() != 17017) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_qrscanner_scan() != 56830) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_boxedroute_route() != 6095) {
@@ -28609,19 +27934,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_constructor_mnemonic_preview() != 34768) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_constructor_multiqr_new_from_string() != 58512) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_constructor_multiqr_try_new() != 29401) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_constructor_multiqr_try_new_from_data() != 6690) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_constructor_qrscanner_new() != 21520) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_cove_checksum_constructor_nodeselector_new() != 62365) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_constructor_qrscanner_new() != 57573) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_boxedroute_new() != 21632) {
