@@ -4,6 +4,7 @@ use act_zero::*;
 use bdk_wallet::{
     KeychainKind, Wallet as BdkWallet,
     bitcoin::{Address, Network},
+    descriptor::ExtendedDescriptor,
 };
 use bip39::Mnemonic;
 use cove_util::result_ext::ResultExt as _;
@@ -518,8 +519,12 @@ impl Wallets {
             (&json.bip44, WalletAddressType::Legacy),
         ] {
             if let Some(json) = json {
-                let params = BdkWallet::create(json.external.clone(), json.internal.clone())
-                    .network(network);
+                // TODO: remove string round-trip once bdk_wallet updates to miniscript 0.13
+                let external: ExtendedDescriptor =
+                    json.external.to_string().parse().expect("valid descriptor");
+                let internal: ExtendedDescriptor =
+                    json.internal.to_string().parse().expect("valid descriptor");
+                let params = BdkWallet::create(external, internal).network(network);
 
                 let wallet =
                     BdkWallet::create_with_params(params).map_err_str(WalletError::BdkError)?;
