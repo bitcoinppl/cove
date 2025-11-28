@@ -30,6 +30,7 @@ class CoinControlManager(
     private val tag = "CoinControlManager"
 
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val isClosed = AtomicBoolean(false)
 
     var sort by mutableStateOf<CoinControlListSort?>(
@@ -190,12 +191,16 @@ class CoinControlManager(
 
     override fun reconcile(message: CoinControlManagerReconcileMessage) {
         logDebug("reconcile: $message")
-        mainScope.launch { apply(message) }
+        ioScope.launch {
+            mainScope.launch { apply(message) }
+        }
     }
 
     override fun reconcileMany(messages: List<CoinControlManagerReconcileMessage>) {
         logDebug("reconcile_messages: ${messages.size} messages")
-        mainScope.launch { messages.forEach { apply(it) } }
+        ioScope.launch {
+            mainScope.launch { messages.forEach { apply(it) } }
+        }
     }
 
     fun dispatch(action: CoinControlManagerAction) {
@@ -207,6 +212,7 @@ class CoinControlManager(
         if (!isClosed.compareAndSet(false, true)) return
         logDebug("Closing CoinControlManager")
         updateSendFlowManagerTask?.cancel()
+        ioScope.cancel()
         mainScope.cancel() // stop callbacks into Rust
         rust.close() // free Rust Arc
     }

@@ -28,6 +28,7 @@ class AuthManager private constructor() : AuthManagerReconciler {
     private val tag = "AuthManager"
 
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     internal var rust: RustAuthManager = RustAuthManager()
         private set
@@ -200,18 +201,20 @@ class AuthManager private constructor() : AuthManagerReconciler {
 
     override fun reconcile(message: AuthManagerReconcileMessage) {
         logDebug("reconcile: $message")
-        mainScope.launch {
-            when (message) {
-                is AuthManagerReconcileMessage.AuthTypeChanged -> {
-                    type = message.v1
-                }
+        ioScope.launch {
+            mainScope.launch {
+                when (message) {
+                    is AuthManagerReconcileMessage.AuthTypeChanged -> {
+                        type = message.v1
+                    }
 
-                is AuthManagerReconcileMessage.WipeDataPinChanged -> {
-                    isWipeDataPinEnabled = rust.isWipeDataPinEnabled()
-                }
+                    is AuthManagerReconcileMessage.WipeDataPinChanged -> {
+                        isWipeDataPinEnabled = rust.isWipeDataPinEnabled()
+                    }
 
-                is AuthManagerReconcileMessage.DecoyPinChanged -> {
-                    isDecoyPinEnabled = rust.isDecoyPinEnabled()
+                    is AuthManagerReconcileMessage.DecoyPinChanged -> {
+                        isDecoyPinEnabled = rust.isDecoyPinEnabled()
+                    }
                 }
             }
         }

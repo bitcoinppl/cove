@@ -25,6 +25,9 @@ class AppManager private constructor() : FfiReconcile {
     // Scope for UI-bound work; reconcile() hops to Main here
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
+    // Scope for IO-bound work; FFI calls run here first before dispatching to mainScope
+    private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     // rust bridge - not observable
     internal var rust: FfiApp = FfiApp()
         private set
@@ -513,73 +516,75 @@ class AppManager private constructor() : FfiReconcile {
 
     override fun reconcile(message: AppStateReconcileMessage) {
         logDebug("Reconcile: $message")
-        // Ensure all Compose state mutations occur on Main
-        mainScope.launch {
-            when (message) {
-                is AppStateReconcileMessage.RouteUpdated -> {
-                    router.updateRoutes(message.v1.toList())
-                }
-
-                is AppStateReconcileMessage.PushedRoute -> {
-                    val newRoutes = (router.routes + message.v1).toList()
-                    router.updateRoutes(newRoutes)
-                }
-
-                is AppStateReconcileMessage.DatabaseUpdated -> {
-                    database = Database()
-                }
-
-                is AppStateReconcileMessage.ColorSchemeChanged -> {
-                    colorSchemeSelection = message.v1
-                }
-
-                is AppStateReconcileMessage.SelectedNodeChanged -> {
-                    selectedNode = message.v1
-                }
-
-                is AppStateReconcileMessage.SelectedNetworkChanged -> {
-                    if (previousSelectedNetwork == null) {
-                        previousSelectedNetwork = selectedNetwork
+        // Run on IO first to avoid blocking main thread on FFI calls, then dispatch to Main for UI updates
+        ioScope.launch {
+            mainScope.launch {
+                when (message) {
+                    is AppStateReconcileMessage.RouteUpdated -> {
+                        router.updateRoutes(message.v1.toList())
                     }
-                    selectedNetwork = message.v1
-                }
 
-                is AppStateReconcileMessage.DefaultRouteChanged -> {
-                    router.default = message.v1
-                    router.updateRoutes(message.v2.toList())
-                    routeId = UUID.randomUUID().toString()
-                    logDebug("Route ID changed to: $routeId")
-                }
+                    is AppStateReconcileMessage.PushedRoute -> {
+                        val newRoutes = (router.routes + message.v1).toList()
+                        router.updateRoutes(newRoutes)
+                    }
 
-                is AppStateReconcileMessage.FiatPricesChanged -> {
-                    prices = message.v1
-                }
+                    is AppStateReconcileMessage.DatabaseUpdated -> {
+                        database = Database()
+                    }
 
-                is AppStateReconcileMessage.FeesChanged -> {
-                    fees = message.v1
-                }
+                    is AppStateReconcileMessage.ColorSchemeChanged -> {
+                        colorSchemeSelection = message.v1
+                    }
 
-                is AppStateReconcileMessage.FiatCurrencyChanged -> {
-                    selectedFiatCurrency = message.v1
+                    is AppStateReconcileMessage.SelectedNodeChanged -> {
+                        selectedNode = message.v1
+                    }
 
-                    // refresh fiat values in the wallet manager using IO
-                    walletManager?.let { wm ->
-                        launch(Dispatchers.IO) {
-                            wm.forceWalletScan()
-                            wm.updateWalletBalance()
+                    is AppStateReconcileMessage.SelectedNetworkChanged -> {
+                        if (previousSelectedNetwork == null) {
+                            previousSelectedNetwork = selectedNetwork
+                        }
+                        selectedNetwork = message.v1
+                    }
+
+                    is AppStateReconcileMessage.DefaultRouteChanged -> {
+                        router.default = message.v1
+                        router.updateRoutes(message.v2.toList())
+                        routeId = UUID.randomUUID().toString()
+                        logDebug("Route ID changed to: $routeId")
+                    }
+
+                    is AppStateReconcileMessage.FiatPricesChanged -> {
+                        prices = message.v1
+                    }
+
+                    is AppStateReconcileMessage.FeesChanged -> {
+                        fees = message.v1
+                    }
+
+                    is AppStateReconcileMessage.FiatCurrencyChanged -> {
+                        selectedFiatCurrency = message.v1
+
+                        // refresh fiat values in the wallet manager using IO
+                        walletManager?.let { wm ->
+                            launch(Dispatchers.IO) {
+                                wm.forceWalletScan()
+                                wm.updateWalletBalance()
+                            }
                         }
                     }
-                }
 
-                is AppStateReconcileMessage.AcceptedTerms -> {
-                    isTermsAccepted = true
-                }
+                    is AppStateReconcileMessage.AcceptedTerms -> {
+                        isTermsAccepted = true
+                    }
 
-                is AppStateReconcileMessage.WalletModeChanged -> {
-                    isLoading = true
-                    launch {
-                        kotlinx.coroutines.delay(200)
-                        isLoading = false
+                    is AppStateReconcileMessage.WalletModeChanged -> {
+                        isLoading = true
+                        launch {
+                            kotlinx.coroutines.delay(200)
+                            isLoading = false
+                        }
                     }
                 }
 
