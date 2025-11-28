@@ -61,9 +61,18 @@ fun AutoSizeText(
     BoxWithConstraints(modifier = modifier) {
         val maxWidthPx = with(density) { maxWidth.toPx() }
 
-        // calculate optimal font size
+        // calculate optimal font size with all dependencies
         val fontSize =
-            remember(text, maxWidthPx, maxFontSize, minFontSize) {
+            remember(
+                text,
+                maxWidthPx,
+                maxFontSize,
+                minFontSize,
+                style,
+                fontWeight,
+                fontStyle,
+                fontFamily,
+            ) {
                 calculateOptimalFontSize(
                     text = text,
                     maxFontSize = maxFontSize,
@@ -125,33 +134,32 @@ fun BalanceAutoSizeText(
     val fontFamilyResolver = LocalFontFamilyResolver.current
     val minFontSize = baseFontSize * minimumScaleFactor
 
-    // calculate starting font size based on text length
-    // reduce by 1.5sp per character over 8 chars
-    val lengthBasedFontSize =
-        remember(text, baseFontSize, minFontSize) {
-            val charsOverBase = maxOf(0, text.length - 8)
-            val reduction = charsOverBase * 1.5f
-            val calculated = baseFontSize.value - reduction
-            maxOf(calculated, minFontSize.value).sp
-        }
-
     BoxWithConstraints(modifier = modifier) {
         val maxWidthPx = with(density) { maxWidth.toPx() }
 
-        // calculate optimal font size (no remember - needs fresh calculation based on actual width)
+        // let binary search find optimal size from baseFontSize
         val finalFontSize =
-            calculateOptimalFontSize(
-                text = text,
-                maxFontSize = lengthBasedFontSize,
-                minFontSize = minFontSize,
-                maxWidthPx = maxWidthPx,
-                style = style,
-                fontWeight = fontWeight,
-                fontStyle = null,
-                fontFamily = null,
-                density = density,
-                fontFamilyResolver = fontFamilyResolver,
-            )
+            remember(
+                text,
+                maxWidthPx,
+                baseFontSize,
+                minFontSize,
+                style,
+                fontWeight,
+            ) {
+                calculateOptimalFontSize(
+                    text = text,
+                    maxFontSize = baseFontSize,
+                    minFontSize = minFontSize,
+                    maxWidthPx = maxWidthPx,
+                    style = style,
+                    fontWeight = fontWeight,
+                    fontStyle = null,
+                    fontFamily = null,
+                    density = density,
+                    fontFamilyResolver = fontFamilyResolver,
+                )
+            }
 
         Text(
             text = text,
@@ -170,7 +178,7 @@ fun BalanceAutoSizeText(
 }
 
 /**
- * Calculate optimal font size using binary search
+ * Calculate optimal font size using binary search with 0.1sp precision
  */
 private fun calculateOptimalFontSize(
     text: String,
@@ -184,12 +192,17 @@ private fun calculateOptimalFontSize(
     density: Density,
     fontFamilyResolver: FontFamily.Resolver,
 ): TextUnit {
+    // guard against invalid width - return max font size if we can't measure
+    if (maxWidthPx <= 0 || maxWidthPx == Float.MAX_VALUE) {
+        return maxFontSize
+    }
+
     var low = minFontSize.value
     var high = maxFontSize.value
-    var optimalSize = minFontSize.value
+    var optimalSize = maxFontSize.value // start with max, shrink only if needed
 
-    // binary search for optimal font size
-    while (low <= high) {
+    // binary search for optimal font size with 0.1sp precision
+    while (high - low > 0.1f) {
         val mid = (low + high) / 2f
         val testStyle =
             style.copy(
@@ -214,10 +227,10 @@ private fun calculateOptimalFontSize(
         if (paragraph.minIntrinsicWidth <= maxWidthPx) {
             // text fits, try larger size
             optimalSize = mid
-            low = mid + 0.5f
+            low = mid + 0.1f
         } else {
             // text doesn't fit, try smaller size
-            high = mid - 0.5f
+            high = mid - 0.1f
         }
     }
 
