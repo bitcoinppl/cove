@@ -496,7 +496,6 @@ fileprivate struct FfiConverterData: FfiConverterRustBuffer {
 
 /**
  * crypto-hdkey: Hierarchical Deterministic Key (BIP32)
- * BCR-2020-007: https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-007-hdkey.md
  */
 public protocol CryptoHdkeyProtocol: AnyObject, Sendable {
     
@@ -508,7 +507,6 @@ public protocol CryptoHdkeyProtocol: AnyObject, Sendable {
 }
 /**
  * crypto-hdkey: Hierarchical Deterministic Key (BIP32)
- * BCR-2020-007: https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-007-hdkey.md
  */
 open class CryptoHdkey: CryptoHdkeyProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64

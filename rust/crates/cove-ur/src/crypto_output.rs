@@ -43,23 +43,13 @@ impl CryptoOutput {
 
         // get derivation path from origin, or use default for script type
         let deriv_path = hdkey.origin.as_ref().map(|o| o.to_path_string()).unwrap_or_else(|| {
-            match self.descriptor.script_type {
-                ScriptType::P2pkh => "44h/0h/0h".to_string(),
-                ScriptType::P2wpkh => "84h/0h/0h".to_string(),
-                ScriptType::P2shP2wpkh => "49h/0h/0h".to_string(),
-                ScriptType::P2tr => "86h/0h/0h".to_string(),
-            }
+            self.descriptor.script_type.descriptor_derivation_path().to_string()
         });
 
         // build key expression with origin info and multipath suffix
         let key_expr = format!("[{fingerprint}/{deriv_path}]{xpub}/<0;1>/*");
 
-        let descriptor = match self.descriptor.script_type {
-            ScriptType::P2pkh => format!("pkh({key_expr})"),
-            ScriptType::P2wpkh => format!("wpkh({key_expr})"),
-            ScriptType::P2shP2wpkh => format!("sh(wpkh({key_expr}))"),
-            ScriptType::P2tr => format!("tr({key_expr})"),
-        };
+        let descriptor = self.descriptor.script_type.wrap_with(&key_expr);
 
         Ok(descriptor)
     }

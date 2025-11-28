@@ -1,10 +1,24 @@
+//! crypto-hdkey: Hierarchical Deterministic Key (BIP32)
+//! BCR-2020-007: https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-007-hdkey.md
+//!
+//! Note: This type uses manual CBOR encoding/decoding (not derive macros) because:
+//! 1. Fields 5-7 (use_info, origin, children) contain embedded tagged CBOR structures
+//! 2. These nested types must be pre-encoded with their own tags (305, 304)
+//! 3. The raw CBOR bytes are appended directly to the buffer
+//! 4. Decoding requires position tracking and recursive parsing
+//! 5. Derive macros cannot express this embedded CBOR pattern cleanly
+
 use bitcoin::bip32::{Xpriv, Xpub};
 use minicbor::{Decoder, Encoder, data::Tag};
 
-use crate::{coin_info::CryptoCoinInfo, error::*, keypath::CryptoKeypath, registry::CRYPTO_HDKEY};
+use crate::{
+    coin_info::CryptoCoinInfo,
+    error::*,
+    keypath::CryptoKeypath,
+    registry::{CRYPTO_HDKEY, hdkey_keys::*, lengths},
+};
 
 /// crypto-hdkey: Hierarchical Deterministic Key (BIP32)
-/// BCR-2020-007: https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-007-hdkey.md
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Object)]
 pub struct CryptoHdkey {
     /// True if this is a master key
@@ -81,104 +95,79 @@ impl CryptoHdkey {
     /// Encode as tagged CBOR
     /// CBOR structure: #6.303({1: bool, 2: bool, 3: bytes, ?4: bytes, ...})
     pub fn to_cbor(&self) -> Result<Vec<u8>> {
-        // pre-encode embedded structures
+        // pre-encode embedded structures (they contain their own CBOR tags)
         let use_info_cbor = self.use_info.as_ref().map(|u| u.to_cbor()).transpose()?;
         let origin_cbor = self.origin.as_ref().map(|o| o.to_cbor()).transpose()?;
         let children_cbor = self.children.as_ref().map(|c| c.to_cbor()).transpose()?;
 
         let mut buffer = Vec::new();
-        let mut encoder = Encoder::new(&mut buffer);
-
-        // write tag 303
-        encoder.tag(Tag::new(CRYPTO_HDKEY)).map_err(|e| UrError::CborEncodeError(e.to_string()))?;
 
         // count fields
-        let mut field_count = 3; // is_master, is_private, key_data always present
-        if self.chain_code.is_some() {
-            field_count += 1;
-        }
-        if self.use_info.is_some() {
-            field_count += 1;
-        }
-        if self.origin.is_some() {
-            field_count += 1;
-        }
-        if self.children.is_some() {
-            field_count += 1;
-        }
-        if self.parent_fingerprint.is_some() {
-            field_count += 1;
-        }
-        if self.name.is_some() {
-            field_count += 1;
-        }
-        if self.source.is_some() {
-            field_count += 1;
-        }
+        let field_count = 3 // is_master, is_private, key_data always present
+            + self.chain_code.is_some() as u64
+            + self.use_info.is_some() as u64
+            + self.origin.is_some() as u64
+            + self.children.is_some() as u64
+            + self.parent_fingerprint.is_some() as u64
+            + self.name.is_some() as u64
+            + self.source.is_some() as u64;
 
-        // write map header
-        encoder.map(field_count).map_err(|e| UrError::CborEncodeError(e.to_string()))?;
+        // write tag, map header, and fields 1-4 with encoder
+        {
+            let mut encoder = Encoder::new(&mut buffer);
+            encoder.tag(Tag::new(CRYPTO_HDKEY)).map_err_cbor_encode()?;
+            encoder.map(field_count).map_err_cbor_encode()?;
 
-        // write is_master (key 1)
-        encoder.u32(1).map_err(|e| UrError::CborEncodeError(e.to_string()))?;
-        encoder.bool(self.is_master).map_err(|e| UrError::CborEncodeError(e.to_string()))?;
+            // is_master (key 1)
+            encoder.u32(IS_MASTER).map_err_cbor_encode()?;
+            encoder.bool(self.is_master).map_err_cbor_encode()?;
 
-        // write is_private (key 2)
-        encoder.u32(2).map_err(|e| UrError::CborEncodeError(e.to_string()))?;
-        encoder.bool(self.is_private).map_err(|e| UrError::CborEncodeError(e.to_string()))?;
+            // is_private (key 2)
+            encoder.u32(IS_PRIVATE).map_err_cbor_encode()?;
+            encoder.bool(self.is_private).map_err_cbor_encode()?;
 
-        // write key_data (key 3)
-        encoder.u32(3).map_err(|e| UrError::CborEncodeError(e.to_string()))?;
-        encoder.bytes(&self.key_data).map_err(|e| UrError::CborEncodeError(e.to_string()))?;
+            // key_data (key 3)
+            encoder.u32(KEY_DATA).map_err_cbor_encode()?;
+            encoder.bytes(&self.key_data).map_err_cbor_encode()?;
 
-        // write chain_code if present (key 4)
-        if let Some(chain_code) = &self.chain_code {
-            encoder.u32(4).map_err(|e| UrError::CborEncodeError(e.to_string()))?;
-            encoder.bytes(chain_code).map_err(|e| UrError::CborEncodeError(e.to_string()))?;
-        }
+            // chain_code if present (key 4)
+            if let Some(chain_code) = &self.chain_code {
+                encoder.u32(CHAIN_CODE).map_err_cbor_encode()?;
+                encoder.bytes(chain_code).map_err_cbor_encode()?;
+            }
+        } // encoder borrow ends here
 
-        // write use_info if present (key 5) - append raw CBOR
+        // fields 5-7 contain pre-encoded CBOR with their own tags, so we append
+        // the map key followed by raw CBOR bytes directly to the buffer
         if let Some(cbor) = use_info_cbor {
-            // manually encode key 5
-            buffer.push(0x05); // key 5 as small uint
+            buffer.push(USE_INFO as u8); // CBOR uint for small values
             buffer.extend_from_slice(&cbor);
         }
-
-        // write origin if present (key 6) - append raw CBOR
         if let Some(cbor) = origin_cbor {
-            // manually encode key 6
-            buffer.push(0x06); // key 6 as small uint
+            buffer.push(ORIGIN as u8); // CBOR uint for small values
             buffer.extend_from_slice(&cbor);
         }
-
-        // write children if present (key 7) - append raw CBOR
         if let Some(cbor) = children_cbor {
-            // manually encode key 7
-            buffer.push(0x07); // key 7 as small uint
+            buffer.push(CHILDREN as u8); // CBOR uint for small values
             buffer.extend_from_slice(&cbor);
         }
 
-        // recreate encoder for remaining fields
-        let mut encoder = Encoder::new(&mut buffer);
+        // remaining fields are simple types, use encoder
+        {
+            let mut encoder = Encoder::new(&mut buffer);
 
-        // write parent_fingerprint if present (key 8)
-        if let Some(fingerprint) = &self.parent_fingerprint {
-            encoder.u32(8).map_err(|e| UrError::CborEncodeError(e.to_string()))?;
-            encoder
-                .u32(u32::from_be_bytes(*fingerprint))
-                .map_err(|e| UrError::CborEncodeError(e.to_string()))?;
-        }
-
-        // write name if present (key 9)
-        if let Some(name) = &self.name {
-            encoder.u32(9).map_err(|e| UrError::CborEncodeError(e.to_string()))?;
-            encoder.str(name).map_err(|e| UrError::CborEncodeError(e.to_string()))?;
-        }
-
-        // write source if present (key 10)
-        if let Some(source) = &self.source {
-            encoder.u32(10).map_err(|e| UrError::CborEncodeError(e.to_string()))?;
-            encoder.str(source).map_err(|e| UrError::CborEncodeError(e.to_string()))?;
+            if let Some(fingerprint) = &self.parent_fingerprint {
+                encoder.u32(PARENT_FINGERPRINT).map_err_cbor_encode()?;
+                encoder.u32(u32::from_be_bytes(*fingerprint)).map_err_cbor_encode()?;
+            }
+            if let Some(name) = &self.name {
+                encoder.u32(NAME).map_err_cbor_encode()?;
+                encoder.str(name).map_err_cbor_encode()?;
+            }
+            if let Some(source) = &self.source {
+                encoder.u32(SOURCE).map_err_cbor_encode()?;
+                encoder.str(source).map_err_cbor_encode()?;
+            }
         }
 
         Ok(buffer)
@@ -189,7 +178,7 @@ impl CryptoHdkey {
         let mut decoder = Decoder::new(cbor);
 
         // read and verify tag 303
-        let tag = decoder.tag().map_err(|e| UrError::CborDecodeError(e.to_string()))?;
+        let tag = decoder.tag().map_err_cbor_decode()?;
 
         if tag != Tag::new(CRYPTO_HDKEY) {
             return Err(UrError::InvalidTag { expected: CRYPTO_HDKEY, actual: tag.as_u64() });
@@ -198,7 +187,7 @@ impl CryptoHdkey {
         // read map
         let map_len = decoder
             .map()
-            .map_err(|e| UrError::CborDecodeError(e.to_string()))?
+            .map_err_cbor_decode()?
             .ok_or_else(|| UrError::CborDecodeError("Expected definite-length map".to_string()))?;
 
         let mut is_master = None;
@@ -213,87 +202,67 @@ impl CryptoHdkey {
         let mut source = None;
 
         for _ in 0..map_len {
-            let key = decoder.u32().map_err(|e| UrError::CborDecodeError(e.to_string()))?;
+            let key = decoder.u32().map_err_cbor_decode()?;
 
             match key {
-                1 => {
-                    is_master =
-                        Some(decoder.bool().map_err(|e| UrError::CborDecodeError(e.to_string()))?);
+                IS_MASTER => {
+                    is_master = Some(decoder.bool().map_err_cbor_decode()?);
                 }
-                2 => {
-                    is_private =
-                        Some(decoder.bool().map_err(|e| UrError::CborDecodeError(e.to_string()))?);
+                IS_PRIVATE => {
+                    is_private = Some(decoder.bool().map_err_cbor_decode()?);
                 }
-                3 => {
-                    key_data = Some(
-                        decoder
-                            .bytes()
-                            .map_err(|e| UrError::CborDecodeError(e.to_string()))?
-                            .to_vec(),
-                    );
+                KEY_DATA => {
+                    key_data = Some(decoder.bytes().map_err_cbor_decode()?.to_vec());
                 }
-                4 => {
-                    chain_code = Some(
-                        decoder
-                            .bytes()
-                            .map_err(|e| UrError::CborDecodeError(e.to_string()))?
-                            .to_vec(),
-                    );
+                CHAIN_CODE => {
+                    chain_code = Some(decoder.bytes().map_err_cbor_decode()?.to_vec());
                 }
-                5 => {
+                USE_INFO => {
                     // read embedded tagged CBOR for use_info
                     let pos = decoder.position();
                     use_info = Some(CryptoCoinInfo::from_cbor(&cbor[pos..])?);
                     // skip over the embedded structure
-                    decoder.skip().map_err(|e| UrError::CborDecodeError(e.to_string()))?;
+                    decoder.skip().map_err_cbor_decode()?;
                 }
-                6 => {
+                ORIGIN => {
                     // read embedded tagged CBOR for origin
                     let pos = decoder.position();
                     origin = Some(CryptoKeypath::from_cbor(&cbor[pos..])?);
                     // skip over the embedded structure
-                    decoder.skip().map_err(|e| UrError::CborDecodeError(e.to_string()))?;
+                    decoder.skip().map_err_cbor_decode()?;
                 }
-                7 => {
+                CHILDREN => {
                     // read embedded tagged CBOR for children
                     let pos = decoder.position();
                     children = Some(CryptoKeypath::from_cbor(&cbor[pos..])?);
                     // skip over the embedded structure
-                    decoder.skip().map_err(|e| UrError::CborDecodeError(e.to_string()))?;
+                    decoder.skip().map_err_cbor_decode()?;
                 }
-                8 => {
-                    let fp = decoder.u32().map_err(|e| UrError::CborDecodeError(e.to_string()))?;
+                PARENT_FINGERPRINT => {
+                    let fp = decoder.u32().map_err_cbor_decode()?;
                     parent_fingerprint = Some(fp.to_be_bytes());
                 }
-                9 => {
-                    name = Some(
-                        decoder
-                            .str()
-                            .map_err(|e| UrError::CborDecodeError(e.to_string()))?
-                            .to_string(),
-                    );
+                NAME => {
+                    name = Some(decoder.str().map_err_cbor_decode()?.to_string());
                 }
-                10 => {
-                    source = Some(
-                        decoder
-                            .str()
-                            .map_err(|e| UrError::CborDecodeError(e.to_string()))?
-                            .to_string(),
-                    );
+                SOURCE => {
+                    source = Some(decoder.str().map_err_cbor_decode()?.to_string());
                 }
                 _ => {
-                    return Err(UrError::InvalidField(format!("Unknown key in hdkey: {}", key)));
+                    // skip unknown fields for forward compatibility
+                    decoder.skip().map_err_cbor_decode()?;
                 }
             }
         }
 
-        let is_master = is_master.ok_or_else(|| UrError::MissingField("is_master".to_string()))?;
-        let is_private =
-            is_private.ok_or_else(|| UrError::MissingField("is_private".to_string()))?;
+        // is_master and is_private default to false if not present (BCR-2020-007)
+        let is_master = is_master.unwrap_or(false);
+        let is_private = is_private.unwrap_or(false);
         let key_data = key_data.ok_or_else(|| UrError::MissingField("key_data".to_string()))?;
 
         // validate key data length
-        let expected_len = if is_private { 32 } else { 33 };
+        let expected_len =
+            if is_private { lengths::PRIVATE_KEY } else { lengths::COMPRESSED_PUBKEY };
         if key_data.len() != expected_len {
             return Err(UrError::InvalidKeyDataLength {
                 expected: expected_len as u64,
@@ -557,20 +526,21 @@ mod tests {
     /// Test malformed CBOR: wrong tag
     #[test]
     fn test_crypto_hdkey_wrong_tag() {
+        use crate::registry::CRYPTO_SEED;
         use minicbor::{Encoder, data::Tag};
 
         let mut cbor = Vec::new();
         let mut encoder = Encoder::new(&mut cbor);
 
-        // use wrong tag (300 instead of 303)
-        encoder.tag(Tag::new(300)).unwrap();
+        // use wrong tag (CRYPTO_SEED instead of CRYPTO_HDKEY)
+        encoder.tag(Tag::new(CRYPTO_SEED)).unwrap();
         encoder.map(3).unwrap();
-        encoder.u32(1).unwrap();
+        encoder.u32(IS_MASTER).unwrap();
         encoder.bool(false).unwrap();
-        encoder.u32(2).unwrap();
+        encoder.u32(IS_PRIVATE).unwrap();
         encoder.bool(false).unwrap();
-        encoder.u32(3).unwrap();
-        encoder.bytes(&vec![0x02; 33]).unwrap();
+        encoder.u32(KEY_DATA).unwrap();
+        encoder.bytes(&vec![0x02; lengths::COMPRESSED_PUBKEY]).unwrap();
 
         let result = CryptoHdkey::from_cbor(&cbor);
         assert!(result.is_err());
@@ -585,12 +555,12 @@ mod tests {
         let mut cbor = Vec::new();
         let mut encoder = Encoder::new(&mut cbor);
 
-        // correct tag but missing key_data (field 3)
-        encoder.tag(Tag::new(303)).unwrap();
+        // correct tag but missing key_data (KEY_DATA field)
+        encoder.tag(Tag::new(CRYPTO_HDKEY)).unwrap();
         encoder.map(2).unwrap();
-        encoder.u32(1).unwrap();
+        encoder.u32(IS_MASTER).unwrap();
         encoder.bool(false).unwrap();
-        encoder.u32(2).unwrap();
+        encoder.u32(IS_PRIVATE).unwrap();
         encoder.bool(false).unwrap();
 
         let result = CryptoHdkey::from_cbor(&cbor);
@@ -610,14 +580,14 @@ mod tests {
         let mut encoder = Encoder::new(&mut cbor);
 
         // correct tag but wrong key data length (32 bytes for public key, should be 33)
-        encoder.tag(Tag::new(303)).unwrap();
+        encoder.tag(Tag::new(CRYPTO_HDKEY)).unwrap();
         encoder.map(3).unwrap();
-        encoder.u32(1).unwrap();
+        encoder.u32(IS_MASTER).unwrap();
         encoder.bool(false).unwrap();
-        encoder.u32(2).unwrap();
+        encoder.u32(IS_PRIVATE).unwrap();
         encoder.bool(false).unwrap(); // public key
-        encoder.u32(3).unwrap();
-        encoder.bytes(&vec![0x02; 32]).unwrap(); // wrong length
+        encoder.u32(KEY_DATA).unwrap();
+        encoder.bytes(&vec![0x02; lengths::PRIVATE_KEY]).unwrap(); // wrong length for public key
 
         let result = CryptoHdkey::from_cbor(&cbor);
         assert!(result.is_err());
@@ -625,6 +595,30 @@ mod tests {
             result.unwrap_err(),
             UrError::InvalidKeyDataLength { expected: 33, actual: 32 }
         ));
+    }
+
+    /// Test forward compatibility: unknown keys should be ignored
+    #[test]
+    fn test_crypto_hdkey_ignores_unknown_keys() {
+        use minicbor::{Encoder, data::Tag};
+
+        let mut cbor = Vec::new();
+        let mut encoder = Encoder::new(&mut cbor);
+
+        // create valid crypto-hdkey with an unknown key (99)
+        encoder.tag(Tag::new(CRYPTO_HDKEY)).unwrap();
+        encoder.map(4).unwrap();
+        encoder.u32(IS_MASTER).unwrap();
+        encoder.bool(false).unwrap(); // is_master
+        encoder.u32(IS_PRIVATE).unwrap();
+        encoder.bool(false).unwrap(); // is_private
+        encoder.u32(KEY_DATA).unwrap();
+        encoder.bytes(&vec![0x02; lengths::COMPRESSED_PUBKEY]).unwrap(); // key_data (public)
+        encoder.u32(99).unwrap(); // unknown key
+        encoder.str("future field").unwrap();
+
+        let result = CryptoHdkey::from_cbor(&cbor);
+        assert!(result.is_ok(), "Should ignore unknown key 99");
     }
 
     /// Test malformed CBOR: corrupted structure

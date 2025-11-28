@@ -1,3 +1,11 @@
+//! crypto-psbt: PSBT encoded as CBOR byte string with tag 310
+//! BCR-2020-006: https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md
+//!
+//! Note: This type uses manual CBOR encoding/decoding (not derive macros) because:
+//! 1. The structure is `tag(310) bytes` - a simple tagged byte string, not a map
+//! 2. Decoding must support both tagged and untagged formats for interoperability
+//! 3. Derive macros don't provide significant simplification for this structure
+
 use bitcoin::psbt::Psbt as BdkPsbt;
 use foundation_ur::{UR, bytewords};
 use minicbor::{Decoder, Encoder, data::Tag};
@@ -68,13 +76,13 @@ impl CryptoPsbt {
                 }
 
                 // read byte string after tag
-                decoder.bytes().map_err(|e| UrError::CborDecodeError(e.to_string()))?.to_vec()
+                decoder.bytes().map_err_cbor_decode()?.to_vec()
             }
             Err(_) => {
                 // untagged format: try to read as byte string directly
                 // reset decoder to start
                 decoder = Decoder::new(cbor);
-                decoder.bytes().map_err(|e| UrError::CborDecodeError(e.to_string()))?.to_vec()
+                decoder.bytes().map_err_cbor_decode()?.to_vec()
             }
         };
 

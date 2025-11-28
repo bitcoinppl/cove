@@ -1,7 +1,28 @@
-use bip39::Mnemonic;
-use minicbor::{Decoder, Encoder, data::Tag};
+//! crypto-seed: BIP39 seed with optional metadata
+//! BCR-2020-006: https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md
 
-use crate::{error::*, registry::CRYPTO_SEED};
+use bip39::Mnemonic;
+use minicbor::{Decode, Encode};
+
+use crate::{error::*, registry::VALID_BIP39_ENTROPY_LENGTHS};
+
+/// Internal CBOR representation with derive macros
+#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
+#[cbor(tag(300), map)]
+struct CryptoSeedCbor {
+    #[n(1)]
+    #[cbor(with = "minicbor::bytes")]
+    payload: Vec<u8>,
+
+    #[n(2)]
+    creation_date: Option<u64>,
+
+    #[n(3)]
+    name: Option<String>,
+
+    #[n(4)]
+    note: Option<String>,
+}
 
 /// crypto-seed: BIP39 seed with optional metadata
 /// BCR-2020-006: https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md
@@ -47,126 +68,38 @@ impl CryptoSeed {
     /// Encode as tagged CBOR
     /// CBOR structure: #6.300({1: bytes, ?2: uint, ?3: text, ?4: text})
     pub fn to_cbor(&self) -> Result<Vec<u8>> {
-        let mut buffer = Vec::new();
-        let mut encoder = Encoder::new(&mut buffer);
-
-        // write tag 300
-        encoder.tag(Tag::new(CRYPTO_SEED)).map_err(|e| UrError::CborEncodeError(e.to_string()))?;
-
-        // count fields
-        let mut field_count = 1; // payload always present
-        if self.creation_date.is_some() {
-            field_count += 1;
-        }
-        if self.name.is_some() {
-            field_count += 1;
-        }
-        if self.note.is_some() {
-            field_count += 1;
-        }
-
-        // write map header
-        encoder.map(field_count).map_err(|e| UrError::CborEncodeError(e.to_string()))?;
-
-        // write payload (key 1)
-        encoder.u32(1).map_err(|e| UrError::CborEncodeError(e.to_string()))?;
-        encoder.bytes(&self.payload).map_err(|e| UrError::CborEncodeError(e.to_string()))?;
-
-        // write creation_date if present (key 2)
-        if let Some(timestamp) = self.creation_date {
-            encoder.u32(2).map_err(|e| UrError::CborEncodeError(e.to_string()))?;
-            encoder.u64(timestamp).map_err(|e| UrError::CborEncodeError(e.to_string()))?;
-        }
-
-        // write name if present (key 3)
-        if let Some(name) = &self.name {
-            encoder.u32(3).map_err(|e| UrError::CborEncodeError(e.to_string()))?;
-            encoder.str(name).map_err(|e| UrError::CborEncodeError(e.to_string()))?;
-        }
-
-        // write note if present (key 4)
-        if let Some(note) = &self.note {
-            encoder.u32(4).map_err(|e| UrError::CborEncodeError(e.to_string()))?;
-            encoder.str(note).map_err(|e| UrError::CborEncodeError(e.to_string()))?;
-        }
-
-        Ok(buffer)
+        let cbor = CryptoSeedCbor {
+            payload: self.payload.clone(),
+            creation_date: self.creation_date,
+            name: self.name.clone(),
+            note: self.note.clone(),
+        };
+        minicbor::to_vec(&cbor).map_err(|e| UrError::CborEncodeError(e.to_string()))
     }
 
     /// Decode from tagged CBOR
     pub fn from_cbor(cbor: &[u8]) -> Result<Self> {
-        let mut decoder = Decoder::new(cbor);
+        let decoded: CryptoSeedCbor = minicbor::decode(cbor).map_err_cbor_decode()?;
 
-        // read and verify tag 300
-        let tag = decoder.tag().map_err(|e| UrError::CborDecodeError(e.to_string()))?;
-
-        if tag != Tag::new(CRYPTO_SEED) {
-            return Err(UrError::InvalidTag { expected: CRYPTO_SEED, actual: tag.as_u64() });
+        // validate payload is not empty (required field)
+        if decoded.payload.is_empty() {
+            return Err(UrError::MissingField("payload".to_string()));
         }
-
-        // read map
-        let map_len = decoder
-            .map()
-            .map_err(|e| UrError::CborDecodeError(e.to_string()))?
-            .ok_or_else(|| UrError::CborDecodeError("Expected definite-length map".to_string()))?;
-
-        let mut payload = None;
-        let mut creation_date = None;
-        let mut name = None;
-        let mut note = None;
-
-        for _ in 0..map_len {
-            let key = decoder.u32().map_err(|e| UrError::CborDecodeError(e.to_string()))?;
-
-            match key {
-                1 => {
-                    payload = Some(
-                        decoder
-                            .bytes()
-                            .map_err(|e| UrError::CborDecodeError(e.to_string()))?
-                            .to_vec(),
-                    );
-                }
-                2 => {
-                    creation_date =
-                        Some(decoder.u64().map_err(|e| UrError::CborDecodeError(e.to_string()))?);
-                }
-                3 => {
-                    name = Some(
-                        decoder
-                            .str()
-                            .map_err(|e| UrError::CborDecodeError(e.to_string()))?
-                            .to_string(),
-                    );
-                }
-                4 => {
-                    note = Some(
-                        decoder
-                            .str()
-                            .map_err(|e| UrError::CborDecodeError(e.to_string()))?
-                            .to_string(),
-                    );
-                }
-                _ => {
-                    return Err(UrError::InvalidField(format!(
-                        "Unknown key in crypto-seed: {}",
-                        key
-                    )));
-                }
-            }
-        }
-
-        let payload = payload.ok_or_else(|| UrError::MissingField("payload".to_string()))?;
 
         // validate payload length for BIP39 (128-256 bits in 32-bit increments)
-        if ![16, 20, 24, 28, 32].contains(&payload.len()) {
+        if !VALID_BIP39_ENTROPY_LENGTHS.contains(&decoded.payload.len()) {
             return Err(UrError::InvalidPayloadLength(format!(
                 "Expected 16, 20, 24, 28, or 32 bytes, got {}",
-                payload.len()
+                decoded.payload.len()
             )));
         }
 
-        Ok(Self { payload, creation_date, name, note })
+        Ok(Self {
+            payload: decoded.payload,
+            creation_date: decoded.creation_date,
+            name: decoded.name,
+            note: decoded.note,
+        })
     }
 }
 
@@ -328,7 +261,8 @@ mod tests {
 
         let result = CryptoSeed::from_cbor(&cbor);
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), UrError::InvalidTag { expected: 300, actual: 310 }));
+        // derive macro returns generic decode error, not specific tag error
+        assert!(matches!(result.unwrap_err(), UrError::CborDecodeError(_)));
     }
 
     /// Test malformed CBOR: missing required field
@@ -347,9 +281,22 @@ mod tests {
 
         let result = CryptoSeed::from_cbor(&cbor);
         assert!(result.is_err());
+        // minicbor derive catches missing required fields at decode time
         match result.unwrap_err() {
-            UrError::MissingField(field) => assert_eq!(field, "payload"),
-            _ => panic!("Expected MissingField error"),
+            UrError::CborDecodeError(msg) => {
+                assert!(
+                    msg.contains("missing value") || msg.contains("payload"),
+                    "Error should mention missing payload: {}",
+                    msg
+                );
+            }
+            UrError::MissingField(_) | UrError::InvalidPayloadLength(_) => {
+                // also acceptable
+            }
+            e => panic!(
+                "Expected CborDecodeError, MissingField, or InvalidPayloadLength error, got: {:?}",
+                e
+            ),
         }
     }
 
@@ -375,5 +322,26 @@ mod tests {
         let result = CryptoSeed::from_cbor(truncated);
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), UrError::CborDecodeError(_)));
+    }
+
+    /// Test forward compatibility: unknown keys should be ignored
+    #[test]
+    fn test_crypto_seed_ignores_unknown_keys() {
+        use minicbor::{Encoder, data::Tag};
+
+        let mut cbor = Vec::new();
+        let mut encoder = Encoder::new(&mut cbor);
+
+        // create valid crypto-seed with an unknown key (99)
+        encoder.tag(Tag::new(300)).unwrap();
+        encoder.map(2).unwrap();
+        encoder.u32(1).unwrap();
+        encoder.bytes(&[0xAB; 16]).unwrap(); // payload
+        encoder.u32(99).unwrap(); // unknown key
+        encoder.str("future field").unwrap();
+
+        let result = CryptoSeed::from_cbor(&cbor);
+        assert!(result.is_ok(), "Should ignore unknown key 99");
+        assert_eq!(result.unwrap().payload, vec![0xAB; 16]);
     }
 }

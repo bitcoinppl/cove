@@ -1,3 +1,4 @@
+pub mod cbor;
 pub mod coin_info;
 pub mod crypto_account;
 pub mod crypto_hdkey;

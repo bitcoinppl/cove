@@ -17581,8 +17581,6 @@ public enum MultiQrError: Swift.Error, Equatable, Hashable, Foundation.Localized
 
     
     
-    case CannotAddPartToSingleQr
-    case CannotAddPartToSeedQr
     case ParseError(String
     )
     case InvalidUtf8
@@ -17630,17 +17628,15 @@ public struct FfiConverterTypeMultiQrError: FfiConverterRustBuffer {
         
 
         
-        case 1: return .CannotAddPartToSingleQr
-        case 2: return .CannotAddPartToSeedQr
-        case 3: return .ParseError(
+        case 1: return .ParseError(
             try FfiConverterString.read(from: &buf)
             )
-        case 4: return .InvalidUtf8
-        case 5: return .CannotAddBinaryDataToBbqr
-        case 6: return .InvalidSeedQr(
+        case 2: return .InvalidUtf8
+        case 3: return .CannotAddBinaryDataToBbqr
+        case 4: return .InvalidSeedQr(
             try FfiConverterTypeSeedQrError.read(from: &buf)
             )
-        case 7: return .Ur(
+        case 5: return .Ur(
             try FfiConverterTypeUrError.read(from: &buf)
             )
 
@@ -17655,34 +17651,26 @@ public struct FfiConverterTypeMultiQrError: FfiConverterRustBuffer {
 
         
         
-        case .CannotAddPartToSingleQr:
-            writeInt(&buf, Int32(1))
-        
-        
-        case .CannotAddPartToSeedQr:
-            writeInt(&buf, Int32(2))
-        
-        
         case let .ParseError(v1):
-            writeInt(&buf, Int32(3))
+            writeInt(&buf, Int32(1))
             FfiConverterString.write(v1, into: &buf)
             
         
         case .InvalidUtf8:
-            writeInt(&buf, Int32(4))
+            writeInt(&buf, Int32(2))
         
         
         case .CannotAddBinaryDataToBbqr:
-            writeInt(&buf, Int32(5))
+            writeInt(&buf, Int32(3))
         
         
         case let .InvalidSeedQr(v1):
-            writeInt(&buf, Int32(6))
+            writeInt(&buf, Int32(4))
             FfiConverterTypeSeedQrError.write(v1, into: &buf)
             
         
         case let .Ur(v1):
-            writeInt(&buf, Int32(7))
+            writeInt(&buf, Int32(5))
             FfiConverterTypeUrError.write(v1, into: &buf)
             
         }
