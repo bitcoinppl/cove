@@ -21,8 +21,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
-import kotlin.math.floor
-import kotlin.math.log10
 
 /**
  * Text composable that automatically resizes to fit available width
@@ -127,22 +125,12 @@ fun BalanceAutoSizeText(
     val fontFamilyResolver = LocalFontFamilyResolver.current
     val minFontSize = baseFontSize * minimumScaleFactor
 
-    // extract numeric value to count digits (matches iOS algorithm)
-    val digits =
-        remember(text) {
-            val numericText = text.replace(Regex("[^0-9.]"), "")
-            val number = numericText.toDoubleOrNull() ?: 0.0
-            if (number > 0) {
-                floor(log10(number)).toInt() + 1
-            } else {
-                1
-            }
-        }
-
-    // calculate font size based on digits: max(baseFontSize - (digits - 1) * 2, minFontSize)
-    val digitBasedFontSize =
-        remember(digits, baseFontSize, minFontSize) {
-            val reduction = (digits - 1) * 2
+    // calculate starting font size based on text length
+    // reduce by 1.5sp per character over 8 chars
+    val lengthBasedFontSize =
+        remember(text, baseFontSize, minFontSize) {
+            val charsOverBase = maxOf(0, text.length - 8)
+            val reduction = charsOverBase * 1.5f
             val calculated = baseFontSize.value - reduction
             maxOf(calculated, minFontSize.value).sp
         }
@@ -154,7 +142,7 @@ fun BalanceAutoSizeText(
         val finalFontSize =
             calculateOptimalFontSize(
                 text = text,
-                maxFontSize = digitBasedFontSize,
+                maxFontSize = lengthBasedFontSize,
                 minFontSize = minFontSize,
                 maxWidthPx = maxWidthPx,
                 style = style,
