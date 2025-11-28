@@ -34,9 +34,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -47,6 +44,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import org.bitcoinppl.cove.Auth
 import org.bitcoinppl.cove.UnlockMode
 import org.bitcoinppl.cove_core.AuthType
@@ -225,7 +225,7 @@ private fun BiometricView(
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    // trigger biometric only when Activity is RESUMED (not during onStart)
+    // trigger biometric when Activity is RESUMED
     // BiometricPrompt fails silently if called during onStart, before onResume
     DisposableEffect(lifecycleOwner) {
         val observer =
@@ -235,6 +235,13 @@ private fun BiometricView(
                 }
             }
         lifecycleOwner.lifecycle.addObserver(observer)
+
+        // also trigger immediately if already resumed (fixes race condition where
+        // composable enters composition after ON_RESUME event already fired)
+        if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+            onBiometricTap()
+        }
+
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
         }

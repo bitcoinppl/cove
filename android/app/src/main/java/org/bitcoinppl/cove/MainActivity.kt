@@ -5,6 +5,11 @@ import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
+import android.view.Gravity
+import android.view.View
+import android.view.WindowManager
+import android.widget.FrameLayout
+import android.widget.ImageView
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -55,6 +60,45 @@ import org.bitcoinppl.cove_core.stringOrDataTryIntoMultiFormat
 import org.bitcoinppl.cove_core.types.ColorSchemeSelection
 
 class MainActivity : FragmentActivity() {
+    // view-based privacy cover - updates synchronously (unlike Compose state)
+    private var privacyCoverView: View? = null
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (!hasFocus && Auth.isAuthEnabled) {
+            // show cover when window loses focus (fires earlier than onPause)
+            privacyCoverView?.visibility = View.VISIBLE
+            // FLAG_SECURE as system-level guarantee content won't be captured
+            window.setFlags(
+                WindowManager.LayoutParams.FLAG_SECURE,
+                WindowManager.LayoutParams.FLAG_SECURE,
+            )
+        } else if (hasFocus) {
+            // hide cover when window regains focus (e.g., after biometric prompt)
+            privacyCoverView?.visibility = View.GONE
+            // clear FLAG_SECURE to allow screenshots during normal use
+            window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        // backup: also show cover in onPause in case onWindowFocusChanged didn't fire
+        if (Auth.isAuthEnabled) {
+            privacyCoverView?.visibility = View.VISIBLE
+            window.setFlags(
+                WindowManager.LayoutParams.FLAG_SECURE,
+                WindowManager.LayoutParams.FLAG_SECURE,
+            )
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        privacyCoverView?.visibility = View.GONE
+        window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge(
@@ -172,6 +216,40 @@ class MainActivity : FragmentActivity() {
                 }
             }
         }
+
+        // create view-based privacy cover overlay (synchronous updates, no Compose race condition)
+        setupPrivacyCover()
+    }
+
+    private fun setupPrivacyCover() {
+        val iconSize = (144 * resources.displayMetrics.density).toInt()
+
+        val imageView =
+            ImageView(this).apply {
+                setImageResource(R.drawable.ic_launcher_foreground)
+                scaleType = ImageView.ScaleType.FIT_CENTER
+            }
+
+        val container =
+            FrameLayout(this).apply {
+                setBackgroundColor(android.graphics.Color.BLACK)
+                val params =
+                    FrameLayout.LayoutParams(iconSize, iconSize).apply {
+                        gravity = Gravity.CENTER
+                    }
+                addView(imageView, params)
+                visibility = View.GONE
+            }
+
+        addContentView(
+            container,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT,
+            ),
+        )
+
+        privacyCoverView = container
     }
 
     companion object {
