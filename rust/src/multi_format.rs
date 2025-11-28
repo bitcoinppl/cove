@@ -5,7 +5,7 @@
 //! what type of data was scanned.
 //!
 //! For the scanning state machine that handles multi-part QR codes (BBQR, animated URs),
-//! see [`crate::multi_qr`].
+//! see [`crate::qr_scanner`].
 
 use std::sync::Arc;
 
@@ -162,7 +162,7 @@ impl MultiFormat {
     /// Parse a single UR string (non-animated, complete UR)
     fn try_from_ur_string(ur_string: &str) -> Result<Self> {
         let ur = cove_ur::Ur::parse(ur_string).map_err(|_| MultiFormatError::UnrecognizedFormat)?;
-        let ur_type_str = ur.ur_type();
+        let ur_type_str = ur.ur_type().map_err(|_| MultiFormatError::UnrecognizedFormat)?;
         let ur_type = crate::ur::UrType::from_str(ur_type_str);
         let message = ur.message_bytes().ok_or(MultiFormatError::UnrecognizedFormat)?;
 

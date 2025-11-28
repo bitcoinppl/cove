@@ -91,9 +91,9 @@ struct QrCodeScanView: View {
 
         do {
             switch try scanner.scan(qr: qr) {
-            case let .complete(multiFormat):
+            case let .complete(data, _):
                 scanComplete = true
-                scannedCode = TaggedItem(multiFormat)
+                scannedCode = TaggedItem(data)
                 scanner.reset()
                 dismiss()
 
@@ -101,6 +101,7 @@ struct QrCodeScanView: View {
                 progress = prog
             }
         } catch {
+            scanner.reset()
             dismiss()
             app.alertState = TaggedItem(
                 .general(

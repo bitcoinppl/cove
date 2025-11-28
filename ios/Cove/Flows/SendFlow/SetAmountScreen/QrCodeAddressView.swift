@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct QrCodeAddressView: View {
-    @State private var multiQr: MultiQr?
+    @State private var scanner = QrScanner()
     @Environment(AppManager.self) var app
     @Environment(\.dismiss) private var dismiss
 
@@ -17,18 +17,9 @@ struct QrCodeAddressView: View {
 
     // private
     @State private var scanComplete = false
-    @State private var totalParts: Int? = nil
-    @State private var partsLeft: Int? = nil
+    @State private var progress: ScanProgress? = nil
 
     private let screenHeight = UIScreen.main.bounds.height
-
-    var partsScanned: Int {
-        if let totalParts, let partsLeft {
-            totalParts - partsLeft
-        } else {
-            0
-        }
-    }
 
     var qrCodeHeight: CGFloat {
         screenHeight * 0.6
@@ -72,16 +63,20 @@ struct QrCodeAddressView: View {
                         Spacer()
                         Spacer()
 
-                        if let totalParts, let partsLeft {
-                            Text("Scanned \(partsScanned) of \(totalParts)")
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                                .padding(.top, 8)
+                        if let progress {
+                            VStack(spacing: 8) {
+                                Text(progress.displayText())
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                    .padding(.top, 8)
 
-                            Text("\(partsLeft) parts left")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .fontWeight(.bold)
+                                if let detailText = progress.detailText() {
+                                    Text(detailText)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .fontWeight(.bold)
+                                }
+                            }
                         }
 
                         Spacer()
@@ -96,32 +91,22 @@ struct QrCodeAddressView: View {
 
     private func handleScan(result: Result<ScanResult, ScanError>) {
         switch result {
-        case let .success(result):
-            guard case let .string(stringValue) = result.data else { return }
+        case let .success(scanResult):
+            let qr = StringOrData(scanResult.data)
 
-            if multiQr == nil {
-                multiQr = MultiQr.newFromString(qr: stringValue)
-                totalParts = Int(multiQr?.totalParts() ?? 0)
-            }
-
-            guard let multiQr else { return }
-
-            // single QR
-            if !multiQr.isBbqr() {
-                scanComplete = true
-                scannedCode = TaggedString(stringValue)
-                return
-            }
-
-            // BBQr
             do {
-                let result = try multiQr.addPart(qr: stringValue)
-                partsLeft = Int(result.partsLeft())
-
-                if result.isComplete() {
+                switch try scanner.scan(qr: qr) {
+                case let .complete(_, rawData):
                     scanComplete = true
-                    let data = try result.finalResult()
-                    scannedCode = TaggedString(data)
+                    if let raw = rawData {
+                        scannedCode = TaggedString(raw)
+                    } else if case let .string(str) = scanResult.data {
+                        scannedCode = TaggedString(str)
+                    }
+                    scanner.reset()
+
+                case let .inProgress(prog):
+                    progress = prog
                 }
             } catch {
                 dismiss()
