@@ -148,21 +148,12 @@ struct SidebarView: View {
                 }
             }
         }
-        .onAppear {
-            do {
-                self.wallets = try Database().wallets().all()
-            } catch {
-                Log.error("Failed to get wallets \(error)")
-            }
-        }
+        .onAppear(perform: loadWallets)
         .onChange(of: app.isSidebarVisible) { _, isVisible in
-            if isVisible {
-                do {
-                    self.wallets = try Database().wallets().all()
-                } catch {
-                    Log.error("Failed to get wallets \(error)")
-                }
-            }
+            if isVisible { loadWallets() }
+        }
+        .onChange(of: app.routeId) { _, _ in
+            loadWallets()
         }
         .padding(20)
         .frame(maxWidth: .infinity)
@@ -200,5 +191,13 @@ struct SidebarView: View {
         }
 
         navigateRouteOnMain(route)
+    }
+
+    private func loadWallets() {
+        do {
+            self.wallets = try Database().wallets().all()
+        } catch {
+            Log.error("Failed to get wallets \(error)")
+        }
     }
 }

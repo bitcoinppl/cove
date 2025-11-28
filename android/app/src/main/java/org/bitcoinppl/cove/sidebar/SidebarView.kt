@@ -63,15 +63,13 @@ fun SidebarView(
 
     var wallets by remember { mutableStateOf(emptyList<WalletMetadata>()) }
 
-    LaunchedEffect(app.isSidebarVisible) {
-        if (app.isSidebarVisible) {
-            wallets =
-                try {
-                    Database().wallets().all()
-                } catch (e: Exception) {
-                    emptyList()
-                }
-        }
+    LaunchedEffect(app.isSidebarVisible, app.routeId) {
+        wallets =
+            try {
+                Database().wallets().all()
+            } catch (e: Exception) {
+                emptyList()
+            }
     }
 
     Column(
