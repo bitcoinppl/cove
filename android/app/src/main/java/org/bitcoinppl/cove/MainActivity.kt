@@ -65,25 +65,21 @@ class MainActivity : FragmentActivity() {
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
+        // only toggle FLAG_SECURE here (invisible to user)
+        // privacy cover is handled in onPause/onResume to avoid false positives from internal popups
         if (!hasFocus && Auth.isAuthEnabled) {
-            // show cover when window loses focus (fires earlier than onPause)
-            privacyCoverView?.visibility = View.VISIBLE
-            // FLAG_SECURE as system-level guarantee content won't be captured
             window.setFlags(
                 WindowManager.LayoutParams.FLAG_SECURE,
                 WindowManager.LayoutParams.FLAG_SECURE,
             )
         } else if (hasFocus) {
-            // hide cover when window regains focus (e.g., after biometric prompt)
-            privacyCoverView?.visibility = View.GONE
-            // clear FLAG_SECURE to allow screenshots during normal use
             window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
         }
     }
 
     override fun onPause() {
         super.onPause()
-        // backup: also show cover in onPause in case onWindowFocusChanged didn't fire
+        // show cover only on actual app transitions (not internal popups like DropdownMenu)
         if (Auth.isAuthEnabled) {
             privacyCoverView?.visibility = View.VISIBLE
             window.setFlags(
