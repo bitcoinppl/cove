@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.views.AutoSizeText
+import org.bitcoinppl.cove.views.AutoSizeTextField
 import org.bitcoinppl.cove.views.ImageButton
 
 @Preview()
@@ -295,20 +296,17 @@ private fun AmountWidget(
             verticalAlignment = Alignment.Bottom,
         ) {
             Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                BasicTextField(
+                AutoSizeTextField(
                     value = amount,
                     onValueChange = { newValue ->
                         amount = newValue
                         onAmountChanged(newValue)
                     },
-                    textStyle =
-                        TextStyle(
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontSize = 48.sp,
-                            fontWeight = FontWeight.Bold,
-                            textAlign = TextAlign.Right,
-                        ),
-                    singleLine = true,
+                    maxFontSize = 48.sp,
+                    minimumScaleFactor = 0.01f,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Right,
                     modifier = Modifier.fillMaxWidth(),
                 )
             }

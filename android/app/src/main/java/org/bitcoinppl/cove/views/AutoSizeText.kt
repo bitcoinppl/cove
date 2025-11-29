@@ -2,12 +2,15 @@ package org.bitcoinppl.cove.views
 
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFontFamilyResolver
 import androidx.compose.ui.text.TextLayoutResult
@@ -15,6 +18,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
@@ -173,6 +177,79 @@ fun BalanceAutoSizeText(
             softWrap = false,
             overflow = TextOverflow.Ellipsis,
             onTextLayout = onTextLayout,
+        )
+    }
+}
+
+/**
+ * Editable text field that automatically resizes to fit available width
+ * Mimics iOS TextField with minimumScaleFactor behavior
+ *
+ * @param value The current text value
+ * @param onValueChange Callback when text changes
+ * @param modifier Modifier for the text field
+ * @param maxFontSize Maximum font size (will shrink from this)
+ * @param minimumScaleFactor Minimum scale factor (0.0 to 1.0). Text will shrink to this percentage
+ * @param color Text color
+ * @param fontWeight Font weight
+ * @param textAlign Text alignment
+ */
+@Composable
+fun AutoSizeTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    maxFontSize: TextUnit = 48.sp,
+    minimumScaleFactor: Float = 0.01f,
+    color: Color = Color.Unspecified,
+    fontWeight: FontWeight? = null,
+    textAlign: TextAlign? = null,
+) {
+    val density = LocalDensity.current
+    val fontFamilyResolver = LocalFontFamilyResolver.current
+    val minFontSize = maxFontSize * minimumScaleFactor
+    val style = LocalTextStyle.current
+
+    BoxWithConstraints(modifier = modifier) {
+        val maxWidthPx = with(density) { maxWidth.toPx() }
+
+        val fontSize =
+            remember(
+                value,
+                maxWidthPx,
+                maxFontSize,
+                minFontSize,
+                style,
+                fontWeight,
+            ) {
+                calculateOptimalFontSize(
+                    text = value,
+                    maxFontSize = maxFontSize,
+                    minFontSize = minFontSize,
+                    maxWidthPx = maxWidthPx,
+                    style = style,
+                    fontWeight = fontWeight,
+                    fontStyle = null,
+                    fontFamily = null,
+                    density = density,
+                    fontFamilyResolver = fontFamilyResolver,
+                )
+            }
+
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            textStyle =
+                TextStyle(
+                    color = color,
+                    fontSize = fontSize,
+                    fontWeight = fontWeight,
+                    textAlign = textAlign ?: TextAlign.Unspecified,
+                ),
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            cursorBrush = SolidColor(color),
+            modifier = Modifier.fillMaxWidth(),
         )
     }
 }
