@@ -446,11 +446,6 @@
 
             func found(_ result: ScanResult) {
                 lastTime = Date()
-
-                if parentView.shouldVibrateOnSuccess {
-                    AudioServicesPlaySystemSound(SystemSoundID(kSystemSoundID_Vibrate))
-                }
-
                 parentView.completion(.success(result))
             }
 

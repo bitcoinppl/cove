@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct QrCodeAddressView: View {
     @State private var scanner = QrScanner()
@@ -89,6 +90,27 @@ struct QrCodeAddressView: View {
         .background(.black.opacity(0.20))
     }
 
+    private func triggerProgressHaptic() {
+        let generator = UIImpactFeedbackGenerator(style: .light)
+        generator.impactOccurred()
+    }
+
+    private func triggerSuccessHaptic() {
+        let generator = UINotificationFeedbackGenerator()
+        generator.notificationOccurred(.success)
+    }
+
+    private func triggerHaptic(_ haptic: HapticFeedback) {
+        switch haptic {
+        case .progress:
+            triggerProgressHaptic()
+        case .success:
+            triggerSuccessHaptic()
+        case .none:
+            break
+        }
+    }
+
     private func handleScan(result: Result<ScanResult, ScanError>) {
         switch result {
         case let .success(scanResult):
@@ -96,7 +118,8 @@ struct QrCodeAddressView: View {
 
             do {
                 switch try scanner.scan(qr: qr) {
-                case let .complete(data, _):
+                case let .complete(data, _, haptic):
+                    triggerHaptic(haptic)
                     if case let .address(addr) = data {
                         scannedCode = TaggedString(addr.address().string())
                         scanComplete = true
@@ -111,7 +134,8 @@ struct QrCodeAddressView: View {
                         )
                     }
 
-                case let .inProgress(prog):
+                case let .inProgress(prog, haptic):
+                    triggerHaptic(haptic)
                     progress = prog
                 }
             } catch {

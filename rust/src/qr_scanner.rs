@@ -48,6 +48,17 @@ pub enum MultiQrError {
     Ur(#[from] cove_ur::UrError),
 }
 
+/// Haptic feedback hint for the platform to trigger
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum HapticFeedback {
+    /// Light tap - new part scanned in multi-part QR
+    Progress,
+    /// Success notification - scan complete (single or multi-part)
+    Success,
+    /// No haptic feedback (duplicate part, no change)
+    None,
+}
+
 /// Result of a QR scan - either complete with parsed data or in progress
 #[derive(Debug, Clone, uniffi::Enum)]
 pub enum ScanResult {
@@ -56,9 +67,15 @@ pub enum ScanResult {
         data: crate::multi_format::MultiFormat,
         /// Raw string data (for screens that need the original string)
         raw_data: Option<String>,
+        /// Haptic feedback to trigger
+        haptic: HapticFeedback,
     },
     /// Multi-part scan in progress
-    InProgress(ScanProgress),
+    InProgress {
+        progress: ScanProgress,
+        /// Haptic feedback to trigger
+        haptic: HapticFeedback,
+    },
 }
 
 /// Progress information for multi-part QR scans
@@ -95,6 +112,18 @@ impl ScanProgress {
     }
 }
 
+impl ScanProgress {
+    /// Check if this progress is greater than another (used for haptic feedback)
+    fn is_greater_than(&self, other: &ScanProgress) -> bool {
+        match (self, other) {
+            (ScanProgress::Bbqr { scanned: a, .. }, ScanProgress::Bbqr { scanned: b, .. }) => a > b,
+            (ScanProgress::Ur { percentage: a }, ScanProgress::Ur { percentage: b }) => a > b,
+            // different types shouldn't happen, but treat as progress
+            _ => true,
+        }
+    }
+}
+
 /// Stateful QR scanner that handles both single and multi-part QR codes.
 ///
 /// This is the main entry point for QR scanning. It manages the internal state
@@ -102,13 +131,14 @@ impl ScanProgress {
 #[derive(uniffi::Object)]
 pub struct QrScanner {
     state: Mutex<Option<MultiQr>>,
+    previous_progress: Mutex<Option<ScanProgress>>,
 }
 
 #[uniffi::export]
 impl QrScanner {
     #[uniffi::constructor]
     pub fn new() -> Self {
-        Self { state: Mutex::new(None) }
+        Self { state: Mutex::new(None), previous_progress: Mutex::new(None) }
     }
 
     /// Scan a QR code and return the result.
@@ -118,24 +148,48 @@ impl QrScanner {
     /// - `InProgress(ScanProgress)` for multi-part QRs
     ///
     /// On subsequent scans, adds parts and returns updated status.
+    /// The haptic field indicates what feedback the platform should trigger.
     #[uniffi::method]
     pub fn scan(&self, qr: StringOrData) -> Result<ScanResult, MultiQrError> {
         let mut guard = self.state.lock();
 
-        match &*guard {
-            Some(multi_qr) => self.handle_subsequent_scan(multi_qr, qr),
+        let result = match &*guard {
+            Some(multi_qr) => self.handle_subsequent_scan(multi_qr, qr)?,
             None => {
                 let (multi_qr_opt, result) = self.handle_first_scan(qr)?;
                 *guard = multi_qr_opt;
-                Ok(result)
+                result
             }
+        };
+
+        // auto-reset on completion so subsequent scans start fresh
+        if matches!(result, ScanResult::Complete { .. }) {
+            *guard = None;
+            *self.previous_progress.lock() = None;
         }
+
+        // compute correct haptic for InProgress results
+        let result = match result {
+            ScanResult::InProgress { progress, .. } => {
+                let mut prev_guard = self.previous_progress.lock();
+                let haptic = match &*prev_guard {
+                    Some(prev) if !progress.is_greater_than(prev) => HapticFeedback::None,
+                    _ => HapticFeedback::Progress,
+                };
+                *prev_guard = Some(progress.clone());
+                ScanResult::InProgress { progress, haptic }
+            }
+            complete => complete,
+        };
+
+        Ok(result)
     }
 
     /// Reset the scanner state for a new scan session.
     #[uniffi::method]
     pub fn reset(&self) {
         *self.state.lock() = None;
+        *self.previous_progress.lock() = None;
     }
 }
 
@@ -153,7 +207,14 @@ impl QrScanner {
                 let seed_qr = SeedQr::try_from_data(&data)?;
                 let mnemonic = seed_qr.into_mnemonic();
                 let multi_format = MultiFormat::Mnemonic(Arc::new(mnemonic.into()));
-                Ok((None, ScanResult::Complete { data: multi_format, raw_data: None }))
+                Ok((
+                    None,
+                    ScanResult::Complete {
+                        data: multi_format,
+                        raw_data: None,
+                        haptic: HapticFeedback::Success,
+                    },
+                ))
             }
 
             StringOrData::String(qr_string) => self.handle_first_scan_string(qr_string),
@@ -180,7 +241,11 @@ impl QrScanner {
                             .map_err(|e| MultiQrError::ParseError(e.to_string()))?;
                         return Ok((
                             None,
-                            ScanResult::Complete { data: multi_format, raw_data: Some(qr) },
+                            ScanResult::Complete {
+                                data: multi_format,
+                                raw_data: Some(qr),
+                                haptic: HapticFeedback::Success,
+                            },
                         ));
                     }
                     Ok(foundation_ur::UR::MultiPart { .. })
@@ -192,10 +257,11 @@ impl QrScanner {
                             let _ = decoder.receive(foundation_ur);
                         }
                         let percentage = decoder.estimated_percent_complete();
+                        let progress = ScanProgress::Ur { percentage };
                         let multi_qr = MultiQr::Ur(Arc::new(Mutex::new(decoder)));
                         return Ok((
                             Some(multi_qr),
-                            ScanResult::InProgress(ScanProgress::Ur { percentage }),
+                            ScanResult::InProgress { progress, haptic: HapticFeedback::Progress },
                         ));
                     }
                     Err(_) => {
@@ -222,17 +288,22 @@ impl QrScanner {
                             .map_err(|e| MultiQrError::ParseError(e.to_string()))?;
                     return Ok((
                         None,
-                        ScanResult::Complete { data: multi_format, raw_data: Some(data_string) },
+                        ScanResult::Complete {
+                            data: multi_format,
+                            raw_data: Some(data_string),
+                            haptic: HapticFeedback::Success,
+                        },
                     ));
                 }
                 ContinuousJoinResult::InProgress { parts_left } => {
                     // multi-part BBQR - return in-progress
                     let total = header.num_parts as u32;
                     let scanned = total - parts_left as u32;
+                    let progress = ScanProgress::Bbqr { scanned, total };
                     let multi_qr = MultiQr::Bbqr(header, Arc::new(Mutex::new(continuous_joiner)));
                     return Ok((
                         Some(multi_qr),
-                        ScanResult::InProgress(ScanProgress::Bbqr { scanned, total }),
+                        ScanResult::InProgress { progress, haptic: HapticFeedback::Progress },
                     ));
                 }
                 ContinuousJoinResult::NotStarted => {
@@ -246,13 +317,27 @@ impl QrScanner {
             let mnemonic = seed_qr.into_mnemonic();
             let multi_format =
                 crate::multi_format::MultiFormat::Mnemonic(Arc::new(mnemonic.into()));
-            return Ok((None, ScanResult::Complete { data: multi_format, raw_data: Some(qr) }));
+            return Ok((
+                None,
+                ScanResult::Complete {
+                    data: multi_format,
+                    raw_data: Some(qr),
+                    haptic: HapticFeedback::Success,
+                },
+            ));
         }
 
         // plain string - try to convert to MultiFormat directly
         let multi_format = crate::multi_format::MultiFormat::try_from_string(&qr)
             .map_err(|e| MultiQrError::ParseError(e.to_string()))?;
-        Ok((None, ScanResult::Complete { data: multi_format, raw_data: Some(qr) }))
+        Ok((
+            None,
+            ScanResult::Complete {
+                data: multi_format,
+                raw_data: Some(qr),
+                haptic: HapticFeedback::Success,
+            },
+        ))
     }
 
     /// Handle subsequent scans - adds parts to existing multi-part QR.
@@ -275,12 +360,20 @@ impl QrScanner {
                         let multi_format =
                             crate::multi_format::MultiFormat::try_from_string(&data_string)
                                 .map_err(|e| MultiQrError::ParseError(e.to_string()))?;
-                        Ok(ScanResult::Complete { data: multi_format, raw_data: Some(data_string) })
+                        Ok(ScanResult::Complete {
+                            data: multi_format,
+                            raw_data: Some(data_string),
+                            haptic: HapticFeedback::Success,
+                        })
                     }
                     ContinuousJoinResult::InProgress { parts_left } => {
                         let total = header.num_parts as u32;
                         let scanned = total - parts_left as u32;
-                        Ok(ScanResult::InProgress(ScanProgress::Bbqr { scanned, total }))
+                        let progress = ScanProgress::Bbqr { scanned, total };
+                        Ok(ScanResult::InProgress {
+                            progress,
+                            haptic: HapticFeedback::None, // computed in scan()
+                        })
                     }
                     ContinuousJoinResult::NotStarted => {
                         Err(MultiQrError::ParseError("BBQR not started".into()))
@@ -311,10 +404,15 @@ impl QrScanner {
                     Ok(ScanResult::Complete {
                         data: multi_format,
                         raw_data: None, // UR payload is binary, not useful as string
+                        haptic: HapticFeedback::Success,
                     })
                 } else {
                     let percentage = decoder.estimated_percent_complete();
-                    Ok(ScanResult::InProgress(ScanProgress::Ur { percentage }))
+                    let progress = ScanProgress::Ur { percentage };
+                    Ok(ScanResult::InProgress {
+                        progress,
+                        haptic: HapticFeedback::None, // computed in scan()
+                    })
                 }
             }
 
@@ -377,7 +475,7 @@ mod tests {
                     data
                 );
             }
-            ScanResult::InProgress(_) => {
+            ScanResult::InProgress { .. } => {
                 panic!("Single-part BBQR should complete immediately, not be in progress");
             }
         }
@@ -400,7 +498,7 @@ mod tests {
                     "Should be Address"
                 );
             }
-            ScanResult::InProgress(_) => {
+            ScanResult::InProgress { .. } => {
                 panic!("Plain address should complete immediately");
             }
         }
@@ -450,7 +548,7 @@ mod tests {
                     data
                 );
             }
-            ScanResult::InProgress(_) => {
+            ScanResult::InProgress { .. } => {
                 panic!("Single-part BBQR should complete immediately, not be in progress");
             }
         }
@@ -474,7 +572,7 @@ mod tests {
                     "Should be HardwareExport"
                 );
             }
-            ScanResult::InProgress(_) => {
+            ScanResult::InProgress { .. } => {
                 panic!("Plain xpub should complete immediately");
             }
         }
@@ -509,28 +607,43 @@ mod tests {
 
         // scan all parts through QrScanner
         let scanner = QrScanner::new();
+        let mut completed = false;
 
         // first scan should return in-progress
         let first_result = scanner.scan(StringOrData::String(parts[0].clone())).unwrap();
         match first_result {
-            ScanResult::InProgress(ScanProgress::Ur { percentage }) => {
+            ScanResult::InProgress { progress: ScanProgress::Ur { percentage }, .. } => {
                 assert!(percentage > 0.0 && percentage < 1.0, "Progress should be partial");
             }
-            _ => panic!("First scan should be in progress"),
+            ScanResult::Complete { data, .. } => {
+                // single part completed (shouldn't happen with small fragment size)
+                assert!(
+                    matches!(data, crate::multi_format::MultiFormat::Mnemonic(_)),
+                    "Should parse as Mnemonic"
+                );
+                completed = true;
+            }
+            _ => panic!("Expected UR progress or completion"),
         }
 
-        // scan remaining parts
-        for (i, part) in parts.iter().enumerate().skip(1) {
-            let result = scanner.scan(StringOrData::String(part.clone())).unwrap();
+        // scan remaining parts until completion
+        if !completed {
+            for part in parts.iter().skip(1) {
+                let result = scanner.scan(StringOrData::String(part.clone())).unwrap();
 
-            if i < parts.len() - 1 {
-                // intermediate parts should show increasing progress
                 match result {
-                    ScanResult::InProgress(ScanProgress::Ur { percentage }) => {
+                    ScanResult::InProgress {
+                        progress: ScanProgress::Ur { percentage }, ..
+                    } => {
                         assert!(percentage > 0.0, "Progress should be positive");
                     }
-                    ScanResult::Complete { .. } => {
+                    ScanResult::Complete { data, .. } => {
                         // UR fountain codes may complete before all parts are scanned
+                        assert!(
+                            matches!(data, crate::multi_format::MultiFormat::Mnemonic(_)),
+                            "Should parse as Mnemonic"
+                        );
+                        completed = true;
                         break;
                     }
                     _ => panic!("Expected UR progress or completion"),
@@ -538,29 +651,7 @@ mod tests {
             }
         }
 
-        // final scan should complete
-        let final_result =
-            scanner.scan(StringOrData::String(parts.last().unwrap().clone())).unwrap();
-        match final_result {
-            ScanResult::Complete { data, .. } => {
-                // should be a Mnemonic format
-                assert!(
-                    matches!(data, crate::multi_format::MultiFormat::Mnemonic(_)),
-                    "Should parse as Mnemonic"
-                );
-            }
-            ScanResult::InProgress(_) => {
-                // may still need more parts due to fountain coding - keep scanning
-                // repeat last part to ensure completion
-                for _ in 0..10 {
-                    let result =
-                        scanner.scan(StringOrData::String(parts.last().unwrap().clone())).unwrap();
-                    if matches!(result, ScanResult::Complete { .. }) {
-                        break;
-                    }
-                }
-            }
-        }
+        assert!(completed, "UR should complete after scanning all parts");
     }
 
     /// Test error handling for malformed UR sequences
@@ -613,7 +704,7 @@ mod tests {
             let result = scanner.scan(StringOrData::String(part.clone())).unwrap();
 
             match result {
-                ScanResult::InProgress(ScanProgress::Ur { percentage }) => {
+                ScanResult::InProgress { progress: ScanProgress::Ur { percentage }, .. } => {
                     assert!(
                         percentage >= last_progress,
                         "Progress should not decrease: {} < {}",
@@ -665,7 +756,10 @@ mod tests {
 
         // scan first part
         let result = scanner.scan(StringOrData::String(split.parts[0].clone())).unwrap();
-        assert!(matches!(result, ScanResult::InProgress(_)), "First scan should be in progress");
+        assert!(
+            matches!(result, ScanResult::InProgress { .. }),
+            "First scan should be in progress"
+        );
 
         // reset scanner
         scanner.reset();

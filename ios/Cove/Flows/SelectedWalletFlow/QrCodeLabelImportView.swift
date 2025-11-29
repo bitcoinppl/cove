@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct QrCodeLabelImportView: View {
     @Environment(AppManager.self) var app
@@ -100,6 +101,27 @@ struct QrCodeLabelImportView: View {
         }
     }
 
+    private func triggerProgressHaptic() {
+        let generator = UIImpactFeedbackGenerator(style: .light)
+        generator.impactOccurred()
+    }
+
+    private func triggerSuccessHaptic() {
+        let generator = UINotificationFeedbackGenerator()
+        generator.notificationOccurred(.success)
+    }
+
+    private func triggerHaptic(_ haptic: HapticFeedback) {
+        switch haptic {
+        case .progress:
+            triggerProgressHaptic()
+        case .success:
+            triggerSuccessHaptic()
+        case .none:
+            break
+        }
+    }
+
     private func handleScan(result: Result<ScanResult, ScanError>) {
         switch result {
         case let .success(scanResult):
@@ -107,7 +129,8 @@ struct QrCodeLabelImportView: View {
 
             do {
                 switch try scanner.scan(qr: qr) {
-                case let .complete(_, rawData):
+                case let .complete(_, rawData, haptic):
+                    triggerHaptic(haptic)
                     scanComplete = true
                     // use rawData (the assembled string) - should always be available for labels
                     if let raw = rawData {
@@ -115,7 +138,8 @@ struct QrCodeLabelImportView: View {
                     }
                     scanner.reset()
 
-                case let .inProgress(prog):
+                case let .inProgress(prog, haptic):
+                    triggerHaptic(haptic)
                     progress = prog
                 }
             } catch {

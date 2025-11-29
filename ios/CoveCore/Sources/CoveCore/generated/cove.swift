@@ -5669,6 +5669,7 @@ public protocol QrScannerProtocol: AnyObject, Sendable {
      * - `InProgress(ScanProgress)` for multi-part QRs
      *
      * On subsequent scans, adds parts and returns updated status.
+     * The haptic field indicates what feedback the platform should trigger.
      */
     func scan(qr: StringOrData) throws  -> ScanResult
     
@@ -5757,6 +5758,7 @@ open func reset()  {try! rustCall() {
      * - `InProgress(ScanProgress)` for multi-part QRs
      *
      * On subsequent scans, adds parts and returns updated status.
+     * The haptic field indicates what feedback the platform should trigger.
      */
 open func scan(qr: StringOrData)throws  -> ScanResult  {
     return try  FfiConverterTypeScanResult_lift(try rustCallWithError(FfiConverterTypeMultiQrError_lift) {
@@ -15995,6 +15997,92 @@ public func FfiConverterTypeGlobalFlagTableError_lower(_ value: GlobalFlagTableE
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Haptic feedback hint for the platform to trigger
+ */
+
+public enum HapticFeedback: Equatable, Hashable {
+    
+    /**
+     * Light tap - new part scanned in multi-part QR
+     */
+    case progress
+    /**
+     * Success notification - scan complete (single or multi-part)
+     */
+    case success
+    /**
+     * No haptic feedback (duplicate part, no change)
+     */
+    case none
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension HapticFeedback: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHapticFeedback: FfiConverterRustBuffer {
+    typealias SwiftType = HapticFeedback
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HapticFeedback {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .progress
+        
+        case 2: return .success
+        
+        case 3: return .none
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: HapticFeedback, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .progress:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .success:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .none:
+            writeInt(&buf, Int32(3))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHapticFeedback_lift(_ buf: RustBuffer) throws -> HapticFeedback {
+    return try FfiConverterTypeHapticFeedback.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHapticFeedback_lower(_ value: HapticFeedback) -> RustBuffer {
+    return FfiConverterTypeHapticFeedback.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum HardwareWalletMetadata {
     
@@ -18563,12 +18651,18 @@ public enum ScanResult {
     case complete(data: MultiFormat, 
         /**
          * Raw string data (for screens that need the original string)
-         */rawData: String?
+         */rawData: String?, 
+        /**
+         * Haptic feedback to trigger
+         */haptic: HapticFeedback
     )
     /**
      * Multi-part scan in progress
      */
-    case inProgress(ScanProgress
+    case inProgress(progress: ScanProgress, 
+        /**
+         * Haptic feedback to trigger
+         */haptic: HapticFeedback
     )
 
 
@@ -18591,10 +18685,10 @@ public struct FfiConverterTypeScanResult: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
         
-        case 1: return .complete(data: try FfiConverterTypeMultiFormat.read(from: &buf), rawData: try FfiConverterOptionString.read(from: &buf)
+        case 1: return .complete(data: try FfiConverterTypeMultiFormat.read(from: &buf), rawData: try FfiConverterOptionString.read(from: &buf), haptic: try FfiConverterTypeHapticFeedback.read(from: &buf)
         )
         
-        case 2: return .inProgress(try FfiConverterTypeScanProgress.read(from: &buf)
+        case 2: return .inProgress(progress: try FfiConverterTypeScanProgress.read(from: &buf), haptic: try FfiConverterTypeHapticFeedback.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -18605,15 +18699,17 @@ public struct FfiConverterTypeScanResult: FfiConverterRustBuffer {
         switch value {
         
         
-        case let .complete(data,rawData):
+        case let .complete(data,rawData,haptic):
             writeInt(&buf, Int32(1))
             FfiConverterTypeMultiFormat.write(data, into: &buf)
             FfiConverterOptionString.write(rawData, into: &buf)
+            FfiConverterTypeHapticFeedback.write(haptic, into: &buf)
             
         
-        case let .inProgress(v1):
+        case let .inProgress(progress,haptic):
             writeInt(&buf, Int32(2))
-            FfiConverterTypeScanProgress.write(v1, into: &buf)
+            FfiConverterTypeScanProgress.write(progress, into: &buf)
+            FfiConverterTypeHapticFeedback.write(haptic, into: &buf)
             
         }
     }
@@ -27601,7 +27697,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_qrscanner_reset() != 17017) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_qrscanner_scan() != 56830) {
+    if (uniffi_cove_checksum_method_qrscanner_scan() != 4364) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_boxedroute_route() != 6095) {
