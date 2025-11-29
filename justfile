@@ -118,37 +118,37 @@ compile:
 # build android
 alias ba := build-android
 build-android:
-    cd rust && cargo xtask build-android debug && say "done building Android debug"
+    cd rust && cargo xtask build-android debug && say "done android"
 
 alias bar := build-android-release
 build-android-release:
-    cd rust && cargo xtask build-android release && say "done building Android release"
+    cd rust && cargo xtask build-android release && say "done android release"
 
 alias ra := run-android
 run-android profile="debug":
     cd rust && cargo xtask run-android {{profile}}
 
 compile-android:
-    cd android && ./gradlew assembleDebug && say "done building Android debug"
+    cd android && ./gradlew assembleDebug
 
 # build ios
 alias bi := build-ios
 build-ios profile="debug" *flags="":
-    cd rust && cargo xtask build-ios {{profile}} {{flags}} && say "done building iOS {{profile}}"
+    cd rust && cargo xtask build-ios {{profile}} {{flags}} && say "done ios"
 
 alias bir := build-ios-release
 build-ios-release:
-    cd rust && cargo xtask build-ios release-smaller --device && say "done building iOS release"
+    cd rust && cargo xtask build-ios release-smaller --device && say "done ios release"
 
 alias bidd := build-ios-debug-device
 build-ios-debug-device:
-    cd rust && cargo xtask build-ios debug --device && say "done building iOS debug"
+    cd rust && cargo xtask build-ios debug --device && say "done ios device"
 
 run-ios:
     cd rust && cargo xtask run-ios
 
 compile-ios:
-    cd ios && xcodebuild -scheme Cove -sdk iphonesimulator -arch arm64 build && say "done building iOS debug"
+    cd ios && xcodebuild -scheme Cove -sdk iphonesimulator -arch arm64 build
 
 xtask *args:
     cd rust && cargo xtask {{args}}
