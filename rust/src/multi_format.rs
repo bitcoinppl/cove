@@ -241,47 +241,25 @@ impl MultiFormat {
             }
 
             UrType::CryptoAccount => {
-                let account = match cove_ur::CryptoAccount::from_cbor(data) {
-                    Ok(acc) => acc,
-                    Err(e) => {
-                        warn!("Failed to decode CryptoAccount CBOR: {:?}", e);
-                        return Err(MultiFormatError::UnrecognizedFormat);
-                    }
-                };
+                let account = cove_ur::CryptoAccount::from_cbor(data).map_err(|e| {
+                    warn!("Failed to decode CryptoAccount CBOR: {:?}", e);
+                    MultiFormatError::UnrecognizedFormat
+                })?;
 
-                let descriptor = account.get_preferred_descriptor();
-
-                // if only P2TR available, return TaprootNotSupported error
-                if descriptor.is_none() && account.is_taproot_only() {
+                if account.is_taproot_only() {
                     warn!("CryptoAccount only has taproot descriptors");
                     return Err(MultiFormatError::TaprootNotSupported);
                 }
 
-                let descriptor = match descriptor {
-                    Some(d) => d,
-                    None => {
-                        warn!("CryptoAccount has no supported descriptor");
-                        return Err(MultiFormatError::UnrecognizedFormat);
-                    }
-                };
+                let preferred = account
+                    .get_preferred_descriptor()
+                    .ok_or(MultiFormatError::UnrecognizedFormat)?;
+                let network = preferred.hdkey.infer_network();
 
-                let network = descriptor.hdkey.infer_network();
-                let xpub_str = match descriptor.hdkey.to_xpub_string(network) {
-                    Ok(s) => s,
-                    Err(e) => {
-                        warn!("Failed to convert hdkey to xpub: {:?}", e);
-                        return Err(MultiFormatError::UnrecognizedFormat);
-                    }
-                };
-
-                let format = match pubport::Format::try_new_from_str(&xpub_str) {
-                    Ok(f) => f,
-                    Err(e) => {
-                        warn!("Failed to parse xpub with pubport: {:?}", e);
-                        return Err(MultiFormatError::UnrecognizedFormat);
-                    }
-                };
-
+                // convert to Json format (works for single or multiple descriptors)
+                let json =
+                    account.to_pubport_json(network).ok_or(MultiFormatError::UnrecognizedFormat)?;
+                let format = pubport::Format::Json(Box::new(json));
                 let hardware_export = HardwareExport::new(format);
                 Ok(Self::HardwareExport(hardware_export.into()))
             }

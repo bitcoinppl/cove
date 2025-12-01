@@ -6,6 +6,7 @@ use pubport::descriptor::ScriptType;
 
 use crate::{
     crypto_hdkey::CryptoHdkey,
+    crypto_output::CryptoOutput,
     error::*,
     registry::{
         CRYPTO_ACCOUNT, CRYPTO_HDKEY, CRYPTO_OUTPUT, PAY_TO_PUBKEY_HASH, SCRIPT_HASH, TAPROOT,
@@ -117,6 +118,46 @@ impl CryptoAccount {
     pub fn is_taproot_only(&self) -> bool {
         !self.output_descriptors.is_empty()
             && self.output_descriptors.iter().all(|d| d.script_type == ScriptType::P2tr)
+    }
+
+    /// Convert to pubport Json format for multi-account discovery
+    /// Returns None if no supported descriptors are found
+    pub fn to_pubport_json(&self, network: bitcoin::Network) -> Option<pubport::formats::Json> {
+        use pubport::{Format, descriptor::Descriptors, formats::Json};
+
+        let mut bip44: Option<Descriptors> = None;
+        let mut bip49: Option<Descriptors> = None;
+        let mut bip84: Option<Descriptors> = None;
+        let mut bip86: Option<Descriptors> = None;
+
+        for output_desc in &self.output_descriptors {
+            // use CryptoOutput to generate descriptor string
+            let crypto_output = CryptoOutput { descriptor: output_desc.clone() };
+            let desc_string = match crypto_output.descriptor_string(network) {
+                Ok(s) => s,
+                Err(_) => continue,
+            };
+
+            // parse with pubport to get Descriptors
+            let descriptors = match Format::try_new_from_str(&desc_string) {
+                Ok(Format::Descriptor(d) | Format::KeyExpression(d)) => d,
+                _ => continue,
+            };
+
+            match output_desc.script_type {
+                ScriptType::P2pkh => bip44 = Some(descriptors),
+                ScriptType::P2shP2wpkh => bip49 = Some(descriptors),
+                ScriptType::P2wpkh => bip84 = Some(descriptors),
+                ScriptType::P2tr => bip86 = Some(descriptors),
+            }
+        }
+
+        // require at least one supported descriptor (non-taproot)
+        if bip44.is_none() && bip49.is_none() && bip84.is_none() {
+            return None;
+        }
+
+        Some(Json { bip44, bip49, bip84, bip86 })
     }
 }
 
@@ -347,6 +388,62 @@ mod tests {
             // public keys are 33 bytes compressed
             assert_eq!(descriptor.hdkey.key_data.len(), 33, "Public key should be 33 bytes");
         }
+    }
+
+    #[test]
+    fn test_to_pubport_json_with_bcr_spec_vector() {
+        let cbor = hex::decode(BCR_SPEC_CBOR_HEX).unwrap();
+        let account = CryptoAccount::from_cbor_untagged(&cbor).unwrap();
+
+        // convert to pubport Json format
+        let json = account
+            .to_pubport_json(bitcoin::Network::Bitcoin)
+            .expect("Should convert to Json format");
+
+        // verify we have bip84 (P2WPKH) - preferred type
+        assert!(json.bip84.is_some(), "Should have BIP84 (P2WPKH) descriptor");
+
+        // verify we have bip44 (P2PKH)
+        assert!(json.bip44.is_some(), "Should have BIP44 (P2PKH) descriptor");
+
+        // verify we have bip49 (P2SH-P2WPKH)
+        assert!(json.bip49.is_some(), "Should have BIP49 (P2SH-P2WPKH) descriptor");
+
+        // verify bip86 (P2TR) is present (BCR spec vector has taproot)
+        assert!(json.bip86.is_some(), "Should have BIP86 (P2TR) descriptor");
+
+        // verify the descriptors are valid by checking external/internal
+        let bip84 = json.bip84.as_ref().unwrap();
+        assert!(!bip84.external.to_string().is_empty(), "BIP84 external should be valid");
+        assert!(!bip84.internal.to_string().is_empty(), "BIP84 internal should be valid");
+    }
+
+    #[test]
+    fn test_to_pubport_json_taproot_only_returns_none() {
+        let taproot_account = CryptoAccount {
+            master_fingerprint: [0x12, 0x34, 0x56, 0x78],
+            output_descriptors: vec![OutputDescriptor {
+                script_type: ScriptType::P2tr,
+                hdkey: CryptoHdkey {
+                    is_master: false,
+                    is_private: false,
+                    key_data: vec![0x02; 33],
+                    chain_code: Some(vec![0x00; 32]),
+                    use_info: None,
+                    origin: None,
+                    children: None,
+                    parent_fingerprint: None,
+                    name: None,
+                    source: None,
+                },
+            }],
+        };
+
+        // taproot-only should return None (no supported non-taproot descriptors)
+        assert!(
+            taproot_account.to_pubport_json(bitcoin::Network::Bitcoin).is_none(),
+            "Taproot-only account should return None for to_pubport_json"
+        );
     }
 
     #[test]
