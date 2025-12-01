@@ -193,6 +193,83 @@ impl QrScanner {
     }
 }
 
+/// Parse a UR QR code (caller already verified `ur:` prefix).
+fn parse_ur(qr: &str) -> Result<(Option<MultiQr>, ScanResult), MultiQrError> {
+    use crate::multi_format::MultiFormat;
+
+    debug!("detected UR prefix, attempting to parse...");
+    let ur = Ur::parse(qr)?;
+
+    match ur.to_foundation_ur()? {
+        foundation_ur::UR::SinglePart { .. } | foundation_ur::UR::SinglePartDeserialized { .. } => {
+            debug!("Single-part UR, converting to MultiFormat");
+            let multi_format = MultiFormat::try_from_string(qr)
+                .map_err(|e| MultiQrError::ParseError(e.to_string()))?;
+            Ok((
+                None,
+                ScanResult::Complete {
+                    data: multi_format,
+                    raw_data: Some(qr.to_string()),
+                    haptic: HapticFeedback::Success,
+                },
+            ))
+        }
+        foundation_ur::UR::MultiPart { .. } | foundation_ur::UR::MultiPartDeserialized { .. } => {
+            debug!("Multi-part UR, using decoder");
+            let mut decoder = UrDecoder::default();
+            let foundation_ur = ur.to_foundation_ur()?;
+            let _ = decoder.receive(foundation_ur);
+            let percentage = decoder.estimated_percent_complete();
+            let progress = ScanProgress::Ur { percentage };
+            let multi_qr = MultiQr::Ur(Arc::new(Mutex::new(decoder)));
+            Ok((
+                Some(multi_qr),
+                ScanResult::InProgress { progress, haptic: HapticFeedback::Progress },
+            ))
+        }
+    }
+}
+
+/// Parse a BBQr QR code (caller already verified header parses).
+fn parse_bbqr(qr: &str, header: Header) -> Result<(Option<MultiQr>, ScanResult), MultiQrError> {
+    use crate::multi_format::MultiFormat;
+
+    let mut continuous_joiner = ContinuousJoiner::new();
+    let join_result = continuous_joiner
+        .add_part(qr.to_string())
+        .map_err(|e| MultiQrError::ParseError(e.to_string()))?;
+
+    match join_result {
+        ContinuousJoinResult::Complete(result) => {
+            let data_string =
+                String::from_utf8(result.data).map_err(|_| MultiQrError::InvalidUtf8)?;
+            let multi_format = MultiFormat::try_from_string(&data_string)
+                .map_err(|e| MultiQrError::ParseError(e.to_string()))?;
+            Ok((
+                None,
+                ScanResult::Complete {
+                    data: multi_format,
+                    raw_data: Some(data_string),
+                    haptic: HapticFeedback::Success,
+                },
+            ))
+        }
+        ContinuousJoinResult::InProgress { parts_left } => {
+            let total = header.num_parts as u32;
+            let scanned = total - parts_left as u32;
+            let progress = ScanProgress::Bbqr { scanned, total };
+            let multi_qr = MultiQr::Bbqr(header, Arc::new(Mutex::new(continuous_joiner)));
+            Ok((
+                Some(multi_qr),
+                ScanResult::InProgress { progress, haptic: HapticFeedback::Progress },
+            ))
+        }
+        ContinuousJoinResult::NotStarted => {
+            Err(MultiQrError::ParseError("BBQR not started".into()))
+        }
+    }
+}
+
 impl QrScanner {
     /// Handle the first scan - creates MultiQr and returns initial result.
     fn handle_first_scan(
@@ -228,95 +305,20 @@ impl QrScanner {
     ) -> Result<(Option<MultiQr>, ScanResult), MultiQrError> {
         use crate::multi_format::MultiFormat;
 
-        // try to parse UR
+        // UR - committed parse (if prefix matches, must be UR)
         if qr.to_lowercase().starts_with("ur:") {
-            debug!("detected UR prefix, attempting to parse...");
-            if let Ok(ur) = Ur::parse(&qr) {
-                match ur.to_foundation_ur() {
-                    Ok(foundation_ur::UR::SinglePart { .. })
-                    | Ok(foundation_ur::UR::SinglePartDeserialized { .. }) => {
-                        // single-part UR - convert directly to MultiFormat
-                        debug!("Single-part UR, converting to MultiFormat");
-                        let multi_format = MultiFormat::try_from_string(&qr)
-                            .map_err(|e| MultiQrError::ParseError(e.to_string()))?;
-                        return Ok((
-                            None,
-                            ScanResult::Complete {
-                                data: multi_format,
-                                raw_data: Some(qr),
-                                haptic: HapticFeedback::Success,
-                            },
-                        ));
-                    }
-                    Ok(foundation_ur::UR::MultiPart { .. })
-                    | Ok(foundation_ur::UR::MultiPartDeserialized { .. }) => {
-                        // multi-part UR - create decoder and return in-progress
-                        debug!("Multi-part UR, using decoder");
-                        let mut decoder = UrDecoder::default();
-                        if let Ok(foundation_ur) = ur.to_foundation_ur() {
-                            let _ = decoder.receive(foundation_ur);
-                        }
-                        let percentage = decoder.estimated_percent_complete();
-                        let progress = ScanProgress::Ur { percentage };
-                        let multi_qr = MultiQr::Ur(Arc::new(Mutex::new(decoder)));
-                        return Ok((
-                            Some(multi_qr),
-                            ScanResult::InProgress { progress, haptic: HapticFeedback::Progress },
-                        ));
-                    }
-                    Err(_) => {
-                        // fall through to try other formats
-                    }
-                }
-            }
+            return parse_ur(&qr);
         }
 
-        // try to parse BBQR
-        if let Ok(header) = bbqr::header::Header::try_from_str(&qr) {
-            let mut continuous_joiner = ContinuousJoiner::new();
-            let join_result = continuous_joiner
-                .add_part(qr.clone())
-                .map_err(|e| MultiQrError::ParseError(e.to_string()))?;
-
-            match join_result {
-                ContinuousJoinResult::Complete(result) => {
-                    // single-part BBQR - decode and convert to MultiFormat
-                    let data_string =
-                        String::from_utf8(result.data).map_err(|_| MultiQrError::InvalidUtf8)?;
-                    let multi_format =
-                        crate::multi_format::MultiFormat::try_from_string(&data_string)
-                            .map_err(|e| MultiQrError::ParseError(e.to_string()))?;
-                    return Ok((
-                        None,
-                        ScanResult::Complete {
-                            data: multi_format,
-                            raw_data: Some(data_string),
-                            haptic: HapticFeedback::Success,
-                        },
-                    ));
-                }
-                ContinuousJoinResult::InProgress { parts_left } => {
-                    // multi-part BBQR - return in-progress
-                    let total = header.num_parts as u32;
-                    let scanned = total - parts_left as u32;
-                    let progress = ScanProgress::Bbqr { scanned, total };
-                    let multi_qr = MultiQr::Bbqr(header, Arc::new(Mutex::new(continuous_joiner)));
-                    return Ok((
-                        Some(multi_qr),
-                        ScanResult::InProgress { progress, haptic: HapticFeedback::Progress },
-                    ));
-                }
-                ContinuousJoinResult::NotStarted => {
-                    return Err(MultiQrError::ParseError("BBQR not started".into()));
-                }
-            }
+        // BBQr - committed parse (if header parses, must be BBQr)
+        if let Ok(header) = Header::try_from_str(&qr) {
+            return parse_bbqr(&qr, header);
         }
 
-        // try to parse seed QR
+        // SeedQR - fallback (no distinguishing prefix)
         if let Ok(seed_qr) = SeedQr::try_from_str(&qr) {
             let mnemonic = seed_qr.into_mnemonic();
-            let multi_format =
-                crate::multi_format::MultiFormat::Mnemonic(Arc::new(mnemonic.into()));
+            let multi_format = MultiFormat::Mnemonic(Arc::new(mnemonic.into()));
             return Ok((
                 None,
                 ScanResult::Complete {
@@ -328,7 +330,7 @@ impl QrScanner {
         }
 
         // plain string - try to convert to MultiFormat directly
-        let multi_format = crate::multi_format::MultiFormat::try_from_string(&qr)
+        let multi_format = MultiFormat::try_from_string(&qr)
             .map_err(|e| MultiQrError::ParseError(e.to_string()))?;
         Ok((
             None,
