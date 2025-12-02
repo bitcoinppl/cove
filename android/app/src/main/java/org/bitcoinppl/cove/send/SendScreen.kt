@@ -79,6 +79,7 @@ fun SendScreen(
     onChangeSpeed: () -> Unit,
     onToggleBalanceVisibility: () -> Unit = {},
     onUnitChange: (String) -> Unit = {},
+    onToggleFiatOrBtc: () -> Unit = {},
     isFiatMode: Boolean = false,
     isBalanceHidden: Boolean = false,
     balanceAmount: String,
@@ -86,6 +87,7 @@ fun SendScreen(
     amountText: String,
     amountDenomination: String,
     dollarEquivalentText: String,
+    secondaryUnit: String = "",
     initialAddress: String,
     accountShort: String,
     feeEta: String,
@@ -159,8 +161,10 @@ fun SendScreen(
                         initialAmount = amountText,
                         denomination = amountDenomination,
                         dollarText = dollarEquivalentText,
+                        secondaryUnit = secondaryUnit,
                         onAmountChanged = onAmountChanged,
                         onUnitChange = onUnitChange,
+                        onToggleFiatOrBtc = onToggleFiatOrBtc,
                         isFiatMode = isFiatMode,
                     )
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
@@ -262,12 +266,24 @@ private fun AmountWidget(
     initialAmount: String,
     denomination: String,
     dollarText: String,
+    secondaryUnit: String = "",
     onAmountChanged: (String) -> Unit,
     onUnitChange: (String) -> Unit = {},
+    onToggleFiatOrBtc: () -> Unit = {},
     isFiatMode: Boolean = false,
 ) {
     var amount by remember { mutableStateOf(initialAmount) }
     var showUnitMenu by remember { mutableStateOf(false) }
+
+    // offset to compensate for unit dropdown (matches iOS)
+    val configuration = LocalConfiguration.current
+    val screenWidthDp = configuration.screenWidthDp.dp
+    val amountOffset =
+        if (isFiatMode) {
+            0.dp
+        } else {
+            if (denomination.lowercase() == "btc") screenWidthDp * 0.10f else screenWidthDp * 0.11f
+        }
 
     // bidirectional sync: update local state when parent state changes
     androidx.compose.runtime.LaunchedEffect(initialAmount) {
@@ -306,8 +322,8 @@ private fun AmountWidget(
                     minimumScaleFactor = 0.01f,
                     color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Right,
-                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().offset(x = amountOffset),
                 )
             }
             Spacer(Modifier.width(32.dp))
@@ -362,13 +378,37 @@ private fun AmountWidget(
             }
         }
         Spacer(Modifier.height(8.dp))
-        Text(
-            dollarText,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 16.sp,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth(),
-        )
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .then(
+                        // full width tap area in fiat mode (no dropdown to conflict with)
+                        if (isFiatMode) Modifier.clickable(onClick = onToggleFiatOrBtc) else Modifier,
+                    ),
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            Row(
+                modifier =
+                    // limited tap area in BTC mode to avoid dropdown conflict
+                    if (!isFiatMode) Modifier.clickable(onClick = onToggleFiatOrBtc) else Modifier,
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                Text(
+                    dollarText,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 16.sp,
+                )
+                if (isFiatMode && secondaryUnit.isNotEmpty()) {
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        secondaryUnit,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 16.sp,
+                    )
+                }
+            }
+        }
         Spacer(Modifier.height(24.dp))
     }
 }

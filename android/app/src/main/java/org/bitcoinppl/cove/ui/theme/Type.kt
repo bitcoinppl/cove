@@ -10,10 +10,11 @@ import androidx.compose.ui.unit.sp
 
 // tight text styling to match iOS spacing behavior
 private val tightPlatformStyle = PlatformTextStyle(includeFontPadding = false)
-private val tightLineHeightStyle = LineHeightStyle(
-    alignment = LineHeightStyle.Alignment.Center,
-    trim = LineHeightStyle.Trim.Both
-)
+private val tightLineHeightStyle =
+    LineHeightStyle(
+        alignment = LineHeightStyle.Alignment.Center,
+        trim = LineHeightStyle.Trim.Both,
+    )
 
 // Complete Material 3 typography scale with iOS-matching tight spacing
 val Typography =
