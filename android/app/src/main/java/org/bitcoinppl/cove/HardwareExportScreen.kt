@@ -65,8 +65,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -300,7 +302,10 @@ fun HardwareExportScreen(
                         )
                     }
 
-                    // amount display - centered with offset to account for unit label
+                    // amount display - centered with dynamic offset based on unit label width
+                    var unitLabelWidth by remember { mutableStateOf(0.dp) }
+                    val density = LocalDensity.current
+
                     Column(
                         modifier =
                             Modifier
@@ -310,11 +315,12 @@ fun HardwareExportScreen(
                     ) {
                         Row(
                             verticalAlignment = Alignment.Bottom,
-                            modifier = Modifier.offset(x = 32.dp),
+                            modifier = Modifier.offset(x = unitLabelWidth / 2),
                         ) {
-                            Text(
+                            AutoSizeText(
                                 text = walletManager.amountFmt(details.sendingAmount()),
-                                fontSize = 48.sp,
+                                maxFontSize = 48.sp,
+                                minimumScaleFactor = 0.5f,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface,
                             )
@@ -324,7 +330,10 @@ fun HardwareExportScreen(
                                 color = MaterialTheme.colorScheme.onSurface,
                                 modifier =
                                     Modifier
-                                        .padding(start = 8.dp, bottom = 10.dp),
+                                        .padding(start = 8.dp, bottom = 10.dp)
+                                        .onSizeChanged { size ->
+                                            unitLabelWidth = with(density) { size.width.toDp() }
+                                        },
                             )
                         }
 
