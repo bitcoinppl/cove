@@ -104,6 +104,15 @@ fun CustomFeeRateSheet(
             if (selectedRate > 0) {
                 val estimatedFee = (feeRate.toDouble() / selectedRate) * selectedFee
                 totalSats = estimatedFee.toLong()
+
+                // create estimated custom fee option so it shows up when Done is pressed
+                val estimatedFeeOption =
+                    FeeRateOptionWithTotalFee(
+                        feeSpeed = feeSpeed,
+                        feeRate = FeeRate.fromSatPerVb(feeRate),
+                        totalFee = Amount.fromSat(estimatedFee.toULong()),
+                    )
+                updatedFeeOptions = updatedFeeOptions.addCustomFeeRate(estimatedFeeOption)
             }
             return
         }
