@@ -288,6 +288,7 @@ fun HardwareExportScreen(
                             text = "You're sending",
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.padding(top = 6.dp),
                         )
 
@@ -315,10 +316,12 @@ fun HardwareExportScreen(
                                 text = walletManager.amountFmt(details.sendingAmount()),
                                 fontSize = 48.sp,
                                 fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
                             )
 
                             Text(
                                 text = if (metadata?.selectedUnit?.name == "SAT") "sats" else "btc",
+                                color = MaterialTheme.colorScheme.onSurface,
                                 modifier =
                                     Modifier
                                         .padding(start = 8.dp, bottom = 10.dp),
@@ -738,6 +741,7 @@ private fun AccountSection(metadata: WalletMetadata?) {
                     text = name,
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
             }
         }
@@ -770,6 +774,7 @@ private fun AddressSection(
             text = address,
             style = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
             textAlign = TextAlign.End,
             modifier =
                 Modifier
@@ -807,10 +812,11 @@ private fun SignTransactionSection(
                         contentColor = CoveColor.midnightBlue,
                     ),
                 shape = RoundedCornerShape(10.dp),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                    horizontal = 12.dp,
-                    vertical = 12.dp,
-                ),
+                contentPadding =
+                    androidx.compose.foundation.layout.PaddingValues(
+                        horizontal = 12.dp,
+                        vertical = 16.dp,
+                    ),
             ) {
                 Icon(
                     Icons.Default.Output,
@@ -836,10 +842,11 @@ private fun SignTransactionSection(
                         contentColor = CoveColor.midnightBlue,
                     ),
                 shape = RoundedCornerShape(10.dp),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                    horizontal = 12.dp,
-                    vertical = 12.dp,
-                ),
+                contentPadding =
+                    androidx.compose.foundation.layout.PaddingValues(
+                        horizontal = 12.dp,
+                        vertical = 16.dp,
+                    ),
             ) {
                 Icon(
                     Icons.AutoMirrored.Filled.Input,
