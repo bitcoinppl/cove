@@ -195,11 +195,7 @@ fun WalletTransactionsScreen(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             if (isColdWallet) {
-                                BitcoinShieldIcon(
-                                    modifier = Modifier.offset(y = (-5).dp),
-                                    size = 13.dp,
-                                    color = Color.White,
-                                )
+                                BitcoinShieldIcon(size = 13.dp, color = Color.White)
                                 Spacer(modifier = Modifier.size(8.dp))
                             }
                             AutoSizeText(
