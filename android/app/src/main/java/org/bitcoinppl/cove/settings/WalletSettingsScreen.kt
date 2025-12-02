@@ -354,7 +354,12 @@ private fun WalletColorSelector(
     Column(
         Modifier
             .fillMaxWidth()
-            .padding(MaterialSpacing.medium),
+            .padding(
+                start = MaterialSpacing.medium,
+                end = MaterialSpacing.medium,
+                top = MaterialSpacing.medium,
+                bottom = MaterialSpacing.small,
+            ),
     ) {
         Text(
             modifier =
