@@ -12,6 +12,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalDensity
@@ -214,6 +215,7 @@ fun AutoSizeTextField(
     fontWeight: FontWeight? = null,
     textAlign: TextAlign? = null,
     onTextWidthChanged: ((androidx.compose.ui.unit.Dp) -> Unit)? = null,
+    onFocusChanged: ((Boolean) -> Unit)? = null,
 ) {
     val density = LocalDensity.current
     val fontFamilyResolver = LocalFontFamilyResolver.current
@@ -284,7 +286,12 @@ fun AutoSizeTextField(
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             cursorBrush = SolidColor(color),
-            modifier = Modifier.fillMaxWidth(),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { focusState ->
+                        onFocusChanged?.invoke(focusState.isFocused)
+                    },
         )
     }
 }
