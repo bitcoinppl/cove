@@ -16,6 +16,7 @@ object CoveColor {
     val btnPrimary = ComposeColor(0xFFE5EAEF)
     val coveLightGray = ComposeColor(0xFFE5EAEF)
     val duskBlue = ComposeColor(0xFF3A4254)
+    val bitcoinOrange = ComposeColor(0xFFFF9500)
 
     // system green colors (theme-aware)
     val SystemGreenLight = ComposeColor(0xFF34C759)

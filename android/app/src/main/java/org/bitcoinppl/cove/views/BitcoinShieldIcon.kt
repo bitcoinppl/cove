@@ -1,6 +1,7 @@
 package org.bitcoinppl.cove.views
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -12,13 +13,27 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
+/**
+ * Bitcoin shield icon with optional text alignment adjustment.
+ *
+ * @param alignWithText When true (default), applies a -5.dp vertical offset to visually
+ *   align with adjacent text. Set to false when used in contexts where this adjustment
+ *   is not needed.
+ */
 @Composable
 fun BitcoinShieldIcon(
     modifier: Modifier = Modifier,
     size: Dp = 13.dp,
     color: Color = Color.White,
+    alignWithText: Boolean = true,
 ) {
-    Canvas(modifier = modifier.size(size)) {
+    val adjustedModifier =
+        if (alignWithText) {
+            modifier.offset(y = (-5).dp)
+        } else {
+            modifier
+        }
+    Canvas(modifier = adjustedModifier.size(size)) {
         val scaleFactor = size.toPx() / 125f
         scale(scaleFactor, scaleFactor) {
             drawShield(color)
