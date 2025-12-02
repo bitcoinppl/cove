@@ -124,8 +124,10 @@ fun NetworkSettingsScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
+                        pendingNetworkChange = null
                         app.dispatch(AppAction.ChangeNetwork(network))
                         app.rust.selectLatestOrNewWallet()
+                        app.popRoute()
                     },
                 ) {
                     Text("Yes, Change Network")
