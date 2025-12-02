@@ -4,9 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -20,15 +19,14 @@ import org.bitcoinppl.cove.SendFlowManager
 import org.bitcoinppl.cove.SendFlowPresenter
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.utils.toColor
 import org.bitcoinppl.cove_core.types.FeeRateOptionWithTotalFee
 import org.bitcoinppl.cove_core.types.FeeRateOptionsWithTotalFee
 import org.bitcoinppl.cove_core.types.FeeSpeed
+import org.bitcoinppl.cove_core.types.feeSpeedToCircleColor
 import java.util.Locale
 
-/**
- * fee rate selector sheet - displays fast/medium/slow fee options
- * ported from iOS SendFlowSelectFeeRateView.swift
- */
+/** fee rate selector sheet - displays fast/medium/slow fee options */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FeeRateSelectorSheet(
@@ -198,7 +196,7 @@ private fun FeeOptionCard(
         if (isSelected) {
             MaterialTheme.colorScheme.primary.copy(alpha = 0.75f)
         } else {
-            Color.Transparent
+            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
         }
 
     Box(
@@ -276,17 +274,6 @@ private fun FeeOptionCard(
                     color = contentColor,
                 )
             }
-
-            // checkmark if selected
-            if (isSelected) {
-                Spacer(modifier = Modifier.width(8.dp))
-                Icon(
-                    imageVector = Icons.Default.Check,
-                    contentDescription = "Selected",
-                    tint = contentColor,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
         }
     }
 }
@@ -296,7 +283,6 @@ private fun DurationCapsule(
     speed: FeeSpeed,
     fontColor: Color,
 ) {
-    // get duration string from FeeSpeed
     val durationText =
         remember(speed) {
             when (speed) {
@@ -314,15 +300,29 @@ private fun DurationCapsule(
             }
         }
 
+    val circleColor = feeSpeedToCircleColor(speed).toColor()
+
     Surface(
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(8.dp),
         color = fontColor.copy(alpha = 0.2f),
     ) {
-        Text(
-            text = durationText,
-            style = MaterialTheme.typography.labelSmall,
-            color = fontColor,
+        Row(
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-        )
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Box(
+                modifier =
+                    Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(circleColor),
+            )
+            Text(
+                text = durationText,
+                style = MaterialTheme.typography.labelSmall,
+                color = fontColor,
+            )
+        }
     }
 }
