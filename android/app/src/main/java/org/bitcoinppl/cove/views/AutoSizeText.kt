@@ -7,18 +7,23 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFontFamilyResolver
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
@@ -185,6 +190,9 @@ fun BalanceAutoSizeText(
  * Editable text field that automatically resizes to fit available width
  * Mimics iOS TextField with minimumScaleFactor behavior
  *
+ * Uses TextFieldValue internally to properly manage cursor position when
+ * the text is modified externally (e.g., formatting with commas).
+ *
  * @param value The current text value
  * @param onValueChange Callback when text changes
  * @param modifier Modifier for the text field
@@ -193,6 +201,7 @@ fun BalanceAutoSizeText(
  * @param color Text color
  * @param fontWeight Font weight
  * @param textAlign Text alignment
+ * @param onTextWidthChanged Callback with measured text width in Dp (for positioning related elements)
  */
 @Composable
 fun AutoSizeTextField(
@@ -204,26 +213,43 @@ fun AutoSizeTextField(
     color: Color = Color.Unspecified,
     fontWeight: FontWeight? = null,
     textAlign: TextAlign? = null,
+    onTextWidthChanged: ((androidx.compose.ui.unit.Dp) -> Unit)? = null,
 ) {
     val density = LocalDensity.current
     val fontFamilyResolver = LocalFontFamilyResolver.current
     val minFontSize = maxFontSize * minimumScaleFactor
     val style = LocalTextStyle.current
 
+    // use TextFieldValue internally to control cursor position
+    // track the last external value to detect when it changes
+    var lastExternalValue by remember { mutableStateOf(value) }
+    var textFieldValue by remember {
+        mutableStateOf(TextFieldValue(value, TextRange(value.length)))
+    }
+
+    // sync from external value changes (e.g., formatting), keeping cursor at end
+    // this runs during composition for immediate effect, not in a side effect
+    if (value != lastExternalValue) {
+        lastExternalValue = value
+        if (textFieldValue.text != value) {
+            textFieldValue = TextFieldValue(value, TextRange(value.length))
+        }
+    }
+
     BoxWithConstraints(modifier = modifier) {
         val maxWidthPx = with(density) { maxWidth.toPx() }
 
-        val fontSize =
+        val (fontSize, textWidthPx) =
             remember(
-                value,
+                textFieldValue.text,
                 maxWidthPx,
                 maxFontSize,
                 minFontSize,
                 style,
                 fontWeight,
             ) {
-                calculateOptimalFontSize(
-                    text = value,
+                calculateOptimalFontSizeAndWidth(
+                    text = textFieldValue.text,
                     maxFontSize = maxFontSize,
                     minFontSize = minFontSize,
                     maxWidthPx = maxWidthPx,
@@ -236,9 +262,18 @@ fun AutoSizeTextField(
                 )
             }
 
+        // report text width in Dp
+        val textWidthDp = with(density) { textWidthPx.toDp() }
+        onTextWidthChanged?.invoke(textWidthDp)
+
         BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
+            value = textFieldValue,
+            onValueChange = { newValue ->
+                textFieldValue = newValue
+                if (newValue.text != value) {
+                    onValueChange(newValue.text)
+                }
+            },
             textStyle =
                 TextStyle(
                     color = color,
@@ -312,4 +347,87 @@ private fun calculateOptimalFontSize(
     }
 
     return optimalSize.sp
+}
+
+/**
+ * Calculate optimal font size and text width using binary search with 0.1sp precision
+ * Returns a Pair of (fontSize, textWidthPx)
+ */
+private fun calculateOptimalFontSizeAndWidth(
+    text: String,
+    maxFontSize: TextUnit,
+    minFontSize: TextUnit,
+    maxWidthPx: Float,
+    style: TextStyle,
+    fontWeight: FontWeight?,
+    fontStyle: FontStyle?,
+    fontFamily: FontFamily?,
+    density: Density,
+    fontFamilyResolver: FontFamily.Resolver,
+): Pair<TextUnit, Float> {
+    // guard against invalid width - return max font size if we can't measure
+    if (maxWidthPx <= 0 || maxWidthPx == Float.MAX_VALUE) {
+        return Pair(maxFontSize, 0f)
+    }
+
+    var low = minFontSize.value
+    var high = maxFontSize.value
+    var optimalSize = maxFontSize.value // start with max, shrink only if needed
+    var textWidth = 0f
+
+    // binary search for optimal font size with 0.1sp precision
+    while (high - low > 0.1f) {
+        val mid = (low + high) / 2f
+        val testStyle =
+            style.copy(
+                fontSize = mid.sp,
+                fontWeight = fontWeight,
+                fontStyle = fontStyle,
+                fontFamily = fontFamily,
+            )
+
+        // measure text width at this font size
+        val paragraph =
+            androidx.compose.ui.text.Paragraph(
+                text = text,
+                style = testStyle,
+                constraints =
+                    androidx.compose.ui.unit
+                        .Constraints(maxWidth = Int.MAX_VALUE),
+                density = density,
+                fontFamilyResolver = fontFamilyResolver,
+            )
+
+        if (paragraph.minIntrinsicWidth <= maxWidthPx) {
+            // text fits, try larger size
+            optimalSize = mid
+            textWidth = paragraph.minIntrinsicWidth
+            low = mid + 0.1f
+        } else {
+            // text doesn't fit, try smaller size
+            high = mid - 0.1f
+        }
+    }
+
+    // final measurement at optimal size to get accurate width
+    val finalStyle =
+        style.copy(
+            fontSize = optimalSize.sp,
+            fontWeight = fontWeight,
+            fontStyle = fontStyle,
+            fontFamily = fontFamily,
+        )
+    val finalParagraph =
+        androidx.compose.ui.text.Paragraph(
+            text = text,
+            style = finalStyle,
+            constraints =
+                androidx.compose.ui.unit
+                    .Constraints(maxWidth = Int.MAX_VALUE),
+            density = density,
+            fontFamilyResolver = fontFamilyResolver,
+        )
+    textWidth = finalParagraph.minIntrinsicWidth
+
+    return Pair(optimalSize.sp, textWidth)
 }

@@ -114,18 +114,24 @@ class SendFlowManager(
 
     /**
      * update entering BTC amount with debounced dispatch
+     * only dispatches if value actually changed (matches iOS pattern)
      */
     fun updateEnteringBtcAmount(value: String) {
-        enteringBtcAmount = value
-        debouncedDispatch(SendFlowManagerAction.NotifyEnteringBtcAmountChanged(value))
+        if (enteringBtcAmount != value) {
+            enteringBtcAmount = value
+            debouncedDispatch(SendFlowManagerAction.NotifyEnteringBtcAmountChanged(value))
+        }
     }
 
     /**
      * update entering fiat amount with debounced dispatch
+     * only dispatches if value actually changed (matches iOS pattern)
      */
     fun updateEnteringFiatAmount(value: String) {
-        enteringFiatAmount = value
-        debouncedDispatch(SendFlowManagerAction.NotifyEnteringFiatAmountChanged(value))
+        if (enteringFiatAmount != value) {
+            enteringFiatAmount = value
+            debouncedDispatch(SendFlowManagerAction.NotifyEnteringFiatAmountChanged(value))
+        }
     }
 
     /**
