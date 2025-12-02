@@ -518,6 +518,17 @@ private fun GlobalAlertDialog(
             )
         }
 
+        is AppAlertState.ImportedSuccessfully -> {
+            AlertDialog(
+                onDismissRequest = onDismiss,
+                title = { Text(state.title()) },
+                text = { Text(state.message()) },
+                confirmButton = {
+                    TextButton(onClick = onDismiss) { Text("OK") }
+                },
+            )
+        }
+
         else -> {
             AlertDialog(
                 onDismissRequest = onDismiss,
