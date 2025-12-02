@@ -26,10 +26,7 @@ import org.bitcoinppl.cove.sheets.FeeRateSelectorSheet
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
 
-/**
- * UI state for tracking send transaction progress
- * Mirrors iOS SendState enum
- */
+/** UI state for tracking send transaction progress */
 sealed interface SendState {
     data object Idle : SendState
 
@@ -42,10 +39,7 @@ sealed interface SendState {
     ) : SendState
 }
 
-/**
- * send flow container - manages WalletManager + SendFlowManager lifecycle
- * ported from iOS SendFlowContainer.swift
- */
+/** send flow container - manages WalletManager + SendFlowManager lifecycle */
 @Composable
 fun SendFlowContainer(
     app: AppManager,
@@ -120,7 +114,7 @@ fun SendFlowContainer(
                 }
             }
 
-            // observe unit changes and notify send flow manager (mirrors iOS .onChange)
+            // observe unit changes and notify send flow manager
             var previousUnit by remember { mutableStateOf(wm.walletMetadata?.selectedUnit) }
             LaunchedEffect(wm.walletMetadata?.selectedUnit) {
                 val currentUnit = wm.walletMetadata?.selectedUnit
@@ -131,7 +125,7 @@ fun SendFlowContainer(
                 previousUnit = currentUnit
             }
 
-            // observe fiatOrBtc changes and notify send flow manager (mirrors iOS .onChange)
+            // observe fiatOrBtc changes and notify send flow manager
             var previousFiatOrBtc by remember { mutableStateOf(wm.walletMetadata?.fiatOrBtc) }
             LaunchedEffect(wm.walletMetadata?.fiatOrBtc) {
                 val currentFiatOrBtc = wm.walletMetadata?.fiatOrBtc
@@ -142,14 +136,14 @@ fun SendFlowContainer(
                 previousFiatOrBtc = currentFiatOrBtc
             }
 
-            // observe app prices changes and notify send flow manager (mirrors iOS .onChange)
+            // observe app prices changes and notify send flow manager
             LaunchedEffect(app.prices) {
                 app.prices?.let { prices ->
                     sfm.dispatch(SendFlowManagerAction.NotifyPricesChanged(prices))
                 }
             }
 
-            // observe focus field changes and notify send flow manager (mirrors iOS .onChange)
+            // observe focus field changes and notify send flow manager
             var previousFocusField by remember { mutableStateOf(presenter.focusField) }
             LaunchedEffect(presenter.focusField) {
                 val currentFocusField = presenter.focusField
@@ -160,7 +154,7 @@ fun SendFlowContainer(
                 previousFocusField = currentFocusField
             }
 
-            // observe auth lock state changes (mirrors iOS .onChange for auth.lockState)
+            // observe auth lock state changes
             LaunchedEffect(Auth.isLocked) {
                 if (!Auth.isLocked) {
                     // after unlock, validate and focus appropriate field
@@ -419,7 +413,7 @@ private fun SendFlowRouteToScreen(
             var showErrorAlert by remember { mutableStateOf(false) }
             val scope = rememberCoroutineScope()
 
-            // lock on appear for hot wallets (mirrors iOS .onAppear)
+            // lock on appear for hot wallets
             LaunchedEffect(Unit) {
                 kotlinx.coroutines.delay(50)
                 if (walletManager.walletMetadata?.walletType == WalletType.HOT) {
@@ -427,7 +421,7 @@ private fun SendFlowRouteToScreen(
                 }
             }
 
-            // timed unlock on disappear (mirrors iOS .onDisappear)
+            // timed unlock on disappear
             DisposableEffect(Unit) {
                 onDispose {
                     val lockedAt = Auth.lockedAt ?: return@onDispose
