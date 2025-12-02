@@ -865,7 +865,7 @@ private fun TransactionDetailsWidget(
             DetailsWidget(
                 label = stringResource(R.string.label_network_fee),
                 primary = transactionDetails.feeFmt(unit = metadata?.selectedUnit ?: BitcoinUnit.SAT),
-                secondary = "≈ $feeFiatFmt",
+                secondary = feeFiatFmt,
                 showInfoIcon = true,
                 onInfoClick = { /* TODO: show fee info */ },
             )
@@ -874,7 +874,7 @@ private fun TransactionDetailsWidget(
             DetailsWidget(
                 label = stringResource(R.string.label_recipient_receives),
                 primary = transactionDetails.sentSansFeeFmt(unit = metadata?.selectedUnit ?: BitcoinUnit.SAT),
-                secondary = "≈ $sentSansFeeFiatFmt",
+                secondary = sentSansFeeFiatFmt,
             )
             Spacer(Modifier.height(24.dp))
 
@@ -890,7 +890,7 @@ private fun TransactionDetailsWidget(
             DetailsWidget(
                 label = stringResource(R.string.label_total_spent),
                 primary = transactionDetails.amountFmt(unit = metadata?.selectedUnit ?: BitcoinUnit.SAT),
-                secondary = "≈ $totalSpentFiatFmt",
+                secondary = totalSpentFiatFmt,
                 isTotal = true,
             )
         } else {
