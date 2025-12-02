@@ -9,8 +9,8 @@ import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.unit.sp
 
 // tight text styling to match iOS spacing behavior
-private val tightPlatformStyle = PlatformTextStyle(includeFontPadding = false)
-private val tightLineHeightStyle =
+internal val tightPlatformStyle = PlatformTextStyle(includeFontPadding = false)
+internal val tightLineHeightStyle =
     LineHeightStyle(
         alignment = LineHeightStyle.Alignment.Center,
         trim = LineHeightStyle.Trim.Both,
@@ -175,3 +175,16 @@ val Typography =
                 lineHeightStyle = tightLineHeightStyle,
             ),
     )
+
+// extension to match iOS title3 (20pt)
+val Typography.title3: TextStyle
+    get() =
+        TextStyle(
+            fontFamily = FontFamily.Default,
+            fontWeight = FontWeight.Normal,
+            fontSize = 20.sp,
+            lineHeight = 20.sp,
+            letterSpacing = 0.sp,
+            platformStyle = tightPlatformStyle,
+            lineHeightStyle = tightLineHeightStyle,
+        )

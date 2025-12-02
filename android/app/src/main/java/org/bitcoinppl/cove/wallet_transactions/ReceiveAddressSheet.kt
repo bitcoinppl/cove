@@ -48,6 +48,7 @@ import org.bitcoinppl.cove.QrCodeGenerator
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.isLight
+import org.bitcoinppl.cove.ui.theme.title3
 import org.bitcoinppl.cove_core.types.AddressInfoWithDerivation
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -182,13 +183,13 @@ private fun ReceiveAddressSheetContent(
                 // wallet name header
                 Text(
                     text = walletName,
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.title3,
                     fontWeight = FontWeight.SemiBold,
                     color = Color.White,
                     textAlign = TextAlign.Center,
                 )
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
                 // QR code
                 Box(
@@ -198,8 +199,7 @@ private fun ReceiveAddressSheetContent(
                             .padding(horizontal = 32.dp)
                             .aspectRatio(1f)
                             .clip(RoundedCornerShape(12.dp))
-                            .background(Color.White)
-                            .padding(18.dp),
+                            .background(Color.White),
                     contentAlignment = Alignment.Center,
                 ) {
                     when {

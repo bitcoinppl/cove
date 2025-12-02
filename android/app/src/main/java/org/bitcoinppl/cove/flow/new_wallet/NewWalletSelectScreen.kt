@@ -59,6 +59,7 @@ import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.ui.theme.title3
 import org.bitcoinppl.cove.views.DashDotsIndicator
 import org.bitcoinppl.cove.views.ImageButton
 import org.bitcoinppl.cove_core.Wallet
@@ -367,7 +368,7 @@ fun NewWalletSelectScreen(
             ) {
                 Text(
                     text = "Import Hardware Wallet",
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.title3,
                     modifier = Modifier.padding(bottom = 16.dp),
                 )
 

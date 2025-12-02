@@ -32,6 +32,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.collect
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.ui.theme.title3
 import org.bitcoinppl.cove_core.LabelManager
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -141,7 +142,7 @@ fun NfcLabelImportSheet(
 
                 Text(
                     text = "Ready to Scan",
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.title3,
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
                 )
@@ -163,7 +164,7 @@ fun NfcLabelImportSheet(
 
                 Text(
                     text = "NFC Unavailable",
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.title3,
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
                 )

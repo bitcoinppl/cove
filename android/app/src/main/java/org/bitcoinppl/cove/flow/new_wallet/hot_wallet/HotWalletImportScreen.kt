@@ -94,6 +94,7 @@ import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.ImportWalletManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.ui.theme.title3
 import org.bitcoinppl.cove.views.DashDotsIndicator
 import org.bitcoinppl.cove.views.ImageButton
 import org.bitcoinppl.cove_core.*
@@ -879,7 +880,7 @@ private fun QrScannerContent(
 
                 Text(
                     text = "Scan Seed Phrase QR Code",
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.title3,
                     fontWeight = FontWeight.SemiBold,
                     color = Color.White,
                 )
@@ -1127,7 +1128,7 @@ private fun NfcScannerSheet(
 
                 Text(
                     text = "Ready to Scan",
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.title3,
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
                 )
@@ -1149,7 +1150,7 @@ private fun NfcScannerSheet(
 
                 Text(
                     text = "NFC Unavailable",
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.title3,
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
                 )
