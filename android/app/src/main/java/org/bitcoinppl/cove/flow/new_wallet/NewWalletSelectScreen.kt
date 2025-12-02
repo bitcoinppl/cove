@@ -293,12 +293,7 @@ fun NewWalletSelectScreen(
                     ) {
                         ImageButton(
                             text = stringResource(R.string.btn_hardware_wallet),
-                            leading = {
-                                Icon(
-                                    painter = painterResource(R.drawable.icon_currency_bitcoin),
-                                    contentDescription = null,
-                                )
-                            },
+                            leadingIcon = painterResource(R.drawable.icon_currency_bitcoin),
                             onClick = {
                                 showHardwareWalletSheet = true
                             },
@@ -310,15 +305,9 @@ fun NewWalletSelectScreen(
                             modifier = Modifier.weight(1f),
                         )
 
-                        // placeholder "phone"
                         ImageButton(
                             text = stringResource(R.string.btn_on_this_device),
-                            leading = {
-                                Icon(
-                                    painter = painterResource(R.drawable.icon_phone_device),
-                                    contentDescription = null,
-                                )
-                            },
+                            leadingIcon = painterResource(R.drawable.icon_phone_device),
                             onClick = onOpenNewHotWallet,
                             colors =
                                 ButtonDefaults.buttonColors(

@@ -58,6 +58,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -319,12 +320,7 @@ fun WalletTransactionsScreen(
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         ImageButton(
                             text = stringResource(R.string.btn_send),
-                            leading = {
-                                Icon(
-                                    imageVector = Icons.Filled.NorthEast,
-                                    contentDescription = null,
-                                )
-                            },
+                            leadingIcon = rememberVectorPainter(Icons.Filled.NorthEast),
                             onClick = onSend,
                             colors =
                                 androidx.compose.material3.ButtonDefaults.buttonColors(
@@ -335,12 +331,7 @@ fun WalletTransactionsScreen(
                         )
                         ImageButton(
                             text = stringResource(R.string.btn_receive),
-                            leading = {
-                                Icon(
-                                    imageVector = Icons.Filled.SouthWest,
-                                    contentDescription = null,
-                                )
-                            },
+                            leadingIcon = rememberVectorPainter(Icons.Filled.SouthWest),
                             onClick = onReceive,
                             colors =
                                 androidx.compose.material3.ButtonDefaults.buttonColors(
