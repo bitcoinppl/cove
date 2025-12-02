@@ -1,6 +1,8 @@
 package org.bitcoinppl.cove.sheets
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
@@ -8,6 +10,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -25,6 +28,7 @@ import org.bitcoinppl.cove.SendFlowPresenter
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.utils.toColor
 import org.bitcoinppl.cove_core.SendFlowAlertState
 import org.bitcoinppl.cove_core.SendFlowException
 import org.bitcoinppl.cove_core.types.Amount
@@ -32,6 +36,7 @@ import org.bitcoinppl.cove_core.types.FeeRate
 import org.bitcoinppl.cove_core.types.FeeRateOptionWithTotalFee
 import org.bitcoinppl.cove_core.types.FeeRateOptionsWithTotalFee
 import org.bitcoinppl.cove_core.types.FeeSpeed
+import org.bitcoinppl.cove_core.types.feeSpeedToCircleColor
 import java.util.Locale
 import kotlin.math.max
 import kotlin.math.round
@@ -47,10 +52,7 @@ private object CustomFeeRateConstants {
     const val ALERT_DELAY_MS = 850L
 }
 
-/**
- * custom fee rate sheet - allows user to set custom sats/vbyte with slider
- * ported from iOS SendFlowCustomFeeRateView.swift
- */
+/** custom fee rate sheet - allows user to set custom sats/vbyte with slider */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CustomFeeRateSheet(
@@ -210,7 +212,7 @@ fun CustomFeeRateSheet(
                     .padding(horizontal = 16.dp)
                     .padding(bottom = 32.dp),
         ) {
-            // title (matches iOS)
+            // title
             Text(
                 text = "Set Custom Network Fee",
                 style = MaterialTheme.typography.titleMedium,
@@ -225,7 +227,7 @@ fun CustomFeeRateSheet(
             Spacer(modifier = Modifier.height(20.dp))
 
             Column(modifier = Modifier.fillMaxWidth()) {
-                // "satoshi/byte" label (matches iOS)
+                // "satoshi/byte" label
                 Text(
                     text = "satoshi/byte",
                     fontWeight = FontWeight.Medium,
@@ -236,7 +238,7 @@ fun CustomFeeRateSheet(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // fee rate input + duration capsule row (matches iOS)
+                // fee rate input + duration capsule row
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -276,7 +278,7 @@ fun CustomFeeRateSheet(
 
                 Spacer(modifier = Modifier.height(4.dp))
 
-                // total fee + fiat display (matches iOS)
+                // total fee + fiat display
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -311,7 +313,7 @@ fun CustomFeeRateSheet(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // done button (matches iOS styling)
+            // done button
             Button(
                 onClick = onDismiss,
                 modifier =
@@ -359,16 +361,30 @@ private fun DurationCapsule(
             }
         }
 
+    val circleColor = feeSpeedToCircleColor(speed).toColor()
+
     Surface(
         shape = RoundedCornerShape(8.dp),
         color = Color.Gray.copy(alpha = 0.2f),
     ) {
-        Text(
-            text = durationText,
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.SemiBold,
-            color = fontColor,
+        Row(
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-        )
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Box(
+                modifier =
+                    Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(circleColor),
+            )
+            Text(
+                text = durationText,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = fontColor,
+            )
+        }
     }
 }
