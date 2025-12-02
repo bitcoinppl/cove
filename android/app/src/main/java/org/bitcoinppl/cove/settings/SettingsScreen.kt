@@ -1,6 +1,5 @@
 package org.bitcoinppl.cove.settings
 
-import androidx.activity.compose.BackHandler
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.background
@@ -21,11 +20,11 @@ import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Hub
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
-import androidx.compose.material.icons.filled.Masks
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Palette
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.TheaterComedy
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -79,18 +78,6 @@ fun SettingsScreen(
     app: org.bitcoinppl.cove.AppManager,
     modifier: Modifier = Modifier,
 ) {
-    // track if network has changed (similar to iOS implementation)
-    val networkChanged =
-        remember(app.previousSelectedNetwork, app.selectedNetwork) {
-            app.previousSelectedNetwork != null && app.selectedNetwork != app.previousSelectedNetwork
-        }
-    var showNetworkChangeAlert by remember { mutableStateOf(false) }
-
-    // intercept back button when network has changed
-    BackHandler(enabled = networkChanged) {
-        showNetworkChangeAlert = true
-    }
-
     Scaffold(
         modifier =
             modifier
@@ -111,15 +98,7 @@ fun SettingsScreen(
                     }
                 },
                 navigationIcon = {
-                    IconButton(
-                        onClick = {
-                            if (networkChanged) {
-                                showNetworkChangeAlert = true
-                            } else {
-                                app.popRoute()
-                            }
-                        },
-                    ) {
+                    IconButton(onClick = { app.popRoute() }) {
                         Icon(Icons.AutoMirrored.Default.ArrowBack, contentDescription = "Back")
                     }
                 },
@@ -190,39 +169,6 @@ fun SettingsScreen(
             }
         },
     )
-
-    // network change alert
-    if (showNetworkChangeAlert) {
-        AlertDialog(
-            onDismissRequest = { showNetworkChangeAlert = false },
-            title = { Text("⚠️ Network Changed ⚠️") },
-            text = {
-                val networkName =
-                    org.bitcoinppl.cove_core.types
-                        .networkToString(app.selectedNetwork)
-                Text("You've changed your network to $networkName")
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        app.rust.selectLatestOrNewWallet()
-                        app.confirmNetworkChange()
-                        showNetworkChangeAlert = false
-                        app.popRoute()
-                    },
-                ) {
-                    Text("Yes, Change Network")
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = { showNetworkChangeAlert = false },
-                ) {
-                    Text("Cancel")
-                }
-            },
-        )
-    }
 }
 
 @Composable
@@ -518,7 +464,7 @@ private fun SecuritySection(app: org.bitcoinppl.cove.AppManager) {
                 MaterialDivider()
                 MaterialSettingsItem(
                     title = "Enable Decoy PIN",
-                    icon = Icons.Default.Masks,
+                    icon = Icons.Default.TheaterComedy,
                     isSwitch = true,
                     switchCheckedState = isDecoyPinEnabled,
                     onCheckChanged = { enabled -> onDecoyPinToggle(enabled) },
