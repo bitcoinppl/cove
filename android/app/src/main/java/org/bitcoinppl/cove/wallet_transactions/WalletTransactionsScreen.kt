@@ -89,8 +89,6 @@ import org.bitcoinppl.cove_core.WalletSettingsRoute
 import org.bitcoinppl.cove_core.WalletType
 import org.bitcoinppl.cove_core.types.TransactionDirection
 import org.bitcoinppl.cove_core.types.WalletId
-import java.text.NumberFormat
-import java.util.Locale
 
 enum class TransactionType { SENT, RECEIVED }
 
@@ -150,9 +148,9 @@ fun WalletTransactionsScreen(
             val spendable = it.balance.spendable()
             it.displayAmount(spendable, showUnit = true)
         } ?: satsAmount
-    val actualUsdAmount =
+    val actualFiatAmount =
         manager?.fiatBalance?.let {
-            NumberFormat.getCurrencyInstance(Locale.US).format(it)
+            manager.rust.displayFiatAmount(it)
         } ?: usdAmount
     val transactions =
         when (val state = manager?.loadState) {
@@ -307,8 +305,8 @@ fun WalletTransactionsScreen(
                     val fiatOrBtc = manager?.walletMetadata?.fiatOrBtc ?: FiatOrBtc.BTC
                     val (primaryAmount, secondaryAmount) =
                         when (fiatOrBtc) {
-                            FiatOrBtc.FIAT -> actualUsdAmount to actualSatsAmount
-                            FiatOrBtc.BTC -> actualSatsAmount to actualUsdAmount
+                            FiatOrBtc.FIAT -> actualFiatAmount to actualSatsAmount
+                            FiatOrBtc.BTC -> actualSatsAmount to actualFiatAmount
                         }
 
                     BalanceWidget(
