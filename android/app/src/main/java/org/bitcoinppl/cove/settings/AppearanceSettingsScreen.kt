@@ -85,7 +85,7 @@ fun AppearanceSettingsScreen(
                         .verticalScroll(rememberScrollState())
                         .padding(paddingValues),
             ) {
-                SectionHeader(stringResource(R.string.title_settings_appearance))
+                SectionHeader(stringResource(R.string.title_settings_appearance), showDivider = false)
                 MaterialSection {
                     Column {
                         colorSchemes.forEachIndexed { index, colorScheme ->

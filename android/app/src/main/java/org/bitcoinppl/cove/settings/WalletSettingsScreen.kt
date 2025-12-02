@@ -27,6 +27,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -54,6 +55,7 @@ import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletManager
+import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.MaterialSpacing
 import org.bitcoinppl.cove.utils.toComposeColor
 import org.bitcoinppl.cove.views.AutoSizeText
@@ -152,7 +154,7 @@ fun WalletSettingsScreen(
                         .verticalScroll(rememberScrollState())
                         .padding(paddingValues),
             ) {
-                SectionHeader(stringResource(R.string.title_wallet_information))
+                SectionHeader(stringResource(R.string.title_wallet_information), showDivider = false)
                 MaterialSection {
                     Column {
                         MaterialSettingsItem(
@@ -229,6 +231,7 @@ fun WalletSettingsScreen(
                         if (metadata.walletType == WalletType.HOT) {
                             MaterialSettingsItem(
                                 title = stringResource(R.string.label_wallet_view_secrets),
+                                titleColor = CoveColor.WarningOrange,
                                 onClick = {
                                     app.pushRoute(Route.SecretWords(metadata.id))
                                 },
@@ -238,6 +241,15 @@ fun WalletSettingsScreen(
                         if (dangerItemCount > 0) MaterialDivider()
                         MaterialSettingsItem(
                             title = stringResource(R.string.label_wallet_delete),
+                            titleColor = MaterialTheme.colorScheme.error,
+                            leadingContent = {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(24.dp),
+                                )
+                            },
                             onClick = {
                                 showDeleteConfirmation = true
                             },
@@ -342,7 +354,7 @@ private fun WalletColorSelector(
     Column(
         Modifier
             .fillMaxWidth()
-            .padding(8.dp),
+            .padding(MaterialSpacing.medium),
     ) {
         Text(
             modifier =

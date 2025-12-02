@@ -265,7 +265,7 @@ fun NodeSettingsScreen(
                         .verticalScroll(rememberScrollState())
                         .padding(paddingValues),
             ) {
-                SectionHeader(stringResource(R.string.title_settings_node))
+                SectionHeader(stringResource(R.string.title_settings_node), showDivider = false)
                 MaterialSection {
                     Column {
                         // preset nodes
