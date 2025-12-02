@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.ui.theme.title3
 import org.bitcoinppl.cove.utils.intoRoute
 import org.bitcoinppl.cove.views.DashDotsIndicator
 import org.bitcoinppl.cove.views.ImageButton
@@ -223,7 +224,7 @@ fun HotWalletSelectScreen(
                 ) {
                     Text(
                         text = stringResource(R.string.label_select_number_of_words),
-                        style = MaterialTheme.typography.titleLarge,
+                        style = MaterialTheme.typography.title3,
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.padding(bottom = 8.dp),
                     )

@@ -29,6 +29,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.AppAlertState
+import org.bitcoinppl.cove.ui.theme.title3
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove_core.multiFormatTryFromNfcMessage
@@ -125,7 +126,7 @@ fun NfcScanSheet(
             if (errorMessage != null) {
                 Text(
                     text = "Error",
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.title3,
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
@@ -149,7 +150,7 @@ fun NfcScanSheet(
                 Spacer(modifier = Modifier.height(24.dp))
                 Text(
                     text = "Ready to Scan",
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.title3,
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
