@@ -1,5 +1,7 @@
 package org.bitcoinppl.cove.ui.theme
 
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color as ComposeColor
 
 /**
@@ -65,3 +67,12 @@ object CoveColor {
     val SuccessGreen = ComposeColor(0xFF4CAF50)
     val ErrorRed = ComposeColor(0xFFF44336)
 }
+
+/**
+ * Theme-aware midnight button color matching iOS midnightBtn color asset.
+ * Light mode: dark navy (#1C2536)
+ * Dark mode: medium gray (#4A4A4D)
+ */
+@Composable
+fun midnightBtn(): ComposeColor =
+    if (isSystemInDarkTheme()) CoveColor.midnightBtnDark else CoveColor.midnightBlue
