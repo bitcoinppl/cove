@@ -152,6 +152,7 @@ struct TransactionDetailsView: View {
                     .foregroundColor(.gray)
 
                 Text(transactionDetails.confirmationDateTime() ?? "Unknown")
+                    .fontWeight(.semibold)
                     .foregroundColor(.gray)
             }
             .multilineTextAlignment(.center)
