@@ -186,6 +186,9 @@ private fun SendFlowRouteToScreen(
                         }
                     walletManager.dispatch(WalletManagerAction.UpdateUnit(bitcoinUnit))
                 },
+                onToggleFiatOrBtc = {
+                    walletManager.dispatch(WalletManagerAction.ToggleFiatOrBtc)
+                },
                 isFiatMode = walletManager.walletMetadata?.fiatOrBtc == FiatOrBtc.FIAT,
                 isBalanceHidden = !(walletManager.walletMetadata?.sensitiveVisible ?: true),
                 balanceAmount = walletManager.amountFmt(walletManager.balance.spendable()),
@@ -206,6 +209,11 @@ private fun SendFlowRouteToScreen(
                     when (walletManager.walletMetadata?.fiatOrBtc) {
                         FiatOrBtc.FIAT -> sendFlowManager.sendAmountBtc
                         else -> sendFlowManager.sendAmountFiat
+                    },
+                secondaryUnit =
+                    when (walletManager.walletMetadata?.fiatOrBtc) {
+                        FiatOrBtc.FIAT -> walletManager.unit
+                        else -> ""
                     },
                 initialAddress = sendFlowManager.enteringAddress,
                 accountShort =
