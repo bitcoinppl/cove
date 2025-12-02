@@ -39,6 +39,7 @@ fun FeeRateSelectorSheet(
     feeOptions: FeeRateOptionsWithTotalFee,
     selectedOption: FeeRateOptionWithTotalFee,
     onSelectFee: (FeeRateOptionWithTotalFee) -> Unit,
+    onUpdateFeeOptions: (FeeRateOptionsWithTotalFee) -> Unit,
     onDismiss: () -> Unit,
 ) {
     var showCustomFeeSheet by remember { mutableStateOf(false) }
@@ -153,12 +154,14 @@ fun FeeRateSelectorSheet(
     if (showCustomFeeSheet) {
         CustomFeeRateSheet(
             app = app,
+            walletManager = walletManager,
             sendFlowManager = sendFlowManager,
             presenter = presenter,
             feeOptions = currentFeeOptions,
             selectedOption = selectedOption,
             onUpdateFeeOptions = { newOptions, newSelected ->
                 currentFeeOptions = newOptions
+                onUpdateFeeOptions(newOptions)
                 onSelectFee(newSelected)
                 showCustomFeeSheet = false
             },

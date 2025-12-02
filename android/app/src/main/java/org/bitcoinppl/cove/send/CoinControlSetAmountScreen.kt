@@ -34,11 +34,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.QrCodeScanView
 import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.sheets.FeeRateSelectorSheet
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.BalanceAutoSizeText
 import org.bitcoinppl.cove.views.ImageButton
+import org.bitcoinppl.cove_core.SendFlowManagerAction
+import org.bitcoinppl.cove_core.StringOrData
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -64,6 +69,7 @@ fun CoinControlSetAmountScreen(
     totalSpendingFiat: String,
     utxoCount: Int,
     utxos: List<org.bitcoinppl.cove_core.types.Utxo>,
+    app: AppManager,
     sendFlowManager: org.bitcoinppl.cove.SendFlowManager,
     walletManager: org.bitcoinppl.cove.WalletManager,
     presenter: org.bitcoinppl.cove.SendFlowPresenter,
@@ -177,8 +183,50 @@ fun CoinControlSetAmountScreen(
                     onDismiss = { presenter.sheetState = null },
                 )
             }
-            else -> {
-                // other sheets (Qr, Fee) are not handled in coin control screen
+            is org.bitcoinppl.cove.SendFlowPresenter.SheetState.Qr -> {
+                ModalBottomSheet(
+                    onDismissRequest = { presenter.sheetState = null },
+                    sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+                ) {
+                    QrCodeScanView(
+                        onScanned = { stringOrData ->
+                            presenter.sheetState = null
+                            val scannedString =
+                                when (stringOrData) {
+                                    is StringOrData.String -> stringOrData.v1
+                                    is StringOrData.Data -> stringOrData.v1.toString(Charsets.UTF_8)
+                                }
+                            sendFlowManager.enteringAddress = scannedString
+                        },
+                        onDismiss = { presenter.sheetState = null },
+                        app = app,
+                    )
+                }
+            }
+            is org.bitcoinppl.cove.SendFlowPresenter.SheetState.Fee -> {
+                sendFlowManager.feeRateOptions?.let { feeOptions ->
+                    sendFlowManager.selectedFeeRate?.let { selectedRate ->
+                        FeeRateSelectorSheet(
+                            app = app,
+                            walletManager = walletManager,
+                            sendFlowManager = sendFlowManager,
+                            presenter = presenter,
+                            feeOptions = feeOptions,
+                            selectedOption = selectedRate,
+                            onSelectFee = { newFeeOption ->
+                                sendFlowManager.dispatch(
+                                    SendFlowManagerAction.SelectFeeRate(newFeeOption),
+                                )
+                            },
+                            onUpdateFeeOptions = { newOptions ->
+                                sendFlowManager.dispatch(
+                                    SendFlowManagerAction.ChangeFeeRateOptions(newOptions),
+                                )
+                            },
+                            onDismiss = { presenter.sheetState = null },
+                        )
+                    }
+                }
             }
         }
     }
