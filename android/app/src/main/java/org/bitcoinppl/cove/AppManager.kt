@@ -57,9 +57,6 @@ class AppManager private constructor() : FfiReconcile {
     var selectedNetwork by mutableStateOf(Database().globalConfig().selectedNetwork())
         private set
 
-    var previousSelectedNetwork: Network? by mutableStateOf(null)
-        private set
-
     var colorSchemeSelection by mutableStateOf(Database().globalConfig().colorScheme())
         private set
 
@@ -505,10 +502,6 @@ class AppManager private constructor() : FfiReconcile {
         rust.loadAndResetDefaultRoute(to)
     }
 
-    fun confirmNetworkChange() {
-        previousSelectedNetwork = null
-    }
-
     fun agreeToTerms() {
         dispatch(AppAction.AcceptTerms)
         isTermsAccepted = true
@@ -542,9 +535,6 @@ class AppManager private constructor() : FfiReconcile {
                     }
 
                     is AppStateReconcileMessage.SelectedNetworkChanged -> {
-                        if (previousSelectedNetwork == null) {
-                            previousSelectedNetwork = selectedNetwork
-                        }
                         selectedNetwork = message.v1
                     }
 
