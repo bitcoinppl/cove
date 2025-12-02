@@ -428,6 +428,18 @@ fun WalletTransactionsScreen(
                                                     TransactionDirection.OUTGOING -> TransactionType.SENT
                                                 }
 
+                                            val txLabel =
+                                                if (manager?.walletMetadata?.showLabels == true) {
+                                                    txn.v1.label()
+                                                } else {
+                                                    stringResource(
+                                                        when (txType) {
+                                                            TransactionType.SENT -> R.string.label_transaction_sent
+                                                            TransactionType.RECEIVED -> R.string.label_transaction_received
+                                                        },
+                                                    )
+                                                }
+
                                             // format amount with manager if available
                                             val formattedAmount =
                                                 manager?.let {
@@ -438,6 +450,7 @@ fun WalletTransactionsScreen(
 
                                             TransactionWidget(
                                                 type = txType,
+                                                label = txLabel,
                                                 date = txn.v1.confirmedAtFmt(),
                                                 amount = formattedAmount,
                                                 balanceAfter = txn.v1.blockHeightFmt(),
@@ -458,6 +471,18 @@ fun WalletTransactionsScreen(
                                                     TransactionDirection.OUTGOING -> TransactionType.SENT
                                                 }
 
+                                            val txLabel =
+                                                if (manager?.walletMetadata?.showLabels == true) {
+                                                    txn.v1.label()
+                                                } else {
+                                                    stringResource(
+                                                        when (txType) {
+                                                            TransactionType.SENT -> R.string.label_transaction_sent
+                                                            TransactionType.RECEIVED -> R.string.label_transaction_received
+                                                        },
+                                                    )
+                                                }
+
                                             // format amount with manager if available
                                             val formattedAmount =
                                                 manager?.let {
@@ -468,6 +493,7 @@ fun WalletTransactionsScreen(
 
                                             TransactionWidget(
                                                 type = txType,
+                                                label = txLabel,
                                                 date = stringResource(R.string.pending),
                                                 amount = formattedAmount,
                                                 balanceAfter = stringResource(R.string.unconfirmed),
@@ -503,6 +529,7 @@ fun WalletTransactionsScreen(
 @Composable
 private fun TransactionWidget(
     type: TransactionType,
+    label: String,
     date: String,
     amount: String,
     balanceAfter: String,
@@ -513,14 +540,6 @@ private fun TransactionWidget(
     app: AppManager?,
     manager: WalletManager?,
 ) {
-    val title =
-        stringResource(
-            when (type) {
-                TransactionType.SENT -> R.string.label_transaction_sent
-                TransactionType.RECEIVED -> R.string.label_transaction_received
-            },
-        )
-
     val scope = rememberCoroutineScope()
     val isDark = !MaterialTheme.colorScheme.isLight
 
@@ -571,7 +590,7 @@ private fun TransactionWidget(
         ) {
             Icon(
                 imageVector = if (type == TransactionType.SENT) Icons.Filled.NorthEast else Icons.Filled.SouthWest,
-                contentDescription = title,
+                contentDescription = label,
                 tint = Color.White,
                 modifier = Modifier.size(24.dp),
             )
@@ -584,7 +603,7 @@ private fun TransactionWidget(
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             Text(
-                text = title,
+                text = label,
                 color = primaryText.copy(alpha = 0.65f),
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Medium,
