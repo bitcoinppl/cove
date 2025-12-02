@@ -236,24 +236,33 @@ fun CardItemPreview() {
     CardItem("name") { Text("hello") }
 }
 
-// Material Design section header (sentence case, labelLarge)
+// Material Design section header (AOSP style with divider and accent color)
 @Composable
 fun SectionHeader(
     title: String,
     modifier: Modifier = Modifier,
+    showDivider: Boolean = true,
 ) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier =
-            modifier
-                .fillMaxWidth()
-                .padding(
-                    horizontal = MaterialSpacing.medium,
-                    vertical = 12.dp,
-                ),
-    )
+    Column(modifier = modifier.fillMaxWidth()) {
+        if (showDivider) {
+            Spacer(modifier = Modifier.height(MaterialSpacing.medium))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        }
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        start = MaterialSpacing.medium,
+                        end = MaterialSpacing.medium,
+                        top = 12.dp,
+                        bottom = 4.dp,
+                    ),
+        )
+    }
 }
 
 @Preview

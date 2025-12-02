@@ -86,7 +86,7 @@ fun FiatCurrencySettingsScreen(
                         .verticalScroll(rememberScrollState())
                         .padding(paddingValues),
             ) {
-                SectionHeader(stringResource(R.string.title_settings_currency))
+                SectionHeader(stringResource(R.string.title_settings_currency), showDivider = false)
                 MaterialSection {
                     Column {
                         fiatCurrencies.forEachIndexed { index, fiatCurrency ->

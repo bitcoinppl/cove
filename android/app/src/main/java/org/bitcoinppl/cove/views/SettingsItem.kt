@@ -98,12 +98,14 @@ fun MaterialSettingsItem(
     subtitle: String? = null,
     leadingContent: (@Composable () -> Unit)? = null,
     trailingContent: (@Composable () -> Unit)? = null,
+    titleColor: Color? = null,
 ) {
     ListItem(
         headlineContent = {
             Text(
                 text = title,
                 style = MaterialTheme.typography.bodyLarge,
+                color = titleColor ?: Color.Unspecified,
             )
         },
         supportingContent =

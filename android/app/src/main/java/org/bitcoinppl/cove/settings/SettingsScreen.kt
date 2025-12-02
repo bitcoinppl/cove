@@ -25,7 +25,7 @@ import androidx.compose.material.icons.filled.Masks
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -135,12 +135,12 @@ fun SettingsScreen(
                         .verticalScroll(rememberScrollState())
                         .padding(paddingValues),
             ) {
-                SectionHeader(stringResource(R.string.title_settings_general))
+                SectionHeader(stringResource(R.string.title_settings_general), showDivider = false)
                 MaterialSection {
                     Column {
                         MaterialSettingsItem(
                             title = stringResource(R.string.title_settings_network),
-                            icon = Icons.Default.Wifi,
+                            icon = Icons.Default.Public,
                             onClick = {
                                 app.pushRoute(
                                     org.bitcoinppl.cove_core.Route

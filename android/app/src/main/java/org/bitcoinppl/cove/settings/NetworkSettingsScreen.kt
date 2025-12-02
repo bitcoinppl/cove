@@ -91,7 +91,7 @@ fun NetworkSettingsScreen(
                         .verticalScroll(rememberScrollState())
                         .padding(paddingValues),
             ) {
-                SectionHeader(stringResource(R.string.title_settings_network))
+                SectionHeader(stringResource(R.string.title_settings_network), showDivider = false)
                 MaterialSection {
                     Column {
                         networks.forEachIndexed { index, network ->
