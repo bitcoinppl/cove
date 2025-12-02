@@ -1,6 +1,5 @@
 package org.bitcoinppl.cove.views
 
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,13 +15,10 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -38,10 +34,6 @@ fun ImageButton(
     colors: ButtonColors = ButtonDefaults.buttonColors(),
     enabled: Boolean = true,
 ) {
-    val maxFontSize = 14.sp
-    val minimumScaleFactor = 0.2f
-    val baseIconSize = 24.dp
-
     Button(
         onClick = onClick,
         shape = RoundedCornerShape(10.dp),
@@ -50,36 +42,26 @@ fun ImageButton(
         enabled = enabled,
         contentPadding = PaddingValues(vertical = 18.dp, horizontal = 12.dp),
     ) {
-        BoxWithConstraints {
-            // track the scale factor from AutoSizeText
-            var scaleFactor by remember { mutableStateOf(1f) }
-            val iconSize = baseIconSize * scaleFactor
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                if (leadingIcon != null) {
-                    Icon(
-                        painter = leadingIcon,
-                        contentDescription = null,
-                        modifier = Modifier.size(iconSize),
-                        tint = LocalContentColor.current,
-                    )
-                    Spacer(Modifier.width(8.dp * scaleFactor))
-                }
-                AutoSizeText(
-                    text = text,
-                    fontWeight = FontWeight.Medium,
-                    maxFontSize = maxFontSize,
-                    minimumScaleFactor = minimumScaleFactor,
-                    modifier = Modifier.weight(1f),
-                    onTextLayout = { result ->
-                        val computedSize = result.layoutInput.style.fontSize
-                        scaleFactor = (computedSize.value / maxFontSize.value).coerceIn(minimumScaleFactor, 1f)
-                    },
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            if (leadingIcon != null) {
+                Icon(
+                    painter = leadingIcon,
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp),
+                    tint = LocalContentColor.current,
                 )
+                Spacer(Modifier.width(8.dp))
             }
+            AutoSizeText(
+                text = text,
+                fontWeight = FontWeight.Medium,
+                maxFontSize = 14.sp,
+                minimumScaleFactor = 0.5f,
+                modifier = Modifier.weight(1f),
+            )
         }
     }
 }
@@ -89,9 +71,7 @@ fun ImageButton(
 private fun PreviewImageButton() {
     ImageButton(
         text = "Call Now",
-        leadingIcon =
-            androidx.compose.ui.graphics.vector
-                .rememberVectorPainter(Icons.Default.Call),
+        leadingIcon = rememberVectorPainter(Icons.Default.Call),
         onClick = {},
         colors =
             ButtonDefaults.buttonColors(
