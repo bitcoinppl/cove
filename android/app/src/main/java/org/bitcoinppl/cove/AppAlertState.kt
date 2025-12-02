@@ -163,7 +163,6 @@ sealed class AppAlertState {
 
     fun isSnackbar(): Boolean =
         when (this) {
-            is ImportedSuccessfully,
             is ImportedLabelsSuccessfully,
             is InvalidWordGroup,
             is ErrorImportingHotWallet,

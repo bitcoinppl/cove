@@ -6,6 +6,8 @@ import android.nfc.NfcAdapter
 import android.nfc.Tag
 import android.nfc.tech.Ndef
 import android.nfc.tech.NdefFormatable
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -15,17 +17,28 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.receiveAsFlow
 import java.nio.charset.Charset
 
+enum class NfcReadingState {
+    WAITING,
+    TAG_DETECTED,
+    READING,
+    SUCCESS,
+}
+
 class NfcReader(
     private val activity: Activity,
 ) {
     private val nfcAdapter: NfcAdapter? = NfcAdapter.getDefaultAdapter(activity)
     private val _scanResults = Channel<NfcScanResult>(Channel.BUFFERED)
     val scanResults: Flow<NfcScanResult> = _scanResults.receiveAsFlow()
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     var isScanning by mutableStateOf(false)
         private set
 
     var message by mutableStateOf("")
+        private set
+
+    var readingState by mutableStateOf(NfcReadingState.WAITING)
         private set
 
     fun startScanning() {
@@ -41,6 +54,7 @@ class NfcReader(
 
         isScanning = true
         message = "Hold your phone near the NFC tag"
+        readingState = NfcReadingState.WAITING
 
         nfcAdapter.enableReaderMode(
             activity,
@@ -59,16 +73,28 @@ class NfcReader(
     fun stopScanning() {
         isScanning = false
         message = ""
+        readingState = NfcReadingState.WAITING
         nfcAdapter?.disableReaderMode(activity)
     }
 
     private fun handleTag(tag: Tag) {
         Log.d("NfcReader", "Tag detected: ${tag.techList.joinToString()}")
 
+        // update state on main thread - tag detected!
+        mainHandler.post {
+            readingState = NfcReadingState.TAG_DETECTED
+            message = "Reading"
+        }
+
         try {
             // try reading NDEF data
             val ndef = Ndef.get(tag)
             if (ndef != null) {
+                // update state on main thread - now reading
+                mainHandler.post {
+                    readingState = NfcReadingState.READING
+                }
+
                 ndef.connect()
                 val ndefMessage = ndef.ndefMessage
                 ndef.close()
@@ -138,21 +164,40 @@ class NfcReader(
             }
         }
 
-        if (textContent.isNotBlank()) {
-            _scanResults.trySend(NfcScanResult.Success(textContent, binaryData))
-        } else if (binaryData != null) {
-            _scanResults.trySend(NfcScanResult.Success(null, binaryData))
+        if (textContent.isNotBlank() || binaryData != null) {
+            // set SUCCESS state and show success message
+            mainHandler.post {
+                readingState = NfcReadingState.SUCCESS
+                message = "Tag read successfully!"
+            }
+
+            // delay sending the result so UI can show success message
+            val result =
+                if (textContent.isNotBlank()) {
+                    NfcScanResult.Success(textContent, binaryData)
+                } else {
+                    NfcScanResult.Success(null, binaryData)
+                }
+
+            mainHandler.postDelayed({
+                _scanResults.trySend(result)
+                stopScanning()
+            }, SUCCESS_DISPLAY_DELAY_MS)
         } else {
             _scanResults.trySend(NfcScanResult.Error("No readable data found on NFC tag"))
+            stopScanning()
         }
+    }
 
-        stopScanning()
+    companion object {
+        private const val SUCCESS_DISPLAY_DELAY_MS = 1000L
     }
 
     fun reset() {
         stopScanning()
         isScanning = false
         message = ""
+        readingState = NfcReadingState.WAITING
     }
 }
 
