@@ -11,6 +11,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.CurrencyBitcoin
 import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.Visibility
@@ -38,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.ui.theme.midnightBtn
 import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.AutoSizeTextField
 import org.bitcoinppl.cove.views.ImageButton
@@ -77,9 +79,12 @@ fun SendScreen(
     onNext: () -> Unit,
     onScanQr: () -> Unit,
     onChangeSpeed: () -> Unit,
+    onClearAmount: () -> Unit = {},
     onToggleBalanceVisibility: () -> Unit = {},
     onUnitChange: (String) -> Unit = {},
     onToggleFiatOrBtc: () -> Unit = {},
+    onSanitizeBtcAmount: (oldValue: String, newValue: String) -> String? = { _, _ -> null },
+    onSanitizeFiatAmount: (oldValue: String, newValue: String) -> String? = { _, _ -> null },
     isFiatMode: Boolean = false,
     isBalanceHidden: Boolean = false,
     balanceAmount: String,
@@ -163,8 +168,11 @@ fun SendScreen(
                         dollarText = dollarEquivalentText,
                         secondaryUnit = secondaryUnit,
                         onAmountChanged = onAmountChanged,
+                        onClearAmount = onClearAmount,
                         onUnitChange = onUnitChange,
                         onToggleFiatOrBtc = onToggleFiatOrBtc,
+                        onSanitizeBtcAmount = onSanitizeBtcAmount,
+                        onSanitizeFiatAmount = onSanitizeFiatAmount,
                         isFiatMode = isFiatMode,
                     )
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
@@ -188,7 +196,7 @@ fun SendScreen(
                         onClick = onNext,
                         colors =
                             ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.surface,
+                                containerColor = midnightBtn(),
                                 contentColor = Color.White,
                             ),
                         modifier =
@@ -268,12 +276,16 @@ private fun AmountWidget(
     dollarText: String,
     secondaryUnit: String = "",
     onAmountChanged: (String) -> Unit,
+    onClearAmount: () -> Unit = {},
     onUnitChange: (String) -> Unit = {},
     onToggleFiatOrBtc: () -> Unit = {},
+    onSanitizeBtcAmount: (oldValue: String, newValue: String) -> String? = { _, _ -> null },
+    onSanitizeFiatAmount: (oldValue: String, newValue: String) -> String? = { _, _ -> null },
     isFiatMode: Boolean = false,
 ) {
     var amount by remember { mutableStateOf(initialAmount) }
     var showUnitMenu by remember { mutableStateOf(false) }
+    var textWidth by remember { mutableStateOf(0.dp) }
 
     // offset to compensate for unit dropdown (matches iOS)
     val configuration = LocalConfiguration.current
@@ -315,8 +327,19 @@ private fun AmountWidget(
                 AutoSizeTextField(
                     value = amount,
                     onValueChange = { newValue ->
-                        amount = newValue
-                        onAmountChanged(newValue)
+                        val oldValue = amount
+                        // sanitize synchronously before updating local state (matches iOS pattern)
+                        val sanitized =
+                            if (isFiatMode) {
+                                onSanitizeFiatAmount(oldValue, newValue) ?: newValue
+                            } else {
+                                onSanitizeBtcAmount(oldValue, newValue) ?: newValue
+                            }
+                        // only update if changed
+                        if (sanitized != oldValue) {
+                            amount = sanitized
+                            onAmountChanged(sanitized)
+                        }
                     },
                     maxFontSize = 48.sp,
                     minimumScaleFactor = 0.01f,
@@ -324,7 +347,31 @@ private fun AmountWidget(
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth().offset(x = amountOffset),
+                    onTextWidthChanged = { width -> textWidth = width },
                 )
+                // clear button: positioned at top, horizontally follows the text's right edge
+                // text is centered with an offset, so X position = offset + half text width + small margin
+                if (amount.isNotEmpty()) {
+                    IconButton(
+                        onClick = {
+                            amount = ""
+                            onAmountChanged("")
+                            onClearAmount()
+                        },
+                        modifier =
+                            Modifier
+                                .align(Alignment.TopCenter)
+                                .offset(x = amountOffset + (textWidth / 2) + 16.dp)
+                                .size(32.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Clear,
+                            contentDescription = "Clear amount",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                }
             }
             Spacer(Modifier.width(32.dp))
             Box {
@@ -379,19 +426,18 @@ private fun AmountWidget(
         }
         Spacer(Modifier.height(8.dp))
         Row(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .then(
-                        // full width tap area in fiat mode (no dropdown to conflict with)
-                        if (isFiatMode) Modifier.clickable(onClick = onToggleFiatOrBtc) else Modifier,
-                    ),
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.Center,
         ) {
             Row(
                 modifier =
-                    // limited tap area in BTC mode to avoid dropdown conflict
-                    if (!isFiatMode) Modifier.clickable(onClick = onToggleFiatOrBtc) else Modifier,
+                    Modifier
+                        .clickable(onClick = onToggleFiatOrBtc)
+                        .padding(vertical = 8.dp)
+                        .then(
+                            // add horizontal padding in fiat mode (no dropdown to conflict with)
+                            if (isFiatMode) Modifier.padding(horizontal = 24.dp) else Modifier,
+                        ),
                 horizontalArrangement = Arrangement.Center,
             ) {
                 Text(

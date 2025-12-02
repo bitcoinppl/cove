@@ -67,6 +67,8 @@ import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.ui.theme.midnightBtn
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
 import java.io.File
@@ -352,6 +354,7 @@ fun HardwareExportScreen(
                     walletManager = walletManager,
                     details = details,
                     onDismiss = { sheetState = null },
+                    onShowInputOutput = { sheetState = SheetState.InputOutputDetails },
                 )
             }
         }
@@ -679,7 +682,8 @@ private fun SignTransactionSection(
                 modifier = Modifier.weight(1f),
                 colors =
                     ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
+                        containerColor = CoveColor.btnPrimary,
+                        contentColor = CoveColor.midnightBlue,
                     ),
             ) {
                 Icon(
@@ -699,7 +703,8 @@ private fun SignTransactionSection(
                 modifier = Modifier.weight(1f),
                 colors =
                     ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
+                        containerColor = CoveColor.btnPrimary,
+                        contentColor = CoveColor.midnightBlue,
                     ),
             ) {
                 Icon(
@@ -752,31 +757,134 @@ private fun TransactionDetailsSheet(
     walletManager: WalletManager,
     details: ConfirmDetails,
     onDismiss: () -> Unit,
+    onShowInputOutput: () -> Unit,
 ) {
+    val metadata = walletManager.walletMetadata
+    val feePercentage = details.feePercentage()
+
     Column(
         modifier =
             Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(24.dp),
     ) {
+        // title
         Text(
-            text = "Transaction Details",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
+            text = "More Details",
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.align(Alignment.CenterHorizontally),
         )
 
-        DetailRow("Transaction ID", details.id().asHashString())
-        DetailRow("Sending Amount", walletManager.amountFmtUnit(details.sendingAmount()))
-        DetailRow("Network Fee", walletManager.amountFmtUnit(details.feeTotal()))
-        DetailRow("Total", walletManager.amountFmtUnit(details.spendingAmount()))
-        DetailRow("Fee Rate", "${details.feeRate().satPerVb()} sat/vB")
+        // account section
+        AccountSection(metadata)
 
-        TextButton(
+        HorizontalDivider()
+
+        // details section
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            // address row (tappable)
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onShowInputOutput),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = "Address",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                )
+                Text(
+                    text = details.sendingTo().spacedOut(),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.End,
+                    modifier = Modifier.weight(1f).padding(start = 16.dp),
+                    maxLines = 3,
+                )
+            }
+
+            // network fee row (with warning styling if >20%)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = "Network Fee",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                )
+                Text(
+                    text = walletManager.amountFmtUnit(details.feeTotal()),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = if (feePercentage > 20u) FontWeight.Bold else FontWeight.Medium,
+                    color =
+                        if (feePercentage > 20u) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        },
+                )
+            }
+
+            // they'll receive row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = "They'll receive",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = walletManager.amountFmtUnit(details.sendingAmount()),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+
+            // you'll pay row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = "You'll pay",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = walletManager.amountFmtUnit(details.spendingAmount()),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // close button with midnightBtn styling (matching iOS)
+        Button(
             onClick = onDismiss,
-            modifier = Modifier.align(Alignment.End),
+            modifier = Modifier.fillMaxWidth(),
+            colors =
+                ButtonDefaults.buttonColors(
+                    containerColor = midnightBtn(),
+                    contentColor = Color.White,
+                ),
+            shape = RoundedCornerShape(10.dp),
         ) {
-            Text("Close")
+            Text(
+                text = "Close",
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.padding(vertical = 4.dp),
+            )
         }
     }
 }
