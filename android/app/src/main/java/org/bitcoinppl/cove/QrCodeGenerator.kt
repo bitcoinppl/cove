@@ -20,7 +20,10 @@ object QrCodeGenerator {
         size: Int = 512,
         errorCorrectionLevel: ErrorCorrectionLevel = ErrorCorrectionLevel.L,
     ): Bitmap {
-        val hints = mapOf(EncodeHintType.ERROR_CORRECTION to errorCorrectionLevel)
+        val hints = mapOf(
+            EncodeHintType.ERROR_CORRECTION to errorCorrectionLevel,
+            EncodeHintType.MARGIN to 0,
+        )
 
         val writer = QRCodeWriter()
         val bitMatrix = writer.encode(text, BarcodeFormat.QR_CODE, size, size, hints)

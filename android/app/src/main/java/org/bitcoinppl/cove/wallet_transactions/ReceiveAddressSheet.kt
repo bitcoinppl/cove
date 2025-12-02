@@ -199,7 +199,8 @@ private fun ReceiveAddressSheetContent(
                             .padding(horizontal = 32.dp)
                             .aspectRatio(1f)
                             .clip(RoundedCornerShape(12.dp))
-                            .background(Color.White),
+                            .background(Color.White)
+                            .padding(12.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     when {
