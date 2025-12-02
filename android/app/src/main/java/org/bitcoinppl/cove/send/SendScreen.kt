@@ -25,6 +25,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
@@ -286,6 +287,7 @@ private fun AmountWidget(
     var amount by remember { mutableStateOf(initialAmount) }
     var showUnitMenu by remember { mutableStateOf(false) }
     var textWidth by remember { mutableStateOf(0.dp) }
+    var isFocused by remember { mutableStateOf(false) }
 
     // offset to compensate for unit dropdown (matches iOS)
     val configuration = LocalConfiguration.current
@@ -348,10 +350,12 @@ private fun AmountWidget(
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth().offset(x = amountOffset),
                     onTextWidthChanged = { width -> textWidth = width },
+                    onFocusChanged = { focused -> isFocused = focused },
                 )
                 // clear button: positioned at top, horizontally follows the text's right edge
                 // text is centered with an offset, so X position = offset + half text width + small margin
-                if (amount.isNotEmpty()) {
+                // only show when focused and has content
+                if (isFocused && amount.isNotEmpty()) {
                     IconButton(
                         onClick = {
                             amount = ""
@@ -466,6 +470,7 @@ private fun AddressWidget(
     onAddressChanged: (String) -> Unit,
 ) {
     var address by remember { mutableStateOf(initialAddress) }
+    var isFocused by remember { mutableStateOf(false) }
 
     // bidirectional sync: update local state when parent state changes
     androidx.compose.runtime.LaunchedEffect(initialAddress) {
@@ -491,6 +496,23 @@ private fun AddressWidget(
                     fontSize = 14.sp,
                 )
             }
+            // clear button - only visible when focused and has content
+            if (isFocused && address.isNotEmpty()) {
+                IconButton(
+                    onClick = {
+                        address = ""
+                        onAddressChanged("")
+                    },
+                    modifier = Modifier.size(32.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Clear,
+                        contentDescription = "Clear address",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+            }
             IconButton(
                 onClick = onScanQr,
                 modifier = Modifier.offset(x = 8.dp),
@@ -512,7 +534,12 @@ private fun AddressWidget(
                     lineHeight = 20.sp,
                     fontWeight = FontWeight.Medium,
                 ),
-            modifier = Modifier.fillMaxWidth(),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { focusState ->
+                        isFocused = focusState.isFocused
+                    },
         )
         Spacer(Modifier.height(24.dp))
     }
