@@ -17,11 +17,13 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.NorthEast
@@ -55,6 +57,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -77,8 +80,10 @@ import org.bitcoinppl.cove_core.FiatOrBtc
 import org.bitcoinppl.cove_core.HotWalletRoute
 import org.bitcoinppl.cove_core.NewWalletRoute
 import org.bitcoinppl.cove_core.Route
+import org.bitcoinppl.cove_core.RouteFactory
 import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.Transaction
+import org.bitcoinppl.cove_core.UnsignedTransaction
 import org.bitcoinppl.cove_core.WalletManagerAction
 import org.bitcoinppl.cove_core.WalletSettingsRoute
 import org.bitcoinppl.cove_core.WalletType
@@ -155,6 +160,7 @@ fun WalletTransactionsScreen(
             is WalletLoadState.SCANNING -> state.txns
             else -> emptyList()
         }
+    val unsignedTransactions = manager?.unsignedTransactions ?: emptyList()
 
     // use Material Design system colors for native Android feel
     val listBg = MaterialTheme.colorScheme.background
@@ -247,17 +253,25 @@ fun WalletTransactionsScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = onQrCode) {
-                        Icon(
-                            imageVector = Icons.Filled.QrCode2,
-                            contentDescription = "QR Code",
-                        )
-                    }
-                    IconButton(onClick = onMore) {
-                        Icon(
-                            imageVector = Icons.Filled.MoreVert,
-                            contentDescription = "More",
-                        )
+                    Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                        IconButton(
+                            onClick = onQrCode,
+                            modifier = Modifier.size(36.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.QrCode2,
+                                contentDescription = "QR Code",
+                            )
+                        }
+                        IconButton(
+                            onClick = onMore,
+                            modifier = Modifier.size(36.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.MoreVert,
+                                contentDescription = "More",
+                            )
+                        }
                     }
                 },
             )
@@ -368,7 +382,7 @@ fun WalletTransactionsScreen(
                         )
 
                         // render real transactions or show empty state
-                        if (transactions.isEmpty()) {
+                        if (transactions.isEmpty() && unsignedTransactions.isEmpty()) {
                             // empty state
                             Box(
                                 modifier =
@@ -389,6 +403,21 @@ fun WalletTransactionsScreen(
                                 state = listState,
                                 modifier = Modifier.weight(1f),
                             ) {
+                                // render unsigned transactions first (pending signature)
+                                items(
+                                    items = unsignedTransactions,
+                                    key = { it.id().toString() },
+                                ) { unsignedTxn ->
+                                    UnsignedTransactionWidget(
+                                        txn = unsignedTxn,
+                                        primaryText = primaryText,
+                                        secondaryText = secondaryText,
+                                        app = app,
+                                        manager = manager,
+                                    )
+                                    HorizontalDivider(color = dividerColor, thickness = 0.5.dp)
+                                }
+
                                 itemsIndexed(transactions) { index, txn ->
                                     when (txn) {
                                         is Transaction.Confirmed -> {
@@ -581,6 +610,136 @@ private fun TransactionWidget(
                 color = secondaryText,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Normal,
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun UnsignedTransactionWidget(
+    txn: UnsignedTransaction,
+    primaryText: Color,
+    secondaryText: Color,
+    app: AppManager?,
+    manager: WalletManager?,
+) {
+    val isDark = !MaterialTheme.colorScheme.isLight
+    var showDeleteMenu by remember { mutableStateOf(false) }
+
+    // icon background: same values as iOS (0.35 dark, 0.75 light)
+    val iconBackground =
+        if (isDark) {
+            Color.Gray.copy(alpha = 0.35f)
+        } else {
+            Color.Black.copy(alpha = 0.75f)
+        }
+
+    // format the spending amount
+    val formattedAmount =
+        manager?.let {
+            it.displayAmount(txn.spendingAmount(), showUnit = true)
+        } ?: txn.spendingAmount().satsStringWithUnit()
+
+    Box {
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .combinedClickable(
+                        onClick = {
+                            // navigate to hardware export screen
+                            val walletId = manager?.walletMetadata?.id
+                            if (app != null && walletId != null) {
+                                val route = RouteFactory().sendHardwareExport(walletId, txn.details())
+                                app.pushRoute(route)
+                            }
+                        },
+                        onLongClick = { showDeleteMenu = true },
+                    ).padding(vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // lock icon with warning indicator (0.6 opacity on whole box like iOS)
+            // outer Box applies opacity to entire contents including background
+            Box(modifier = Modifier.graphicsLayer { alpha = 0.6f }) {
+                Box(
+                    modifier =
+                        Modifier
+                            .size(50.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(iconBackground),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.LockOpen,
+                        contentDescription = "Unsigned Transaction",
+                        tint = Color.White,
+                        modifier = Modifier.size(24.dp),
+                    )
+                    // small warning indicator
+                    Icon(
+                        imageVector = Icons.Filled.Warning,
+                        contentDescription = null,
+                        tint = Color(0xFFFF9800),
+                        modifier =
+                            Modifier
+                                .size(14.dp)
+                                .align(Alignment.BottomEnd)
+                                .offset(x = 2.dp, y = 2.dp),
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.size(12.dp))
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = txn.label(),
+                    color = primaryText.copy(alpha = 0.4f),
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                )
+                Text(
+                    text = stringResource(R.string.pending_signature),
+                    color = Color(0xFFFF9800),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Normal,
+                )
+            }
+
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    text = formattedAmount,
+                    color = primaryText.copy(alpha = 0.6f),
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Normal,
+                )
+            }
+        }
+
+        // delete dropdown menu
+        DropdownMenu(
+            expanded = showDeleteMenu,
+            onDismissRequest = { showDeleteMenu = false },
+        ) {
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        text = stringResource(R.string.delete),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                },
+                onClick = {
+                    showDeleteMenu = false
+                    try {
+                        manager?.rust?.deleteUnsignedTransaction(txn.id())
+                    } catch (e: Exception) {
+                        android.util.Log.e("UnsignedTxWidget", "Failed to delete unsigned transaction", e)
+                    }
+                },
             )
         }
     }
