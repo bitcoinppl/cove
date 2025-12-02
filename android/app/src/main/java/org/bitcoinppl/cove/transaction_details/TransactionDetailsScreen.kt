@@ -559,7 +559,7 @@ fun TransactionDetailsScreen(
                             text = formattedDate,
                             color = sub,
                             fontSize = 16.sp,
-                            fontWeight = if (isReceived) FontWeight.SemiBold else FontWeight.Normal,
+                            fontWeight = FontWeight.Medium,
                             textAlign = TextAlign.Center,
                             lineHeight = 22.sp,
                         )
