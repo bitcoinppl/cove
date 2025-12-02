@@ -541,4 +541,26 @@ private fun SendFlowRouteToScreen(
             )
         }
     }
+
+    // validation alert dialog (shown across all send routes)
+    if (presenter.isShowingAlert) {
+        AlertDialog(
+            onDismissRequest = {
+                presenter.setDisappearing()
+                presenter.alertState = null
+            },
+            title = { Text(presenter.alertTitle()) },
+            text = { Text(presenter.alertMessage()) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        presenter.setDisappearing()
+                        presenter.alertButtonAction()?.invoke()
+                    },
+                ) {
+                    Text("OK")
+                }
+            },
+        )
+    }
 }
