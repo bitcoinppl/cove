@@ -320,8 +320,13 @@ impl QrScanner {
     /// - Uninitialized → Complete (single-part) or InProgress (multi-part)
     /// - InProgress(Bbqr) → InProgress (more parts) or Complete
     /// - InProgress(Ur) → InProgress (more parts) or Complete
-    /// - Complete → acts like Uninitialized (auto-reset)
+    /// - Complete → returns cached result (call `reset()` to scan again)
     fn scan(&mut self, qr: StringOrData) -> Result<ScanResult, MultiQrError> {
+        // if already complete, return cached result without modifying state
+        if let Self::Complete(result) = self {
+            return Ok(result.clone());
+        }
+
         // take ownership of current state to avoid borrow issues
         let current_state = std::mem::replace(self, Self::Uninitialized);
 
@@ -338,7 +343,7 @@ impl QrScanner {
                 Self::scan_ur_part(*ur, &qr)?
             }
 
-            Self::Complete(result) => return Ok(result),
+            Self::Complete(_) => unreachable!("handled above"),
         };
 
         *self = new_state;
