@@ -9,6 +9,7 @@ import SwiftUI
     var rust: FfiApp
     var router: Router
     var database: Database
+    var wallets: [WalletMetadata] = []
     var isSidebarVisible = false
     var asyncRuntimeReady = false
 
@@ -64,6 +65,7 @@ import SwiftUI
         router = state.router
         self.rust = rust
         database = Database()
+        wallets = (try? database.wallets().all()) ?? []
 
         // set the cached prices and fees
         prices = try? rust.prices()
@@ -259,6 +261,9 @@ import SwiftUI
                             withAnimation { self.isLoading = false }
                         }
                     }
+
+                case .walletsChanged:
+                    self.wallets = (try? self.database.wallets().all()) ?? []
                 }
             }
         }

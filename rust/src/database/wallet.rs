@@ -227,6 +227,8 @@ impl WalletsTable {
         wallets.retain(|wallet| &wallet.id != id);
         self.save_all_wallets(network, mode, wallets)?;
 
+        Updater::send_update(Update::WalletsChanged);
+
         Ok(())
     }
 
@@ -242,6 +244,8 @@ impl WalletsTable {
 
         wallets.push(wallet);
         self.save_all_wallets(network, mode, wallets)?;
+
+        Updater::send_update(Update::WalletsChanged);
 
         Ok(())
     }
