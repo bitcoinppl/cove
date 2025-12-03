@@ -215,10 +215,12 @@ fn parse_ur(qr: &str) -> Result<(QrScanner, ScanResult), MultiQrError> {
         }
 
         foundation_ur::UR::MultiPart { .. } | foundation_ur::UR::MultiPartDeserialized { .. } => {
+            use cove_ur::UrError;
+
             debug!("Multi-part UR, using decoder");
             let mut decoder = UrDecoder::default();
             let foundation_ur = ur.to_foundation_ur()?;
-            let _ = decoder.receive(foundation_ur);
+            decoder.receive(foundation_ur).map_err(|e| UrError::UrParseError(e.to_string()))?;
 
             let percentage = decoder.estimated_percent_complete();
             let progress = ScanProgress::Ur { percentage };

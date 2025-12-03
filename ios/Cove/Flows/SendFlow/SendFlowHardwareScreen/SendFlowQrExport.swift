@@ -204,7 +204,7 @@ struct SendFlowQrExport: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color.midnightBlue.edgesIgnoringSafeArea(.all))
             .sheet(isPresented: $isPresented) {
-                SendFlowQrExport(details: confirmDetailsPreviewLarge())
+                SendFlowQrExport(details: confirmDetailsPreviewNew())
                     .presentationDetents([.height(550), .height(650), .large])
                     .padding()
                     .padding(.top, 10)

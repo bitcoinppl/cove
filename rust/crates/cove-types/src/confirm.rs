@@ -396,13 +396,6 @@ mod ffi_preview {
 
         BdkPsbt::deserialize(&psbt_bytes).expect("unable to deserialize psbt").into()
     }
-
-    /// Larger PSBT for testing multi-QR scenarios
-    /// Creates a larger payload by using the small PSBT but padding the result
-    pub fn psbt_preview_large() -> Psbt {
-        // Use the same valid PSBT - the size will be enough for multiple QRs at lower density
-        psbt_preview_new()
-    }
 }
 
 /// Preview ConfirmDetails for SwiftUI previews
@@ -417,24 +410,6 @@ pub fn confirm_details_preview_new() -> ConfirmDetails {
         fee_total: Amount::from_sat(658),
         fee_rate: BdkFeeRate::from_sat_per_vb_unchecked(3).into(),
         fee_percentage: 3,
-        sending_to: Address::preview_new(),
-        psbt,
-        more_details,
-    }
-}
-
-/// Large PSBT preview for testing multi-QR scenarios
-#[uniffi::export]
-pub fn confirm_details_preview_large() -> ConfirmDetails {
-    let psbt = ffi_preview::psbt_preview_large();
-    let more_details = InputOutputDetails::new(&psbt, Network::Bitcoin);
-
-    ConfirmDetails {
-        spending_amount: Amount::from_sat(2500000),
-        sending_amount: Amount::from_sat(2499000),
-        fee_total: Amount::from_sat(1000),
-        fee_rate: BdkFeeRate::from_sat_per_vb_unchecked(5).into(),
-        fee_percentage: 1,
         sending_to: Address::preview_new(),
         psbt,
         more_details,
