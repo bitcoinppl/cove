@@ -789,6 +789,7 @@ dependencies = [
  "itertools 0.14.0",
  "jiff",
  "memchr",
+ "minicbor 2.1.3",
  "nid",
  "num-bigint",
  "numfmt",

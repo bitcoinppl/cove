@@ -265,11 +265,15 @@ impl MultiFormat {
             }
 
             UrType::Bytes => {
-                // decode bytes - could be JSON (Passport format)
-                let json_str =
-                    std::str::from_utf8(data).map_err(|_| MultiFormatError::UnrecognizedFormat)?;
+                // ur:bytes payload is CBOR-encoded byte string (per UR spec)
+                let mut decoder = minicbor::Decoder::new(data);
+                let inner_bytes =
+                    decoder.bytes().map_err(|_| MultiFormatError::UnrecognizedFormat)?;
 
-                // pubport already handles Passport JSON format
+                let json_str = std::str::from_utf8(inner_bytes)
+                    .map_err(|_| MultiFormatError::UnrecognizedFormat)?;
+
+                // pubport handles Passport JSON format
                 let format = pubport::Format::try_new_from_str(json_str)
                     .map_err(|_| MultiFormatError::UnrecognizedFormat)?;
                 let hardware_export = HardwareExport::new(format);
@@ -464,6 +468,72 @@ mod tests {
         let ur_string = "UR:CRYPTO-OUTPUT/TAADMWTAADDLOSAOWKAXHDCLAXNSRSIMBNDRBNFTDEJSAXADLSMTWNDSAOWPLBIHFLSBEMLGMWCTDWDSFTFLDACPREAAHDCXMOCXBYKEGWNBDYADGHEMPYCFHGEYRYCATDTIWTWTLBGTSGPEGYECBDDARFHTFNLFAHTAADEHOEADAEAOAEAMTAADDYOTADLNCSGHYKAEYKAEYKAOCYGHENTSDKAXAXAYCYBGKBNBVAASIHFWGAGDEOESCLCFPSPY";
         let result = MultiFormat::try_from_string(ur_string);
         assert!(result.is_ok(), "Should parse uppercase UR: {:?}", result);
+        assert!(matches!(result.unwrap(), MultiFormat::HardwareExport(_)));
+    }
+
+    #[test]
+    fn test_ur_bytes_passport_json() {
+        // Passport-style JSON wallet export using the "abandon" seed
+        // Master fingerprint: 73c5da0a
+        // BIP84 zpub from "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+        let passport_json = r#"{
+  "xfp": "73c5da0a",
+  "bip84": {
+    "deriv": "m/84'/0'/0'",
+    "xpub": "zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz2oz2AGutZYs",
+    "first": "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu"
+  }
+}"#;
+
+        // CBOR-encode the JSON (as Passport does per UR spec)
+        let mut cbor = Vec::new();
+        let mut encoder = minicbor::Encoder::new(&mut cbor);
+        encoder.bytes(passport_json.as_bytes()).unwrap();
+
+        // create ur:bytes string
+        let ur = UR::new("bytes", &cbor);
+        let ur_string = ur.to_string();
+
+        // this should parse successfully as HardwareExport
+        let result = MultiFormat::try_from_string(&ur_string);
+        assert!(result.is_ok(), "Failed to parse ur:bytes Passport JSON: {:?}", result);
+        assert!(matches!(result.unwrap(), MultiFormat::HardwareExport(_)));
+    }
+
+    #[test]
+    fn test_crypto_hdkey_ur() {
+        use std::str::FromStr;
+
+        // use child xpub (depth > 0) - pubport rejects master xpubs
+        let xpub_str = "xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM";
+        let xpub = bitcoin::bip32::Xpub::from_str(xpub_str).unwrap();
+
+        let crypto_hdkey = cove_ur::CryptoHdkey::from_xpub(&xpub);
+        let cbor = crypto_hdkey.to_cbor().unwrap();
+
+        let ur = UR::new("crypto-hdkey", &cbor);
+        let ur_string = ur.to_string();
+
+        let result = MultiFormat::try_from_string(&ur_string);
+        assert!(result.is_ok(), "Failed to parse crypto-hdkey UR: {:?}", result);
+        assert!(matches!(result.unwrap(), MultiFormat::HardwareExport(_)));
+    }
+
+    #[test]
+    fn test_crypto_account_ur() {
+        // BCR spec test vector (untagged) - contains P2PKH, P2SH-P2WPKH, P2WPKH, P2TR, and multisig keys
+        // master fingerprint: 37b5eed4
+        const BCR_SPEC_CBOR_UNTAGGED_HEX: &str = "a2011a37b5eed40287d90134d90193d9012fa403582103eb3e2863911826374de86c231a4b76f0b89dfa174afb78d7f478199884d9dd320458206456a5df2db0f6d9af72b2a1af4b25f45200ed6fcc29c3440b311d4796b70b5b06d90130a20186182cf500f500f5021a37b5eed4081a99f9cdf7d90134d90190d90194d9012fa403582102c7e4823730f6ee2cf864e2c352060a88e60b51a84e89e4c8c75ec22590ad6b690458209d2f86043276f9251a4a4f577166a5abeb16b6ec61e226b5b8fa11038bfda42d06d90130a201861831f500f500f5021a37b5eed4081aa80f7cdbd90134d90194d9012fa403582103fd433450b6924b4f7efdd5d1ed017d364be95ab2b592dc8bddb3b00c1c24f63f04582072ede7334d5acf91c6fda622c205199c595a31f9218ed30792d301d5ee9e3a8806d90130a201861854f500f500f5021a37b5eed4081a0d5de1d7d90134d90190d9019ad9012fa4035821035ccd58b63a2cdc23d0812710603592e7457573211880cb59b1ef012e168e059a04582088d3299b448f87215d96b0c226235afc027f9e7dc700284f3e912a34daeb1a2306d90130a20182182df5021a37b5eed4081a37b5eed4d90134d90190d90191d9019ad9012fa4035821032c78ebfcabdac6d735a0820ef8732f2821b4fb84cd5d6b26526938f90c0507110458207953efe16a73e5d3f9f2d4c6e49bd88e22093bbd85be5a7e862a4b98a16e0ab606d90130a201881830f500f500f501f5021a37b5eed4081a59b69b2ad90134d90191d9019ad9012fa40358210260563ee80c26844621b06b74070baf0e23fb76ce439d0237e87502ebbd3ca3460458202fa0e41c9dc43dc4518659bfcef935ba8101b57dbc0812805dd983bc1d34b81306d90130a201881830f500f500f502f5021a37b5eed4081a59b69b2ad90134d90199d9012fa403582102bbb97cf9efa176b738efd6ee1d4d0fa391a973394fbc16e4c5e78e536cd14d2d0458204b4693e1f794206ed1355b838da24949a92b63d02e58910bf3bd3d9c242281e606d90130a201861856f500f500f5021a37b5eed4081acec7070c";
+
+        // add tag 311 (0xd90137) prefix to make it tagged CBOR
+        let mut tagged_cbor = hex::decode("d90137").unwrap(); // tag 311
+        tagged_cbor.extend(hex::decode(BCR_SPEC_CBOR_UNTAGGED_HEX).unwrap());
+
+        let ur = UR::new("crypto-account", &tagged_cbor);
+        let ur_string = ur.to_string();
+
+        let result = MultiFormat::try_from_string(&ur_string);
+        assert!(result.is_ok(), "Failed to parse crypto-account UR: {:?}", result);
         assert!(matches!(result.unwrap(), MultiFormat::HardwareExport(_)));
     }
 }

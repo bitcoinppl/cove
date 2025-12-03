@@ -200,6 +200,7 @@ jiff = { workspace = true, features = [] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 cbor4ii = { version = "1.0", features = ["serde1"] }
+minicbor = { workspace = true }
 serde_urlencoded = { workspace = true }
 
 zerocopy = { version = "0.8", features = ["derive"] }
@@ -257,6 +258,7 @@ uniffi = { workspace = true, features = ["build"] }
 [dev-dependencies]
 tempfile = "3.19"
 pretty_assertions = "1.4.1"
+minicbor = { workspace = true }
 
 tokio = { workspace = true, features = ["rt", "test-util", "macros"] }
 uniffi = { workspace = true, features = ["bindgen-tests"] }
