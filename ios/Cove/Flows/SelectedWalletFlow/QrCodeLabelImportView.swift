@@ -13,7 +13,7 @@ struct QrCodeLabelImportView: View {
     @Environment(\.dismiss) private var dismiss
 
     // args
-    @Binding var scannedCode: TaggedString?
+    @Binding var scannedCode: TaggedItem<MultiFormat>?
 
     // private
     @State private var scanner = QrScanner()
@@ -129,13 +129,10 @@ struct QrCodeLabelImportView: View {
 
             do {
                 switch try scanner.scan(qr: qr) {
-                case let .complete(_, rawData, haptic):
+                case let .complete(data, haptic):
                     triggerHaptic(haptic)
                     scanComplete = true
-                    // use rawData (the assembled string) - should always be available for labels
-                    if let raw = rawData {
-                        scannedCode = TaggedString(raw)
-                    }
+                    scannedCode = TaggedItem(data)
                     scanner.reset()
 
                 case let .inProgress(prog, haptic):
@@ -166,3 +163,4 @@ struct QrCodeLabelImportView: View {
     QrCodeLabelImportView(scannedCode: .constant(nil))
         .environment(AppManager.shared)
 }
+

@@ -18646,12 +18646,9 @@ public func FfiConverterTypeScanProgress_lower(_ value: ScanProgress) -> RustBuf
 public enum ScanResult {
     
     /**
-     * Scan complete - here's the parsed data and optionally the raw string
+     * Scan complete - here's the parsed data
      */
     case complete(data: MultiFormat, 
-        /**
-         * Raw string data (for screens that need the original string)
-         */rawData: String?, 
         /**
          * Haptic feedback to trigger
          */haptic: HapticFeedback
@@ -18685,7 +18682,7 @@ public struct FfiConverterTypeScanResult: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
         
-        case 1: return .complete(data: try FfiConverterTypeMultiFormat.read(from: &buf), rawData: try FfiConverterOptionString.read(from: &buf), haptic: try FfiConverterTypeHapticFeedback.read(from: &buf)
+        case 1: return .complete(data: try FfiConverterTypeMultiFormat.read(from: &buf), haptic: try FfiConverterTypeHapticFeedback.read(from: &buf)
         )
         
         case 2: return .inProgress(progress: try FfiConverterTypeScanProgress.read(from: &buf), haptic: try FfiConverterTypeHapticFeedback.read(from: &buf)
@@ -18699,10 +18696,9 @@ public struct FfiConverterTypeScanResult: FfiConverterRustBuffer {
         switch value {
         
         
-        case let .complete(data,rawData,haptic):
+        case let .complete(data,haptic):
             writeInt(&buf, Int32(1))
             FfiConverterTypeMultiFormat.write(data, into: &buf)
-            FfiConverterOptionString.write(rawData, into: &buf)
             FfiConverterTypeHapticFeedback.write(haptic, into: &buf)
             
         

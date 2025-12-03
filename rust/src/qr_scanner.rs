@@ -62,11 +62,9 @@ pub enum HapticFeedback {
 /// Result of a QR scan - either complete with parsed data or in progress
 #[derive(Debug, Clone, uniffi::Enum)]
 pub enum ScanResult {
-    /// Scan complete - here's the parsed data and optionally the raw string
+    /// Scan complete - here's the parsed data
     Complete {
         data: crate::multi_format::MultiFormat,
-        /// Raw string data (for screens that need the original string)
-        raw_data: Option<String>,
         /// Haptic feedback to trigger
         haptic: HapticFeedback,
     },
@@ -209,7 +207,6 @@ fn parse_ur(qr: &str) -> Result<(Option<MultiQr>, ScanResult), MultiQrError> {
                 None,
                 ScanResult::Complete {
                     data: multi_format,
-                    raw_data: Some(qr.to_string()),
                     haptic: HapticFeedback::Success,
                 },
             ))
@@ -230,10 +227,45 @@ fn parse_ur(qr: &str) -> Result<(Option<MultiQr>, ScanResult), MultiQrError> {
     }
 }
 
+/// Parse completed BBQr data based on file type.
+///
+/// Binary types (Transaction, Psbt) are parsed directly from bytes.
+/// Text types (UnicodeText, Json, Cbor) are converted to UTF-8 first.
+fn parse_bbqr_data(
+    data: Vec<u8>,
+    file_type: bbqr::file_type::FileType,
+) -> Result<crate::multi_format::MultiFormat, MultiQrError> {
+    use bbqr::file_type::FileType;
+    use crate::multi_format::MultiFormat;
+    use crate::transaction::ffi::BitcoinTransaction;
+
+    match file_type {
+        FileType::Transaction => {
+            MultiFormat::try_from_data(&data)
+                .map_err(|e| MultiQrError::ParseError(e.to_string()))
+        }
+        FileType::Psbt => {
+            // parse raw PSBT bytes and extract the unsigned transaction
+            let crypto_psbt = cove_ur::CryptoPsbt::from_psbt_bytes(data)
+                .map_err(|e| MultiQrError::ParseError(e.to_string()))?;
+            let psbt = crypto_psbt.psbt();
+            let unsigned_tx = &psbt.unsigned_tx;
+            let tx_bytes = bitcoin::consensus::serialize(unsigned_tx);
+            let txn = BitcoinTransaction::try_from_data(&tx_bytes)
+                .map_err(|e| MultiQrError::ParseError(e.to_string()))?;
+            Ok(MultiFormat::Transaction(Arc::new(txn)))
+        }
+        FileType::UnicodeText | FileType::Json | FileType::Cbor => {
+            let data_string =
+                String::from_utf8(data).map_err(|_| MultiQrError::InvalidUtf8)?;
+            MultiFormat::try_from_string(&data_string)
+                .map_err(|e| MultiQrError::ParseError(e.to_string()))
+        }
+    }
+}
+
 /// Parse a BBQr QR code (caller already verified header parses).
 fn parse_bbqr(qr: &str, header: Header) -> Result<(Option<MultiQr>, ScanResult), MultiQrError> {
-    use crate::multi_format::MultiFormat;
-
     let mut continuous_joiner = ContinuousJoiner::new();
     let join_result = continuous_joiner
         .add_part(qr.to_string())
@@ -241,15 +273,11 @@ fn parse_bbqr(qr: &str, header: Header) -> Result<(Option<MultiQr>, ScanResult),
 
     match join_result {
         ContinuousJoinResult::Complete(result) => {
-            let data_string =
-                String::from_utf8(result.data).map_err(|_| MultiQrError::InvalidUtf8)?;
-            let multi_format = MultiFormat::try_from_string(&data_string)
-                .map_err(|e| MultiQrError::ParseError(e.to_string()))?;
+            let multi_format = parse_bbqr_data(result.data, header.file_type)?;
             Ok((
                 None,
                 ScanResult::Complete {
                     data: multi_format,
-                    raw_data: Some(data_string),
                     haptic: HapticFeedback::Success,
                 },
             ))
@@ -288,7 +316,6 @@ impl QrScanner {
                     None,
                     ScanResult::Complete {
                         data: multi_format,
-                        raw_data: None,
                         haptic: HapticFeedback::Success,
                     },
                 ))
@@ -323,7 +350,6 @@ impl QrScanner {
                 None,
                 ScanResult::Complete {
                     data: multi_format,
-                    raw_data: Some(qr),
                     haptic: HapticFeedback::Success,
                 },
             ));
@@ -336,7 +362,6 @@ impl QrScanner {
             None,
             ScanResult::Complete {
                 data: multi_format,
-                raw_data: Some(qr),
                 haptic: HapticFeedback::Success,
             },
         ))
@@ -357,14 +382,9 @@ impl QrScanner {
 
                 match join_result {
                     ContinuousJoinResult::Complete(result) => {
-                        let data_string = String::from_utf8(result.data)
-                            .map_err(|_| MultiQrError::InvalidUtf8)?;
-                        let multi_format =
-                            crate::multi_format::MultiFormat::try_from_string(&data_string)
-                                .map_err(|e| MultiQrError::ParseError(e.to_string()))?;
+                        let multi_format = parse_bbqr_data(result.data, header.file_type)?;
                         Ok(ScanResult::Complete {
                             data: multi_format,
-                            raw_data: Some(data_string),
                             haptic: HapticFeedback::Success,
                         })
                     }
@@ -405,7 +425,6 @@ impl QrScanner {
                             .map_err(|e| MultiQrError::ParseError(e.to_string()))?;
                     Ok(ScanResult::Complete {
                         data: multi_format,
-                        raw_data: None, // UR payload is binary, not useful as string
                         haptic: HapticFeedback::Success,
                     })
                 } else {

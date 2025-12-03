@@ -202,7 +202,7 @@ struct HotWalletImportScreen: View {
 
         do {
             switch try scanner.scan(qr: qr) {
-            case let .complete(multiFormat, _, haptic):
+            case let .complete(multiFormat, haptic):
                 triggerHaptic(haptic)
                 // extract mnemonic words from the result
                 if case let .mnemonic(mnemonic) = multiFormat {

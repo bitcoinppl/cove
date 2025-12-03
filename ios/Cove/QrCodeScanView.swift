@@ -113,7 +113,7 @@ struct QrCodeScanView: View {
 
         do {
             switch try scanner.scan(qr: qr) {
-            case let .complete(data, _, haptic):
+            case let .complete(data, haptic):
                 triggerHaptic(haptic)
                 scanComplete = true
                 scannedCode = TaggedItem(data)
