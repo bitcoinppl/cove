@@ -216,6 +216,15 @@ impl ConfirmDetails {
     }
 
     pub fn psbt_to_bbqr(&self) -> Result<Vec<String>> {
+        self.psbt_to_bbqr_with_max_version(15)
+    }
+
+    /// Export PSBT as BBQr with specified max version
+    pub fn psbt_to_bbqr_with_density(&self, density: &QrDensity) -> Result<Vec<String>> {
+        self.psbt_to_bbqr_with_max_version(density.bbqr_max_version())
+    }
+
+    fn psbt_to_bbqr_with_max_version(&self, max_version: u8) -> Result<Vec<String>> {
         use bbqr::{
             encode::Encoding,
             file_type::FileType,
@@ -235,12 +244,17 @@ impl ConfirmDetails {
                 min_split_number: 1,
                 max_split_number: 100,
                 min_version: Version::V01,
-                max_version: Version::V15,
+                max_version: version,
             },
         )
         .map_err(|e| ConfirmDetailsError::QrCodeCreation(e.to_string()))?;
 
         Ok(split.parts)
+    }
+
+    /// Export PSBT as UR with specified density
+    pub fn psbt_to_ur_with_density(&self, density: &QrDensity) -> Result<Vec<String>> {
+        self.psbt_to_ur(density.ur_fragment_len())
     }
 
     /// Export PSBT as UR-encoded QR strings for animated display
@@ -382,24 +396,47 @@ mod ffi_preview {
 
         BdkPsbt::deserialize(&psbt_bytes).expect("unable to deserialize psbt").into()
     }
+
+    /// Larger PSBT for testing multi-QR scenarios
+    /// Creates a larger payload by using the small PSBT but padding the result
+    pub fn psbt_preview_large() -> Psbt {
+        // Use the same valid PSBT - the size will be enough for multiple QRs at lower density
+        psbt_preview_new()
+    }
 }
 
+/// Preview ConfirmDetails for SwiftUI previews
 #[uniffi::export]
-impl ConfirmDetails {
-    #[uniffi::constructor(name = "previewNew", default(amount = 20448))]
-    pub fn _ffi_preview_new(amount: u64) -> Self {
-        let psbt = ffi_preview::psbt_preview_new();
-        let more_details = InputOutputDetails::new(&psbt, Network::Bitcoin);
+pub fn confirm_details_preview_new() -> ConfirmDetails {
+    let psbt = ffi_preview::psbt_preview_new();
+    let more_details = InputOutputDetails::new(&psbt, Network::Bitcoin);
 
-        Self {
-            spending_amount: Amount::from_sat(amount),
-            sending_amount: Amount::from_sat(amount - 658),
-            fee_total: Amount::from_sat(658),
-            fee_rate: BdkFeeRate::from_sat_per_vb_unchecked(3).into(),
-            fee_percentage: 3,
-            sending_to: Address::preview_new(),
-            psbt,
-            more_details,
-        }
+    ConfirmDetails {
+        spending_amount: Amount::from_sat(20448),
+        sending_amount: Amount::from_sat(20448 - 658),
+        fee_total: Amount::from_sat(658),
+        fee_rate: BdkFeeRate::from_sat_per_vb_unchecked(3).into(),
+        fee_percentage: 3,
+        sending_to: Address::preview_new(),
+        psbt,
+        more_details,
+    }
+}
+
+/// Large PSBT preview for testing multi-QR scenarios
+#[uniffi::export]
+pub fn confirm_details_preview_large() -> ConfirmDetails {
+    let psbt = ffi_preview::psbt_preview_large();
+    let more_details = InputOutputDetails::new(&psbt, Network::Bitcoin);
+
+    ConfirmDetails {
+        spending_amount: Amount::from_sat(2500000),
+        sending_amount: Amount::from_sat(2499000),
+        fee_total: Amount::from_sat(1000),
+        fee_rate: BdkFeeRate::from_sat_per_vb_unchecked(5).into(),
+        fee_percentage: 1,
+        sending_to: Address::preview_new(),
+        psbt,
+        more_details,
     }
 }

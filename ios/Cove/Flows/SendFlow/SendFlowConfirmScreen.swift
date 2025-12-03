@@ -261,7 +261,7 @@ struct SendFlowConfirmScreen: View {
                                 SendFlowConfirmScreen(
                                     id: WalletId(),
                                     manager: manager,
-                                    details: ConfirmDetails.previewNew(amount: 30333),
+                                    details: confirmDetailsPreviewNew(),
                                     signedTransaction: nil,
                                     signedPsbt: nil
                                 )
@@ -287,7 +287,7 @@ struct SendFlowConfirmScreen: View {
         SendFlowConfirmScreen(
             id: WalletId(),
             manager: WalletManager(preview: "preview_only"),
-            details: ConfirmDetails.previewNew(amount: 30_333_312),
+            details: confirmDetailsPreviewNew(),
             signedTransaction: nil, signedPsbt: nil
         )
         .environment(AppManager.shared)

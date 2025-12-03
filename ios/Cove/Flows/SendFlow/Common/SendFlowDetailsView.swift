@@ -129,7 +129,7 @@ struct SendFlowDetailsView: View {
     AsyncPreview {
         SendFlowDetailsView(
             manager: WalletManager(preview: "preview_only"),
-            details: ConfirmDetails.previewNew(),
+            details: confirmDetailsPreviewNew(),
             prices: nil
         )
         .padding()

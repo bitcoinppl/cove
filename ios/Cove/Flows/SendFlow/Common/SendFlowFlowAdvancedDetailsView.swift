@@ -241,7 +241,7 @@ private struct SectionCard: View {
     AsyncPreview {
         SendFlowAdvancedDetailsView(
             manager: WalletManager(preview: "preview_only"),
-            details: ConfirmDetails.previewNew()
+            details: confirmDetailsPreviewNew()
         )
         .environment(AppManager.shared)
         .environment(

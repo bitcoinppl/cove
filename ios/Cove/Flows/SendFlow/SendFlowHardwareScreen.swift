@@ -504,7 +504,7 @@ struct SendFlowHardwareScreen: View {
                 )
         case .exportQr:
             SendFlowQrExport(details: details)
-                .presentationDetents([.height(475), .height(600), .large])
+                .presentationDetents([.height(550), .height(650), .large])
                 .padding()
                 .padding(.top, 10)
         }
@@ -565,7 +565,7 @@ struct SendFlowHardwareScreen: View {
         SendFlowHardwareScreen(
             id: WalletId(),
             manager: WalletManager(preview: "preview_only"),
-            details: ConfirmDetails.previewNew()
+            details: confirmDetailsPreviewNew()
         )
         .environment(AppManager.shared)
     }
