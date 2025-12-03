@@ -1604,6 +1604,13 @@ public protocol ConfirmDetailsProtocol: AnyObject, Sendable {
     
     func psbtToBbqr() throws  -> [String]
     
+    /**
+     * Export PSBT as BBQr with specified max version
+     */
+    func psbtToBbqrWithDensity(density: QrDensity) throws  -> [String]
+    
+    func psbtToBbqrWithMaxVersion(maxVersion: UInt8) throws  -> [String]
+    
     func psbtToHex()  -> String
     
     /**
@@ -1615,6 +1622,11 @@ public protocol ConfirmDetailsProtocol: AnyObject, Sendable {
      * Export PSBT as single UR string (for small PSBTs)
      */
     func psbtToUrSingle() throws  -> String
+    
+    /**
+     * Export PSBT as UR with specified density
+     */
+    func psbtToUrWithDensity(density: QrDensity) throws  -> [String]
     
     func sendingAmount()  -> Amount
     
@@ -1673,14 +1685,6 @@ open class ConfirmDetails: ConfirmDetailsProtocol, @unchecked Sendable {
         try! rustCall { uniffi_cove_types_fn_free_confirmdetails(handle, $0) }
     }
 
-    
-public static func previewNew(amount: UInt64 = UInt64(20448)) -> ConfirmDetails  {
-    return try!  FfiConverterTypeConfirmDetails_lift(try! rustCall() {
-    uniffi_cove_types_fn_constructor_confirmdetails_previewnew(
-        FfiConverterUInt64.lower(amount),$0
-    )
-})
-}
     
 
     
@@ -1772,6 +1776,27 @@ open func psbtToBbqr()throws  -> [String]  {
 })
 }
     
+    /**
+     * Export PSBT as BBQr with specified max version
+     */
+open func psbtToBbqrWithDensity(density: QrDensity)throws  -> [String]  {
+    return try  FfiConverterSequenceString.lift(try rustCallWithError(FfiConverterTypeConfirmDetailsError_lift) {
+    uniffi_cove_types_fn_method_confirmdetails_psbt_to_bbqr_with_density(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeQrDensity_lower(density),$0
+    )
+})
+}
+    
+open func psbtToBbqrWithMaxVersion(maxVersion: UInt8)throws  -> [String]  {
+    return try  FfiConverterSequenceString.lift(try rustCallWithError(FfiConverterTypeConfirmDetailsError_lift) {
+    uniffi_cove_types_fn_method_confirmdetails_psbt_to_bbqr_with_max_version(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt8.lower(maxVersion),$0
+    )
+})
+}
+    
 open func psbtToHex() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_cove_types_fn_method_confirmdetails_psbt_to_hex(
@@ -1799,6 +1824,18 @@ open func psbtToUrSingle()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeConfirmDetailsError_lift) {
     uniffi_cove_types_fn_method_confirmdetails_psbt_to_ur_single(
             self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+    /**
+     * Export PSBT as UR with specified density
+     */
+open func psbtToUrWithDensity(density: QrDensity)throws  -> [String]  {
+    return try  FfiConverterSequenceString.lift(try rustCallWithError(FfiConverterTypeConfirmDetailsError_lift) {
+    uniffi_cove_types_fn_method_confirmdetails_psbt_to_ur_with_density(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeQrDensity_lower(density),$0
     )
 })
 }
@@ -3172,6 +3209,205 @@ public func FfiConverterTypePsbt_lift(_ handle: UInt64) throws -> Psbt {
 #endif
 public func FfiConverterTypePsbt_lower(_ value: Psbt) -> UInt64 {
     return FfiConverterTypePsbt.lower(value)
+}
+
+
+
+
+
+
+/**
+ * QR code density settings for export
+ *
+ * Controls how much data is packed into each QR code frame.
+ * Higher density = larger/more complex QRs, fewer animation frames.
+ * Lower density = smaller/simpler QRs, more animation frames.
+ */
+public protocol QrDensityProtocol: AnyObject, Sendable {
+    
+    func bbqrMaxVersion()  -> UInt8
+    
+    func canDecrease()  -> Bool
+    
+    func canIncrease()  -> Bool
+    
+    /**
+     * Decrease density (smaller QRs, more animation frames)
+     */
+    func decrease()  -> QrDensity
+    
+    /**
+     * Increase density (larger QRs, fewer animation frames)
+     */
+    func increase()  -> QrDensity
+    
+    func urFragmentLen()  -> UInt32
+    
+}
+/**
+ * QR code density settings for export
+ *
+ * Controls how much data is packed into each QR code frame.
+ * Higher density = larger/more complex QRs, fewer animation frames.
+ * Lower density = smaller/simpler QRs, more animation frames.
+ */
+open class QrDensity: QrDensityProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_cove_types_fn_clone_qrdensity(self.handle, $0) }
+    }
+public convenience init() {
+    let handle =
+        try! rustCall() {
+    uniffi_cove_types_fn_constructor_qrdensity_new($0
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_cove_types_fn_free_qrdensity(handle, $0) }
+    }
+
+    
+
+    
+open func bbqrMaxVersion() -> UInt8  {
+    return try!  FfiConverterUInt8.lift(try! rustCall() {
+    uniffi_cove_types_fn_method_qrdensity_bbqr_max_version(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+open func canDecrease() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_types_fn_method_qrdensity_can_decrease(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+open func canIncrease() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_types_fn_method_qrdensity_can_increase(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+    /**
+     * Decrease density (smaller QRs, more animation frames)
+     */
+open func decrease() -> QrDensity  {
+    return try!  FfiConverterTypeQrDensity_lift(try! rustCall() {
+    uniffi_cove_types_fn_method_qrdensity_decrease(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+    /**
+     * Increase density (larger QRs, fewer animation frames)
+     */
+open func increase() -> QrDensity  {
+    return try!  FfiConverterTypeQrDensity_lift(try! rustCall() {
+    uniffi_cove_types_fn_method_qrdensity_increase(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+open func urFragmentLen() -> UInt32  {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+    uniffi_cove_types_fn_method_qrdensity_ur_fragment_len(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeQrDensity: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = QrDensity
+
+    public static func lift(_ handle: UInt64) throws -> QrDensity {
+        return QrDensity(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: QrDensity) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> QrDensity {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: QrDensity, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeQrDensity_lift(_ handle: UInt64) throws -> QrDensity {
+    return try FfiConverterTypeQrDensity.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeQrDensity_lower(_ value: QrDensity) -> UInt64 {
+    return FfiConverterTypeQrDensity.lower(value)
 }
 
 
@@ -5067,6 +5303,92 @@ public func FfiConverterTypePsbtError_lower(_ value: PsbtError) -> RustBuffer {
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * QR code export format for PSBTs
+ */
+
+public enum QrExportFormat: Equatable, Hashable, CustomStringConvertible {
+    
+    /**
+     * BBQr format (Binary Bitcoin QR)
+     */
+    case bbqr
+    /**
+     * UR format (Uniform Resources)
+     */
+    case ur
+
+
+
+
+
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_types_fn_method_qrexportformat_uniffi_trait_display(
+            FfiConverterTypeQrExportFormat_lower(self),$0
+    )
+}
+    )
+}
+}
+
+#if compiler(>=6)
+extension QrExportFormat: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeQrExportFormat: FfiConverterRustBuffer {
+    typealias SwiftType = QrExportFormat
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> QrExportFormat {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .bbqr
+        
+        case 2: return .ur
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: QrExportFormat, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .bbqr:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .ur:
+            writeInt(&buf, Int32(2))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeQrExportFormat_lift(_ buf: RustBuffer) throws -> QrExportFormat {
+    return try FfiConverterTypeQrExportFormat.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeQrExportFormat_lower(_ value: QrExportFormat) -> RustBuffer {
+    return FfiConverterTypeQrExportFormat.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum TransactionDirection: Equatable, Hashable {
     
@@ -5566,6 +5888,35 @@ public func colorSchemeSelectionCapitalizedString(colorScheme: ColorSchemeSelect
     )
 })
 }
+/**
+ * Large PSBT preview for testing multi-QR scenarios
+ */
+public func confirmDetailsPreviewLarge() -> ConfirmDetails  {
+    return try!  FfiConverterTypeConfirmDetails_lift(try! rustCall() {
+    uniffi_cove_types_fn_func_confirm_details_preview_large($0
+    )
+})
+}
+/**
+ * Preview ConfirmDetails for SwiftUI previews
+ */
+public func confirmDetailsPreviewNew() -> ConfirmDetails  {
+    return try!  FfiConverterTypeConfirmDetails_lift(try! rustCall() {
+    uniffi_cove_types_fn_func_confirm_details_preview_new($0
+    )
+})
+}
+/**
+ * Check if two QrDensity values are equal (for Swift Equatable conformance)
+ */
+public func qrDensityIsEqual(lhs: QrDensity, rhs: QrDensity) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_types_fn_func_qr_density_is_equal(
+        FfiConverterTypeQrDensity_lower(lhs),
+        FfiConverterTypeQrDensity_lower(rhs),$0
+    )
+})
+}
 public func feeRateOptionsWithTotalFeeIsEqual(lhs: FeeRateOptionsWithTotalFee, rhs: FeeRateOptionsWithTotalFee) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
     uniffi_cove_types_fn_func_fee_rate_options_with_total_fee_is_equal(
@@ -5680,6 +6031,15 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_func_color_scheme_selection_capitalized_string() != 30731) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_types_checksum_func_confirm_details_preview_large() != 50637) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_types_checksum_func_confirm_details_preview_new() != 21539) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_types_checksum_func_qr_density_is_equal() != 3265) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_func_fee_rate_options_with_total_fee_is_equal() != 17627) {
@@ -5823,6 +6183,12 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_types_checksum_method_confirmdetails_psbt_to_bbqr() != 44475) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_types_checksum_method_confirmdetails_psbt_to_bbqr_with_density() != 46679) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_types_checksum_method_confirmdetails_psbt_to_bbqr_with_max_version() != 52826) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_types_checksum_method_confirmdetails_psbt_to_hex() != 28844) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -5832,6 +6198,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_types_checksum_method_confirmdetails_psbt_to_ur_single() != 27748) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_types_checksum_method_confirmdetails_psbt_to_ur_with_density() != 61309) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_types_checksum_method_confirmdetails_sending_amount() != 32253) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -5839,6 +6208,24 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_confirmdetails_spending_amount() != 58334) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_types_checksum_method_qrdensity_bbqr_max_version() != 14183) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_types_checksum_method_qrdensity_can_decrease() != 33353) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_types_checksum_method_qrdensity_can_increase() != 15365) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_types_checksum_method_qrdensity_decrease() != 5016) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_types_checksum_method_qrdensity_increase() != 45150) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_types_checksum_method_qrdensity_ur_fragment_len() != 56660) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_feerate_sat_per_vb() != 25940) {
@@ -5994,7 +6381,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_types_checksum_constructor_amount_one_sat() != 27159) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_constructor_confirmdetails_previewnew() != 27324) {
+    if (uniffi_cove_types_checksum_constructor_qrdensity_new() != 57563) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_constructor_feerate_from_sat_per_vb() != 23120) {

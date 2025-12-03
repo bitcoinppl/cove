@@ -58,6 +58,99 @@ pub enum ConfirmDetailsError {
     QrCodeCreation(String),
 }
 
+/// QR code export format for PSBTs
+#[derive(Debug, Clone, Copy, Default, Hash, Eq, PartialEq, derive_more::Display, uniffi::Enum)]
+#[uniffi::export(Display)]
+pub enum QrExportFormat {
+    /// BBQr format (Binary Bitcoin QR)
+    #[default]
+    #[display("BBQr")]
+    Bbqr,
+    /// UR format (Uniform Resources)
+    #[display("UR")]
+    Ur,
+}
+
+/// QR code density settings for export
+///
+/// Controls how much data is packed into each QR code frame.
+/// Higher density = larger/more complex QRs, fewer animation frames.
+/// Lower density = smaller/simpler QRs, more animation frames.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Object)]
+pub struct QrDensity {
+    /// UR max fragment length in bytes (50-500, default 200)
+    ur_fragment_len: u32,
+    /// BBQr max version (5-40, default 15)
+    bbqr_max_version: u8,
+}
+
+impl QrDensity {
+    const UR_MIN: u32 = 50;
+    const UR_MAX: u32 = 500;
+    const UR_DEFAULT: u32 = 200;
+    const UR_STEP: u32 = 50;
+
+    const BBQR_MIN: u8 = 5;
+    const BBQR_MAX: u8 = 40;
+    const BBQR_DEFAULT: u8 = 15;
+    const BBQR_STEP: u8 = 2;
+}
+
+impl Default for QrDensity {
+    fn default() -> Self {
+        Self { ur_fragment_len: Self::UR_DEFAULT, bbqr_max_version: Self::BBQR_DEFAULT }
+    }
+}
+
+#[uniffi::export]
+impl QrDensity {
+    #[uniffi::constructor]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Increase density (larger QRs, fewer animation frames)
+    pub fn increase(&self) -> Self {
+        Self {
+            ur_fragment_len: (self.ur_fragment_len + Self::UR_STEP).min(Self::UR_MAX),
+            bbqr_max_version: (self.bbqr_max_version + Self::BBQR_STEP).min(Self::BBQR_MAX),
+        }
+    }
+
+    /// Decrease density (smaller QRs, more animation frames)
+    pub fn decrease(&self) -> Self {
+        Self {
+            ur_fragment_len: self.ur_fragment_len.saturating_sub(Self::UR_STEP).max(Self::UR_MIN),
+            bbqr_max_version: self
+                .bbqr_max_version
+                .saturating_sub(Self::BBQR_STEP)
+                .max(Self::BBQR_MIN),
+        }
+    }
+
+    pub fn can_increase(&self) -> bool {
+        self.ur_fragment_len < Self::UR_MAX || self.bbqr_max_version < Self::BBQR_MAX
+    }
+
+    pub fn can_decrease(&self) -> bool {
+        self.ur_fragment_len > Self::UR_MIN || self.bbqr_max_version > Self::BBQR_MIN
+    }
+
+    pub fn ur_fragment_len(&self) -> u32 {
+        self.ur_fragment_len
+    }
+
+    pub fn bbqr_max_version(&self) -> u8 {
+        self.bbqr_max_version
+    }
+}
+
+/// Check if two QrDensity values are equal (for Swift Equatable conformance)
+#[uniffi::export]
+pub fn qr_density_is_equal(lhs: &QrDensity, rhs: &QrDensity) -> bool {
+    lhs == rhs
+}
+
 #[derive(Debug, Default, Clone, Hash, Eq, PartialEq)]
 pub struct ExtraItem {
     pub label: Option<String>,
@@ -131,6 +224,8 @@ impl ConfirmDetails {
         };
 
         let data = self.psbt.0.serialize();
+
+        let version = Version::try_from(max_version).unwrap_or(Version::V15);
 
         let split = Split::try_from_data(
             data.as_slice(),
