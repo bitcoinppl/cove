@@ -87,14 +87,17 @@ struct SendFlowQrExport: View {
                     }
             }
 
-            HStack(alignment: .lastTextBaseline) {
-                if qrs.count > 1 {
+            if qrs.count > 1 {
+                HStack(alignment: .center, spacing: 8) {
+                    MinusButtonMinimal
                     ProgressIndicator
+                    PlusButtonMinimal
                 }
-
-                DensityButtons.offset(y: -2)
+                .padding(.horizontal, 9)
+            } else {
+                DensityButtons
+                    .padding(.horizontal, 9)
             }
-            .padding(.horizontal, 9)
         }
     }
 
@@ -109,11 +112,34 @@ struct SendFlowQrExport: View {
                     .cornerRadius(2)
             }
         }
-        .padding(.top, 20)
     }
 
     var canDecreaseDensity: Bool { density.canDecrease() }
     var canIncreaseDensity: Bool { density.canIncrease() && qrs.count > 1 }
+
+    @ViewBuilder
+    var MinusButtonMinimal: some View {
+        Button { density = density.decrease() } label: {
+            Image(systemName: "minus")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(Color.secondary.opacity(canDecreaseDensity ? 1 : 0.3))
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .disabled(!canDecreaseDensity)
+    }
+
+    @ViewBuilder
+    var PlusButtonMinimal: some View {
+        Button { density = density.increase() } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(Color.secondary.opacity(canIncreaseDensity ? 1 : 0.3))
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .disabled(!canIncreaseDensity)
+    }
 
     @ViewBuilder
     var DensityButtons: some View {

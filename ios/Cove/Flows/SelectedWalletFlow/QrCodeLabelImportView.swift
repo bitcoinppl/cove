@@ -163,4 +163,3 @@ struct QrCodeLabelImportView: View {
     QrCodeLabelImportView(scannedCode: .constant(nil))
         .environment(AppManager.shared)
 }
-
