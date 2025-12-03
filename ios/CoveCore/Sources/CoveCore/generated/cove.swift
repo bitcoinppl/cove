@@ -5649,10 +5649,10 @@ public func FfiConverterTypePushTx_lower(_ value: PushTx) -> UInt64 {
 
 
 /**
- * Stateful QR scanner that handles both single and multi-part QR codes.
+ * FFI wrapper for QrScanner state machine.
  *
- * This is the main entry point for QR scanning. It manages the internal state
- * and returns a unified `ScanResult` for every scan, whether first or subsequent.
+ * This is the main entry point for QR scanning from Swift/Kotlin.
+ * It wraps the internal state machine in a Mutex for thread safety.
  */
 public protocol QrScannerProtocol: AnyObject, Sendable {
     
@@ -5664,9 +5664,9 @@ public protocol QrScannerProtocol: AnyObject, Sendable {
     /**
      * Scan a QR code and return the result.
      *
-     * On first scan, creates the internal state and returns either:
+     * On first scan, detects the format and returns either:
      * - `Complete(MultiFormat)` for single-part QRs
-     * - `InProgress(ScanProgress)` for multi-part QRs
+     * - `InProgress(ScanProgress)` for multi-part QRs (BBQr or UR)
      *
      * On subsequent scans, adds parts and returns updated status.
      * The haptic field indicates what feedback the platform should trigger.
@@ -5675,10 +5675,10 @@ public protocol QrScannerProtocol: AnyObject, Sendable {
     
 }
 /**
- * Stateful QR scanner that handles both single and multi-part QR codes.
+ * FFI wrapper for QrScanner state machine.
  *
- * This is the main entry point for QR scanning. It manages the internal state
- * and returns a unified `ScanResult` for every scan, whether first or subsequent.
+ * This is the main entry point for QR scanning from Swift/Kotlin.
+ * It wraps the internal state machine in a Mutex for thread safety.
  */
 open class QrScanner: QrScannerProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -5753,9 +5753,9 @@ open func reset()  {try! rustCall() {
     /**
      * Scan a QR code and return the result.
      *
-     * On first scan, creates the internal state and returns either:
+     * On first scan, detects the format and returns either:
      * - `Complete(MultiFormat)` for single-part QRs
-     * - `InProgress(ScanProgress)` for multi-part QRs
+     * - `InProgress(ScanProgress)` for multi-part QRs (BBQr or UR)
      *
      * On subsequent scans, adds parts and returns updated status.
      * The haptic field indicates what feedback the platform should trigger.
@@ -17672,7 +17672,7 @@ public enum MultiQrError: Swift.Error, Equatable, Hashable, Foundation.Localized
     case ParseError(String
     )
     case InvalidUtf8
-    case CannotAddBinaryDataToBbqr
+    case RequiresStringData
     case InvalidSeedQr(SeedQrError
     )
     case Ur(UrError
@@ -17720,7 +17720,7 @@ public struct FfiConverterTypeMultiQrError: FfiConverterRustBuffer {
             try FfiConverterString.read(from: &buf)
             )
         case 2: return .InvalidUtf8
-        case 3: return .CannotAddBinaryDataToBbqr
+        case 3: return .RequiresStringData
         case 4: return .InvalidSeedQr(
             try FfiConverterTypeSeedQrError.read(from: &buf)
             )
@@ -17748,7 +17748,7 @@ public struct FfiConverterTypeMultiQrError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(2))
         
         
-        case .CannotAddBinaryDataToBbqr:
+        case .RequiresStringData:
             writeInt(&buf, Int32(3))
         
         
@@ -27693,7 +27693,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_qrscanner_reset() != 17017) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_qrscanner_scan() != 4364) {
+    if (uniffi_cove_checksum_method_qrscanner_scan() != 55003) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_boxedroute_route() != 6095) {
