@@ -54,6 +54,7 @@ import org.bitcoinppl.cove.nfc.TapCardNfcManager
 import org.bitcoinppl.cove.sidebar.SidebarContainer
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove.views.LockView
+import org.bitcoinppl.cove_core.AfterPinAction
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.TapSignerRoute
 import org.bitcoinppl.cove_core.stringOrDataTryIntoMultiFormat
@@ -477,7 +478,9 @@ private fun GlobalAlertDialog(
                         onDismiss()
                         app.sheetState =
                             TaggedItem(
-                                AppSheetState.TapSigner(TapSignerRoute.InitSelect(state.tapSigner)),
+                                AppSheetState.TapSigner(
+                                    TapSignerRoute.EnterPin(state.tapSigner, AfterPinAction.Derive)
+                                ),
                             )
                     }) { Text("Yes") }
                 },
