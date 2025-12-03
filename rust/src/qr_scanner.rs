@@ -266,6 +266,7 @@ fn parse_bbqr_data(
             Ok(MultiFormat::Transaction(Arc::new(txn)))
         }
 
+        // TODO: CBOR is binary, not UTF-8 text. Should decode CBOR separately when we have a use case.
         FileType::UnicodeText | FileType::Json | FileType::Cbor => {
             let data_string = String::from_utf8(data).map_err(|_| MultiQrError::InvalidUtf8)?;
             MultiFormat::try_from_string(&data_string)
