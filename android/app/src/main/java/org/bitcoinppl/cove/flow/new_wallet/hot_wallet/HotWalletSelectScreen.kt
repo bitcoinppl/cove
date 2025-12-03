@@ -173,7 +173,7 @@ fun HotWalletSelectScreen(
                     )
 
                     Column(
-                        verticalArrangement = Arrangement.spacedBy(24.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         ImageButton(

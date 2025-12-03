@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -26,6 +27,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -69,7 +71,6 @@ import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.DashDotsIndicator
-import org.bitcoinppl.cove.views.ImageButton
 import org.bitcoinppl.cove_core.WordValidator
 import kotlin.math.hypot
 import kotlin.math.roundToInt
@@ -358,7 +359,7 @@ fun HotWalletVerifyScreen(
                 }
 
                 Column(
-                    verticalArrangement = Arrangement.spacedBy(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
                     modifier =
                         Modifier
                             .fillMaxWidth()
@@ -388,28 +389,38 @@ fun HotWalletVerifyScreen(
 
                     HorizontalDivider(color = Color.White.copy(alpha = 0.35f), thickness = 1.dp)
 
-                    ImageButton(
-                        text = stringResource(R.string.btn_show_words),
+                    Button(
                         onClick = onShowWords,
+                        shape = RoundedCornerShape(10.dp),
                         colors =
                             ButtonDefaults.buttonColors(
                                 containerColor = CoveColor.btnPrimary,
                                 contentColor = CoveColor.midnightBlue,
                             ),
+                        contentPadding = PaddingValues(vertical = 20.dp, horizontal = 10.dp),
                         modifier = Modifier.fillMaxWidth(),
-                    )
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center,
                     ) {
-                        TextButton(onClick = { showSkipAlert = true }) {
-                            Text(
-                                text = stringResource(R.string.btn_skip_verification),
-                                color = Color.White.copy(alpha = 0.9f),
-                            )
-                        }
+                        Text(
+                            text = stringResource(R.string.btn_show_words),
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 13.sp,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
                     }
+
+                    Text(
+                        text = stringResource(R.string.btn_skip_verification),
+                        color = Color.White.copy(alpha = 0.9f),
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 12.sp,
+                        textAlign = TextAlign.Center,
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(top = 4.dp)
+                                .clickable { showSkipAlert = true },
+                    )
                 }
             }
 
