@@ -819,4 +819,159 @@ mod tests {
         let complete_ur = ScanProgress::Ur { percentage: 1.0 };
         assert_eq!(complete_ur.display_text(), "Scanned 100%");
     }
+
+    /// Test PSBT hex constant used in tests
+    const TEST_PSBT_HEX: &str = "70736274ff01009a020000000258e87a21b56daf0c23be8e7070456c336f7cbaa5c8757924f545887bb2abdd750000000000ffffffff838d0427d0ec650a68aa46bb0b098aea4422c071b2ca78352a077959d07cea1d0100000000ffffffff0270aaf00800000000160014d85c2b71d0060b09c9886aeb815e50991dda124d00e1f5050000000016001400aea9a2e5f0f876a588df5546e8742d1d87008f000000000000000000";
+
+    /// Test QrScanner parses BBQr with FileType::Psbt correctly
+    /// This would have caught the "Invalid UTF-8" bug
+    #[test]
+    fn test_qr_scanner_single_part_bbqr_psbt() {
+        use bbqr::{
+            encode::Encoding,
+            file_type::FileType,
+            qr::Version,
+            split::{Split, SplitOptions},
+        };
+
+        let psbt_bytes = hex::decode(TEST_PSBT_HEX).unwrap();
+
+        // create BBQr with FileType::Psbt (binary, not text!)
+        let split = Split::try_from_data(
+            &psbt_bytes,
+            FileType::Psbt,
+            SplitOptions {
+                encoding: Encoding::Zlib,
+                min_split_number: 1,
+                max_split_number: 1,
+                min_version: Version::V01,
+                max_version: Version::V40,
+            },
+        )
+        .expect("should encode PSBT as BBQr");
+
+        let bbqr_string = &split.parts[0];
+
+        let scanner = QrScanner::new();
+        let result = scanner.scan(StringOrData::String(bbqr_string.clone()));
+
+        assert!(result.is_ok(), "Scanner should succeed for PSBT BBQr: {:?}", result);
+
+        match result.unwrap() {
+            ScanResult::Complete { data, .. } => {
+                assert!(
+                    matches!(data, crate::multi_format::MultiFormat::Transaction(_)),
+                    "PSBT should parse as Transaction (unsigned tx extracted), got: {:?}",
+                    data
+                );
+            }
+            ScanResult::InProgress { .. } => {
+                panic!("Single-part BBQr should complete immediately");
+            }
+        }
+    }
+
+    /// Test QrScanner parses BBQr with FileType::Transaction correctly
+    #[test]
+    fn test_qr_scanner_single_part_bbqr_transaction() {
+        use bbqr::{
+            encode::Encoding,
+            file_type::FileType,
+            qr::Version,
+            split::{Split, SplitOptions},
+        };
+
+        // extract unsigned transaction from PSBT
+        let psbt_bytes = hex::decode(TEST_PSBT_HEX).unwrap();
+        let crypto_psbt = cove_ur::CryptoPsbt::from_psbt_bytes(psbt_bytes).unwrap();
+        let unsigned_tx = &crypto_psbt.psbt().unsigned_tx;
+        let tx_bytes = bitcoin::consensus::serialize(unsigned_tx);
+
+        // create BBQr with FileType::Transaction
+        let split = Split::try_from_data(
+            &tx_bytes,
+            FileType::Transaction,
+            SplitOptions {
+                encoding: Encoding::Zlib,
+                min_split_number: 1,
+                max_split_number: 1,
+                min_version: Version::V01,
+                max_version: Version::V40,
+            },
+        )
+        .expect("should encode transaction as BBQr");
+
+        let bbqr_string = &split.parts[0];
+
+        let scanner = QrScanner::new();
+        let result = scanner.scan(StringOrData::String(bbqr_string.clone()));
+
+        assert!(result.is_ok(), "Scanner should succeed for Transaction BBQr: {:?}", result);
+
+        match result.unwrap() {
+            ScanResult::Complete { data, .. } => {
+                assert!(
+                    matches!(data, crate::multi_format::MultiFormat::Transaction(_)),
+                    "Transaction BBQr should parse as Transaction, got: {:?}",
+                    data
+                );
+            }
+            ScanResult::InProgress { .. } => {
+                panic!("Single-part BBQr should complete immediately");
+            }
+        }
+    }
+
+    /// Test multi-part BBQr with FileType::Psbt
+    #[test]
+    fn test_qr_scanner_multi_part_bbqr_psbt() {
+        use bbqr::{
+            encode::Encoding,
+            file_type::FileType,
+            qr::Version,
+            split::{Split, SplitOptions},
+        };
+
+        let psbt_bytes = hex::decode(TEST_PSBT_HEX).unwrap();
+
+        // force multi-part by using small QR version
+        let split = Split::try_from_data(
+            &psbt_bytes,
+            FileType::Psbt,
+            SplitOptions {
+                encoding: Encoding::Zlib,
+                min_split_number: 3,
+                max_split_number: 10,
+                min_version: Version::V01,
+                max_version: Version::V05,
+            },
+        )
+        .expect("should encode PSBT as multi-part BBQr");
+
+        assert!(split.parts.len() > 1, "Should have multiple parts, got {}", split.parts.len());
+
+        let scanner = QrScanner::new();
+
+        // scan all parts
+        for (i, part) in split.parts.iter().enumerate() {
+            let result = scanner.scan(StringOrData::String(part.clone()));
+            assert!(result.is_ok(), "Part {} should scan successfully: {:?}", i, result);
+
+            match result.unwrap() {
+                ScanResult::InProgress { progress: ScanProgress::Bbqr { scanned, total }, .. } => {
+                    assert_eq!(scanned as usize, i + 1, "Scanned count should match");
+                    assert_eq!(total as usize, split.parts.len(), "Total should match");
+                }
+                ScanResult::Complete { data, .. } => {
+                    assert_eq!(i, split.parts.len() - 1, "Should only complete on last part");
+                    assert!(
+                        matches!(data, crate::multi_format::MultiFormat::Transaction(_)),
+                        "Multi-part PSBT BBQr should parse as Transaction, got: {:?}",
+                        data
+                    );
+                }
+                _ => panic!("Unexpected result for part {}", i),
+            }
+        }
+    }
 }
