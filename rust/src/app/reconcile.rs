@@ -30,6 +30,7 @@ pub enum AppStateReconcileMessage {
     WalletModeChanged(WalletMode),
     PushedRoute(Route),
     AcceptedTerms,
+    WalletsChanged,
 }
 
 // alias for easier imports on the rust side

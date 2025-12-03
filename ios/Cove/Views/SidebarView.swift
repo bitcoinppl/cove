@@ -12,17 +12,6 @@ struct SidebarView: View {
     @Environment(\.navigate) private var navigate
 
     let currentRoute: Route
-    @State var wallets: [WalletMetadata]
-
-    init(currentRoute: Route, wallets: [WalletMetadata]? = nil) {
-        self.currentRoute = currentRoute
-        if let wallets {
-            self.wallets = wallets
-            return
-        }
-
-        self.wallets = []
-    }
 
     func setForeground(_ route: Route) -> LinearGradient {
         if RouteFactory().isSameParentRoute(route: route, routeToCheck: currentRoute) {
@@ -78,7 +67,7 @@ struct SidebarView: View {
                 .padding(.bottom, 16)
 
                 VStack(spacing: 12) {
-                    ForEach(wallets, id: \.id) { wallet in
+                    ForEach(app.wallets, id: \.id) { wallet in
                         Button(action: {
                             goTo(Route.selectedWallet(wallet.id))
                         }) {
@@ -147,13 +136,6 @@ struct SidebarView: View {
                     }
                 }
             }
-        }
-        .onAppear(perform: loadWallets)
-        .onChange(of: app.isSidebarVisible) { _, isVisible in
-            if isVisible { loadWallets() }
-        }
-        .onChange(of: app.routeId) { _, _ in
-            loadWallets()
         }
         .padding(20)
         .frame(maxWidth: .infinity)

@@ -27,12 +27,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -47,7 +42,6 @@ import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
-import org.bitcoinppl.cove_core.Database
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.RouteFactory
 import org.bitcoinppl.cove_core.SettingsRoute
@@ -60,17 +54,6 @@ fun SidebarView(
     modifier: Modifier = Modifier,
 ) {
     val coroutineScope = rememberCoroutineScope()
-
-    var wallets by remember { mutableStateOf(emptyList<WalletMetadata>()) }
-
-    LaunchedEffect(app.isSidebarVisible, app.routeId) {
-        wallets =
-            try {
-                Database().wallets().all()
-            } catch (e: Exception) {
-                emptyList()
-            }
-    }
 
     Column(
         modifier =
@@ -136,7 +119,7 @@ fun SidebarView(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            items(wallets) { wallet ->
+            items(app.wallets) { wallet ->
                 WalletItem(
                     wallet = wallet,
                     onClick = {
@@ -168,14 +151,7 @@ fun SidebarView(
                         app.isSidebarVisible = false
                         coroutineScope.launch {
                             delay(300)
-                            val wallets =
-                                try {
-                                    Database().wallets().all()
-                                } catch (e: Exception) {
-                                    emptyList()
-                                }
-
-                            if (wallets.isEmpty()) {
+                            if (app.wallets.isEmpty()) {
                                 app.resetRoute(RouteFactory().newWalletSelect())
                             } else {
                                 app.pushRoute(RouteFactory().newWalletSelect())

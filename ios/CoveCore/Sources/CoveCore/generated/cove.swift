@@ -12757,6 +12757,7 @@ public enum AppStateReconcileMessage {
     case pushedRoute(Route
     )
     case acceptedTerms
+    case walletsChanged
 
 
 
@@ -12811,6 +12812,8 @@ public struct FfiConverterTypeAppStateReconcileMessage: FfiConverterRustBuffer {
         )
         
         case 12: return .acceptedTerms
+        
+        case 13: return .walletsChanged
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -12877,6 +12880,10 @@ public struct FfiConverterTypeAppStateReconcileMessage: FfiConverterRustBuffer {
         
         case .acceptedTerms:
             writeInt(&buf, Int32(12))
+        
+        
+        case .walletsChanged:
+            writeInt(&buf, Int32(13))
         
         }
     }

@@ -36,6 +36,9 @@ class AppManager private constructor() : FfiReconcile {
         private set
 
     // ui state
+    var wallets by mutableStateOf(emptyList<WalletMetadata>())
+        private set
+
     var isSidebarVisible by mutableStateOf(false)
         internal set
 
@@ -87,6 +90,7 @@ class AppManager private constructor() : FfiReconcile {
     init {
         logDebug("Initializing AppManager")
         rust.listenForUpdates(this)
+        wallets = runCatching { Database().wallets().all() }.getOrElse { emptyList() }
     }
 
     companion object {
@@ -561,6 +565,10 @@ class AppManager private constructor() : FfiReconcile {
                         kotlinx.coroutines.delay(200)
                         isLoading = false
                     }
+                }
+
+                is AppStateReconcileMessage.WalletsChanged -> {
+                    wallets = runCatching { database.wallets().all() }.getOrElse { emptyList() }
                 }
             }
         }
