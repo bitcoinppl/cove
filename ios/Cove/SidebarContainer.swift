@@ -181,6 +181,10 @@ struct SidebarContainer<Content: View>: View {
             dragStartedWithSidebarOpen = app.isSidebarVisible
         }
         .onChange(of: app.isSidebarVisible) { _, isVisible in
+            if isVisible {
+                app.loadWallets()
+            }
+
             guard !isDragging else { return }
 
             withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {

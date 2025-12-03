@@ -161,6 +161,10 @@ import SwiftUI
         isSidebarVisible.toggle()
     }
 
+    func loadWallets() {
+        wallets = (try? database.wallets().all()) ?? []
+    }
+
     func pushRoute(_ route: Route) {
         isSidebarVisible = false
         router.routes.append(route)

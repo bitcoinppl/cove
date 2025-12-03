@@ -5889,15 +5889,6 @@ public func colorSchemeSelectionCapitalizedString(colorScheme: ColorSchemeSelect
 })
 }
 /**
- * Large PSBT preview for testing multi-QR scenarios
- */
-public func confirmDetailsPreviewLarge() -> ConfirmDetails  {
-    return try!  FfiConverterTypeConfirmDetails_lift(try! rustCall() {
-    uniffi_cove_types_fn_func_confirm_details_preview_large($0
-    )
-})
-}
-/**
  * Preview ConfirmDetails for SwiftUI previews
  */
 public func confirmDetailsPreviewNew() -> ConfirmDetails  {
@@ -6031,9 +6022,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_func_color_scheme_selection_capitalized_string() != 30731) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_types_checksum_func_confirm_details_preview_large() != 50637) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_func_confirm_details_preview_new() != 21539) {

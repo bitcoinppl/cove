@@ -174,12 +174,4 @@ struct SidebarView: View {
 
         navigateRouteOnMain(route)
     }
-
-    private func loadWallets() {
-        do {
-            self.wallets = try Database().wallets().all()
-        } catch {
-            Log.error("Failed to get wallets \(error)")
-        }
-    }
 }
