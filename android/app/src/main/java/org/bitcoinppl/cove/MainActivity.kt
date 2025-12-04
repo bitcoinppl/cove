@@ -293,8 +293,14 @@ private fun SheetContent(
             )
         }
         is AppSheetState.TapSigner -> {
-            // TapSigner sheets would go here if needed
-            // Currently handled elsewhere in the app
+            ModalBottomSheet(
+                onDismissRequest = onDismiss,
+                sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            ) {
+                TapSignerContainer(
+                    route = state.item.route,
+                )
+            }
         }
     }
 }
@@ -479,7 +485,7 @@ private fun GlobalAlertDialog(
                         app.sheetState =
                             TaggedItem(
                                 AppSheetState.TapSigner(
-                                    TapSignerRoute.EnterPin(state.tapSigner, AfterPinAction.Derive)
+                                    TapSignerRoute.EnterPin(state.tapSigner, AfterPinAction.Derive),
                                 ),
                             )
                     }) { Text("Yes") }

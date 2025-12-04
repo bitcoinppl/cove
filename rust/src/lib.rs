@@ -35,6 +35,7 @@ mod ur;
 mod wallet;
 mod wallet_scanner;
 mod word_validator;
+mod word_verify_state_machine;
 mod xpub;
 
 ::cove_tap_card::uniffi_reexport_scaffolding!();
