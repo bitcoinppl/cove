@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -66,15 +67,18 @@ fun ImageButton(
             BasicText(
                 text = text,
                 maxLines = 1,
-                autoSize = TextAutoSize.StepBased(
-                    minFontSize = 7.sp,
-                    maxFontSize = 14.sp,
-                    stepSize = 0.5.sp,
-                ),
-                style = TextStyle(
-                    fontWeight = FontWeight.Medium,
-                    color = LocalContentColor.current,
-                ),
+                autoSize =
+                    TextAutoSize.StepBased(
+                        minFontSize = 7.sp,
+                        maxFontSize = 14.sp,
+                        stepSize = 0.5.sp,
+                    ),
+                style =
+                    TextStyle(
+                        fontWeight = FontWeight.Medium,
+                        color = LocalContentColor.current,
+                        textAlign = TextAlign.Center,
+                    ),
                 modifier = Modifier.weight(1f),
             )
         }

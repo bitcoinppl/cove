@@ -4,22 +4,22 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 
 /**
  * hidden text field for PIN entry
  * displays only pin circles, actual input is invisible
+ * uses BasicTextField to avoid BringIntoView crash in ModalBottomSheet
  */
 @Composable
 fun HiddenPinTextField(
@@ -31,14 +31,15 @@ fun HiddenPinTextField(
 ) {
     val focusRequester = remember { FocusRequester() }
 
-    // request focus on first composition
+    // request focus after short delay to ensure layout is complete
     LaunchedEffect(Unit) {
+        delay(200)
         focusRequester.requestFocus()
     }
 
     Box(modifier = modifier) {
-        // hidden text field
-        TextField(
+        // hidden text field using BasicTextField to avoid BringIntoView crash
+        BasicTextField(
             value = value,
             onValueChange = { newValue ->
                 // only allow digits
@@ -56,18 +57,10 @@ fun HiddenPinTextField(
             },
             modifier =
                 Modifier
-                    .size(0.dp)
+                    .size(1.dp) // minimal size (0.dp can cause issues)
                     .focusRequester(focusRequester),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            colors =
-                TextFieldDefaults.colors(
-                    focusedContainerColor = Color.Transparent,
-                    unfocusedContainerColor = Color.Transparent,
-                    disabledContainerColor = Color.Transparent,
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                    disabledIndicatorColor = Color.Transparent,
-                ),
+            singleLine = true,
         )
 
         // clickable overlay to refocus
