@@ -303,8 +303,10 @@ struct UnsignedTransactionView: View {
             return privateShow(manager.amountFmtUnit(txn.spendingAmount()))
         }
 
-        // fiat
-        guard let fiatAmount else { return privateShow("$XX.XX USD") }
+        // fiat - fall back to BTC if fiat unavailable
+        guard let fiatAmount else {
+            return privateShow(manager.amountFmtUnit(txn.spendingAmount()))
+        }
         return privateShow(manager.rust.displayFiatAmount(amount: fiatAmount))
     }
 
@@ -339,9 +341,8 @@ struct UnsignedTransactionView: View {
                 Text(amount)
             }
         }
-        .task {
-            fiatAmount =
-                try? await manager.rust.amountInFiat(amount: txn.spendingAmount())
+        .onAppear {
+            fiatAmount = manager.rust.amountInFiat(amount: txn.spendingAmount())
         }
         .onTapGesture {
             let hardwareExportRoute =

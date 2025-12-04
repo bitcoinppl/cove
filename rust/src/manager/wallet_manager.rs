@@ -498,22 +498,11 @@ impl RustWalletManager {
         Ok(())
     }
 
+    /// Sync method using cached prices, returns None if no cached prices
     #[uniffi::method]
-    pub async fn balance_in_fiat(&self) -> Result<f64, Error> {
-        let balance = call!(self.actor.balance())
-            .await
-            .map_err(|_| Error::WalletBalanceError("unable to get balance".to_string()))?;
-
-        self.amount_in_fiat(balance.spendable().into()).await
-    }
-
-    #[uniffi::method]
-    pub async fn amount_in_fiat(&self, amount: Arc<Amount>) -> Result<f64, Error> {
+    pub fn amount_in_fiat(&self, amount: Arc<Amount>) -> Option<f64> {
         let currency = self.selected_fiat_currency();
-
-        FIAT_CLIENT.current_value_in_currency(*amount, currency).await.map_err(|error| {
-            Error::FiatError(format!("unable to get fiat value for amount: {error}"))
-        })
+        FIAT_CLIENT.value_in_currency_cached(*amount, currency)
     }
 
     #[uniffi::method(default(show_unit = true))]

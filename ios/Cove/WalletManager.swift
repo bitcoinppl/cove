@@ -37,7 +37,7 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
         walletMetadata = rust.walletMetadata()
         unsignedTransactions = (try? rust.getUnsignedTransactions()) ?? []
 
-        Task { [weak self] in await self?.updateFiatBalance() }
+        updateFiatBalance()
         rust.listenForUpdates(reconciler: WeakReconciler(self))
     }
 
@@ -49,7 +49,7 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
         walletMetadata = metadata
         id = metadata.id
 
-        Task { [weak self] in await self?.updateFiatBalance() }
+        updateFiatBalance()
         rust.listenForUpdates(reconciler: WeakReconciler(self))
     }
 
@@ -133,22 +133,16 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
         return details
     }
 
-    private func updateFiatBalance() async {
-        do {
-            let fiatBalance = try await rust.balanceInFiat()
-            await MainActor.run {
-                withAnimation { self.fiatBalance = fiatBalance }
-            }
-        } catch {
-            Log.error("error getting fiat balance: \(error)")
-            fiatBalance = 0.00
-        }
+    private func updateFiatBalance() {
+        fiatBalance = rust.amountInFiat(amount: balance.spendable())
     }
 
     func updateWalletBalance() async {
         let balance = await rust.balance()
-        await MainActor.run { self.balance = balance }
-        await updateFiatBalance()
+        await MainActor.run {
+            self.balance = balance
+            self.updateFiatBalance()
+        }
     }
 
     func apply(_ message: Message) {
@@ -177,7 +171,7 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
 
         case let .walletBalanceChanged(balance):
             withAnimation { self.balance = balance }
-            Task { [weak self] in await self?.updateFiatBalance() }
+            updateFiatBalance()
 
         case .unsignedTransactionsChanged:
             self.unsignedTransactions = (try? rust.getUnsignedTransactions()) ?? []
