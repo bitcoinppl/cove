@@ -169,27 +169,6 @@ struct HotWalletImportScreen: View {
         }
     }
 
-    private func triggerProgressHaptic() {
-        let generator = UIImpactFeedbackGenerator(style: .light)
-        generator.impactOccurred()
-    }
-
-    private func triggerSuccessHaptic() {
-        let generator = UINotificationFeedbackGenerator()
-        generator.notificationOccurred(.success)
-    }
-
-    private func triggerHaptic(_ haptic: HapticFeedback) {
-        switch haptic {
-        case .progress:
-            triggerProgressHaptic()
-        case .success:
-            triggerSuccessHaptic()
-        case .none:
-            break
-        }
-    }
-
     private func handleScan(result: Result<ScanResult, ScanError>) {
         if case let .failure(error) = result {
             Log.error("Scan error: \(error.localizedDescription)")
@@ -203,7 +182,7 @@ struct HotWalletImportScreen: View {
         do {
             switch try scanner.scan(qr: qr) {
             case let .complete(multiFormat, haptic):
-                triggerHaptic(haptic)
+                haptic.trigger()
                 // extract mnemonic words from the result
                 if case let .mnemonic(mnemonic) = multiFormat {
                     let mnemonicString = mnemonic.words().joined(separator: " ")
@@ -214,7 +193,7 @@ struct HotWalletImportScreen: View {
                 scanner.reset()
 
             case let .inProgress(_, haptic):
-                triggerHaptic(haptic)
+                haptic.trigger()
                 // multi-part QR in progress - keep scanning
             }
         } catch {

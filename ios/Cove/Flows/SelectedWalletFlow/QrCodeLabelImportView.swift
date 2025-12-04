@@ -101,27 +101,6 @@ struct QrCodeLabelImportView: View {
         }
     }
 
-    private func triggerProgressHaptic() {
-        let generator = UIImpactFeedbackGenerator(style: .light)
-        generator.impactOccurred()
-    }
-
-    private func triggerSuccessHaptic() {
-        let generator = UINotificationFeedbackGenerator()
-        generator.notificationOccurred(.success)
-    }
-
-    private func triggerHaptic(_ haptic: HapticFeedback) {
-        switch haptic {
-        case .progress:
-            triggerProgressHaptic()
-        case .success:
-            triggerSuccessHaptic()
-        case .none:
-            break
-        }
-    }
-
     private func handleScan(result: Result<ScanResult, ScanError>) {
         switch result {
         case let .success(scanResult):
@@ -130,13 +109,13 @@ struct QrCodeLabelImportView: View {
             do {
                 switch try scanner.scan(qr: qr) {
                 case let .complete(data, haptic):
-                    triggerHaptic(haptic)
+                    haptic.trigger()
                     scanComplete = true
                     scannedCode = TaggedItem(data)
                     scanner.reset()
 
                 case let .inProgress(prog, haptic):
-                    triggerHaptic(haptic)
+                    haptic.trigger()
                     progress = prog
                 }
             } catch {
