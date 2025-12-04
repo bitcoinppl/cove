@@ -70,6 +70,9 @@ pub enum MultiQrError {
 
     #[error(transparent)]
     Ur(#[from] cove_ur::UrError),
+
+    #[error("BBQr CBOR file type is not yet supported")]
+    BbqrCborNotSupported,
 }
 
 impl StringOrData {
@@ -137,7 +140,11 @@ impl ScanProgress {
         match self {
             ScanProgress::Bbqr { scanned, total } => {
                 let remaining = total - scanned;
-                Some(format!("{} parts left", remaining))
+                if remaining == 1 {
+                    Some("1 part left".to_string())
+                } else {
+                    Some(format!("{} parts left", remaining))
+                }
             }
             ScanProgress::Ur { .. } => None, // UR uses fountain codes, no fixed "parts left"
         }
@@ -239,7 +246,8 @@ fn parse_ur(qr: &str) -> Result<(QrScanner, ScanResult), MultiQrError> {
 /// Parse completed BBQr data based on file type.
 ///
 /// Binary types (Transaction, Psbt) are parsed directly from bytes.
-/// Text types (UnicodeText, Json, Cbor) are converted to UTF-8 first.
+/// Text types (UnicodeText, Json) are converted to UTF-8 first.
+/// CBOR is not yet supported and returns an error.
 fn parse_bbqr_data(
     data: Vec<u8>,
     file_type: bbqr::file_type::FileType,
@@ -268,8 +276,9 @@ fn parse_bbqr_data(
             Ok(MultiFormat::Transaction(Arc::new(txn)))
         }
 
-        // TODO: CBOR is binary, not UTF-8 text. Should decode CBOR separately when we have a use case.
-        FileType::UnicodeText | FileType::Json | FileType::Cbor => {
+        FileType::Cbor => Err(MultiQrError::BbqrCborNotSupported),
+
+        FileType::UnicodeText | FileType::Json => {
             let data_string = String::from_utf8(data).map_err(|_| MultiQrError::InvalidUtf8)?;
             MultiFormat::try_from_string(&data_string)
                 .map_err(|e| MultiQrError::ParseError(e.to_string()))
@@ -843,6 +852,9 @@ mod tests {
         assert_eq!(ur_progress.detail_text(), None);
 
         // edge cases
+        let one_left = ScanProgress::Bbqr { scanned: 9, total: 10 };
+        assert_eq!(one_left.detail_text(), Some("1 part left".to_string()));
+
         let complete_bbqr = ScanProgress::Bbqr { scanned: 10, total: 10 };
         assert_eq!(complete_bbqr.display_text(), "Scanned 10 of 10");
         assert_eq!(complete_bbqr.detail_text(), Some("0 parts left".to_string()));
