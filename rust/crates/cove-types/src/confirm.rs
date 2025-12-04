@@ -284,15 +284,6 @@ impl ConfirmDetails {
 
         Ok(parts)
     }
-
-    /// Export PSBT as single UR string (for small PSBTs)
-    pub fn psbt_to_ur_single(&self) -> Result<String> {
-        let parts = self.psbt_to_ur(10000)?; // large fragment to get single part
-        parts
-            .into_iter()
-            .next()
-            .ok_or_else(|| ConfirmDetailsError::QrCodeCreation("No UR parts generated".into()))
-    }
 }
 
 impl AddressAndAmount {
