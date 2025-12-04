@@ -34,16 +34,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.bitcoinppl.cove.AppAlertState
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.QrCodeScanView
 import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.sheets.FeeRateSelectorSheet
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.BalanceAutoSizeText
 import org.bitcoinppl.cove.views.ImageButton
+import org.bitcoinppl.cove_core.MultiFormat
 import org.bitcoinppl.cove_core.SendFlowManagerAction
-import org.bitcoinppl.cove_core.StringOrData
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -189,14 +191,22 @@ fun CoinControlSetAmountScreen(
                     sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
                 ) {
                     QrCodeScanView(
-                        onScanned = { stringOrData ->
+                        onScanned = { multiFormat ->
                             presenter.sheetState = null
-                            val scannedString =
-                                when (stringOrData) {
-                                    is StringOrData.String -> stringOrData.v1
-                                    is StringOrData.Data -> stringOrData.v1.toString(Charsets.UTF_8)
+                            when (multiFormat) {
+                                is MultiFormat.Address -> {
+                                    sendFlowManager.enteringAddress = multiFormat.v1.address().string()
                                 }
-                            sendFlowManager.enteringAddress = scannedString
+                                else -> {
+                                    app.alertState =
+                                        TaggedItem(
+                                            AppAlertState.General(
+                                                title = "Invalid QR Code",
+                                                message = "Please scan a valid Bitcoin address QR code",
+                                            ),
+                                        )
+                                }
+                            }
                         },
                         onDismiss = { presenter.sheetState = null },
                         app = app,

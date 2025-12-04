@@ -628,22 +628,9 @@ fun HardwareExportScreen(
     // fullscreen QR scanner
     if (showQrScanner) {
         QrCodeScanView(
-            onScanned = { stringOrData ->
-                try {
-                    val multiFormat = stringOrDataTryIntoMultiFormat(stringOrData)
-                    app.handleMultiFormat(multiFormat)
-                    showQrScanner = false
-                } catch (e: Exception) {
-                    Log.e("HardwareExportScreen", "Error scanning QR code: $e")
-                    showQrScanner = false
-                    app.alertState =
-                        TaggedItem(
-                            AppAlertState.General(
-                                title = "Scan Failed",
-                                message = e.message ?: "Failed to scan QR code",
-                            ),
-                        )
-                }
+            onScanned = { multiFormat ->
+                showQrScanner = false
+                app.handleMultiFormat(multiFormat)
             },
             onDismiss = { showQrScanner = false },
             app = app,

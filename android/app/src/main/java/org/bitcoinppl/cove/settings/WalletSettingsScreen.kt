@@ -313,14 +313,15 @@ private fun WalletColorSelector(
         mutableStateOf(selectedWalletColor)
     }
 
-    val availableColors = remember {
-        try {
-            defaultWalletColors()
-        } catch (e: Throwable) {
-            Log.e("WalletSettingsScreen", "failed to load default wallet colors", e)
-            emptyList()
+    val availableColors =
+        remember {
+            try {
+                defaultWalletColors()
+            } catch (e: Throwable) {
+                Log.e("WalletSettingsScreen", "failed to load default wallet colors", e)
+                emptyList()
+            }
         }
-    }
 
     Column(
         Modifier
