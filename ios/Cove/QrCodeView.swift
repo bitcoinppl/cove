@@ -12,10 +12,12 @@ struct QrCodeView: View {
     let text: String
 
     var body: some View {
-        generateQRCode(text: text)
-            .interpolation(.none)
-            .resizable()
-            .scaledToFit()
+        HStack {
+            generateQRCode(text: text)
+                .interpolation(.none)
+                .resizable()
+                .scaledToFit()
+        }
     }
 
     func generateQRCode(text: String) -> Image {

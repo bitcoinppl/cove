@@ -39,7 +39,7 @@ struct SelectedWalletScreen: View {
     // import / export
     @State var exportingBackup: ExportingBackup? = nil
 
-    @State private var scannedLabels: TaggedString? = nil
+    @State private var scannedLabels: TaggedItem<MultiFormat>? = nil
     @State private var isImportingLabels = false
 
     // private
@@ -254,10 +254,20 @@ struct SelectedWalletScreen: View {
         .onChange(of: scannedLabels, initial: false, onChangeOfScannedLabels)
     }
 
-    func onChangeOfScannedLabels(_: TaggedString?, _ labels: TaggedString?) {
-        guard let labels else { return }
+    func onChangeOfScannedLabels(_: TaggedItem<MultiFormat>?, _ scanned: TaggedItem<MultiFormat>?) {
+        guard let scanned else { return }
+
+        guard case let .bip329Labels(labels) = scanned.item else {
+            app.alertState = .init(
+                .general(
+                    title: "Invalid QR Code",
+                    message: "The scanned QR code does not contain BIP329 labels."
+                ))
+            return
+        }
+
         do {
-            try labelManager.import(jsonl: labels.item)
+            try labelManager.importLabels(labels: labels)
             app.alertState = .init(
                 .general(
                     title: "Success!",
@@ -268,7 +278,7 @@ struct SelectedWalletScreen: View {
             app.alertState = .init(
                 .general(
                     title: "Oops something went wrong!",
-                    message: "Invalid QR code \(error.localizedDescription)"
+                    message: "Unable to import labels: \(error.localizedDescription)"
                 ))
         }
     }

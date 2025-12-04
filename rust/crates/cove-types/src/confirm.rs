@@ -58,6 +58,99 @@ pub enum ConfirmDetailsError {
     QrCodeCreation(String),
 }
 
+/// QR code export format for PSBTs
+#[derive(Debug, Clone, Copy, Default, Hash, Eq, PartialEq, derive_more::Display, uniffi::Enum)]
+#[uniffi::export(Display)]
+pub enum QrExportFormat {
+    /// BBQr format (Binary Bitcoin QR)
+    #[default]
+    #[display("BBQr")]
+    Bbqr,
+    /// UR format (Uniform Resources)
+    #[display("UR")]
+    Ur,
+}
+
+/// QR code density settings for export
+///
+/// Controls how much data is packed into each QR code frame.
+/// Higher density = larger/more complex QRs, fewer animation frames.
+/// Lower density = smaller/simpler QRs, more animation frames.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Object)]
+pub struct QrDensity {
+    /// UR max fragment length in bytes (50-500, default 200)
+    ur_fragment_len: u32,
+    /// BBQr max version (5-40, default 15)
+    bbqr_max_version: u8,
+}
+
+impl QrDensity {
+    const UR_MIN: u32 = 50;
+    const UR_MAX: u32 = 500;
+    const UR_DEFAULT: u32 = 200;
+    const UR_STEP: u32 = 50;
+
+    const BBQR_MIN: u8 = 5;
+    const BBQR_MAX: u8 = 40;
+    const BBQR_DEFAULT: u8 = 15;
+    const BBQR_STEP: u8 = 2;
+}
+
+impl Default for QrDensity {
+    fn default() -> Self {
+        Self { ur_fragment_len: Self::UR_DEFAULT, bbqr_max_version: Self::BBQR_DEFAULT }
+    }
+}
+
+#[uniffi::export]
+impl QrDensity {
+    #[uniffi::constructor]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Increase density (larger QRs, fewer animation frames)
+    pub fn increase(&self) -> Self {
+        Self {
+            ur_fragment_len: (self.ur_fragment_len + Self::UR_STEP).min(Self::UR_MAX),
+            bbqr_max_version: (self.bbqr_max_version + Self::BBQR_STEP).min(Self::BBQR_MAX),
+        }
+    }
+
+    /// Decrease density (smaller QRs, more animation frames)
+    pub fn decrease(&self) -> Self {
+        Self {
+            ur_fragment_len: self.ur_fragment_len.saturating_sub(Self::UR_STEP).max(Self::UR_MIN),
+            bbqr_max_version: self
+                .bbqr_max_version
+                .saturating_sub(Self::BBQR_STEP)
+                .max(Self::BBQR_MIN),
+        }
+    }
+
+    pub fn can_increase(&self) -> bool {
+        self.ur_fragment_len < Self::UR_MAX || self.bbqr_max_version < Self::BBQR_MAX
+    }
+
+    pub fn can_decrease(&self) -> bool {
+        self.ur_fragment_len > Self::UR_MIN || self.bbqr_max_version > Self::BBQR_MIN
+    }
+
+    pub fn ur_fragment_len(&self) -> u32 {
+        self.ur_fragment_len
+    }
+
+    pub fn bbqr_max_version(&self) -> u8 {
+        self.bbqr_max_version
+    }
+}
+
+/// Check if two QrDensity values are equal (for Swift Equatable conformance)
+#[uniffi::export]
+pub fn qr_density_is_equal(lhs: &QrDensity, rhs: &QrDensity) -> bool {
+    lhs == rhs
+}
+
 #[derive(Debug, Default, Clone, Hash, Eq, PartialEq)]
 pub struct ExtraItem {
     pub label: Option<String>,
@@ -123,6 +216,15 @@ impl ConfirmDetails {
     }
 
     pub fn psbt_to_bbqr(&self) -> Result<Vec<String>> {
+        self.psbt_to_bbqr_with_max_version(15)
+    }
+
+    /// Export PSBT as BBQr with specified max version
+    pub fn psbt_to_bbqr_with_density(&self, density: &QrDensity) -> Result<Vec<String>> {
+        self.psbt_to_bbqr_with_max_version(density.bbqr_max_version())
+    }
+
+    fn psbt_to_bbqr_with_max_version(&self, max_version: u8) -> Result<Vec<String>> {
         use bbqr::{
             encode::Encoding,
             file_type::FileType,
@@ -132,6 +234,8 @@ impl ConfirmDetails {
 
         let data = self.psbt.0.serialize();
 
+        let version = Version::try_from(max_version).unwrap_or(Version::V15);
+
         let split = Split::try_from_data(
             data.as_slice(),
             FileType::Psbt,
@@ -140,12 +244,45 @@ impl ConfirmDetails {
                 min_split_number: 1,
                 max_split_number: 100,
                 min_version: Version::V01,
-                max_version: Version::V15,
+                max_version: version,
             },
         )
         .map_err(|e| ConfirmDetailsError::QrCodeCreation(e.to_string()))?;
 
         Ok(split.parts)
+    }
+
+    /// Export PSBT as UR with specified density
+    pub fn psbt_to_ur_with_density(&self, density: &QrDensity) -> Result<Vec<String>> {
+        self.psbt_to_ur(density.ur_fragment_len())
+    }
+
+    /// Export PSBT as UR-encoded QR strings for animated display
+    pub fn psbt_to_ur(&self, max_fragment_len: u32) -> Result<Vec<String>> {
+        use cove_ur::CryptoPsbt;
+        use foundation_ur::Encoder as UrEncoder;
+
+        // wrap PSBT in CryptoPsbt and encode to tagged CBOR
+        let crypto_psbt = CryptoPsbt::from_psbt_bytes(self.psbt.0.serialize()).map_err(|e| {
+            ConfirmDetailsError::QrCodeCreation(format!("CryptoPsbt encoding failed: {}", e))
+        })?;
+
+        let cbor_psbt = crypto_psbt.encode().map_err(|e| {
+            ConfirmDetailsError::QrCodeCreation(format!("CBOR encoding failed: {}", e))
+        })?;
+
+        let mut encoder = UrEncoder::new();
+        encoder.start("crypto-psbt", &cbor_psbt, max_fragment_len as usize);
+
+        let sequence_count = encoder.sequence_count() as usize;
+        let mut parts = Vec::with_capacity(sequence_count);
+
+        for _ in 0..sequence_count {
+            let part = encoder.next_part();
+            parts.push(part.to_string());
+        }
+
+        Ok(parts)
     }
 }
 
@@ -252,22 +389,20 @@ mod ffi_preview {
     }
 }
 
+/// Preview ConfirmDetails for SwiftUI previews
 #[uniffi::export]
-impl ConfirmDetails {
-    #[uniffi::constructor(name = "previewNew", default(amount = 20448))]
-    pub fn _ffi_preview_new(amount: u64) -> Self {
-        let psbt = ffi_preview::psbt_preview_new();
-        let more_details = InputOutputDetails::new(&psbt, Network::Bitcoin);
+pub fn confirm_details_preview_new() -> ConfirmDetails {
+    let psbt = ffi_preview::psbt_preview_new();
+    let more_details = InputOutputDetails::new(&psbt, Network::Bitcoin);
 
-        Self {
-            spending_amount: Amount::from_sat(amount),
-            sending_amount: Amount::from_sat(amount - 658),
-            fee_total: Amount::from_sat(658),
-            fee_rate: BdkFeeRate::from_sat_per_vb_unchecked(3).into(),
-            fee_percentage: 3,
-            sending_to: Address::preview_new(),
-            psbt,
-            more_details,
-        }
+    ConfirmDetails {
+        spending_amount: Amount::from_sat(20448),
+        sending_amount: Amount::from_sat(20448 - 658),
+        fee_total: Amount::from_sat(658),
+        fee_rate: BdkFeeRate::from_sat_per_vb_unchecked(3).into(),
+        fee_percentage: 3,
+        sending_to: Address::preview_new(),
+        psbt,
+        more_details,
     }
 }

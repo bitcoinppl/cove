@@ -252,11 +252,6 @@ impl Wallet {
             return Self::try_new_persisted_from_pubport(hardware_export);
         }
 
-        let xpub = xpub.trim();
-        if xpub.starts_with("UR:") || xpub.starts_with("ur:") {
-            return Err(MultiFormatError::UrFormatNotSupported.into());
-        }
-
         // already returned if its a valid xpub
         Err(hardware_export.unwrap_err())
     }
@@ -280,7 +275,7 @@ impl Wallet {
                     xpub::XpubError::MissingXpub("No BIP84 xpub found".to_string()),
                 ))?;
 
-                metadata.discovery_state = DiscoveryState::StartedJson(Arc::new(json.into()));
+                metadata.discovery_state = DiscoveryState::StartedJson(Arc::new((*json).into()));
                 descriptors
             }
             Format::Wasabi(descriptors) => descriptors,

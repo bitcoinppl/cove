@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use derive_more::derive::{AsRef, Deref, From, Into};
 
-#[derive(Debug, Clone, Deref, From, Into, AsRef, uniffi::Object)]
+#[derive(Debug, Clone, PartialEq, Eq, Deref, From, Into, AsRef, uniffi::Object)]
 pub struct HardwareExport(Arc<pubport::Format>);
 
 impl HardwareExport {

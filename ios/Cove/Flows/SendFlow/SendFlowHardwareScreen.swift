@@ -11,7 +11,7 @@ import SwiftUI
 private enum SheetState: Equatable {
     case details
     case inputOutputDetails
-    case exportQr([String])
+    case exportQr
 }
 
 private enum DetailsSheetState: Equatable {
@@ -434,13 +434,7 @@ struct SendFlowHardwareScreen: View {
     @ViewBuilder
     var ExportTransactionDialog: some View {
         Button("QR Code") {
-            do {
-                let qrs = try details.psbtToBbqr()
-                sheetState = .init(.exportQr(qrs))
-            } catch {
-                Log.error("Failed to convert PSBT to BBQR: \(error)")
-                alertState = .init(.bbqrError(error.localizedDescription))
-            }
+            sheetState = .init(.exportQr)
         }
 
         Button("NFC") {
@@ -508,9 +502,9 @@ struct SendFlowHardwareScreen: View {
                     [.height(300), .height(400), .height(500), .large],
                     selection: $inputOutputDetailsPresentationSize
                 )
-        case let .exportQr(qrs):
-            SendFlowBbqrExport(qrs: qrs.map { QrCodeView(text: $0) })
-                .presentationDetents([.height(425), .height(600), .large])
+        case .exportQr:
+            SendFlowQrExport(details: details)
+                .presentationDetents([.height(550), .height(650), .large])
                 .padding()
                 .padding(.top, 10)
         }
@@ -571,7 +565,7 @@ struct SendFlowHardwareScreen: View {
         SendFlowHardwareScreen(
             id: WalletId(),
             manager: WalletManager(preview: "preview_only"),
-            details: ConfirmDetails.previewNew()
+            details: confirmDetailsPreviewNew()
         )
         .environment(AppManager.shared)
     }

@@ -90,7 +90,6 @@
         public let showViewfinder: Bool
         public let requiresPhotoOutput: Bool
         public var simulatedData = ""
-        public var shouldVibrateOnSuccess: Bool
         public var isTorchOn: Bool
         public var isPaused: Bool
         public var isGalleryPresented: Binding<Bool>
@@ -105,7 +104,6 @@
             showViewfinder: Bool = false,
             requiresPhotoOutput: Bool = true,
             simulatedData: String = "",
-            shouldVibrateOnSuccess: Bool = true,
             isTorchOn: Bool = false,
             isPaused: Bool = false,
             isGalleryPresented: Binding<Bool> = .constant(false),
@@ -119,7 +117,6 @@
             self.requiresPhotoOutput = requiresPhotoOutput
             self.scanInterval = scanInterval
             self.simulatedData = simulatedData
-            self.shouldVibrateOnSuccess = shouldVibrateOnSuccess
             self.isTorchOn = isTorchOn
             self.isPaused = isPaused
             self.isGalleryPresented = isGalleryPresented

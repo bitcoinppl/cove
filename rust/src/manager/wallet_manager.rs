@@ -742,17 +742,19 @@ impl RustWalletManager {
 
     #[uniffi::method]
     pub fn mark_wallet_as_verified(&self) -> Result<(), Error> {
-        {
+        // clone metadata and release lock before I/O
+        let metadata = {
             let mut wallet_metadata = self.metadata.write();
             wallet_metadata.verified = true;
+            wallet_metadata.clone()
+        };
 
-            self.reconciler.send(Message::WalletMetadataChanged(wallet_metadata.clone()));
-        }
+        self.reconciler.send(Message::WalletMetadataChanged(metadata.clone()));
 
-        let id = self.metadata.read().id.clone();
-        let database = Database::global();
-
-        database.wallets.mark_wallet_as_verified(&id).map_err(Error::MarkWalletAsVerifiedError)?;
+        Database::global()
+            .wallets
+            .mark_wallet_as_verified(&metadata.id)
+            .map_err(Error::MarkWalletAsVerifiedError)?;
 
         Ok(())
     }
@@ -952,8 +954,10 @@ impl RustWalletManager {
                     (FiatOrBtc::Fiat, Unit::Sat),
                 ];
 
-                let current =
-                    (self.metadata.read().fiat_or_btc, self.metadata.read().selected_unit);
+                let current = {
+                    let md = self.metadata.read();
+                    (md.fiat_or_btc, md.selected_unit)
+                };
 
                 let current_index = order
                     .iter()
@@ -998,14 +1002,10 @@ impl RustWalletManager {
             }
         }
 
-        let metadata = self.metadata.read();
-        let metadata_changed_msg = Message::WalletMetadataChanged(metadata.clone());
-        self.reconciler.send(metadata_changed_msg);
+        let metadata = self.metadata.read().clone();
+        self.reconciler.send(Message::WalletMetadataChanged(metadata.clone()));
 
-        // update wallet_metadata in the database
-        if let Err(error) =
-            Database::global().wallets.update_wallet_metadata(self.metadata.read().clone())
-        {
+        if let Err(error) = Database::global().wallets.update_wallet_metadata(metadata) {
             error!("Unable to update wallet metadata: {error:?}")
         }
     }

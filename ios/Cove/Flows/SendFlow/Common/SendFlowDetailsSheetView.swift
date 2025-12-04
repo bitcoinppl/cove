@@ -49,7 +49,7 @@ struct SendFlowDetailsSheetView: View {
     AsyncPreview {
         SendFlowDetailsSheetView(
             manager: WalletManager(preview: "preview_only"),
-            details: ConfirmDetails.previewNew()
+            details: confirmDetailsPreviewNew()
         )
         .padding()
     }

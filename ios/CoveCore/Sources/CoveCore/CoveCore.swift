@@ -173,6 +173,12 @@ extension TapSigner: @retroactive Equatable {
     }
 }
 
+extension QrDensity: @retroactive Equatable {
+    public static func == (lhs: QrDensity, rhs: QrDensity) -> Bool {
+        qrDensityIsEqual(lhs: lhs, rhs: rhs)
+    }
+}
+
 public extension WalletMetadata {
     func isTapSigner() -> Bool {
         hardwareMetadata?.isTapSigner() ?? false

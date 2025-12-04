@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 private struct AlertItem: Identifiable {
     let id = UUID()
@@ -59,27 +60,18 @@ private enum AlertType {
 }
 
 struct QrCodeImportScreen: View {
-    @State private var multiQr: MultiQr?
-    @State private var scannedCode: TaggedString?
+    @State private var scanner = QrScanner()
+    @State private var scannedMultiFormat: TaggedItem<MultiFormat>?
     @State private var showingHelp = false
     @Environment(AppManager.self) var app
     @Environment(\.dismiss) private var dismiss
 
     // private
     @State private var scanComplete = false
-    @State private var totalParts: Int? = nil
-    @State private var partsLeft: Int? = nil
+    @State private var progress: ScanProgress? = nil
     @State private var alert: AlertItem? = nil
 
     private let screenHeight = UIScreen.main.bounds.height
-
-    var partsScanned: Int {
-        if let totalParts, let partsLeft {
-            totalParts - partsLeft
-        } else {
-            0
-        }
-    }
 
     var qrCodeHeight: CGFloat {
         screenHeight * 0.6
@@ -113,17 +105,19 @@ struct QrCodeImportScreen: View {
                         Spacer()
                         Spacer()
 
-                        if let totalParts, let partsLeft {
-                            Group {
-                                Text("Scanned \(partsScanned) of \(totalParts)")
+                        if let progress {
+                            VStack(spacing: 8) {
+                                Text(progress.displayText())
                                     .font(.subheadline)
                                     .fontWeight(.medium)
                                     .padding(.top, 8)
 
-                                Text("\(partsLeft) parts left")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .fontWeight(.bold)
+                                if let detailText = progress.detailText() {
+                                    Text(detailText)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .fontWeight(.bold)
+                                }
                             }
                             .foregroundStyle(.white)
                         }
@@ -136,10 +130,22 @@ struct QrCodeImportScreen: View {
         .alert(item: $alert) { alert in
             alert.type.alert
         }
-        .onChange(of: scannedCode) { _, scannedCode in
-            guard let scannedCode else { return }
+        .onChange(of: scannedMultiFormat) { _, scannedMultiFormat in
+            guard let multiFormat = scannedMultiFormat?.item else { return }
             do {
-                let wallet = try Wallet.newFromXpub(xpub: scannedCode.value)
+                let wallet: Wallet
+                switch multiFormat {
+                case let .hardwareExport(export):
+                    wallet = try Wallet.newFromExport(export: export)
+                default:
+                    Log.warn("Unexpected format for wallet import: \(multiFormat)")
+                    alert = AlertItem(type: .error("Unexpected format for wallet import"))
+                    // reset state so user can retry
+                    scanComplete = false
+                    self.scannedMultiFormat = nil
+                    scanner.reset()
+                    return
+                }
                 let id = wallet.id()
                 Log.debug("Imported Wallet: \(id)")
                 alert = AlertItem(type: .success("Imported Wallet Successfully"))
@@ -178,34 +184,23 @@ struct QrCodeImportScreen: View {
 
     private func handleScan(result: Result<ScanResult, ScanError>) {
         switch result {
-        case let .success(result):
-            guard case let .string(stringValue) = result.data else { return }
+        case let .success(scanResult):
+            let qr = StringOrData(scanResult.data)
 
-            if multiQr == nil {
-                multiQr = MultiQr.newFromString(qr: stringValue)
-                totalParts = Int(multiQr?.totalParts() ?? 0)
-            }
-
-            guard let multiQr else { return }
-
-            // single QR
-            if !multiQr.isBbqr() {
-                scanComplete = true
-                scannedCode = TaggedString(stringValue)
-                return
-            }
-
-            // BBQr
             do {
-                let result = try multiQr.addPart(qr: stringValue)
-                partsLeft = Int(result.partsLeft())
-
-                if result.isComplete() {
+                switch try scanner.scan(qr: qr) {
+                case let .complete(data, haptic):
+                    haptic.trigger()
                     scanComplete = true
-                    let data = try result.finalResult()
-                    scannedCode = TaggedString(data)
+                    scannedMultiFormat = TaggedItem(data)
+                    scanner.reset()
+
+                case let .inProgress(prog, haptic):
+                    haptic.trigger()
+                    progress = prog
                 }
             } catch {
+                scanner.reset()
                 app.alertState = TaggedItem(
                     .general(
                         title: "QR Scan Error",

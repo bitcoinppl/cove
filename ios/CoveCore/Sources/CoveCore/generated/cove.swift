@@ -1233,269 +1233,6 @@ public func FfiConverterTypeBalance_lower(_ value: Balance) -> UInt64 {
 
 
 
-public protocol BbqrJoinResultProtocol: AnyObject, Sendable {
-    
-    func finalResult() throws  -> String
-    
-    func isComplete()  -> Bool
-    
-    func partsLeft()  -> UInt32
-    
-}
-open class BbqrJoinResult: BbqrJoinResultProtocol, @unchecked Sendable {
-    fileprivate let handle: UInt64
-
-    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public struct NoHandle {
-        public init() {}
-    }
-
-    // TODO: We'd like this to be `private` but for Swifty reasons,
-    // we can't implement `FfiConverter` without making this `required` and we can't
-    // make it `required` without making it `public`.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    required public init(unsafeFromHandle handle: UInt64) {
-        self.handle = handle
-    }
-
-    // This constructor can be used to instantiate a fake object.
-    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
-    //
-    // - Warning:
-    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public init(noHandle: NoHandle) {
-        self.handle = 0
-    }
-
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public func uniffiCloneHandle() -> UInt64 {
-        return try! rustCall { uniffi_cove_fn_clone_bbqrjoinresult(self.handle, $0) }
-    }
-    // No primary constructor declared for this class.
-
-    deinit {
-        if handle == 0 {
-            // Mock objects have handle=0 don't try to free them
-            return
-        }
-
-        try! rustCall { uniffi_cove_fn_free_bbqrjoinresult(handle, $0) }
-    }
-
-    
-
-    
-open func finalResult()throws  -> String  {
-    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeMultiQrError_lift) {
-    uniffi_cove_fn_method_bbqrjoinresult_final_result(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
-open func isComplete() -> Bool  {
-    return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_cove_fn_method_bbqrjoinresult_is_complete(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
-open func partsLeft() -> UInt32  {
-    return try!  FfiConverterUInt32.lift(try! rustCall() {
-    uniffi_cove_fn_method_bbqrjoinresult_parts_left(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
-
-    
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeBbqrJoinResult: FfiConverter {
-    typealias FfiType = UInt64
-    typealias SwiftType = BbqrJoinResult
-
-    public static func lift(_ handle: UInt64) throws -> BbqrJoinResult {
-        return BbqrJoinResult(unsafeFromHandle: handle)
-    }
-
-    public static func lower(_ value: BbqrJoinResult) -> UInt64 {
-        return value.uniffiCloneHandle()
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BbqrJoinResult {
-        let handle: UInt64 = try readInt(&buf)
-        return try lift(handle)
-    }
-
-    public static func write(_ value: BbqrJoinResult, into buf: inout [UInt8]) {
-        writeInt(&buf, lower(value))
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeBbqrJoinResult_lift(_ handle: UInt64) throws -> BbqrJoinResult {
-    return try FfiConverterTypeBbqrJoinResult.lift(handle)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeBbqrJoinResult_lower(_ value: BbqrJoinResult) -> UInt64 {
-    return FfiConverterTypeBbqrJoinResult.lower(value)
-}
-
-
-
-
-
-
-public protocol BbqrJoinedProtocol: AnyObject, Sendable {
-    
-    func getGroupedWords(chunks: UInt8) throws  -> [[String]]
-    
-    func getSeedWords() throws  -> [String]
-    
-}
-open class BbqrJoined: BbqrJoinedProtocol, @unchecked Sendable {
-    fileprivate let handle: UInt64
-
-    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public struct NoHandle {
-        public init() {}
-    }
-
-    // TODO: We'd like this to be `private` but for Swifty reasons,
-    // we can't implement `FfiConverter` without making this `required` and we can't
-    // make it `required` without making it `public`.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    required public init(unsafeFromHandle handle: UInt64) {
-        self.handle = handle
-    }
-
-    // This constructor can be used to instantiate a fake object.
-    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
-    //
-    // - Warning:
-    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public init(noHandle: NoHandle) {
-        self.handle = 0
-    }
-
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public func uniffiCloneHandle() -> UInt64 {
-        return try! rustCall { uniffi_cove_fn_clone_bbqrjoined(self.handle, $0) }
-    }
-    // No primary constructor declared for this class.
-
-    deinit {
-        if handle == 0 {
-            // Mock objects have handle=0 don't try to free them
-            return
-        }
-
-        try! rustCall { uniffi_cove_fn_free_bbqrjoined(handle, $0) }
-    }
-
-    
-
-    
-open func getGroupedWords(chunks: UInt8)throws  -> [[String]]  {
-    return try  FfiConverterSequenceSequenceString.lift(try rustCallWithError(FfiConverterTypeMultiQrError_lift) {
-    uniffi_cove_fn_method_bbqrjoined_get_grouped_words(
-            self.uniffiCloneHandle(),
-        FfiConverterUInt8.lower(chunks),$0
-    )
-})
-}
-    
-open func getSeedWords()throws  -> [String]  {
-    return try  FfiConverterSequenceString.lift(try rustCallWithError(FfiConverterTypeMultiQrError_lift) {
-    uniffi_cove_fn_method_bbqrjoined_get_seed_words(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
-
-    
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeBbqrJoined: FfiConverter {
-    typealias FfiType = UInt64
-    typealias SwiftType = BbqrJoined
-
-    public static func lift(_ handle: UInt64) throws -> BbqrJoined {
-        return BbqrJoined(unsafeFromHandle: handle)
-    }
-
-    public static func lower(_ value: BbqrJoined) -> UInt64 {
-        return value.uniffiCloneHandle()
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BbqrJoined {
-        let handle: UInt64 = try readInt(&buf)
-        return try lift(handle)
-    }
-
-    public static func write(_ value: BbqrJoined, into buf: inout [UInt8]) {
-        writeInt(&buf, lower(value))
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeBbqrJoined_lift(_ handle: UInt64) throws -> BbqrJoined {
-    return try FfiConverterTypeBbqrJoined.lift(handle)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeBbqrJoined_lower(_ value: BbqrJoined) -> UInt64 {
-    return FfiConverterTypeBbqrJoined.lower(value)
-}
-
-
-
-
-
-
 public protocol Bip329LabelsProtocol: AnyObject, Sendable {
     
 }
@@ -5365,200 +5102,6 @@ public func FfiConverterTypeMnemonic_lower(_ value: Mnemonic) -> UInt64 {
 
 
 
-public protocol MultiQrProtocol: AnyObject, Sendable {
-    
-    func addPart(qr: String) throws  -> BbqrJoinResult
-    
-    func getGroupedWords(qr: StringOrData, groupsOf: UInt8) throws  -> [[String]]?
-    
-    func handleScanResult(qr: StringOrData) throws  -> MultiQrScanResult
-    
-    func isBbqr()  -> Bool
-    
-    func isSeedQr()  -> Bool
-    
-    func totalParts()  -> UInt32
-    
-}
-open class MultiQr: MultiQrProtocol, @unchecked Sendable {
-    fileprivate let handle: UInt64
-
-    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public struct NoHandle {
-        public init() {}
-    }
-
-    // TODO: We'd like this to be `private` but for Swifty reasons,
-    // we can't implement `FfiConverter` without making this `required` and we can't
-    // make it `required` without making it `public`.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    required public init(unsafeFromHandle handle: UInt64) {
-        self.handle = handle
-    }
-
-    // This constructor can be used to instantiate a fake object.
-    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
-    //
-    // - Warning:
-    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public init(noHandle: NoHandle) {
-        self.handle = 0
-    }
-
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public func uniffiCloneHandle() -> UInt64 {
-        return try! rustCall { uniffi_cove_fn_clone_multiqr(self.handle, $0) }
-    }
-    // No primary constructor declared for this class.
-
-    deinit {
-        if handle == 0 {
-            // Mock objects have handle=0 don't try to free them
-            return
-        }
-
-        try! rustCall { uniffi_cove_fn_free_multiqr(handle, $0) }
-    }
-
-    
-public static func newFromString(qr: String) -> MultiQr  {
-    return try!  FfiConverterTypeMultiQr_lift(try! rustCall() {
-    uniffi_cove_fn_constructor_multiqr_new_from_string(
-        FfiConverterString.lower(qr),$0
-    )
-})
-}
-    
-public static func tryNew(qr: StringOrData)throws  -> MultiQr  {
-    return try  FfiConverterTypeMultiQr_lift(try rustCallWithError(FfiConverterTypeMultiQrError_lift) {
-    uniffi_cove_fn_constructor_multiqr_try_new(
-        FfiConverterTypeStringOrData_lower(qr),$0
-    )
-})
-}
-    
-public static func tryNewFromData(data: Data)throws  -> MultiQr  {
-    return try  FfiConverterTypeMultiQr_lift(try rustCallWithError(FfiConverterTypeMultiQrError_lift) {
-    uniffi_cove_fn_constructor_multiqr_try_new_from_data(
-        FfiConverterData.lower(data),$0
-    )
-})
-}
-    
-
-    
-open func addPart(qr: String)throws  -> BbqrJoinResult  {
-    return try  FfiConverterTypeBbqrJoinResult_lift(try rustCallWithError(FfiConverterTypeMultiQrError_lift) {
-    uniffi_cove_fn_method_multiqr_add_part(
-            self.uniffiCloneHandle(),
-        FfiConverterString.lower(qr),$0
-    )
-})
-}
-    
-open func getGroupedWords(qr: StringOrData, groupsOf: UInt8)throws  -> [[String]]?  {
-    return try  FfiConverterOptionSequenceSequenceString.lift(try rustCallWithError(FfiConverterTypeMultiQrError_lift) {
-    uniffi_cove_fn_method_multiqr_get_grouped_words(
-            self.uniffiCloneHandle(),
-        FfiConverterTypeStringOrData_lower(qr),
-        FfiConverterUInt8.lower(groupsOf),$0
-    )
-})
-}
-    
-open func handleScanResult(qr: StringOrData)throws  -> MultiQrScanResult  {
-    return try  FfiConverterTypeMultiQrScanResult_lift(try rustCallWithError(FfiConverterTypeMultiQrError_lift) {
-    uniffi_cove_fn_method_multiqr_handle_scan_result(
-            self.uniffiCloneHandle(),
-        FfiConverterTypeStringOrData_lower(qr),$0
-    )
-})
-}
-    
-open func isBbqr() -> Bool  {
-    return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_cove_fn_method_multiqr_is_bbqr(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
-open func isSeedQr() -> Bool  {
-    return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_cove_fn_method_multiqr_is_seed_qr(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
-open func totalParts() -> UInt32  {
-    return try!  FfiConverterUInt32.lift(try! rustCall() {
-    uniffi_cove_fn_method_multiqr_total_parts(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
-
-    
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeMultiQr: FfiConverter {
-    typealias FfiType = UInt64
-    typealias SwiftType = MultiQr
-
-    public static func lift(_ handle: UInt64) throws -> MultiQr {
-        return MultiQr(unsafeFromHandle: handle)
-    }
-
-    public static func lower(_ value: MultiQr) -> UInt64 {
-        return value.uniffiCloneHandle()
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MultiQr {
-        let handle: UInt64 = try readInt(&buf)
-        return try lift(handle)
-    }
-
-    public static func write(_ value: MultiQr, into buf: inout [UInt8]) {
-        writeInt(&buf, lower(value))
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeMultiQr_lift(_ handle: UInt64) throws -> MultiQr {
-    return try FfiConverterTypeMultiQr.lift(handle)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeMultiQr_lower(_ value: MultiQr) -> UInt64 {
-    return FfiConverterTypeMultiQr.lower(value)
-}
-
-
-
-
-
-
 public protocol NodeSelectorProtocol: AnyObject, Sendable {
     
     /**
@@ -6098,6 +5641,177 @@ public func FfiConverterTypePushTx_lift(_ handle: UInt64) throws -> PushTx {
 #endif
 public func FfiConverterTypePushTx_lower(_ value: PushTx) -> UInt64 {
     return FfiConverterTypePushTx.lower(value)
+}
+
+
+
+
+
+
+/**
+ * FFI wrapper for QrScanner state machine.
+ *
+ * This is the main entry point for QR scanning from Swift/Kotlin.
+ * It wraps the internal state machine in a Mutex for thread safety.
+ */
+public protocol QrScannerProtocol: AnyObject, Sendable {
+    
+    /**
+     * Reset the scanner state for a new scan session.
+     */
+    func reset() 
+    
+    /**
+     * Scan a QR code and return the result.
+     *
+     * On first scan, detects the format and returns either:
+     * - `Complete(MultiFormat)` for single-part QRs
+     * - `InProgress(ScanProgress)` for multi-part QRs (BBQr or UR)
+     *
+     * On subsequent scans, adds parts and returns updated status.
+     * The haptic field indicates what feedback the platform should trigger.
+     */
+    func scan(qr: StringOrData) throws  -> ScanResult
+    
+}
+/**
+ * FFI wrapper for QrScanner state machine.
+ *
+ * This is the main entry point for QR scanning from Swift/Kotlin.
+ * It wraps the internal state machine in a Mutex for thread safety.
+ */
+open class QrScanner: QrScannerProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_cove_fn_clone_qrscanner(self.handle, $0) }
+    }
+public convenience init() {
+    let handle =
+        try! rustCall() {
+    uniffi_cove_fn_constructor_qrscanner_new($0
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_qrscanner(handle, $0) }
+    }
+
+    
+
+    
+    /**
+     * Reset the scanner state for a new scan session.
+     */
+open func reset()  {try! rustCall() {
+    uniffi_cove_fn_method_qrscanner_reset(
+            self.uniffiCloneHandle(),$0
+    )
+}
+}
+    
+    /**
+     * Scan a QR code and return the result.
+     *
+     * On first scan, detects the format and returns either:
+     * - `Complete(MultiFormat)` for single-part QRs
+     * - `InProgress(ScanProgress)` for multi-part QRs (BBQr or UR)
+     *
+     * On subsequent scans, adds parts and returns updated status.
+     * The haptic field indicates what feedback the platform should trigger.
+     */
+open func scan(qr: StringOrData)throws  -> ScanResult  {
+    return try  FfiConverterTypeScanResult_lift(try rustCallWithError(FfiConverterTypeMultiQrError_lift) {
+    uniffi_cove_fn_method_qrscanner_scan(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeStringOrData_lower(qr),$0
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeQrScanner: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = QrScanner
+
+    public static func lift(_ handle: UInt64) throws -> QrScanner {
+        return QrScanner(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: QrScanner) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> QrScanner {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: QrScanner, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeQrScanner_lift(_ handle: UInt64) throws -> QrScanner {
+    return try FfiConverterTypeQrScanner.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeQrScanner_lower(_ value: QrScanner) -> UInt64 {
+    return FfiConverterTypeQrScanner.lower(value)
 }
 
 
@@ -10185,6 +9899,177 @@ public func FfiConverterTypeUnsignedTransactionsTable_lift(_ handle: UInt64) thr
 #endif
 public func FfiConverterTypeUnsignedTransactionsTable_lower(_ value: UnsignedTransactionsTable) -> UInt64 {
     return FfiConverterTypeUnsignedTransactionsTable.lower(value)
+}
+
+
+
+
+
+
+/**
+ * Result of a completed UR decode
+ */
+public protocol UrResultProtocol: AnyObject, Sendable {
+    
+    func data()  -> Data
+    
+    func isHdkey()  -> Bool
+    
+    func isPsbt()  -> Bool
+    
+    func isSeed()  -> Bool
+    
+    func urType()  -> UrType
+    
+}
+/**
+ * Result of a completed UR decode
+ */
+open class UrResult: UrResultProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_cove_fn_clone_urresult(self.handle, $0) }
+    }
+public convenience init(data: Data, urType: UrType) {
+    let handle =
+        try! rustCall() {
+    uniffi_cove_fn_constructor_urresult_new(
+        FfiConverterData.lower(data),
+        FfiConverterTypeUrType_lower(urType),$0
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_urresult(handle, $0) }
+    }
+
+    
+
+    
+open func data() -> Data  {
+    return try!  FfiConverterData.lift(try! rustCall() {
+    uniffi_cove_fn_method_urresult_data(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+open func isHdkey() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_method_urresult_is_hdkey(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+open func isPsbt() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_method_urresult_is_psbt(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+open func isSeed() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_method_urresult_is_seed(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+open func urType() -> UrType  {
+    return try!  FfiConverterTypeUrType_lift(try! rustCall() {
+    uniffi_cove_fn_method_urresult_ur_type(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeUrResult: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = UrResult
+
+    public static func lift(_ handle: UInt64) throws -> UrResult {
+        return UrResult(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: UrResult) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UrResult {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: UrResult, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUrResult_lift(_ handle: UInt64) throws -> UrResult {
+    return try FfiConverterTypeUrResult.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUrResult_lower(_ value: UrResult) -> UInt64 {
+    return FfiConverterTypeUrResult.lower(value)
 }
 
 
@@ -16119,6 +16004,92 @@ public func FfiConverterTypeGlobalFlagTableError_lower(_ value: GlobalFlagTableE
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Haptic feedback hint for the platform to trigger
+ */
+
+public enum HapticFeedback: Equatable, Hashable {
+    
+    /**
+     * Light tap - new part scanned in multi-part QR
+     */
+    case progress
+    /**
+     * Success notification - scan complete (single or multi-part)
+     */
+    case success
+    /**
+     * No haptic feedback (duplicate part, no change)
+     */
+    case none
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension HapticFeedback: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHapticFeedback: FfiConverterRustBuffer {
+    typealias SwiftType = HapticFeedback
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HapticFeedback {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .progress
+        
+        case 2: return .success
+        
+        case 3: return .none
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: HapticFeedback, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .progress:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .success:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .none:
+            writeInt(&buf, Int32(3))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHapticFeedback_lift(_ buf: RustBuffer) throws -> HapticFeedback {
+    return try FfiConverterTypeHapticFeedback.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHapticFeedback_lower(_ value: HapticFeedback) -> RustBuffer {
+    return FfiConverterTypeHapticFeedback.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum HardwareWalletMetadata {
     
@@ -17451,7 +17422,7 @@ public func FfiConverterTypeMnemonicParseError_lower(_ value: MnemonicParseError
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum MultiFormat {
+public enum MultiFormat: Equatable {
     
     case address(AddressWithNetwork
     )
@@ -17478,6 +17449,17 @@ public enum MultiFormat {
 
 
 
+// The local Rust `Eq` implementation - only `eq` is used.
+public static func == (self: MultiFormat, other: MultiFormat) -> Bool {
+    return try!  FfiConverterBool.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_multiformat_uniffi_trait_eq_eq(
+            FfiConverterTypeMultiFormat_lower(self),
+        FfiConverterTypeMultiFormat_lower(other),$0
+    )
+}
+    )
+}
 }
 
 #if compiler(>=6)
@@ -17586,9 +17568,9 @@ public enum MultiFormatError: Swift.Error, Equatable, Hashable, Foundation.Local
     )
     case UnsupportedNetworkAddress
     case UnrecognizedFormat
-    case UrFormatNotSupported
     case InvalidTapSigner(TapCardParseError
     )
+    case TaprootNotSupported
 
     
 
@@ -17633,10 +17615,10 @@ public struct FfiConverterTypeMultiFormatError: FfiConverterRustBuffer {
             )
         case 2: return .UnsupportedNetworkAddress
         case 3: return .UnrecognizedFormat
-        case 4: return .UrFormatNotSupported
-        case 5: return .InvalidTapSigner(
+        case 4: return .InvalidTapSigner(
             try FfiConverterTypeTapCardParseError.read(from: &buf)
             )
+        case 5: return .TaprootNotSupported
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -17662,14 +17644,14 @@ public struct FfiConverterTypeMultiFormatError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(3))
         
         
-        case .UrFormatNotSupported:
-            writeInt(&buf, Int32(4))
-        
-        
         case let .InvalidTapSigner(v1):
-            writeInt(&buf, Int32(5))
+            writeInt(&buf, Int32(4))
             FfiConverterTypeTapCardParseError.write(v1, into: &buf)
             
+        
+        case .TaprootNotSupported:
+            writeInt(&buf, Int32(5))
+        
         }
     }
 }
@@ -17694,18 +17676,13 @@ public enum MultiQrError: Swift.Error, Equatable, Hashable, Foundation.Localized
 
     
     
-    case CannotAddPartToSingleQr
-    case CannotAddPartToSeedQr
     case ParseError(String
     )
     case InvalidUtf8
-    case NotYetAvailable
-    case CannotAddBinaryDataToBbqr
-    case BbqrDidNotContainSeedWords(String
-    )
+    case RequiresStringData
     case InvalidSeedQr(SeedQrError
     )
-    case InvalidPlainTextQr(String
+    case Ur(UrError
     )
 
     
@@ -17746,22 +17723,16 @@ public struct FfiConverterTypeMultiQrError: FfiConverterRustBuffer {
         
 
         
-        case 1: return .CannotAddPartToSingleQr
-        case 2: return .CannotAddPartToSeedQr
-        case 3: return .ParseError(
+        case 1: return .ParseError(
             try FfiConverterString.read(from: &buf)
             )
-        case 4: return .InvalidUtf8
-        case 5: return .NotYetAvailable
-        case 6: return .CannotAddBinaryDataToBbqr
-        case 7: return .BbqrDidNotContainSeedWords(
-            try FfiConverterString.read(from: &buf)
-            )
-        case 8: return .InvalidSeedQr(
+        case 2: return .InvalidUtf8
+        case 3: return .RequiresStringData
+        case 4: return .InvalidSeedQr(
             try FfiConverterTypeSeedQrError.read(from: &buf)
             )
-        case 9: return .InvalidPlainTextQr(
-            try FfiConverterString.read(from: &buf)
+        case 5: return .Ur(
+            try FfiConverterTypeUrError.read(from: &buf)
             )
 
          default: throw UniffiInternalError.unexpectedEnumCase
@@ -17775,44 +17746,27 @@ public struct FfiConverterTypeMultiQrError: FfiConverterRustBuffer {
 
         
         
-        case .CannotAddPartToSingleQr:
-            writeInt(&buf, Int32(1))
-        
-        
-        case .CannotAddPartToSeedQr:
-            writeInt(&buf, Int32(2))
-        
-        
         case let .ParseError(v1):
-            writeInt(&buf, Int32(3))
+            writeInt(&buf, Int32(1))
             FfiConverterString.write(v1, into: &buf)
             
         
         case .InvalidUtf8:
-            writeInt(&buf, Int32(4))
+            writeInt(&buf, Int32(2))
         
         
-        case .NotYetAvailable:
-            writeInt(&buf, Int32(5))
+        case .RequiresStringData:
+            writeInt(&buf, Int32(3))
         
-        
-        case .CannotAddBinaryDataToBbqr:
-            writeInt(&buf, Int32(6))
-        
-        
-        case let .BbqrDidNotContainSeedWords(v1):
-            writeInt(&buf, Int32(7))
-            FfiConverterString.write(v1, into: &buf)
-            
         
         case let .InvalidSeedQr(v1):
-            writeInt(&buf, Int32(8))
+            writeInt(&buf, Int32(4))
             FfiConverterTypeSeedQrError.write(v1, into: &buf)
             
         
-        case let .InvalidPlainTextQr(v1):
-            writeInt(&buf, Int32(9))
-            FfiConverterString.write(v1, into: &buf)
+        case let .Ur(v1):
+            writeInt(&buf, Int32(5))
+            FfiConverterTypeUrError.write(v1, into: &buf)
             
         }
     }
@@ -17832,99 +17786,6 @@ public func FfiConverterTypeMultiQrError_lift(_ buf: RustBuffer) throws -> Multi
 public func FfiConverterTypeMultiQrError_lower(_ value: MultiQrError) -> RustBuffer {
     return FfiConverterTypeMultiQrError.lower(value)
 }
-
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
-
-public enum MultiQrScanResult {
-    
-    case seedQr(SeedQr
-    )
-    case single(String
-    )
-    case completedBBqr(BbqrJoined
-    )
-    case inProgressBBqr(UInt32
-    )
-
-
-
-
-
-}
-
-#if compiler(>=6)
-extension MultiQrScanResult: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeMultiQrScanResult: FfiConverterRustBuffer {
-    typealias SwiftType = MultiQrScanResult
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MultiQrScanResult {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-        
-        case 1: return .seedQr(try FfiConverterTypeSeedQr.read(from: &buf)
-        )
-        
-        case 2: return .single(try FfiConverterString.read(from: &buf)
-        )
-        
-        case 3: return .completedBBqr(try FfiConverterTypeBbqrJoined.read(from: &buf)
-        )
-        
-        case 4: return .inProgressBBqr(try FfiConverterUInt32.read(from: &buf)
-        )
-        
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: MultiQrScanResult, into buf: inout [UInt8]) {
-        switch value {
-        
-        
-        case let .seedQr(v1):
-            writeInt(&buf, Int32(1))
-            FfiConverterTypeSeedQr.write(v1, into: &buf)
-            
-        
-        case let .single(v1):
-            writeInt(&buf, Int32(2))
-            FfiConverterString.write(v1, into: &buf)
-            
-        
-        case let .completedBBqr(v1):
-            writeInt(&buf, Int32(3))
-            FfiConverterTypeBbqrJoined.write(v1, into: &buf)
-            
-        
-        case let .inProgressBBqr(v1):
-            writeInt(&buf, Int32(4))
-            FfiConverterUInt32.write(v1, into: &buf)
-            
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeMultiQrScanResult_lift(_ buf: RustBuffer) throws -> MultiQrScanResult {
-    return try FfiConverterTypeMultiQrScanResult.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeMultiQrScanResult_lower(_ value: MultiQrScanResult) -> RustBuffer {
-    return FfiConverterTypeMultiQrScanResult.lower(value)
-}
-
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
@@ -18675,6 +18536,201 @@ public func FfiConverterTypeRoute_lift(_ buf: RustBuffer) throws -> Route {
 #endif
 public func FfiConverterTypeRoute_lower(_ value: Route) -> RustBuffer {
     return FfiConverterTypeRoute.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Progress information for multi-part QR scans
+ */
+
+public enum ScanProgress: Equatable, Hashable {
+    
+    /**
+     * BBQR progress with scanned/total parts
+     */
+    case bbqr(scanned: UInt32, total: UInt32
+    )
+    /**
+     * UR progress as percentage (0.0 to 1.0)
+     */
+    case ur(percentage: Double
+    )
+
+
+
+    /**
+     * Detail text for the progress (e.g., "7 parts left"), or None for UR
+     */
+public func detailText() -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+    uniffi_cove_fn_method_scanprogress_detail_text(
+            FfiConverterTypeScanProgress_lower(self),$0
+    )
+})
+}
+
+    /**
+     * Display text for the progress (e.g., "Scanned 3 of 10" or "Scanned 45%")
+     */
+public func displayText() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_method_scanprogress_display_text(
+            FfiConverterTypeScanProgress_lower(self),$0
+    )
+})
+}
+
+
+
+}
+
+#if compiler(>=6)
+extension ScanProgress: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeScanProgress: FfiConverterRustBuffer {
+    typealias SwiftType = ScanProgress
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ScanProgress {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .bbqr(scanned: try FfiConverterUInt32.read(from: &buf), total: try FfiConverterUInt32.read(from: &buf)
+        )
+        
+        case 2: return .ur(percentage: try FfiConverterDouble.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ScanProgress, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .bbqr(scanned,total):
+            writeInt(&buf, Int32(1))
+            FfiConverterUInt32.write(scanned, into: &buf)
+            FfiConverterUInt32.write(total, into: &buf)
+            
+        
+        case let .ur(percentage):
+            writeInt(&buf, Int32(2))
+            FfiConverterDouble.write(percentage, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeScanProgress_lift(_ buf: RustBuffer) throws -> ScanProgress {
+    return try FfiConverterTypeScanProgress.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeScanProgress_lower(_ value: ScanProgress) -> RustBuffer {
+    return FfiConverterTypeScanProgress.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Result of a QR scan - either complete with parsed data or in progress
+ */
+
+public enum ScanResult {
+    
+    /**
+     * Scan complete - here's the parsed data
+     */
+    case complete(data: MultiFormat, 
+        /**
+         * Haptic feedback to trigger
+         */haptic: HapticFeedback
+    )
+    /**
+     * Multi-part scan in progress
+     */
+    case inProgress(progress: ScanProgress, 
+        /**
+         * Haptic feedback to trigger
+         */haptic: HapticFeedback
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ScanResult: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeScanResult: FfiConverterRustBuffer {
+    typealias SwiftType = ScanResult
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ScanResult {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .complete(data: try FfiConverterTypeMultiFormat.read(from: &buf), haptic: try FfiConverterTypeHapticFeedback.read(from: &buf)
+        )
+        
+        case 2: return .inProgress(progress: try FfiConverterTypeScanProgress.read(from: &buf), haptic: try FfiConverterTypeHapticFeedback.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ScanResult, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .complete(data,haptic):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeMultiFormat.write(data, into: &buf)
+            FfiConverterTypeHapticFeedback.write(haptic, into: &buf)
+            
+        
+        case let .inProgress(progress,haptic):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeScanProgress.write(progress, into: &buf)
+            FfiConverterTypeHapticFeedback.write(haptic, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeScanResult_lift(_ buf: RustBuffer) throws -> ScanResult {
+    return try FfiConverterTypeScanResult.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeScanResult_lower(_ value: ScanResult) -> RustBuffer {
+    return FfiConverterTypeScanResult.lower(value)
 }
 
 
@@ -21692,6 +21748,135 @@ public func FfiConverterTypeUnsignedTransactionsTableError_lift(_ buf: RustBuffe
 public func FfiConverterTypeUnsignedTransactionsTableError_lower(_ value: UnsignedTransactionsTableError) -> RustBuffer {
     return FfiConverterTypeUnsignedTransactionsTableError.lower(value)
 }
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Supported UR types for Bitcoin operations
+ */
+
+public enum UrType: Equatable, Hashable {
+    
+    /**
+     * crypto-psbt - Partially Signed Bitcoin Transaction
+     */
+    case cryptoPsbt
+    /**
+     * crypto-seed - BIP39 seed
+     */
+    case cryptoSeed
+    /**
+     * crypto-hdkey - HD key (xpub/xprv)
+     */
+    case cryptoHdkey
+    /**
+     * crypto-account - Account descriptor
+     */
+    case cryptoAccount
+    /**
+     * crypto-output - Output descriptor
+     */
+    case cryptoOutput
+    /**
+     * bytes - Raw bytes
+     */
+    case bytes
+    /**
+     * Unknown type with raw string
+     */
+    case unknown(String
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension UrType: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeUrType: FfiConverterRustBuffer {
+    typealias SwiftType = UrType
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UrType {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .cryptoPsbt
+        
+        case 2: return .cryptoSeed
+        
+        case 3: return .cryptoHdkey
+        
+        case 4: return .cryptoAccount
+        
+        case 5: return .cryptoOutput
+        
+        case 6: return .bytes
+        
+        case 7: return .unknown(try FfiConverterString.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: UrType, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .cryptoPsbt:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .cryptoSeed:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .cryptoHdkey:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .cryptoAccount:
+            writeInt(&buf, Int32(4))
+        
+        
+        case .cryptoOutput:
+            writeInt(&buf, Int32(5))
+        
+        
+        case .bytes:
+            writeInt(&buf, Int32(6))
+        
+        
+        case let .unknown(v1):
+            writeInt(&buf, Int32(7))
+            FfiConverterString.write(v1, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUrType_lift(_ buf: RustBuffer) throws -> UrType {
+    return try FfiConverterTypeUrType.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUrType_lower(_ value: UrType) -> RustBuffer {
+    return FfiConverterTypeUrType.lower(value)
+}
+
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
@@ -25622,30 +25807,6 @@ fileprivate struct FfiConverterOptionSequenceTypeUtxo: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterOptionSequenceSequenceString: FfiConverterRustBuffer {
-    typealias SwiftType = [[String]]?
-
-    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
-        guard let value = value else {
-            writeInt(&buf, Int8(0))
-            return
-        }
-        writeInt(&buf, Int8(1))
-        FfiConverterSequenceSequenceString.write(value, into: &buf)
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
-        switch try readInt(&buf) as Int8 {
-        case 0: return nil
-        case 1: return try FfiConverterSequenceSequenceString.read(from: &buf)
-        default: throw UniffiInternalError.unexpectedOptionalTag
-        }
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
 fileprivate struct FfiConverterOptionTypeWalletId: FfiConverterRustBuffer {
     typealias SwiftType = WalletId?
 
@@ -27518,39 +27679,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_mnemonic_words() != 8009) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_bbqrjoinresult_final_result() != 4512) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_bbqrjoinresult_is_complete() != 57834) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_bbqrjoinresult_parts_left() != 18009) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_bbqrjoined_get_grouped_words() != 39118) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_bbqrjoined_get_seed_words() != 36742) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_multiqr_add_part() != 4791) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_multiqr_get_grouped_words() != 41176) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_multiqr_handle_scan_result() != 10107) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_multiqr_is_bbqr() != 45869) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_multiqr_is_seed_qr() != 47501) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_multiqr_total_parts() != 39268) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_cove_checksum_method_nodeselector_check_and_save_node() != 9328) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -27567,6 +27695,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_nodeselector_selected_node() != 20791) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_qrscanner_reset() != 17017) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_qrscanner_scan() != 55003) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_boxedroute_route() != 6095) {
@@ -27788,6 +27922,21 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_unsignedtransaction_spending_amount() != 60073) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_urresult_data() != 20992) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_urresult_is_hdkey() != 16134) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_urresult_is_psbt() != 29188) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_urresult_is_seed() != 5310) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_urresult_ur_type() != 33507) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_wallet_id() != 30585) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -27872,16 +28021,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_constructor_mnemonic_preview() != 34768) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_constructor_multiqr_new_from_string() != 58512) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_constructor_multiqr_try_new() != 29401) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_constructor_multiqr_try_new_from_data() != 6690) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_cove_checksum_constructor_nodeselector_new() != 62365) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_constructor_qrscanner_new() != 57573) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_boxedroute_new() != 21632) {
@@ -27936,6 +28079,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_unsignedtransaction_preview_new() != 60973) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_constructor_urresult_new() != 34590) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_wallet_new_from_export() != 38500) {
@@ -28009,6 +28155,7 @@ private let initializationResult: InitializationResult = {
     uniffiEnsureCoveNfcInitialized()
     uniffiEnsureCoveTapCardInitialized()
     uniffiEnsureCoveTypesInitialized()
+    uniffiEnsureCoveUrInitialized()
     return InitializationResult.ok
 }()
 

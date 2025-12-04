@@ -84,11 +84,11 @@ struct SettingsContainer: View {
                     .ignoresSafeArea(edges: .all)
             }
         )
-        .alert("Network Changed", isPresented: $showNetworkChangeAlert) {
+        .alert("Change Network?", isPresented: $showNetworkChangeAlert) {
             Button("Yes, Change Network") {
                 if let network = pendingNetwork {
                     app.dispatch(action: .changeNetwork(network: network))
-                    app.popRoute()
+                    app.rust.selectLatestOrNewWallet()
                 }
                 pendingNetwork = nil
             }
@@ -97,7 +97,7 @@ struct SettingsContainer: View {
             }
         } message: {
             if let network = pendingNetwork {
-                Text("You've changed your network to \(network)")
+                Text("Switching to \(network) will take you to a wallet on that network.")
             }
         }
     }

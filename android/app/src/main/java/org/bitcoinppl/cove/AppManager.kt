@@ -229,6 +229,10 @@ class AppManager private constructor() : FfiReconcile {
         isSidebarVisible = !isSidebarVisible
     }
 
+    fun loadWallets() {
+        wallets = runCatching { database.wallets().all() }.getOrElse { emptyList() }
+    }
+
     fun pushRoute(route: Route) {
         logDebug("pushRoute: $route")
         isSidebarVisible = false

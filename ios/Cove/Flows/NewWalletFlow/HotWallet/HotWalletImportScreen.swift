@@ -115,7 +115,7 @@ struct HotWalletImportScreen: View {
 
     // qr code scanning
     @Environment(\.dismiss) var dismiss
-    @State private var multiQr: MultiQr?
+    @State private var scanner = QrScanner()
     @State private var scannedCode: TaggedString?
     @State private var scanComplete: Bool = false
     @State private var scanError: TaggedString?
@@ -180,24 +180,26 @@ struct HotWalletImportScreen: View {
         let qr = StringOrData(scanResult.data)
 
         do {
-            let multiQr: MultiQr =
-                try multiQr
-                    ?? {
-                        let newMultiQr = try MultiQr.tryNew(qr: qr)
-                        self.multiQr = newMultiQr
-                        return newMultiQr
-                    }()
+            switch try scanner.scan(qr: qr) {
+            case let .complete(multiFormat, haptic):
+                haptic.trigger()
+                // extract mnemonic words from the result
+                if case let .mnemonic(mnemonic) = multiFormat {
+                    let mnemonicString = mnemonic.words().joined(separator: " ")
+                    if let words = try? groupedPlainWordsOf(mnemonic: mnemonicString, groups: UInt8(groupsOf)) {
+                        setWords(words)
+                    }
+                }
+                scanner.reset()
 
-            // see if its single qr or seed qr
-            if let words = try multiQr.getGroupedWords(qr: qr, groupsOf: UInt8(groupsOf)) {
-                setWords(words)
+            case let .inProgress(_, haptic):
+                haptic.trigger()
+                // multi-part QR in progress - keep scanning
             }
         } catch {
             Log.error("Seed QR failed to scan: \(error.localizedDescription)")
             sheetState = .none
-
-            // reset multiqr on error
-            multiQr = nil
+            scanner.reset()
         }
     }
 
@@ -597,8 +599,8 @@ struct HotWalletImportScreen: View {
             return
         }
 
-        // reset multiqr and nfc reader on succesful scan
-        multiQr = nil
+        // reset scanner and nfc reader on successful scan
+        scanner.reset()
         nfcReader.resetReader()
         nfcReader.session = nil
 
