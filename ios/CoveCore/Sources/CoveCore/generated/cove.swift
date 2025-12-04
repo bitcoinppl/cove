@@ -17684,6 +17684,7 @@ public enum MultiQrError: Swift.Error, Equatable, Hashable, Foundation.Localized
     )
     case Ur(UrError
     )
+    case BbqrCborNotSupported
 
     
 
@@ -17734,6 +17735,7 @@ public struct FfiConverterTypeMultiQrError: FfiConverterRustBuffer {
         case 5: return .Ur(
             try FfiConverterTypeUrError.read(from: &buf)
             )
+        case 6: return .BbqrCborNotSupported
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -17768,6 +17770,10 @@ public struct FfiConverterTypeMultiQrError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(5))
             FfiConverterTypeUrError.write(v1, into: &buf)
             
+        
+        case .BbqrCborNotSupported:
+            writeInt(&buf, Int32(6))
+        
         }
     }
 }
