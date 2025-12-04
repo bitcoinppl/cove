@@ -190,7 +190,7 @@ struct VerifyWordsScreen: View {
     }
 
     @MainActor
-    func checkWord(_ word: String) {
+    func checkWord(_: String) {
         let transition = stateMachine.animationComplete()
 
         guard case .correct = transition.newState else {
@@ -272,10 +272,10 @@ struct VerifyWordsScreen: View {
 
     var currentWord: String? {
         switch checkState {
-        case .checking(let word), .correct(let word), .incorrect(let word), .returning(let word):
-            return word
+        case let .checking(word), let .correct(word), let .incorrect(word), let .returning(word):
+            word
         case .none:
-            return nil
+            nil
         }
     }
 

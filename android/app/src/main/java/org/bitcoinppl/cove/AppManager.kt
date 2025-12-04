@@ -576,10 +576,10 @@ class AppManager private constructor() : FfiReconcile {
                             isLoading = false
                         }
                     }
-                }
 
-                is AppStateReconcileMessage.WalletsChanged -> {
-                    wallets = runCatching { database.wallets().all() }.getOrElse { emptyList() }
+                    is AppStateReconcileMessage.WalletsChanged -> {
+                        wallets = runCatching { database.wallets().all() }.getOrElse { emptyList() }
+                    }
                 }
             }
         }

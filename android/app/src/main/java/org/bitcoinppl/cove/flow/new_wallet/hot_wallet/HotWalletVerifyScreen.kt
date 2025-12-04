@@ -107,15 +107,17 @@ fun HotWalletVerifyScreen(
     val config = remember { stateMachine.config() }
 
     // colors derived from state - no recomputation bug possible
-    val overlayBg = when (checkState) {
-        is WordCheckState.Correct -> CoveColor.SuccessGreen
-        is WordCheckState.Incorrect -> CoveColor.ErrorRed
-        else -> CoveColor.btnPrimary
-    }
-    val overlayText = when (checkState) {
-        is WordCheckState.Correct, is WordCheckState.Incorrect -> Color.White
-        else -> CoveColor.midnightBlue
-    }
+    val overlayBg =
+        when (checkState) {
+            is WordCheckState.Correct -> CoveColor.SuccessGreen
+            is WordCheckState.Incorrect -> CoveColor.ErrorRed
+            else -> CoveColor.btnPrimary
+        }
+    val overlayText =
+        when (checkState) {
+            is WordCheckState.Correct, is WordCheckState.Incorrect -> Color.White
+            else -> CoveColor.midnightBlue
+        }
 
     // handle state machine transitions
     LaunchedEffect(checkState) {
@@ -212,12 +214,13 @@ fun HotWalletVerifyScreen(
         containerColor = CoveColor.midnightBlue,
         topBar = {
             CenterAlignedTopAppBar(
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = Color.Transparent,
-                    titleContentColor = Color.White,
-                    actionIconContentColor = Color.White,
-                    navigationIconContentColor = Color.White,
-                ),
+                colors =
+                    TopAppBarDefaults.centerAlignedTopAppBarColors(
+                        containerColor = Color.Transparent,
+                        titleContentColor = Color.White,
+                        actionIconContentColor = Color.White,
+                        navigationIconContentColor = Color.White,
+                    ),
                 title = {
                     Text(
                         stringResource(R.string.title_verify_recovery_words),
@@ -240,34 +243,38 @@ fun HotWalletVerifyScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .onGloballyPositioned { coords ->
-                    val pos = coords.positionInRoot()
-                    rootOffset = Offset(pos.x, pos.y)
-                },
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .onGloballyPositioned { coords ->
+                        val pos = coords.positionInRoot()
+                        rootOffset = Offset(pos.x, pos.y)
+                    },
         ) {
             Image(
                 painter = painterResource(id = R.drawable.image_chain_code_pattern_horizontal),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .align(Alignment.TopCenter),
+                modifier =
+                    Modifier
+                        .fillMaxHeight()
+                        .align(Alignment.TopCenter),
             )
 
             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(vertical = 20.dp),
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(vertical = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(24.dp),
             ) {
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 20.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp),
                     verticalArrangement = Arrangement.Top,
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
@@ -292,16 +299,18 @@ fun HotWalletVerifyScreen(
                             contentAlignment = Alignment.Center,
                         ) {
                             Box(
-                                modifier = Modifier
-                                    .width(cellWidth)
-                                    .height(chipHeight)
-                                    .onGloballyPositioned { coordinates ->
-                                        val pos = coordinates.positionInRoot()
-                                        targetPosition = Offset(
-                                            pos.x - rootOffset.x,
-                                            pos.y - rootOffset.y,
-                                        )
-                                    },
+                                modifier =
+                                    Modifier
+                                        .width(cellWidth)
+                                        .height(chipHeight)
+                                        .onGloballyPositioned { coordinates ->
+                                            val pos = coordinates.positionInRoot()
+                                            targetPosition =
+                                                Offset(
+                                                    pos.x - rootOffset.x,
+                                                    pos.y - rootOffset.y,
+                                                )
+                                        },
                             ) { }
                         }
                     }
@@ -332,22 +341,24 @@ fun HotWalletVerifyScreen(
                                 ) {
                                     rowItems.forEach { word ->
                                         Box(modifier = Modifier.weight(1f)) {
-                                            val isAnimating = checkState.let {
-                                                when (it) {
-                                                    is WordCheckState.Checking -> it.word == word
-                                                    is WordCheckState.Correct -> it.word == word
-                                                    is WordCheckState.Incorrect -> it.word == word
-                                                    is WordCheckState.Returning -> it.word == word
-                                                    WordCheckState.None -> false
+                                            val isAnimating =
+                                                checkState.let {
+                                                    when (it) {
+                                                        is WordCheckState.Checking -> it.word == word
+                                                        is WordCheckState.Correct -> it.word == word
+                                                        is WordCheckState.Incorrect -> it.word == word
+                                                        is WordCheckState.Returning -> it.word == word
+                                                        WordCheckState.None -> false
+                                                    }
                                                 }
-                                            }
 
                                             if (isAnimating) {
                                                 // placeholder while animating
                                                 Box(
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .height(46.dp),
+                                                    modifier =
+                                                        Modifier
+                                                            .fillMaxWidth()
+                                                            .height(46.dp),
                                                 ) { }
                                             } else {
                                                 OptionChip(
@@ -361,10 +372,11 @@ fun HotWalletVerifyScreen(
                                                     },
                                                     onPositionCaptured = { position ->
                                                         wordPositions = wordPositions + (
-                                                            word to Offset(
-                                                                position.x - rootOffset.x,
-                                                                position.y - rootOffset.y,
-                                                            )
+                                                            word to
+                                                                Offset(
+                                                                    position.x - rootOffset.x,
+                                                                    position.y - rootOffset.y,
+                                                                )
                                                         )
                                                     },
                                                 )
@@ -382,9 +394,10 @@ fun HotWalletVerifyScreen(
 
                 Column(
                     verticalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 20.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp),
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         DashDotsIndicator(
@@ -413,10 +426,11 @@ fun HotWalletVerifyScreen(
                     Button(
                         onClick = onShowWords,
                         shape = RoundedCornerShape(10.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = CoveColor.btnPrimary,
-                            contentColor = CoveColor.midnightBlue,
-                        ),
+                        colors =
+                            ButtonDefaults.buttonColors(
+                                containerColor = CoveColor.btnPrimary,
+                                contentColor = CoveColor.midnightBlue,
+                            ),
                         contentPadding = PaddingValues(vertical = 20.dp, horizontal = 10.dp),
                         modifier = Modifier.fillMaxWidth(),
                     ) {
@@ -435,10 +449,11 @@ fun HotWalletVerifyScreen(
                         fontWeight = FontWeight.Medium,
                         fontSize = 12.sp,
                         textAlign = TextAlign.Center,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 4.dp)
-                            .clickable { showSkipAlert = true },
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(top = 4.dp)
+                                .clickable { showSkipAlert = true },
                     )
                 }
             }
@@ -472,27 +487,28 @@ fun HotWalletVerifyScreen(
             }
 
             // animated overlay chip
-            val currentWord = when (val state = checkState) {
-                is WordCheckState.Checking -> state.word
-                is WordCheckState.Correct -> state.word
-                is WordCheckState.Incorrect -> state.word
-                is WordCheckState.Returning -> state.word
-                WordCheckState.None -> null
-            }
+            val currentWord =
+                when (val state = checkState) {
+                    is WordCheckState.Checking -> state.word
+                    is WordCheckState.Correct -> state.word
+                    is WordCheckState.Incorrect -> state.word
+                    is WordCheckState.Returning -> state.word
+                    WordCheckState.None -> null
+                }
 
             if (currentWord != null) {
                 Box(
-                    modifier = Modifier
-                        .offset {
-                            IntOffset(
-                                animationX.value.roundToInt(),
-                                animationY.value.roundToInt(),
-                            )
-                        }
-                        .width(actualChipWidth)
-                        .height(chipHeight)
-                        .background(overlayBg, RoundedCornerShape(14.dp))
-                        .zIndex(10f),
+                    modifier =
+                        Modifier
+                            .offset {
+                                IntOffset(
+                                    animationX.value.roundToInt(),
+                                    animationY.value.roundToInt(),
+                                )
+                            }.width(actualChipWidth)
+                            .height(chipHeight)
+                            .background(overlayBg, RoundedCornerShape(14.dp))
+                            .zIndex(10f),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
@@ -520,20 +536,22 @@ private fun OptionChip(
     val textColor = if (selected) CoveColor.midnightBlue else CoveColor.midnightBlue
 
     Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(46.dp),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .height(46.dp),
         contentAlignment = Alignment.Center,
     ) {
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .clip(shape)
-                .background(bg, shape)
-                .clickable { onClick() }
-                .onGloballyPositioned { coordinates ->
-                    onPositionCaptured(coordinates.positionInRoot())
-                },
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .clip(shape)
+                    .background(bg, shape)
+                    .clickable { onClick() }
+                    .onGloballyPositioned { coordinates ->
+                        onPositionCaptured(coordinates.positionInRoot())
+                    },
             contentAlignment = Alignment.Center,
         ) {
             AutoSizeText(

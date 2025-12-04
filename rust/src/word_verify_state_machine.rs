@@ -24,7 +24,6 @@ pub enum WordCheckState {
     Returning { word: String },
 }
 
-
 /// Animation timing configuration
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct WordVerifyAnimationConfig {
@@ -159,7 +158,7 @@ impl WordVerifyStateMachine {
                     new_state: inner.state.clone(),
                     should_advance_word: false,
                     animation_duration_ms: None,
-                }
+                };
             }
         };
 
@@ -273,11 +272,8 @@ mod tests {
 
         // get the correct word
         let possible = sm.possible_words();
-        let correct_word = possible
-            .iter()
-            .find(|w| validator.is_word_correct(w.to_string(), 1))
-            .unwrap()
-            .clone();
+        let correct_word =
+            possible.iter().find(|w| validator.is_word_correct(w.to_string(), 1)).unwrap().clone();
 
         let transition = sm.select_word(correct_word.clone());
 
@@ -293,11 +289,8 @@ mod tests {
 
         // get the correct word
         let possible = sm.possible_words();
-        let correct_word = possible
-            .iter()
-            .find(|w| validator.is_word_correct(w.to_string(), 1))
-            .unwrap()
-            .clone();
+        let correct_word =
+            possible.iter().find(|w| validator.is_word_correct(w.to_string(), 1)).unwrap().clone();
 
         // select word
         sm.select_word(correct_word);
