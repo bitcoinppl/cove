@@ -4,6 +4,8 @@ pub mod reconcile;
 
 use std::{sync::Arc, time::Duration};
 
+use backon::{ConstantBuilder, Retryable as _};
+
 use crate::{
     auth::AuthType,
     color_scheme::ColorSchemeSelection,
@@ -516,39 +518,23 @@ impl FfiApp {
         crate::task::init_tokio();
 
         // get / update prices
-        let _state = self.inner().state.clone();
         crate::task::spawn(async move {
-            // init prices and update the client state
-            if crate::fiat::client::init_prices().await.is_ok() {
-                let prices = FIAT_CLIENT.get_or_fetch_prices().await;
-                if let Ok(prices) = prices {
-                    Updater::send_update(AppMessage::FiatPricesChanged(prices.into()));
-                }
+            let init_result = (|| crate::fiat::client::init_prices())
+                .retry(
+                    ConstantBuilder::default()
+                        .with_delay(Duration::from_secs(120))
+                        .with_max_times(5),
+                )
+                .notify(|err, _| warn!("unable to init prices: {err}, trying again"))
+                .await;
 
+            if init_result.is_err() {
+                error!("unable to get prices, giving up");
                 return;
             }
 
-            // failed to get prices, retry 5 times
-            let mut retries = 0;
-            loop {
-                retries += 1;
-                if retries > 5 {
-                    error!("unable to get prices, giving up");
-                    break;
-                }
-
-                tokio::time::sleep(Duration::from_secs(120)).await;
-                match crate::fiat::client::init_prices().await {
-                    Ok(_) => break,
-                    Err(error) => {
-                        warn!("unable to init prices: {error}, trying again");
-                    }
-                }
-
-                let prices = FIAT_CLIENT.get_or_fetch_prices().await;
-                if let Ok(prices) = prices {
-                    Updater::send_update(AppMessage::FiatPricesChanged(prices.into()));
-                }
+            if let Ok(prices) = FIAT_CLIENT.get_or_fetch_prices().await {
+                Updater::send_update(AppMessage::FiatPricesChanged(prices.into()));
             }
         });
 

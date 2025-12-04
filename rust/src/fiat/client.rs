@@ -4,6 +4,7 @@ use std::{
 };
 
 use arc_swap::ArcSwap;
+use backon::{ExponentialBuilder, Retryable as _};
 use eyre::{Context as _, Result};
 use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
@@ -182,10 +183,13 @@ pub async fn init_prices() -> Result<()> {
     debug!("init_prices");
     let fiat_client = &FIAT_CLIENT;
 
-    let prices = tryhard::retry_fn(|| fiat_client.get_or_fetch_prices())
-        .retries(20)
-        .exponential_backoff(Duration::from_millis(10))
-        .max_delay(Duration::from_secs(5))
+    let prices = (|| fiat_client.get_or_fetch_prices())
+        .retry(
+            ExponentialBuilder::default()
+                .with_min_delay(Duration::from_millis(10))
+                .with_max_delay(Duration::from_secs(5))
+                .with_max_times(20),
+        )
         .await;
 
     match prices {
@@ -232,10 +236,13 @@ pub async fn fetch_and_update_prices_if_needed() -> Result<()> {
 
     debug!("fetching prices");
     let fiat_client = &FIAT_CLIENT;
-    let prices = tryhard::retry_fn(|| fiat_client.get_or_fetch_prices())
-        .retries(5)
-        .exponential_backoff(Duration::from_millis(10))
-        .max_delay(Duration::from_secs(1))
+    let prices = (|| fiat_client.get_or_fetch_prices())
+        .retry(
+            ExponentialBuilder::default()
+                .with_min_delay(Duration::from_millis(10))
+                .with_max_delay(Duration::from_secs(1))
+                .with_max_times(5),
+        )
         .await?;
 
     // saved prices are the same as the new ones don't need to update
