@@ -17,22 +17,23 @@ struct VerifyWordsContainer: View {
 
     @State var verificationComplete = false
     @State private var manager: WalletManager? = nil
-    @State private var validator: WordValidator? = nil
+    @State private var stateMachine: WordVerifyStateMachine? = nil
 
     func initOnAppear() {
         do {
             let manager = try app.getWalletManager(id: id)
             let validator = try manager.rust.wordValidator()
+            let sm = WordVerifyStateMachine(validator: validator, startingWordNumber: 1)
 
             self.manager = manager
-            self.validator = validator
+            self.stateMachine = sm
         } catch {
             Log.error("VerifyWords failed to initialize: \(error)")
         }
     }
 
     @ViewBuilder
-    func LoadedScreen(manager: WalletManager, validator: WordValidator) -> some View {
+    func LoadedScreen(manager: WalletManager, stateMachine: WordVerifyStateMachine) -> some View {
         if verificationComplete {
             VerificationCompleteScreen(manager: manager)
                 .transition(
@@ -43,7 +44,7 @@ struct VerifyWordsContainer: View {
         } else {
             VerifyWordsScreen(
                 manager: manager,
-                validator: validator,
+                stateMachine: stateMachine,
                 verificationComplete: $verificationComplete
             )
             .transition(
@@ -56,10 +57,10 @@ struct VerifyWordsContainer: View {
 
     var body: some View {
         Group {
-            if let manager, let validator {
+            if let manager, let stateMachine {
                 if sizeCategory > .extraExtraExtraLarge || isMiniDevice {
                     ScrollView {
-                        LoadedScreen(manager: manager, validator: validator)
+                        LoadedScreen(manager: manager, stateMachine: stateMachine)
                             .frame(minHeight: screenHeight, maxHeight: .infinity)
                     }
                     .background(
@@ -68,7 +69,7 @@ struct VerifyWordsContainer: View {
                     )
                     .adaptiveToolbarStyle()
                 } else {
-                    LoadedScreen(manager: manager, validator: validator)
+                    LoadedScreen(manager: manager, stateMachine: stateMachine)
                 }
             } else {
                 Text("Loading....")
@@ -98,13 +99,13 @@ struct VerifyWordsScreen: View {
 
     // args
     let manager: WalletManager
-    let validator: WordValidator
+    let stateMachine: WordVerifyStateMachine
     @Binding var verificationComplete: Bool
 
     // private
+    @State private var checkState: WordCheckState = .none
     @State private var wordNumber: Int
     @State private var possibleWords: [String]
-    @State private var checkState: CheckState = .none
     @State private var incorrectGuesses = 0
 
     @Namespace private var namespace
@@ -121,14 +122,14 @@ struct VerifyWordsScreen: View {
         manager.walletMetadata.id
     }
 
-    init(manager: WalletManager, validator: WordValidator, verificationComplete: Binding<Bool>) {
+    init(manager: WalletManager, stateMachine: WordVerifyStateMachine, verificationComplete: Binding<Bool>) {
         self.manager = manager
-        self.validator = validator
+        self.stateMachine = stateMachine
         _verificationComplete = verificationComplete
 
-        wordNumber = 1
-
-        possibleWords = validator.possibleWords(for: 1)
+        let wordNum = Int(stateMachine.wordNumber())
+        wordNumber = wordNum
+        possibleWords = stateMachine.possibleWords()
     }
 
     private func DisplayAlert(for alertType: AlertType) -> Alert {
@@ -167,15 +168,12 @@ struct VerifyWordsScreen: View {
             return
         }
 
-        let animation =
-            if validator.isWordCorrect(word: word, for: UInt8(wordNumber)) {
-                Animation.spring().speed(2.25)
-            } else {
-                Animation.spring().speed(1.75)
-            }
+        let transition = stateMachine.selectWord(word: word)
+
+        let animation = Animation.spring().speed(2.0)
 
         withAnimation(animation) {
-            checkState = .checking(word)
+            checkState = transition.newState
         } completion: {
             checkWord(word)
         }
@@ -184,7 +182,7 @@ struct VerifyWordsScreen: View {
     @MainActor
     func deselectWord(_ animation: Animation = .spring(), completion: @escaping () -> Void = {}) {
         withAnimation(animation, completionCriteria: .logicallyComplete) {
-            checkState = .returning
+            checkState = .returning(word: currentWord ?? "")
         } completion: {
             checkState = .none
             completion()
@@ -193,35 +191,49 @@ struct VerifyWordsScreen: View {
 
     @MainActor
     func checkWord(_ word: String) {
-        if validator.isWordCorrect(word: word, for: UInt8(wordNumber)) {
-            withAnimation(Animation.spring().speed(3), completionCriteria: .logicallyComplete) {
-                checkState = .correct(word)
-            } completion: {
-                checkState = .none
-                nextWord()
+        let transition = stateMachine.animationComplete()
+
+        guard case .correct = transition.newState else {
+            handleIncorrectWord(transition: transition)
+            return
+        }
+
+        withAnimation(Animation.spring().speed(3), completionCriteria: .logicallyComplete) {
+            checkState = transition.newState
+        } completion: {
+            self.handleCorrectWordDwell()
+        }
+    }
+
+    @MainActor
+    private func handleCorrectWordDwell() {
+        let dwellTransition = stateMachine.dwellComplete()
+        checkState = .none
+
+        guard dwellTransition.shouldAdvanceWord else { return }
+
+        if stateMachine.isComplete() {
+            withAnimation(.easeInOut(duration: 0.3)) {
+                verificationComplete = true
             }
         } else {
-            incorrectGuesses += 1
-            withAnimation(Animation.spring().speed(2)) {
-                checkState = .incorrect(word)
-            } completion: {
-                deselectWord(.spring().speed(3))
+            withAnimation(.spring().speed(3)) {
+                wordNumber = Int(stateMachine.wordNumber())
+                possibleWords = stateMachine.possibleWords()
             }
         }
     }
 
     @MainActor
-    func nextWord() {
-        if validator.isComplete(wordNumber: UInt8(wordNumber)) {
-            withAnimation(.easeInOut(duration: 0.3)) {
-                verificationComplete = true
+    private func handleIncorrectWord(transition: StateTransition) {
+        incorrectGuesses += 1
+        withAnimation(Animation.spring().speed(2)) {
+            checkState = transition.newState
+        } completion: {
+            _ = self.stateMachine.dwellComplete()
+            self.deselectWord(.spring().speed(3)) {
+                _ = self.stateMachine.returnComplete()
             }
-            return
-        }
-
-        withAnimation(.spring().speed(3)) {
-            wordNumber += 1
-            possibleWords = validator.possibleWords(for: UInt8(wordNumber))
         }
     }
 
@@ -258,6 +270,15 @@ struct VerifyWordsScreen: View {
         return [item, item, item, item]
     }
 
+    var currentWord: String? {
+        switch checkState {
+        case .checking(let word), .correct(let word), .incorrect(let word), .returning(let word):
+            return word
+        case .none:
+            return nil
+        }
+    }
+
     var body: some View {
         VStack(spacing: 24) {
             Text("What is word #\(wordNumber)?")
@@ -266,7 +287,7 @@ struct VerifyWordsScreen: View {
                 .fontWeight(.semibold)
 
             VStack(spacing: 10) {
-                if let checkingWord = checkState.word {
+                if let checkingWord = currentWord {
                     Button(action: {
                         guard case .checking = checkState else { return }
                         deselectWord()
@@ -287,7 +308,7 @@ struct VerifyWordsScreen: View {
                     .matchedGeometryEffect(
                         id: matchedGeoId(for: checkingWord),
                         in: namespace,
-                        isSource: checkState != .none && checkState != .returning
+                        isSource: checkState != .none && !isReturning
                     )
                 } else {
                     // take up the same space
@@ -311,7 +332,7 @@ struct VerifyWordsScreen: View {
                             .lineLimit(1)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-                    .disabled(isDisabled || checkState.word == word)
+                    .disabled(isDisabled || currentWord == word)
                     .contentShape(Rectangle())
                     .padding(.horizontal)
                     .padding(.vertical, 12)
@@ -320,9 +341,9 @@ struct VerifyWordsScreen: View {
                     .matchedGeometryEffect(
                         id: matchedGeoId(for: word),
                         in: namespace,
-                        isSource: checkState == .none || checkState == .returning
+                        isSource: checkState == .none || isReturning
                     )
-                    .opacity(checkState.word == word ? 0 : 1)
+                    .opacity(currentWord == word ? 0 : 1)
                 }
             }
             .padding(.vertical)
@@ -391,38 +412,27 @@ struct VerifyWordsScreen: View {
         )
         .background(Color.midnightBlue)
     }
-}
 
-enum CheckState: Equatable {
-    case none
-    case checking(String)
-    case correct(String)
-    case incorrect(String)
-    case returning
-
-    var word: String? {
-        switch self {
-        case let .checking(word):
-            word
-        case let .correct(word):
-            word
-        case let .incorrect(word):
-            word
-        case .none, .returning:
-            nil
-        }
+    private var isReturning: Bool {
+        if case .returning = checkState { return true }
+        return false
     }
 }
 
 #Preview {
     struct Container: View {
         @State var manager = WalletManager(preview: "preview_only")
-        @State var validator = WordValidator.preview(preview: true)
+        @State var stateMachine: WordVerifyStateMachine
+
+        init() {
+            let validator = WordValidator.preview(preview: true)
+            _stateMachine = State(initialValue: WordVerifyStateMachine(validator: validator, startingWordNumber: 1))
+        }
 
         var body: some View {
             VerifyWordsScreen(
                 manager: manager,
-                validator: validator,
+                stateMachine: stateMachine,
                 verificationComplete: Binding.constant(false)
             )
             .environment(AppManager.shared)

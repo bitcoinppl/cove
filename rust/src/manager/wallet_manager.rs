@@ -959,7 +959,7 @@ impl RustWalletManager {
             }
 
             Action::ToggleFiatBtcPrimarySecondary => {
-                let order = [
+                const ORDER: &[(FiatOrBtc, Unit); 4] = &[
                     (FiatOrBtc::Btc, Unit::Btc),
                     (FiatOrBtc::Fiat, Unit::Btc),
                     (FiatOrBtc::Btc, Unit::Sat),
@@ -971,14 +971,15 @@ impl RustWalletManager {
                     (md.fiat_or_btc, md.selected_unit)
                 };
 
-                let current_index = order
+                let current_index = ORDER
                     .iter()
                     .position(|option| option == &current)
                     .expect("all options covered");
 
-                let next_index = (current_index + 1) % order.len();
-                let (fiat_or_btc, unit) = order[next_index];
+                let next_index = (current_index + 1) % ORDER.len();
+                let (fiat_or_btc, unit) = ORDER[next_index];
 
+                let mut metadata = self.metadata.write();
                 metadata.fiat_or_btc = fiat_or_btc;
                 metadata.selected_unit = unit;
             }

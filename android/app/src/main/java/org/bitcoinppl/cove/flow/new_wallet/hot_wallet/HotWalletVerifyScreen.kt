@@ -1,6 +1,5 @@
 package org.bitcoinppl.cove.flow.new_wallet.hot_wallet
 
-import android.util.Log
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
@@ -44,12 +43,14 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -59,7 +60,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -71,43 +71,10 @@ import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.DashDotsIndicator
-import org.bitcoinppl.cove_core.WordValidator
+import org.bitcoinppl.cove_core.WordCheckState
+import org.bitcoinppl.cove_core.WordVerifyStateMachine
 import kotlin.math.hypot
 import kotlin.math.roundToInt
-
-object AnimationConfig {
-    // Movement durations (ms): how long the chip travels to the target.
-    var moveDurationMsCorrect: Int = 300
-    var moveDurationMsIncorrect: Int = 400
-
-    // Dwell time at target (ms): how long the chip stays visible after arriving.
-    var dwellDurationMsCorrect: Int = 1000
-    var dwellDurationMsIncorrect: Int = 1000
-
-    // Color flip threshold (fraction of remaining distance): lower = later (0.1 late), higher = earlier (0.9 fast).
-    var colorFlipThresholdFractionCorrect: Float = 0.1f
-    var colorFlipThresholdFractionIncorrect: Float = 0.1f
-}
-
-@Preview(showBackground = true, backgroundColor = 0xFF0D1B2A)
-@Composable
-private fun HotWalletVerifyScreenPreview() {
-    val snack = remember { SnackbarHostState() }
-    val validator = remember { WordValidator.preview(true) }
-    val options = validator.possibleWords(3u)
-
-    HotWalletVerifyScreen(
-        onBack = {},
-        onShowWords = {},
-        onSkip = {},
-        snackbarHostState = snack,
-        questionIndex = 3,
-        validator = validator,
-        wordNumber = 3,
-        options = options,
-        onCorrectSelected = { word -> Log.d("HotWalletPreview", "onCorrectSelected: $word") },
-    )
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -115,73 +82,129 @@ fun HotWalletVerifyScreen(
     onBack: () -> Unit,
     onShowWords: () -> Unit,
     onSkip: () -> Unit,
-    validator: WordValidator,
-    wordNumber: Int,
+    stateMachine: WordVerifyStateMachine,
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
-    questionIndex: Int = 1,
-    options: List<String> = emptyList(),
-    onCorrectSelected: (String) -> Unit = {},
+    onVerificationComplete: () -> Unit = {},
 ) {
     var actualChipWidth by remember { mutableStateOf(80.dp) }
     val chipHeight = 46.dp
     var showSkipAlert by remember { mutableStateOf(false) }
 
-    var wordPositions by remember { mutableStateOf(mapOf<String, androidx.compose.ui.geometry.Offset>()) }
-    var targetPosition by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
-    var rootOffset by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+    // position tracking for animation
+    var wordPositions by remember { mutableStateOf(mapOf<String, Offset>()) }
+    var targetPosition by remember { mutableStateOf(Offset.Zero) }
+    var rootOffset by remember { mutableStateOf(Offset.Zero) }
 
-    var animatingWord by remember { mutableStateOf<String?>(null) }
+    // animation state
     val animationX = remember { Animatable(0f) }
     val animationY = remember { Animatable(0f) }
     var travelDistance by remember { mutableStateOf(1f) }
-    var overlayVisible by remember { mutableStateOf(false) }
 
-    val correctColor = CoveColor.SuccessGreen
-    val incorrectColor = CoveColor.ErrorRed
+    // UI state derived from state machine
+    var checkState by remember { mutableStateOf(stateMachine.state()) }
+    var wordNumber by remember { mutableIntStateOf(stateMachine.wordNumber().toInt()) }
+    var possibleWords by remember { mutableStateOf(stateMachine.possibleWords().map { it.lowercase() }) }
+    val config = remember { stateMachine.config() }
 
-    LaunchedEffect(animatingWord) {
-        animatingWord?.let { word ->
-            overlayVisible = false
-            val startPos = wordPositions[word]
-            if (startPos == null) {
-                animatingWord = null
-                return@let
-            }
-            val dist = hypot(targetPosition.x - startPos.x, targetPosition.y - startPos.y)
-            travelDistance = if (dist <= 0f) 1f else dist
+    // colors derived from state - no recomputation bug possible
+    val overlayBg = when (checkState) {
+        is WordCheckState.Correct -> CoveColor.SuccessGreen
+        is WordCheckState.Incorrect -> CoveColor.ErrorRed
+        else -> CoveColor.btnPrimary
+    }
+    val overlayText = when (checkState) {
+        is WordCheckState.Correct, is WordCheckState.Incorrect -> Color.White
+        else -> CoveColor.midnightBlue
+    }
 
-            val isCorrect = validator.isWordCorrect(word, wordNumber.toUByte())
-            val moveMs =
-                if (isCorrect) AnimationConfig.moveDurationMsCorrect else AnimationConfig.moveDurationMsIncorrect
-            val dwellMs =
-                if (isCorrect) AnimationConfig.dwellDurationMsCorrect else AnimationConfig.dwellDurationMsIncorrect
+    // handle state machine transitions
+    LaunchedEffect(checkState) {
+        when (val state = checkState) {
+            is WordCheckState.Checking -> {
+                // animate chip to target
+                val word = state.word
+                val startPos = wordPositions[word] ?: return@LaunchedEffect
 
-            animationX.snapTo(startPos.x)
-            animationY.snapTo(startPos.y)
-            overlayVisible = true
+                val dist = hypot(targetPosition.x - startPos.x, targetPosition.y - startPos.y)
+                travelDistance = if (dist <= 0f) 1f else dist
 
-            coroutineScope {
-                launch {
-                    animationX.animateTo(
-                        targetValue = targetPosition.x,
-                        animationSpec = tween(moveMs, easing = LinearEasing),
-                    )
+                animationX.snapTo(startPos.x)
+                animationY.snapTo(startPos.y)
+
+                val moveMs = config.moveDurationMsCorrect.toInt()
+
+                coroutineScope {
+                    launch {
+                        animationX.animateTo(
+                            targetValue = targetPosition.x,
+                            animationSpec = tween(moveMs, easing = LinearEasing),
+                        )
+                    }
+                    launch {
+                        animationY.animateTo(
+                            targetValue = targetPosition.y,
+                            animationSpec = tween(moveMs, easing = LinearEasing),
+                        )
+                    }
                 }
-                launch {
-                    animationY.animateTo(
-                        targetValue = targetPosition.y,
-                        animationSpec = tween(moveMs, easing = LinearEasing),
-                    )
+
+                // animation complete - transition to correct/incorrect
+                val transition = stateMachine.animationComplete()
+                checkState = transition.newState
+            }
+
+            is WordCheckState.Correct -> {
+                // dwell then advance
+                delay(config.dwellDurationMsCorrect.toLong())
+                val transition = stateMachine.dwellComplete()
+                checkState = transition.newState
+
+                if (transition.shouldAdvanceWord) {
+                    if (stateMachine.isComplete()) {
+                        onVerificationComplete()
+                    } else {
+                        wordNumber = stateMachine.wordNumber().toInt()
+                        possibleWords = stateMachine.possibleWords().map { it.lowercase() }
+                    }
                 }
             }
 
-            delay(moveMs.toLong())
-            if (isCorrect) onCorrectSelected(word)
-            if (dwellMs > 0) {
-                delay(dwellMs.toLong())
+            is WordCheckState.Incorrect -> {
+                // dwell then start return
+                delay(config.dwellDurationMsIncorrect.toLong())
+                val transition = stateMachine.dwellComplete()
+                checkState = transition.newState
             }
-            overlayVisible = false
-            animatingWord = null
+
+            is WordCheckState.Returning -> {
+                // animate back to origin
+                val word = state.word
+                val originPos = wordPositions[word] ?: return@LaunchedEffect
+
+                val moveMs = config.moveDurationMsIncorrect.toInt()
+
+                coroutineScope {
+                    launch {
+                        animationX.animateTo(
+                            targetValue = originPos.x,
+                            animationSpec = tween(moveMs, easing = LinearEasing),
+                        )
+                    }
+                    launch {
+                        animationY.animateTo(
+                            targetValue = originPos.y,
+                            animationSpec = tween(moveMs, easing = LinearEasing),
+                        )
+                    }
+                }
+
+                val transition = stateMachine.returnComplete()
+                checkState = transition.newState
+            }
+
+            WordCheckState.None -> {
+                // idle - nothing to do
+            }
         }
     }
 
@@ -189,13 +212,12 @@ fun HotWalletVerifyScreen(
         containerColor = CoveColor.midnightBlue,
         topBar = {
             CenterAlignedTopAppBar(
-                colors =
-                    TopAppBarDefaults.centerAlignedTopAppBarColors(
-                        containerColor = Color.Transparent,
-                        titleContentColor = Color.White,
-                        actionIconContentColor = Color.White,
-                        navigationIconContentColor = Color.White,
-                    ),
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = Color.Transparent,
+                    titleContentColor = Color.White,
+                    actionIconContentColor = Color.White,
+                    navigationIconContentColor = Color.White,
+                ),
                 title = {
                     Text(
                         stringResource(R.string.title_verify_recovery_words),
@@ -218,47 +240,41 @@ fun HotWalletVerifyScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
         Box(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .onGloballyPositioned { coords ->
-                        val pos = coords.positionInRoot()
-                        rootOffset =
-                            androidx.compose.ui.geometry
-                                .Offset(pos.x, pos.y)
-                    },
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .onGloballyPositioned { coords ->
+                    val pos = coords.positionInRoot()
+                    rootOffset = Offset(pos.x, pos.y)
+                },
         ) {
             Image(
                 painter = painterResource(id = R.drawable.image_chain_code_pattern_horizontal),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier =
-                    Modifier
-                        .fillMaxHeight()
-                        .align(Alignment.TopCenter),
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .align(Alignment.TopCenter),
             )
 
             Column(
-                modifier =
-                    Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
-                        .padding(vertical = 20.dp),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(vertical = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(24.dp),
             ) {
                 Column(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 20.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp),
                     verticalArrangement = Arrangement.Top,
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Spacer(Modifier.height(12.dp))
 
                     Text(
-                        text = stringResource(R.string.label_what_is_word_n, questionIndex),
+                        text = stringResource(R.string.label_what_is_word_n, wordNumber),
                         color = Color.White,
                         fontSize = 22.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -268,6 +284,7 @@ fun HotWalletVerifyScreen(
 
                     Spacer(Modifier.height(24.dp))
 
+                    // target position for chip animation
                     BoxWithConstraints(Modifier.fillMaxWidth()) {
                         val cellWidth = (maxWidth - 12.dp * 3) / 4
                         Box(
@@ -275,18 +292,16 @@ fun HotWalletVerifyScreen(
                             contentAlignment = Alignment.Center,
                         ) {
                             Box(
-                                modifier =
-                                    Modifier
-                                        .width(cellWidth)
-                                        .height(chipHeight)
-                                        .onGloballyPositioned { coordinates ->
-                                            val pos = coordinates.positionInRoot()
-                                            targetPosition =
-                                                androidx.compose.ui.geometry.Offset(
-                                                    pos.x - rootOffset.x,
-                                                    pos.y - rootOffset.y,
-                                                )
-                                        },
+                                modifier = Modifier
+                                    .width(cellWidth)
+                                    .height(chipHeight)
+                                    .onGloballyPositioned { coordinates ->
+                                        val pos = coordinates.positionInRoot()
+                                        targetPosition = Offset(
+                                            pos.x - rootOffset.x,
+                                            pos.y - rootOffset.y,
+                                        )
+                                    },
                             ) { }
                         }
                     }
@@ -296,59 +311,66 @@ fun HotWalletVerifyScreen(
                     HorizontalDivider(
                         color = Color.White,
                         thickness = 1.dp,
-                        modifier =
-                            Modifier
-                                .width(160.dp),
+                        modifier = Modifier.width(160.dp),
                     )
 
                     Spacer(Modifier.height(24.dp))
 
+                    // word options grid
                     BoxWithConstraints(Modifier.fillMaxWidth()) {
                         val cellWidth = (maxWidth - 12.dp * 3) / 4
                         actualChipWidth = cellWidth
 
-                        // regular grid layout (not lazy) so we can scroll the whole screen
                         Column(
                             verticalArrangement = Arrangement.spacedBy(12.dp),
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            options.chunked(4).forEach { rowItems ->
+                            possibleWords.chunked(4).forEach { rowItems ->
                                 Row(
                                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                                     modifier = Modifier.fillMaxWidth(),
                                 ) {
                                     rowItems.forEach { word ->
                                         Box(modifier = Modifier.weight(1f)) {
-                                            if (animatingWord == word && overlayVisible) {
+                                            val isAnimating = checkState.let {
+                                                when (it) {
+                                                    is WordCheckState.Checking -> it.word == word
+                                                    is WordCheckState.Correct -> it.word == word
+                                                    is WordCheckState.Incorrect -> it.word == word
+                                                    is WordCheckState.Returning -> it.word == word
+                                                    WordCheckState.None -> false
+                                                }
+                                            }
+
+                                            if (isAnimating) {
+                                                // placeholder while animating
                                                 Box(
-                                                    modifier =
-                                                        Modifier
-                                                            .fillMaxWidth()
-                                                            .height(46.dp),
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .height(46.dp),
                                                 ) { }
                                             } else {
                                                 OptionChip(
                                                     text = word,
                                                     selected = false,
                                                     onClick = {
-                                                        if (animatingWord == null) {
-                                                            animatingWord = word
+                                                        if (checkState == WordCheckState.None) {
+                                                            val transition = stateMachine.selectWord(word)
+                                                            checkState = transition.newState
                                                         }
                                                     },
                                                     onPositionCaptured = { position ->
                                                         wordPositions = wordPositions + (
-                                                            word to
-                                                                androidx.compose.ui.geometry.Offset(
-                                                                    position.x - rootOffset.x,
-                                                                    position.y - rootOffset.y,
-                                                                )
+                                                            word to Offset(
+                                                                position.x - rootOffset.x,
+                                                                position.y - rootOffset.y,
+                                                            )
                                                         )
                                                     },
                                                 )
                                             }
                                         }
                                     }
-                                    // fill remaining slots if row is not complete
                                     repeat(4 - rowItems.size) {
                                         Spacer(modifier = Modifier.weight(1f))
                                     }
@@ -360,10 +382,9 @@ fun HotWalletVerifyScreen(
 
                 Column(
                     verticalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 20.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp),
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         DashDotsIndicator(
@@ -392,11 +413,10 @@ fun HotWalletVerifyScreen(
                     Button(
                         onClick = onShowWords,
                         shape = RoundedCornerShape(10.dp),
-                        colors =
-                            ButtonDefaults.buttonColors(
-                                containerColor = CoveColor.btnPrimary,
-                                contentColor = CoveColor.midnightBlue,
-                            ),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = CoveColor.btnPrimary,
+                            contentColor = CoveColor.midnightBlue,
+                        ),
                         contentPadding = PaddingValues(vertical = 20.dp, horizontal = 10.dp),
                         modifier = Modifier.fillMaxWidth(),
                     ) {
@@ -415,11 +435,10 @@ fun HotWalletVerifyScreen(
                         fontWeight = FontWeight.Medium,
                         fontSize = 12.sp,
                         textAlign = TextAlign.Center,
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(top = 4.dp)
-                                .clickable { showSkipAlert = true },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp)
+                            .clickable { showSkipAlert = true },
                     )
                 }
             }
@@ -452,31 +471,32 @@ fun HotWalletVerifyScreen(
                 )
             }
 
-            if (animatingWord != null && overlayVisible) {
-                val word = animatingWord!!
-                val isCorrect = validator.isWordCorrect(word, wordNumber.toUByte())
-                val remaining = hypot(targetPosition.x - animationX.value, targetPosition.y - animationY.value)
-                val threshold = if (isCorrect) AnimationConfig.colorFlipThresholdFractionCorrect else AnimationConfig.colorFlipThresholdFractionIncorrect
-                val nearTarget = travelDistance > 0f && (remaining / travelDistance) < threshold.coerceIn(0f, 1f)
-                val overlayBg = if (nearTarget) (if (isCorrect) correctColor else incorrectColor) else CoveColor.btnPrimary
-                val overlayText = if (nearTarget) Color.White else CoveColor.midnightBlue
+            // animated overlay chip
+            val currentWord = when (val state = checkState) {
+                is WordCheckState.Checking -> state.word
+                is WordCheckState.Correct -> state.word
+                is WordCheckState.Incorrect -> state.word
+                is WordCheckState.Returning -> state.word
+                WordCheckState.None -> null
+            }
 
+            if (currentWord != null) {
                 Box(
-                    modifier =
-                        Modifier
-                            .offset {
-                                IntOffset(
-                                    animationX.value.roundToInt(),
-                                    animationY.value.roundToInt(),
-                                )
-                            }.width(actualChipWidth)
-                            .height(chipHeight)
-                            .background(overlayBg, RoundedCornerShape(14.dp))
-                            .zIndex(10f),
+                    modifier = Modifier
+                        .offset {
+                            IntOffset(
+                                animationX.value.roundToInt(),
+                                animationY.value.roundToInt(),
+                            )
+                        }
+                        .width(actualChipWidth)
+                        .height(chipHeight)
+                        .background(overlayBg, RoundedCornerShape(14.dp))
+                        .zIndex(10f),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        text = word,
+                        text = currentWord,
                         color = overlayText,
                         fontWeight = FontWeight.Medium,
                         maxLines = 1,
@@ -493,29 +513,27 @@ private fun OptionChip(
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    onPositionCaptured: (androidx.compose.ui.geometry.Offset) -> Unit = {},
+    onPositionCaptured: (Offset) -> Unit = {},
 ) {
     val shape = RoundedCornerShape(14.dp)
     val bg = if (selected) Color.White else CoveColor.btnPrimary
     val textColor = if (selected) CoveColor.midnightBlue else CoveColor.midnightBlue
 
     Box(
-        modifier =
-            modifier
-                .fillMaxWidth()
-                .height(46.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .height(46.dp),
         contentAlignment = Alignment.Center,
     ) {
         Box(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .clip(shape)
-                    .background(bg, shape)
-                    .clickable { onClick() }
-                    .onGloballyPositioned { coordinates ->
-                        onPositionCaptured(coordinates.positionInRoot())
-                    },
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(shape)
+                .background(bg, shape)
+                .clickable { onClick() }
+                .onGloballyPositioned { coordinates ->
+                    onPositionCaptured(coordinates.positionInRoot())
+                },
             contentAlignment = Alignment.Center,
         ) {
             AutoSizeText(
