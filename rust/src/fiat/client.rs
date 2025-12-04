@@ -18,7 +18,11 @@ use super::historical::HistoricalPricesResponse;
 const CURRENCY_URL: &str = "https://mempool.space/api/v1/prices";
 const HISTORICAL_PRICES_URL: &str = "https://mempool.space/api/v1/historical-price";
 
-const ONE_MIN: u64 = 60;
+/// How often to fetch prices from the server 1 minute
+const BACKGROUND_REFRESH_INTERVAL: u64 = 60;
+
+/// Hard limit: never fetch if < 30 seconds since last fetch
+const HARD_LIMIT: u64 = 30; // min seconds between fetches
 
 // Global client for getting prices
 pub static FIAT_CLIENT: LazyLock<FiatClient> = LazyLock::new(FiatClient::new);
@@ -30,7 +34,6 @@ pub static PRICES: LazyLock<ArcSwap<Option<PriceResponse>>> =
 pub struct FiatClient {
     url: String,
     client: reqwest::Client,
-    wait_before_new_prices: u64,
 }
 
 #[derive(
@@ -77,16 +80,20 @@ impl_default_for!(FiatClient);
 
 impl FiatClient {
     fn new() -> Self {
-        Self {
-            url: CURRENCY_URL.to_string(),
-            client: reqwest::Client::new(),
-            wait_before_new_prices: ONE_MIN,
-        }
+        Self { url: CURRENCY_URL.to_string(), client: reqwest::Client::new() }
     }
 
     #[allow(dead_code)]
     fn new_with_url(url: String) -> Self {
-        Self { url, client: reqwest::Client::new(), wait_before_new_prices: ONE_MIN }
+        Self { url, client: reqwest::Client::new() }
+    }
+
+    /// Sync method using cached prices only, returns None if no cache
+    pub fn value_in_currency_cached(&self, amount: Amount, currency: FiatCurrency) -> Option<f64> {
+        let prices = self.prices()?;
+        let btc = amount.as_btc();
+        let price = prices.get_for_currency(currency);
+        Some(btc * price as f64)
     }
 
     /// Get historical price and exchange rates for a specific timestamp
@@ -106,24 +113,33 @@ impl FiatClient {
     /// Get the cached prices, will fetch and update the prices in the background if needed
     /// Returns None if the prices are not cached
     pub fn prices(&self) -> Option<PriceResponse> {
+        // check in-memory cache first
         if let Some(prices) = PRICES.load().as_ref() {
             let now_secs = Timestamp::now().as_second() as u64;
-            if (now_secs - prices.time) > self.wait_before_new_prices {
+            if (now_secs - prices.fetched_at) > BACKGROUND_REFRESH_INTERVAL {
                 crate::task::spawn(async move { fetch_and_update_prices_if_needed().await });
             }
 
             return Some(*prices);
         }
 
+        // fallback to database cache
+        if let Ok(Some(prices)) = Database::global().global_cache.get_prices() {
+            debug!("loaded cached prices from database");
+            PRICES.swap(Arc::new(Some(prices)));
+            return Some(prices);
+        }
+
+        warn!("no cached prices found in memory or database");
         None
     }
 
-    /// Always returns the latest prcies, will also update the prices cache
+    /// Always returns the latest prices, will also update the prices cache
     pub async fn get_or_fetch_prices(&self) -> Result<PriceResponse, reqwest::Error> {
         trace!("get_or_fetch_prices");
         if let Some(prices) = PRICES.load().as_ref() {
             let now_secs = Timestamp::now().as_second() as u64;
-            if now_secs - prices.fetched_at < self.wait_before_new_prices {
+            if now_secs - prices.fetched_at < HARD_LIMIT {
                 return Ok(*prices);
             }
         }
@@ -229,7 +245,7 @@ pub async fn fetch_and_update_prices_if_needed() -> Result<()> {
     trace!("fetch_and_update_prices_if_needed");
     if let Some(prices) = PRICES.load().as_ref() {
         let now_secs = Timestamp::now().as_second() as u64;
-        if now_secs - prices.fetched_at < ONE_MIN {
+        if now_secs - prices.fetched_at < HARD_LIMIT {
             return Ok(());
         }
     }

@@ -20,34 +20,37 @@ struct WalletBalanceHeaderView: View {
     let updater: (WalletManagerAction) -> Void
     let showReceiveSheet: () -> Void
 
-    private var primaryBalanceString: String {
+    @ViewBuilder
+    private var primaryBalanceView: some View {
         if !metadata.sensitiveVisible {
-            return "••••••"
+            Text("••••••")
+        } else if metadata.fiatOrBtc == .fiat {
+            if let fiatBalance {
+                Text(manager.rust.displayFiatAmount(amount: fiatBalance))
+            } else {
+                ProgressView()
+                    .tint(.white)
+            }
+        } else {
+            Text(manager.amountFmtUnit(balance))
         }
-
-        // fiat
-        if metadata.fiatOrBtc == .fiat {
-            guard let fiatBalance else { return "" }
-            return manager.rust.displayFiatAmount(amount: fiatBalance)
-        }
-
-        // btc or sats
-        return manager.amountFmtUnit(balance)
     }
 
-    private var secondaryBalanceString: String {
+    @ViewBuilder
+    private var secondaryBalanceView: some View {
         if !metadata.sensitiveVisible {
-            return "••••••"
+            Text("••••••")
+        } else if metadata.fiatOrBtc == .btc {
+            if let fiatBalance {
+                Text(manager.rust.displayFiatAmount(amount: fiatBalance))
+            } else {
+                ProgressView()
+                    .tint(.white.opacity(0.75))
+                    .scaleEffect(0.7)
+            }
+        } else {
+            Text(manager.amountFmtUnit(balance))
         }
-
-        // fiat
-        if metadata.fiatOrBtc == .btc {
-            guard let fiatBalance else { return "" }
-            return manager.rust.displayFiatAmount(amount: fiatBalance)
-        }
-
-        // btc or sats
-        return manager.amountFmtUnit(balance)
     }
 
     var eyeIcon: String {
@@ -74,7 +77,7 @@ struct WalletBalanceHeaderView: View {
         VStack(spacing: 28) {
             VStack(spacing: 6) {
                 HStack {
-                    Text(secondaryBalanceString)
+                    secondaryBalanceView
                         .foregroundColor(.white.opacity(0.75))
                         .font(.footnote)
                         .padding(.leading, 2)
@@ -84,7 +87,7 @@ struct WalletBalanceHeaderView: View {
                 }
 
                 HStack {
-                    Text(primaryBalanceString)
+                    primaryBalanceView
                         .foregroundStyle(.white)
                         .font(.system(size: fontSize, weight: .bold))
                         .contentTransition(.numericText())

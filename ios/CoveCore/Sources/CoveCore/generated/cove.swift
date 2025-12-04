@@ -7520,11 +7520,12 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
      */
     func addressAt(index: UInt32) async throws  -> AddressInfo
     
-    func amountInFiat(amount: Amount) async throws  -> Double
+    /**
+     * Sync method using cached prices, returns None if no cached prices
+     */
+    func amountInFiat(amount: Amount)  -> Double?
     
     func balance() async  -> Balance
-    
-    func balanceInFiat() async throws  -> Double
     
     func broadcastTransaction(signedTransaction: BitcoinTransaction) async throws 
     
@@ -7737,21 +7738,16 @@ open func addressAt(index: UInt32)async throws  -> AddressInfo  {
         )
 }
     
-open func amountInFiat(amount: Amount)async throws  -> Double  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_cove_fn_method_rustwalletmanager_amount_in_fiat(
-                    self.uniffiCloneHandle(),
-                    FfiConverterTypeAmount_lower(amount)
-                )
-            },
-            pollFunc: ffi_cove_rust_future_poll_f64,
-            completeFunc: ffi_cove_rust_future_complete_f64,
-            freeFunc: ffi_cove_rust_future_free_f64,
-            liftFunc: FfiConverterDouble.lift,
-            errorHandler: FfiConverterTypeWalletManagerError_lift
-        )
+    /**
+     * Sync method using cached prices, returns None if no cached prices
+     */
+open func amountInFiat(amount: Amount) -> Double?  {
+    return try!  FfiConverterOptionDouble.lift(try! rustCall() {
+    uniffi_cove_fn_method_rustwalletmanager_amount_in_fiat(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeAmount_lower(amount),$0
+    )
+})
 }
     
 open func balance()async  -> Balance  {
@@ -7769,23 +7765,6 @@ open func balance()async  -> Balance  {
             liftFunc: FfiConverterTypeBalance_lift,
             errorHandler: nil
             
-        )
-}
-    
-open func balanceInFiat()async throws  -> Double  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_cove_fn_method_rustwalletmanager_balance_in_fiat(
-                    self.uniffiCloneHandle()
-                    
-                )
-            },
-            pollFunc: ffi_cove_rust_future_poll_f64,
-            completeFunc: ffi_cove_rust_future_complete_f64,
-            freeFunc: ffi_cove_rust_future_free_f64,
-            liftFunc: FfiConverterDouble.lift,
-            errorHandler: FfiConverterTypeWalletManagerError_lift
         )
 }
     
@@ -26377,6 +26356,30 @@ fileprivate struct FfiConverterOptionFloat: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionDouble: FfiConverterRustBuffer {
+    typealias SwiftType = Double?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterDouble.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterDouble.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionString: FfiConverterRustBuffer {
     typealias SwiftType = String?
 
@@ -28666,13 +28669,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustwalletmanager_address_at() != 13093) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustwalletmanager_amount_in_fiat() != 35706) {
+    if (uniffi_cove_checksum_method_rustwalletmanager_amount_in_fiat() != 61774) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_balance() != 14970) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_rustwalletmanager_balance_in_fiat() != 19007) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_broadcast_transaction() != 63043) {
