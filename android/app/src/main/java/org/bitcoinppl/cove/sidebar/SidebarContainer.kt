@@ -42,6 +42,7 @@ fun SidebarContainer(
     val context = LocalContext.current
     val density = LocalDensity.current
     val sidebarWidthPx = with(density) { SIDEBAR_WIDTH_DP.dp.toPx() }
+    val edgeThresholdPx = with(density) { EDGE_SWIPE_THRESHOLD_DP.dp.toPx() }
 
     var gestureOffset by remember { mutableFloatStateOf(0f) }
     var isDragging by remember { mutableStateOf(false) }

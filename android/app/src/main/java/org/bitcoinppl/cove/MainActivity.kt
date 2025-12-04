@@ -1,5 +1,8 @@
 package org.bitcoinppl.cove
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -43,9 +46,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.fragment.app.FragmentActivity
 import org.bitcoinppl.cove.navigation.CoveNavDisplay
@@ -57,7 +58,6 @@ import org.bitcoinppl.cove.views.LockView
 import org.bitcoinppl.cove_core.AfterPinAction
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.TapSignerRoute
-import org.bitcoinppl.cove_core.stringOrDataTryIntoMultiFormat
 import org.bitcoinppl.cove_core.types.ColorSchemeSelection
 
 class MainActivity : FragmentActivity() {
@@ -268,18 +268,9 @@ private fun SheetContent(
                 sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
             ) {
                 QrCodeScanView(
-                    onScanned = { stringOrData ->
+                    onScanned = { multiFormat ->
                         app.sheetState = null
-                        try {
-                            val multiFormat = stringOrDataTryIntoMultiFormat(stringOrData)
-                            app.handleMultiFormat(multiFormat)
-                        } catch (e: Exception) {
-                            Log.e("MainActivity", "Failed to parse QR code: ${e.message}", e)
-                            app.alertState =
-                                TaggedItem(
-                                    AppAlertState.InvalidFormat(e.message ?: "Unknown error"),
-                                )
-                        }
+                        app.handleMultiFormat(multiFormat)
                     },
                     onDismiss = onDismiss,
                     app = app,
@@ -336,6 +327,13 @@ private fun GlobalAlertDialog(
     app: AppManager,
     onDismiss: () -> Unit,
 ) {
+    val context = LocalContext.current
+
+    fun copyToClipboard(text: String) {
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText("address", text))
+    }
+
     when (val state = alert.item) {
         is AppAlertState.DuplicateWallet -> {
             AlertDialog(
@@ -379,14 +377,13 @@ private fun GlobalAlertDialog(
         }
 
         is AppAlertState.AddressWrongNetwork -> {
-            val clipboardManager = LocalClipboardManager.current
             AlertDialog(
                 onDismissRequest = onDismiss,
                 title = { Text(state.title()) },
                 text = { Text(state.message()) },
                 confirmButton = {
                     TextButton(onClick = {
-                        clipboardManager.setText(AnnotatedString(state.address.string()))
+                        copyToClipboard(state.address.string())
                         onDismiss()
                     }) { Text("Copy Address") }
                 },
@@ -397,14 +394,13 @@ private fun GlobalAlertDialog(
         }
 
         is AppAlertState.FoundAddress -> {
-            val clipboardManager = LocalClipboardManager.current
             AlertDialog(
                 onDismissRequest = onDismiss,
                 title = { Text(state.title()) },
                 text = { Text(state.message()) },
                 confirmButton = {
                     TextButton(onClick = {
-                        clipboardManager.setText(AnnotatedString(state.address.string()))
+                        copyToClipboard(state.address.string())
                         onDismiss()
                     }) { Text("Copy Address") }
                 },
@@ -415,14 +411,13 @@ private fun GlobalAlertDialog(
         }
 
         is AppAlertState.NoWalletSelected -> {
-            val clipboardManager = LocalClipboardManager.current
             AlertDialog(
                 onDismissRequest = onDismiss,
                 title = { Text(state.title()) },
                 text = { Text(state.message()) },
                 confirmButton = {
                     TextButton(onClick = {
-                        clipboardManager.setText(AnnotatedString(state.address.string()))
+                        copyToClipboard(state.address.string())
                         onDismiss()
                     }) { Text("Copy Address") }
                 },

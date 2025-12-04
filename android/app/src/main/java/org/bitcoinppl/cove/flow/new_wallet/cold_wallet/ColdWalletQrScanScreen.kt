@@ -27,6 +27,7 @@ import org.bitcoinppl.cove.AppAlertState
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.QrCodeScanView
 import org.bitcoinppl.cove.TaggedItem
+import org.bitcoinppl.cove_core.MultiFormat
 import org.bitcoinppl.cove_core.Wallet
 import org.bitcoinppl.cove_core.WalletException
 
@@ -70,72 +71,70 @@ fun ColdWalletQrScanScreen(app: AppManager, modifier: Modifier = Modifier) {
         Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
             QrCodeScanView(
                 showTopBar = false,
-                onScanned = { stringOrData ->
-                    try {
-                        // try to parse as string first for xpub/descriptor
-                        val xpub =
-                            when (stringOrData) {
-                                is org.bitcoinppl.cove_core.StringOrData.String -> stringOrData.v1
-                                is org.bitcoinppl.cove_core.StringOrData.Data ->
-                                    stringOrData.v1.toString(Charsets.UTF_8)
+                onScanned = { multiFormat ->
+                    when (multiFormat) {
+                        is MultiFormat.HardwareExport -> {
+                            try {
+                                val wallet = Wallet.newFromExport(export = multiFormat.v1)
+                                val id = wallet.id()
+                                wallet.close()
+                                Log.d("ColdWalletQrScanScreen", "Imported Wallet: $id")
+
+                                app.rust.selectWallet(id = id)
+                                app.popRoute()
+                                app.alertState =
+                                    TaggedItem(
+                                        AppAlertState.General(
+                                            title = "Success",
+                                            message = "Imported Wallet Successfully",
+                                        ),
+                                    )
+                            } catch (e: WalletException.WalletAlreadyExists) {
+                                try {
+                                    app.rust.selectWallet(id = e.v1)
+                                    app.popRoute()
+                                    app.alertState =
+                                        TaggedItem(
+                                            AppAlertState.General(
+                                                title = "Success",
+                                                message = "Wallet already exists: ${e.v1}",
+                                            ),
+                                        )
+                                } catch (selectError: Exception) {
+                                    Log.w(
+                                        "ColdWalletQrScanScreen",
+                                        "Unable to select existing wallet",
+                                        selectError,
+                                    )
+                                    app.popRoute()
+                                    app.alertState =
+                                        TaggedItem(
+                                            AppAlertState.ErrorImportingHardwareWallet(
+                                                message = selectError.message ?: "Unable to select wallet",
+                                            ),
+                                        )
+                                }
+                            } catch (e: Exception) {
+                                Log.w("ColdWalletQrScanScreen", "Error importing hardware wallet: $e")
+                                app.popRoute()
+                                app.alertState =
+                                    TaggedItem(
+                                        AppAlertState.ErrorImportingHardwareWallet(
+                                            message = e.message ?: "Unknown error",
+                                        ),
+                                    )
                             }
-
-                        val wallet = Wallet.newFromXpub(xpub = xpub)
-                        val id = wallet.id()
-                        wallet.close()
-                        Log.d("ColdWalletQrScanScreen", "Imported Wallet: $id")
-
-                        app.rust.selectWallet(id = id)
-                        app.popRoute()
-                        app.alertState =
-                            TaggedItem(
-                                AppAlertState.General(
-                                    title = "Success",
-                                    message = "Imported Wallet Successfully",
-                                ),
-                            )
-                    } catch (e: WalletException.MultiFormat) {
-                        app.popRoute()
-                        app.alertState =
-                            TaggedItem(
-                                AppAlertState.ErrorImportingHardwareWallet(
-                                    message = e.v1.toString(),
-                                ),
-                            )
-                    } catch (e: WalletException.WalletAlreadyExists) {
-                        try {
-                            app.rust.selectWallet(id = e.v1)
+                        }
+                        else -> {
                             app.popRoute()
                             app.alertState =
                                 TaggedItem(
                                     AppAlertState.General(
-                                        title = "Success",
-                                        message = "Wallet already exists: ${e.v1}",
-                                    ),
-                                )
-                        } catch (selectError: Exception) {
-                            Log.w(
-                                "ColdWalletQrScanScreen",
-                                "Unable to select existing wallet",
-                                selectError,
-                            )
-                            app.popRoute()
-                            app.alertState =
-                                TaggedItem(
-                                    AppAlertState.ErrorImportingHardwareWallet(
-                                        message = selectError.message ?: "Unable to select wallet",
+                                        title = "Invalid QR Code",
+                                        message = "Please scan a valid hardware wallet export QR code",
                                     ),
                                 )
                         }
-                    } catch (e: Exception) {
-                        Log.w("ColdWalletQrScanScreen", "Error importing hardware wallet: $e")
-                        app.popRoute()
-                        app.alertState =
-                            TaggedItem(
-                                AppAlertState.ErrorImportingHardwareWallet(
-                                    message = e.message ?: "Unknown error",
-                                ),
-                            )
                     }
                 },
                 onDismiss = { app.popRoute() },

@@ -96,7 +96,6 @@ import org.bitcoinppl.cove_core.TransactionDetails
 import org.bitcoinppl.cove_core.TransactionState
 import org.bitcoinppl.cove_core.WalletManagerAction
 import org.bitcoinppl.cove_core.WalletMetadata
-import org.bitcoinppl.cove_core.types.BitcoinUnit
 import org.bitcoinppl.cove_core.types.FfiColorScheme
 import org.bitcoinppl.cove_core.types.TransactionDirection
 
@@ -232,20 +231,21 @@ fun TransactionDetailsScreen(
 
     // get ring colors (matching iOS opacities)
     val ringOpacities = if (isDark) listOf(0.88f, 0.66f, 0.33f) else listOf(0.44f, 0.24f, 0.10f)
-    val ringColors: List<Color> = listOf(
-        presenter
-            .ringColor(txState, colorScheme, direction, confirmationCount, 1L)
-            .toColor()
-            .let { color -> color.copy(alpha = color.alpha * ringOpacities[0]) },
-        presenter
-            .ringColor(txState, colorScheme, direction, confirmationCount, 2L)
-            .toColor()
-            .let { color -> color.copy(alpha = color.alpha * ringOpacities[1]) },
-        presenter
-            .ringColor(txState, colorScheme, direction, confirmationCount, 3L)
-            .toColor()
-            .let { color -> color.copy(alpha = color.alpha * ringOpacities[2]) },
-    )
+    val ringColors: List<Color> =
+        listOf(
+            presenter
+                .ringColor(txState, colorScheme, direction, confirmationCount, 1L)
+                .toColor()
+                .let { color -> color.copy(alpha = color.alpha * ringOpacities[0]) },
+            presenter
+                .ringColor(txState, colorScheme, direction, confirmationCount, 2L)
+                .toColor()
+                .let { color -> color.copy(alpha = color.alpha * ringOpacities[1]) },
+            presenter
+                .ringColor(txState, colorScheme, direction, confirmationCount, 3L)
+                .toColor()
+                .let { color -> color.copy(alpha = color.alpha * ringOpacities[2]) },
+        )
 
     val headerTitle =
         stringResource(

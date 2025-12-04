@@ -303,14 +303,22 @@ private fun SendFlowRouteToScreen(
                             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
                         ) {
                             QrCodeScanView(
-                                onScanned = { stringOrData ->
+                                onScanned = { multiFormat ->
                                     presenter.sheetState = null
-                                    val scannedString =
-                                        when (stringOrData) {
-                                            is StringOrData.String -> stringOrData.v1
-                                            is StringOrData.Data -> stringOrData.v1.toString(Charsets.UTF_8)
+                                    when (multiFormat) {
+                                        is MultiFormat.Address -> {
+                                            sendFlowManager.enteringAddress = multiFormat.v1.address().string()
                                         }
-                                    sendFlowManager.enteringAddress = scannedString
+                                        else -> {
+                                            app.alertState =
+                                                TaggedItem(
+                                                    AppAlertState.General(
+                                                        title = "Invalid QR Code",
+                                                        message = "Please scan a valid Bitcoin address QR code",
+                                                    ),
+                                                )
+                                        }
+                                    }
                                 },
                                 onDismiss = { presenter.sheetState = null },
                                 app = app,
