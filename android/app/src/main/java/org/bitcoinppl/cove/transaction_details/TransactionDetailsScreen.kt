@@ -70,12 +70,10 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -98,136 +96,15 @@ import org.bitcoinppl.cove_core.TransactionDetails
 import org.bitcoinppl.cove_core.TransactionState
 import org.bitcoinppl.cove_core.WalletManagerAction
 import org.bitcoinppl.cove_core.WalletMetadata
-import org.bitcoinppl.cove_core.types.Address
-import org.bitcoinppl.cove_core.types.Amount
 import org.bitcoinppl.cove_core.types.BitcoinUnit
 import org.bitcoinppl.cove_core.types.FfiColorScheme
-import org.bitcoinppl.cove_core.types.NoHandle
 import org.bitcoinppl.cove_core.types.TransactionDirection
-import org.bitcoinppl.cove_core.types.TxId
-import org.bitcoinppl.cove_core.NoHandle as CoreNoHandle
 
 private const val INITIAL_DELAY_MS = 2000L
 private const val FREQUENT_POLL_INTERVAL_MS = 30000L
 private const val NORMAL_POLL_INTERVAL_MS = 60000L
 private const val MAX_POLL_ERRORS = 10
 private const val CONFIRMATIONS_THRESHOLD = 3
-
-@Preview(name = "Confirmed Received", showBackground = true)
-@Composable
-private fun TransactionDetailsConfirmedReceivedPreview() {
-    TransactionDetailsPreviewContent(previewDetails(isSent = false, isConfirmed = true))
-}
-
-@Preview(name = "Confirmed Sent", showBackground = true)
-@Composable
-private fun TransactionDetailsConfirmedSentPreview() {
-    TransactionDetailsPreviewContent(previewDetails(isSent = true, isConfirmed = true))
-}
-
-@Preview(name = "Pending Received", showBackground = true)
-@Composable
-private fun TransactionDetailsPendingReceivedPreview() {
-    TransactionDetailsPreviewContent(previewDetails(isSent = false, isConfirmed = false))
-}
-
-@Preview(name = "Pending Sent", showBackground = true)
-@Composable
-private fun TransactionDetailsPendingSentPreview() {
-    TransactionDetailsPreviewContent(previewDetails(isSent = true, isConfirmed = false))
-}
-
-@Composable
-private fun TransactionDetailsPreviewContent(details: TransactionDetails) {
-    TransactionDetailsScreen(
-        app = null,
-        manager = null,
-        details = details,
-        isPreviewMode = true,
-    )
-}
-
-private fun previewDetails(isSent: Boolean, isConfirmed: Boolean): TransactionDetails =
-    PreviewTransactionDetails(
-        isSentTx = isSent,
-        isConfirmedTx = isConfirmed,
-        formattedDate = if (isConfirmed) "Nov 25, 2025 at 3:45 PM" else "",
-        address = "bc1q 4kmx 9uqq 0flm f232 0ntz 3apc z4en v97t",
-        amountPrimary = if (isSent) "-25,555 sats" else "+25,555 sats",
-        amountFiat = if (isSent) "-$28.88" else "$28.88",
-        feePrimary = if (isSent) "98 sats" else null,
-        feeFiat = if (isSent) "$0.02" else null,
-        sentSansFeePrimary = if (isSent) "25,457 sats" else null,
-        sentSansFeeFiat = if (isSent) "$28.86" else null,
-        totalSpentPrimary = if (isSent) "25,653 sats" else null,
-    )
-
-// Lightweight preview-safe TransactionDetails that avoids loading native libs.
-private class PreviewTransactionDetails(
-    private val isSentTx: Boolean,
-    private val isConfirmedTx: Boolean,
-    private val formattedDate: String,
-    private val address: String,
-    private val amountPrimary: String,
-    private val amountFiat: String,
-    private val feePrimary: String?,
-    private val feeFiat: String?,
-    private val sentSansFeePrimary: String?,
-    private val sentSansFeeFiat: String?,
-    private val totalSpentPrimary: String? = null,
-    private val url: String = "https://mempool.space/tx/preview",
-    private val txIdValue: String = "preview-tx-id",
-) : TransactionDetails(CoreNoHandle) {
-    override fun isSent(): Boolean = isSentTx
-
-    override fun isReceived(): Boolean = !isSentTx
-
-    override fun isConfirmed(): Boolean = isConfirmedTx
-
-    override fun confirmationDateTime(): String? = formattedDate
-
-    override fun transactionUrl(): String = url
-
-    override fun txId(): TxId = PreviewTxId(txIdValue)
-
-    override fun amountFmt(unit: BitcoinUnit): String = amountPrimary
-
-    override suspend fun amountFiatFmt(): String = amountFiat
-
-    override fun feeFmt(unit: BitcoinUnit): String? = feePrimary
-
-    override suspend fun feeFiatFmt(): String = feeFiat ?: ""
-
-    override fun sentSansFeeFmt(unit: BitcoinUnit): String? = sentSansFeePrimary
-
-    override suspend fun sentSansFeeFiatFmt(): String = sentSansFeeFiat ?: ""
-
-    override fun amount(): Amount = PreviewAmount()
-
-    override fun addressSpacedOut(): String = address
-
-    override fun address(): Address = PreviewAddress(address.replace(" ", ""))
-
-    override fun blockNumberFmt(): String? = "123456"
-
-    override fun blockNumber(): UInt? = 123456u
-
-    override fun transactionLabel(): String? = null
-}
-
-private class PreviewAmount : Amount(NoHandle)
-
-private class PreviewAddress(
-    private val value: String,
-) : Address(NoHandle) {
-    override fun string(): String = value
-}
-
-private class PreviewTxId(
-    private val value: String = "preview",
-) : TxId(NoHandle) {
-    override fun toString(): String = value
-}
 
 /**
  * transaction details screen - now using manager-based pattern
@@ -236,15 +113,12 @@ private class PreviewTxId(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TransactionDetailsScreen(
-    app: AppManager?,
-    manager: WalletManager?,
+    app: AppManager,
+    manager: WalletManager,
     details: TransactionDetails,
-    isPreviewMode: Boolean = false,
 ) {
     val context = LocalContext.current
-    val inspectionMode = LocalInspectionMode.current
-    val isPreview = isPreviewMode || inspectionMode || app == null || manager == null
-    val metadata = manager?.walletMetadata
+    val metadata = manager.walletMetadata ?: return
 
     // state for confirmation polling
     var numberOfConfirmations by remember { mutableStateOf<Int?>(null) }
@@ -279,9 +153,7 @@ fun TransactionDetailsScreen(
     }
 
     // poll for confirmations if not fully confirmed
-    LaunchedEffect(transactionDetails.txId(), isPreview) {
-        if (isPreview || manager == null) return@LaunchedEffect
-
+    LaunchedEffect(transactionDetails.txId()) {
         if (!transactionDetails.isConfirmed()) {
             delay(INITIAL_DELAY_MS)
         }
@@ -348,50 +220,32 @@ fun TransactionDetailsScreen(
     val isConfirmed = transactionDetails.isConfirmed()
 
     // header icon presenter for dynamic colors
-    val presenter = remember(isPreview) { if (isPreview) null else HeaderIconPresenter() }
+    val presenter = remember { HeaderIconPresenter() }
     val txState = if (isConfirmed) TransactionState.CONFIRMED else TransactionState.PENDING
     val direction = if (isSent) TransactionDirection.OUTGOING else TransactionDirection.INCOMING
     val colorScheme = if (isDark) FfiColorScheme.DARK else FfiColorScheme.LIGHT
     val confirmationCount = numberOfConfirmations?.toLong() ?: if (isConfirmed) 5L else 0L
 
     // get colors from presenter (matching iOS)
-    val circleColor =
-        presenter?.backgroundColor(txState, direction, colorScheme, confirmationCount)?.toColor()
-            ?: if (isSent) Color(0xFF0F0F12) else CoveColor.TransactionReceived
-    val iconColor = presenter?.iconColor(txState, direction, colorScheme, confirmationCount)?.toColor() ?: Color.White
+    val circleColor = presenter.backgroundColor(txState, direction, colorScheme, confirmationCount).toColor()
+    val iconColor = presenter.iconColor(txState, direction, colorScheme, confirmationCount).toColor()
 
-    // get ring colors; fall back to static values in preview (matching iOS opacities)
+    // get ring colors (matching iOS opacities)
     val ringOpacities = if (isDark) listOf(0.88f, 0.66f, 0.33f) else listOf(0.44f, 0.24f, 0.10f)
-    val ringColors: List<Color> =
-        presenter?.let {
-            listOf(
-                it
-                    .ringColor(txState, colorScheme, direction, confirmationCount, 1L)
-                    .toColor()
-                    .let { color -> color.copy(alpha = color.alpha * ringOpacities[0]) },
-                it
-                    .ringColor(txState, colorScheme, direction, confirmationCount, 2L)
-                    .toColor()
-                    .let { color -> color.copy(alpha = color.alpha * ringOpacities[1]) },
-                it
-                    .ringColor(txState, colorScheme, direction, confirmationCount, 3L)
-                    .toColor()
-                    .let { color -> color.copy(alpha = color.alpha * ringOpacities[2]) },
-            )
-        }
-            ?: if (isDark) {
-                listOf(
-                    Color.White.copy(alpha = 0.88f),
-                    Color.White.copy(alpha = 0.66f),
-                    Color.White.copy(alpha = 0.33f),
-                )
-            } else {
-                listOf(
-                    Color.Black.copy(alpha = 0.44f),
-                    Color.Black.copy(alpha = 0.24f),
-                    Color.Black.copy(alpha = 0.10f),
-                )
-            }
+    val ringColors: List<Color> = listOf(
+        presenter
+            .ringColor(txState, colorScheme, direction, confirmationCount, 1L)
+            .toColor()
+            .let { color -> color.copy(alpha = color.alpha * ringOpacities[0]) },
+        presenter
+            .ringColor(txState, colorScheme, direction, confirmationCount, 2L)
+            .toColor()
+            .let { color -> color.copy(alpha = color.alpha * ringOpacities[1]) },
+        presenter
+            .ringColor(txState, colorScheme, direction, confirmationCount, 3L)
+            .toColor()
+            .let { color -> color.copy(alpha = color.alpha * ringOpacities[2]) },
+    )
 
     val headerTitle =
         stringResource(
@@ -427,12 +281,7 @@ fun TransactionDetailsScreen(
         }
 
     // format amounts
-    val txAmountPrimary =
-        if (manager != null) {
-            manager.rust.displayAmount(amount = transactionDetails.amount())
-        } else {
-            transactionDetails.amountFmt(metadata?.selectedUnit ?: BitcoinUnit.SAT)
-        }
+    val txAmountPrimary = manager.rust.displayAmount(amount = transactionDetails.amount())
     val txAmountSecondary by androidx.compose.runtime.produceState(initialValue = "---") {
         value =
             try {
@@ -443,7 +292,7 @@ fun TransactionDetailsScreen(
     }
 
     // details expanded from metadata
-    val isExpanded = metadata?.detailsExpanded ?: false
+    val isExpanded = metadata.detailsExpanded
 
     Scaffold(
         containerColor = bg,
@@ -458,7 +307,7 @@ fun TransactionDetailsScreen(
                     ),
                 title = { Text("") },
                 navigationIcon = {
-                    IconButton(onClick = { app?.popRoute() }) {
+                    IconButton(onClick = { app.popRoute() }) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = null,
@@ -526,14 +375,12 @@ fun TransactionDetailsScreen(
 
                 Spacer(Modifier.height(4.dp))
 
-                if (!isPreview && manager != null) {
-                    TransactionLabelView(
-                        transactionDetails = transactionDetails,
-                        manager = manager,
-                        secondaryColor = sub,
-                        snackbarHostState = snackbarHostState,
-                    )
-                }
+                TransactionLabelView(
+                    transactionDetails = transactionDetails,
+                    manager = manager,
+                    secondaryColor = sub,
+                    snackbarHostState = snackbarHostState,
+                )
 
                 Spacer(Modifier.height(24.dp))
 
@@ -704,7 +551,7 @@ fun TransactionDetailsScreen(
 
                     TextButton(
                         onClick = {
-                            manager?.dispatch(WalletManagerAction.ToggleDetailsExpanded)
+                            manager.dispatch(WalletManagerAction.ToggleDetailsExpanded)
                         },
                         modifier =
                             Modifier
@@ -732,7 +579,7 @@ private fun TransactionDetailsWidget(
     feeFiatFmt: String,
     sentSansFeeFiatFmt: String,
     totalSpentFiatFmt: String,
-    metadata: WalletMetadata?,
+    metadata: WalletMetadata,
 ) {
     val dividerColor = MaterialTheme.colorScheme.outlineVariant
     val sub = MaterialTheme.colorScheme.onSurfaceVariant
@@ -864,7 +711,7 @@ private fun TransactionDetailsWidget(
         if (isSent) {
             DetailsWidget(
                 label = stringResource(R.string.label_network_fee),
-                primary = transactionDetails.feeFmt(unit = metadata?.selectedUnit ?: BitcoinUnit.SAT),
+                primary = transactionDetails.feeFmt(unit = metadata.selectedUnit),
                 secondary = feeFiatFmt,
                 showInfoIcon = true,
                 onInfoClick = { /* TODO: show fee info */ },
@@ -873,7 +720,7 @@ private fun TransactionDetailsWidget(
 
             DetailsWidget(
                 label = stringResource(R.string.label_recipient_receives),
-                primary = transactionDetails.sentSansFeeFmt(unit = metadata?.selectedUnit ?: BitcoinUnit.SAT),
+                primary = transactionDetails.sentSansFeeFmt(unit = metadata.selectedUnit),
                 secondary = sentSansFeeFiatFmt,
             )
             Spacer(Modifier.height(24.dp))
@@ -889,7 +736,7 @@ private fun TransactionDetailsWidget(
 
             DetailsWidget(
                 label = stringResource(R.string.label_total_spent),
-                primary = transactionDetails.amountFmt(unit = metadata?.selectedUnit ?: BitcoinUnit.SAT),
+                primary = transactionDetails.amountFmt(unit = metadata.selectedUnit),
                 secondary = totalSpentFiatFmt,
                 isTotal = true,
             )

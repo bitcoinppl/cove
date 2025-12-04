@@ -46,10 +46,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.AppManager
@@ -306,27 +304,6 @@ fun WalletSettingsScreen(
     }
 }
 
-@Preview
-@Composable
-fun WalletColorSelectorPreview() {
-    WalletColorSelector(WalletColor.Orange)
-}
-
-// static color list for compose previews to avoid FFI calls in IDE
-private val previewWalletColors =
-    listOf(
-        WalletColor.WBeige,
-        WalletColor.WPastelBlue,
-        WalletColor.WPastelNavy,
-        WalletColor.WPastelRed,
-        WalletColor.WPastelYellow,
-        WalletColor.WPastelTeal,
-        WalletColor.Blue,
-        WalletColor.Green,
-        WalletColor.Orange,
-        WalletColor.Purple,
-    )
-
 @Composable
 private fun WalletColorSelector(
     selectedWalletColor: WalletColor,
@@ -336,20 +313,14 @@ private fun WalletColorSelector(
         mutableStateOf(selectedWalletColor)
     }
 
-    val isInPreview = LocalInspectionMode.current
-    val availableColors =
-        remember(isInPreview) {
-            if (isInPreview) {
-                previewWalletColors
-            } else {
-                try {
-                    defaultWalletColors()
-                } catch (e: Throwable) {
-                    Log.e("WalletSettingsScreen", "failed to load default wallet colors", e)
-                    previewWalletColors
-                }
-            }
+    val availableColors = remember {
+        try {
+            defaultWalletColors()
+        } catch (e: Throwable) {
+            Log.e("WalletSettingsScreen", "failed to load default wallet colors", e)
+            emptyList()
         }
+    }
 
     Column(
         Modifier
