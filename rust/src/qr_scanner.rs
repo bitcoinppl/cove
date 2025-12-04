@@ -642,76 +642,57 @@ mod tests {
         }
     }
 
-    /// Test multi-part UR completion with crypto-seed
-    /// Creates a multi-part UR using foundation_ur, scans all parts, verifies completion
+    /// Test multi-part UR: progress tracking, completion, and result parsing
     #[test]
-    fn test_multi_part_ur_completion() {
+    fn test_multi_part_ur() {
         use cove_ur::CryptoSeed;
         use foundation_ur::Encoder as UrEncoder;
 
-        // create test seed with 16-byte entropy
-        let entropy = vec![0xAB; 16];
-        let seed = CryptoSeed::from_entropy(entropy.clone()).unwrap();
+        // larger entropy + small fragments = more parts for thorough testing
+        let entropy = vec![0xFF; 32];
+        let seed = CryptoSeed::from_entropy(entropy).unwrap();
         let cbor = seed.encode().unwrap();
 
-        // create multi-part UR with small fragment size to force multiple parts
-        const MAX_FRAGMENT_LEN: usize = 20;
+        const MAX_FRAGMENT_LEN: usize = 15;
         let mut encoder = UrEncoder::new();
         encoder.start("crypto-seed", &cbor, MAX_FRAGMENT_LEN);
 
-        // collect all parts
         let sequence_count = encoder.sequence_count();
-        assert!(sequence_count > 1, "Should create multiple parts with small fragment size");
+        assert!(sequence_count > 2, "Should have multiple parts");
 
         let mut parts = Vec::new();
         for _ in 0..sequence_count {
-            let part = encoder.next_part();
-            parts.push(part.to_string());
+            parts.push(encoder.next_part().to_string());
         }
 
-        // scan all parts through QrScanner
         let scanner = QrScannerFFI::new();
+        let mut last_progress = 0.0;
         let mut completed = false;
 
-        // first scan should return in-progress
-        let first_result = scanner.scan(StringOrData::String(parts[0].clone())).unwrap();
-        match first_result {
-            ScanResult::InProgress { progress: ScanProgress::Ur { percentage }, .. } => {
-                assert!(percentage > 0.0 && percentage < 1.0, "Progress should be partial");
-            }
-            ScanResult::Complete { data, .. } => {
-                // single part completed (shouldn't happen with small fragment size)
-                assert!(
-                    matches!(data, crate::multi_format::MultiFormat::Mnemonic(_)),
-                    "Should parse as Mnemonic"
-                );
-                completed = true;
-            }
-            _ => panic!("Expected UR progress or completion"),
-        }
+        for (i, part) in parts.iter().enumerate() {
+            let result = scanner.scan(StringOrData::String(part.clone())).unwrap();
 
-        // scan remaining parts until completion
-        if !completed {
-            for part in parts.iter().skip(1) {
-                let result = scanner.scan(StringOrData::String(part.clone())).unwrap();
-
-                match result {
-                    ScanResult::InProgress {
-                        progress: ScanProgress::Ur { percentage }, ..
-                    } => {
-                        assert!(percentage > 0.0, "Progress should be positive");
-                    }
-                    ScanResult::Complete { data, .. } => {
-                        // UR fountain codes may complete before all parts are scanned
-                        assert!(
-                            matches!(data, crate::multi_format::MultiFormat::Mnemonic(_)),
-                            "Should parse as Mnemonic"
-                        );
-                        completed = true;
-                        break;
-                    }
-                    _ => panic!("Expected UR progress or completion"),
+            match result {
+                ScanResult::InProgress { progress: ScanProgress::Ur { percentage }, .. } => {
+                    assert!(
+                        percentage >= last_progress,
+                        "Progress should not decrease: {} < {}",
+                        percentage,
+                        last_progress
+                    );
+                    assert!(percentage > 0.0 && percentage <= 1.0, "Progress should be in (0, 1]");
+                    last_progress = percentage;
                 }
+                ScanResult::Complete { data, .. } => {
+                    assert!(i > 0, "Should scan at least 2 parts before completion");
+                    assert!(
+                        matches!(data, crate::multi_format::MultiFormat::Mnemonic(_)),
+                        "Should parse as Mnemonic"
+                    );
+                    completed = true;
+                    break;
+                }
+                _ => panic!("Expected UR progress or completion"),
             }
         }
 
@@ -734,58 +715,6 @@ mod tests {
         // empty UR
         let result = scanner.scan(StringOrData::String("ur:crypto-seed/".to_string()));
         assert!(result.is_err(), "Should fail on empty UR payload");
-    }
-
-    /// Test progress percentage accuracy for multi-part UR
-    #[test]
-    fn test_ur_progress_percentage() {
-        use cove_ur::CryptoSeed;
-        use foundation_ur::Encoder as UrEncoder;
-
-        // create larger payload to ensure multiple parts
-        let entropy = vec![0xFF; 32];
-        let seed = CryptoSeed::from_entropy(entropy).unwrap();
-        let cbor = seed.encode().unwrap();
-
-        // small fragment size to force many parts
-        const MAX_FRAGMENT_LEN: usize = 15;
-        let mut encoder = UrEncoder::new();
-        encoder.start("crypto-seed", &cbor, MAX_FRAGMENT_LEN);
-
-        let sequence_count = encoder.sequence_count();
-        assert!(sequence_count > 2, "Should have multiple parts");
-
-        let mut parts = Vec::new();
-        for _ in 0..sequence_count {
-            parts.push(encoder.next_part().to_string());
-        }
-
-        let scanner = QrScannerFFI::new();
-        let mut last_progress = 0.0;
-
-        // scan parts and verify progress increases (or completes early due to fountain codes)
-        for (i, part) in parts.iter().enumerate() {
-            let result = scanner.scan(StringOrData::String(part.clone())).unwrap();
-
-            match result {
-                ScanResult::InProgress { progress: ScanProgress::Ur { percentage }, .. } => {
-                    assert!(
-                        percentage >= last_progress,
-                        "Progress should not decrease: {} < {}",
-                        percentage,
-                        last_progress
-                    );
-                    assert!(percentage <= 1.0, "Progress should not exceed 100%");
-                    last_progress = percentage;
-                }
-                ScanResult::Complete { .. } => {
-                    // fountain codes may complete before all parts scanned
-                    assert!(i > 0, "Should scan at least 2 parts before completion");
-                    break;
-                }
-                _ => panic!("Expected UR progress or completion"),
-            }
-        }
     }
 
     /// Test QrScanner reset behavior
