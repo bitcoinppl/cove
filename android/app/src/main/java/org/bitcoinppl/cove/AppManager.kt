@@ -1,5 +1,7 @@
 package org.bitcoinppl.cove
 
+private const val WALLET_MODE_CHANGE_DELAY_MS = 250L
+
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -548,6 +550,7 @@ class AppManager private constructor() : FfiReconcile {
 
                     is AppStateReconcileMessage.FiatPricesChanged -> {
                         prices = message.v1
+                        walletManager?.updateFiatBalance()
                     }
 
                     is AppStateReconcileMessage.FeesChanged -> {
@@ -574,7 +577,7 @@ class AppManager private constructor() : FfiReconcile {
                         isLoading = true
                         loadWallets()
                         launch {
-                            kotlinx.coroutines.delay(200)
+                            kotlinx.coroutines.delay(WALLET_MODE_CHANGE_DELAY_MS)
                             isLoading = false
                         }
                     }
