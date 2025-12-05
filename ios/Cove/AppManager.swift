@@ -239,6 +239,7 @@ import SwiftUI
 
                 case let .fiatPricesChanged(prices):
                     self.prices = prices
+                    self.walletManager?.updateFiatBalance()
 
                 case let .feesChanged(fees):
                     self.fees = fees

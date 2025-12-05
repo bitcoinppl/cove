@@ -548,6 +548,7 @@ class AppManager private constructor() : FfiReconcile {
 
                     is AppStateReconcileMessage.FiatPricesChanged -> {
                         prices = message.v1
+                        walletManager?.updateFiatBalance()
                     }
 
                     is AppStateReconcileMessage.FeesChanged -> {
