@@ -106,8 +106,8 @@ import org.bitcoinppl.cove_core.types.Utxo
 import org.bitcoinppl.cove_core.types.UtxoList
 import org.bitcoinppl.cove_core.types.UtxoType
 import org.bitcoinppl.cove_core.types.WalletId
-import uniffi.cove_ur.FfiConverterTypeUrError
-import uniffi.cove_ur.UrException
+import org.bitcoinppl.cove_core.ur.FfiConverterTypeUrError
+import org.bitcoinppl.cove_core.ur.UrException
 import org.bitcoinppl.cove_core.device.RustBuffer as RustBufferKeychainError
 import org.bitcoinppl.cove_core.nfc.RustBuffer as RustBufferNfcMessage
 import org.bitcoinppl.cove_core.tapcard.RustBuffer as RustBufferTapCardParseError
@@ -142,7 +142,7 @@ import org.bitcoinppl.cove_core.types.RustBuffer as RustBufferUtxo
 import org.bitcoinppl.cove_core.types.RustBuffer as RustBufferUtxoList
 import org.bitcoinppl.cove_core.types.RustBuffer as RustBufferUtxoType
 import org.bitcoinppl.cove_core.types.RustBuffer as RustBufferWalletId
-import uniffi.cove_ur.RustBuffer as RustBufferUrError
+import org.bitcoinppl.cove_core.ur.RustBuffer as RustBufferUrError
 
 // This is a helper for safely working with byte buffers returned from the Rust code.
 // A rust-owned buffer is represented by its capacity, its current length, and a
@@ -1849,7 +1849,7 @@ internal object UniffiLib {
         org.bitcoinppl.cove_core.nfc.uniffiEnsureInitialized()
         org.bitcoinppl.cove_core.tapcard.uniffiEnsureInitialized()
         org.bitcoinppl.cove_core.types.uniffiEnsureInitialized()
-        uniffi.cove_ur.uniffiEnsureInitialized()
+        org.bitcoinppl.cove_core.ur.uniffiEnsureInitialized()
         
     }
     external fun uniffi_cove_fn_clone_ffiapp(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -43991,7 +43991,7 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
 
 object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrException> {
     override fun lift(error_buf: RustBuffer.ByValue): UrException =
-        uniffi.cove_ur.UrException.ErrorHandler.lift(
+        org.bitcoinppl.cove_core.ur.UrException.ErrorHandler.lift(
             RustBufferUrError.ByValue().apply {
                 capacity = error_buf.capacity
                 len = error_buf.len

@@ -1,0 +1,11 @@
+[bindings.swift]
+cdylib_name = "coveurffi"
+
+[bindings.kotlin]
+package_name = "org.bitcoinppl.cove_core.ur"
+cdylib_name = "coveffi"
+
+[bindings.kotlin.external_packages]
+cove_types = "org.bitcoinppl.cove_core.types"
+cove_util = "org.bitcoinppl.cove_core.util"
+
