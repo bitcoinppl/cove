@@ -115,5 +115,6 @@ dependencies {
 ktlint {
     filter {
         exclude("**/cove_core/**")
+        exclude("**/uniffi/**")
     }
 }
