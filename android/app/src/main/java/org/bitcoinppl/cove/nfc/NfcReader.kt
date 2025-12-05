@@ -56,25 +56,31 @@ class NfcReader(
         message = "Hold your phone near the NFC tag"
         readingState = NfcReadingState.WAITING
 
-        nfcAdapter.enableReaderMode(
-            activity,
-            { tag ->
-                handleTag(tag)
-            },
-            NfcAdapter.FLAG_READER_NFC_A or
-                NfcAdapter.FLAG_READER_NFC_B or
-                NfcAdapter.FLAG_READER_NFC_F or
-                NfcAdapter.FLAG_READER_NFC_V or
-                NfcAdapter.FLAG_READER_NO_PLATFORM_SOUNDS,
-            null,
-        )
+        // must be called on UI thread
+        activity.runOnUiThread {
+            nfcAdapter.enableReaderMode(
+                activity,
+                { tag ->
+                    handleTag(tag)
+                },
+                NfcAdapter.FLAG_READER_NFC_A or
+                    NfcAdapter.FLAG_READER_NFC_B or
+                    NfcAdapter.FLAG_READER_NFC_F or
+                    NfcAdapter.FLAG_READER_NFC_V or
+                    NfcAdapter.FLAG_READER_NO_PLATFORM_SOUNDS,
+                null,
+            )
+        }
     }
 
     fun stopScanning() {
         isScanning = false
         message = ""
         readingState = NfcReadingState.WAITING
-        nfcAdapter?.disableReaderMode(activity)
+        // must be called on UI thread
+        activity.runOnUiThread {
+            nfcAdapter?.disableReaderMode(activity)
+        }
     }
 
     private fun handleTag(tag: Tag) {
