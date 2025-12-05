@@ -140,7 +140,7 @@ act-zero-ext = "0.2.0"
 tokio = { workspace = true, features = ["rt"] }
 async-trait = "0.1.81"
 futures = "0.3.30"
-tryhard = "0.5"
+backon = "1.3"
 
 # crypto
 rand = { workspace = true }

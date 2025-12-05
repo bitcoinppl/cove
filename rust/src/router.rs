@@ -1,5 +1,8 @@
 use std::sync::Arc;
 
+/// Default delay for load-and-reset transitions (in milliseconds)
+pub const LOAD_AND_RESET_DELAY_MS: u32 = 250;
+
 use crate::{
     app::FfiApp,
     database::Database,
@@ -226,7 +229,7 @@ impl From<ColdWalletRoute> for Route {
 
 impl Route {
     pub fn load_and_reset(self) -> Self {
-        self.load_and_reset_after(800)
+        self.load_and_reset_after(LOAD_AND_RESET_DELAY_MS)
     }
 
     pub fn load_and_reset_after(self, time: u32) -> Self {
@@ -300,11 +303,11 @@ impl RouteFactory {
         routes.push(BoxedRoute::new(default_route).into());
         routes.extend(boxed_nested_routes);
 
-        Route::LoadAndReset { reset_to: routes, after_millis: 500 }
+        Route::LoadAndReset { reset_to: routes, after_millis: LOAD_AND_RESET_DELAY_MS }
     }
 
     pub fn load_and_reset_to(&self, reset_to: Route) -> Route {
-        Self::load_and_reset_to_after(self, reset_to, 500)
+        Self::load_and_reset_to_after(self, reset_to, LOAD_AND_RESET_DELAY_MS)
     }
 
     pub fn load_and_reset_to_after(&self, reset_to: Route, time: u32) -> Route {

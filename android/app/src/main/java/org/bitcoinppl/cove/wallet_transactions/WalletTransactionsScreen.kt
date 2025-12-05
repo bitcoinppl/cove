@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -149,10 +150,10 @@ fun WalletTransactionsScreen(
             val spendable = it.balance.spendable()
             it.displayAmount(spendable, showUnit = true)
         } ?: satsAmount
-    val actualFiatAmount =
+    val actualFiatAmount: String? =
         manager?.fiatBalance?.let {
             manager.rust.displayFiatAmount(it)
-        } ?: usdAmount
+        }
     val transactions =
         when (val state = manager?.loadState) {
             is WalletLoadState.LOADED -> state.txns
@@ -304,16 +305,12 @@ fun WalletTransactionsScreen(
                     verticalArrangement = Arrangement.spacedBy(24.dp),
                 ) {
                     val fiatOrBtc = manager?.walletMetadata?.fiatOrBtc ?: FiatOrBtc.BTC
-                    val (primaryAmount, secondaryAmount) =
-                        when (fiatOrBtc) {
-                            FiatOrBtc.FIAT -> actualFiatAmount to actualSatsAmount
-                            FiatOrBtc.BTC -> actualSatsAmount to actualFiatAmount
-                        }
 
                     BalanceWidget(
                         hidden = initialBalanceHidden,
-                        primaryAmount = primaryAmount,
-                        secondaryAmount = secondaryAmount,
+                        fiatAmount = actualFiatAmount,
+                        btcAmount = actualSatsAmount,
+                        fiatOrBtc = fiatOrBtc,
                         onToggle = { manager?.dispatch(WalletManagerAction.ToggleFiatBtcPrimarySecondary) },
                     )
 
@@ -756,31 +753,70 @@ private fun UnsignedTransactionWidget(
 @Composable
 private fun BalanceWidget(
     hidden: Boolean,
-    primaryAmount: String,
-    secondaryAmount: String,
+    fiatAmount: String?,
+    btcAmount: String,
+    fiatOrBtc: FiatOrBtc,
     onToggle: () -> Unit,
 ) {
     var isHidden by remember { mutableStateOf(hidden) }
+
+    // determine primary/secondary based on fiatOrBtc preference
+    val primaryIsFiat = fiatOrBtc == FiatOrBtc.FIAT
+    val primaryAmount = if (primaryIsFiat) fiatAmount else btcAmount
+    val secondaryAmount = if (primaryIsFiat) btcAmount else fiatAmount
 
     Column(
         modifier = Modifier.clickable { onToggle() },
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Text(
-            text = if (isHidden) "••••••" else secondaryAmount,
-            color = Color.White.copy(alpha = 0.7f),
-            fontSize = 13.sp,
-        )
+        // secondary balance (top, smaller)
+        if (isHidden) {
+            Text(
+                text = "••••••",
+                color = Color.White.copy(alpha = 0.7f),
+                fontSize = 13.sp,
+            )
+        } else if (secondaryAmount != null) {
+            Text(
+                text = secondaryAmount,
+                color = Color.White.copy(alpha = 0.7f),
+                fontSize = 13.sp,
+            )
+        } else {
+            CircularProgressIndicator(
+                modifier = Modifier.size(12.dp),
+                color = Color.White.copy(alpha = 0.7f),
+                strokeWidth = 1.5.dp,
+            )
+        }
 
         Row(verticalAlignment = Alignment.CenterVertically) {
-            BalanceAutoSizeText(
-                text = if (isHidden) "••••••" else primaryAmount,
-                modifier = Modifier.padding(end = 12.dp),
-                color = Color.White,
-                baseFontSize = 34.sp,
-                minimumScaleFactor = 0.5f,
-                fontWeight = FontWeight.Bold,
-            )
+            // primary balance (bottom, larger)
+            if (isHidden) {
+                BalanceAutoSizeText(
+                    text = "••••••",
+                    modifier = Modifier.padding(end = 12.dp),
+                    color = Color.White,
+                    baseFontSize = 34.sp,
+                    minimumScaleFactor = 0.5f,
+                    fontWeight = FontWeight.Bold,
+                )
+            } else if (primaryAmount != null) {
+                BalanceAutoSizeText(
+                    text = primaryAmount,
+                    modifier = Modifier.padding(end = 12.dp),
+                    color = Color.White,
+                    baseFontSize = 34.sp,
+                    minimumScaleFactor = 0.5f,
+                    fontWeight = FontWeight.Bold,
+                )
+            } else {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(24.dp),
+                    color = Color.White,
+                    strokeWidth = 2.dp,
+                )
+            }
             Spacer(modifier = Modifier.weight(1f))
             Icon(
                 imageVector = if (isHidden) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,

@@ -1400,8 +1400,6 @@ external fun uniffi_cove_checksum_method_rustwalletmanager_amount_in_fiat(
 ): Short
 external fun uniffi_cove_checksum_method_rustwalletmanager_balance(
 ): Short
-external fun uniffi_cove_checksum_method_rustwalletmanager_balance_in_fiat(
-): Short
 external fun uniffi_cove_checksum_method_rustwalletmanager_broadcast_transaction(
 ): Short
 external fun uniffi_cove_checksum_method_rustwalletmanager_convert_and_display_fiat(
@@ -2334,11 +2332,9 @@ external fun uniffi_cove_fn_constructor_rustwalletmanager_try_new_from_xpub(`xpu
 ): Long
 external fun uniffi_cove_fn_method_rustwalletmanager_address_at(`ptr`: Long,`index`: Int,
 ): Long
-external fun uniffi_cove_fn_method_rustwalletmanager_amount_in_fiat(`ptr`: Long,`amount`: Long,
-): Long
+external fun uniffi_cove_fn_method_rustwalletmanager_amount_in_fiat(`ptr`: Long,`amount`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_rustwalletmanager_balance(`ptr`: Long,
-): Long
-external fun uniffi_cove_fn_method_rustwalletmanager_balance_in_fiat(`ptr`: Long,
 ): Long
 external fun uniffi_cove_fn_method_rustwalletmanager_broadcast_transaction(`ptr`: Long,`signedTransaction`: Long,
 ): Long
@@ -3750,13 +3746,10 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_address_at() != 13093.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_amount_in_fiat() != 35706.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_amount_in_fiat() != 61774.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_balance() != 14970.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_balance_in_fiat() != 19007.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_broadcast_transaction() != 63043.toShort()) {
@@ -17872,11 +17865,12 @@ public interface RustWalletManagerInterface {
      */
     suspend fun `addressAt`(`index`: kotlin.UInt): AddressInfo
     
-    suspend fun `amountInFiat`(`amount`: Amount): kotlin.Double
+    /**
+     * Sync method using cached prices, returns None if no cached prices
+     */
+    fun `amountInFiat`(`amount`: Amount): kotlin.Double?
     
     suspend fun `balance`(): Balance
-    
-    suspend fun `balanceInFiat`(): kotlin.Double
     
     suspend fun `broadcastTransaction`(`signedTransaction`: BitcoinTransaction)
     
@@ -18106,25 +18100,20 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     }
 
     
-    @Throws(WalletManagerException::class)
-    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
-    override suspend fun `amountInFiat`(`amount`: Amount) : kotlin.Double {
-        return uniffiRustCallAsync(
-        callWithHandle { uniffiHandle ->
-            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_amount_in_fiat(
-                uniffiHandle,
-                FfiConverterTypeAmount.lower(`amount`),
-            )
-        },
-        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_f64(future, callback, continuation) },
-        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_f64(future, continuation) },
-        { future -> UniffiLib.ffi_cove_rust_future_free_f64(future) },
-        // lift function
-        { FfiConverterDouble.lift(it) },
-        // Error FFI converter
-        WalletManagerException.ErrorHandler,
+    /**
+     * Sync method using cached prices, returns None if no cached prices
+     */override fun `amountInFiat`(`amount`: Amount): kotlin.Double? {
+            return FfiConverterOptionalDouble.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_amount_in_fiat(
+        it,
+        FfiConverterTypeAmount.lower(`amount`),_status)
+}
+    }
     )
     }
+    
 
     
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
@@ -18143,27 +18132,6 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
         { FfiConverterTypeBalance.lift(it) },
         // Error FFI converter
         UniffiNullRustCallStatusErrorHandler,
-    )
-    }
-
-    
-    @Throws(WalletManagerException::class)
-    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
-    override suspend fun `balanceInFiat`() : kotlin.Double {
-        return uniffiRustCallAsync(
-        callWithHandle { uniffiHandle ->
-            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_balance_in_fiat(
-                uniffiHandle,
-                
-            )
-        },
-        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_f64(future, callback, continuation) },
-        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_f64(future, continuation) },
-        { future -> UniffiLib.ffi_cove_rust_future_free_f64(future) },
-        // lift function
-        { FfiConverterDouble.lift(it) },
-        // Error FFI converter
-        WalletManagerException.ErrorHandler,
     )
     }
 
@@ -42518,6 +42486,38 @@ public object FfiConverterOptionalFloat: FfiConverterRustBuffer<kotlin.Float?> {
         } else {
             buf.put(1)
             FfiConverterFloat.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalDouble: FfiConverterRustBuffer<kotlin.Double?> {
+    override fun read(buf: ByteBuffer): kotlin.Double? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterDouble.read(buf)
+    }
+
+    override fun allocationSize(value: kotlin.Double?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterDouble.allocationSize(value)
+        }
+    }
+
+    override fun write(value: kotlin.Double?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterDouble.write(value, buf)
         }
     }
 }

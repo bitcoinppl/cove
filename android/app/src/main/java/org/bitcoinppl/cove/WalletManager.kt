@@ -97,7 +97,7 @@ class WalletManager :
         this.unsignedTransactions = runCatching { rustManager.getUnsignedTransactions() }.getOrElse { emptyList() }
 
         // start fiat balance update
-        mainScope.launch(Dispatchers.IO) { updateFiatBalance() }
+        updateFiatBalance()
 
         rustManager.listenForUpdates(this)
     }
@@ -180,26 +180,16 @@ class WalletManager :
         transactionDetailsCache[txId] = details
     }
 
-    private suspend fun updateFiatBalance() {
-        try {
-            val fiatBal = rust.balanceInFiat()
-            withContext(Dispatchers.Main) {
-                fiatBalance = fiatBal
-            }
-        } catch (e: Exception) {
-            logError("error getting fiat balance", e)
-            withContext(Dispatchers.Main) {
-                fiatBalance = 0.0
-            }
-        }
+    internal fun updateFiatBalance() {
+        fiatBalance = rust.amountInFiat(balance.spendable())
     }
 
     suspend fun updateWalletBalance() {
         val bal = rust.balance()
         withContext(Dispatchers.Main) {
             balance = bal
+            updateFiatBalance()
         }
-        updateFiatBalance()
     }
 
     private fun apply(message: WalletManagerReconcileMessage) {
@@ -213,8 +203,12 @@ class WalletManager :
             }
 
             is WalletManagerReconcileMessage.AvailableTransactions -> {
-                if (loadState is WalletLoadState.LOADING) {
-                    loadState = WalletLoadState.SCANNING(message.v1)
+                // accept cached transactions in loading/scanning states, or if new count > current
+                loadState = when (val current = loadState) {
+                    is WalletLoadState.LOADING, is WalletLoadState.SCANNING ->
+                        WalletLoadState.SCANNING(message.v1)
+                    is WalletLoadState.LOADED ->
+                        if (message.v1.size > current.txns.size) WalletLoadState.SCANNING(message.v1) else current
                 }
             }
 
@@ -234,8 +228,7 @@ class WalletManager :
 
             is WalletManagerReconcileMessage.WalletBalanceChanged -> {
                 balance = message.v1
-                // update fiat balance in background
-                mainScope.launch(Dispatchers.IO) { updateFiatBalance() }
+                updateFiatBalance()
             }
 
             is WalletManagerReconcileMessage.UnsignedTransactionsChanged -> {
@@ -282,16 +275,16 @@ class WalletManager :
     }
 
     override fun reconcile(message: WalletManagerReconcileMessage) {
-        logDebug("reconcile: $message")
-        ioScope.launch {
-            mainScope.launch { apply(message) }
+        mainScope.launch {
+            logDebug("reconcile: $message")
+            apply(message)
         }
     }
 
     override fun reconcileMany(messages: List<WalletManagerReconcileMessage>) {
-        logDebug("reconcile_messages: ${messages.size} messages")
-        ioScope.launch {
-            mainScope.launch { messages.forEach { apply(it) } }
+        mainScope.launch {
+            logDebug("reconcile_messages: ${messages.size} messages")
+            messages.forEach { apply(it) }
         }
     }
 
