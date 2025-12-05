@@ -133,7 +133,7 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
         return details
     }
 
-    private func updateFiatBalance() {
+    func updateFiatBalance() {
         fiatBalance = rust.amountInFiat(amount: balance.spendable())
     }
 

@@ -180,7 +180,7 @@ class WalletManager :
         transactionDetailsCache[txId] = details
     }
 
-    private fun updateFiatBalance() {
+    internal fun updateFiatBalance() {
         fiatBalance = rust.amountInFiat(balance.spendable())
     }
 
