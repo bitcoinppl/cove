@@ -1,6 +1,8 @@
 import Observation
 import SwiftUI
 
+private let walletModeChangeDelayMs = 250
+
 @Observable final class AppManager: FfiReconcile {
     static let shared = AppManager()
 
@@ -263,7 +265,7 @@ import SwiftUI
                     self.loadWallets()
 
                     Task {
-                        try? await Task.sleep(for: .milliseconds(200))
+                        try? await Task.sleep(for: .milliseconds(walletModeChangeDelayMs))
                         await MainActor.run {
                             withAnimation { self.isLoading = false }
                         }
