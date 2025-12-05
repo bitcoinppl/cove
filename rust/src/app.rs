@@ -18,7 +18,7 @@ use crate::{
     keychain::Keychain,
     network::Network,
     node::Node,
-    router::{Route, RouteFactory, Router},
+    router::{LOAD_AND_RESET_DELAY_MS, Route, RouteFactory, Router},
     wallet::metadata::{WalletId, WalletMetadata, WalletType},
 };
 use cove_macros::impl_default_for;
@@ -405,9 +405,9 @@ impl FfiApp {
             .collect::<Vec<WalletId>>()
     }
 
-    /// Load and reset the default route after 800ms delay
+    /// Load and reset the default route after default delay
     pub fn load_and_reset_default_route(&self, route: Route) {
-        self.load_and_reset_default_route_after(route, 800);
+        self.load_and_reset_default_route_after(route, LOAD_AND_RESET_DELAY_MS);
     }
 
     /// Load and reset the default route

@@ -2643,7 +2643,7 @@ public protocol FfiAppProtocol: AnyObject, Sendable {
     func listenForUpdates(updater: FfiReconcile) 
     
     /**
-     * Load and reset the default route after 800ms delay
+     * Load and reset the default route after 200ms delay
      */
     func loadAndResetDefaultRoute(route: Route) 
     
@@ -2933,7 +2933,7 @@ open func listenForUpdates(updater: FfiReconcile)  {try! rustCall() {
 }
     
     /**
-     * Load and reset the default route after 800ms delay
+     * Load and reset the default route after 200ms delay
      */
 open func loadAndResetDefaultRoute(route: Route)  {try! rustCall() {
     uniffi_cove_fn_method_ffiapp_load_and_reset_default_route(
@@ -28243,7 +28243,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_ffiapp_listen_for_updates() != 31459) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_ffiapp_load_and_reset_default_route() != 39591) {
+    if (uniffi_cove_checksum_method_ffiapp_load_and_reset_default_route() != 65360) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_load_and_reset_default_route_after() != 60004) {
