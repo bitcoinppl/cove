@@ -4,6 +4,11 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -11,6 +16,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.CurrencyBitcoin
 import androidx.compose.material.icons.filled.QrCode2
@@ -25,11 +31,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
@@ -44,6 +54,8 @@ import org.bitcoinppl.cove.ui.theme.midnightBtn
 import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.AutoSizeTextField
 import org.bitcoinppl.cove.views.ImageButton
+
+private enum class SendFocusField { None, Amount, Address }
 
 @Preview()
 @Composable
@@ -81,6 +93,7 @@ fun SendScreen(
     onScanQr: () -> Unit,
     onChangeSpeed: () -> Unit,
     onClearAmount: () -> Unit = {},
+    onMaxSelected: () -> Unit = {},
     onToggleBalanceVisibility: () -> Unit = {},
     onUnitChange: (String) -> Unit = {},
     onToggleFiatOrBtc: () -> Unit = {},
@@ -104,6 +117,10 @@ fun SendScreen(
     onAddressChanged: (String) -> Unit,
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
+    var focusedField by remember { mutableStateOf(SendFocusField.None) }
+    val focusManager = LocalFocusManager.current
+    val addressFocusRequester = remember { FocusRequester() }
+
     Scaffold(
         containerColor = CoveColor.midnightBlue,
         topBar = {
@@ -153,58 +170,96 @@ fun SendScreen(
                     onToggleVisibility = onToggleBalanceVisibility,
                     height = headerHeight,
                 )
-                Column(
+
+                val density = LocalDensity.current
+                val isKeyboardVisible = WindowInsets.ime.getBottom(density) > 0
+
+                Box(
                     modifier =
                         Modifier
                             .fillMaxWidth()
                             .weight(1f)
                             .clip(RoundedCornerShape(topStart = 0.dp, topEnd = 0.dp))
-                            .background(MaterialTheme.colorScheme.surface)
-                            .verticalScroll(rememberScrollState())
-                            .padding(horizontal = 16.dp),
+                            .background(MaterialTheme.colorScheme.surface),
                 ) {
-                    AmountWidget(
-                        initialAmount = amountText,
-                        denomination = amountDenomination,
-                        dollarText = dollarEquivalentText,
-                        secondaryUnit = secondaryUnit,
-                        onAmountChanged = onAmountChanged,
-                        onClearAmount = onClearAmount,
-                        onUnitChange = onUnitChange,
-                        onToggleFiatOrBtc = onToggleFiatOrBtc,
-                        onSanitizeBtcAmount = onSanitizeBtcAmount,
-                        onSanitizeFiatAmount = onSanitizeFiatAmount,
-                        isFiatMode = isFiatMode,
-                    )
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
-                    AddressWidget(
-                        onScanQr = onScanQr,
-                        initialAddress = initialAddress,
-                        onAddressChanged = onAddressChanged,
-                    )
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
-                    SpendingWidget(
-                        accountShort = accountShort,
-                        feeEta = feeEta,
-                        feeAmount = feeAmount,
-                        totalSpendingCrypto = totalSpendingCrypto,
-                        totalSpendingFiat = totalSpendingFiat,
-                        onChangeSpeed = onChangeSpeed,
-                    )
-                    Spacer(Modifier.weight(1f))
-                    ImageButton(
-                        text = stringResource(R.string.btn_next),
-                        onClick = onNext,
-                        colors =
-                            ButtonDefaults.buttonColors(
-                                containerColor = midnightBtn(),
-                                contentColor = Color.White,
-                            ),
+                    Column(
                         modifier =
                             Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 24.dp),
-                    )
+                                .fillMaxSize()
+                                .verticalScroll(rememberScrollState())
+                                .padding(horizontal = 16.dp),
+                    ) {
+                        AmountWidget(
+                            initialAmount = amountText,
+                            denomination = amountDenomination,
+                            dollarText = dollarEquivalentText,
+                            secondaryUnit = secondaryUnit,
+                            onAmountChanged = onAmountChanged,
+                            onClearAmount = onClearAmount,
+                            onUnitChange = onUnitChange,
+                            onToggleFiatOrBtc = onToggleFiatOrBtc,
+                            onSanitizeBtcAmount = onSanitizeBtcAmount,
+                            onSanitizeFiatAmount = onSanitizeFiatAmount,
+                            isFiatMode = isFiatMode,
+                            onFocusChanged = { focused ->
+                                focusedField = if (focused) SendFocusField.Amount else SendFocusField.None
+                            },
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
+                        AddressWidget(
+                            onScanQr = onScanQr,
+                            initialAddress = initialAddress,
+                            onAddressChanged = onAddressChanged,
+                            focusRequester = addressFocusRequester,
+                            onFocusChanged = { focused ->
+                                focusedField = if (focused) SendFocusField.Address else SendFocusField.None
+                            },
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
+                        SpendingWidget(
+                            accountShort = accountShort,
+                            feeEta = feeEta,
+                            feeAmount = feeAmount,
+                            totalSpendingCrypto = totalSpendingCrypto,
+                            totalSpendingFiat = totalSpendingFiat,
+                            onChangeSpeed = onChangeSpeed,
+                        )
+                        Spacer(Modifier.weight(1f))
+                        ImageButton(
+                            text = stringResource(R.string.btn_next),
+                            onClick = onNext,
+                            colors =
+                                ButtonDefaults.buttonColors(
+                                    containerColor = midnightBtn(),
+                                    contentColor = Color.White,
+                                ),
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 24.dp),
+                        )
+                    }
+
+                    // Keyboard toolbar - only show for amount field
+                    if (isKeyboardVisible && focusedField == SendFocusField.Amount) {
+                        KeyboardToolbar(
+                            onMaxSelected = onMaxSelected,
+                            onNextOrDone = {
+                                if (initialAddress.isEmpty()) {
+                                    addressFocusRequester.requestFocus()
+                                } else {
+                                    focusManager.clearFocus()
+                                }
+                            },
+                            onClear = onClearAmount,
+                            hasAddress = initialAddress.isNotEmpty(),
+                            modifier =
+                                Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .consumeWindowInsets(WindowInsets.navigationBars)
+                                    .imePadding(),
+                        )
+                    }
                 }
             }
         }
@@ -283,6 +338,7 @@ private fun AmountWidget(
     onSanitizeBtcAmount: (oldValue: String, newValue: String) -> String? = { _, _ -> null },
     onSanitizeFiatAmount: (oldValue: String, newValue: String) -> String? = { _, _ -> null },
     isFiatMode: Boolean = false,
+    onFocusChanged: (Boolean) -> Unit = {},
 ) {
     var amount by remember { mutableStateOf(initialAmount) }
     var showUnitMenu by remember { mutableStateOf(false) }
@@ -350,32 +406,11 @@ private fun AmountWidget(
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth().offset(x = amountOffset),
                     onTextWidthChanged = { width -> textWidth = width },
-                    onFocusChanged = { focused -> isFocused = focused },
+                    onFocusChanged = { focused ->
+                        isFocused = focused
+                        onFocusChanged(focused)
+                    },
                 )
-                // clear button: positioned at top, horizontally follows the text's right edge
-                // text is centered with an offset, so X position = offset + half text width + small margin
-                // only show when focused and has content
-                if (isFocused && amount.isNotEmpty()) {
-                    IconButton(
-                        onClick = {
-                            amount = ""
-                            onAmountChanged("")
-                            onClearAmount()
-                        },
-                        modifier =
-                            Modifier
-                                .align(Alignment.TopCenter)
-                                .offset(x = amountOffset + (textWidth / 2) + 16.dp)
-                                .size(32.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Clear,
-                            contentDescription = "Clear amount",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(20.dp),
-                        )
-                    }
-                }
             }
             Spacer(Modifier.width(32.dp))
             Box {
@@ -468,6 +503,8 @@ private fun AddressWidget(
     onScanQr: () -> Unit,
     initialAddress: String,
     onAddressChanged: (String) -> Unit,
+    focusRequester: FocusRequester,
+    onFocusChanged: (Boolean) -> Unit = {},
 ) {
     var address by remember { mutableStateOf(initialAddress) }
     var isFocused by remember { mutableStateOf(false) }
@@ -537,8 +574,10 @@ private fun AddressWidget(
             modifier =
                 Modifier
                     .fillMaxWidth()
+                    .focusRequester(focusRequester)
                     .onFocusChanged { focusState ->
                         isFocused = focusState.isFocused
+                        onFocusChanged(focusState.isFocused)
                     },
         )
         Spacer(Modifier.height(24.dp))
@@ -634,5 +673,50 @@ private fun SpendingWidget(
             }
         }
         Spacer(Modifier.height(20.dp))
+    }
+}
+
+@Composable
+private fun KeyboardToolbar(
+    onMaxSelected: () -> Unit,
+    onNextOrDone: () -> Unit,
+    onClear: () -> Unit,
+    hasAddress: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val buttonText = if (!hasAddress) "Next" else "Done"
+
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surface,
+    ) {
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // Left: Next or Done
+            FilledTonalButton(onClick = onNextOrDone) {
+                Text(buttonText)
+            }
+
+            // Right: Max + Clear
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilledTonalButton(onClick = onMaxSelected) {
+                    Text("Max")
+                }
+
+                FilledTonalButton(onClick = onClear) {
+                    Icon(
+                        Icons.Filled.Cancel,
+                        contentDescription = "Clear",
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+            }
+        }
     }
 }

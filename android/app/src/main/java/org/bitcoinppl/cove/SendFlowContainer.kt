@@ -217,6 +217,9 @@ private fun SendFlowRouteToScreen(
                 onClearAmount = {
                     sendFlowManager.dispatch(SendFlowManagerAction.ClearSendAmount)
                 },
+                onMaxSelected = {
+                    sendFlowManager.dispatch(SendFlowManagerAction.SelectMaxSend)
+                },
                 onToggleBalanceVisibility = {
                     walletManager.dispatch(WalletManagerAction.ToggleSensitiveVisibility)
                 },
