@@ -511,6 +511,27 @@ impl Wallet {
         self.bdk.balance().into()
     }
 
+    /// Read cached transactions from the BDK wallet
+    pub fn transactions(&self) -> Vec<crate::transaction::Transaction> {
+        use crate::transaction::{Amount, Transaction};
+
+        let zero = Amount::ZERO;
+
+        let mut transactions = self
+            .bdk
+            .transactions()
+            .map(|tx| {
+                let sent_and_received = self.bdk.sent_and_received(&tx.tx_node.tx).into();
+                (tx, sent_and_received)
+            })
+            .map(|(tx, sent_and_received)| Transaction::new(&self.id, sent_and_received, tx))
+            .filter(|tx| tx.sent_and_received().amount() > zero)
+            .collect::<Vec<Transaction>>();
+
+        transactions.sort_unstable_by(|a, b| a.cmp(b).reverse());
+        transactions
+    }
+
     #[allow(dead_code)]
     pub fn public_external_descriptor(&self) -> crate::keys::Descriptor {
         let extended_descriptor: ExtendedDescriptor =

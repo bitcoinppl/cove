@@ -28,7 +28,7 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
     // cached transaction details
     var transactionDetails: [TxId: TransactionDetails] = [:]
 
-    public init(id: WalletId) throws {
+    init(id: WalletId) throws {
         self.id = id
         let rust = try RustWalletManager(id: id)
 
@@ -41,7 +41,7 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
         rust.listenForUpdates(reconciler: WeakReconciler(self))
     }
 
-    public init(xpub: String) throws {
+    init(xpub: String) throws {
         let rust = try RustWalletManager.tryNewFromXpub(xpub: xpub)
         let metadata = rust.walletMetadata()
 
@@ -53,7 +53,7 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
         rust.listenForUpdates(reconciler: WeakReconciler(self))
     }
 
-    public init(tapSigner: TapSigner, deriveInfo: DeriveInfo, backup: Data? = nil) throws {
+    init(tapSigner: TapSigner, deriveInfo: DeriveInfo, backup: Data? = nil) throws {
         let rust = try RustWalletManager.tryNewFromTapSigner(
             tapSigner: tapSigner, deriveInfo: deriveInfo, backup: backup
         )
@@ -154,8 +154,13 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
             self.loadState = .scanning(txns)
 
         case let .availableTransactions(txns):
-            if self.loadState == .loading {
+            switch self.loadState {
+            case .loading, .scanning:
                 self.loadState = .scanning(txns)
+            case let .loaded(current) where txns.count > current.count:
+                self.loadState = .scanning(txns)
+            case .loaded:
+                break
             }
 
         case let .updatedTransactions(txns):
@@ -214,37 +219,31 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
     }
 
     func reconcile(message: Message) {
-        rustBridge.async { [weak self] in
+        Task { @MainActor [weak self] in
             guard let self else {
                 Log.error("WalletManager no longer available")
                 return
             }
-
             logger.debug("reconcile: \(message)")
-            DispatchQueue.main.async { [weak self] in
-                self?.apply(message)
-            }
+            apply(message)
         }
     }
 
     func reconcileMany(messages: [Message]) {
-        rustBridge.async { [weak self] in
+        Task { @MainActor [weak self] in
             guard let self else {
                 Log.error("WalletManager no longer available")
                 return
             }
-
             logger.debug("reconcile_messages: \(messages)")
-            DispatchQueue.main.async { [weak self] in
-                for message in messages {
-                    self?.apply(message)
-                }
+            for message in messages {
+                apply(message)
             }
         }
     }
 
-    public func dispatch(action: Action) { dispatch(action) }
-    public func dispatch(_ action: Action) {
+    func dispatch(action: Action) { dispatch(action) }
+    func dispatch(_ action: Action) {
         rustBridge.async { [weak self] in
             self?.logger.debug("dispatch: \(action)")
             self?.rust.dispatch(action: action)
@@ -252,7 +251,7 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
     }
 
     // PREVIEW only
-    public init(preview: String, _ walletMetadata: WalletMetadata? = nil) {
+    init(preview: String, _ walletMetadata: WalletMetadata? = nil) {
         assert(preview == "preview_only")
 
         id = WalletId()

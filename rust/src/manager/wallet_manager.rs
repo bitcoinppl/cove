@@ -244,11 +244,19 @@ impl RustWalletManager {
         let id = metadata.id.clone();
         let wallet = Wallet::try_load_persisted(id.clone())?;
         let metadata = wallet.metadata.clone();
+
+        // read cached and send to UI immediately
+        let cached_balance: Balance = wallet.balance();
+        let cached_transactions: Vec<Transaction> = wallet.transactions();
+
+        let reconciler = MessageSender::new(sender.clone());
+        reconciler.send(Message::WalletBalanceChanged(cached_balance.into()));
+        reconciler.send(Message::AvailableTransactions(cached_transactions));
+
         let actor = task::spawn_actor(WalletActor::new(wallet, sender.clone()));
 
-        // only creates the scanner if its not already complet
-        let scanner =
-            WalletScanner::try_new(metadata.clone(), sender.clone()).ok().map(spawn_actor);
+        // will only create the scanner if its not already complete
+        let scanner = WalletScanner::try_new(metadata.clone(), sender).ok().map(spawn_actor);
 
         let label_manager = LabelManager::new(id.clone()).into();
 
@@ -256,7 +264,7 @@ impl RustWalletManager {
             id,
             actor,
             metadata: Arc::new(RwLock::new(metadata)),
-            reconciler: MessageSender::new(sender),
+            reconciler,
             reconcile_receiver: Arc::new(receiver),
             label_manager,
             scanner,
