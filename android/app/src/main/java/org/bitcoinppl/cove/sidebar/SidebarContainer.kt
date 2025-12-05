@@ -1,6 +1,5 @@
 package org.bitcoinppl.cove.sidebar
 
-import android.app.Activity
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring

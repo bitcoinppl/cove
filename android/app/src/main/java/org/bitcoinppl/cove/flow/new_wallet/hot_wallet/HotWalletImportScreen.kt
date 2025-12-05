@@ -1,6 +1,5 @@
 package org.bitcoinppl.cove.flow.new_wallet.hot_wallet
 
-import android.app.Activity
 import android.util.Log
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background

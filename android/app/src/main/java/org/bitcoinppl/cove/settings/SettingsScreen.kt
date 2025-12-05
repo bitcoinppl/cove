@@ -50,7 +50,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
-import androidx.fragment.app.FragmentActivity
 import org.bitcoinppl.cove.Auth
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.findFragmentActivity
