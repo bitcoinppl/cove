@@ -1,4 +1,4 @@
-# Compose ↔ iOS Parity Guide
+# iOS ↔ Android Parity Guide
 
 This document covers platform-specific gotchas and patterns for achieving visual and behavioral parity between Android (Jetpack Compose) and iOS (SwiftUI).
 
@@ -94,3 +94,45 @@ Use the custom implementations in `views/AutoSizeText.kt` for:
   }
   ```
 - **Note**: `ImageButton` handles text sizing internally using native `TextAutoSize`.
+
+---
+
+## NFC Scanning UI
+
+- **iOS**: `NFCTagReaderSession` provides automatic system NFC popup. Messages display via `session.alertMessage` property.
+- **Android**: `enableReaderMode` is silent—no system UI. Custom overlay required.
+
+### Transport Protocol Messages
+
+Both platforms implement `TapcardTransportProtocol` with `setMessage()` and `appendMessage()` (called by Rust during NFC operations to show progress):
+
+**iOS** (`TapCardTransport` in `ios/Cove/TapSignerNFC.swift`):
+```swift
+func setMessage(message: String) {
+    nfcSession.alertMessage = message
+}
+
+func appendMessage(message: String) {
+    nfcSession.alertMessage = nfcSession.alertMessage + message
+}
+```
+
+**Android** (`TapCardTransport` in `android/.../nfc/TapCardNfcManager.kt`):
+```kotlin
+override fun setMessage(message: String) {
+    currentMessage = message
+    onMessageUpdate?.invoke(currentMessage)
+}
+
+override fun appendMessage(message: String) {
+    currentMessage += message
+    onMessageUpdate?.invoke(currentMessage)
+}
+```
+
+### Custom Overlay (Android only)
+
+Since Android has no system NFC UI, `TapSignerScanningOverlay` composable provides visual feedback:
+- NFC icon, animated "Scanning..." dots, message text, progress indicator
+- Message updates via callback → `manager.scanMessage` state → recomposition
+- Shown in `TapSignerContainer` when `manager.isScanning` is true

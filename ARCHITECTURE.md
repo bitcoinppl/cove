@@ -149,7 +149,7 @@ This pattern is used throughout the codebase for shared resources and is safe to
   }
   ```
 
-**Compose ↔ iOS parity patterns:** For detailed guidance on matching iOS behavior in Compose (opacity, text colors, button centering, AutoSizeText, etc.), see [docs/COMPOSE_IOS_PARITY.md](docs/COMPOSE_IOS_PARITY.md).
+**iOS ↔ Android parity patterns:** For detailed guidance on matching behavior across platforms (opacity, text colors, button centering, NFC scanning UI, etc.), see [docs/IOS_ANDROID_PARITY.md](docs/IOS_ANDROID_PARITY.md).
 
 ### Manager Pattern (cross-platform)
 
