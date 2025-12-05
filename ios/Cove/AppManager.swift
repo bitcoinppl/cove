@@ -230,6 +230,7 @@ import SwiftUI
 
                 case let .selectedNetworkChanged(network):
                     self.selectedNetwork = network
+                    self.loadWallets()
 
                 case let .defaultRouteChanged(route, nestedRoutes):
                     self.router.routes = nestedRoutes
@@ -258,6 +259,7 @@ import SwiftUI
 
                 case .walletModeChanged:
                     self.isLoading = true
+                    self.loadWallets()
 
                     Task {
                         try? await Task.sleep(for: .milliseconds(200))
