@@ -35,6 +35,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
+import org.bitcoinppl.cove.findActivity
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.title3
 import org.bitcoinppl.cove_core.LabelManager
@@ -48,7 +49,7 @@ fun NfcLabelImportSheet(
     onError: (String) -> Unit,
 ) {
     val context = LocalContext.current
-    val activity = context as? Activity
+    val activity = context.findActivity()
 
     if (activity == null) {
         // fallback if not in activity context

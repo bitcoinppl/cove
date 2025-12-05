@@ -1,5 +1,6 @@
 package org.bitcoinppl.cove
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -23,7 +24,8 @@ fun TapSignerContainer(
     // use current route or last in path
     val currentRoute = manager.path.lastOrNull() ?: manager.initialRoute
 
-    when (currentRoute) {
+    Box(modifier = modifier.fillMaxSize()) {
+        when (currentRoute) {
         is TapSignerRoute.InitSelect -> {
             TapSignerChooseChainCode(
                 app = app,
@@ -117,6 +119,12 @@ fun TapSignerContainer(
                 tapSigner = currentRoute.v1,
                 modifier = modifier.fillMaxSize(),
             )
+        }
+        }
+
+        // show scanning overlay when NFC is active
+        if (manager.isScanning) {
+            TapSignerScanningOverlay(message = manager.scanMessage)
         }
     }
 }
