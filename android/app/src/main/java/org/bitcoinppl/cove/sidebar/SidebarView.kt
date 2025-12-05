@@ -30,7 +30,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -39,8 +38,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
@@ -56,8 +53,6 @@ fun SidebarView(
     app: AppManager,
     modifier: Modifier = Modifier,
 ) {
-    val coroutineScope = rememberCoroutineScope()
-
     Column(
         modifier =
             modifier
@@ -150,9 +145,7 @@ fun SidebarView(
                 Modifier
                     .fillMaxWidth()
                     .clickable {
-                        app.isSidebarVisible = false
-                        coroutineScope.launch {
-                            delay(300)
+                        app.closeSidebarAndNavigate {
                             if (app.wallets.isEmpty()) {
                                 app.resetRoute(RouteFactory().newWalletSelect())
                             } else {
