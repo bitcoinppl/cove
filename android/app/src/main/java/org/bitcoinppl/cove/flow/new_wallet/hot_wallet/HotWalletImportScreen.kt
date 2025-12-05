@@ -16,9 +16,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -59,6 +56,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
@@ -193,7 +191,7 @@ fun HotWalletImportScreen(
                     Bip39WordSpecificAutocomplete(
                         wordNumber = (idx + 1).toUShort(),
                         numberOfWords = numberOfWords,
-                    ).isBip39Word(word)
+                    ).isValidWord(word, enteredWords)
             }
 
     fun importWallet() {
@@ -351,7 +349,13 @@ fun HotWalletImportScreen(
 
                     ImageButton(
                         text = stringResource(R.string.action_import_wallet),
-                        onClick = { if (isAllWordsValid()) importWallet() },
+                        onClick = {
+                            if (isAllWordsValid()) {
+                                importWallet()
+                            } else {
+                                alertState = AlertState.InvalidWords
+                            }
+                        },
                         colors =
                             ButtonDefaults.buttonColors(
                                 containerColor = CoveColor.btnPrimary,
@@ -458,6 +462,10 @@ private fun WordInputGrid(
 
     val flatWords = enteredWords.flatten()
 
+    val numRows = wordCount / 2
+    val leftIndices = (0 until numRows)
+    val rightIndices = (numRows until wordCount)
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors =
@@ -466,43 +474,77 @@ private fun WordInputGrid(
             ),
         shape = RoundedCornerShape(10.dp),
     ) {
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+        Row(
             modifier =
                 Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 24.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            itemsIndexed(
-                items = flatWords,
-                key = { index, _ -> "word-input-$index" },
-            ) { index, word ->
-                WordInputField(
-                    number = index + 1,
-                    word = word,
-                    numberOfWords = numberOfWords,
-                    allEnteredWords = enteredWords,
-                    isFocused = focusedField == index,
-                    onWordChanged = { newWord ->
-                        val groupIndex = index / GROUPS_OF
-                        val wordIndex = index % GROUPS_OF
-                        val newWords = enteredWords.toMutableList()
-                        val newGroup = newWords[groupIndex].toMutableList()
-                        newGroup[wordIndex] = newWord
-                        newWords[groupIndex] = newGroup
-                        onWordsChanged(newWords)
-                    },
-                    onFocusChanged = { hasFocus ->
-                        if (hasFocus) onFocusChanged(index)
-                    },
-                    onNext = {
-                        if (index < wordCount - 1) {
-                            onFocusChanged(index + 1)
-                        }
-                    },
-                )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                leftIndices.forEach { index ->
+                    WordInputField(
+                        number = index + 1,
+                        word = flatWords[index],
+                        numberOfWords = numberOfWords,
+                        allEnteredWords = enteredWords,
+                        isLastWord = index == wordCount - 1,
+                        isFocused = focusedField == index,
+                        onWordChanged = { newWord ->
+                            val groupIndex = index / GROUPS_OF
+                            val wordIndex = index % GROUPS_OF
+                            val newWords = enteredWords.toMutableList()
+                            val newGroup = newWords[groupIndex].toMutableList()
+                            newGroup[wordIndex] = newWord
+                            newWords[groupIndex] = newGroup
+                            onWordsChanged(newWords)
+                        },
+                        onFocusChanged = { hasFocus ->
+                            if (hasFocus) onFocusChanged(index)
+                        },
+                        onNext = {
+                            if (index < wordCount - 1) {
+                                onFocusChanged(index + 1)
+                            }
+                        },
+                    )
+                }
+            }
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                rightIndices.forEach { index ->
+                    WordInputField(
+                        number = index + 1,
+                        word = flatWords[index],
+                        numberOfWords = numberOfWords,
+                        allEnteredWords = enteredWords,
+                        isLastWord = index == wordCount - 1,
+                        isFocused = focusedField == index,
+                        onWordChanged = { newWord ->
+                            val groupIndex = index / GROUPS_OF
+                            val wordIndex = index % GROUPS_OF
+                            val newWords = enteredWords.toMutableList()
+                            val newGroup = newWords[groupIndex].toMutableList()
+                            newGroup[wordIndex] = newWord
+                            newWords[groupIndex] = newGroup
+                            onWordsChanged(newWords)
+                        },
+                        onFocusChanged = { hasFocus ->
+                            if (hasFocus) onFocusChanged(index)
+                        },
+                        onNext = {
+                            if (index < wordCount - 1) {
+                                onFocusChanged(index + 1)
+                            }
+                        },
+                    )
+                }
             }
         }
     }
@@ -514,6 +556,7 @@ private fun WordInputField(
     word: String,
     numberOfWords: NumberOfBip39Words,
     allEnteredWords: List<List<String>>,
+    isLastWord: Boolean,
     isFocused: Boolean,
     onWordChanged: (String) -> Unit,
     onFocusChanged: (Boolean) -> Unit,
@@ -528,8 +571,9 @@ private fun WordInputField(
         }
 
     var suggestions by remember { mutableStateOf<List<String>>(emptyList()) }
+    val focusManager = LocalFocusManager.current
 
-    val isValid = word.isNotEmpty() && autocomplete.isBip39Word(word)
+    val isValid = word.isNotEmpty() && autocomplete.isValidWord(word, allEnteredWords)
     val hasInput = word.isNotEmpty()
 
     // underline color based on state (matching iOS)
@@ -566,13 +610,16 @@ private fun WordInputField(
     }
 
     // update suggestions when word or focus changes
-    LaunchedEffect(word, isFocused) {
-        suggestions =
-            if (isFocused && word.isNotEmpty()) {
-                autocomplete.autocomplete(word, allEnteredWords)
-            } else {
-                emptyList()
-            }
+    // for last word, show checksum suggestions even when empty
+    // don't show suggestions if word is already valid (user selected one)
+    LaunchedEffect(word, isFocused, allEnteredWords) {
+        suggestions = when {
+            !isFocused -> emptyList()
+            isValid -> emptyList()
+            isLastWord -> autocomplete.autocomplete(word, allEnteredWords)
+            word.isNotEmpty() -> autocomplete.autocomplete(word, allEnteredWords)
+            else -> emptyList()
+        }
     }
 
     Column {
@@ -599,9 +646,14 @@ private fun WordInputField(
                         onWordChanged(trimmed)
 
                         // auto-advance when word is complete and valid
-                        if (trimmed.isNotEmpty() && autocomplete.isBip39Word(trimmed)) {
+                        if (trimmed.isNotEmpty() && autocomplete.isValidWord(trimmed, allEnteredWords)) {
                             suggestions = emptyList()
-                            onNext()
+                            if (isLastWord) {
+                                // dismiss keyboard, let user manually click Import Wallet
+                                focusManager.clearFocus()
+                            } else {
+                                onNext()
+                            }
                         }
                     },
                     textStyle =
@@ -617,11 +669,12 @@ private fun WordInputField(
                             capitalization = KeyboardCapitalization.None,
                             autoCorrectEnabled = false,
                             keyboardType = KeyboardType.Ascii,
-                            imeAction = ImeAction.Next,
+                            imeAction = if (isLastWord) ImeAction.Done else ImeAction.Next,
                         ),
                     keyboardActions =
                         KeyboardActions(
                             onNext = { onNext() },
+                            onDone = { focusManager.clearFocus() },
                         ),
                     modifier =
                         Modifier
@@ -670,7 +723,12 @@ private fun WordInputField(
                                 .clickable {
                                     onWordChanged(suggestion)
                                     suggestions = emptyList()
-                                    onNext()
+                                    if (isLastWord) {
+                                        // dismiss keyboard, let user manually click Import Wallet
+                                        focusManager.clearFocus()
+                                    } else {
+                                        onNext()
+                                    }
                                 }.padding(horizontal = 12.dp, vertical = 10.dp),
                     )
                 }

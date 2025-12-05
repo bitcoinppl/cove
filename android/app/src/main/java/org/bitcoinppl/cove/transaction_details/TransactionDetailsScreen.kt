@@ -547,7 +547,7 @@ fun TransactionDetailsScreen(
                                 .fillMaxWidth(),
                     )
 
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(16.dp))
 
                     TextButton(
                         onClick = {
