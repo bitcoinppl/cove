@@ -536,6 +536,7 @@ class AppManager private constructor() : FfiReconcile {
 
                     is AppStateReconcileMessage.SelectedNetworkChanged -> {
                         selectedNetwork = message.v1
+                        loadWallets()
                     }
 
                     is AppStateReconcileMessage.DefaultRouteChanged -> {
@@ -571,6 +572,7 @@ class AppManager private constructor() : FfiReconcile {
 
                     is AppStateReconcileMessage.WalletModeChanged -> {
                         isLoading = true
+                        loadWallets()
                         launch {
                             kotlinx.coroutines.delay(200)
                             isLoading = false
