@@ -26,100 +26,100 @@ fun TapSignerContainer(
 
     Box(modifier = modifier.fillMaxSize()) {
         when (currentRoute) {
-        is TapSignerRoute.InitSelect -> {
-            TapSignerChooseChainCode(
-                app = app,
-                manager = manager,
-                tapSigner = currentRoute.v1,
-                modifier = modifier.fillMaxSize(),
-            )
-        }
+            is TapSignerRoute.InitSelect -> {
+                TapSignerChooseChainCode(
+                    app = app,
+                    manager = manager,
+                    tapSigner = currentRoute.v1,
+                    modifier = modifier.fillMaxSize(),
+                )
+            }
 
-        is TapSignerRoute.InitAdvanced -> {
-            TapSignerAdvancedChainCode(
-                app = app,
-                manager = manager,
-                tapSigner = currentRoute.v1,
-                modifier = modifier.fillMaxSize(),
-            )
-        }
+            is TapSignerRoute.InitAdvanced -> {
+                TapSignerAdvancedChainCode(
+                    app = app,
+                    manager = manager,
+                    tapSigner = currentRoute.v1,
+                    modifier = modifier.fillMaxSize(),
+                )
+            }
 
-        is TapSignerRoute.StartingPin -> {
-            TapSignerStartingPinView(
-                app = app,
-                manager = manager,
-                tapSigner = currentRoute.tapSigner,
-                chainCode = currentRoute.chainCode,
-                modifier = modifier.fillMaxSize(),
-            )
-        }
+            is TapSignerRoute.StartingPin -> {
+                TapSignerStartingPinView(
+                    app = app,
+                    manager = manager,
+                    tapSigner = currentRoute.tapSigner,
+                    chainCode = currentRoute.chainCode,
+                    modifier = modifier.fillMaxSize(),
+                )
+            }
 
-        is TapSignerRoute.NewPin -> {
-            TapSignerNewPinView(
-                app = app,
-                manager = manager,
-                args = currentRoute.v1,
-                modifier = modifier.fillMaxSize(),
-            )
-        }
+            is TapSignerRoute.NewPin -> {
+                TapSignerNewPinView(
+                    app = app,
+                    manager = manager,
+                    args = currentRoute.v1,
+                    modifier = modifier.fillMaxSize(),
+                )
+            }
 
-        is TapSignerRoute.ConfirmPin -> {
-            TapSignerConfirmPinView(
-                app = app,
-                manager = manager,
-                args = currentRoute.v1,
-                modifier = modifier.fillMaxSize(),
-            )
-        }
+            is TapSignerRoute.ConfirmPin -> {
+                TapSignerConfirmPinView(
+                    app = app,
+                    manager = manager,
+                    args = currentRoute.v1,
+                    modifier = modifier.fillMaxSize(),
+                )
+            }
 
-        is TapSignerRoute.SetupSuccess -> {
-            TapSignerSetupSuccessView(
-                app = app,
-                manager = manager,
-                tapSigner = currentRoute.v1,
-                setup = currentRoute.v2,
-                modifier = modifier.fillMaxSize(),
-            )
-        }
+            is TapSignerRoute.SetupSuccess -> {
+                TapSignerSetupSuccessView(
+                    app = app,
+                    manager = manager,
+                    tapSigner = currentRoute.v1,
+                    setup = currentRoute.v2,
+                    modifier = modifier.fillMaxSize(),
+                )
+            }
 
-        is TapSignerRoute.SetupRetry -> {
-            TapSignerSetupRetryView(
-                app = app,
-                manager = manager,
-                tapSigner = currentRoute.v1,
-                response = currentRoute.v2,
-                modifier = modifier.fillMaxSize(),
-            )
-        }
+            is TapSignerRoute.SetupRetry -> {
+                TapSignerSetupRetryView(
+                    app = app,
+                    manager = manager,
+                    tapSigner = currentRoute.v1,
+                    response = currentRoute.v2,
+                    modifier = modifier.fillMaxSize(),
+                )
+            }
 
-        is TapSignerRoute.EnterPin -> {
-            TapSignerEnterPinView(
-                app = app,
-                manager = manager,
-                tapSigner = currentRoute.tapSigner,
-                action = currentRoute.action,
-                modifier = modifier.fillMaxSize(),
-            )
-        }
+            is TapSignerRoute.EnterPin -> {
+                TapSignerEnterPinView(
+                    app = app,
+                    manager = manager,
+                    tapSigner = currentRoute.tapSigner,
+                    action = currentRoute.action,
+                    modifier = modifier.fillMaxSize(),
+                )
+            }
 
-        is TapSignerRoute.ImportSuccess -> {
-            TapSignerImportSuccessView(
-                app = app,
-                manager = manager,
-                tapSigner = currentRoute.v1,
-                deriveInfo = currentRoute.v2,
-                modifier = modifier.fillMaxSize(),
-            )
-        }
+            is TapSignerRoute.ImportSuccess -> {
+                TapSignerImportSuccessView(
+                    app = app,
+                    manager = manager,
+                    tapSigner = currentRoute.v1,
+                    deriveInfo = currentRoute.v2,
+                    modifier = modifier.fillMaxSize(),
+                )
+            }
 
-        is TapSignerRoute.ImportRetry -> {
-            TapSignerImportRetryView(
-                app = app,
-                manager = manager,
-                tapSigner = currentRoute.v1,
-                modifier = modifier.fillMaxSize(),
-            )
-        }
+            is TapSignerRoute.ImportRetry -> {
+                TapSignerImportRetryView(
+                    app = app,
+                    manager = manager,
+                    tapSigner = currentRoute.v1,
+                    modifier = modifier.fillMaxSize(),
+                )
+            }
         }
 
         // show scanning overlay when NFC is active

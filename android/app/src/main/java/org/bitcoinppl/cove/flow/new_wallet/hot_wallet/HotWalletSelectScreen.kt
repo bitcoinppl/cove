@@ -232,12 +232,13 @@ fun HotWalletSelectScreen(
                         modifier = Modifier.padding(bottom = 8.dp),
                     )
 
-                    // show QR and NFC options for import
+                    // show QR and NFC options for import - use app-level scan sheets
+                    // which handle all formats (mnemonic, TapSigner, hardware export, etc.)
                     if (nextScreen == NextScreenDialog.Import) {
                         TextButton(
                             onClick = {
-                                navigateToRoute(NumberOfBip39Words.TWENTY_FOUR, ImportType.QR)
                                 showSheet = false
+                                app.scanQr()
                             },
                             modifier = Modifier.fillMaxWidth(),
                         ) {
@@ -246,8 +247,8 @@ fun HotWalletSelectScreen(
 
                         TextButton(
                             onClick = {
-                                navigateToRoute(NumberOfBip39Words.TWENTY_FOUR, ImportType.NFC)
                                 showSheet = false
+                                app.scanNfc()
                             },
                             modifier = Modifier.fillMaxWidth(),
                         ) {

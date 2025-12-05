@@ -49,9 +49,10 @@ fun TapSignerScanningOverlay(
     }
 
     Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.7f)),
+        modifier =
+            modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.7f)),
         contentAlignment = Alignment.Center,
     ) {
         Surface(

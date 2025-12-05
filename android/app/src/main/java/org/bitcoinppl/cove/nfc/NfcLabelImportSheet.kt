@@ -1,6 +1,5 @@
 package org.bitcoinppl.cove.nfc
 
-import android.app.Activity
 import android.util.Log
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
