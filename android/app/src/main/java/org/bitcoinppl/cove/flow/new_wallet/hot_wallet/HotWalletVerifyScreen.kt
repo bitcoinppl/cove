@@ -1,8 +1,8 @@
 package org.bitcoinppl.cove.flow.new_wallet.hot_wallet
 
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -57,6 +59,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -69,12 +72,14 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
-import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.DashDotsIndicator
 import org.bitcoinppl.cove_core.WordCheckState
 import org.bitcoinppl.cove_core.WordVerifyStateMachine
 import kotlin.math.hypot
 import kotlin.math.roundToInt
+
+private const val DWELL_MS_CORRECT = 300L
+private const val DWELL_MS_INCORRECT = 500L
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -133,19 +138,24 @@ fun HotWalletVerifyScreen(
                 animationX.snapTo(startPos.x)
                 animationY.snapTo(startPos.y)
 
-                val moveMs = config.moveDurationMsCorrect.toInt()
+                // spring animation matching iOS spring().speed(2.0)
+                val springSpec =
+                    spring<Float>(
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = Spring.StiffnessMediumLow * 2f,
+                    )
 
                 coroutineScope {
                     launch {
                         animationX.animateTo(
                             targetValue = targetPosition.x,
-                            animationSpec = tween(moveMs, easing = LinearEasing),
+                            animationSpec = springSpec,
                         )
                     }
                     launch {
                         animationY.animateTo(
                             targetValue = targetPosition.y,
-                            animationSpec = tween(moveMs, easing = LinearEasing),
+                            animationSpec = springSpec,
                         )
                     }
                 }
@@ -156,8 +166,8 @@ fun HotWalletVerifyScreen(
             }
 
             is WordCheckState.Correct -> {
-                // dwell then advance
-                delay(config.dwellDurationMsCorrect.toLong())
+                // brief dwell to show green, then advance (matching iOS spring timing)
+                delay(DWELL_MS_CORRECT)
                 val transition = stateMachine.dwellComplete()
                 checkState = transition.newState
 
@@ -172,8 +182,8 @@ fun HotWalletVerifyScreen(
             }
 
             is WordCheckState.Incorrect -> {
-                // dwell then start return
-                delay(config.dwellDurationMsIncorrect.toLong())
+                // brief dwell to show red before returning (matching iOS spring timing)
+                delay(DWELL_MS_INCORRECT)
                 val transition = stateMachine.dwellComplete()
                 checkState = transition.newState
             }
@@ -183,19 +193,24 @@ fun HotWalletVerifyScreen(
                 val word = state.word
                 val originPos = wordPositions[word] ?: return@LaunchedEffect
 
-                val moveMs = config.moveDurationMsIncorrect.toInt()
+                // spring animation matching iOS spring().speed(3.0)
+                val springSpec =
+                    spring<Float>(
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = Spring.StiffnessMediumLow * 3f,
+                    )
 
                 coroutineScope {
                     launch {
                         animationX.animateTo(
                             targetValue = originPos.x,
-                            animationSpec = tween(moveMs, easing = LinearEasing),
+                            animationSpec = springSpec,
                         )
                     }
                     launch {
                         animationY.animateTo(
                             targetValue = originPos.y,
-                            animationSpec = tween(moveMs, easing = LinearEasing),
+                            animationSpec = springSpec,
                         )
                     }
                 }
@@ -452,7 +467,6 @@ fun HotWalletVerifyScreen(
                         modifier =
                             Modifier
                                 .fillMaxWidth()
-                                .padding(top = 4.dp)
                                 .clickable { showSkipAlert = true },
                     )
                 }
@@ -511,11 +525,22 @@ fun HotWalletVerifyScreen(
                             .zIndex(10f),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(
+                    BasicText(
                         text = currentWord,
-                        color = overlayText,
-                        fontWeight = FontWeight.Medium,
                         maxLines = 1,
+                        autoSize =
+                            TextAutoSize.StepBased(
+                                minFontSize = 7.sp,
+                                maxFontSize = 14.sp,
+                                stepSize = 0.5.sp,
+                            ),
+                        style =
+                            TextStyle(
+                                color = overlayText,
+                                fontWeight = FontWeight.Medium,
+                                textAlign = TextAlign.Center,
+                            ),
+                        modifier = Modifier.padding(horizontal = 6.dp),
                     )
                 }
             }
@@ -554,13 +579,21 @@ private fun OptionChip(
                     },
             contentAlignment = Alignment.Center,
         ) {
-            AutoSizeText(
+            BasicText(
                 text = text,
-                color = textColor,
-                fontWeight = FontWeight.Medium,
-                maxFontSize = 14.sp,
-                minimumScaleFactor = 0.50f,
-                textAlign = TextAlign.Center,
+                maxLines = 1,
+                autoSize =
+                    TextAutoSize.StepBased(
+                        minFontSize = 7.sp,
+                        maxFontSize = 14.sp,
+                        stepSize = 0.5.sp,
+                    ),
+                style =
+                    TextStyle(
+                        color = textColor,
+                        fontWeight = FontWeight.Medium,
+                        textAlign = TextAlign.Center,
+                    ),
                 modifier = Modifier.padding(horizontal = 6.dp),
             )
         }
