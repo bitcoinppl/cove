@@ -37,6 +37,7 @@ import kotlinx.coroutines.delay
 import org.bitcoinppl.cove.AppAlertState
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.TaggedItem
+import org.bitcoinppl.cove.findActivity
 import org.bitcoinppl.cove.ui.theme.title3
 import org.bitcoinppl.cove_core.multiFormatTryFromNfcMessage
 import org.bitcoinppl.cove_core.nfc.NfcMessage
@@ -50,7 +51,7 @@ fun NfcScanSheet(
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
-    val activity = context as? Activity
+    val activity = context.findActivity()
 
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isScanning by remember { mutableStateOf(false) }

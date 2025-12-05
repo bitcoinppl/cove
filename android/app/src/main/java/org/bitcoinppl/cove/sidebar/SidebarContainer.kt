@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.findActivity
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.roundToInt
 
@@ -98,7 +99,7 @@ fun SidebarContainer(
         }
 
         if (app.isSidebarVisible) {
-            (context as? Activity)?.moveTaskToBack(true)
+            context.findActivity()?.moveTaskToBack(true)
         } else {
             app.isSidebarVisible = true
         }

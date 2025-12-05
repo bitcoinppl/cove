@@ -38,10 +38,7 @@ private fun PinCircle(
     modifier: Modifier = Modifier,
 ) {
     Surface(
-        modifier =
-            modifier
-                .size(18.dp)
-                .padding(horizontal = 10.dp),
+        modifier = modifier.size(18.dp),
         shape = CircleShape,
         color = if (isFilled) MaterialTheme.colorScheme.primary else Color.Transparent,
         border =

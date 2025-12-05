@@ -53,6 +53,7 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import org.bitcoinppl.cove.Auth
 import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.findFragmentActivity
 import org.bitcoinppl.cove.views.MaterialDivider
 import org.bitcoinppl.cove.views.MaterialSection
 import org.bitcoinppl.cove.views.MaterialSettingsItem
@@ -232,7 +233,7 @@ private fun WalletSettingsSection(app: org.bitcoinppl.cove.AppManager) {
 @Composable
 private fun SecuritySection(app: org.bitcoinppl.cove.AppManager) {
     val context = LocalContext.current
-    val activity = context as? FragmentActivity
+    val activity = context.findFragmentActivity()
     val auth = Auth
     val biometricManager = remember { BiometricManager.from(context) }
 

@@ -84,6 +84,7 @@ import org.bitcoinppl.cove.ImportWalletManager
 import org.bitcoinppl.cove.QrCodeScanView
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.TaggedItem
+import org.bitcoinppl.cove.findActivity
 import org.bitcoinppl.cove.nfc.NfcReadingState
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.title3
@@ -726,7 +727,7 @@ private fun NfcScannerSheet(
     onWordsScanned: (List<List<String>>) -> Unit,
 ) {
     val context = LocalContext.current
-    val activity = context as? Activity
+    val activity = context.findActivity()
 
     if (activity == null) {
         // fallback if not in activity context
