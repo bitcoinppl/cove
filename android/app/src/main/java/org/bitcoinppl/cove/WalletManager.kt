@@ -203,8 +203,12 @@ class WalletManager :
             }
 
             is WalletManagerReconcileMessage.AvailableTransactions -> {
-                if (loadState is WalletLoadState.LOADING) {
-                    loadState = WalletLoadState.SCANNING(message.v1)
+                // accept cached transactions in loading/scanning states, or if new count > current
+                loadState = when (val current = loadState) {
+                    is WalletLoadState.LOADING, is WalletLoadState.SCANNING ->
+                        WalletLoadState.SCANNING(message.v1)
+                    is WalletLoadState.LOADED ->
+                        if (message.v1.size > current.txns.size) WalletLoadState.SCANNING(message.v1) else current
                 }
             }
 
@@ -271,16 +275,16 @@ class WalletManager :
     }
 
     override fun reconcile(message: WalletManagerReconcileMessage) {
-        logDebug("reconcile: $message")
-        ioScope.launch {
-            mainScope.launch { apply(message) }
+        mainScope.launch {
+            logDebug("reconcile: $message")
+            apply(message)
         }
     }
 
     override fun reconcileMany(messages: List<WalletManagerReconcileMessage>) {
-        logDebug("reconcile_messages: ${messages.size} messages")
-        ioScope.launch {
-            mainScope.launch { messages.forEach { apply(it) } }
+        mainScope.launch {
+            logDebug("reconcile_messages: ${messages.size} messages")
+            messages.forEach { apply(it) }
         }
     }
 
