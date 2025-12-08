@@ -6,6 +6,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -201,6 +203,20 @@ private fun SendFlowRouteToScreen(
 ) {
     when (sendRoute) {
         is SendRoute.SetAmount -> {
+            val exceedsBalance = sendFlowManager.rust.amountExceedsBalance()
+            var previouslyExceeded by remember { mutableStateOf(false) }
+            val snackbarHostState = remember { SnackbarHostState() }
+
+            LaunchedEffect(exceedsBalance) {
+                if (exceedsBalance && !previouslyExceeded) {
+                    snackbarHostState.showSnackbar(
+                        message = "Exceeds available balance",
+                        duration = SnackbarDuration.Short,
+                    )
+                }
+                previouslyExceeded = exceedsBalance
+            }
+
             SendScreen(
                 onBack = { app.popRoute() },
                 onNext = {
@@ -295,6 +311,8 @@ private fun SendFlowRouteToScreen(
                 onAddressChanged = { newAddress ->
                     sendFlowManager.enteringAddress = newAddress
                 },
+                exceedsBalance = exceedsBalance,
+                snackbarHostState = snackbarHostState,
             )
 
             // handle sheets for SendScreen

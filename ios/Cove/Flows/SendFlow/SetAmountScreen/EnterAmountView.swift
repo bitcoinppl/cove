@@ -19,6 +19,7 @@ struct EnterAmountView: View {
 
     @FocusState private var focusField: SendFlowPresenter.FocusField?
     @State private var showingMenu: Bool = false
+    @State private var previouslyExceeded: Bool = false
 
     init(sendFlowManager: SendFlowManager) {
         self.sendFlowManager = sendFlowManager
@@ -48,6 +49,14 @@ struct EnterAmountView: View {
         sendFlowManager.sendAmountBtc
     }
 
+    var exceedsBalance: Bool {
+        sendFlowManager.rust.amountExceedsBalance()
+    }
+
+    var amountTextColor: Color {
+        exceedsBalance ? .orange : .primary
+    }
+
     var body: some View {
         VStack(spacing: 8) {
             HStack(alignment: .bottom) {
@@ -55,6 +64,7 @@ struct EnterAmountView: View {
                 case .btc:
                     TextField("", text: $enteringBtcAmount)
                         .font(.system(size: 48, weight: .bold))
+                        .foregroundColor(amountTextColor)
                         .multilineTextAlignment(.center)
                         .keyboardType(.decimalPad)
                         .minimumScaleFactor(0.01)
@@ -68,6 +78,7 @@ struct EnterAmountView: View {
                 case .fiat:
                     TextField("", text: $enteringFiatAmount)
                         .font(.system(size: 48, weight: .bold))
+                        .foregroundColor(amountTextColor)
                         .multilineTextAlignment(.center)
                         .keyboardType(.decimalPad)
                         .minimumScaleFactor(0.01)
@@ -156,6 +167,20 @@ struct EnterAmountView: View {
                             return sendFlowManager.dispatch(.changeSetAmountFocusField(.address))
                         }
                     }
+                }
+                .onChange(of: exceedsBalance) { _, newValue in
+                    if newValue, !previouslyExceeded {
+                        Task {
+                            await FloaterPopup(
+                                text: "Exceeds available balance",
+                                backgroundColor: .orange,
+                                textColor: .white,
+                                iconColor: .white,
+                                icon: "exclamationmark.triangle"
+                            ).present()
+                        }
+                    }
+                    previouslyExceeded = newValue
                 }
                 .popover(isPresented: $showingMenu) {
                     VStack(alignment: .center, spacing: 0) {

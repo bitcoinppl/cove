@@ -115,6 +115,7 @@ fun SendScreen(
     totalSpendingFiat: String,
     onAmountChanged: (String) -> Unit,
     onAddressChanged: (String) -> Unit,
+    exceedsBalance: Boolean = false,
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
     var focusedField by remember { mutableStateOf(SendFocusField.None) }
@@ -201,6 +202,7 @@ fun SendScreen(
                             onSanitizeBtcAmount = onSanitizeBtcAmount,
                             onSanitizeFiatAmount = onSanitizeFiatAmount,
                             isFiatMode = isFiatMode,
+                            exceedsBalance = exceedsBalance,
                             onFocusChanged = { focused ->
                                 focusedField = if (focused) SendFocusField.Amount else SendFocusField.None
                             },
@@ -338,6 +340,7 @@ private fun AmountWidget(
     onSanitizeBtcAmount: (oldValue: String, newValue: String) -> String? = { _, _ -> null },
     onSanitizeFiatAmount: (oldValue: String, newValue: String) -> String? = { _, _ -> null },
     isFiatMode: Boolean = false,
+    exceedsBalance: Boolean = false,
     onFocusChanged: (Boolean) -> Unit = {},
 ) {
     var amount by remember { mutableStateOf(initialAmount) }
@@ -401,7 +404,7 @@ private fun AmountWidget(
                     },
                     maxFontSize = 48.sp,
                     minimumScaleFactor = 0.01f,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = if (exceedsBalance) CoveColor.WarningOrange else MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth().offset(x = amountOffset),
