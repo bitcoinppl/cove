@@ -288,12 +288,13 @@ private fun BalanceWidget(
             }
             IconButton(
                 onClick = onToggleVisibility,
-                modifier = Modifier.offset(y = 8.dp, x = 8.dp),
+                modifier = Modifier.align(Alignment.CenterVertically),
             ) {
                 Icon(
                     imageVector = if (isHidden) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                    contentDescription = null,
+                    contentDescription = if (isHidden) "Hidden" else "Visible",
                     tint = Color.White,
+                    modifier = Modifier.size(24.dp),
                 )
             }
         }
