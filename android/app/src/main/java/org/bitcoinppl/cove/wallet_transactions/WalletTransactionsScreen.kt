@@ -119,7 +119,6 @@ private fun WalletTransactionsDarkPreview() {
         onQrCode = {},
         onMore = {},
         isDarkList = true,
-        initialBalanceHidden = true,
         snackbarHostState = snack,
     )
 }
@@ -136,7 +135,6 @@ fun WalletTransactionsScreen(
     isDarkList: Boolean,
     manager: WalletManager? = null,
     app: AppManager? = null,
-    initialBalanceHidden: Boolean = false,
     usdAmount: String = "$1,351.93",
     satsAmount: String = "1,166,369 SATS",
     walletName: String = "Main",
@@ -293,6 +291,9 @@ fun WalletTransactionsScreen(
                         .align(Alignment.TopCenter),
             )
 
+            val fiatOrBtc = manager?.walletMetadata?.fiatOrBtc ?: FiatOrBtc.BTC
+            val sensitiveVisible = manager?.walletMetadata?.sensitiveVisible ?: true
+
             Column(
                 modifier = Modifier.fillMaxSize(),
             ) {
@@ -303,7 +304,6 @@ fun WalletTransactionsScreen(
                             .padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 32.dp),
                     verticalArrangement = Arrangement.spacedBy(24.dp),
                 ) {
-                    val fiatOrBtc = manager?.walletMetadata?.fiatOrBtc ?: FiatOrBtc.BTC
                     val (primaryAmount, secondaryAmount) =
                         when (fiatOrBtc) {
                             FiatOrBtc.FIAT -> actualFiatAmount to actualSatsAmount
@@ -311,10 +311,11 @@ fun WalletTransactionsScreen(
                         }
 
                     BalanceWidget(
-                        hidden = initialBalanceHidden,
+                        sensitiveVisible = sensitiveVisible,
                         primaryAmount = primaryAmount,
                         secondaryAmount = secondaryAmount,
-                        onToggle = { manager?.dispatch(WalletManagerAction.ToggleFiatBtcPrimarySecondary) },
+                        onToggleUnit = { manager?.dispatch(WalletManagerAction.ToggleFiatBtcPrimarySecondary) },
+                        onToggleSensitive = { manager?.dispatch(WalletManagerAction.ToggleSensitiveVisibility) },
                     )
 
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -403,6 +404,8 @@ fun WalletTransactionsScreen(
                                         secondaryText = secondaryText,
                                         app = app,
                                         manager = manager,
+                                        fiatOrBtc = fiatOrBtc,
+                                        sensitiveVisible = manager?.walletMetadata?.sensitiveVisible ?: true,
                                     )
                                     HorizontalDivider(color = dividerColor, thickness = 0.5.dp)
                                 }
@@ -430,11 +433,21 @@ fun WalletTransactionsScreen(
                                                 }
 
                                             // format amount with manager if available
-                                            val formattedAmount =
+                                            val formattedAmount: String =
                                                 manager?.let {
                                                     val amount = txn.v1.sentAndReceived().amount()
                                                     val prefix = if (direction == TransactionDirection.OUTGOING) "-" else ""
-                                                    prefix + it.displayAmount(amount, showUnit = true)
+                                                    when (fiatOrBtc) {
+                                                        FiatOrBtc.BTC -> prefix + it.displayAmount(amount, showUnit = true)
+                                                        FiatOrBtc.FIAT -> {
+                                                            val fiatAmount = txn.v1.fiatAmount()
+                                                            if (fiatAmount != null) {
+                                                                prefix + it.rust.displayFiatAmount(fiatAmount.amount)
+                                                            } else {
+                                                                "---"
+                                                            }
+                                                        }
+                                                    }
                                                 } ?: txn.v1.sentAndReceived().label()
 
                                             TransactionWidget(
@@ -449,6 +462,7 @@ fun WalletTransactionsScreen(
                                                 transaction = txn,
                                                 app = app,
                                                 manager = manager,
+                                                sensitiveVisible = manager?.walletMetadata?.sensitiveVisible ?: true,
                                             )
                                         }
 
@@ -473,11 +487,21 @@ fun WalletTransactionsScreen(
                                                 }
 
                                             // format amount with manager if available
-                                            val formattedAmount =
+                                            val formattedAmount: String =
                                                 manager?.let {
                                                     val amount = txn.v1.sentAndReceived().amount()
                                                     val prefix = if (direction == TransactionDirection.OUTGOING) "-" else ""
-                                                    prefix + it.displayAmount(amount, showUnit = true)
+                                                    when (fiatOrBtc) {
+                                                        FiatOrBtc.BTC -> prefix + it.displayAmount(amount, showUnit = true)
+                                                        FiatOrBtc.FIAT -> {
+                                                            val fiatAmount = txn.v1.fiatAmount()
+                                                            if (fiatAmount != null) {
+                                                                prefix + it.rust.displayFiatAmount(fiatAmount.amount)
+                                                            } else {
+                                                                "---"
+                                                            }
+                                                        }
+                                                    }
                                                 } ?: txn.v1.sentAndReceived().label()
 
                                             TransactionWidget(
@@ -492,6 +516,7 @@ fun WalletTransactionsScreen(
                                                 transaction = txn,
                                                 app = app,
                                                 manager = manager,
+                                                sensitiveVisible = manager?.walletMetadata?.sensitiveVisible ?: true,
                                             )
                                         }
                                     }
@@ -528,9 +553,13 @@ private fun TransactionWidget(
     transaction: Transaction,
     app: AppManager?,
     manager: WalletManager?,
+    sensitiveVisible: Boolean,
 ) {
     val scope = rememberCoroutineScope()
     val isDark = !MaterialTheme.colorScheme.isLight
+
+    fun privateShow(text: String, placeholder: String = "••••••"): String =
+        if (sensitiveVisible) text else placeholder
 
     // get transaction id for navigation
     val txId =
@@ -598,7 +627,7 @@ private fun TransactionWidget(
                 fontWeight = FontWeight.Medium,
             )
             AutoSizeText(
-                text = date,
+                text = privateShow(date),
                 color = secondaryText,
                 maxFontSize = 12.sp,
                 minimumScaleFactor = 0.90f,
@@ -608,13 +637,13 @@ private fun TransactionWidget(
 
         Column(horizontalAlignment = Alignment.End) {
             Text(
-                text = amount,
+                text = privateShow(amount),
                 color = if (type == TransactionType.RECEIVED) CoveColor.TransactionReceived else primaryText.copy(alpha = 0.8f),
                 fontSize = 17.sp,
                 fontWeight = FontWeight.Normal,
             )
             Text(
-                text = balanceAfter,
+                text = privateShow(balanceAfter),
                 color = secondaryText,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Normal,
@@ -631,9 +660,14 @@ private fun UnsignedTransactionWidget(
     secondaryText: Color,
     app: AppManager?,
     manager: WalletManager?,
+    fiatOrBtc: FiatOrBtc,
+    sensitiveVisible: Boolean,
 ) {
     val isDark = !MaterialTheme.colorScheme.isLight
     var showDeleteMenu by remember { mutableStateOf(false) }
+
+    fun privateShow(text: String, placeholder: String = "••••••"): String =
+        if (sensitiveVisible) text else placeholder
 
     // icon background: same values as iOS (0.35 dark, 0.75 light)
     val iconBackground =
@@ -643,10 +677,13 @@ private fun UnsignedTransactionWidget(
             Color.Black.copy(alpha = 0.75f)
         }
 
-    // format the spending amount
+    // format the spending amount (unsigned transactions don't have cached fiat amount)
     val formattedAmount =
         manager?.let {
-            it.displayAmount(txn.spendingAmount(), showUnit = true)
+            when (fiatOrBtc) {
+                FiatOrBtc.BTC -> it.displayAmount(txn.spendingAmount(), showUnit = true)
+                FiatOrBtc.FIAT -> "---"
+            }
         } ?: txn.spendingAmount().satsStringWithUnit()
 
     Box {
@@ -720,7 +757,7 @@ private fun UnsignedTransactionWidget(
 
             Column(horizontalAlignment = Alignment.End) {
                 Text(
-                    text = formattedAmount,
+                    text = privateShow(formattedAmount),
                     color = primaryText.copy(alpha = 0.6f),
                     fontSize = 17.sp,
                     fontWeight = FontWeight.Normal,
@@ -755,15 +792,16 @@ private fun UnsignedTransactionWidget(
 
 @Composable
 private fun BalanceWidget(
-    hidden: Boolean,
+    sensitiveVisible: Boolean,
     primaryAmount: String,
     secondaryAmount: String,
-    onToggle: () -> Unit,
+    onToggleUnit: () -> Unit,
+    onToggleSensitive: () -> Unit,
 ) {
-    var isHidden by remember { mutableStateOf(hidden) }
+    val isHidden = !sensitiveVisible
 
     Column(
-        modifier = Modifier.clickable { onToggle() },
+        modifier = Modifier.clickable { onToggleUnit() },
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Text(
@@ -772,21 +810,27 @@ private fun BalanceWidget(
             fontSize = 13.sp,
         )
 
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            BalanceAutoSizeText(
-                text = if (isHidden) "••••••" else primaryAmount,
-                modifier = Modifier.padding(end = 12.dp),
-                color = Color.White,
-                baseFontSize = 34.sp,
-                minimumScaleFactor = 0.5f,
-                fontWeight = FontWeight.Bold,
-            )
-            Spacer(modifier = Modifier.weight(1f))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(modifier = Modifier.weight(1f)) {
+                BalanceAutoSizeText(
+                    text = if (isHidden) "••••••" else primaryAmount,
+                    modifier = Modifier.padding(end = 12.dp),
+                    color = Color.White,
+                    baseFontSize = 34.sp,
+                    minimumScaleFactor = 0.5f,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
             Icon(
                 imageVector = if (isHidden) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                contentDescription = if (isHidden) "Show" else "Hide",
-                tint = Color.White.copy(alpha = 0.7f),
-                modifier = Modifier.clickable { isHidden = !isHidden },
+                contentDescription = if (isHidden) "Hidden" else "Visible",
+                tint = Color.White,
+                modifier = Modifier
+                    .size(24.dp)
+                    .clickable { onToggleSensitive() },
             )
         }
     }
