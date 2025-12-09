@@ -99,6 +99,8 @@ fun SendFlowContainer(
     DisposableEffect(Unit) {
         onDispose {
             sendFlowManager?.presenter?.setDisappearing()
+            sendFlowManager?.close()
+            app.clearSendFlowManager()
         }
     }
 
@@ -311,6 +313,25 @@ private fun SendFlowRouteToScreen(
                 onAddressChanged = { newAddress ->
                     sendFlowManager.enteringAddress = newAddress
                 },
+                onAmountFocusChanged = { focused ->
+                    presenter.focusField = if (focused) SetAmountFocusField.AMOUNT else null
+                },
+                onAddressFocusChanged = { focused ->
+                    presenter.focusField = if (focused) SetAmountFocusField.ADDRESS else null
+                },
+                onAmountDone = {
+                    // if address is invalid, focus address; otherwise dismiss
+                    presenter.focusField =
+                        if (!sendFlowManager.rust.validateAddress()) SetAmountFocusField.ADDRESS
+                        else null
+                },
+                onAddressDone = {
+                    // if amount is invalid, focus amount; otherwise dismiss
+                    presenter.focusField =
+                        if (!sendFlowManager.rust.validateAmount()) SetAmountFocusField.AMOUNT
+                        else null
+                },
+                focusField = presenter.focusField,
                 exceedsBalance = exceedsBalance,
                 snackbarHostState = snackbarHostState,
             )
@@ -328,7 +349,16 @@ private fun SendFlowRouteToScreen(
                                     presenter.sheetState = null
                                     when (multiFormat) {
                                         is MultiFormat.Address -> {
-                                            sendFlowManager.enteringAddress = multiFormat.v1.address().string()
+                                            val addressWithNetwork = multiFormat.v1
+                                            sendFlowManager.enteringAddress = addressWithNetwork.address().string()
+                                            // if QR contains an amount (BIP21), set it
+                                            addressWithNetwork.amount()?.let { amount ->
+                                                sendFlowManager.updateAmount(amount)
+                                            }
+                                            // focus management: if amount valid clear focus, otherwise focus amount
+                                            presenter.focusField =
+                                                if (sendFlowManager.rust.validateAmount()) null
+                                                else SetAmountFocusField.AMOUNT
                                         }
                                         else -> {
                                             app.alertState =
