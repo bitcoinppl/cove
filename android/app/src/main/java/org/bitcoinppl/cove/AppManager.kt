@@ -172,6 +172,10 @@ class AppManager private constructor() : FfiReconcile {
         return manager
     }
 
+    fun clearSendFlowManager() {
+        sendFlowManager = null
+    }
+
     val fullVersionId: String
         get() {
             val appVersion = BuildConfig.VERSION_NAME
