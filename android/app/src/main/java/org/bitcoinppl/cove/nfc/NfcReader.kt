@@ -145,23 +145,48 @@ class NfcReader(
                     continue
                 }
 
-                // check if it's a text record (TNF_WELL_KNOWN with type "T")
-                if (record.tnf == android.nfc.NdefRecord.TNF_WELL_KNOWN && typeString == "T") {
-                    // text record format: first byte is status, rest is text
-                    val statusByte = payload[0]
-                    val textEncoding = if (statusByte.toInt() and 0x80 == 0) "UTF-8" else "UTF-16"
-                    val languageCodeLength = statusByte.toInt() and 0x3F
-                    val text =
-                        String(
-                            payload,
-                            languageCodeLength + 1,
-                            payload.size - languageCodeLength - 1,
-                            Charset.forName(textEncoding),
-                        )
-                    textContent = text
-                    Log.d("NfcReader", "Found text: $text")
+                // handle well-known record types
+                if (record.tnf == android.nfc.NdefRecord.TNF_WELL_KNOWN) {
+                    when (typeString) {
+                        // text record (type "T")
+                        "T" -> {
+                            val statusByte = payload[0]
+                            val textEncoding = if (statusByte.toInt() and 0x80 == 0) "UTF-8" else "UTF-16"
+                            val languageCodeLength = statusByte.toInt() and 0x3F
+                            val text =
+                                String(
+                                    payload,
+                                    languageCodeLength + 1,
+                                    payload.size - languageCodeLength - 1,
+                                    Charset.forName(textEncoding),
+                                )
+                            textContent = text
+                            Log.d("NfcReader", "Found text: $text")
+                        }
+                        // URI record (type "U") - used by ColdCard PushTx
+                        "U" -> {
+                            val uri = record.toUri()?.toString()
+                            if (uri != null) {
+                                textContent = uri
+                                Log.d("NfcReader", "Found URI: $uri")
+                            }
+                        }
+                        else -> {
+                            // try as raw string for other well-known types
+                            try {
+                                val text = String(payload, Charsets.UTF_8)
+                                if (text.isNotBlank()) {
+                                    textContent = text
+                                    Log.d("NfcReader", "Found raw text: $text")
+                                }
+                            } catch (e: Exception) {
+                                Log.d("NfcReader", "Not text, storing as binary")
+                                binaryData = payload
+                            }
+                        }
+                    }
                 } else {
-                    // try as raw string
+                    // try as raw string for other TNF types
                     try {
                         val text = String(payload, Charsets.UTF_8)
                         if (text.isNotBlank()) {

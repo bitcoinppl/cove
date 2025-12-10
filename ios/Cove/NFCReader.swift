@@ -291,7 +291,8 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
         Log.debug("num of records: \(message.records.count)")
         for record in message.records {
             Log.debug("record type: \(record.typeNameFormat)")
-            if let type = String(data: record.type, encoding: .utf8) {
+            let typeString = String(data: record.type, encoding: .utf8)
+            if let type = typeString {
                 Log.debug("type: \(type)")
             }
 
@@ -302,9 +303,23 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
                 continue
             }
 
-            if let payload = String(data: record.payload, encoding: .utf8) {
+            // handle well-known record types
+            if record.typeNameFormat == .nfcWellKnown {
+                // URI record (type "U") - used by ColdCard PushTx
+                if typeString == "U", let uri = record.wellKnownTypeURIPayload()?.absoluteString {
+                    Log.debug("Found URI: \(uri)")
+                    textMessage = uri
+                    continue
+                }
+
+                // text record (type "T") and others
+                if let payload = String(data: record.payload, encoding: .utf8) {
+                    textMessage = payload
+                }
+            } else if let payload = String(data: record.payload, encoding: .utf8) {
                 textMessage = payload
             }
+
             Log.debug("id: \(record.identifier)")
         }
 
