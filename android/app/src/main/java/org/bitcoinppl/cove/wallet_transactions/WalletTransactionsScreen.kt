@@ -37,6 +37,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -175,6 +176,10 @@ fun WalletTransactionsScreen(
     // track scroll state to show wallet name in toolbar when scrolled
     val listState = rememberLazyListState()
     val isScrolled = listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0
+
+    // pull-to-refresh state
+    var isRefreshing by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     // state for wallet name rename dropdown
     var showRenameMenu by remember { mutableStateOf(false) }
@@ -350,14 +355,31 @@ fun WalletTransactionsScreen(
                     }
                 }
 
-                Column(
+                PullToRefreshBox(
+                    isRefreshing = isRefreshing,
+                    onRefresh = {
+                        if (manager != null && manager.loadState is WalletLoadState.LOADED) {
+                            scope.launch {
+                                isRefreshing = true
+
+                                manager.setScanning()
+                                manager.forceWalletScan()
+                                manager.rust.forceUpdateHeight()
+                                manager.updateWalletBalance()
+                                manager.rust.getTransactions()
+
+                                isRefreshing = false
+                            }
+                        }
+                    },
                     modifier =
                         Modifier
                             .fillMaxWidth()
-                            .weight(1f) // Fill remaining space
+                            .weight(1f)
                             .background(listBg),
                 ) {
-                    VerifyReminder(
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        VerifyReminder(
                         walletId = manager?.walletMetadata?.id ?: "",
                         isVerified = manager?.isVerified ?: true,
                         app = app,
@@ -539,6 +561,7 @@ fun WalletTransactionsScreen(
                                 }
                             }
                         }
+                    }
                     }
                 }
             }

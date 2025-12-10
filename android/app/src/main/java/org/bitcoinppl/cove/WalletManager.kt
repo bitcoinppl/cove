@@ -148,6 +148,15 @@ class WalletManager :
         rust.forceWalletScan()
     }
 
+    fun setScanning() {
+        val currentTxns = when (val state = loadState) {
+            is WalletLoadState.LOADED -> state.txns
+            is WalletLoadState.SCANNING -> state.txns
+            else -> emptyList()
+        }
+        loadState = WalletLoadState.SCANNING(currentTxns)
+    }
+
     suspend fun firstAddress(): AddressInfo = rust.addressAt(0u)
 
     fun amountFmt(amount: Amount): String =
