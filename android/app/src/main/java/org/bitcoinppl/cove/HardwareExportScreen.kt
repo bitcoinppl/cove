@@ -30,6 +30,7 @@ import androidx.compose.material.icons.automirrored.filled.Input
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.Nfc
 import androidx.compose.material.icons.filled.Output
 import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.Share
@@ -485,7 +486,7 @@ fun HardwareExportScreen(
                             },
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Icon(Icons.Default.Upload, contentDescription = null)
+                            Icon(Icons.Default.Nfc, contentDescription = null)
                             Text("NFC", modifier = Modifier.padding(start = 8.dp))
                         }
 
@@ -590,7 +591,7 @@ fun HardwareExportScreen(
                             },
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Icon(Icons.Default.Upload, contentDescription = null)
+                            Icon(Icons.Default.Nfc, contentDescription = null)
                             Text("NFC", modifier = Modifier.padding(start = 8.dp))
                         }
                     }
