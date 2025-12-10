@@ -17,7 +17,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -337,12 +339,14 @@ fun TransactionDetailsScreen(
         val parallaxOffset = (-60).dp - (scrollOffset * 0.3f).dp
         val fadeAlpha = (1f - (scrollOffset / 275f)).coerceIn(0f, if (isDark) 1.0f else 0.40f)
 
-        Box(
+        BoxWithConstraints(
             modifier =
                 Modifier
                     .fillMaxSize()
-                    .padding(padding),
+                    .padding(bottom = padding.calculateBottomPadding()),
         ) {
+            val minHeight = maxHeight
+
             Image(
                 painter = painterResource(id = R.drawable.image_chain_code_pattern_horizontal),
                 contentDescription = null,
@@ -358,12 +362,14 @@ fun TransactionDetailsScreen(
             Column(
                 modifier =
                     Modifier
-                        .fillMaxSize()
+                        .fillMaxWidth()
+                        .defaultMinSize(minHeight = minHeight)
                         .padding(horizontal = 20.dp)
                         .verticalScroll(scrollState),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Spacer(Modifier.height(16.dp))
+                // add top padding to account for top bar
+                Spacer(Modifier.height(padding.calculateTopPadding() + 16.dp))
 
                 val configuration = LocalConfiguration.current
                 val headerSize = (configuration.screenWidthDp * 0.33f).dp
@@ -504,7 +510,7 @@ fun TransactionDetailsScreen(
 
                 // show confirmation indicator if < 3 confirmations
                 if (numberOfConfirmations != null && numberOfConfirmations!! < 3) {
-                    Column(modifier = Modifier.padding(horizontal = 28.dp)) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
                         Spacer(Modifier.height(24.dp))
                         Box(
                             modifier =
@@ -518,6 +524,10 @@ fun TransactionDetailsScreen(
                             current = numberOfConfirmations!!,
                             modifier = Modifier.fillMaxWidth(),
                         )
+                        // only add spacing if details are collapsed
+                        if (!isExpanded) {
+                            Spacer(Modifier.height(32.dp))
+                        }
                     }
                 }
 
@@ -535,6 +545,9 @@ fun TransactionDetailsScreen(
                         metadata = metadata,
                     )
                 }
+
+                // flexible spacer to push buttons to bottom (matches iOS Spacer() behavior)
+                Spacer(Modifier.weight(1f))
 
                 Column(
                     modifier =
