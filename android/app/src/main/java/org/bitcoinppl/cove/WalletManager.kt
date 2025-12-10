@@ -16,7 +16,8 @@ import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.tapcard.TapSigner
 import org.bitcoinppl.cove_core.types.*
 import java.io.Closeable
-import java.util.concurrent.ConcurrentHashMap
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.snapshots.SnapshotStateMap
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -59,8 +60,8 @@ class WalletManager :
     var errorAlert by mutableStateOf<WalletErrorAlert?>(null)
     var sendFlowErrorAlert by mutableStateOf<TaggedItem<SendFlowErrorAlert>?>(null)
 
-    // cached transaction details
-    private val transactionDetailsCache = ConcurrentHashMap<TxId, TransactionDetails>()
+    // cached transaction details (observable for Compose)
+    val transactionDetailsCache: SnapshotStateMap<TxId, TransactionDetails> = mutableStateMapOf()
 
     // computed properties
     val unit: String

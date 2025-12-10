@@ -44,6 +44,7 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -59,6 +60,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -83,6 +85,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletManager
@@ -120,10 +123,15 @@ fun TransactionDetailsScreen(
 ) {
     val context = LocalContext.current
     val metadata = manager.walletMetadata ?: return
+    val scope = rememberCoroutineScope()
+    val txId = details.txId()
 
-    // state for confirmation polling
+    // read transaction details from cache (observable), fallback to passed-in details
+    val transactionDetails = manager.transactionDetailsCache[txId] ?: details
+
+    // state for confirmation polling and pull-to-refresh
     var numberOfConfirmations by remember { mutableStateOf<Int?>(null) }
-    var transactionDetails by remember { mutableStateOf(details) }
+    var isRefreshing by remember { mutableStateOf(false) }
     var feeFiatFmt by remember { mutableStateOf("---") }
     var sentSansFeeFiatFmt by remember { mutableStateOf("---") }
     var totalSpentFiatFmt by remember { mutableStateOf("---") }
@@ -131,14 +139,12 @@ fun TransactionDetailsScreen(
     // get current color scheme (respects in-app theme toggle)
     val isDark = !MaterialTheme.colorScheme.isLight
 
-    // immediately fetch fresh transaction details on screen load (matches iOS behavior)
+    // immediately fetch fresh transaction details on screen load
     LaunchedEffect(Unit) {
         try {
-            val freshDetails = manager.rust.transactionDetails(txId = details.txId())
-            transactionDetails = freshDetails
-            manager.updateTransactionDetailsCache(details.txId(), freshDetails)
+            val freshDetails = manager.rust.transactionDetails(txId = txId)
+            manager.updateTransactionDetailsCache(txId, freshDetails)
         } catch (e: Exception) {
-            // fall back to passed-in details if fetch fails
             android.util.Log.e("TransactionDetails", "error fetching fresh details", e)
         }
     }
@@ -166,7 +172,7 @@ fun TransactionDetailsScreen(
     }
 
     // poll for confirmations if not fully confirmed
-    LaunchedEffect(transactionDetails.txId()) {
+    LaunchedEffect(txId) {
         if (!transactionDetails.isConfirmed()) {
             delay(INITIAL_DELAY_MS)
         }
@@ -178,14 +184,13 @@ fun TransactionDetailsScreen(
             try {
                 ensureActive()
 
-                // refresh transaction details
-                val freshDetails = manager.rust.transactionDetails(txId = transactionDetails.txId())
+                // refresh transaction details and update cache
+                val freshDetails = manager.rust.transactionDetails(txId = txId)
                 if (!isActive) break
-                transactionDetails = freshDetails
-                manager.updateTransactionDetailsCache(freshDetails.txId(), freshDetails)
+                manager.updateTransactionDetailsCache(txId, freshDetails)
 
-                // get confirmations
-                val blockNumber = transactionDetails.blockNumber()
+                // get confirmations from fresh details
+                val blockNumber = freshDetails.blockNumber()
                 if (blockNumber != null) {
                     val confirmations = manager.rust.numberOfConfirmations(blockHeight = blockNumber)
                     if (!isActive) break
@@ -339,12 +344,34 @@ fun TransactionDetailsScreen(
         val parallaxOffset = (-60).dp - (scrollOffset * 0.3f).dp
         val fadeAlpha = (1f - (scrollOffset / 275f)).coerceIn(0f, if (isDark) 1.0f else 0.40f)
 
-        BoxWithConstraints(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(bottom = padding.calculateBottomPadding()),
+        PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = {
+                scope.launch {
+                    isRefreshing = true
+                    try {
+                        val freshDetails = manager.rust.transactionDetails(txId = txId)
+                        manager.updateTransactionDetailsCache(txId, freshDetails)
+
+                        // also update confirmations
+                        val blockNumber = freshDetails.blockNumber()
+                        if (blockNumber != null) {
+                            val confirmations = manager.rust.numberOfConfirmations(blockHeight = blockNumber)
+                            numberOfConfirmations = confirmations.toInt()
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("TransactionDetails", "error refreshing details", e)
+                    }
+                    isRefreshing = false
+                }
+            },
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(bottom = padding.calculateBottomPadding()),
         ) {
+            BoxWithConstraints(
+                modifier = Modifier.fillMaxSize(),
+            ) {
             val minHeight = maxHeight
 
             Image(
@@ -594,6 +621,7 @@ fun TransactionDetailsScreen(
                     }
                 }
             }
+        }
         }
     }
 }
