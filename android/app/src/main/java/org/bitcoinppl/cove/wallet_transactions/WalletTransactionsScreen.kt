@@ -28,11 +28,13 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.NorthEast
 import androidx.compose.material.icons.filled.QrCode2
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.SouthWest
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -399,21 +401,57 @@ fun WalletTransactionsScreen(
                             fontWeight = FontWeight.Bold,
                         )
 
-                        // render real transactions or show empty state
-                        if (transactions.isEmpty() && unsignedTransactions.isEmpty()) {
-                            // empty state
+                        val isScanning = manager?.loadState is WalletLoadState.SCANNING ||
+                            manager?.loadState is WalletLoadState.LOADING
+                        val isFirstScan = manager?.walletMetadata?.internal?.lastScanFinished == null
+                        val hasTransactions = transactions.isNotEmpty() || unsignedTransactions.isNotEmpty()
+
+                        // small inline spinner when scanning with existing transactions
+                        if (isScanning && hasTransactions) {
                             Box(
-                                modifier =
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 32.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 10.dp),
                                 contentAlignment = Alignment.Center,
                             ) {
-                                Text(
-                                    text = stringResource(R.string.no_transactions_yet),
-                                    color = secondaryText,
-                                    fontSize = 14.sp,
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp,
+                                    color = primaryText,
                                 )
+                            }
+                        }
+
+                        // render transactions, empty state, or full loading spinner
+                        if (!hasTransactions) {
+                            if (isScanning && isFirstScan) {
+                                // first scan in progress - show large centered spinner
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .weight(1f),
+                                    contentAlignment = Alignment.TopCenter,
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.padding(top = 80.dp),
+                                        color = primaryText,
+                                    )
+                                }
+                            } else {
+                                // scan complete but no transactions
+                                Box(
+                                    modifier =
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 32.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.no_transactions_yet),
+                                        color = secondaryText,
+                                        fontSize = 14.sp,
+                                    )
+                                }
                             }
                         } else {
                             // render transactions dynamically in scrollable list
@@ -460,7 +498,6 @@ fun WalletTransactionsScreen(
                                                     )
                                                 }
 
-                                            // format amount with manager if available
                                             val formattedAmount: String =
                                                 manager?.let {
                                                     val amount = txn.v1.sentAndReceived().amount()
@@ -478,13 +515,12 @@ fun WalletTransactionsScreen(
                                                     }
                                                 } ?: txn.v1.sentAndReceived().label()
 
-                                            TransactionWidget(
+                                            ConfirmedTransactionWidget(
                                                 type = txType,
                                                 label = txLabel,
                                                 date = txn.v1.confirmedAtFmt(),
                                                 amount = formattedAmount,
                                                 balanceAfter = txn.v1.blockHeightFmt(),
-                                                listCard = listCard,
                                                 primaryText = primaryText,
                                                 secondaryText = secondaryText,
                                                 transaction = txn,
@@ -508,13 +544,12 @@ fun WalletTransactionsScreen(
                                                 } else {
                                                     stringResource(
                                                         when (txType) {
-                                                            TransactionType.SENT -> R.string.label_transaction_sent
-                                                            TransactionType.RECEIVED -> R.string.label_transaction_received
+                                                            TransactionType.SENT -> R.string.label_transaction_sending
+                                                            TransactionType.RECEIVED -> R.string.label_transaction_receiving
                                                         },
                                                     )
                                                 }
 
-                                            // format amount with manager if available
                                             val formattedAmount: String =
                                                 manager?.let {
                                                     val amount = txn.v1.sentAndReceived().amount()
@@ -532,15 +567,11 @@ fun WalletTransactionsScreen(
                                                     }
                                                 } ?: txn.v1.sentAndReceived().label()
 
-                                            TransactionWidget(
+                                            UnconfirmedTransactionWidget(
                                                 type = txType,
                                                 label = txLabel,
-                                                date = stringResource(R.string.pending),
                                                 amount = formattedAmount,
-                                                balanceAfter = stringResource(R.string.unconfirmed),
-                                                listCard = listCard,
                                                 primaryText = primaryText,
-                                                secondaryText = secondaryText,
                                                 transaction = txn,
                                                 app = app,
                                                 manager = manager,
@@ -570,16 +601,15 @@ fun WalletTransactionsScreen(
 }
 
 @Composable
-private fun TransactionWidget(
+private fun ConfirmedTransactionWidget(
     type: TransactionType,
     label: String,
     date: String,
     amount: String,
     balanceAfter: String,
-    listCard: Color,
     primaryText: Color,
     secondaryText: Color,
-    transaction: Transaction,
+    transaction: Transaction.Confirmed,
     app: AppManager?,
     manager: WalletManager?,
     sensitiveVisible: Boolean,
@@ -590,37 +620,24 @@ private fun TransactionWidget(
     fun privateShow(text: String, placeholder: String = "••••••"): String =
         if (sensitiveVisible) text else placeholder
 
-    // get transaction id for navigation
-    val txId =
-        when (transaction) {
-            is Transaction.Confirmed -> transaction.v1.id()
-            is Transaction.Unconfirmed -> transaction.v1.id()
-        }
-
-    // icon background color based on dark mode
-    val iconBackground =
-        if (isDark) {
-            Color.Gray.copy(alpha = 0.35f)
-        } else {
-            Color.Black.copy(alpha = 0.75f)
-        }
+    val iconBackground = if (isDark) Color.Gray.copy(alpha = 0.35f) else Color.Black.copy(alpha = 0.75f)
+    val icon = if (type == TransactionType.SENT) Icons.Filled.NorthEast else Icons.Filled.SouthWest
 
     Row(
         modifier =
             Modifier
                 .fillMaxWidth()
                 .clickable {
-                    // navigate to transaction details
                     if (app != null && manager != null) {
                         scope.launch {
                             try {
-                                val details = manager.transactionDetails(txId)
+                                val details = manager.transactionDetails(transaction.v1.id())
                                 val walletId = manager.walletMetadata?.id
                                 if (walletId != null) {
                                     app.pushRoute(Route.TransactionDetails(walletId, details))
                                 }
                             } catch (e: Exception) {
-                                android.util.Log.e("TransactionWidget", "Failed to load transaction details", e)
+                                android.util.Log.e("ConfirmedTxWidget", "Failed to load transaction details", e)
                             }
                         }
                     }
@@ -636,7 +653,7 @@ private fun TransactionWidget(
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                imageVector = if (type == TransactionType.SENT) Icons.Filled.NorthEast else Icons.Filled.SouthWest,
+                imageVector = icon,
                 contentDescription = label,
                 tint = Color.White,
                 modifier = Modifier.size(24.dp),
@@ -665,9 +682,14 @@ private fun TransactionWidget(
         }
 
         Column(horizontalAlignment = Alignment.End) {
+            val amountColor = if (type == TransactionType.RECEIVED) {
+                CoveColor.TransactionReceived
+            } else {
+                primaryText.copy(alpha = 0.8f)
+            }
             Text(
                 text = privateShow(amount),
-                color = if (type == TransactionType.RECEIVED) CoveColor.TransactionReceived else primaryText.copy(alpha = 0.8f),
+                color = amountColor,
                 fontSize = 17.sp,
                 fontWeight = FontWeight.Normal,
             )
@@ -675,6 +697,94 @@ private fun TransactionWidget(
                 text = privateShow(balanceAfter),
                 color = secondaryText,
                 fontSize = 12.sp,
+                fontWeight = FontWeight.Normal,
+            )
+        }
+    }
+}
+
+@Composable
+private fun UnconfirmedTransactionWidget(
+    type: TransactionType,
+    label: String,
+    amount: String,
+    primaryText: Color,
+    transaction: Transaction.Unconfirmed,
+    app: AppManager?,
+    manager: WalletManager?,
+    sensitiveVisible: Boolean,
+) {
+    val scope = rememberCoroutineScope()
+    val isDark = !MaterialTheme.colorScheme.isLight
+
+    fun privateShow(text: String, placeholder: String = "••••••"): String =
+        if (sensitiveVisible) text else placeholder
+
+    val iconBackground = if (isDark) Color.Gray.copy(alpha = 0.35f) else Color.Black.copy(alpha = 0.75f)
+
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable {
+                    if (app != null && manager != null) {
+                        scope.launch {
+                            try {
+                                val details = manager.transactionDetails(transaction.v1.id())
+                                val walletId = manager.walletMetadata?.id
+                                if (walletId != null) {
+                                    app.pushRoute(Route.TransactionDetails(walletId, details))
+                                }
+                            } catch (e: Exception) {
+                                android.util.Log.e("UnconfirmedTxWidget", "Failed to load transaction details", e)
+                            }
+                        }
+                    }
+                }.padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(modifier = Modifier.graphicsLayer { alpha = 0.6f }) {
+            Box(
+                modifier =
+                    Modifier
+                        .size(50.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(iconBackground),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Schedule,
+                    contentDescription = label,
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp),
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.size(12.dp))
+
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = label,
+                color = primaryText.copy(alpha = 0.4f),
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Medium,
+            )
+        }
+
+        Column(horizontalAlignment = Alignment.End) {
+            val amountColor = if (type == TransactionType.RECEIVED) {
+                CoveColor.TransactionReceived
+            } else {
+                primaryText.copy(alpha = 0.8f)
+            }
+            Text(
+                text = privateShow(amount),
+                color = amountColor.copy(alpha = 0.65f),
+                fontSize = 17.sp,
                 fontWeight = FontWeight.Normal,
             )
         }
