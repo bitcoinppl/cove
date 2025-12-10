@@ -34,7 +34,6 @@ import org.bitcoinppl.cove_core.SendFlowManagerAction
 import org.bitcoinppl.cove_core.types.Amount
 import org.bitcoinppl.cove_core.types.Utxo
 import org.bitcoinppl.cove_core.types.UtxoType
-import kotlin.math.max
 
 private enum class PinState {
     NONE,
@@ -233,8 +232,11 @@ fun CoinControlCustomAmountSheet(
                         .heightIn(max = 200.dp)
                         .verticalScroll(rememberScrollState()),
             ) {
-                utxos.forEach { utxo ->
+                utxos.forEachIndexed { index, utxo ->
                     UtxoDetailRow(utxo = utxo, displayAmount = walletManager.amountFmt(utxo.amount))
+                    if (index < utxos.lastIndex) {
+                        Spacer(Modifier.height(8.dp))
+                    }
                 }
             }
 
@@ -307,7 +309,6 @@ fun CoinControlCustomAmountSheet(
                     value = customAmount.toFloat(),
                     onValueChange = { handleSliderChange(it.toDouble()) },
                     valueRange = minSend.toFloat()..maxSend.toFloat(),
-                    steps = max(0, ((maxSend - minSend) / step).toInt() - 1),
                     onValueChangeFinished = {
                         if (isEditing) {
                             scope.launch {
@@ -341,7 +342,8 @@ private fun UtxoDetailRow(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .padding(vertical = 12.dp),
+                .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(10.dp))
+                .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
