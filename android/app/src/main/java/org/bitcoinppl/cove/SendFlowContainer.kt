@@ -99,8 +99,6 @@ fun SendFlowContainer(
     DisposableEffect(Unit) {
         onDispose {
             sendFlowManager?.presenter?.setDisappearing()
-            sendFlowManager?.close()
-            app.clearSendFlowManager()
         }
     }
 
@@ -495,6 +493,9 @@ private fun SendFlowRouteToScreen(
             }
 
             SendConfirmationScreen(
+                app = app,
+                walletManager = walletManager,
+                details = details,
                 onBack = { app.popRoute() },
                 sendState = sendState,
                 onSwipeToSend = {
@@ -534,7 +535,6 @@ private fun SendFlowRouteToScreen(
                         ?.masterFingerprint
                         ?.asUppercase()
                         ?.take(8) ?: "",
-                address = details.sendingTo().string(),
                 networkFee = walletManager.amountFmtUnit(details.feeTotal()),
                 willReceive = walletManager.amountFmtUnit(details.sendingAmount()),
                 willPay = walletManager.amountFmtUnit(details.spendingAmount()),
@@ -545,7 +545,7 @@ private fun SendFlowRouteToScreen(
                 AlertDialog(
                     onDismissRequest = {
                         showSuccessAlert = false
-                        app.popRoute()
+                        app.loadAndReset(Route.SelectedWallet(walletManager.id))
                     },
                     title = { Text("Success") },
                     text = { Text("Transaction sent successfully!") },
@@ -553,7 +553,7 @@ private fun SendFlowRouteToScreen(
                         TextButton(
                             onClick = {
                                 showSuccessAlert = false
-                                app.popRoute()
+                                app.loadAndReset(Route.SelectedWallet(walletManager.id))
                             },
                         ) {
                             Text("OK")
