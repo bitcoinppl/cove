@@ -78,6 +78,7 @@ import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.bitcoinppl.cove.nfc.NfcWriteSheet
 import org.bitcoinppl.cove.send.SendFlowAdvancedDetailsView
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.midnightBtn
@@ -164,8 +165,7 @@ fun HardwareExportScreen(
     var alertState by remember { mutableStateOf<AlertState?>(null) }
     var alertMessage by remember { mutableStateOf("") }
     var showQrScanner by remember { mutableStateOf(false) }
-
-    var bbqrStrings by remember { mutableStateOf<List<String>>(emptyList()) }
+    var showNfcWriteSheet by remember { mutableStateOf(false) }
 
     val metadata = walletManager.walletMetadata
 
@@ -450,8 +450,8 @@ fun HardwareExportScreen(
                 onDismissRequest = { sheetState = null },
                 sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
             ) {
-                BbqrExportView(
-                    qrStrings = bbqrStrings,
+                QrExportView(
+                    details = details,
                     modifier = Modifier.padding(16.dp),
                 )
             }
@@ -470,13 +470,7 @@ fun HardwareExportScreen(
                         TextButton(
                             onClick = {
                                 confirmationState = null
-                                try {
-                                    bbqrStrings = details.psbtToBbqr()
-                                    sheetState = SheetState.ExportQr
-                                } catch (e: Exception) {
-                                    alertState = AlertState.BbqrError
-                                    alertMessage = e.message ?: "Unknown error"
-                                }
+                                sheetState = SheetState.ExportQr
                             },
                             modifier = Modifier.fillMaxWidth(),
                         ) {
@@ -487,8 +481,7 @@ fun HardwareExportScreen(
                         TextButton(
                             onClick = {
                                 confirmationState = null
-                                alertState = AlertState.NfcError
-                                alertMessage = "NFC operations not yet implemented for Android"
+                                showNfcWriteSheet = true
                             },
                             modifier = Modifier.fillMaxWidth(),
                         ) {
@@ -593,8 +586,7 @@ fun HardwareExportScreen(
                         TextButton(
                             onClick = {
                                 confirmationState = null
-                                alertState = AlertState.NfcError
-                                alertMessage = "NFC operations not yet implemented for Android"
+                                app.sheetState = TaggedItem(AppSheetState.Nfc)
                             },
                             modifier = Modifier.fillMaxWidth(),
                         ) {
@@ -645,6 +637,15 @@ fun HardwareExportScreen(
             },
             onDismiss = { showQrScanner = false },
             app = app,
+        )
+    }
+
+    // NFC write sheet for exporting PSBT
+    if (showNfcWriteSheet) {
+        NfcWriteSheet(
+            data = details.psbtBytes(),
+            onDismiss = { showNfcWriteSheet = false },
+            onSuccess = { showNfcWriteSheet = false },
         )
     }
 }
