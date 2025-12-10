@@ -497,10 +497,11 @@ private fun ChangeBadge(tintColor: Color = CoveColor.WarningOrange) {
     Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
         repeat(2) {
             Box(
-                modifier = Modifier
-                    .size(6.dp)
-                    .clip(CircleShape)
-                    .background(tintColor.copy(alpha = 0.8f)),
+                modifier =
+                    Modifier
+                        .size(6.dp)
+                        .clip(CircleShape)
+                        .background(tintColor.copy(alpha = 0.8f)),
             )
         }
     }

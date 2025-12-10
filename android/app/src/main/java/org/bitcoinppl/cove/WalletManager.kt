@@ -2,8 +2,10 @@ package org.bitcoinppl.cove
 
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.graphics.Color
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -16,8 +18,6 @@ import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.tapcard.TapSigner
 import org.bitcoinppl.cove_core.types.*
 import java.io.Closeable
-import androidx.compose.runtime.mutableStateMapOf
-import androidx.compose.runtime.snapshots.SnapshotStateMap
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -150,11 +150,12 @@ class WalletManager :
     }
 
     fun setScanning() {
-        val currentTxns = when (val state = loadState) {
-            is WalletLoadState.LOADED -> state.txns
-            is WalletLoadState.SCANNING -> state.txns
-            else -> emptyList()
-        }
+        val currentTxns =
+            when (val state = loadState) {
+                is WalletLoadState.LOADED -> state.txns
+                is WalletLoadState.SCANNING -> state.txns
+                else -> emptyList()
+            }
         loadState = WalletLoadState.SCANNING(currentTxns)
     }
 

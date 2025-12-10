@@ -56,10 +56,11 @@ fun QrExportView(
 
     fun generateQrCodes() {
         try {
-            qrStrings = when (selectedFormat) {
-                QrExportFormat.BBQR -> details.psbtToBbqrWithDensity(density)
-                QrExportFormat.UR -> details.psbtToUrWithDensity(density)
-            }
+            qrStrings =
+                when (selectedFormat) {
+                    QrExportFormat.BBQR -> details.psbtToBbqrWithDensity(density)
+                    QrExportFormat.UR -> details.psbtToUrWithDensity(density)
+                }
             error = null
             currentIndex = 0
         } catch (e: Exception) {
@@ -104,16 +105,18 @@ fun QrExportView(
 
         // format picker (BBQR / UR)
         SingleChoiceSegmentedButtonRow(
-            modifier = Modifier
-                .padding(vertical = 8.dp)
-                .width(200.dp),
+            modifier =
+                Modifier
+                    .padding(vertical = 8.dp)
+                    .width(200.dp),
         ) {
             QrExportFormat.entries.forEachIndexed { index, format ->
                 SegmentedButton(
-                    shape = SegmentedButtonDefaults.itemShape(
-                        index = index,
-                        count = QrExportFormat.entries.size,
-                    ),
+                    shape =
+                        SegmentedButtonDefaults.itemShape(
+                            index = index,
+                            count = QrExportFormat.entries.size,
+                        ),
                     onClick = { selectedFormat = format },
                     selected = selectedFormat == format,
                     label = { Text(format.toString()) },
@@ -131,10 +134,11 @@ fun QrExportView(
             )
         } else if (qrStrings.isEmpty()) {
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(1f)
-                    .padding(horizontal = 11.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(1f)
+                        .padding(horizontal = 11.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 Text("Loading...")
@@ -143,15 +147,17 @@ fun QrExportView(
             // animated QR view
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(1f)
-                        .padding(horizontal = 11.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(1f)
+                            .padding(horizontal = 11.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    val bitmap = remember(qrStrings[currentIndex]) {
-                        QrCodeGenerator.generate(qrStrings[currentIndex], size = 512)
-                    }
+                    val bitmap =
+                        remember(qrStrings[currentIndex]) {
+                            QrCodeGenerator.generate(qrStrings[currentIndex], size = 512)
+                        }
 
                     Image(
                         bitmap = bitmap.asImageBitmap(),
@@ -179,15 +185,17 @@ fun QrExportView(
                         ) {
                             qrStrings.indices.forEach { index ->
                                 Box(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(12.dp)
-                                        .background(
-                                            color = MaterialTheme.colorScheme.primary.copy(
-                                                alpha = if (index == currentIndex) 1f else 0.3f,
+                                    modifier =
+                                        Modifier
+                                            .weight(1f)
+                                            .height(12.dp)
+                                            .background(
+                                                color =
+                                                    MaterialTheme.colorScheme.primary.copy(
+                                                        alpha = if (index == currentIndex) 1f else 0.3f,
+                                                    ),
+                                                shape = RoundedCornerShape(2.dp),
                                             ),
-                                            shape = RoundedCornerShape(2.dp),
-                                        ),
                                 )
                             }
                         }
@@ -219,18 +227,20 @@ private fun MinusButton(
     modifier: Modifier = Modifier,
 ) {
     Box(
-        modifier = modifier
-            .size(44.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .clickable(enabled = enabled, onClick = onClick),
+        modifier =
+            modifier
+                .size(44.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
             imageVector = Icons.Default.Remove,
             contentDescription = "Decrease density",
-            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                alpha = if (enabled) 1f else 0.3f,
-            ),
+            tint =
+                MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                    alpha = if (enabled) 1f else 0.3f,
+                ),
             modifier = Modifier.size(18.dp),
         )
     }
@@ -243,18 +253,20 @@ private fun PlusButton(
     modifier: Modifier = Modifier,
 ) {
     Box(
-        modifier = modifier
-            .size(44.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .clickable(enabled = enabled, onClick = onClick),
+        modifier =
+            modifier
+                .size(44.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
             imageVector = Icons.Default.Add,
             contentDescription = "Increase density",
-            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                alpha = if (enabled) 1f else 0.3f,
-            ),
+            tint =
+                MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                    alpha = if (enabled) 1f else 0.3f,
+                ),
             modifier = Modifier.size(18.dp),
         )
     }
@@ -269,24 +281,27 @@ private fun DensityButtons(
     modifier: Modifier = Modifier,
 ) {
     Row(
-        modifier = modifier
-            .clip(RoundedCornerShape(50))
-            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f)),
+        modifier =
+            modifier
+                .clip(RoundedCornerShape(50))
+                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f)),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            modifier = Modifier
-                .size(32.dp)
-                .clip(RoundedCornerShape(50))
-                .clickable(enabled = canDecrease, onClick = onDecrease),
+            modifier =
+                Modifier
+                    .size(32.dp)
+                    .clip(RoundedCornerShape(50))
+                    .clickable(enabled = canDecrease, onClick = onDecrease),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
                 imageVector = Icons.Default.Remove,
                 contentDescription = "Decrease density",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                    alpha = if (canDecrease) 1f else 0.3f,
-                ),
+                tint =
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                        alpha = if (canDecrease) 1f else 0.3f,
+                    ),
                 modifier = Modifier.size(14.dp),
             )
         }
@@ -297,18 +312,20 @@ private fun DensityButtons(
         )
 
         Box(
-            modifier = Modifier
-                .size(32.dp)
-                .clip(RoundedCornerShape(50))
-                .clickable(enabled = canIncrease, onClick = onIncrease),
+            modifier =
+                Modifier
+                    .size(32.dp)
+                    .clip(RoundedCornerShape(50))
+                    .clickable(enabled = canIncrease, onClick = onIncrease),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
                 imageVector = Icons.Default.Add,
                 contentDescription = "Increase density",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                    alpha = if (canIncrease) 1f else 0.3f,
-                ),
+                tint =
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                        alpha = if (canIncrease) 1f else 0.3f,
+                    ),
                 modifier = Modifier.size(14.dp),
             )
         }

@@ -1,6 +1,5 @@
 package org.bitcoinppl.cove.send.send_confirmation
 
-import android.util.Log
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -41,7 +40,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
@@ -54,7 +52,6 @@ import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
 import org.bitcoinppl.cove.ui.theme.midnightBtn
 import org.bitcoinppl.cove.views.AutoSizeText
-import org.bitcoinppl.cove.views.BalanceAutoSizeText
 import org.bitcoinppl.cove_core.types.ConfirmDetails
 
 private enum class SheetState {
@@ -312,11 +309,12 @@ private fun AmountWidget(
 
                 Row(
                     verticalAlignment = Alignment.Bottom,
-                    modifier = Modifier
-                        .padding(start = 8.dp, bottom = 10.dp)
-                        .onSizeChanged { size ->
-                            unitLabelWidth = with(density) { size.width.toDp() }
-                        },
+                    modifier =
+                        Modifier
+                            .padding(start = 8.dp, bottom = 10.dp)
+                            .onSizeChanged { size ->
+                                unitLabelWidth = with(density) { size.width.toDp() }
+                            },
                 ) {
                     Text(denomination, color = MaterialTheme.colorScheme.onSurface, fontSize = 18.sp, maxLines = 1)
                     Spacer(Modifier.width(4.dp))
@@ -422,13 +420,14 @@ private fun KeyValueRow(
     boldKey: Boolean = false,
     onClick: (() -> Unit)? = null,
 ) {
-    val rowModifier = if (onClick != null) {
-        Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-    } else {
-        Modifier.fillMaxWidth()
-    }
+    val rowModifier =
+        if (onClick != null) {
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+        } else {
+            Modifier.fillMaxWidth()
+        }
     Row(
         modifier = rowModifier,
         verticalAlignment = Alignment.CenterVertically,

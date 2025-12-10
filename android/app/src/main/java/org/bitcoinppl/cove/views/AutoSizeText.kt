@@ -291,10 +291,11 @@ fun AutoSizeTextField(
                     textAlign = textAlign ?: TextAlign.Unspecified,
                 ),
             singleLine = true,
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Decimal,
-                imeAction = ImeAction.Done,
-            ),
+            keyboardOptions =
+                KeyboardOptions(
+                    keyboardType = KeyboardType.Decimal,
+                    imeAction = ImeAction.Done,
+                ),
             keyboardActions = keyboardActions ?: KeyboardActions.Default,
             cursorBrush = SolidColor(color),
             modifier =

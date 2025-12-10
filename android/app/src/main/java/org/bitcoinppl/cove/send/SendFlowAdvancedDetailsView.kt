@@ -74,15 +74,16 @@ fun SendFlowAdvancedDetailsView(
     var splitOutput by remember { mutableStateOf<SplitOutput?>(null) }
 
     LaunchedEffect(Unit) {
-        splitOutput = try {
-            walletManager.rust.splitTransactionOutputs(details.outputs())
-        } catch (e: Exception) {
-            null
-        }
+        splitOutput =
+            try {
+                walletManager.rust.splitTransactionOutputs(details.outputs())
+            } catch (e: Exception) {
+                null
+            }
     }
 
-    fun displayFiatOrBtcAmount(amount: Amount): String {
-        return when (metadata?.fiatOrBtc) {
+    fun displayFiatOrBtcAmount(amount: Amount): String =
+        when (metadata?.fiatOrBtc) {
             FiatOrBtc.FIAT -> {
                 val prices = app.prices
                 if (prices != null) {
@@ -97,10 +98,9 @@ fun SendFlowAdvancedDetailsView(
                 "${walletManager.amountFmt(amount)} $units"
             }
         }
-    }
 
-    fun toTxRows(addressAndAmounts: List<AddressAndAmount>): List<TxRowModel> {
-        return addressAndAmounts.map {
+    fun toTxRows(addressAndAmounts: List<AddressAndAmount>): List<TxRowModel> =
+        addressAndAmounts.map {
             TxRowModel(
                 label = it.label,
                 utxoType = it.utxoType,
@@ -109,14 +109,14 @@ fun SendFlowAdvancedDetailsView(
                 amount = displayFiatOrBtcAmount(it.amount),
             )
         }
-    }
 
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .padding(16.dp)
-            .clickable { walletManager.dispatch(WalletManagerAction.ToggleFiatOrBtc) },
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                .padding(16.dp)
+                .clickable { walletManager.dispatch(WalletManagerAction.ToggleFiatOrBtc) },
     ) {
         // header
         Row(
@@ -142,10 +142,11 @@ fun SendFlowAdvancedDetailsView(
 
             IconButton(
                 onClick = onDismiss,
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)),
+                modifier =
+                    Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)),
             ) {
                 Icon(
                     imageVector = Icons.Default.Close,
@@ -163,9 +164,10 @@ fun SendFlowAdvancedDetailsView(
 
         // scrollable content
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState()),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
         ) {
             val split = splitOutput
             if (split != null) {
@@ -237,9 +239,10 @@ fun SendFlowAdvancedDetailsView(
 
             // fee row
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Text(
@@ -285,10 +288,11 @@ private fun SectionCard(
         }
 
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(6.dp))
-                .background(MaterialTheme.colorScheme.surface),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(MaterialTheme.colorScheme.surface),
         ) {
             rows.forEachIndexed { index, row ->
                 TxRow(
@@ -313,17 +317,19 @@ private fun TxRow(
 ) {
     var showMenu by remember { mutableStateOf(false) }
 
-    val label = model.label ?: when (model.utxoType) {
-        UtxoType.OUTPUT -> "Receive Address"
-        UtxoType.CHANGE -> "Change Address"
-        else -> null
-    }
+    val label =
+        model.label ?: when (model.utxoType) {
+            UtxoType.OUTPUT -> "Receive Address"
+            UtxoType.CHANGE -> "Change Address"
+            else -> null
+        }
 
     Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { showMenu = true }
-            .padding(vertical = 12.dp, horizontal = 12.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable { showMenu = true }
+                .padding(vertical = 12.dp, horizontal = 12.dp),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -349,10 +355,11 @@ private fun TxRow(
                             Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                                 repeat(2) {
                                     Box(
-                                        modifier = Modifier
-                                            .size(6.dp)
-                                            .clip(CircleShape)
-                                            .background(Color(0xFFCC8800).copy(alpha = 0.8f)),
+                                        modifier =
+                                            Modifier
+                                                .size(6.dp)
+                                                .clip(CircleShape)
+                                                .background(Color(0xFFCC8800).copy(alpha = 0.8f)),
                                     )
                                 }
                             }

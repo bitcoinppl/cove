@@ -320,14 +320,20 @@ private fun SendFlowRouteToScreen(
                 onAmountDone = {
                     // if address is invalid, focus address; otherwise dismiss
                     presenter.focusField =
-                        if (!sendFlowManager.rust.validateAddress()) SetAmountFocusField.ADDRESS
-                        else null
+                        if (!sendFlowManager.rust.validateAddress()) {
+                            SetAmountFocusField.ADDRESS
+                        } else {
+                            null
+                        }
                 },
                 onAddressDone = {
                     // if amount is invalid, focus amount; otherwise dismiss
                     presenter.focusField =
-                        if (!sendFlowManager.rust.validateAmount()) SetAmountFocusField.AMOUNT
-                        else null
+                        if (!sendFlowManager.rust.validateAmount()) {
+                            SetAmountFocusField.AMOUNT
+                        } else {
+                            null
+                        }
                 },
                 focusField = presenter.focusField,
                 exceedsBalance = exceedsBalance,
@@ -355,8 +361,11 @@ private fun SendFlowRouteToScreen(
                                             }
                                             // focus management: if amount valid clear focus, otherwise focus amount
                                             presenter.focusField =
-                                                if (sendFlowManager.rust.validateAmount()) null
-                                                else SetAmountFocusField.AMOUNT
+                                                if (sendFlowManager.rust.validateAmount()) {
+                                                    null
+                                                } else {
+                                                    SetAmountFocusField.AMOUNT
+                                                }
                                         }
                                         else -> {
                                             app.alertState =

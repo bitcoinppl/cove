@@ -151,7 +151,7 @@ class NfcWriter(
                 ndef.close()
                 _writeResults.trySend(
                     NfcWriteResult.Error(
-                        "Data too large for tag (${messageSize} bytes, max ${ndef.maxSize})",
+                        "Data too large for tag ($messageSize bytes, max ${ndef.maxSize})",
                     ),
                 )
                 return
@@ -160,7 +160,7 @@ class NfcWriter(
             ndef.writeNdefMessage(message)
             ndef.close()
 
-            Log.d(TAG, "Successfully wrote ${messageSize} bytes to NFC tag")
+            Log.d(TAG, "Successfully wrote $messageSize bytes to NFC tag")
 
             // success
             mainHandler.post {
