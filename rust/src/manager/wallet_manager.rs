@@ -629,12 +629,19 @@ impl RustWalletManager {
         .await
         .unwrap()?;
 
+        // for unconfirmed transactions, trigger a background sync to update status
+        // this uses SyncRequest with just this txid so it's fast
+        if !details.is_confirmed() {
+            send!(self.actor.perform_scan_for_single_tx_id(details.tx_id().0));
+        }
+
         Ok(details)
     }
 
     #[uniffi::method]
     pub async fn number_of_confirmations(&self, block_height: u32) -> Result<u32, Error> {
-        let current_height = self.current_block_height().await?;
+        // always get fresh height to ensure confirmation count reflects latest blocks
+        let current_height = self.force_update_height().await?;
         if block_height > current_height { Ok(0) } else { Ok(current_height - block_height + 1) }
     }
 
