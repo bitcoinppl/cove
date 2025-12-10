@@ -129,6 +129,18 @@ fun TransactionDetailsScreen(
     // get current color scheme (respects in-app theme toggle)
     val isDark = !MaterialTheme.colorScheme.isLight
 
+    // immediately fetch fresh transaction details on screen load (matches iOS behavior)
+    LaunchedEffect(Unit) {
+        try {
+            val freshDetails = manager.rust.transactionDetails(txId = details.txId())
+            transactionDetails = freshDetails
+            manager.updateTransactionDetailsCache(details.txId(), freshDetails)
+        } catch (e: Exception) {
+            // fall back to passed-in details if fetch fails
+            android.util.Log.e("TransactionDetails", "error fetching fresh details", e)
+        }
+    }
+
     // load fiat amounts
     LaunchedEffect(transactionDetails) {
         feeFiatFmt =
@@ -165,9 +177,10 @@ fun TransactionDetailsScreen(
                 ensureActive()
 
                 // refresh transaction details
-                val details = manager.rust.transactionDetails(txId = transactionDetails.txId())
+                val freshDetails = manager.rust.transactionDetails(txId = transactionDetails.txId())
                 if (!isActive) break
-                transactionDetails = details
+                transactionDetails = freshDetails
+                manager.updateTransactionDetailsCache(freshDetails.txId(), freshDetails)
 
                 // get confirmations
                 val blockNumber = transactionDetails.blockNumber()

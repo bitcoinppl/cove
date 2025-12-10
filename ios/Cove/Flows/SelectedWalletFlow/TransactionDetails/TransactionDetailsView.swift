@@ -340,6 +340,7 @@ struct TransactionDetailsView: View {
                 if let details = try? await manager.rust.transactionDetails(txId: txId) {
                     await MainActor.run {
                         withAnimation { transactionDetails = details }
+                        manager.updateTransactionDetailsCache(txId: txId, details: details)
                     }
                 }
 
