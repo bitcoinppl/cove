@@ -122,7 +122,7 @@ build-android:
 
 alias bar := build-android-release
 build-android-release:
-    cd rust && cargo xtask build-android release && say "done android release"
+    cd rust && cargo xtask build-android release-speed && say "done android release"
 
 alias ra := run-android
 run-android profile="debug":
@@ -138,7 +138,7 @@ build-ios profile="debug" *flags="":
 
 alias bir := build-ios-release
 build-ios-release:
-    cd rust && cargo xtask build-ios release-smaller --device && say "done ios release"
+    cd rust && cargo xtask build-ios release-speed --device && say "done ios release"
 
 alias bidd := build-ios-debug-device
 build-ios-debug-device:
