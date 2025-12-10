@@ -285,7 +285,8 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
 
     func processNDEFMessage(_ message: NFCNDEFMessage) {
         Log.debug("processing NDEF message, \(message)")
-        var _message = ""
+        var textMessage: String? = nil
+        var binaryData: Data? = nil
 
         Log.debug("num of records: \(message.records.count)")
         for record in message.records {
@@ -293,15 +294,23 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
             if let type = String(data: record.type, encoding: .utf8) {
                 Log.debug("type: \(type)")
             }
+
+            // handle external type records (includes bitcoin.org:txn for signed transactions)
+            if record.typeNameFormat == .nfcExternal {
+                Log.debug("External type record with \(record.payload.count) bytes")
+                binaryData = record.payload
+                continue
+            }
+
             if let payload = String(data: record.payload, encoding: .utf8) {
-                _message = payload
+                textMessage = payload
             }
             Log.debug("id: \(record.identifier)")
         }
 
-        Log.debug("NDEF message: \(_message)")
+        Log.debug("NDEF message text: \(textMessage ?? "nil"), binary: \(binaryData?.count ?? 0) bytes")
         isScanning = false
-        scannedMessage = try? NfcMessage.tryNew(string: _message)
+        scannedMessage = try? NfcMessage.tryNew(string: textMessage, data: binaryData)
     }
 
     func tagReaderSessionDidBecomeActive(_: NFCTagReaderSession) {

@@ -132,15 +132,21 @@ class NfcReader(
         var binaryData: ByteArray? = null
 
         for (record in ndefMessage.records) {
-            Log.d("NfcReader", "Record type: ${String(record.type)}")
+            val typeString = String(record.type)
+            Log.d("NfcReader", "Record type: $typeString, TNF: ${record.tnf}")
 
-            // try to extract text
             val payload = record.payload
             if (payload.isNotEmpty()) {
+                // handle external type records (TNF = 4)
+                // includes bitcoin.org:txn for signed transactions
+                if (record.tnf == android.nfc.NdefRecord.TNF_EXTERNAL_TYPE) {
+                    Log.d("NfcReader", "External type record: $typeString, ${payload.size} bytes")
+                    binaryData = payload
+                    continue
+                }
+
                 // check if it's a text record (TNF_WELL_KNOWN with type "T")
-                if (record.tnf == android.nfc.NdefRecord.TNF_WELL_KNOWN &&
-                    String(record.type) == "T"
-                ) {
+                if (record.tnf == android.nfc.NdefRecord.TNF_WELL_KNOWN && typeString == "T") {
                     // text record format: first byte is status, rest is text
                     val statusByte = payload[0]
                     val textEncoding = if (statusByte.toInt() and 0x80 == 0) "UTF-8" else "UTF-16"
