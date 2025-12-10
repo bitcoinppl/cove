@@ -26,7 +26,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowDropUp
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.ButtonDefaults
@@ -495,12 +494,16 @@ private fun SelectionCircle(selected: Boolean) {
 
 @Composable
 private fun ChangeBadge(tintColor: Color = CoveColor.WarningOrange) {
-    Icon(
-        imageVector = Icons.Filled.Link,
-        contentDescription = null,
-        tint = tintColor,
-        modifier = Modifier.size(16.dp),
-    )
+    Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+        repeat(2) {
+            Box(
+                modifier = Modifier
+                    .size(6.dp)
+                    .clip(CircleShape)
+                    .background(tintColor.copy(alpha = 0.8f)),
+            )
+        }
+    }
 }
 
 @Composable

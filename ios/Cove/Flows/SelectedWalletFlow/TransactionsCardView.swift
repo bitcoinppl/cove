@@ -304,7 +304,7 @@ struct UnsignedTransactionView: View {
         }
 
         // fiat
-        guard let fiatAmount else { return privateShow("$XX.XX USD") }
+        guard let fiatAmount else { return privateShow("---") }
         return privateShow(manager.rust.displayFiatAmount(amount: fiatAmount))
     }
 

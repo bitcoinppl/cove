@@ -346,7 +346,6 @@ private fun TxRow(
                         )
 
                         if (model.utxoType == UtxoType.CHANGE) {
-                            // two dots badge similar to iOS "circlebadge.2"
                             Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                                 repeat(2) {
                                     Box(

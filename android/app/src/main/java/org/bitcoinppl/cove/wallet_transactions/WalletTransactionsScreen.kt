@@ -46,6 +46,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -158,6 +159,11 @@ fun WalletTransactionsScreen(
             else -> emptyList()
         }
     val unsignedTransactions = manager?.unsignedTransactions ?: emptyList()
+
+    // clear SendFlowManager when returning to wallet screen (matches iOS SelectedWalletScreen)
+    LaunchedEffect(Unit) {
+        app?.clearSendFlowManager()
+    }
 
     // use Material Design system colors for native Android feel
     val listBg = MaterialTheme.colorScheme.background
@@ -665,6 +671,16 @@ private fun UnsignedTransactionWidget(
 ) {
     val isDark = !MaterialTheme.colorScheme.isLight
     var showDeleteMenu by remember { mutableStateOf(false) }
+    var fiatAmount by remember { mutableStateOf<Double?>(null) }
+
+    // fetch fiat amount asynchronously (matches iOS .task behavior)
+    LaunchedEffect(txn.id()) {
+        fiatAmount = try {
+            manager?.rust?.amountInFiat(txn.spendingAmount())
+        } catch (e: Exception) {
+            null
+        }
+    }
 
     fun privateShow(text: String, placeholder: String = "••••••"): String =
         if (sensitiveVisible) text else placeholder
@@ -677,12 +693,19 @@ private fun UnsignedTransactionWidget(
             Color.Black.copy(alpha = 0.75f)
         }
 
-    // format the spending amount (unsigned transactions don't have cached fiat amount)
+    // format the spending amount
     val formattedAmount =
         manager?.let {
             when (fiatOrBtc) {
                 FiatOrBtc.BTC -> it.displayAmount(txn.spendingAmount(), showUnit = true)
-                FiatOrBtc.FIAT -> "---"
+                FiatOrBtc.FIAT -> {
+                    val amount = fiatAmount
+                    if (amount != null) {
+                        it.rust.displayFiatAmount(amount)
+                    } else {
+                        "---"
+                    }
+                }
             }
         } ?: txn.spendingAmount().satsStringWithUnit()
 
