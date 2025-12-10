@@ -20,11 +20,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
@@ -104,6 +102,7 @@ fun HotWalletVerifyScreen(
     val animationX = remember { Animatable(0f) }
     val animationY = remember { Animatable(0f) }
     var travelDistance by remember { mutableStateOf(1f) }
+    var isPositionReady by remember { mutableStateOf(false) }
 
     // UI state derived from state machine
     var checkState by remember { mutableStateOf(stateMachine.state()) }
@@ -135,8 +134,11 @@ fun HotWalletVerifyScreen(
                 val dist = hypot(targetPosition.x - startPos.x, targetPosition.y - startPos.y)
                 travelDistance = if (dist <= 0f) 1f else dist
 
+                // snap to start position before showing the overlay
+                isPositionReady = false
                 animationX.snapTo(startPos.x)
                 animationY.snapTo(startPos.y)
+                isPositionReady = true
 
                 // spring animation matching iOS spring().speed(2.0)
                 val springSpec =
@@ -220,7 +222,8 @@ fun HotWalletVerifyScreen(
             }
 
             WordCheckState.None -> {
-                // idle - nothing to do
+                // idle - reset position ready state
+                isPositionReady = false
             }
         }
     }
@@ -281,7 +284,6 @@ fun HotWalletVerifyScreen(
                 modifier =
                     Modifier
                         .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
                         .padding(vertical = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(24.dp),
             ) {
@@ -412,6 +414,7 @@ fun HotWalletVerifyScreen(
                     modifier =
                         Modifier
                             .fillMaxWidth()
+                            .weight(1f)
                             .padding(horizontal = 20.dp),
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -435,6 +438,8 @@ fun HotWalletVerifyScreen(
                         color = Color.White.copy(alpha = 0.8f),
                         lineHeight = 20.sp,
                     )
+
+                    Spacer(Modifier.weight(1f))
 
                     HorizontalDivider(color = Color.White.copy(alpha = 0.35f), thickness = 1.dp)
 
@@ -510,7 +515,7 @@ fun HotWalletVerifyScreen(
                     WordCheckState.None -> null
                 }
 
-            if (currentWord != null) {
+            if (currentWord != null && isPositionReady) {
                 Box(
                     modifier =
                         Modifier

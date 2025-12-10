@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -108,7 +109,9 @@ fun VerificationCompleteScreen(
                     Icon(
                         imageVector = Icons.Default.CheckCircle,
                         contentDescription = "Success",
-                        modifier = Modifier.fillMaxWidth(0.46f),
+                        modifier = Modifier
+                            .fillMaxWidth(0.46f)
+                            .aspectRatio(1f),
                         tint = CoveColor.SuccessGreen,
                     )
                 }
@@ -160,6 +163,7 @@ fun VerificationCompleteScreen(
                                 contentColor = CoveColor.midnightBlue,
                             ),
                         modifier = Modifier.fillMaxWidth(),
+                        fontSize = 13.sp,
                     )
                 }
             }
