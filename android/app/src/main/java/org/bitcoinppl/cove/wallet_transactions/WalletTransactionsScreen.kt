@@ -76,6 +76,7 @@ import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletLoadState
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
 import org.bitcoinppl.cove.ui.theme.isLight
 import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.BalanceAutoSizeText
@@ -186,6 +187,9 @@ fun WalletTransactionsScreen(
     // state for wallet name rename dropdown
     var showRenameMenu by remember { mutableStateOf(false) }
     val isColdWallet = manager?.walletMetadata?.walletType == WalletType.COLD
+
+    // force white status bar icons for midnight blue background
+    ForceLightStatusBarIcons()
 
     Scaffold(
         containerColor = CoveColor.midnightBlue,
@@ -424,8 +428,8 @@ fun WalletTransactionsScreen(
 
                         // render transactions, empty state, or full loading spinner
                         if (!hasTransactions) {
-                            if (isScanning && isFirstScan) {
-                                // first scan in progress - show large centered spinner
+                            if (isFirstScan) {
+                                // first scan never completed - show large centered spinner
                                 Box(
                                     modifier = Modifier
                                         .fillMaxWidth()

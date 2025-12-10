@@ -82,6 +82,7 @@ import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.nfc.NfcWriteSheet
 import org.bitcoinppl.cove.send.SendFlowAdvancedDetailsView
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
 import org.bitcoinppl.cove.ui.theme.midnightBtn
 import org.bitcoinppl.cove.ui.theme.title3
 import org.bitcoinppl.cove.views.AutoSizeText
@@ -211,6 +212,9 @@ fun HardwareExportScreen(
                 }
             }
         }
+
+    // force white status bar icons for midnight blue background
+    ForceLightStatusBarIcons()
 
     Scaffold(
         containerColor = CoveColor.midnightBlue,

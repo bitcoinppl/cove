@@ -51,6 +51,7 @@ import org.bitcoinppl.cove.SendState
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.send.SendFlowAdvancedDetailsView
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
 import org.bitcoinppl.cove.ui.theme.midnightBtn
 import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.BalanceAutoSizeText
@@ -97,6 +98,9 @@ fun SendConfirmationScreen(
 ) {
     var sheetState by remember { mutableStateOf<SheetState?>(null) }
     val address = details.sendingTo().spacedOut()
+
+    // force white status bar icons for midnight blue background
+    ForceLightStatusBarIcons()
 
     Scaffold(
         containerColor = CoveColor.midnightBlue,

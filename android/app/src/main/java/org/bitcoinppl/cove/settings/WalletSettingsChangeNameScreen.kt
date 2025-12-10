@@ -13,6 +13,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -122,6 +123,17 @@ fun WalletSettingsChangeNameScreen(
                         }
                     },
                     label = { Text(stringResource(R.string.label_wallet_name)) },
+                    trailingIcon = {
+                        if (name.isNotEmpty()) {
+                            IconButton(onClick = { name = "" }) {
+                                Icon(
+                                    imageVector = Icons.Filled.Clear,
+                                    contentDescription = "Clear",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    },
                     isError = isError,
                     supportingText =
                         if (isError) {

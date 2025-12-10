@@ -54,6 +54,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
 import org.bitcoinppl.cove.ui.theme.midnightBtn
 import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.AutoSizeTextField
@@ -152,6 +153,9 @@ fun SendScreen(
             null -> focusManager.clearFocus()
         }
     }
+
+    // force white status bar icons for midnight blue background
+    ForceLightStatusBarIcons()
 
     Scaffold(
         containerColor = CoveColor.midnightBlue,

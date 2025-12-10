@@ -17,6 +17,25 @@ import androidx.core.view.WindowCompat
 import org.bitcoinppl.cove.findActivity
 
 /**
+ * Forces light status bar icons (white icons) for screens with dark backgrounds
+ * like midnightBlue. Uses SideEffect to continuously enforce this on every recomposition,
+ * which handles theme changes correctly.
+ */
+@Composable
+fun ForceLightStatusBarIcons() {
+    val view = LocalView.current
+
+    SideEffect {
+        val activity = view.context.findActivity() ?: return@SideEffect
+        val window = activity.window
+        val insetsController = WindowCompat.getInsetsController(window, view)
+
+        // force light icons (white) for dark backgrounds
+        insetsController.isAppearanceLightStatusBars = false
+    }
+}
+
+/**
  * Extension to check if the current ColorScheme is light mode.
  * Uses surface luminance to reliably detect theme (works with dynamic colors).
  */
@@ -75,7 +94,7 @@ fun CoveTheme(
         SideEffect {
             view.context.findActivity()?.let { activity ->
                 val window = activity.window
-                WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = darkTheme
+                WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
             }
         }
     }

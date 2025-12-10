@@ -24,6 +24,7 @@ import org.bitcoinppl.cove.ImportWalletManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.CoveTheme
+import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
 import java.util.Locale
 
 @Preview
@@ -62,6 +63,9 @@ fun ImportWalletScreen(
     val pageSize = 12
     val pageStart = tabIndex * pageSize
     val pageEnd = (pageStart + pageSize).coerceAtMost(totalWords)
+
+    // force white status bar icons for midnight blue background
+    ForceLightStatusBarIcons()
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
