@@ -24,8 +24,8 @@ ci:
     just fmt
     cargo fmt --check
     just lint
-    just test
     just compile
+    just test
 
 # ------------------------------------------------------------------------------
 # build
@@ -319,4 +319,4 @@ xtask *args:
 # text-to-speech helper
 [private]
 say *args:
-    @say args || @echo {{args}} || echo {{args}} || true
+    @say {{args}} || @echo {{args}} || echo {{args}} || true

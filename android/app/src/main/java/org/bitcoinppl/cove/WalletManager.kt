@@ -193,7 +193,7 @@ class WalletManager :
 
     private suspend fun updateFiatBalance() {
         try {
-            val fiatBal = rust.balanceInFiat()
+            val fiatBal = rust.amountInFiat(balance.spendable())
             withContext(Dispatchers.Main) {
                 fiatBalance = fiatBal
             }
@@ -293,16 +293,16 @@ class WalletManager :
     }
 
     override fun reconcile(message: WalletManagerReconcileMessage) {
-        logDebug("reconcile: $message")
-        ioScope.launch {
-            mainScope.launch { apply(message) }
+        mainScope.launch {
+            logDebug("reconcile: $message")
+            apply(message)
         }
     }
 
     override fun reconcileMany(messages: List<WalletManagerReconcileMessage>) {
-        logDebug("reconcile_messages: ${messages.size} messages")
-        ioScope.launch {
-            mainScope.launch { messages.forEach { apply(it) } }
+        mainScope.launch {
+            logDebug("reconcile_messages: ${messages.size} messages")
+            messages.forEach { apply(it) }
         }
     }
 
