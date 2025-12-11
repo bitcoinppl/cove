@@ -38,6 +38,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,16 +48,21 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.App
 import org.bitcoinppl.cove.AppAlertState
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
+import org.bitcoinppl.cove.ui.theme.title3
 import org.bitcoinppl.cove.views.DashDotsIndicator
 import org.bitcoinppl.cove.views.ImageButton
 import org.bitcoinppl.cove_core.Wallet
@@ -89,7 +95,19 @@ fun NewWalletSelectScreen(
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
     var showHardwareWalletSheet by remember { mutableStateOf(false) }
+    var showNfcHelpSheet by remember { mutableStateOf(false) }
+    var nfcCalled by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    // function to trigger NFC scan and show help after delay (matching iOS behavior)
+    fun triggerNfcScan() {
+        onOpenNfcScan()
+        scope.launch {
+            delay(800)
+            nfcCalled = true
+        }
+    }
 
     fun importWallet(content: String) {
         try {
@@ -167,6 +185,9 @@ fun NewWalletSelectScreen(
             ?.toString()
     }
 
+    // force white status bar icons for midnight blue background
+    ForceLightStatusBarIcons()
+
     Scaffold(containerColor = CoveColor.midnightBlue, topBar = {
         CenterAlignedTopAppBar(
             colors =
@@ -208,9 +229,7 @@ fun NewWalletSelectScreen(
                         contentDescription = "Scan QR",
                     )
                 }
-                IconButton(onClick = {
-                    onOpenNfcScan()
-                }) {
+                IconButton(onClick = { triggerNfcScan() }) {
                     Icon(
                         painter = painterResource(id = R.drawable.icon_contactless),
                         contentDescription = "NFC",
@@ -278,12 +297,7 @@ fun NewWalletSelectScreen(
                     ) {
                         ImageButton(
                             text = stringResource(R.string.btn_hardware_wallet),
-                            leading = {
-                                Icon(
-                                    painter = painterResource(R.drawable.icon_currency_bitcoin),
-                                    contentDescription = null,
-                                )
-                            },
+                            leadingIcon = painterResource(R.drawable.icon_currency_bitcoin),
                             onClick = {
                                 showHardwareWalletSheet = true
                             },
@@ -295,15 +309,9 @@ fun NewWalletSelectScreen(
                             modifier = Modifier.weight(1f),
                         )
 
-                        // placeholder "phone"
                         ImageButton(
                             text = stringResource(R.string.btn_on_this_device),
-                            leading = {
-                                Icon(
-                                    painter = painterResource(R.drawable.icon_phone_device),
-                                    contentDescription = null,
-                                )
-                            },
+                            leadingIcon = painterResource(R.drawable.icon_phone_device),
                             onClick = onOpenNewHotWallet,
                             colors =
                                 ButtonDefaults.buttonColors(
@@ -313,8 +321,31 @@ fun NewWalletSelectScreen(
                             modifier = Modifier.weight(1f),
                         )
                     }
+
+                    // NFC Help button - appears after NFC is called (matching iOS behavior)
+                    if (nfcCalled) {
+                        Text(
+                            text = "NFC Help",
+                            color = Color.White,
+                            modifier =
+                                Modifier
+                                    .clickable { showNfcHelpSheet = true }
+                                    .padding(vertical = 8.dp)
+                                    .fillMaxWidth(),
+                            textAlign = TextAlign.Center,
+                        )
+                    }
                 }
             }
+        }
+    }
+
+    // NFC Help sheet
+    if (showNfcHelpSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showNfcHelpSheet = false },
+        ) {
+            NfcHelpSheet()
         }
     }
 
@@ -330,7 +361,7 @@ fun NewWalletSelectScreen(
             ) {
                 Text(
                     text = "Import Hardware Wallet",
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.title3,
                     modifier = Modifier.padding(bottom = 16.dp),
                 )
 
@@ -381,7 +412,7 @@ fun NewWalletSelectScreen(
                     modifier =
                         Modifier.clickable {
                             showHardwareWalletSheet = false
-                            onOpenNfcScan()
+                            triggerNfcScan()
                         },
                 )
 

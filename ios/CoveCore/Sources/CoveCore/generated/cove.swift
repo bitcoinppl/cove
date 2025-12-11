@@ -6237,9 +6237,19 @@ public protocol RustAuthManagerProtocol: AnyObject, Sendable {
     func switchToMainMode() 
     
     /**
+     * Validate a new PIN doesn't conflict with existing PINs
+     */
+    func validateNewPin(newPin: String)  -> String?
+    
+    /**
      * Validate if we have the correct settings to be able to set a decoy or wipe data pin
      */
     func validatePinSettings(pin: String) throws 
+    
+    /**
+     * Validate a security settings action and return what UI to show
+     */
+    func validateSecurityAction(action: SecuritySettingsAction, unverifiedWalletIds: [WalletId])  -> SecuritySettingsResult
     
 }
 open class RustAuthManager: RustAuthManagerProtocol, @unchecked Sendable {
@@ -6484,6 +6494,18 @@ open func switchToMainMode()  {try! rustCall() {
 }
     
     /**
+     * Validate a new PIN doesn't conflict with existing PINs
+     */
+open func validateNewPin(newPin: String) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+    uniffi_cove_fn_method_rustauthmanager_validate_new_pin(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(newPin),$0
+    )
+})
+}
+    
+    /**
      * Validate if we have the correct settings to be able to set a decoy or wipe data pin
      */
 open func validatePinSettings(pin: String)throws   {try rustCallWithError(FfiConverterTypeTrickPinError_lift) {
@@ -6492,6 +6514,19 @@ open func validatePinSettings(pin: String)throws   {try rustCallWithError(FfiCon
         FfiConverterString.lower(pin),$0
     )
 }
+}
+    
+    /**
+     * Validate a security settings action and return what UI to show
+     */
+open func validateSecurityAction(action: SecuritySettingsAction, unverifiedWalletIds: [WalletId]) -> SecuritySettingsResult  {
+    return try!  FfiConverterTypeSecuritySettingsResult_lift(try! rustCall() {
+    uniffi_cove_fn_method_rustauthmanager_validate_security_action(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeSecuritySettingsAction_lower(action),
+        FfiConverterSequenceTypeWalletId.lower(unverifiedWalletIds),$0
+    )
+})
 }
     
 
@@ -7116,6 +7151,8 @@ public protocol RustSendFlowManagerProtocol: AnyObject, Sendable {
     
     func amount()  -> Amount
     
+    func amountExceedsBalance()  -> Bool
+    
     func amountSats()  -> UInt64
     
     /**
@@ -7221,6 +7258,14 @@ open class RustSendFlowManager: RustSendFlowManagerProtocol, @unchecked Sendable
 open func amount() -> Amount  {
     return try!  FfiConverterTypeAmount_lift(try! rustCall() {
     uniffi_cove_fn_method_rustsendflowmanager_amount(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+open func amountExceedsBalance() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_method_rustsendflowmanager_amount_exceeds_balance(
             self.uniffiCloneHandle(),$0
     )
 })
@@ -10723,6 +10768,315 @@ public func FfiConverterTypeWordValidator_lower(_ value: WordValidator) -> UInt6
 
 
 
+
+
+/**
+ * State machine for word verification flow
+ *
+ * UI sends events (select_word, animation_complete, etc.) and receives
+ * StateTransition results that tell it what state to render and what
+ * animations to play.
+ */
+public protocol WordVerifyStateMachineProtocol: AnyObject, Sendable {
+    
+    /**
+     * Animation to target complete - transition to Correct or Incorrect
+     *
+     * Returns a transition with the result state and dwell duration.
+     */
+    func animationComplete()  -> StateTransition
+    
+    /**
+     * Get the animation configuration
+     */
+    func config()  -> WordVerifyAnimationConfig
+    
+    /**
+     * Dwell time complete - advance word or start return animation
+     *
+     * If correct: transitions to None and signals to advance word.
+     * If incorrect: transitions to Returning state.
+     */
+    func dwellComplete()  -> StateTransition
+    
+    /**
+     * Check if all words have been verified
+     */
+    func isComplete()  -> Bool
+    
+    /**
+     * Get possible words for the current word number
+     */
+    func possibleWords()  -> [String]
+    
+    /**
+     * Reset to a specific word number (useful for going back)
+     */
+    func resetToWord(wordNumber: UInt8) 
+    
+    /**
+     * Return animation complete (after incorrect) - back to None
+     */
+    func returnComplete()  -> StateTransition
+    
+    /**
+     * User tapped a word - start the checking animation
+     *
+     * Returns a transition with Checking state and the animation duration.
+     * If already animating, returns no-change.
+     */
+    func selectWord(word: String)  -> StateTransition
+    
+    /**
+     * Get the current state
+     */
+    func state()  -> WordCheckState
+    
+    /**
+     * Get the current word number being verified (1-indexed)
+     */
+    func wordNumber()  -> UInt8
+    
+}
+/**
+ * State machine for word verification flow
+ *
+ * UI sends events (select_word, animation_complete, etc.) and receives
+ * StateTransition results that tell it what state to render and what
+ * animations to play.
+ */
+open class WordVerifyStateMachine: WordVerifyStateMachineProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_cove_fn_clone_wordverifystatemachine(self.handle, $0) }
+    }
+    /**
+     * Create a new state machine with the given validator
+     */
+public convenience init(validator: WordValidator, startingWordNumber: UInt8) {
+    let handle =
+        try! rustCall() {
+    uniffi_cove_fn_constructor_wordverifystatemachine_new(
+        FfiConverterTypeWordValidator_lower(validator),
+        FfiConverterUInt8.lower(startingWordNumber),$0
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_wordverifystatemachine(handle, $0) }
+    }
+
+    
+
+    
+    /**
+     * Animation to target complete - transition to Correct or Incorrect
+     *
+     * Returns a transition with the result state and dwell duration.
+     */
+open func animationComplete() -> StateTransition  {
+    return try!  FfiConverterTypeStateTransition_lift(try! rustCall() {
+    uniffi_cove_fn_method_wordverifystatemachine_animation_complete(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+    /**
+     * Get the animation configuration
+     */
+open func config() -> WordVerifyAnimationConfig  {
+    return try!  FfiConverterTypeWordVerifyAnimationConfig_lift(try! rustCall() {
+    uniffi_cove_fn_method_wordverifystatemachine_config(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+    /**
+     * Dwell time complete - advance word or start return animation
+     *
+     * If correct: transitions to None and signals to advance word.
+     * If incorrect: transitions to Returning state.
+     */
+open func dwellComplete() -> StateTransition  {
+    return try!  FfiConverterTypeStateTransition_lift(try! rustCall() {
+    uniffi_cove_fn_method_wordverifystatemachine_dwell_complete(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+    /**
+     * Check if all words have been verified
+     */
+open func isComplete() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_method_wordverifystatemachine_is_complete(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+    /**
+     * Get possible words for the current word number
+     */
+open func possibleWords() -> [String]  {
+    return try!  FfiConverterSequenceString.lift(try! rustCall() {
+    uniffi_cove_fn_method_wordverifystatemachine_possible_words(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+    /**
+     * Reset to a specific word number (useful for going back)
+     */
+open func resetToWord(wordNumber: UInt8)  {try! rustCall() {
+    uniffi_cove_fn_method_wordverifystatemachine_reset_to_word(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt8.lower(wordNumber),$0
+    )
+}
+}
+    
+    /**
+     * Return animation complete (after incorrect) - back to None
+     */
+open func returnComplete() -> StateTransition  {
+    return try!  FfiConverterTypeStateTransition_lift(try! rustCall() {
+    uniffi_cove_fn_method_wordverifystatemachine_return_complete(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+    /**
+     * User tapped a word - start the checking animation
+     *
+     * Returns a transition with Checking state and the animation duration.
+     * If already animating, returns no-change.
+     */
+open func selectWord(word: String) -> StateTransition  {
+    return try!  FfiConverterTypeStateTransition_lift(try! rustCall() {
+    uniffi_cove_fn_method_wordverifystatemachine_select_word(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(word),$0
+    )
+})
+}
+    
+    /**
+     * Get the current state
+     */
+open func state() -> WordCheckState  {
+    return try!  FfiConverterTypeWordCheckState_lift(try! rustCall() {
+    uniffi_cove_fn_method_wordverifystatemachine_state(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+    /**
+     * Get the current word number being verified (1-indexed)
+     */
+open func wordNumber() -> UInt8  {
+    return try!  FfiConverterUInt8.lift(try! rustCall() {
+    uniffi_cove_fn_method_wordverifystatemachine_word_number(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeWordVerifyStateMachine: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = WordVerifyStateMachine
+
+    public static func lift(_ handle: UInt64) throws -> WordVerifyStateMachine {
+        return WordVerifyStateMachine(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: WordVerifyStateMachine) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WordVerifyStateMachine {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: WordVerifyStateMachine, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWordVerifyStateMachine_lift(_ handle: UInt64) throws -> WordVerifyStateMachine {
+    return try FfiConverterTypeWordVerifyStateMachine.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWordVerifyStateMachine_lower(_ value: WordVerifyStateMachine) -> UInt64 {
+    return FfiConverterTypeWordVerifyStateMachine.lower(value)
+}
+
+
+
+
 public struct AppState {
     public var router: Router
 
@@ -11939,6 +12293,85 @@ public func FfiConverterTypeSendRouteConfirmArgs_lower(_ value: SendRouteConfirm
 }
 
 
+/**
+ * Result of a state transition
+ */
+public struct StateTransition: Equatable, Hashable {
+    /**
+     * The new state after the transition
+     */
+    public var newState: WordCheckState
+    /**
+     * Whether the UI should advance to the next word
+     */
+    public var shouldAdvanceWord: Bool
+    /**
+     * Suggested animation/delay duration in ms (None if no animation needed)
+     */
+    public var animationDurationMs: UInt32?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The new state after the transition
+         */newState: WordCheckState, 
+        /**
+         * Whether the UI should advance to the next word
+         */shouldAdvanceWord: Bool, 
+        /**
+         * Suggested animation/delay duration in ms (None if no animation needed)
+         */animationDurationMs: UInt32?) {
+        self.newState = newState
+        self.shouldAdvanceWord = shouldAdvanceWord
+        self.animationDurationMs = animationDurationMs
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension StateTransition: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeStateTransition: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StateTransition {
+        return
+            try StateTransition(
+                newState: FfiConverterTypeWordCheckState.read(from: &buf), 
+                shouldAdvanceWord: FfiConverterBool.read(from: &buf), 
+                animationDurationMs: FfiConverterOptionUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: StateTransition, into buf: inout [UInt8]) {
+        FfiConverterTypeWordCheckState.write(value.newState, into: &buf)
+        FfiConverterBool.write(value.shouldAdvanceWord, into: &buf)
+        FfiConverterOptionUInt32.write(value.animationDurationMs, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStateTransition_lift(_ buf: RustBuffer) throws -> StateTransition {
+    return try FfiConverterTypeStateTransition.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStateTransition_lower(_ value: StateTransition) -> RustBuffer {
+    return FfiConverterTypeStateTransition.lower(value)
+}
+
+
 public struct TapSignerConfirmPinArgs {
     public var tapSigner: TapSigner
     public var startingPin: String
@@ -12272,6 +12705,95 @@ public func FfiConverterTypeWalletMetadata_lift(_ buf: RustBuffer) throws -> Wal
 #endif
 public func FfiConverterTypeWalletMetadata_lower(_ value: WalletMetadata) -> RustBuffer {
     return FfiConverterTypeWalletMetadata.lower(value)
+}
+
+
+/**
+ * Animation timing configuration
+ */
+public struct WordVerifyAnimationConfig: Equatable, Hashable {
+    /**
+     * Duration (ms) for chip to travel to target when correct
+     */
+    public var moveDurationMsCorrect: UInt32
+    /**
+     * Duration (ms) for chip to travel to target when incorrect
+     */
+    public var moveDurationMsIncorrect: UInt32
+    /**
+     * How long (ms) chip stays at target after arriving (correct)
+     */
+    public var dwellDurationMsCorrect: UInt32
+    /**
+     * How long (ms) chip stays at target after arriving (incorrect)
+     */
+    public var dwellDurationMsIncorrect: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Duration (ms) for chip to travel to target when correct
+         */moveDurationMsCorrect: UInt32, 
+        /**
+         * Duration (ms) for chip to travel to target when incorrect
+         */moveDurationMsIncorrect: UInt32, 
+        /**
+         * How long (ms) chip stays at target after arriving (correct)
+         */dwellDurationMsCorrect: UInt32, 
+        /**
+         * How long (ms) chip stays at target after arriving (incorrect)
+         */dwellDurationMsIncorrect: UInt32) {
+        self.moveDurationMsCorrect = moveDurationMsCorrect
+        self.moveDurationMsIncorrect = moveDurationMsIncorrect
+        self.dwellDurationMsCorrect = dwellDurationMsCorrect
+        self.dwellDurationMsIncorrect = dwellDurationMsIncorrect
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension WordVerifyAnimationConfig: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeWordVerifyAnimationConfig: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WordVerifyAnimationConfig {
+        return
+            try WordVerifyAnimationConfig(
+                moveDurationMsCorrect: FfiConverterUInt32.read(from: &buf), 
+                moveDurationMsIncorrect: FfiConverterUInt32.read(from: &buf), 
+                dwellDurationMsCorrect: FfiConverterUInt32.read(from: &buf), 
+                dwellDurationMsIncorrect: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: WordVerifyAnimationConfig, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.moveDurationMsCorrect, into: &buf)
+        FfiConverterUInt32.write(value.moveDurationMsIncorrect, into: &buf)
+        FfiConverterUInt32.write(value.dwellDurationMsCorrect, into: &buf)
+        FfiConverterUInt32.write(value.dwellDurationMsIncorrect, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWordVerifyAnimationConfig_lift(_ buf: RustBuffer) throws -> WordVerifyAnimationConfig {
+    return try FfiConverterTypeWordVerifyAnimationConfig.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWordVerifyAnimationConfig_lower(_ value: WordVerifyAnimationConfig) -> RustBuffer {
+    return FfiConverterTypeWordVerifyAnimationConfig.lower(value)
 }
 
 // Note that we don't yet support `indirect` for enums.
@@ -18887,6 +19409,492 @@ public func FfiConverterTypeScannerResponse_lower(_ value: ScannerResponse) -> R
 }
 
 
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * What alert to show for validation messages
+ */
+
+public enum SecurityAlertState: Equatable, Hashable {
+    
+    case unverifiedWallets(walletId: WalletId
+    )
+    case confirmEnableWipeMePin
+    case confirmDecoyPin
+    case noteNoFaceIdWhenTrickPins
+    case noteNoFaceIdWhenWipeMePin
+    case noteNoFaceIdWhenDecoyPin
+    case notePinRequired
+    /**
+     * Disabling biometric, then show confirm for wipe me PIN
+     */
+    case noteFaceIdDisablingForWipeMePin
+    /**
+     * Disabling biometric, then show confirm for decoy PIN
+     */
+    case noteFaceIdDisablingForDecoyPin
+    case extraSetPinError(message: String
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension SecurityAlertState: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSecurityAlertState: FfiConverterRustBuffer {
+    typealias SwiftType = SecurityAlertState
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SecurityAlertState {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .unverifiedWallets(walletId: try FfiConverterTypeWalletId.read(from: &buf)
+        )
+        
+        case 2: return .confirmEnableWipeMePin
+        
+        case 3: return .confirmDecoyPin
+        
+        case 4: return .noteNoFaceIdWhenTrickPins
+        
+        case 5: return .noteNoFaceIdWhenWipeMePin
+        
+        case 6: return .noteNoFaceIdWhenDecoyPin
+        
+        case 7: return .notePinRequired
+        
+        case 8: return .noteFaceIdDisablingForWipeMePin
+        
+        case 9: return .noteFaceIdDisablingForDecoyPin
+        
+        case 10: return .extraSetPinError(message: try FfiConverterString.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: SecurityAlertState, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .unverifiedWallets(walletId):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeWalletId.write(walletId, into: &buf)
+            
+        
+        case .confirmEnableWipeMePin:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .confirmDecoyPin:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .noteNoFaceIdWhenTrickPins:
+            writeInt(&buf, Int32(4))
+        
+        
+        case .noteNoFaceIdWhenWipeMePin:
+            writeInt(&buf, Int32(5))
+        
+        
+        case .noteNoFaceIdWhenDecoyPin:
+            writeInt(&buf, Int32(6))
+        
+        
+        case .notePinRequired:
+            writeInt(&buf, Int32(7))
+        
+        
+        case .noteFaceIdDisablingForWipeMePin:
+            writeInt(&buf, Int32(8))
+        
+        
+        case .noteFaceIdDisablingForDecoyPin:
+            writeInt(&buf, Int32(9))
+        
+        
+        case let .extraSetPinError(message):
+            writeInt(&buf, Int32(10))
+            FfiConverterString.write(message, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSecurityAlertState_lift(_ buf: RustBuffer) throws -> SecurityAlertState {
+    return try FfiConverterTypeSecurityAlertState.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSecurityAlertState_lower(_ value: SecurityAlertState) -> RustBuffer {
+    return FfiConverterTypeSecurityAlertState.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Action the user wants to take on security settings
+ */
+
+public enum SecuritySettingsAction: Equatable, Hashable {
+    
+    case toggleBiometric(enable: Bool
+    )
+    case togglePin(enable: Bool
+    )
+    case toggleWipeDataPin(enable: Bool
+    )
+    case toggleDecoyPin(enable: Bool
+    )
+    case changePin
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension SecuritySettingsAction: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSecuritySettingsAction: FfiConverterRustBuffer {
+    typealias SwiftType = SecuritySettingsAction
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SecuritySettingsAction {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .toggleBiometric(enable: try FfiConverterBool.read(from: &buf)
+        )
+        
+        case 2: return .togglePin(enable: try FfiConverterBool.read(from: &buf)
+        )
+        
+        case 3: return .toggleWipeDataPin(enable: try FfiConverterBool.read(from: &buf)
+        )
+        
+        case 4: return .toggleDecoyPin(enable: try FfiConverterBool.read(from: &buf)
+        )
+        
+        case 5: return .changePin
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: SecuritySettingsAction, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .toggleBiometric(enable):
+            writeInt(&buf, Int32(1))
+            FfiConverterBool.write(enable, into: &buf)
+            
+        
+        case let .togglePin(enable):
+            writeInt(&buf, Int32(2))
+            FfiConverterBool.write(enable, into: &buf)
+            
+        
+        case let .toggleWipeDataPin(enable):
+            writeInt(&buf, Int32(3))
+            FfiConverterBool.write(enable, into: &buf)
+            
+        
+        case let .toggleDecoyPin(enable):
+            writeInt(&buf, Int32(4))
+            FfiConverterBool.write(enable, into: &buf)
+            
+        
+        case .changePin:
+            writeInt(&buf, Int32(5))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSecuritySettingsAction_lift(_ buf: RustBuffer) throws -> SecuritySettingsAction {
+    return try FfiConverterTypeSecuritySettingsAction.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSecuritySettingsAction_lower(_ value: SecuritySettingsAction) -> RustBuffer {
+    return FfiConverterTypeSecuritySettingsAction.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Result of validating a security settings action
+ */
+
+public enum SecuritySettingsResult: Equatable, Hashable {
+    
+    /**
+     * Proceed to show a sheet for PIN entry
+     */
+    case proceedToSheet(SecuritySheetState
+    )
+    /**
+     * Show an alert dialog
+     */
+    case showAlert(SecurityAlertState
+    )
+    /**
+     * Decoy mode - just update local UI, don't persist
+     */
+    case decoyModeLocalUpdate
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension SecuritySettingsResult: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSecuritySettingsResult: FfiConverterRustBuffer {
+    typealias SwiftType = SecuritySettingsResult
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SecuritySettingsResult {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .proceedToSheet(try FfiConverterTypeSecuritySheetState.read(from: &buf)
+        )
+        
+        case 2: return .showAlert(try FfiConverterTypeSecurityAlertState.read(from: &buf)
+        )
+        
+        case 3: return .decoyModeLocalUpdate
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: SecuritySettingsResult, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .proceedToSheet(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeSecuritySheetState.write(v1, into: &buf)
+            
+        
+        case let .showAlert(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeSecurityAlertState.write(v1, into: &buf)
+            
+        
+        case .decoyModeLocalUpdate:
+            writeInt(&buf, Int32(3))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSecuritySettingsResult_lift(_ buf: RustBuffer) throws -> SecuritySettingsResult {
+    return try FfiConverterTypeSecuritySettingsResult.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSecuritySettingsResult_lower(_ value: SecuritySettingsResult) -> RustBuffer {
+    return FfiConverterTypeSecuritySettingsResult.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * What sheet to show for PIN entry flows
+ */
+
+public enum SecuritySheetState: Equatable, Hashable {
+    
+    case none
+    case newPin
+    case removePin
+    case changePin
+    case enableBiometric
+    case disableBiometric
+    case enableWipeDataPin
+    case removeWipeDataPin
+    /**
+     * Remove wipe data PIN, then enable biometric
+     */
+    case removeWipeDataPinThenEnableBiometric
+    case enableDecoyPin
+    case removeDecoyPin
+    /**
+     * Remove decoy PIN, then enable biometric
+     */
+    case removeDecoyPinThenEnableBiometric
+    case removeAllTrickPins
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension SecuritySheetState: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSecuritySheetState: FfiConverterRustBuffer {
+    typealias SwiftType = SecuritySheetState
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SecuritySheetState {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .none
+        
+        case 2: return .newPin
+        
+        case 3: return .removePin
+        
+        case 4: return .changePin
+        
+        case 5: return .enableBiometric
+        
+        case 6: return .disableBiometric
+        
+        case 7: return .enableWipeDataPin
+        
+        case 8: return .removeWipeDataPin
+        
+        case 9: return .removeWipeDataPinThenEnableBiometric
+        
+        case 10: return .enableDecoyPin
+        
+        case 11: return .removeDecoyPin
+        
+        case 12: return .removeDecoyPinThenEnableBiometric
+        
+        case 13: return .removeAllTrickPins
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: SecuritySheetState, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .none:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .newPin:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .removePin:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .changePin:
+            writeInt(&buf, Int32(4))
+        
+        
+        case .enableBiometric:
+            writeInt(&buf, Int32(5))
+        
+        
+        case .disableBiometric:
+            writeInt(&buf, Int32(6))
+        
+        
+        case .enableWipeDataPin:
+            writeInt(&buf, Int32(7))
+        
+        
+        case .removeWipeDataPin:
+            writeInt(&buf, Int32(8))
+        
+        
+        case .removeWipeDataPinThenEnableBiometric:
+            writeInt(&buf, Int32(9))
+        
+        
+        case .enableDecoyPin:
+            writeInt(&buf, Int32(10))
+        
+        
+        case .removeDecoyPin:
+            writeInt(&buf, Int32(11))
+        
+        
+        case .removeDecoyPinThenEnableBiometric:
+            writeInt(&buf, Int32(12))
+        
+        
+        case .removeAllTrickPins:
+            writeInt(&buf, Int32(13))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSecuritySheetState_lift(_ buf: RustBuffer) throws -> SecuritySheetState {
+    return try FfiConverterTypeSecuritySheetState.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSecuritySheetState_lower(_ value: SecuritySheetState) -> RustBuffer {
+    return FfiConverterTypeSecuritySheetState.lower(value)
+}
+
+
 
 public enum SeedQrError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
@@ -23901,6 +24909,124 @@ public func FfiConverterTypeWalletType_lower(_ value: WalletType) -> RustBuffer 
 }
 
 
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * The current state of the word verification check
+ */
+
+public enum WordCheckState: Equatable, Hashable {
+    
+    /**
+     * No word is being checked
+     */
+    case none
+    /**
+     * User tapped a word, animating to target
+     */
+    case checking(word: String
+    )
+    /**
+     * Word was correct, showing green
+     */
+    case correct(word: String
+    )
+    /**
+     * Word was incorrect, showing red
+     */
+    case incorrect(word: String
+    )
+    /**
+     * Returning to origin after incorrect
+     */
+    case returning(word: String
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension WordCheckState: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeWordCheckState: FfiConverterRustBuffer {
+    typealias SwiftType = WordCheckState
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WordCheckState {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .none
+        
+        case 2: return .checking(word: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 3: return .correct(word: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 4: return .incorrect(word: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 5: return .returning(word: try FfiConverterString.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: WordCheckState, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .none:
+            writeInt(&buf, Int32(1))
+        
+        
+        case let .checking(word):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(word, into: &buf)
+            
+        
+        case let .correct(word):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(word, into: &buf)
+            
+        
+        case let .incorrect(word):
+            writeInt(&buf, Int32(4))
+            FfiConverterString.write(word, into: &buf)
+            
+        
+        case let .returning(word):
+            writeInt(&buf, Int32(5))
+            FfiConverterString.write(word, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWordCheckState_lift(_ buf: RustBuffer) throws -> WordCheckState {
+    return try FfiConverterTypeWordCheckState.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWordCheckState_lower(_ value: WordCheckState) -> RustBuffer {
+    return FfiConverterTypeWordCheckState.lower(value)
+}
+
+
 
 public enum XpubError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
@@ -27415,7 +28541,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustauthmanager_switch_to_main_mode() != 36755) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_rustauthmanager_validate_new_pin() != 2677) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_rustauthmanager_validate_pin_settings() != 50929) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustauthmanager_validate_security_action() != 4302) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustcoincontrolmanager_button_presentation() != 24764) {
@@ -27476,6 +28608,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustsendflowmanager_amount() != 50946) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustsendflowmanager_amount_exceeds_balance() != 56944) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustsendflowmanager_amount_sats() != 25668) {
@@ -27964,6 +29099,36 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_wordvalidator_possible_words() != 58432) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_wordverifystatemachine_animation_complete() != 38406) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_wordverifystatemachine_config() != 39348) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_wordverifystatemachine_dwell_complete() != 24167) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_wordverifystatemachine_is_complete() != 19976) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_wordverifystatemachine_possible_words() != 5700) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_wordverifystatemachine_reset_to_word() != 43945) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_wordverifystatemachine_return_complete() != 53818) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_wordverifystatemachine_select_word() != 45827) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_wordverifystatemachine_state() != 57576) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_wordverifystatemachine_word_number() != 36254) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_constructor_ffiapp_new() != 32653) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -28106,6 +29271,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_wordvalidator_preview() != 63940) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_constructor_wordverifystatemachine_new() != 16955) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffireconcile_reconcile() != 36143) {

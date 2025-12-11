@@ -1,153 +1,322 @@
-# Commonly used commands:
-#   just ba         - build android debug
-#   just bar        - build android release
-#   just bi         - build ios debug simulator
-#   just bir        - build ios release
-#   just bidd       - build ios debug device
-#   just bb [ios|android] - bump build numbers only (default: both)
-#   just bump <major|minor|patch> [targets] - bump version (default: all targets)
-#   just f          - full build and verification (all platforms)
-#   just ci         - run all CI checks
+# List available recipes
+[default]
+list:
+    @just --list
 
-default:
-    just --list
+# ------------------------------------------------------------------------------
+# ci
+# ------------------------------------------------------------------------------
 
-# full build and verification for all platforms
-alias f := full
+# Full build and verification for all platforms
+[group('ci')]
 full:
     just bidd && just ba && just ci && just compile
 
-bacon:
-    cd rust && bacon clippy
+[private]
+alias f := full
 
-bcheck:
-    cd rust && bacon check
-
-check *flags="--workspace --all-targets --all-features":
-    cd rust && cargo check {{flags}}
-
-clean:
-    cd rust && cargo clean && \
-    rm -rf ios/Cove.xcframework && \
-    rm -rf ios/Cove && \
-    rm -rf rust/target
-
-fmt:
-    just fmt-rust && just fmt-swift && just fmt-android
-
-fmt-rust:
-    cd rust && cargo fmt --all
-
-fmt-swift:
-    swiftformat ios --swiftversion 6
-
-fmt-android:
-    cd android && ./gradlew ktlintFormat 
-
-fix *flags="":
-    cd rust && cargo fix --workspace {{flags}}
-
-clippy *flags="":
-    cd rust && cargo clippy {{flags}}
-
-lint-android *flags="":
-    cd android && ./gradlew ktlintCheck {{flags}}
-
-update pkg="":
-    cd rust && cargo update {{pkg}}
-
-bump type targets="rust,ios,android":
-    cd rust && cargo xtask bump-version {{type}} --targets {{targets}}
-
-# bump build numbers only (ios, android, or both)
-alias bb := build-bump
-build-bump targets="ios,android":
-    cd rust && cargo xtask build-bump {{targets}}
-
-
-alias xc := xcode-clean
-xcode-clean:
-    rm -rf ~/Library/Caches/org.swift.swiftpm
-    cd ios && xcodebuild clean
-
+# Run all CI checks
+[group('ci')]
+[script('bash')]
+[working-directory: 'rust']
 ci:
+    set -e
     just fmt
-    cd rust && cargo clippy --all-targets --all-features
+    cargo fmt --check
+    just lint
     just test
-    just lint-android
-    cd rust && cargo clippy --all-targets --all-features -- -D warnings
-    cd rust && cargo fmt --check
-    swiftformat --lint ios --swiftversion 6
-    cd android && ./gradlew ktlintCheck
     just compile
 
-alias xr := xcode-reset
-xcode-reset:
-    killAll Xcode || true
-    rm -rf ios/Cove.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
-    xcrun simctl --set previews delete all
-    rm -rf ~/Library/Caches/org.swift.swiftpm
-    rm -rf ~/Library/Developer/Xcode/DerivedData
-    cd ios && xcodebuild clean
-    cd ios && xcode-build-server config -project *.xcodeproj -scheme Cove
-    open ios/Cove.xcodeproj
+# ------------------------------------------------------------------------------
+# build
+# ------------------------------------------------------------------------------
 
-alias wb := watch-build
-watch-build profile="debug" *flags="":
-    watchexec --exts rs just build-ios {{profile}} {{flags}}
+# Build Android debug APK
+[group('build')]
+[working-directory: 'rust']
+build-android:
+    cargo xtask build-android debug && just say "done android"
 
+[private]
+alias ba := build-android
+
+# Build Android release APK
+[group('build')]
+[working-directory: 'rust']
+build-android-release:
+    cargo xtask build-android release-speed && just say "done android release"
+
+[private]
+alias bar := build-android-release
+
+# Build iOS debug for simulator
+[group('build')]
+[working-directory: 'rust']
+build-ios profile="debug" *flags="":
+    cargo xtask build-ios {{profile}} {{flags}} && just say "done ios"
+
+[private]
+alias bi := build-ios
+
+# Build iOS release for device
+[group('build')]
+[working-directory: 'rust']
+build-ios-release:
+    cargo xtask build-ios release-speed --device && just say "done ios release"
+
+[private]
+alias bir := build-ios-release
+
+# Build iOS debug for device
+[group('build')]
+[working-directory: 'rust']
+build-ios-debug-device:
+    cargo xtask build-ios debug --device && just say "done ios device"
+
+[private]
+alias bidd := build-ios-debug-device
+
+# Compile both iOS and Android
+[group('build')]
+@compile:
+    just compile-ios && just compile-android
+
+# Compile iOS for simulator
+[group('build')]
+[working-directory: 'ios']
+compile-ios:
+    xcodebuild -scheme Cove -sdk iphonesimulator -arch arm64 build
+
+# Compile Android debug
+[group('build')]
+[working-directory: 'android']
+compile-android:
+    ./gradlew assembleDebug
+
+# ------------------------------------------------------------------------------
+# test
+# ------------------------------------------------------------------------------
+
+# Run all tests
+[group('test')]
+[working-directory: 'rust']
 test test="" flags="":
-    cd rust && cargo nextest run {{test}} --workspace {{flags}}
+    cargo nextest run {{test}} --workspace {{flags}}
 
+# Run tests with cargo test
+[group('test')]
+[working-directory: 'rust']
 ctest test="" flags="":
-    cd rust && cargo test {{test}} --workspace -- {{flags}} 
+    cargo test {{test}} --workspace -- {{flags}}
 
+# Run tests with bacon
+[group('test')]
+[working-directory: 'rust']
 btest test="":
-    cd rust && bacon nextest -- {{test}} --workspace
+    bacon nextest -- {{test}} --workspace
 
-alias wt := watch-test
-alias wtest := watch-test
+# Watch and re-run tests on file changes
+[group('test')]
 watch-test test="" flags="":
     watchexec --exts rs just test {{test}} {{flags}}
 
-# both
-compile:
-    just compile-ios && just compile-android
+[private]
+alias wt := watch-test
+[private]
+alias wtest := watch-test
 
+# ------------------------------------------------------------------------------
+# lint
+# ------------------------------------------------------------------------------
 
-# build android
-alias ba := build-android
-build-android:
-    cd rust && cargo xtask build-android debug
+# Lint all platforms
+[group('lint')]
+@lint *flags="":
+    just lint-rust {{flags}} && just lint-swift {{flags}} && just lint-android {{flags}}
 
-alias bar := build-android-release
-build-android-release:
-    cd rust && cargo xtask build-android release
+# Lint Rust code
+[group('lint')]
+[working-directory: 'rust']
+lint-rust *flags="":
+    cargo clippy --all-targets --all-features -- -D warnings {{flags}}
 
-run-android:
-    cd rust && cargo xtask run-android
+# Lint Android code
+[group('lint')]
+[working-directory: 'android']
+lint-android *flags="":
+    ./gradlew ktlintCheck {{flags}}
 
-compile-android:
-    cd android && ./gradlew assembleDebug
+# Lint Swift code
+[group('lint')]
+lint-swift *flags="":
+    swiftformat --lint ios --swiftversion 6 {{flags}}
 
-# build ios
-alias bi := build-ios
-build-ios profile="debug" *flags="":
-    cd rust && cargo xtask build-ios {{profile}} {{flags}}
+# Run clippy
+[group('lint')]
+[working-directory: 'rust']
+clippy *flags="":
+    cargo clippy {{flags}}
 
-alias bir := build-ios-release
-build-ios-release:
-    cd rust && cargo xtask build-ios release-smaller --device
+# ------------------------------------------------------------------------------
+# format
+# ------------------------------------------------------------------------------
 
-alias bidd := build-ios-debug-device
-build-ios-debug-device:
-    cd rust && cargo xtask build-ios debug --device
+# Format all platforms
+[group('format')]
+@fmt:
+    just fmt-rust && just fmt-swift && just fmt-android
 
+# Format Rust code
+[group('format'), private]
+[working-directory: 'rust']
+fmt-rust:
+    cargo fmt --all
+
+# Format Swift code
+[group('format'), private]
+fmt-swift:
+    swiftformat ios --swiftversion 6
+
+# Format Android code
+[group('format'), private]
+[working-directory: 'android']
+fmt-android:
+    ./gradlew ktlintFormat
+
+# ------------------------------------------------------------------------------
+# dev
+# ------------------------------------------------------------------------------
+
+# Run bacon clippy watcher
+[group('dev')]
+[working-directory: 'rust']
+bacon:
+    bacon clippy
+
+# Run bacon check watcher
+[group('dev')]
+[working-directory: 'rust']
+bcheck:
+    bacon check
+
+# Run cargo check
+[group('dev')]
+[working-directory: 'rust']
+check *flags="--workspace --all-targets --all-features":
+    cargo check {{flags}}
+
+# Watch and rebuild iOS on file changes
+[group('dev')]
+watch-build profile="debug" *flags="":
+    watchexec --exts rs just build-ios {{profile}} {{flags}}
+
+[private]
+alias wb := watch-build
+
+# Apply cargo fix
+[group('dev')]
+[working-directory: 'rust']
+fix *flags="":
+    cargo fix --workspace {{flags}}
+
+# ------------------------------------------------------------------------------
+# release
+# ------------------------------------------------------------------------------
+
+# Bump version (type: major, minor, patch)
+[group('release')]
+[working-directory: 'rust']
+bump type targets="rust,ios,android":
+    cargo xtask bump-version {{type}} --targets {{targets}}
+
+# Bump build numbers only
+[group('release')]
+[working-directory: 'rust']
+build-bump targets="ios,android":
+    cargo xtask build-bump {{targets}}
+
+[private]
+alias bb := build-bump
+
+# ------------------------------------------------------------------------------
+# xcode
+# ------------------------------------------------------------------------------
+
+# Clean Xcode caches
+[group('xcode')]
+[working-directory: 'ios']
+xcode-clean:
+    rm -rf ~/Library/Caches/org.swift.swiftpm
+    xcodebuild clean
+
+[private]
+alias xc := xcode-clean
+
+# Reset Xcode completely
+[group('xcode')]
+[confirm("This will kill Xcode and delete caches. Continue?")]
+[script('bash')]
+[working-directory: 'ios']
+xcode-reset:
+    killAll Xcode || true
+    rm -rf Cove.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+    xcrun simctl --set previews delete all
+    rm -rf ~/Library/Caches/org.swift.swiftpm
+    rm -rf ~/Library/Developer/Xcode/DerivedData
+    xcodebuild clean
+    xcode-build-server config -project *.xcodeproj -scheme Cove
+    open Cove.xcodeproj
+
+[private]
+alias xr := xcode-reset
+
+# ------------------------------------------------------------------------------
+# util
+# ------------------------------------------------------------------------------
+
+# Clean all build artifacts
+[group('util')]
+[confirm("Delete all build artifacts?")]
+[script('bash')]
+[working-directory: 'rust']
+clean:
+    cargo clean
+    rm -rf ../ios/Cove.xcframework
+    rm -rf ../ios/Cove
+    rm -rf target
+
+# Update cargo dependencies
+[group('util')]
+[working-directory: 'rust']
+update pkg="":
+    cargo update {{pkg}}
+
+# Run Android app
+[group('util')]
+[working-directory: 'rust']
+run-android profile="debug":
+    cargo xtask run-android {{profile}}
+
+[private]
+alias ra := run-android
+
+# Run iOS app
+[group('util')]
+[working-directory: 'rust']
 run-ios:
-    cd rust && cargo xtask run-ios
+    cargo xtask run-ios
 
-compile-ios:
-    cd ios && xcodebuild -scheme Cove -sdk iphonesimulator -arch arm64 build
-
+# Run xtask commands
+[group('util')]
+[working-directory: 'rust']
 xtask *args:
-    cd rust && cargo xtask {{args}}
+    cargo xtask {{args}}
+
+# ------------------------------------------------------------------------------
+# helpers
+# ------------------------------------------------------------------------------
+
+# text-to-speech helper
+[private]
+say *args:
+    @say args || @echo {{args}} || echo {{args}} || true

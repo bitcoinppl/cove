@@ -29,9 +29,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.ui.theme.CoveColor
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -129,19 +129,21 @@ fun RecoveryWordChip(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
+            AutoSizeText(
                 text = "$index.",
                 color = CoveColor.midnightBlue,
+                maxFontSize = 14.sp,
+                minimumScaleFactor = 0.5f,
             )
             Spacer(Modifier.width(8.dp))
-            Text(
+            AutoSizeText(
                 text = word,
                 color = CoveColor.midnightBlue,
                 fontWeight = FontWeight.Medium,
                 modifier = Modifier.weight(1f),
                 textAlign = TextAlign.Center,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+                maxFontSize = 14.sp,
+                minimumScaleFactor = 0.75f,
             )
         }
     }

@@ -4,7 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -23,7 +23,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -48,6 +47,9 @@ import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.QrCodeGenerator
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.ui.theme.coveColors
+import org.bitcoinppl.cove.ui.theme.isLight
+import org.bitcoinppl.cove.ui.theme.title3
 import org.bitcoinppl.cove_core.types.AddressInfoWithDerivation
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -60,7 +62,6 @@ fun ReceiveAddressSheet(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val tag = "ReceiveAddressSheet"
-    val isDarkTheme = isSystemInDarkTheme()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var addressInfo by remember { mutableStateOf<AddressInfoWithDerivation?>(null) }
     var isLoading by remember { mutableStateOf(true) }
@@ -147,7 +148,7 @@ private fun ReceiveAddressSheetContent(
     onCopyAddress: () -> Unit,
     onCreateNewAddress: () -> Unit,
 ) {
-    val isDarkTheme = isSystemInDarkTheme()
+    val isDarkTheme = !MaterialTheme.colorScheme.isLight
 
     Column(
         modifier =
@@ -183,13 +184,13 @@ private fun ReceiveAddressSheetContent(
                 // wallet name header
                 Text(
                     text = walletName,
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.title3,
                     fontWeight = FontWeight.SemiBold,
                     color = Color.White,
                     textAlign = TextAlign.Center,
                 )
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
                 // QR code
                 Box(
@@ -200,7 +201,7 @@ private fun ReceiveAddressSheetContent(
                             .aspectRatio(1f)
                             .clip(RoundedCornerShape(12.dp))
                             .background(Color.White)
-                            .padding(18.dp),
+                            .padding(12.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     when {
@@ -288,7 +289,7 @@ private fun ReceiveAddressSheetContent(
                     .height(50.dp),
             colors =
                 ButtonDefaults.buttonColors(
-                    containerColor = CoveColor.midnightBlue,
+                    containerColor = MaterialTheme.coveColors.midnightBtn,
                     contentColor = Color.White,
                     disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
                     disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -302,19 +303,17 @@ private fun ReceiveAddressSheetContent(
             )
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
-
         // create new address button
-        TextButton(
-            onClick = onCreateNewAddress,
-            enabled = !isLoading,
-        ) {
-            Text(
-                text = "Create New Address",
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-            )
-        }
+        Text(
+            text = "Create New Address",
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary,
+            modifier =
+                Modifier
+                    .padding(top = 18.dp)
+                    .clickable(enabled = !isLoading) { onCreateNewAddress() },
+        )
     }
 }
 

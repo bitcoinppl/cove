@@ -5,8 +5,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -234,24 +236,33 @@ fun CardItemPreview() {
     CardItem("name") { Text("hello") }
 }
 
-// Material Design section header (sentence case, labelLarge)
+// Material Design section header (AOSP style with divider and accent color)
 @Composable
 fun SectionHeader(
     title: String,
     modifier: Modifier = Modifier,
+    showDivider: Boolean = true,
 ) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier =
-            modifier
-                .fillMaxWidth()
-                .padding(
-                    horizontal = MaterialSpacing.medium,
-                    vertical = 12.dp,
-                ),
-    )
+    Column(modifier = modifier.fillMaxWidth()) {
+        if (showDivider) {
+            Spacer(modifier = Modifier.height(MaterialSpacing.medium))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        }
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        start = MaterialSpacing.medium,
+                        end = MaterialSpacing.medium,
+                        top = 12.dp,
+                        bottom = 4.dp,
+                    ),
+        )
+    }
 }
 
 @Preview
@@ -324,4 +335,36 @@ fun SwitchRow(
             onCheckChanged = onCheckChanged ?: {},
         )
     }
+}
+
+// SwiftUI-compatible VStack with default 8dp spacing between children
+@Composable
+fun VStack(
+    modifier: Modifier = Modifier,
+    spacing: Dp = 8.dp,
+    horizontalAlignment: Alignment.Horizontal = Alignment.Start,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = if (spacing > 0.dp) Arrangement.spacedBy(spacing) else Arrangement.Top,
+        horizontalAlignment = horizontalAlignment,
+        content = content,
+    )
+}
+
+// SwiftUI-compatible HStack with default 10dp spacing between children
+@Composable
+fun HStack(
+    modifier: Modifier = Modifier,
+    spacing: Dp = 10.dp,
+    verticalAlignment: Alignment.Vertical = Alignment.Top,
+    content: @Composable RowScope.() -> Unit,
+) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = if (spacing > 0.dp) Arrangement.spacedBy(spacing) else Arrangement.Start,
+        verticalAlignment = verticalAlignment,
+        content = content,
+    )
 }

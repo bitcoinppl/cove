@@ -14,17 +14,13 @@ import org.bitcoinppl.cove_core.types.*
 import java.io.Closeable
 import java.util.concurrent.atomic.AtomicBoolean
 
-/**
- * send flow presenter - manages UI state for send flow screens
- * ported from iOS SendFlowPresenter.swift
- */
+/** send flow presenter - manages UI state for send flow screens */
 class SendFlowPresenter(
     val app: AppManager,
     val manager: WalletManager,
 ) : Closeable {
-    // TODO: use when implementing alert dialogs - prevents alerts from reappearing during dismissal animations
-    // see iOS showingAlert at SendFlowPresenter.swift:38 for usage pattern
-    private var disappearing: Boolean = false
+    // prevents alerts from reappearing during dismissal animations
+    private var disappearing by mutableStateOf(false)
 
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val isClosed = AtomicBoolean(false)
@@ -32,6 +28,9 @@ class SendFlowPresenter(
     var focusField by mutableStateOf<SetAmountFocusField?>(null)
     var sheetState by mutableStateOf<TaggedItem<SheetState>?>(null)
     var alertState by mutableStateOf<TaggedItem<SendFlowAlertState>?>(null)
+
+    val isShowingAlert: Boolean
+        get() = alertState != null && !disappearing
 
     var lastWorkingFeeRate by mutableStateOf<Float?>(null)
     var erroredFeeRate by mutableStateOf<Float?>(null)

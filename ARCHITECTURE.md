@@ -13,11 +13,10 @@
 - [Rust Core](#rust-core)
 - [UniFFI Bindings](#uniffi-bindings)
 - [Mobile Frontends](#mobile-frontends)
-- [Build & Tooling](#build--tooling)
-- [Testing](#testing)
 - [Extending the Core](#extending-the-core)
-- [Development Workflow](#development-workflow)
 - [Quick Pointers](#quick-pointers)
+
+> **Getting Started?** See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions and development workflow.
 
 ---
 
@@ -149,6 +148,8 @@ This pattern is used throughout the codebase for shared resources and is safe to
   }
   ```
 
+**iOS ↔ Android parity patterns:** For detailed guidance on matching behavior across platforms (opacity, text colors, button centering, NFC scanning UI, etc.), see [docs/IOS_ANDROID_PARITY.md](docs/IOS_ANDROID_PARITY.md).
+
 ### Manager Pattern (cross-platform)
 
 1. UI calls `manager.dispatch(action)` or a helper method (e.g. `importWallet`).
@@ -160,94 +161,12 @@ This pattern keeps business logic and validation centralized in Rust while givin
 
 ---
 
-## Build & Tooling
-
-**Build commands:**
-
-- `just build-ios [profile] [--device] [--sign]` → Runs `scripts/build-ios.sh`, builds the staticlib for requested targets (aarch64-apple-ios, aarch64-apple-ios-sim), regenerates Swift bindings, and produces `cove_core_ffi.xcframework`
-- `just build-android [debug|release]` → Runs `scripts/build-android.sh`, cross-compiles the cdylib with cargo-ndk for Android targets (aarch64-linux-android, x86_64-linux-android), generates Kotlin bindings, and copies them into `android/app/src/main/java/`
-- `just compile` → Compiles both iOS and Android without full FFI rebuild
-- `just compile-ios` / `just compile-android` → Platform-specific compilation without FFI rebuild
-
-**Development commands:**
-
-- `just bacon` → Runs continuous clippy checking with interactive output
-- `just bcheck` → Bacon in check mode for faster iteration
-- `just check` → Runs `cargo check` with appropriate flags
-- `just fix` → Runs `cargo fix --allow-dirty` to automatically fix warnings
-- `just update` → Updates Cargo dependencies
-
-**Format & lint:**
-
-- `just fmt` → Enforces Rust, Swift (`swiftformat`), and Kotlin (`ktlint`) formatting across all codebases
-
-**iOS-specific:**
-
-- `just xcode-clean` → Cleans Xcode derived data
-- `just xcode-reset` → Full Xcode cache reset (useful when builds get stuck)
-- `just run-ios` → Builds and runs the iOS app
-
-**Android-specific:**
-
-- `just run-android` → Builds and runs the Android app on connected device/emulator
-
-**Cleanup:**
-
-- `just clean` → Full cleanup of build artifacts across all platforms
-
-Because binding generation is deterministic, always rerun the appropriate Just target after touching exported Rust APIs so the mobile projects stay in sync.
-
----
-
-## Testing
-
-- `just test` runs the full test suite via `cargo nextest run --workspace` across all Rust crates
-- `just wtest` (or `just watch-test`) runs tests in watch mode, automatically re-running when files change
-- `just btest` uses `bacon` for continuous test monitoring with interactive output
-- `just ctest` runs standard `cargo test` for cases where nextest isn't needed
-- Tests run on both Ubuntu and macOS in CI (`.github/workflows/ci.yml`)
-- The CI pipeline includes separate jobs for: rustfmt, swiftformat, ktlint, clippy, test, compile-android, and compile-ios
-- Run `just ci` locally to execute the same checks that run in CI before pushing
-
----
-
 ## Extending the Core
 
 - **New manager / feature flow:** Create a Rust manager module under `rust/src/manager/`, define its state, actions, and reconcile messages, and export it with `#[uniffi::export]`. Implement the matching Swift/Kotlin manager classes that conform to the generated `…Reconciler` protocol/interface.
 - **Routing additions:** Extend `rust/src/router.rs` enums, expose necessary helpers on `FfiApp`, and update the `RouterManager` on both platforms to handle the new routes.
 - **Database schema changes:** Update the relevant table builders under `rust/src/database/`. Because redb uses typed tables, add migration logic or regenerate tables as needed, and expose read/write helpers through UniFFI.
 - **Async work:** Prefer spawning onto the shared Tokio runtime via `task::spawn`. If the work belongs to a long-lived component, consider using an `act-zero` actor so you can push reconciliation messages back to the UI on completion.
-
----
-
-## Development Workflow
-
-**Initial setup:**
-
-1. Clone the repository and ensure Rust toolchain is installed
-2. Install platform-specific tools: Xcode for iOS, Android Studio + NDK for Android
-3. Install Just: `cargo install just`
-4. Run `just fmt` to verify formatting tools are installed
-
-**Iterative development:**
-
-- For Rust-only changes: Use `just bacon` or `just bcheck` for continuous feedback while coding
-- For UI changes without Rust API changes: Use `just compile-ios` or `just compile-android` for faster iteration
-- For changes to exported Rust APIs: Run `just build-ios` or `just build-android` to regenerate bindings
-- Run `just wtest` in a separate terminal for continuous test feedback
-
-**Before committing:**
-
-1. Run `just ci` to execute all checks locally (format, lint, clippy, tests, compilation)
-2. Fix any issues reported by the CI checks
-3. If clippy reports warnings, run `just fix` first to auto-fix what's possible
-
-**Debugging tips:**
-
-- iOS builds stuck? Try `just xcode-reset` to clear Xcode caches
-- Clean slate needed? Run `just clean` to remove all build artifacts
-- UniFFI binding issues? Check that you regenerated bindings after changing Rust exports
-- Actor not receiving messages? Verify you called `FfiApp::init_on_start` during app startup
 
 ---
 

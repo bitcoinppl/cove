@@ -2,8 +2,10 @@ package org.bitcoinppl.cove
 
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.graphics.Color
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -16,7 +18,6 @@ import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.tapcard.TapSigner
 import org.bitcoinppl.cove_core.types.*
 import java.io.Closeable
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -30,6 +31,7 @@ class WalletManager :
     private val tag = "WalletManager"
 
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val isClosed = AtomicBoolean(false)
 
     val id: WalletId
@@ -58,8 +60,8 @@ class WalletManager :
     var errorAlert by mutableStateOf<WalletErrorAlert?>(null)
     var sendFlowErrorAlert by mutableStateOf<TaggedItem<SendFlowErrorAlert>?>(null)
 
-    // cached transaction details
-    private val transactionDetailsCache = ConcurrentHashMap<TxId, TransactionDetails>()
+    // cached transaction details (observable for Compose)
+    val transactionDetailsCache: SnapshotStateMap<TxId, TransactionDetails> = mutableStateMapOf()
 
     // computed properties
     val unit: String
@@ -145,6 +147,16 @@ class WalletManager :
 
     suspend fun forceWalletScan() {
         rust.forceWalletScan()
+    }
+
+    fun setScanning() {
+        val currentTxns =
+            when (val state = loadState) {
+                is WalletLoadState.LOADED -> state.txns
+                is WalletLoadState.SCANNING -> state.txns
+                else -> emptyList()
+            }
+        loadState = WalletLoadState.SCANNING(currentTxns)
     }
 
     suspend fun firstAddress(): AddressInfo = rust.addressAt(0u)
@@ -246,7 +258,7 @@ class WalletManager :
 
             is WalletManagerReconcileMessage.WalletMetadataChanged -> {
                 walletMetadata = message.v1
-                rust.setWalletMetadata(message.v1)
+                persistWalletMetadata(message.v1)
             }
 
             is WalletManagerReconcileMessage.WalletScannerResponse -> {
@@ -282,12 +294,16 @@ class WalletManager :
 
     override fun reconcile(message: WalletManagerReconcileMessage) {
         logDebug("reconcile: $message")
-        mainScope.launch { apply(message) }
+        ioScope.launch {
+            mainScope.launch { apply(message) }
+        }
     }
 
     override fun reconcileMany(messages: List<WalletManagerReconcileMessage>) {
         logDebug("reconcile_messages: ${messages.size} messages")
-        mainScope.launch { messages.forEach { apply(it) } }
+        ioScope.launch {
+            mainScope.launch { messages.forEach { apply(it) } }
+        }
     }
 
     fun dispatch(action: WalletManagerAction) {
@@ -295,11 +311,16 @@ class WalletManager :
         mainScope.launch(Dispatchers.IO) { rust.dispatch(action) }
     }
 
+    private fun persistWalletMetadata(metadata: WalletMetadata) {
+        ioScope.launch { rust.setWalletMetadata(metadata) }
+    }
+
     override fun close() {
         if (!isClosed.compareAndSet(false, true)) return
         logDebug("Closing WalletManager for $id")
-        mainScope.cancel() // stop callbacks into Rust
-        rust.close() // free Rust Arc
+        ioScope.cancel()
+        mainScope.cancel()
+        rust.close()
     }
 }
 

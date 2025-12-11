@@ -3,11 +3,9 @@ package org.bitcoinppl.cove.sheets
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -20,16 +18,15 @@ import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.SendFlowManager
 import org.bitcoinppl.cove.SendFlowPresenter
 import org.bitcoinppl.cove.WalletManager
-import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.ui.theme.coveColors
+import org.bitcoinppl.cove.utils.toColor
 import org.bitcoinppl.cove_core.types.FeeRateOptionWithTotalFee
 import org.bitcoinppl.cove_core.types.FeeRateOptionsWithTotalFee
 import org.bitcoinppl.cove_core.types.FeeSpeed
+import org.bitcoinppl.cove_core.types.feeSpeedToCircleColor
 import java.util.Locale
 
-/**
- * fee rate selector sheet - displays fast/medium/slow fee options
- * ported from iOS SendFlowSelectFeeRateView.swift
- */
+/** fee rate selector sheet - displays fast/medium/slow fee options */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FeeRateSelectorSheet(
@@ -40,6 +37,7 @@ fun FeeRateSelectorSheet(
     feeOptions: FeeRateOptionsWithTotalFee,
     selectedOption: FeeRateOptionWithTotalFee,
     onSelectFee: (FeeRateOptionWithTotalFee) -> Unit,
+    onUpdateFeeOptions: (FeeRateOptionsWithTotalFee) -> Unit,
     onDismiss: () -> Unit,
 ) {
     var showCustomFeeSheet by remember { mutableStateOf(false) }
@@ -128,7 +126,6 @@ fun FeeRateSelectorSheet(
             Spacer(modifier = Modifier.height(20.dp))
 
             // customize fee button
-            val isDark = isSystemInDarkTheme()
             Button(
                 onClick = { showCustomFeeSheet = true },
                 modifier =
@@ -137,7 +134,8 @@ fun FeeRateSelectorSheet(
                         .padding(horizontal = 24.dp),
                 colors =
                     ButtonDefaults.buttonColors(
-                        containerColor = CoveColor.midnightBlue,
+                        containerColor = MaterialTheme.coveColors.midnightBtn,
+                        contentColor = Color.White,
                     ),
                 shape = RoundedCornerShape(10.dp),
             ) {
@@ -155,12 +153,14 @@ fun FeeRateSelectorSheet(
     if (showCustomFeeSheet) {
         CustomFeeRateSheet(
             app = app,
+            walletManager = walletManager,
             sendFlowManager = sendFlowManager,
             presenter = presenter,
             feeOptions = currentFeeOptions,
             selectedOption = selectedOption,
             onUpdateFeeOptions = { newOptions, newSelected ->
                 currentFeeOptions = newOptions
+                onUpdateFeeOptions(newOptions)
                 onSelectFee(newSelected)
                 showCustomFeeSheet = false
             },
@@ -179,11 +179,9 @@ private fun FeeOptionCard(
     isSelected: Boolean,
     onSelect: () -> Unit,
 ) {
-    val isDark = isSystemInDarkTheme()
-
     val backgroundColor =
         if (isSelected) {
-            CoveColor.midnightBlue.copy(alpha = 0.8f)
+            MaterialTheme.coveColors.midnightBtn.copy(alpha = 0.8f)
         } else {
             MaterialTheme.colorScheme.surfaceVariant
         }
@@ -199,7 +197,7 @@ private fun FeeOptionCard(
         if (isSelected) {
             MaterialTheme.colorScheme.primary.copy(alpha = 0.75f)
         } else {
-            Color.Transparent
+            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
         }
 
     Box(
@@ -277,17 +275,6 @@ private fun FeeOptionCard(
                     color = contentColor,
                 )
             }
-
-            // checkmark if selected
-            if (isSelected) {
-                Spacer(modifier = Modifier.width(8.dp))
-                Icon(
-                    imageVector = Icons.Default.Check,
-                    contentDescription = "Selected",
-                    tint = contentColor,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
         }
     }
 }
@@ -297,7 +284,6 @@ private fun DurationCapsule(
     speed: FeeSpeed,
     fontColor: Color,
 ) {
-    // get duration string from FeeSpeed
     val durationText =
         remember(speed) {
             when (speed) {
@@ -315,15 +301,29 @@ private fun DurationCapsule(
             }
         }
 
+    val circleColor = feeSpeedToCircleColor(speed).toColor()
+
     Surface(
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(8.dp),
         color = fontColor.copy(alpha = 0.2f),
     ) {
-        Text(
-            text = durationText,
-            style = MaterialTheme.typography.labelSmall,
-            color = fontColor,
+        Row(
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-        )
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Box(
+                modifier =
+                    Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(circleColor),
+            )
+            Text(
+                text = durationText,
+                style = MaterialTheme.typography.labelSmall,
+                color = fontColor,
+            )
+        }
     }
 }

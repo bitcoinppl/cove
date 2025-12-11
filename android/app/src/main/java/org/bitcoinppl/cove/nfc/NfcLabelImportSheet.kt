@@ -1,6 +1,5 @@
 package org.bitcoinppl.cove.nfc
 
-import android.app.Activity
 import android.util.Log
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -8,7 +7,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Nfc
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -21,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -30,8 +32,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
+import org.bitcoinppl.cove.findActivity
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.ui.theme.title3
 import org.bitcoinppl.cove_core.LabelManager
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -43,7 +48,7 @@ fun NfcLabelImportSheet(
     onError: (String) -> Unit,
 ) {
     val context = LocalContext.current
-    val activity = context as? Activity
+    val activity = context.findActivity()
 
     if (activity == null) {
         // fallback if not in activity context
@@ -126,47 +131,106 @@ fun NfcLabelImportSheet(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            if (nfcReader.isScanning) {
-                CircularProgressIndicator(
-                    color = Color.White,
-                    modifier = Modifier.padding(16.dp),
-                )
+            val readingState = nfcReader.readingState
 
-                Icon(
-                    imageVector = Icons.Default.Nfc,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.padding(16.dp),
-                )
+            when (readingState) {
+                NfcReadingState.SUCCESS -> {
+                    // success state - show checkmark
+                    Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = "Success",
+                        modifier = Modifier.size(48.dp),
+                        tint = Color(0xFF4CAF50), // green
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = nfcReader.message.ifEmpty { "Tag read successfully!" },
+                        style = MaterialTheme.typography.title3,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                    )
+                }
+                NfcReadingState.TAG_DETECTED, NfcReadingState.READING -> {
+                    // reading state - show animated dots
+                    var dotCount by remember { mutableIntStateOf(1) }
 
-                Text(
-                    text = "Ready to Scan",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                )
+                    LaunchedEffect(Unit) {
+                        while (true) {
+                            delay(300)
+                            dotCount = (dotCount % 3) + 1
+                        }
+                    }
 
-                Text(
-                    text = nfcReader.message,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White.copy(alpha = 0.7f),
-                    textAlign = TextAlign.Center,
-                )
-            } else {
-                // show icon when not scanning
-                Icon(
-                    imageVector = Icons.Default.Nfc,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.padding(16.dp),
-                )
+                    CircularProgressIndicator(
+                        color = Color.White,
+                        modifier = Modifier.padding(16.dp),
+                    )
 
-                Text(
-                    text = "NFC Unavailable",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                )
+                    Icon(
+                        imageVector = Icons.Default.Nfc,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.padding(16.dp),
+                    )
+
+                    Text(
+                        text = "Reading" + ".".repeat(dotCount),
+                        style = MaterialTheme.typography.title3,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                    )
+
+                    Text(
+                        text = "Please hold still",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White.copy(alpha = 0.7f),
+                        textAlign = TextAlign.Center,
+                    )
+                }
+                NfcReadingState.WAITING -> {
+                    if (nfcReader.isScanning) {
+                        CircularProgressIndicator(
+                            color = Color.White,
+                            modifier = Modifier.padding(16.dp),
+                        )
+
+                        Icon(
+                            imageVector = Icons.Default.Nfc,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.padding(16.dp),
+                        )
+
+                        Text(
+                            text = "Ready to Scan",
+                            style = MaterialTheme.typography.title3,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                        )
+
+                        Text(
+                            text = nfcReader.message,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.White.copy(alpha = 0.7f),
+                            textAlign = TextAlign.Center,
+                        )
+                    } else {
+                        // show icon when not scanning
+                        Icon(
+                            imageVector = Icons.Default.Nfc,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.padding(16.dp),
+                        )
+
+                        Text(
+                            text = "NFC Unavailable",
+                            style = MaterialTheme.typography.title3,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                        )
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(8.dp))

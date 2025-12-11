@@ -1,6 +1,7 @@
 package org.bitcoinppl.cove.flow.new_wallet.hot_wallet
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,6 +40,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -46,6 +48,8 @@ import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
+import org.bitcoinppl.cove.ui.theme.title3
 import org.bitcoinppl.cove.utils.intoRoute
 import org.bitcoinppl.cove.views.DashDotsIndicator
 import org.bitcoinppl.cove.views.ImageButton
@@ -86,6 +90,9 @@ fun HotWalletSelectScreen(
             }
         app.pushRoute(route)
     }
+
+    // force white status bar icons for midnight blue background
+    ForceLightStatusBarIcons()
 
     Scaffold(
         containerColor = CoveColor.midnightBlue,
@@ -172,7 +179,7 @@ fun HotWalletSelectScreen(
                     )
 
                     Column(
-                        verticalArrangement = Arrangement.spacedBy(24.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         ImageButton(
@@ -189,19 +196,20 @@ fun HotWalletSelectScreen(
                             modifier = Modifier.fillMaxWidth(),
                         )
 
-                        TextButton(
-                            onClick = {
-                                showSheet = true
-                                nextScreen = NextScreenDialog.Import
-                            },
-                            modifier = Modifier.align(Alignment.CenterHorizontally),
-                        ) {
-                            Text(
-                                text = stringResource(R.string.btn_wallet_import),
-                                color = Color.White,
-                                fontWeight = FontWeight.Medium,
-                            )
-                        }
+                        Text(
+                            text = stringResource(R.string.btn_wallet_import),
+                            color = Color.White,
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 14.sp,
+                            textAlign = TextAlign.Center,
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        showSheet = true
+                                        nextScreen = NextScreenDialog.Import
+                                    },
+                        )
                     }
                 }
             }
@@ -223,17 +231,18 @@ fun HotWalletSelectScreen(
                 ) {
                     Text(
                         text = stringResource(R.string.label_select_number_of_words),
-                        style = MaterialTheme.typography.titleLarge,
+                        style = MaterialTheme.typography.title3,
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.padding(bottom = 8.dp),
                     )
 
-                    // show QR and NFC options for import
+                    // show QR and NFC options for import - use app-level scan sheets
+                    // which handle all formats (mnemonic, TapSigner, hardware export, etc.)
                     if (nextScreen == NextScreenDialog.Import) {
                         TextButton(
                             onClick = {
-                                navigateToRoute(NumberOfBip39Words.TWENTY_FOUR, ImportType.QR)
                                 showSheet = false
+                                app.scanQr()
                             },
                             modifier = Modifier.fillMaxWidth(),
                         ) {
@@ -242,8 +251,8 @@ fun HotWalletSelectScreen(
 
                         TextButton(
                             onClick = {
-                                navigateToRoute(NumberOfBip39Words.TWENTY_FOUR, ImportType.NFC)
                                 showSheet = false
+                                app.scanNfc()
                             },
                             modifier = Modifier.fillMaxWidth(),
                         ) {

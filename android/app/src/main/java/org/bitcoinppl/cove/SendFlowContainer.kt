@@ -4,8 +4,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -19,13 +24,11 @@ import androidx.compose.ui.Modifier
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.send.SendScreen
 import org.bitcoinppl.cove.send.send_confirmation.SendConfirmationScreen
+import org.bitcoinppl.cove.sheets.FeeRateSelectorSheet
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
 
-/**
- * UI state for tracking send transaction progress
- * Mirrors iOS SendState enum
- */
+/** UI state for tracking send transaction progress */
 sealed interface SendState {
     data object Idle : SendState
 
@@ -38,10 +41,7 @@ sealed interface SendState {
     ) : SendState
 }
 
-/**
- * send flow container - manages WalletManager + SendFlowManager lifecycle
- * ported from iOS SendFlowContainer.swift
- */
+/** send flow container - manages WalletManager + SendFlowManager lifecycle */
 @Composable
 fun SendFlowContainer(
     app: AppManager,
@@ -116,6 +116,58 @@ fun SendFlowContainer(
                 }
             }
 
+            // observe unit changes and notify send flow manager
+            var previousUnit by remember { mutableStateOf(wm.walletMetadata?.selectedUnit) }
+            LaunchedEffect(wm.walletMetadata?.selectedUnit) {
+                val currentUnit = wm.walletMetadata?.selectedUnit
+                val oldUnit = previousUnit
+                if (oldUnit != null && currentUnit != null && oldUnit != currentUnit) {
+                    sfm.dispatch(SendFlowManagerAction.NotifySelectedUnitedChanged(oldUnit, currentUnit))
+                }
+                previousUnit = currentUnit
+            }
+
+            // observe fiatOrBtc changes and notify send flow manager
+            var previousFiatOrBtc by remember { mutableStateOf(wm.walletMetadata?.fiatOrBtc) }
+            LaunchedEffect(wm.walletMetadata?.fiatOrBtc) {
+                val currentFiatOrBtc = wm.walletMetadata?.fiatOrBtc
+                val oldFiatOrBtc = previousFiatOrBtc
+                if (oldFiatOrBtc != null && currentFiatOrBtc != null && oldFiatOrBtc != currentFiatOrBtc) {
+                    sfm.dispatch(SendFlowManagerAction.NotifyBtcOrFiatChanged(oldFiatOrBtc, currentFiatOrBtc))
+                }
+                previousFiatOrBtc = currentFiatOrBtc
+            }
+
+            // observe app prices changes and notify send flow manager
+            LaunchedEffect(app.prices) {
+                app.prices?.let { prices ->
+                    sfm.dispatch(SendFlowManagerAction.NotifyPricesChanged(prices))
+                }
+            }
+
+            // observe focus field changes and notify send flow manager
+            var previousFocusField by remember { mutableStateOf(presenter.focusField) }
+            LaunchedEffect(presenter.focusField) {
+                val currentFocusField = presenter.focusField
+                val oldFocusField = previousFocusField
+                if (oldFocusField != currentFocusField) {
+                    sfm.dispatch(SendFlowManagerAction.NotifyFocusFieldChanged(oldFocusField, currentFocusField))
+                }
+                previousFocusField = currentFocusField
+            }
+
+            // observe auth lock state changes
+            LaunchedEffect(Auth.isLocked) {
+                if (!Auth.isLocked) {
+                    // after unlock, validate and focus appropriate field
+                    if (!sfm.rust.validateAmount()) {
+                        sfm.dispatch(SendFlowManagerAction.ChangeSetAmountFocusField(SetAmountFocusField.AMOUNT))
+                    } else if (!sfm.rust.validateAddress()) {
+                        sfm.dispatch(SendFlowManagerAction.ChangeSetAmountFocusField(SetAmountFocusField.ADDRESS))
+                    }
+                }
+            }
+
             SendFlowRouteToScreen(
                 app = app,
                 sendRoute = sendRoute,
@@ -139,6 +191,7 @@ fun SendFlowContainer(
 /**
  * routes SendRoute to appropriate screen
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SendFlowRouteToScreen(
     app: AppManager,
@@ -150,6 +203,20 @@ private fun SendFlowRouteToScreen(
 ) {
     when (sendRoute) {
         is SendRoute.SetAmount -> {
+            val exceedsBalance = sendFlowManager.rust.amountExceedsBalance()
+            var previouslyExceeded by remember { mutableStateOf(false) }
+            val snackbarHostState = remember { SnackbarHostState() }
+
+            LaunchedEffect(exceedsBalance) {
+                if (exceedsBalance && !previouslyExceeded) {
+                    snackbarHostState.showSnackbar(
+                        message = "Exceeds available balance",
+                        duration = SnackbarDuration.Short,
+                    )
+                }
+                previouslyExceeded = exceedsBalance
+            }
+
             SendScreen(
                 onBack = { app.popRoute() },
                 onNext = {
@@ -163,9 +230,34 @@ private fun SendFlowRouteToScreen(
                 onChangeSpeed = {
                     presenter.sheetState = TaggedItem(SendFlowPresenter.SheetState.Fee)
                 },
+                onClearAmount = {
+                    sendFlowManager.dispatch(SendFlowManagerAction.ClearSendAmount)
+                },
+                onMaxSelected = {
+                    sendFlowManager.dispatch(SendFlowManagerAction.SelectMaxSend)
+                },
                 onToggleBalanceVisibility = {
                     walletManager.dispatch(WalletManagerAction.ToggleSensitiveVisibility)
                 },
+                onUnitChange = { unit ->
+                    val bitcoinUnit =
+                        when (unit.lowercase()) {
+                            "sats" -> org.bitcoinppl.cove_core.types.BitcoinUnit.SAT
+                            "btc" -> org.bitcoinppl.cove_core.types.BitcoinUnit.BTC
+                            else -> org.bitcoinppl.cove_core.types.BitcoinUnit.SAT
+                        }
+                    walletManager.dispatch(WalletManagerAction.UpdateUnit(bitcoinUnit))
+                },
+                onToggleFiatOrBtc = {
+                    walletManager.dispatch(WalletManagerAction.ToggleFiatOrBtc)
+                },
+                onSanitizeBtcAmount = { oldValue, newValue ->
+                    sendFlowManager.rust.sanitizeBtcEnteringAmount(oldValue, newValue)
+                },
+                onSanitizeFiatAmount = { oldValue, newValue ->
+                    sendFlowManager.rust.sanitizeFiatEnteringAmount(oldValue, newValue)
+                },
+                isFiatMode = walletManager.walletMetadata?.fiatOrBtc == FiatOrBtc.FIAT,
                 isBalanceHidden = !(walletManager.walletMetadata?.sensitiveVisible ?: true),
                 balanceAmount = walletManager.amountFmt(walletManager.balance.spendable()),
                 balanceDenomination = walletManager.unit,
@@ -185,6 +277,11 @@ private fun SendFlowRouteToScreen(
                     when (walletManager.walletMetadata?.fiatOrBtc) {
                         FiatOrBtc.FIAT -> sendFlowManager.sendAmountBtc
                         else -> sendFlowManager.sendAmountFiat
+                    },
+                secondaryUnit =
+                    when (walletManager.walletMetadata?.fiatOrBtc) {
+                        FiatOrBtc.FIAT -> walletManager.unit
+                        else -> ""
                     },
                 initialAddress = sendFlowManager.enteringAddress,
                 accountShort =
@@ -214,7 +311,106 @@ private fun SendFlowRouteToScreen(
                 onAddressChanged = { newAddress ->
                     sendFlowManager.enteringAddress = newAddress
                 },
+                onAmountFocusChanged = { focused ->
+                    presenter.focusField = if (focused) SetAmountFocusField.AMOUNT else null
+                },
+                onAddressFocusChanged = { focused ->
+                    presenter.focusField = if (focused) SetAmountFocusField.ADDRESS else null
+                },
+                onAmountDone = {
+                    // if address is invalid, focus address; otherwise dismiss
+                    presenter.focusField =
+                        if (!sendFlowManager.rust.validateAddress()) {
+                            SetAmountFocusField.ADDRESS
+                        } else {
+                            null
+                        }
+                },
+                onAddressDone = {
+                    // if amount is invalid, focus amount; otherwise dismiss
+                    presenter.focusField =
+                        if (!sendFlowManager.rust.validateAmount()) {
+                            SetAmountFocusField.AMOUNT
+                        } else {
+                            null
+                        }
+                },
+                focusField = presenter.focusField,
+                exceedsBalance = exceedsBalance,
+                snackbarHostState = snackbarHostState,
             )
+
+            // handle sheets for SendScreen
+            presenter.sheetState?.let { taggedSheet ->
+                when (taggedSheet.item) {
+                    is SendFlowPresenter.SheetState.Qr -> {
+                        ModalBottomSheet(
+                            onDismissRequest = { presenter.sheetState = null },
+                            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+                        ) {
+                            QrCodeScanView(
+                                onScanned = { multiFormat ->
+                                    presenter.sheetState = null
+                                    when (multiFormat) {
+                                        is MultiFormat.Address -> {
+                                            val addressWithNetwork = multiFormat.v1
+                                            sendFlowManager.enteringAddress = addressWithNetwork.address().string()
+                                            // if QR contains an amount (BIP21), set it
+                                            addressWithNetwork.amount()?.let { amount ->
+                                                sendFlowManager.updateAmount(amount)
+                                            }
+                                            // focus management: if amount valid clear focus, otherwise focus amount
+                                            presenter.focusField =
+                                                if (sendFlowManager.rust.validateAmount()) {
+                                                    null
+                                                } else {
+                                                    SetAmountFocusField.AMOUNT
+                                                }
+                                        }
+                                        else -> {
+                                            app.alertState =
+                                                TaggedItem(
+                                                    AppAlertState.General(
+                                                        title = "Invalid QR Code",
+                                                        message = "Please scan a valid Bitcoin address QR code",
+                                                    ),
+                                                )
+                                        }
+                                    }
+                                },
+                                onDismiss = { presenter.sheetState = null },
+                                app = app,
+                            )
+                        }
+                    }
+                    is SendFlowPresenter.SheetState.Fee -> {
+                        sendFlowManager.feeRateOptions?.let { feeOptions ->
+                            sendFlowManager.selectedFeeRate?.let { selectedRate ->
+                                FeeRateSelectorSheet(
+                                    app = app,
+                                    walletManager = walletManager,
+                                    sendFlowManager = sendFlowManager,
+                                    presenter = presenter,
+                                    feeOptions = feeOptions,
+                                    selectedOption = selectedRate,
+                                    onSelectFee = { newFeeOption ->
+                                        sendFlowManager.dispatch(
+                                            SendFlowManagerAction.SelectFeeRate(newFeeOption),
+                                        )
+                                    },
+                                    onUpdateFeeOptions = { newOptions ->
+                                        sendFlowManager.dispatch(
+                                            SendFlowManagerAction.ChangeFeeRateOptions(newOptions),
+                                        )
+                                    },
+                                    onDismiss = { presenter.sheetState = null },
+                                )
+                            }
+                        }
+                    }
+                    else -> {}
+                }
+            }
         }
         is SendRoute.CoinControlSetAmount -> {
             org.bitcoinppl.cove.send.CoinControlSetAmountScreen(
@@ -265,12 +461,14 @@ private fun SendFlowRouteToScreen(
                 totalSpendingFiat = sendFlowManager.totalSpentInFiat,
                 utxoCount = sendRoute.utxos.size,
                 utxos = sendRoute.utxos,
+                app = app,
                 sendFlowManager = sendFlowManager,
                 walletManager = walletManager,
                 presenter = presenter,
                 onAddressChanged = { newAddress ->
                     sendFlowManager.enteringAddress = newAddress
                 },
+                onAddressDone = { presenter.focusField = null },
             )
         }
         is SendRoute.Confirm -> {
@@ -282,7 +480,32 @@ private fun SendFlowRouteToScreen(
             var showErrorAlert by remember { mutableStateOf(false) }
             val scope = rememberCoroutineScope()
 
+            // lock on appear for hot wallets
+            LaunchedEffect(Unit) {
+                kotlinx.coroutines.delay(50)
+                if (walletManager.walletMetadata?.walletType == WalletType.HOT) {
+                    Auth.lock()
+                }
+            }
+
+            // timed unlock on disappear
+            DisposableEffect(Unit) {
+                onDispose {
+                    val lockedAt = Auth.lockedAt ?: return@onDispose
+                    val sinceLocked =
+                        java.time.Instant
+                            .now()
+                            .epochSecond - lockedAt.epochSecond
+                    if (sinceLocked < 5) {
+                        Auth.unlock()
+                    }
+                }
+            }
+
             SendConfirmationScreen(
+                app = app,
+                walletManager = walletManager,
+                details = details,
                 onBack = { app.popRoute() },
                 sendState = sendState,
                 onSwipeToSend = {
@@ -322,7 +545,6 @@ private fun SendFlowRouteToScreen(
                         ?.masterFingerprint
                         ?.asUppercase()
                         ?.take(8) ?: "",
-                address = details.sendingTo().string(),
                 networkFee = walletManager.amountFmtUnit(details.feeTotal()),
                 willReceive = walletManager.amountFmtUnit(details.sendingAmount()),
                 willPay = walletManager.amountFmtUnit(details.spendingAmount()),
@@ -333,7 +555,7 @@ private fun SendFlowRouteToScreen(
                 AlertDialog(
                     onDismissRequest = {
                         showSuccessAlert = false
-                        app.popRoute()
+                        app.loadAndReset(Route.SelectedWallet(walletManager.id))
                     },
                     title = { Text("Success") },
                     text = { Text("Transaction sent successfully!") },
@@ -341,7 +563,7 @@ private fun SendFlowRouteToScreen(
                         TextButton(
                             onClick = {
                                 showSuccessAlert = false
-                                app.popRoute()
+                                app.loadAndReset(Route.SelectedWallet(walletManager.id))
                             },
                         ) {
                             Text("OK")
@@ -387,5 +609,27 @@ private fun SendFlowRouteToScreen(
                 modifier = modifier,
             )
         }
+    }
+
+    // validation alert dialog (shown across all send routes)
+    if (presenter.isShowingAlert) {
+        AlertDialog(
+            onDismissRequest = {
+                presenter.setDisappearing()
+                presenter.alertState = null
+            },
+            title = { Text(presenter.alertTitle()) },
+            text = { Text(presenter.alertMessage()) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        presenter.setDisappearing()
+                        presenter.alertButtonAction()?.invoke()
+                    },
+                ) {
+                    Text("OK")
+                }
+            },
+        )
     }
 }

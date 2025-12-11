@@ -12,6 +12,7 @@
     <string name="label_wallet_type">Wallet type</string>
     <string name="title_wallet_settings">Settings</string>
     <string name="label_wallet_name">Name</string>
+    <string name="change_name">Change Name</string>
     <string name="label_wallet_color">Wallet color</string>
     <string name="label_wallet_show_transaction_labels">Show transaction labels</string>
     <string name="title_wallet_danger_zone">Danger zone</string>
@@ -41,10 +42,14 @@
     <string name="btn_receive">Receive</string>
     <string name="label_transaction_sent">Sent</string>
     <string name="label_transaction_received">Received</string>
+    <string name="label_transaction_sending">Sending</string>
+    <string name="label_transaction_receiving">Receiving</string>
     <string name="title_transactions">Transactions</string>
     <string name="no_transactions_yet">No transactions yet</string>
     <string name="pending">Pending</string>
+    <string name="pending_signature">Pending Signature</string>
     <string name="unconfirmed">Unconfirmed</string>
+    <string name="delete">Delete</string>
     <string name="title_transaction_sent">Transaction Sent</string>
     <string name="title_transaction_received">Transaction Received</string>
     <string name="title_transaction_pending">Transaction Pending</string>

@@ -1,5 +1,9 @@
 package org.bitcoinppl.cove.ui.theme
 
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color as ComposeColor
 
 /**
@@ -14,8 +18,14 @@ object CoveColor {
     val btnPrimary = ComposeColor(0xFFE5EAEF)
     val coveLightGray = ComposeColor(0xFFE5EAEF)
     val duskBlue = ComposeColor(0xFF3A4254)
+    val bitcoinOrange = ComposeColor(0xFFFF9500)
 
-    // Neutral colors (iOS parity when needed)
+    // system green colors (theme-aware)
+    val SystemGreenLight = ComposeColor(0xFF34C759)
+    val SystemGreenDark = ComposeColor(0xFF30D158)
+
+    // Neutral colors
+    val coolGray = ComposeColor(0xFFD4D8D4)
     val almostGray = ComposeColor(0xFF787880)
     val almostWhite = ComposeColor(0xFFEBEDF0)
 
@@ -60,3 +70,33 @@ object CoveColor {
     val SuccessGreen = ComposeColor(0xFF4CAF50)
     val ErrorRed = ComposeColor(0xFFF44336)
 }
+
+/**
+ * Theme-aware Cove colors that automatically adapt to light/dark mode.
+ * Mirrors iOS asset catalog pattern where colors have light/dark variants.
+ *
+ * Access via MaterialTheme.coveColors (e.g., MaterialTheme.coveColors.midnightBtn)
+ */
+data class CoveColorScheme(
+    val midnightBtn: ComposeColor,
+    val systemGreen: ComposeColor,
+)
+
+val LightCoveColors =
+    CoveColorScheme(
+        midnightBtn = CoveColor.midnightBlue, // #1C2536
+        systemGreen = CoveColor.SystemGreenLight, // #34C759
+    )
+
+val DarkCoveColors =
+    CoveColorScheme(
+        midnightBtn = CoveColor.midnightBtnDark, // #4A4A4D
+        systemGreen = CoveColor.SystemGreenDark, // #30D158
+    )
+
+val LocalCoveColors = staticCompositionLocalOf { LightCoveColors }
+
+val MaterialTheme.coveColors: CoveColorScheme
+    @Composable
+    @ReadOnlyComposable
+    get() = LocalCoveColors.current

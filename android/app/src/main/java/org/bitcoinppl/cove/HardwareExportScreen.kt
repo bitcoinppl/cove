@@ -7,6 +7,7 @@ import android.content.Intent
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -14,9 +15,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -27,15 +30,15 @@ import androidx.compose.material.icons.automirrored.filled.Input
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.Nfc
 import androidx.compose.material.icons.filled.Output
 import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Upload
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -58,7 +61,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -67,6 +76,13 @@ import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.bitcoinppl.cove.nfc.NfcWriteSheet
+import org.bitcoinppl.cove.send.SendFlowAdvancedDetailsView
+import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
+import org.bitcoinppl.cove.ui.theme.coveColors
+import org.bitcoinppl.cove.views.AutoSizeText
+import org.bitcoinppl.cove.views.BitcoinShieldIcon
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
 import java.io.File
@@ -81,7 +97,7 @@ internal object TransactionImportErrors {
 
 private enum class SheetState {
     Details,
-    InputOutputDetails,
+    AdvancedDetails,
     ExportQr,
 }
 
@@ -147,8 +163,7 @@ fun HardwareExportScreen(
     var alertState by remember { mutableStateOf<AlertState?>(null) }
     var alertMessage by remember { mutableStateOf("") }
     var showQrScanner by remember { mutableStateOf(false) }
-
-    var bbqrStrings by remember { mutableStateOf<List<String>>(emptyList()) }
+    var showNfcWriteSheet by remember { mutableStateOf(false) }
 
     val metadata = walletManager.walletMetadata
 
@@ -194,13 +209,18 @@ fun HardwareExportScreen(
             }
         }
 
+    // force white status bar icons for midnight blue background
+    ForceLightStatusBarIcons()
+
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.surface,
+        containerColor = CoveColor.midnightBlue,
         topBar = {
             CenterAlignedTopAppBar(
                 colors =
                     TopAppBarDefaults.centerAlignedTopAppBarColors(
                         containerColor = Color.Transparent,
+                        navigationIconContentColor = Color.White,
+                        actionIconContentColor = Color.White,
                     ),
                 title = { },
                 actions = {
@@ -218,126 +238,182 @@ fun HardwareExportScreen(
                         Icon(
                             Icons.Default.Delete,
                             contentDescription = "Delete",
-                            tint = MaterialTheme.colorScheme.error,
+                            tint = Color.White,
                         )
                     }
                 },
             )
         },
     ) { paddingValues ->
-        Column(
+        Box(
             modifier =
                 modifier
                     .fillMaxSize()
-                    .padding(paddingValues)
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(24.dp),
+                    .padding(paddingValues),
         ) {
-            // header section
-            Column {
-                Text(
-                    text = "You're sending",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(top = 6.dp),
-                )
-
-                Text(
-                    text = "The amount they will receive",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                    fontWeight = FontWeight.Medium,
-                )
-            }
-
-            // amount display
-            Column(
-                modifier = Modifier.padding(top = 8.dp),
-                horizontalAlignment = Alignment.Start,
-            ) {
-                Row(
-                    verticalAlignment = Alignment.Bottom,
-                ) {
-                    Text(
-                        text = walletManager.amountFmt(details.sendingAmount()),
-                        fontSize = 48.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
-
-                    Text(
-                        text = if (metadata?.selectedUnit?.name == "SAT") "sats" else "btc",
-                        modifier =
-                            Modifier
-                                .padding(start = 8.dp, bottom = 10.dp),
-                    )
-                }
-
-                Text(
-                    text = fiatAmount,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                )
-            }
-
-            // account section
-            AccountSection(metadata)
-
-            HorizontalDivider()
-
-            // address section
-            AddressSection(
-                address = details.sendingTo().spacedOut(),
-                onCopy = {
-                    val clipboard =
-                        context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    val clip = ClipData.newPlainText("address", details.sendingTo().unformatted())
-                    clipboard.setPrimaryClip(clip)
-                },
-                onClick = { sheetState = SheetState.InputOutputDetails },
+            // background pattern
+            Image(
+                painter = painterResource(id = R.drawable.image_chain_code_pattern_horizontal),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier =
+                    Modifier
+                        .fillMaxHeight()
+                        .align(Alignment.TopCenter)
+                        .offset(y = (-40).dp)
+                        .graphicsLayer(alpha = 0.25f),
             )
 
-            HorizontalDivider()
+            Column(modifier = Modifier.fillMaxSize()) {
+                val configuration = LocalConfiguration.current
+                val screenHeightDp = configuration.screenHeightDp.dp
+                val headerHeight = screenHeightDp * 0.145f
 
-            // sign transaction section
-            when (val hwMetadata = metadata?.hardwareMetadata) {
-                is HardwareWalletMetadata.TapSigner -> {
-                    SignTapSignerSection(
-                        tapSigner = hwMetadata.v1,
-                        onSign = {
-                            val route =
-                                TapSignerRoute.EnterPin(
-                                    tapSigner = hwMetadata.v1,
-                                    action = AfterPinAction.Sign(details.psbt()),
-                                )
-                            app.sheetState = TaggedItem(AppSheetState.TapSigner(route))
-                        },
-                    )
-                }
-                else -> {
-                    SignTransactionSection(
-                        onExport = { confirmationState = ConfirmationState.ExportTxn },
-                        onImport = { confirmationState = ConfirmationState.ImportSignature },
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // more details button
-            TextButton(
-                onClick = { sheetState = SheetState.Details },
-                modifier = Modifier.align(Alignment.CenterHorizontally),
-            ) {
-                Text(
-                    text = "More details",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                    fontWeight = FontWeight.Medium,
+                // balance header
+                BalanceHeader(
+                    walletManager = walletManager,
+                    height = headerHeight,
                 )
-            }
 
-            Spacer(modifier = Modifier.height(32.dp))
+                // main content
+                Column(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .background(MaterialTheme.colorScheme.surface)
+                            .padding(horizontal = 16.dp),
+                ) {
+                    // scrollable content
+                    Column(
+                        modifier =
+                            Modifier
+                                .weight(1f)
+                                .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(24.dp),
+                    ) {
+                        // header section
+                        Column(modifier = Modifier.padding(top = 16.dp)) {
+                            Text(
+                                text = "You're sending",
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.padding(top = 6.dp),
+                            )
+
+                            Text(
+                                text = "The amount they will receive",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                                fontWeight = FontWeight.Medium,
+                            )
+                        }
+
+                        // amount display - centered with dynamic offset based on unit label width
+                        var unitLabelWidth by remember { mutableStateOf(0.dp) }
+                        val density = LocalDensity.current
+
+                        Column(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.Bottom,
+                                modifier = Modifier.offset(x = unitLabelWidth / 2),
+                            ) {
+                                AutoSizeText(
+                                    text = walletManager.amountFmt(details.sendingAmount()),
+                                    maxFontSize = 48.sp,
+                                    minimumScaleFactor = 0.5f,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+
+                                Text(
+                                    text = if (metadata?.selectedUnit?.name == "SAT") "sats" else "btc",
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    modifier =
+                                        Modifier
+                                            .padding(start = 8.dp, bottom = 10.dp)
+                                            .onSizeChanged { size ->
+                                                unitLabelWidth = with(density) { size.width.toDp() }
+                                            },
+                                )
+                            }
+
+                            Text(
+                                text = fiatAmount,
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                            )
+                        }
+
+                        // account section
+                        AccountSection(metadata)
+
+                        HorizontalDivider()
+
+                        // address section
+                        AddressSection(
+                            address = details.sendingTo().spacedOut(),
+                            onCopy = {
+                                val clipboard =
+                                    context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                val clip = ClipData.newPlainText("address", details.sendingTo().unformatted())
+                                clipboard.setPrimaryClip(clip)
+                            },
+                            onClick = { sheetState = SheetState.AdvancedDetails },
+                        )
+
+                        HorizontalDivider()
+
+                        // sign transaction section
+                        when (val hwMetadata = metadata?.hardwareMetadata) {
+                            is HardwareWalletMetadata.TapSigner -> {
+                                SignTapSignerSection(
+                                    tapSigner = hwMetadata.v1,
+                                    onSign = {
+                                        val route =
+                                            TapSignerRoute.EnterPin(
+                                                tapSigner = hwMetadata.v1,
+                                                action = AfterPinAction.Sign(details.psbt()),
+                                            )
+                                        app.sheetState = TaggedItem(AppSheetState.TapSigner(route))
+                                    },
+                                )
+                            }
+                            else -> {
+                                SignTransactionSection(
+                                    onExport = { confirmationState = ConfirmationState.ExportTxn },
+                                    onImport = { confirmationState = ConfirmationState.ImportSignature },
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
+
+                    // more details button - fixed at bottom
+                    TextButton(
+                        onClick = { sheetState = SheetState.Details },
+                        modifier =
+                            Modifier
+                                .align(Alignment.CenterHorizontally)
+                                .padding(vertical = 16.dp),
+                    ) {
+                        Text(
+                            text = "More details",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                            fontWeight = FontWeight.Medium,
+                        )
+                    }
+                }
+            }
         }
     }
 
@@ -352,15 +428,18 @@ fun HardwareExportScreen(
                     walletManager = walletManager,
                     details = details,
                     onDismiss = { sheetState = null },
+                    onShowInputOutput = { sheetState = SheetState.AdvancedDetails },
                 )
             }
         }
-        SheetState.InputOutputDetails -> {
+        SheetState.AdvancedDetails -> {
             ModalBottomSheet(
                 onDismissRequest = { sheetState = null },
                 sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             ) {
-                InputOutputDetailsSheet(
+                SendFlowAdvancedDetailsView(
+                    app = app,
                     walletManager = walletManager,
                     details = details,
                     onDismiss = { sheetState = null },
@@ -372,8 +451,8 @@ fun HardwareExportScreen(
                 onDismissRequest = { sheetState = null },
                 sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
             ) {
-                BbqrExportView(
-                    qrStrings = bbqrStrings,
+                QrExportView(
+                    details = details,
                     modifier = Modifier.padding(16.dp),
                 )
             }
@@ -392,13 +471,7 @@ fun HardwareExportScreen(
                         TextButton(
                             onClick = {
                                 confirmationState = null
-                                try {
-                                    bbqrStrings = details.psbtToBbqr()
-                                    sheetState = SheetState.ExportQr
-                                } catch (e: Exception) {
-                                    alertState = AlertState.BbqrError
-                                    alertMessage = e.message ?: "Unknown error"
-                                }
+                                sheetState = SheetState.ExportQr
                             },
                             modifier = Modifier.fillMaxWidth(),
                         ) {
@@ -409,12 +482,11 @@ fun HardwareExportScreen(
                         TextButton(
                             onClick = {
                                 confirmationState = null
-                                alertState = AlertState.NfcError
-                                alertMessage = "NFC operations not yet implemented for Android"
+                                showNfcWriteSheet = true
                             },
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Icon(Icons.Default.Upload, contentDescription = null)
+                            Icon(Icons.Default.Nfc, contentDescription = null)
                             Text("NFC", modifier = Modifier.padding(start = 8.dp))
                         }
 
@@ -515,12 +587,11 @@ fun HardwareExportScreen(
                         TextButton(
                             onClick = {
                                 confirmationState = null
-                                alertState = AlertState.NfcError
-                                alertMessage = "NFC operations not yet implemented for Android"
+                                app.sheetState = TaggedItem(AppSheetState.Nfc)
                             },
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Icon(Icons.Default.Upload, contentDescription = null)
+                            Icon(Icons.Default.Nfc, contentDescription = null)
                             Text("NFC", modifier = Modifier.padding(start = 8.dp))
                         }
                     }
@@ -561,26 +632,98 @@ fun HardwareExportScreen(
     // fullscreen QR scanner
     if (showQrScanner) {
         QrCodeScanView(
-            onScanned = { stringOrData ->
-                try {
-                    val multiFormat = stringOrDataTryIntoMultiFormat(stringOrData)
-                    app.handleMultiFormat(multiFormat)
-                    showQrScanner = false
-                } catch (e: Exception) {
-                    Log.e("HardwareExportScreen", "Error scanning QR code: $e")
-                    showQrScanner = false
-                    app.alertState =
-                        TaggedItem(
-                            AppAlertState.General(
-                                title = "Scan Failed",
-                                message = e.message ?: "Failed to scan QR code",
-                            ),
-                        )
-                }
+            onScanned = { multiFormat ->
+                showQrScanner = false
+                app.handleMultiFormat(multiFormat)
             },
             onDismiss = { showQrScanner = false },
             app = app,
         )
+    }
+
+    // NFC write sheet for exporting PSBT
+    if (showNfcWriteSheet) {
+        NfcWriteSheet(
+            data = details.psbtBytes(),
+            onDismiss = { showNfcWriteSheet = false },
+            onSuccess = { showNfcWriteSheet = false },
+        )
+    }
+}
+
+@Composable
+private fun BalanceHeader(
+    walletManager: WalletManager,
+    height: androidx.compose.ui.unit.Dp,
+) {
+    val metadata = walletManager.walletMetadata
+    val balance = walletManager.balance.spendable()
+    val isHidden = metadata?.sensitiveVisible != true
+
+    val balanceString =
+        if (isHidden) {
+            "••••••"
+        } else {
+            when (metadata?.selectedUnit) {
+                BitcoinUnit.BTC -> balance.btcString()
+                else -> balance.satsString()
+            }
+        }
+
+    val denomination =
+        when (metadata?.selectedUnit) {
+            BitcoinUnit.BTC -> "btc"
+            else -> "sats"
+        }
+
+    Box(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .height(height)
+                .padding(horizontal = 16.dp),
+    ) {
+        Row(
+            modifier =
+                Modifier
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp),
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Balance",
+                    color = Color.White.copy(alpha = 0.7f),
+                    fontSize = 14.sp,
+                )
+                Spacer(Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        text = balanceString,
+                        color = Color.White,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Spacer(Modifier.size(6.dp))
+                    Text(
+                        text = denomination,
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        modifier = Modifier.offset(y = (-4).dp),
+                    )
+                }
+            }
+            IconButton(
+                onClick = { walletManager.dispatch(WalletManagerAction.ToggleSensitiveVisibility) },
+                modifier = Modifier.offset(y = 8.dp, x = 8.dp),
+            ) {
+                Icon(
+                    imageVector = if (isHidden) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                    contentDescription = null,
+                    tint = Color.White,
+                )
+            }
+        }
     }
 }
 
@@ -588,20 +731,11 @@ fun HardwareExportScreen(
 private fun AccountSection(metadata: WalletMetadata?) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        // bitcoin shield icon placeholder
-        Box(
-            modifier =
-                Modifier
-                    .size(24.dp)
-                    .background(
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
-                        shape = RoundedCornerShape(4.dp),
-                    ),
-        )
+        BitcoinShieldIcon(size = 24.dp, color = CoveColor.bitcoinOrange)
 
-        Column {
+        Column(modifier = Modifier.padding(start = 4.dp)) {
             metadata?.masterFingerprint?.let { fingerprint ->
                 Text(
                     text = fingerprint.asUppercase(),
@@ -616,6 +750,7 @@ private fun AccountSection(metadata: WalletMetadata?) {
                     text = name,
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
             }
         }
@@ -634,25 +769,28 @@ private fun AddressSection(
                 .fillMaxWidth()
                 .clickable(onClick = onClick)
                 .padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Text(
             text = "Address",
             style = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.Medium,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-            modifier = Modifier.weight(0.3f),
         )
+
+        Spacer(Modifier.weight(1f))
 
         Text(
             text = address,
             style = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
             textAlign = TextAlign.End,
             modifier =
                 Modifier
-                    .weight(0.7f)
+                    .weight(3f)
+                    .padding(start = 24.dp)
                     .clickable(onClick = onCopy),
+            maxLines = 4,
         )
     }
 }
@@ -662,7 +800,7 @@ private fun SignTransactionSection(
     onExport: () -> Unit,
     onImport: () -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(17.dp)) {
         Text(
             text = "Sign Transaction",
             style = MaterialTheme.typography.bodySmall,
@@ -672,25 +810,35 @@ private fun SignTransactionSection(
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Button(
                 onClick = onExport,
                 modifier = Modifier.weight(1f),
                 colors =
                     ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
+                        containerColor = CoveColor.btnPrimary,
+                        contentColor = CoveColor.midnightBlue,
+                    ),
+                shape = RoundedCornerShape(10.dp),
+                contentPadding =
+                    androidx.compose.foundation.layout.PaddingValues(
+                        horizontal = 18.dp,
+                        vertical = 16.dp,
                     ),
             ) {
                 Icon(
                     Icons.Default.Output,
                     contentDescription = null,
-                    modifier = Modifier.size(16.dp),
+                    modifier = Modifier.size(14.dp),
                 )
-                Text(
-                    "Export Transaction",
-                    modifier = Modifier.padding(start = 4.dp),
-                    fontSize = 12.sp,
+                AutoSizeText(
+                    text = "Export Transaction",
+                    modifier = Modifier.padding(start = 6.dp),
+                    maxFontSize = 12.sp,
+                    minimumScaleFactor = 0.75f,
+                    fontWeight = FontWeight.Medium,
+                    color = CoveColor.midnightBlue,
                 )
             }
 
@@ -699,18 +847,28 @@ private fun SignTransactionSection(
                 modifier = Modifier.weight(1f),
                 colors =
                     ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
+                        containerColor = CoveColor.btnPrimary,
+                        contentColor = CoveColor.midnightBlue,
+                    ),
+                shape = RoundedCornerShape(10.dp),
+                contentPadding =
+                    androidx.compose.foundation.layout.PaddingValues(
+                        horizontal = 18.dp,
+                        vertical = 16.dp,
                     ),
             ) {
                 Icon(
                     Icons.AutoMirrored.Filled.Input,
                     contentDescription = null,
-                    modifier = Modifier.size(16.dp),
+                    modifier = Modifier.size(14.dp),
                 )
-                Text(
-                    "Import Signature",
-                    modifier = Modifier.padding(start = 4.dp),
-                    fontSize = 12.sp,
+                AutoSizeText(
+                    text = "Import Signature",
+                    modifier = Modifier.padding(start = 6.dp),
+                    maxFontSize = 12.sp,
+                    minimumScaleFactor = 0.75f,
+                    fontWeight = FontWeight.Medium,
+                    color = CoveColor.midnightBlue,
                 )
             }
         }
@@ -752,110 +910,138 @@ private fun TransactionDetailsSheet(
     walletManager: WalletManager,
     details: ConfirmDetails,
     onDismiss: () -> Unit,
+    onShowInputOutput: () -> Unit,
 ) {
+    val metadata = walletManager.walletMetadata
+    val feePercentage = details.feePercentage()
+
     Column(
         modifier =
             Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(24.dp),
     ) {
+        // title
         Text(
-            text = "Transaction Details",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-        )
-
-        DetailRow("Transaction ID", details.id().asHashString())
-        DetailRow("Sending Amount", walletManager.amountFmtUnit(details.sendingAmount()))
-        DetailRow("Network Fee", walletManager.amountFmtUnit(details.feeTotal()))
-        DetailRow("Total", walletManager.amountFmtUnit(details.spendingAmount()))
-        DetailRow("Fee Rate", "${details.feeRate().satPerVb()} sat/vB")
-
-        TextButton(
-            onClick = onDismiss,
-            modifier = Modifier.align(Alignment.End),
-        ) {
-            Text("Close")
-        }
-    }
-}
-
-@Composable
-private fun InputOutputDetailsSheet(
-    walletManager: WalletManager,
-    details: ConfirmDetails,
-    onDismiss: () -> Unit,
-) {
-    Column(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-                .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        Text(
-            text = "Inputs & Outputs",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-        )
-
-        Text(
-            text = "Inputs",
-            style = MaterialTheme.typography.titleSmall,
+            text = "More Details",
+            style = MaterialTheme.typography.bodyLarge,
             fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.align(Alignment.CenterHorizontally),
         )
 
-        details.inputs().forEach { input ->
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        // account section
+        AccountSection(metadata)
+
+        HorizontalDivider()
+
+        // details section
+        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            // address row (tappable)
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onShowInputOutput),
             ) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Text(
-                        text = input.address.spacedOut(),
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    Text(
-                        text = walletManager.amountFmtUnit(input.amount),
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
+                Text(
+                    text = "Address",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                )
+                Spacer(Modifier.weight(1f))
+                Text(
+                    text = details.sendingTo().spacedOut(),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.End,
+                    modifier = Modifier.weight(3f).padding(start = 24.dp),
+                    maxLines = 3,
+                )
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // network fee row (with warning styling if >20%)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = "Network Fee",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                )
+                Text(
+                    text = walletManager.amountFmtUnit(details.feeTotal()),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = if (feePercentage > 20u) FontWeight.Bold else FontWeight.Medium,
+                    color =
+                        if (feePercentage > 20u) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        },
+                )
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // they'll receive row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = "They'll receive",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = walletManager.amountFmtUnit(details.sendingAmount()),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+
+            // you'll pay row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = "You'll pay",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = walletManager.amountFmtUnit(details.spendingAmount()),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
             }
         }
 
-        Text(
-            text = "Outputs",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
-        )
+        Spacer(modifier = Modifier.height(8.dp))
 
-        details.outputs().forEach { output ->
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-            ) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Text(
-                        text = output.address.spacedOut(),
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    Text(
-                        text = walletManager.amountFmtUnit(output.amount),
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
-            }
-        }
-
-        TextButton(
+        // close button with midnightBtn styling (matching iOS)
+        Button(
             onClick = onDismiss,
-            modifier = Modifier.align(Alignment.End),
+            modifier = Modifier.fillMaxWidth(),
+            colors =
+                ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.coveColors.midnightBtn,
+                    contentColor = Color.White,
+                ),
+            shape = RoundedCornerShape(10.dp),
         ) {
-            Text("Close")
+            Text(
+                text = "Close",
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.padding(vertical = 4.dp),
+            )
         }
     }
 }

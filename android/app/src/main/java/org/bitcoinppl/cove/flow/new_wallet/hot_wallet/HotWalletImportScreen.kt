@@ -1,15 +1,9 @@
 package org.bitcoinppl.cove.flow.new_wallet.hot_wallet
 
-import android.Manifest
-import android.app.Activity
 import android.util.Log
-import androidx.camera.core.CameraSelector
-import androidx.camera.core.ImageAnalysis
-import androidx.camera.lifecycle.ProcessCameraProvider
-import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,20 +14,21 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Nfc
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -69,6 +64,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -78,26 +74,22 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.core.content.ContextCompat
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.google.accompanist.permissions.ExperimentalPermissionsApi
-import com.google.accompanist.permissions.isGranted
-import com.google.accompanist.permissions.rememberPermissionState
-import com.google.mlkit.vision.barcode.BarcodeScanning
-import com.google.mlkit.vision.barcode.common.Barcode
-import com.google.mlkit.vision.common.InputImage
 import kotlinx.coroutines.delay
+import org.bitcoinppl.cove.AppAlertState
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.ImportWalletManager
+import org.bitcoinppl.cove.QrCodeScanView
 import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.TaggedItem
+import org.bitcoinppl.cove.findActivity
+import org.bitcoinppl.cove.nfc.NfcReadingState
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
+import org.bitcoinppl.cove.ui.theme.title3
 import org.bitcoinppl.cove.views.DashDotsIndicator
 import org.bitcoinppl.cove.views.ImageButton
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
-import java.util.concurrent.Executors
-import androidx.camera.core.Preview as CameraPreview
 
 private const val GROUPS_OF = 12
 
@@ -123,7 +115,7 @@ private fun HotWalletImportScreenPreview() {
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HotWalletImportScreen(
     app: AppManager,
@@ -151,7 +143,6 @@ fun HotWalletImportScreen(
     // QR and NFC state
     var showQrScanner by remember { mutableStateOf(false) }
     var showNfcScanner by remember { mutableStateOf(false) }
-    var multiQr by remember { mutableStateOf<MultiQr?>(null) }
 
     // auto-open scanner based on importType (matching iOS behavior)
     LaunchedEffect(importType) {
@@ -182,7 +173,6 @@ fun HotWalletImportScreen(
         }
 
         // reset scanners
-        multiQr = null
         showQrScanner = false
         showNfcScanner = false
 
@@ -202,7 +192,7 @@ fun HotWalletImportScreen(
                     Bip39WordSpecificAutocomplete(
                         wordNumber = (idx + 1).toUShort(),
                         numberOfWords = numberOfWords,
-                    ).isBip39Word(word)
+                    ).isValidWord(word, enteredWords)
             }
 
     fun importWallet() {
@@ -222,6 +212,9 @@ fun HotWalletImportScreen(
             alertState = AlertState.GenericError
         }
     }
+
+    // force white status bar icons for midnight blue background
+    ForceLightStatusBarIcons()
 
     Scaffold(
         containerColor = CoveColor.midnightBlue,
@@ -360,7 +353,13 @@ fun HotWalletImportScreen(
 
                     ImageButton(
                         text = stringResource(R.string.action_import_wallet),
-                        onClick = { if (isAllWordsValid()) importWallet() },
+                        onClick = {
+                            if (isAllWordsValid()) {
+                                importWallet()
+                            } else {
+                                alertState = AlertState.InvalidWords
+                            }
+                        },
                         colors =
                             ButtonDefaults.buttonColors(
                                 containerColor = CoveColor.btnPrimary,
@@ -426,10 +425,9 @@ fun HotWalletImportScreen(
         // QR Scanner Bottom Sheet
         if (showQrScanner) {
             QrScannerSheet(
-                numberOfWords = numberOfWords,
+                app = app,
                 onDismiss = {
                     showQrScanner = false
-                    multiQr = null
                 },
                 onWordsScanned = { words ->
                     setWords(words)
@@ -468,39 +466,90 @@ private fun WordInputGrid(
 
     val flatWords = enteredWords.flatten()
 
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(2),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+    val numRows = wordCount / 2
+    val leftIndices = (0 until numRows)
+    val rightIndices = (numRows until wordCount)
+
+    Card(
         modifier = Modifier.fillMaxWidth(),
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainer,
+            ),
+        shape = RoundedCornerShape(10.dp),
     ) {
-        itemsIndexed(
-            items = flatWords,
-            key = { index, _ -> "word-input-$index" },
-        ) { index, word ->
-            WordInputField(
-                number = index + 1,
-                word = word,
-                numberOfWords = numberOfWords,
-                isFocused = focusedField == index,
-                onWordChanged = { newWord ->
-                    val groupIndex = index / GROUPS_OF
-                    val wordIndex = index % GROUPS_OF
-                    val newWords = enteredWords.toMutableList()
-                    val newGroup = newWords[groupIndex].toMutableList()
-                    newGroup[wordIndex] = newWord
-                    newWords[groupIndex] = newGroup
-                    onWordsChanged(newWords)
-                },
-                onFocusChanged = { hasFocus ->
-                    if (hasFocus) onFocusChanged(index)
-                },
-                onNext = {
-                    if (index < wordCount - 1) {
-                        onFocusChanged(index + 1)
-                    }
-                },
-            )
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 24.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                leftIndices.forEach { index ->
+                    WordInputField(
+                        number = index + 1,
+                        word = flatWords[index],
+                        numberOfWords = numberOfWords,
+                        allEnteredWords = enteredWords,
+                        isLastWord = index == wordCount - 1,
+                        isFocused = focusedField == index,
+                        onWordChanged = { newWord ->
+                            val groupIndex = index / GROUPS_OF
+                            val wordIndex = index % GROUPS_OF
+                            val newWords = enteredWords.toMutableList()
+                            val newGroup = newWords[groupIndex].toMutableList()
+                            newGroup[wordIndex] = newWord
+                            newWords[groupIndex] = newGroup
+                            onWordsChanged(newWords)
+                        },
+                        onFocusChanged = { hasFocus ->
+                            if (hasFocus) onFocusChanged(index)
+                        },
+                        onNext = {
+                            if (index < wordCount - 1) {
+                                onFocusChanged(index + 1)
+                            }
+                        },
+                    )
+                }
+            }
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                rightIndices.forEach { index ->
+                    WordInputField(
+                        number = index + 1,
+                        word = flatWords[index],
+                        numberOfWords = numberOfWords,
+                        allEnteredWords = enteredWords,
+                        isLastWord = index == wordCount - 1,
+                        isFocused = focusedField == index,
+                        onWordChanged = { newWord ->
+                            val groupIndex = index / GROUPS_OF
+                            val wordIndex = index % GROUPS_OF
+                            val newWords = enteredWords.toMutableList()
+                            val newGroup = newWords[groupIndex].toMutableList()
+                            newGroup[wordIndex] = newWord
+                            newWords[groupIndex] = newGroup
+                            onWordsChanged(newWords)
+                        },
+                        onFocusChanged = { hasFocus ->
+                            if (hasFocus) onFocusChanged(index)
+                        },
+                        onNext = {
+                            if (index < wordCount - 1) {
+                                onFocusChanged(index + 1)
+                            }
+                        },
+                    )
+                }
+            }
         }
     }
 }
@@ -510,6 +559,8 @@ private fun WordInputField(
     number: Int,
     word: String,
     numberOfWords: NumberOfBip39Words,
+    allEnteredWords: List<List<String>>,
+    isLastWord: Boolean,
     isFocused: Boolean,
     onWordChanged: (String) -> Unit,
     onFocusChanged: (Boolean) -> Unit,
@@ -523,25 +574,37 @@ private fun WordInputField(
             )
         }
 
-    val isValid = word.isNotEmpty() && autocomplete.isBip39Word(word)
+    var suggestions by remember { mutableStateOf<List<String>>(emptyList()) }
+    val focusManager = LocalFocusManager.current
+
+    val isValid = word.isNotEmpty() && autocomplete.isValidWord(word, allEnteredWords)
     val hasInput = word.isNotEmpty()
 
-    val borderColor =
+    // underline color based on state (matching iOS)
+    val underlineColor =
         when {
-            !hasInput -> Color.Transparent
+            !hasInput && !isFocused -> MaterialTheme.colorScheme.onSurfaceVariant
+            !hasInput && isFocused -> MaterialTheme.colorScheme.onSurface
             isValid -> CoveColor.SuccessGreen.copy(alpha = 0.6f)
             else -> CoveColor.ErrorRed.copy(alpha = 0.7f)
         }
 
+    // text color based on state (matching iOS)
     val textColor =
         when {
-            !hasInput -> CoveColor.coveLightGray.copy(alpha = 0.45f)
+            !hasInput -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
             isValid -> CoveColor.SuccessGreen.copy(alpha = 0.8f)
             else -> CoveColor.ErrorRed
         }
 
+    // number color based on state
+    val numberColor =
+        when {
+            !hasInput -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+            else -> MaterialTheme.colorScheme.onSurfaceVariant
+        }
+
     val focusRequester = remember { FocusRequester() }
-    val focusManager = LocalFocusManager.current
 
     LaunchedEffect(isFocused) {
         if (isFocused) {
@@ -550,391 +613,171 @@ private fun WordInputField(
         }
     }
 
-    Row(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .height(40.dp)
-                .background(
-                    color = Color.White.copy(alpha = 0.08f),
-                    shape = RoundedCornerShape(8.dp),
-                ).border(
-                    width = if (borderColor != Color.Transparent) 2.dp else 0.dp,
-                    color = borderColor,
-                    shape = RoundedCornerShape(8.dp),
-                ).padding(horizontal = 12.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = "$number.",
-            color = CoveColor.coveLightGray.copy(alpha = 0.6f),
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.width(28.dp),
-        )
+    // update suggestions when word or focus changes
+    // for last word, show checksum suggestions even when empty
+    // don't show suggestions if word is already valid (user selected one)
+    LaunchedEffect(word, isFocused, allEnteredWords) {
+        suggestions =
+            when {
+                !isFocused -> emptyList()
+                isValid -> emptyList()
+                isLastWord -> autocomplete.autocomplete(word, allEnteredWords)
+                word.isNotEmpty() -> autocomplete.autocomplete(word, allEnteredWords)
+                else -> emptyList()
+            }
+    }
 
-        BasicTextField(
-            value = word,
-            onValueChange = { newValue ->
-                val trimmed = newValue.trim().lowercase()
-                onWordChanged(trimmed)
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Bottom,
+        ) {
+            // number label with monospace font
+            Text(
+                text = "$number.",
+                style = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Monospace),
+                color = numberColor,
+                modifier = Modifier.width(32.dp),
+            )
 
-                // auto-advance when word is complete and valid
-                if (trimmed.isNotEmpty() && autocomplete.isBip39Word(trimmed)) {
-                    onNext()
-                }
-            },
-            textStyle =
-                TextStyle(
-                    color = textColor,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                    textAlign = TextAlign.End,
-                ),
-            singleLine = true,
-            cursorBrush = SolidColor(Color.White),
-            keyboardOptions =
-                KeyboardOptions(
-                    capitalization = KeyboardCapitalization.None,
-                    autoCorrectEnabled = false,
-                    keyboardType = KeyboardType.Ascii,
-                    imeAction = ImeAction.Next,
-                ),
-            keyboardActions =
-                KeyboardActions(
-                    onNext = { onNext() },
-                ),
-            modifier =
-                Modifier
-                    .weight(1f)
-                    .focusRequester(focusRequester)
-                    .onFocusChanged { focusState ->
-                        onFocusChanged(focusState.isFocused)
+            Spacer(Modifier.width(8.dp))
+
+            // text field with underline
+            Box(modifier = Modifier.weight(1f)) {
+                BasicTextField(
+                    value = word,
+                    onValueChange = { newValue ->
+                        val trimmed = newValue.trim().lowercase()
+                        onWordChanged(trimmed)
+
+                        // auto-advance when word is complete and valid
+                        if (trimmed.isNotEmpty() && autocomplete.isValidWord(trimmed, allEnteredWords)) {
+                            suggestions = emptyList()
+                            if (isLastWord) {
+                                // dismiss keyboard, let user manually click Import Wallet
+                                focusManager.clearFocus()
+                            } else {
+                                onNext()
+                            }
+                        }
                     },
-        )
+                    textStyle =
+                        TextStyle(
+                            color = textColor,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                        ),
+                    singleLine = true,
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.onSurface),
+                    keyboardOptions =
+                        KeyboardOptions(
+                            capitalization = KeyboardCapitalization.None,
+                            autoCorrectEnabled = false,
+                            keyboardType = KeyboardType.Ascii,
+                            imeAction = if (isLastWord) ImeAction.Done else ImeAction.Next,
+                        ),
+                    keyboardActions =
+                        KeyboardActions(
+                            onNext = { onNext() },
+                            onDone = { focusManager.clearFocus() },
+                        ),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .focusRequester(focusRequester)
+                            .onFocusChanged { focusState ->
+                                onFocusChanged(focusState.isFocused)
+                                if (!focusState.isFocused) {
+                                    suggestions = emptyList()
+                                }
+                            },
+                )
+
+                // underline
+                Box(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .height(1.dp)
+                            .background(underlineColor)
+                            .align(Alignment.BottomStart),
+                )
+            }
+        }
+
+        // suggestion dropdown
+        if (suggestions.isNotEmpty()) {
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .background(
+                            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                            shape = RoundedCornerShape(bottomStart = 8.dp, bottomEnd = 8.dp),
+                        ),
+            ) {
+                suggestions.forEach { suggestion ->
+                    Text(
+                        text = suggestion,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    onWordChanged(suggestion)
+                                    suggestions = emptyList()
+                                    if (isLastWord) {
+                                        // dismiss keyboard, let user manually click Import Wallet
+                                        focusManager.clearFocus()
+                                    } else {
+                                        onNext()
+                                    }
+                                }.padding(horizontal = 12.dp, vertical = 10.dp),
+                    )
+                }
+            }
+        }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-@androidx.camera.core.ExperimentalGetImage
 private fun QrScannerSheet(
-    numberOfWords: NumberOfBip39Words,
+    app: AppManager,
     onDismiss: () -> Unit,
     onWordsScanned: (List<List<String>>) -> Unit,
 ) {
-    val cameraPermissionState = rememberPermissionState(Manifest.permission.CAMERA)
-
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         containerColor = Color.Black,
     ) {
-        if (cameraPermissionState.status.isGranted) {
-            QrScannerContent(
-                numberOfWords = numberOfWords,
-                onDismiss = onDismiss,
-                onWordsScanned = onWordsScanned,
-                modifier = Modifier.fillMaxSize(),
-            )
-        } else {
-            // camera permission request
-            Column(
-                modifier = Modifier.fillMaxWidth().padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                Text(
-                    text = "Camera Access Required",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                )
-
-                Text(
-                    text = "Please allow camera access to scan QR codes",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White.copy(alpha = 0.7f),
-                    textAlign = TextAlign.Center,
-                )
-
-                TextButton(onClick = { cameraPermissionState.launchPermissionRequest() }) {
-                    Text("Grant Permission", color = Color.White)
-                }
-
-                TextButton(onClick = onDismiss) {
-                    Text("Cancel", color = Color.White.copy(alpha = 0.6f))
-                }
-            }
-        }
-    }
-}
-
-@Composable
-@androidx.camera.core.ExperimentalGetImage
-private fun QrScannerContent(
-    numberOfWords: NumberOfBip39Words,
-    onDismiss: () -> Unit,
-    onWordsScanned: (List<List<String>>) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
-
-    var multiQr by remember { mutableStateOf<MultiQr?>(null) }
-    var scanComplete by remember { mutableStateOf(false) }
-    var totalParts by remember { mutableStateOf<UInt?>(null) }
-    var partsLeft by remember { mutableStateOf<UInt?>(null) }
-
-    val partsScanned =
-        remember(totalParts, partsLeft) {
-            totalParts?.let { total ->
-                partsLeft?.let { left ->
-                    (total - left).toInt()
-                }
-            }
-        }
-
-    val barcodeScanner = remember { BarcodeScanning.getClient() }
-    val executor = remember { Executors.newSingleThreadExecutor() }
-    val cameraProviderRef = remember { mutableStateOf<ProcessCameraProvider?>(null) }
-    val previewRef = remember { mutableStateOf<CameraPreview?>(null) }
-    val analysisRef = remember { mutableStateOf<ImageAnalysis?>(null) }
-
-    Box(modifier = modifier) {
-        if (!scanComplete) {
-            // camera preview
-            AndroidView(
-                factory = { ctx ->
-                    val previewView = PreviewView(ctx)
-                    val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
-
-                    cameraProviderFuture.addListener({
-                        val cameraProvider = cameraProviderFuture.get()
-                        cameraProviderRef.value = cameraProvider
-
-                        val preview =
-                            CameraPreview.Builder().build().also {
-                                it.setSurfaceProvider(previewView.surfaceProvider)
-                            }
-                        previewRef.value = preview
-
-                        val imageAnalysis =
-                            ImageAnalysis
-                                .Builder()
-                                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                                .build()
-                                .also { analysis ->
-                                    analysis.setAnalyzer(executor) { imageProxy ->
-                                        val mediaImage = imageProxy.image
-                                        if (mediaImage != null) {
-                                            val image =
-                                                InputImage.fromMediaImage(
-                                                    mediaImage,
-                                                    imageProxy.imageInfo.rotationDegrees,
-                                                )
-
-                                            val mainExecutor = ContextCompat.getMainExecutor(ctx)
-                                            barcodeScanner
-                                                .process(image)
-                                                .addOnSuccessListener(mainExecutor) { barcodes ->
-                                                    for (barcode in barcodes) {
-                                                        if (barcode.format == Barcode.FORMAT_QR_CODE) {
-                                                            handleQrCodeForSeed(
-                                                                barcode = barcode,
-                                                                numberOfWords = numberOfWords,
-                                                                multiQr = multiQr,
-                                                                onMultiQrUpdate = { multiQr = it },
-                                                                onTotalPartsUpdate = { totalParts = it },
-                                                                onPartsLeftUpdate = { partsLeft = it },
-                                                                onScanComplete = { words ->
-                                                                    scanComplete = true
-                                                                    onWordsScanned(words)
-                                                                },
-                                                                onError = { error ->
-                                                                    Log.e("QrScannerSheet", "Error: $error")
-                                                                    onDismiss()
-                                                                },
-                                                            )
-                                                            break
-                                                        }
-                                                    }
-                                                }.addOnFailureListener(mainExecutor) { e ->
-                                                    Log.e("QrScannerSheet", "Barcode processing failed", e)
-                                                }.addOnCompleteListener {
-                                                    imageProxy.close()
-                                                }
-                                        } else {
-                                            imageProxy.close()
-                                        }
-                                    }
-                                }
-                        analysisRef.value = imageAnalysis
-
-                        val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
-
-                        try {
-                            cameraProvider.unbindAll()
-                            cameraProvider.bindToLifecycle(
-                                lifecycleOwner,
-                                cameraSelector,
-                                preview,
-                                imageAnalysis,
+        QrCodeScanView(
+            showTopBar = false,
+            onScanned = { multiFormat ->
+                when (multiFormat) {
+                    is MultiFormat.Mnemonic -> {
+                        val mnemonicString = multiFormat.v1.words().joinToString(" ")
+                        val words = groupedPlainWordsOf(mnemonic = mnemonicString, groups = GROUPS_OF.toUByte())
+                        onWordsScanned(words)
+                    }
+                    else -> {
+                        onDismiss()
+                        app.alertState =
+                            TaggedItem(
+                                AppAlertState.General(
+                                    title = "Invalid QR Code",
+                                    message = "Please scan a valid seed phrase QR code",
+                                ),
                             )
-                        } catch (e: Exception) {
-                            Log.e("QrScannerSheet", "Camera binding failed", e)
-                        }
-                    }, ContextCompat.getMainExecutor(ctx))
-
-                    previewView
-                },
-                modifier = Modifier.fillMaxSize(),
-            )
-
-            // overlay content
-            Column(
-                modifier =
-                    Modifier
-                        .fillMaxSize()
-                        .padding(16.dp),
-                verticalArrangement = Arrangement.SpaceBetween,
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Spacer(modifier = Modifier.weight(1f))
-
-                Text(
-                    text = "Scan Seed Phrase QR Code",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color.White,
-                )
-
-                Spacer(modifier = Modifier.weight(5f))
-
-                // multi-part progress
-                if (totalParts != null && partsLeft != null) {
-                    Column(
-                        modifier =
-                            Modifier
-                                .background(Color.Black.copy(alpha = 0.7f))
-                                .padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Text(
-                            text = "Scanned $partsScanned of ${totalParts?.toInt()}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium,
-                            color = Color.White,
-                        )
-
-                        Spacer(modifier = Modifier.height(4.dp))
-
-                        Text(
-                            text = "${partsLeft?.toInt()} parts left",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White.copy(alpha = 0.7f),
-                        )
                     }
                 }
-
-                Spacer(modifier = Modifier.weight(1f))
-            }
-        }
-    }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            analysisRef.value?.clearAnalyzer()
-
-            cameraProviderRef.value?.let { cp ->
-                val p = previewRef.value
-                val a = analysisRef.value
-                if (p != null && a != null) {
-                    cp.unbind(p, a)
-                }
-            }
-
-            executor.shutdown()
-            barcodeScanner.close()
-        }
-    }
-}
-
-private fun handleQrCodeForSeed(
-    barcode: Barcode,
-    numberOfWords: NumberOfBip39Words,
-    multiQr: MultiQr?,
-    onMultiQrUpdate: (MultiQr) -> Unit,
-    onTotalPartsUpdate: (UInt) -> Unit,
-    onPartsLeftUpdate: (UInt) -> Unit,
-    onScanComplete: (List<List<String>>) -> Unit,
-    onError: (String) -> Unit,
-) {
-    try {
-        val qrString = barcode.rawValue ?: return
-        val qrBytes = barcode.rawBytes
-
-        // try to parse as MultiQr first (for BBQr/SeedQR)
-        val currentMultiQr =
-            multiQr ?: try {
-                val newMultiQr = MultiQr.newFromString(qr = qrString)
-                onMultiQrUpdate(newMultiQr)
-                onTotalPartsUpdate(newMultiQr.totalParts())
-                newMultiQr
-            } catch (e: Exception) {
-                Log.d("QrScannerSheet", "Not a BBQr, trying plain text: ${e.message}")
-                // try plain text mnemonic
-                tryParsePlainTextOrSeedQr(qrString, qrBytes, numberOfWords, onScanComplete, onError)
-                return
-            }
-
-        // check if it's a BBQr
-        if (!currentMultiQr.isBbqr()) {
-            tryParsePlainTextOrSeedQr(qrString, qrBytes, numberOfWords, onScanComplete, onError)
-            return
-        }
-
-        // add part to BBQr
-        val result = currentMultiQr.addPart(qr = qrString)
-        onPartsLeftUpdate(result.partsLeft())
-
-        if (result.isComplete()) {
-            val finalData = result.finalResult()
-            tryParsePlainTextOrSeedQr(finalData, null, numberOfWords, onScanComplete, onError)
-        }
-    } catch (e: Exception) {
-        onError(e.message ?: "Unknown error")
-    }
-}
-
-private fun tryParsePlainTextOrSeedQr(
-    qrString: String,
-    qrBytes: ByteArray?,
-    numberOfWords: NumberOfBip39Words,
-    onScanComplete: (List<List<String>>) -> Unit,
-    onError: (String) -> Unit,
-) {
-    try {
-        // try parsing as plain text mnemonic first
-        val words = groupedPlainWordsOf(mnemonic = qrString, groups = GROUPS_OF.toUByte())
-        onScanComplete(words)
-    } catch (e: Exception) {
-        Log.d("QrScannerSheet", "Not plain text, trying SeedQR: ${e.message}")
-
-        // try parsing as SeedQR (binary format)
-        qrBytes?.let { bytes ->
-            try {
-                val seedQr = SeedQr.newFromData(data = bytes)
-                val words = seedQr.groupedPlainWords(groupsOf = GROUPS_OF.toUByte())
-                onScanComplete(words)
-                return
-            } catch (e2: Exception) {
-                Log.d("QrScannerSheet", "Not SeedQR binary: ${e2.message}")
-            }
-        }
-
-        onError("Unable to parse QR code as seed phrase")
+            },
+            onDismiss = onDismiss,
+            app = app,
+            modifier = Modifier.fillMaxSize(),
+        )
     }
 }
 
@@ -946,7 +789,7 @@ private fun NfcScannerSheet(
     onWordsScanned: (List<List<String>>) -> Unit,
 ) {
     val context = LocalContext.current
-    val activity = context as? Activity
+    val activity = context.findActivity()
 
     if (activity == null) {
         // fallback if not in activity context
@@ -1037,47 +880,106 @@ private fun NfcScannerSheet(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            if (nfcReader.isScanning) {
-                CircularProgressIndicator(
-                    color = Color.White,
-                    modifier = Modifier.padding(16.dp),
-                )
+            val readingState = nfcReader.readingState
 
-                Icon(
-                    imageVector = Icons.Default.Nfc,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.padding(16.dp),
-                )
+            when (readingState) {
+                NfcReadingState.SUCCESS -> {
+                    // success state - show checkmark
+                    Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = "Success",
+                        modifier = Modifier.size(48.dp),
+                        tint = Color(0xFF4CAF50), // green
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = nfcReader.message.ifEmpty { "Tag read successfully!" },
+                        style = MaterialTheme.typography.title3,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                    )
+                }
+                NfcReadingState.TAG_DETECTED, NfcReadingState.READING -> {
+                    // reading state - show animated dots
+                    var dotCount by remember { mutableIntStateOf(1) }
 
-                Text(
-                    text = "Ready to Scan",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                )
+                    LaunchedEffect(Unit) {
+                        while (true) {
+                            delay(300)
+                            dotCount = (dotCount % 3) + 1
+                        }
+                    }
 
-                Text(
-                    text = nfcReader.message,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White.copy(alpha = 0.7f),
-                    textAlign = TextAlign.Center,
-                )
-            } else {
-                // show icon and error message when not scanning
-                Icon(
-                    imageVector = Icons.Default.Nfc,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.padding(16.dp),
-                )
+                    CircularProgressIndicator(
+                        color = Color.White,
+                        modifier = Modifier.padding(16.dp),
+                    )
 
-                Text(
-                    text = "NFC Unavailable",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                )
+                    Icon(
+                        imageVector = Icons.Default.Nfc,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.padding(16.dp),
+                    )
+
+                    Text(
+                        text = "Reading" + ".".repeat(dotCount),
+                        style = MaterialTheme.typography.title3,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                    )
+
+                    Text(
+                        text = "Please hold still",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White.copy(alpha = 0.7f),
+                        textAlign = TextAlign.Center,
+                    )
+                }
+                NfcReadingState.WAITING -> {
+                    if (nfcReader.isScanning) {
+                        CircularProgressIndicator(
+                            color = Color.White,
+                            modifier = Modifier.padding(16.dp),
+                        )
+
+                        Icon(
+                            imageVector = Icons.Default.Nfc,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.padding(16.dp),
+                        )
+
+                        Text(
+                            text = "Ready to Scan",
+                            style = MaterialTheme.typography.title3,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                        )
+
+                        Text(
+                            text = nfcReader.message,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.White.copy(alpha = 0.7f),
+                            textAlign = TextAlign.Center,
+                        )
+                    } else {
+                        // show icon and error message when not scanning
+                        Icon(
+                            imageVector = Icons.Default.Nfc,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.padding(16.dp),
+                        )
+
+                        Text(
+                            text = "NFC Unavailable",
+                            style = MaterialTheme.typography.title3,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                        )
+                    }
+                }
             }
 
             // show error message regardless of scanning state

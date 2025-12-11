@@ -13,3 +13,5 @@ log.txt
 .claude
 *.part
 *.lck
+*.salive
+android/.kotlin/

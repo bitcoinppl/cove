@@ -11,7 +11,7 @@ android {
 
     defaultConfig {
         applicationId = "org.bitcoinppl.cove"
-        minSdk = 24
+        minSdk = 33
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
@@ -22,9 +22,16 @@ android {
         }
     }
 
+    signingConfigs {
+        getByName("debug") {
+            // uses default debug keystore
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
@@ -58,7 +65,7 @@ dependencies {
 
     implementation("androidx.core:core-ktx:1.17.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.9.3")
-    implementation("androidx.activity:activity-compose:1.10.1")
+    implementation("androidx.activity:activity-compose:1.12.0")
     implementation(platform("androidx.compose:compose-bom:2025.08.01"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
@@ -99,10 +106,15 @@ dependencies {
     // Coil for image loading (including SVG support)
     implementation("io.coil-kt.coil3:coil-compose:3.0.4")
     implementation("io.coil-kt.coil3:coil-svg:3.0.4")
+
+    // Navigation 3 for idiomatic Android navigation
+    implementation("androidx.navigation3:navigation3-runtime:1.0.0")
+    implementation("androidx.navigation3:navigation3-ui:1.0.0")
 }
 
 ktlint {
     filter {
         exclude("**/cove_core/**")
+        exclude("**/uniffi/**")
     }
 }

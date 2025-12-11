@@ -15,6 +15,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.ui.theme.coveColors
+import org.bitcoinppl.cove.views.BalanceAutoSizeText
 import org.bitcoinppl.cove.views.ImageButton
 import java.util.Locale
 
@@ -249,7 +251,7 @@ fun NetworkFeeBottomSheet(
             modifier = Modifier.fillMaxWidth(),
             colors =
                 ButtonDefaults.buttonColors(
-                    containerColor = CoveColor.midnightBlue,
+                    containerColor = MaterialTheme.coveColors.midnightBtn,
                     contentColor = Color.White,
                 ),
         )
@@ -271,7 +273,7 @@ private fun FeeOptionCard(
         shape = RoundedCornerShape(16.dp),
         colors =
             CardDefaults.cardColors(
-                containerColor = if (isSelected) CoveColor.midnightBlue else MaterialTheme.colorScheme.surfaceVariant,
+                containerColor = if (isSelected) MaterialTheme.coveColors.midnightBtn else MaterialTheme.colorScheme.surfaceVariant,
             ),
         border =
             androidx.compose.foundation.BorderStroke(
@@ -404,10 +406,11 @@ fun CustomNetworkFeeBottomSheet(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Text(
+            BalanceAutoSizeText(
                 text = String.format(Locale.US, "%.2f", feeRate),
                 color = MaterialTheme.colorScheme.onSurface,
-                fontSize = 48.sp,
+                baseFontSize = 48.sp,
+                minimumScaleFactor = 0.5f,
                 fontWeight = FontWeight.Bold,
             )
             Row(
@@ -479,7 +482,7 @@ fun CustomNetworkFeeBottomSheet(
             modifier = Modifier.fillMaxWidth(),
             colors =
                 ButtonDefaults.buttonColors(
-                    containerColor = CoveColor.midnightBlue,
+                    containerColor = MaterialTheme.coveColors.midnightBtn,
                     contentColor = Color.White,
                 ),
         )

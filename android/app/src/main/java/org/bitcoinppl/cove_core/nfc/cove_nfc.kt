@@ -2719,6 +2719,15 @@ sealed class NdefPayload {
         companion object
     }
     
+    data class Uri(
+        val v1: kotlin.String) : NdefPayload()
+        
+    {
+        
+
+        companion object
+    }
+    
     data class Data(
         val v1: kotlin.ByteArray) : NdefPayload()
         
@@ -2747,7 +2756,10 @@ public object FfiConverterTypeNdefPayload : FfiConverterRustBuffer<NdefPayload>{
             1 -> NdefPayload.Text(
                 FfiConverterTypeTextPayload.read(buf),
                 )
-            2 -> NdefPayload.Data(
+            2 -> NdefPayload.Uri(
+                FfiConverterString.read(buf),
+                )
+            3 -> NdefPayload.Data(
                 FfiConverterByteArray.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -2760,6 +2772,13 @@ public object FfiConverterTypeNdefPayload : FfiConverterRustBuffer<NdefPayload>{
             (
                 4UL
                 + FfiConverterTypeTextPayload.allocationSize(value.v1)
+            )
+        }
+        is NdefPayload.Uri -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
             )
         }
         is NdefPayload.Data -> {
@@ -2778,8 +2797,13 @@ public object FfiConverterTypeNdefPayload : FfiConverterRustBuffer<NdefPayload>{
                 FfiConverterTypeTextPayload.write(value.v1, buf)
                 Unit
             }
-            is NdefPayload.Data -> {
+            is NdefPayload.Uri -> {
                 buf.putInt(2)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is NdefPayload.Data -> {
+                buf.putInt(3)
                 FfiConverterByteArray.write(value.v1, buf)
                 Unit
             }

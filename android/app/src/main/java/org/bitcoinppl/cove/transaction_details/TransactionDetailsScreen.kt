@@ -5,14 +5,23 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -27,11 +36,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.NorthEast
 import androidx.compose.material.icons.filled.SouthWest
 import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -45,21 +54,25 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -68,18 +81,29 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.components.ConfirmationIndicatorView
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.ui.theme.coveColors
+import org.bitcoinppl.cove.ui.theme.isLight
+import org.bitcoinppl.cove.utils.toColor
+import org.bitcoinppl.cove.views.AutoSizeText
+import org.bitcoinppl.cove.views.BalanceAutoSizeText
 import org.bitcoinppl.cove.views.ImageButton
+import org.bitcoinppl.cove_core.HeaderIconPresenter
 import org.bitcoinppl.cove_core.TransactionDetails
+import org.bitcoinppl.cove_core.TransactionState
 import org.bitcoinppl.cove_core.WalletManagerAction
 import org.bitcoinppl.cove_core.WalletMetadata
-import org.bitcoinppl.cove_core.types.BitcoinUnit
-import kotlin.math.min
+import org.bitcoinppl.cove_core.types.FfiColorScheme
+import org.bitcoinppl.cove_core.types.TransactionDirection
 
 private const val INITIAL_DELAY_MS = 2000L
 private const val FREQUENT_POLL_INTERVAL_MS = 30000L
@@ -99,17 +123,32 @@ fun TransactionDetailsScreen(
     details: TransactionDetails,
 ) {
     val context = LocalContext.current
-    val metadata = manager.walletMetadata
+    val metadata = manager.walletMetadata ?: return
+    val scope = rememberCoroutineScope()
+    val txId = details.txId()
 
-    // state for confirmation polling
+    // read transaction details from cache (observable), fallback to passed-in details
+    val transactionDetails = manager.transactionDetailsCache[txId] ?: details
+
+    // state for confirmation polling and pull-to-refresh
     var numberOfConfirmations by remember { mutableStateOf<Int?>(null) }
-    var transactionDetails by remember { mutableStateOf(details) }
+    var isRefreshing by remember { mutableStateOf(false) }
     var feeFiatFmt by remember { mutableStateOf("---") }
     var sentSansFeeFiatFmt by remember { mutableStateOf("---") }
     var totalSpentFiatFmt by remember { mutableStateOf("---") }
 
-    // get current color scheme
-    val isDark = androidx.compose.foundation.isSystemInDarkTheme()
+    // get current color scheme (respects in-app theme toggle)
+    val isDark = !MaterialTheme.colorScheme.isLight
+
+    // immediately fetch fresh transaction details on screen load
+    LaunchedEffect(Unit) {
+        try {
+            val freshDetails = manager.rust.transactionDetails(txId = txId)
+            manager.updateTransactionDetailsCache(txId, freshDetails)
+        } catch (e: Exception) {
+            android.util.Log.e("TransactionDetails", "error fetching fresh details", e)
+        }
+    }
 
     // load fiat amounts
     LaunchedEffect(transactionDetails) {
@@ -134,7 +173,7 @@ fun TransactionDetailsScreen(
     }
 
     // poll for confirmations if not fully confirmed
-    LaunchedEffect(transactionDetails.txId()) {
+    LaunchedEffect(txId) {
         if (!transactionDetails.isConfirmed()) {
             delay(INITIAL_DELAY_MS)
         }
@@ -142,15 +181,20 @@ fun TransactionDetailsScreen(
         var needsFrequentCheck = true
         var errors = 0
 
-        while (true) {
+        while (isActive) {
             try {
-                // refresh transaction details
-                transactionDetails = manager.rust.transactionDetails(txId = transactionDetails.txId())
+                ensureActive()
 
-                // get confirmations
-                val blockNumber = transactionDetails.blockNumber()
+                // refresh transaction details and update cache
+                val freshDetails = manager.rust.transactionDetails(txId = txId)
+                if (!isActive) break
+                manager.updateTransactionDetailsCache(txId, freshDetails)
+
+                // get confirmations from fresh details
+                val blockNumber = freshDetails.blockNumber()
                 if (blockNumber != null) {
                     val confirmations = manager.rust.numberOfConfirmations(blockHeight = blockNumber)
+                    if (!isActive) break
                     numberOfConfirmations = confirmations.toInt()
 
                     // if fully confirmed, slow down polling
@@ -168,6 +212,9 @@ fun TransactionDetailsScreen(
                 } else {
                     delay(NORMAL_POLL_INTERVAL_MS)
                 }
+            } catch (e: CancellationException) {
+                // composable left composition, exit gracefully
+                break
             } catch (e: Exception) {
                 android.util.Log.e("TransactionDetails", "error polling confirmations", e)
                 errors++
@@ -182,31 +229,44 @@ fun TransactionDetailsScreen(
     val snackbarHostState = remember { SnackbarHostState() }
 
     // theme colors
-    val bg = if (isDark) Color(0xFF000000) else Color(0xFFFFFFFF)
-    val fg = if (isDark) Color(0xFFEFEFEF) else Color(0xFF101010)
-    val sub = if (isDark) Color(0xFFB8B8B8) else Color(0xFF8F8F95)
-    val checkCircle = if (isDark) Color(0xFF0F0F12) else Color(0xFF0F1012)
+    val bg = MaterialTheme.colorScheme.background
+    val fg = MaterialTheme.colorScheme.onBackground
+    val sub = MaterialTheme.colorScheme.onSurfaceVariant
     val chipBg = CoveColor.TransactionReceived
-
-    val ringColors: List<Color> =
-        if (isDark) {
-            listOf(
-                Color.White.copy(alpha = 0.60f),
-                Color.White.copy(alpha = 0.35f),
-                Color.White.copy(alpha = 0.18f),
-            )
-        } else {
-            listOf(
-                Color.Black.copy(alpha = 0.50f),
-                Color.Black.copy(alpha = 0.30f),
-                Color.Black.copy(alpha = 0.15f),
-            )
-        }
 
     // derive UI state from transaction details
     val isSent = transactionDetails.isSent()
     val isReceived = transactionDetails.isReceived()
     val isConfirmed = transactionDetails.isConfirmed()
+
+    // header icon presenter for dynamic colors
+    val presenter = remember { HeaderIconPresenter() }
+    val txState = if (isConfirmed) TransactionState.CONFIRMED else TransactionState.PENDING
+    val direction = if (isSent) TransactionDirection.OUTGOING else TransactionDirection.INCOMING
+    val colorScheme = if (isDark) FfiColorScheme.DARK else FfiColorScheme.LIGHT
+    val confirmationCount = numberOfConfirmations?.toLong() ?: if (isConfirmed) 5L else 0L
+
+    // get colors from presenter (matching iOS)
+    val circleColor = presenter.backgroundColor(txState, direction, colorScheme, confirmationCount).toColor()
+    val iconColor = presenter.iconColor(txState, direction, colorScheme, confirmationCount).toColor()
+
+    // get ring colors (matching iOS opacities)
+    val ringOpacities = if (isDark) listOf(0.88f, 0.66f, 0.33f) else listOf(0.44f, 0.24f, 0.10f)
+    val ringColors: List<Color> =
+        listOf(
+            presenter
+                .ringColor(txState, colorScheme, direction, confirmationCount, 1L)
+                .toColor()
+                .let { color -> color.copy(alpha = color.alpha * ringOpacities[0]) },
+            presenter
+                .ringColor(txState, colorScheme, direction, confirmationCount, 2L)
+                .toColor()
+                .let { color -> color.copy(alpha = color.alpha * ringOpacities[1]) },
+            presenter
+                .ringColor(txState, colorScheme, direction, confirmationCount, 3L)
+                .toColor()
+                .let { color -> color.copy(alpha = color.alpha * ringOpacities[2]) },
+        )
 
     val headerTitle =
         stringResource(
@@ -218,7 +278,13 @@ fun TransactionDetailsScreen(
                 },
         )
 
-    val actionLabelRes = if (isSent) R.string.label_transaction_sent else R.string.label_transaction_received
+    val actionLabelRes =
+        when {
+            isConfirmed && isSent -> R.string.label_transaction_sent
+            isConfirmed && !isSent -> R.string.label_transaction_received
+            !isConfirmed && isSent -> R.string.label_transaction_sending
+            else -> R.string.label_transaction_receiving
+        }
     val actionIcon = if (isSent) Icons.Filled.NorthEast else Icons.Filled.SouthWest
 
     // format date
@@ -240,14 +306,14 @@ fun TransactionDetailsScreen(
     val txAmountSecondary by androidx.compose.runtime.produceState(initialValue = "---") {
         value =
             try {
-                "≈ ${transactionDetails.amountFiatFmt()}"
+                transactionDetails.amountFiatFmt()
             } catch (e: Exception) {
                 "---"
             }
     }
 
     // details expanded from metadata
-    val isExpanded = metadata?.detailsExpanded ?: false
+    val isExpanded = metadata.detailsExpanded
 
     Scaffold(
         containerColor = bg,
@@ -273,202 +339,288 @@ fun TransactionDetailsScreen(
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
-        Box(
+        // parallax + fade effect on background
+        val scrollState = rememberScrollState()
+        val scrollOffset = scrollState.value.toFloat()
+        val parallaxOffset = (-60).dp - (scrollOffset * 0.3f).dp
+        val fadeAlpha = (1f - (scrollOffset / 275f)).coerceIn(0f, if (isDark) 1.0f else 0.40f)
+
+        PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = {
+                scope.launch {
+                    isRefreshing = true
+                    try {
+                        val freshDetails = manager.rust.transactionDetails(txId = txId)
+                        manager.updateTransactionDetailsCache(txId, freshDetails)
+
+                        // also update confirmations
+                        val blockNumber = freshDetails.blockNumber()
+                        if (blockNumber != null) {
+                            val confirmations = manager.rust.numberOfConfirmations(blockHeight = blockNumber)
+                            numberOfConfirmations = confirmations.toInt()
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("TransactionDetails", "error refreshing details", e)
+                    }
+                    isRefreshing = false
+                }
+            },
             modifier =
                 Modifier
                     .fillMaxSize()
-                    .padding(padding),
+                    .padding(bottom = padding.calculateBottomPadding()),
         ) {
-            Image(
-                painter = painterResource(id = R.drawable.image_chain_code_pattern_horizontal),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier =
-                    Modifier
-                        .fillMaxHeight()
-                        .align(Alignment.TopCenter)
-                        .offset(y = (-60).dp)
-                        .graphicsLayer(alpha = if (isDark) 0.75f else 0.15f),
-            )
-
-            Column(
-                modifier =
-                    Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 20.dp)
-                        .verticalScroll(rememberScrollState()),
-                horizontalAlignment = Alignment.CenterHorizontally,
+            BoxWithConstraints(
+                modifier = Modifier.fillMaxSize(),
             ) {
-                Spacer(Modifier.height(16.dp))
+                val minHeight = maxHeight
 
-                CheckWithRingsWidget(
-                    diameter = 180.dp,
-                    circleColor = checkCircle,
-                    ringColors = ringColors,
-                    checkColor = Color.White,
+                Image(
+                    painter = painterResource(id = R.drawable.image_chain_code_pattern_horizontal),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier =
+                        Modifier
+                            .fillMaxHeight()
+                            .align(Alignment.TopCenter)
+                            .offset(y = parallaxOffset)
+                            .alpha(fadeAlpha),
                 )
-
-                Spacer(Modifier.height(16.dp))
-
-                Text(
-                    headerTitle,
-                    color = fg,
-                    fontSize = 32.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    lineHeight = 36.sp,
-                )
-
-                Spacer(Modifier.height(4.dp))
-
-                TransactionLabelView(
-                    transactionDetails = transactionDetails,
-                    manager = manager,
-                    secondaryColor = sub,
-                    snackbarHostState = snackbarHostState,
-                )
-
-                Spacer(Modifier.height(24.dp))
-
-                Text(
-                    message,
-                    color = sub,
-                    fontSize = 16.sp,
-                    textAlign = TextAlign.Center,
-                    lineHeight = 22.sp,
-                )
-
-                Spacer(Modifier.height(32.dp))
-
-                Text(
-                    txAmountPrimary,
-                    color = fg,
-                    fontSize = 36.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    lineHeight = 44.sp,
-                )
-
-                Spacer(Modifier.height(4.dp))
-
-                Text(
-                    txAmountSecondary,
-                    color = fg,
-                    fontSize = 18.sp,
-                )
-
-                Spacer(Modifier.height(32.dp))
-
-                if (isDark) {
-                    OutlinedButton(
-                        onClick = {},
-                        shape = RoundedCornerShape(24.dp),
-                        border = BorderStroke(1.dp, fg),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = fg),
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(actionIcon, contentDescription = null)
-                            Spacer(Modifier.size(8.dp))
-                            Text(
-                                text = stringResource(actionLabelRes),
-                                fontWeight = FontWeight.Normal,
-                                fontSize = 16.sp,
-                            )
-                        }
-                    }
-                } else {
-                    Button(
-                        onClick = {},
-                        shape = RoundedCornerShape(24.dp),
-                        colors =
-                            ButtonDefaults.buttonColors(
-                                containerColor = Color.Black,
-                                contentColor = Color.White,
-                            ),
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(actionIcon, contentDescription = null)
-                            Spacer(Modifier.size(8.dp))
-                            Text(
-                                text = stringResource(actionLabelRes),
-                                fontWeight = FontWeight.Normal,
-                                fontSize = 16.sp,
-                            )
-                        }
-                    }
-                }
-
-                // show confirmation indicator if < 3 confirmations
-                if (numberOfConfirmations != null && numberOfConfirmations!! < 3) {
-                    Spacer(Modifier.height(24.dp))
-                    Box(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .height(1.dp)
-                                .background(if (isDark) Color(0xFF222428) else Color(0xFFE4E5E7)),
-                    )
-                    Spacer(Modifier.height(24.dp))
-                    ConfirmationIndicatorView(
-                        current = numberOfConfirmations!!,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-
-                if (isExpanded) {
-                    TransactionDetailsWidget(
-                        manager = manager,
-                        transactionDetails = transactionDetails,
-                        numberOfConfirmations = numberOfConfirmations,
-                        isDark = isDark,
-                        feeFiatFmt = feeFiatFmt,
-                        sentSansFeeFiatFmt = sentSansFeeFiatFmt,
-                        totalSpentFiatFmt = totalSpentFiatFmt,
-                        metadata = metadata,
-                    )
-                }
 
                 Column(
                     modifier =
                         Modifier
                             .fillMaxWidth()
-                            .padding(bottom = 16.dp),
+                            .defaultMinSize(minHeight = minHeight)
+                            .padding(horizontal = 20.dp)
+                            .verticalScroll(scrollState),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    ImageButton(
-                        text = stringResource(R.string.btn_view_in_explorer),
-                        onClick = {
-                            val url = transactionDetails.transactionUrl()
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                            context.startActivity(intent)
-                        },
-                        colors =
-                            ButtonDefaults.buttonColors(
-                                containerColor = if (isDark) MaterialTheme.colorScheme.surfaceVariant else CoveColor.midnightBlue,
-                                contentColor = if (isDark) MaterialTheme.colorScheme.outline else Color.White,
-                            ),
-                        modifier =
-                            Modifier
-                                .fillMaxWidth(),
+                    // add top padding to account for top bar
+                    Spacer(Modifier.height(padding.calculateTopPadding() + 16.dp))
+
+                    val configuration = LocalConfiguration.current
+                    val headerSize = (configuration.screenWidthDp * 0.33f).dp
+
+                    CheckWithRingsWidget(
+                        diameter = headerSize,
+                        circleColor = circleColor,
+                        ringColors = ringColors,
+                        iconColor = iconColor,
+                        isConfirmed = isConfirmed,
                     )
 
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(16.dp))
 
-                    TextButton(
-                        onClick = {
-                            manager.dispatch(WalletManagerAction.ToggleDetailsExpanded)
-                        },
-                        modifier = Modifier.align(Alignment.CenterHorizontally),
+                    Text(
+                        headerTitle,
+                        color = fg,
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        lineHeight = 32.sp,
+                    )
+
+                    Spacer(Modifier.height(4.dp))
+
+                    TransactionLabelView(
+                        transactionDetails = transactionDetails,
+                        manager = manager,
+                        secondaryColor = sub,
+                        snackbarHostState = snackbarHostState,
+                    )
+
+                    Spacer(Modifier.height(24.dp))
+
+                    // show status message with date
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Text(
-                            text = stringResource(if (isExpanded) R.string.btn_hide_details else R.string.btn_show_details),
-                            color = sub,
-                            fontSize = 14.sp,
-                            textAlign = TextAlign.Center,
-                            fontWeight = FontWeight.SemiBold,
+                        if (isConfirmed && formattedDate.isNotEmpty()) {
+                            Text(
+                                text =
+                                    if (isSent) {
+                                        "Your transaction was sent on"
+                                    } else {
+                                        "Your transaction was successfully received"
+                                    },
+                                color = sub,
+                                fontSize = 16.sp,
+                                textAlign = TextAlign.Center,
+                                lineHeight = 22.sp,
+                            )
+                            Text(
+                                text = formattedDate,
+                                color = sub,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Medium,
+                                textAlign = TextAlign.Center,
+                                lineHeight = 22.sp,
+                            )
+                        } else if (!isConfirmed) {
+                            Text(
+                                text = "Your transaction is pending.",
+                                color = sub,
+                                fontSize = 16.sp,
+                                textAlign = TextAlign.Center,
+                                lineHeight = 22.sp,
+                            )
+                            Text(
+                                text = "Please check back soon for an update.",
+                                color = sub,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                textAlign = TextAlign.Center,
+                                lineHeight = 22.sp,
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(32.dp))
+
+                    BalanceAutoSizeText(
+                        txAmountPrimary,
+                        color = fg,
+                        baseFontSize = 36.sp,
+                        minimumScaleFactor = 0.01f,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+
+                    Spacer(Modifier.height(4.dp))
+
+                    AutoSizeText(
+                        txAmountSecondary,
+                        color = fg.copy(alpha = 0.8f),
+                        maxFontSize = 18.sp,
+                        minimumScaleFactor = 0.90f,
+                    )
+
+                    Spacer(Modifier.height(32.dp))
+
+                    // transaction status capsule matching iOS styling
+                    val systemGreen = if (isDark) CoveColor.SystemGreenDark else CoveColor.SystemGreenLight
+                    val capsuleConfig =
+                        when {
+                            isReceived && isConfirmed -> {
+                                Triple(
+                                    systemGreen.copy(alpha = 0.2f), // green with 20% opacity
+                                    systemGreen, // green text
+                                    false,
+                                )
+                            }
+                            isSent && isConfirmed -> {
+                                Triple(
+                                    Color.Black, // black background
+                                    Color.White, // white text
+                                    true,
+                                ) // white stroke
+                            }
+                            else -> {
+                                Triple(
+                                    CoveColor.coolGray, // coolGray background for pending (iOS parity)
+                                    Color.Black.copy(alpha = 0.8f), // black text at 80% opacity
+                                    false,
+                                )
+                            }
+                        }
+
+                    TransactionCapsule(
+                        text = stringResource(actionLabelRes),
+                        icon = actionIcon,
+                        backgroundColor = capsuleConfig.first,
+                        textColor = capsuleConfig.second,
+                        showStroke = capsuleConfig.third,
+                    )
+
+                    Spacer(Modifier.height(32.dp))
+
+                    // show confirmation indicator if < 3 confirmations
+                    if (numberOfConfirmations != null && numberOfConfirmations!! < 3) {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Spacer(Modifier.height(24.dp))
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .height(1.dp)
+                                        .background(MaterialTheme.colorScheme.outlineVariant),
+                            )
+                            Spacer(Modifier.height(24.dp))
+                            ConfirmationIndicatorView(
+                                current = numberOfConfirmations!!,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            // only add spacing if details are collapsed
+                            if (!isExpanded) {
+                                Spacer(Modifier.height(32.dp))
+                            }
+                        }
+                    }
+
+                    AnimatedVisibility(
+                        visible = isExpanded,
+                        enter = expandVertically() + fadeIn(),
+                        exit = shrinkVertically() + fadeOut(),
+                    ) {
+                        TransactionDetailsWidget(
+                            transactionDetails = transactionDetails,
+                            numberOfConfirmations = numberOfConfirmations,
+                            feeFiatFmt = feeFiatFmt,
+                            sentSansFeeFiatFmt = sentSansFeeFiatFmt,
+                            totalSpentFiatFmt = totalSpentFiatFmt,
+                            metadata = metadata,
                         )
+                    }
+
+                    // flexible spacer to push buttons to bottom (matches iOS Spacer() behavior)
+                    Spacer(Modifier.weight(1f))
+
+                    Column(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        ImageButton(
+                            text = stringResource(R.string.btn_view_in_explorer),
+                            onClick = {
+                                val url = transactionDetails.transactionUrl()
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                context.startActivity(intent)
+                            },
+                            colors =
+                                ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.coveColors.midnightBtn,
+                                    contentColor = Color.White,
+                                ),
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth(),
+                        )
+
+                        Spacer(Modifier.height(16.dp))
+
+                        TextButton(
+                            onClick = {
+                                manager.dispatch(WalletManagerAction.ToggleDetailsExpanded)
+                            },
+                            modifier =
+                                Modifier
+                                    .align(Alignment.CenterHorizontally)
+                                    .offset(y = (-20).dp),
+                        ) {
+                            Text(
+                                text = stringResource(if (isExpanded) R.string.btn_hide_details else R.string.btn_show_details),
+                                color = sub.copy(alpha = 0.8f),
+                                fontSize = 13.sp,
+                                textAlign = TextAlign.Center,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
                     }
                 }
             }
@@ -478,64 +630,21 @@ fun TransactionDetailsScreen(
 
 @Composable
 private fun TransactionDetailsWidget(
-    manager: WalletManager,
     transactionDetails: TransactionDetails,
     numberOfConfirmations: Int?,
-    isDark: Boolean,
     feeFiatFmt: String,
     sentSansFeeFiatFmt: String,
     totalSpentFiatFmt: String,
-    metadata: WalletMetadata?,
+    metadata: WalletMetadata,
 ) {
-    val dividerColor = if (isDark) Color(0xFF222428) else Color(0xFFE4E5E7)
-    val sub = if (isDark) Color(0xFFB8B8B8) else Color(0xFF8F8F95)
-    val fg = if (isDark) Color(0xFFEFEFEF) else Color(0xFF101010)
+    val dividerColor = MaterialTheme.colorScheme.outlineVariant
+    val sub = MaterialTheme.colorScheme.onSurfaceVariant
+    val fg = MaterialTheme.colorScheme.onBackground
     val isSent = transactionDetails.isSent()
     val isConfirmed = transactionDetails.isConfirmed()
 
-    Spacer(Modifier.height(48.dp))
-    Box(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .height(1.dp)
-                .background(dividerColor),
-    )
-    Spacer(Modifier.height(24.dp))
-
-    // show confirmations if confirmed
-    if (isConfirmed) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Text(
-                stringResource(R.string.label_confirmations),
-                color = if (isDark) Color(0xFFB8B8B8) else Color(0xFF6F6F75),
-                fontSize = 14.sp,
-            )
-            Spacer(Modifier.height(8.dp))
-            if (numberOfConfirmations != null) {
-                Text(
-                    numberOfConfirmations.toString(),
-                    color = fg,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
-            Spacer(Modifier.height(14.dp))
-
-            Text(
-                stringResource(R.string.label_block_number),
-                color = if (isDark) Color(0xFFB8B8B8) else Color(0xFF6F6F75),
-                fontSize = 14.sp,
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                transactionDetails.blockNumberFmt() ?: "",
-                color = fg,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
-        }
-        Spacer(Modifier.height(24.dp))
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Spacer(Modifier.height(48.dp))
         Box(
             modifier =
                 Modifier
@@ -544,94 +653,107 @@ private fun TransactionDetailsWidget(
                     .background(dividerColor),
         )
         Spacer(Modifier.height(24.dp))
-    }
 
-    // address (sent to / received from)
-    val addressLabel =
-        stringResource(
-            if (isSent) R.string.label_sent_to else R.string.label_received_from,
-        )
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            addressLabel,
-            color = if (isDark) Color(0xFFB8B8B8) else Color(0xFF6F6F75),
-            fontSize = 16.sp,
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            transactionDetails.addressSpacedOut(),
-            color = fg,
-            fontSize = 20.sp,
-            fontWeight = FontWeight.SemiBold,
-            lineHeight = 24.sp,
-        )
-
-        // show block number and confirmations for confirmed sent transactions
-        if (isSent && isConfirmed) {
-            Spacer(Modifier.height(8.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
+        // show confirmations if confirmed
+        if (isConfirmed) {
+            Column(modifier = Modifier.fillMaxWidth()) {
                 Text(
-                    transactionDetails.blockNumberFmt() ?: "",
+                    stringResource(R.string.label_confirmations),
                     color = sub,
-                    fontSize = 14.sp,
+                    fontSize = 12.sp,
                 )
-                Text(" | ", color = sub, fontSize = 14.sp)
+                Spacer(Modifier.height(8.dp))
                 if (numberOfConfirmations != null) {
                     Text(
                         numberOfConfirmations.toString(),
+                        color = fg,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+                Spacer(Modifier.height(14.dp))
+
+                Text(
+                    stringResource(R.string.label_block_number),
+                    color = sub,
+                    fontSize = 12.sp,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    transactionDetails.blockNumberFmt() ?: "",
+                    color = fg,
+                    fontSize = 14.sp, // iOS footnote parity
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+            Spacer(Modifier.height(24.dp))
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .background(dividerColor),
+            )
+            Spacer(Modifier.height(24.dp))
+        }
+
+        // address (sent to / received from)
+        val addressLabel =
+            stringResource(
+                if (isSent) R.string.label_sent_to else R.string.label_received_from,
+            )
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Text(
+                addressLabel,
+                color = sub,
+                fontSize = 12.sp,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                transactionDetails.addressSpacedOut(),
+                color = fg,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                lineHeight = 18.sp,
+            )
+
+            // show block number and confirmations for confirmed sent transactions
+            if (isSent && isConfirmed) {
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        transactionDetails.blockNumberFmt() ?: "",
                         color = sub,
                         fontSize = 14.sp,
                     )
-                    Spacer(Modifier.size(4.dp))
-                    Box(
-                        modifier =
-                            Modifier
-                                .size(14.dp)
-                                .clip(CircleShape)
-                                .background(CoveColor.SuccessGreen),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Check,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(10.dp),
+                    Text(" | ", color = sub, fontSize = 14.sp)
+                    if (numberOfConfirmations != null) {
+                        Text(
+                            numberOfConfirmations.toString(),
+                            color = sub,
+                            fontSize = 14.sp,
                         )
+                        Spacer(Modifier.size(4.dp))
+                        Box(
+                            modifier =
+                                Modifier
+                                    .size(14.dp)
+                                    .clip(CircleShape)
+                                    .background(CoveColor.SuccessGreen),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(10.dp),
+                            )
+                        }
                     }
                 }
             }
         }
-    }
-    Spacer(Modifier.height(24.dp))
-    Box(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .height(1.dp)
-                .background(dividerColor),
-    )
-    Spacer(Modifier.height(24.dp))
-
-    // network fee (for sent transactions)
-    if (isSent) {
-        DetailsWidget(
-            label = stringResource(R.string.label_network_fee),
-            primary = transactionDetails.feeFmt(unit = metadata?.selectedUnit ?: BitcoinUnit.SAT),
-            secondary = "≈ $feeFiatFmt",
-            isDark = isDark,
-            showInfoIcon = true,
-            onInfoClick = { /* TODO: show fee info */ },
-        )
         Spacer(Modifier.height(24.dp))
-
-        DetailsWidget(
-            label = stringResource(R.string.label_recipient_receives),
-            primary = transactionDetails.sentSansFeeFmt(unit = metadata?.selectedUnit ?: BitcoinUnit.SAT),
-            secondary = "≈ $sentSansFeeFiatFmt",
-            isDark = isDark,
-        )
-        Spacer(Modifier.height(24.dp))
-
         Box(
             modifier =
                 Modifier
@@ -641,25 +763,49 @@ private fun TransactionDetailsWidget(
         )
         Spacer(Modifier.height(24.dp))
 
-        DetailsWidget(
-            label = stringResource(R.string.label_total_spent),
-            primary = transactionDetails.amountFmt(unit = metadata?.selectedUnit ?: BitcoinUnit.SAT),
-            secondary = "≈ $totalSpentFiatFmt",
-            isDark = isDark,
-            isTotal = true,
-        )
-    } else {
-        // received transaction details
-        ReceivedTransactionDetails(
-            transactionDetails = transactionDetails,
-            numberOfConfirmations = numberOfConfirmations,
-            isDark = isDark,
-            sub = sub,
-            fg = fg,
-        )
-    }
+        // network fee (for sent transactions)
+        if (isSent) {
+            DetailsWidget(
+                label = stringResource(R.string.label_network_fee),
+                primary = transactionDetails.feeFmt(unit = metadata.selectedUnit),
+                secondary = feeFiatFmt,
+                showInfoIcon = true,
+                onInfoClick = { /* TODO: show fee info */ },
+            )
+            Spacer(Modifier.height(24.dp))
 
-    Spacer(Modifier.height(72.dp))
+            DetailsWidget(
+                label = stringResource(R.string.label_recipient_receives),
+                primary = transactionDetails.sentSansFeeFmt(unit = metadata.selectedUnit),
+                secondary = sentSansFeeFiatFmt,
+            )
+            Spacer(Modifier.height(24.dp))
+
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .background(dividerColor),
+            )
+            Spacer(Modifier.height(24.dp))
+
+            DetailsWidget(
+                label = stringResource(R.string.label_total_spent),
+                primary = transactionDetails.amountFmt(unit = metadata.selectedUnit),
+                secondary = totalSpentFiatFmt,
+                isTotal = true,
+            )
+        } else {
+            // received transaction details
+            ReceivedTransactionDetails(
+                transactionDetails = transactionDetails,
+                numberOfConfirmations = numberOfConfirmations,
+            )
+        }
+
+        Spacer(Modifier.height(72.dp))
+    }
 }
 
 @Composable
@@ -667,28 +813,16 @@ private fun DetailsWidget(
     label: String,
     primary: String?,
     secondary: String?,
-    isDark: Boolean,
     isTotal: Boolean = false,
     showInfoIcon: Boolean = false,
     onInfoClick: () -> Unit = {},
 ) {
     if (primary == null) return
-    val sub = if (isDark) Color(0xFF8F8F95) else Color(0xFF6F6F75)
-    val fg = if (isDark) Color(0xFFEFEFEF) else Color(0xFF101010)
+    val sub = MaterialTheme.colorScheme.onSurfaceVariant
+    val fg = MaterialTheme.colorScheme.onBackground
 
-    val labelColor =
-        if (isTotal) {
-            if (isDark) Color(0xFFEFEFEF) else Color(0xFF101010)
-        } else {
-            if (isDark) Color(0xFFB8B8B8) else Color(0xFF9CA3AF)
-        }
-
-    val primaryColor =
-        if (isTotal) {
-            fg
-        } else {
-            if (isDark) Color(0xFFB8B8B8) else Color(0xFF9CA3AF)
-        }
+    val labelColor = if (isTotal) fg else sub
+    val primaryColor = if (isTotal) fg else sub
 
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
         Row(
@@ -698,7 +832,7 @@ private fun DetailsWidget(
             Text(
                 label,
                 color = labelColor,
-                fontSize = 18.sp,
+                fontSize = 12.sp,
             )
             if (showInfoIcon) {
                 Spacer(Modifier.width(8.dp))
@@ -709,7 +843,7 @@ private fun DetailsWidget(
                         Icon(
                             imageVector = Icons.Outlined.Info,
                             contentDescription = null,
-                            tint = if (isDark) Color(0xFFB8B8B8) else Color(0xFF9CA3AF),
+                            tint = sub,
                             modifier = Modifier.size(16.dp),
                         )
                     },
@@ -717,10 +851,10 @@ private fun DetailsWidget(
             }
         }
         Column(horizontalAlignment = Alignment.End) {
-            Text(primary, color = primaryColor, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+            AutoSizeText(primary, color = primaryColor, maxFontSize = 14.sp, minimumScaleFactor = 0.90f, fontWeight = FontWeight.SemiBold)
             if (!secondary.isNullOrEmpty()) {
                 Spacer(Modifier.height(6.dp))
-                Text(secondary, color = sub, fontSize = 14.sp)
+                Text(secondary, color = sub, fontSize = 12.sp)
             }
         }
     }
@@ -730,12 +864,11 @@ private fun DetailsWidget(
 private fun ReceivedTransactionDetails(
     transactionDetails: TransactionDetails,
     numberOfConfirmations: Int?,
-    isDark: Boolean,
-    sub: Color,
-    fg: Color,
 ) {
     val context = LocalContext.current
     var isCopied by remember { mutableStateOf(false) }
+    val sub = MaterialTheme.colorScheme.onSurfaceVariant
+    val fg = MaterialTheme.colorScheme.onBackground
 
     Column(modifier = Modifier.fillMaxWidth()) {
         // received at address with copy button
@@ -746,16 +879,16 @@ private fun ReceivedTransactionDetails(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     stringResource(R.string.label_received_at),
-                    color = if (isDark) Color(0xFFB8B8B8) else Color(0xFF6F6F75),
-                    fontSize = 16.sp,
+                    color = sub,
+                    fontSize = 12.sp,
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
                     transactionDetails.addressSpacedOut(),
                     color = fg,
-                    fontSize = 20.sp,
+                    fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
-                    lineHeight = 24.sp,
+                    lineHeight = 18.sp,
                 )
             }
 
@@ -770,7 +903,7 @@ private fun ReceivedTransactionDetails(
                     isCopied = true
                 },
                 shape = RoundedCornerShape(20.dp),
-                border = BorderStroke(1.dp, if (isDark) Color(0xFF4A4A4A) else Color(0xFFD1D1D6)),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
                 colors =
                     ButtonDefaults.outlinedButtonColors(
                         contentColor = fg,
@@ -829,31 +962,81 @@ private fun ReceivedTransactionDetails(
 }
 
 @Composable
+private fun TransactionCapsule(
+    text: String,
+    icon: ImageVector,
+    backgroundColor: Color,
+    textColor: Color,
+    showStroke: Boolean = false,
+) {
+    Box(
+        modifier =
+            Modifier
+                .width(130.dp)
+                .height(30.dp)
+                .clip(RoundedCornerShape(15.dp))
+                .background(backgroundColor)
+                .then(
+                    if (showStroke) {
+                        Modifier.border(
+                            width = 1.dp,
+                            color = Color.White,
+                            shape = RoundedCornerShape(15.dp),
+                        )
+                    } else {
+                        Modifier
+                    },
+                ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = textColor,
+                modifier = Modifier.size(12.dp),
+            )
+            Spacer(Modifier.width(4.dp))
+            Text(
+                text = text,
+                color = textColor,
+                fontSize = 14.sp,
+            )
+        }
+    }
+}
+
+@Composable
 private fun CheckWithRingsWidget(
     diameter: Dp,
     circleColor: Color,
     ringColors: List<Color>,
-    checkColor: Color,
+    iconColor: Color,
+    isConfirmed: Boolean,
 ) {
+    val ringOffset = 10.dp
+    val totalSize = diameter + (ringOffset * ringColors.size * 2)
+
     Box(
         contentAlignment = Alignment.Center,
-        modifier = Modifier.size(diameter),
+        modifier = Modifier.size(totalSize),
     ) {
         Canvas(modifier = Modifier.matchParentSize()) {
-            val canvasMin = min(size.width, size.height)
+            val centerX = size.width / 2f
+            val centerY = size.height / 2f
+            val circleRadius = diameter.toPx() / 2f
             val stroke = 1.dp.toPx()
-
-            val centerRadius = canvasMin * 0.35f
-            val maxRadius = (canvasMin / 2f) - (stroke / 2f)
-            val ringCount = ringColors.size
-            val totalExtra = (maxRadius - centerRadius).coerceAtLeast(0f)
-            val spacing = if (ringCount > 0) totalExtra / ringCount else 0f
+            val ringOffsetPx = ringOffset.toPx()
 
             ringColors.forEachIndexed { index, color ->
-                val r = centerRadius + ((index + 1) * spacing)
+                val r = circleRadius + ((index + 1) * ringOffsetPx)
                 drawCircle(
                     color = color,
                     radius = r,
+                    center = Offset(centerX, centerY),
                     style =
                         Stroke(
                             width = stroke,
@@ -865,28 +1048,39 @@ private fun CheckWithRingsWidget(
         Box(
             modifier =
                 Modifier
-                    .size(diameter * 0.7f)
+                    .size(diameter)
                     .clip(CircleShape)
                     .background(circleColor),
             contentAlignment = Alignment.Center,
         ) {
-            Canvas(modifier = Modifier.size(diameter * 0.36f)) {
-                val stroke = 3.dp.toPx()
-                val w = size.width
-                val h = size.height
-                drawLine(
-                    color = checkColor,
-                    start = Offset(w * 0.1f, h * 0.55f),
-                    end = Offset(w * 0.4f, h * 0.85f),
-                    strokeWidth = stroke,
-                    cap = StrokeCap.Round,
-                )
-                drawLine(
-                    color = checkColor,
-                    start = Offset(w * 0.4f, h * 0.85f),
-                    end = Offset(w * 0.9f, h * 0.15f),
-                    strokeWidth = stroke,
-                    cap = StrokeCap.Round,
+            if (isConfirmed) {
+                // draw checkmark with canvas for confirmed transactions
+                Canvas(modifier = Modifier.size(diameter * 0.5f)) {
+                    val stroke = 3.dp.toPx()
+                    val w = size.width
+                    val h = size.height
+                    drawLine(
+                        color = iconColor,
+                        start = Offset(w * 0.1f, h * 0.55f),
+                        end = Offset(w * 0.4f, h * 0.85f),
+                        strokeWidth = stroke,
+                        cap = StrokeCap.Round,
+                    )
+                    drawLine(
+                        color = iconColor,
+                        start = Offset(w * 0.4f, h * 0.85f),
+                        end = Offset(w * 0.9f, h * 0.15f),
+                        strokeWidth = stroke,
+                        cap = StrokeCap.Round,
+                    )
+                }
+            } else {
+                // show clock icon for pending transactions
+                Icon(
+                    imageVector = Icons.Default.AccessTime,
+                    contentDescription = null,
+                    tint = iconColor,
+                    modifier = Modifier.size(diameter * 0.5f),
                 )
             }
         }

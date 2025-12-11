@@ -629,12 +629,19 @@ impl RustWalletManager {
         .await
         .unwrap()?;
 
+        // for unconfirmed transactions, trigger a background sync to update status
+        // this uses SyncRequest with just this txid so it's fast
+        if !details.is_confirmed() {
+            send!(self.actor.perform_scan_for_single_tx_id(details.tx_id().0));
+        }
+
         Ok(details)
     }
 
     #[uniffi::method]
     pub async fn number_of_confirmations(&self, block_height: u32) -> Result<u32, Error> {
-        let current_height = self.current_block_height().await?;
+        // always get fresh height to ensure confirmation count reflects latest blocks
+        let current_height = self.force_update_height().await?;
         if block_height > current_height { Ok(0) } else { Ok(current_height - block_height + 1) }
     }
 
@@ -705,16 +712,28 @@ impl RustWalletManager {
 
     #[uniffi::method]
     pub fn validate_metadata(&self) {
-        if self.metadata.read().name.trim().is_empty() {
-            let name = self
-                .metadata
-                .read()
+        let name = {
+            let metadata = self.metadata.read();
+            if !metadata.name.trim().is_empty() {
+                return;
+            }
+            metadata
                 .master_fingerprint
                 .as_deref()
                 .map(Fingerprint::as_uppercase)
-                .unwrap_or_else(|| "Unnamed Wallet".to_string());
+                .unwrap_or_else(|| "Unnamed Wallet".to_string())
+        };
 
-            self.dispatch(Action::UpdateName(name));
+        let metadata = {
+            let mut metadata = self.metadata.write();
+            metadata.name = name;
+            metadata.clone()
+        };
+
+        self.reconciler.send(Message::WalletMetadataChanged(metadata.clone()));
+
+        if let Err(error) = Database::global().wallets.update_wallet_metadata(metadata) {
+            error!("Unable to update wallet metadata: {error:?}")
         }
     }
 
@@ -947,7 +966,7 @@ impl RustWalletManager {
             }
 
             Action::ToggleFiatBtcPrimarySecondary => {
-                let order = [
+                const ORDER: &[(FiatOrBtc, Unit); 4] = &[
                     (FiatOrBtc::Btc, Unit::Btc),
                     (FiatOrBtc::Fiat, Unit::Btc),
                     (FiatOrBtc::Btc, Unit::Sat),
@@ -959,16 +978,17 @@ impl RustWalletManager {
                     (md.fiat_or_btc, md.selected_unit)
                 };
 
-                let current_index = order
+                let current_index = ORDER
                     .iter()
                     .position(|option| option == &current)
                     .expect("all options covered");
 
-                let next_index = (current_index + 1) % order.len();
-                let (fiat_or_btc, unit) = order[next_index];
+                let next_index = (current_index + 1) % ORDER.len();
+                let (fiat_or_btc, unit) = ORDER[next_index];
 
-                self.dispatch(Action::UpdateFiatOrBtc(fiat_or_btc));
-                self.dispatch(Action::UpdateUnit(unit));
+                let mut metadata = self.metadata.write();
+                metadata.fiat_or_btc = fiat_or_btc;
+                metadata.selected_unit = unit;
             }
 
             Action::ToggleDetailsExpanded => {

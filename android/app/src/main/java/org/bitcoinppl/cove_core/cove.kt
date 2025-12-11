@@ -106,6 +106,8 @@ import org.bitcoinppl.cove_core.types.Utxo
 import org.bitcoinppl.cove_core.types.UtxoList
 import org.bitcoinppl.cove_core.types.UtxoType
 import org.bitcoinppl.cove_core.types.WalletId
+import org.bitcoinppl.cove_core.ur.FfiConverterTypeUrError
+import org.bitcoinppl.cove_core.ur.UrException
 import org.bitcoinppl.cove_core.device.RustBuffer as RustBufferKeychainError
 import org.bitcoinppl.cove_core.nfc.RustBuffer as RustBufferNfcMessage
 import org.bitcoinppl.cove_core.tapcard.RustBuffer as RustBufferTapCardParseError
@@ -140,6 +142,7 @@ import org.bitcoinppl.cove_core.types.RustBuffer as RustBufferUtxo
 import org.bitcoinppl.cove_core.types.RustBuffer as RustBufferUtxoList
 import org.bitcoinppl.cove_core.types.RustBuffer as RustBufferUtxoType
 import org.bitcoinppl.cove_core.types.RustBuffer as RustBufferWalletId
+import org.bitcoinppl.cove_core.ur.RustBuffer as RustBufferUrError
 
 // This is a helper for safely working with byte buffers returned from the Rust code.
 // A rust-owned buffer is represented by its capacity, its current length, and a
@@ -1303,7 +1306,11 @@ external fun uniffi_cove_checksum_method_rustauthmanager_switch_to_decoy_mode(
 ): Short
 external fun uniffi_cove_checksum_method_rustauthmanager_switch_to_main_mode(
 ): Short
+external fun uniffi_cove_checksum_method_rustauthmanager_validate_new_pin(
+): Short
 external fun uniffi_cove_checksum_method_rustauthmanager_validate_pin_settings(
+): Short
+external fun uniffi_cove_checksum_method_rustauthmanager_validate_security_action(
 ): Short
 external fun uniffi_cove_checksum_method_rustcoincontrolmanager_button_presentation(
 ): Short
@@ -1344,6 +1351,8 @@ external fun uniffi_cove_checksum_method_rustpendingwalletmanager_number_of_word
 external fun uniffi_cove_checksum_method_rustpendingwalletmanager_save_wallet(
 ): Short
 external fun uniffi_cove_checksum_method_rustsendflowmanager_amount(
+): Short
+external fun uniffi_cove_checksum_method_rustsendflowmanager_amount_exceeds_balance(
 ): Short
 external fun uniffi_cove_checksum_method_rustsendflowmanager_amount_sats(
 ): Short
@@ -1483,28 +1492,6 @@ external fun uniffi_cove_checksum_method_mnemonic_all_words(
 ): Short
 external fun uniffi_cove_checksum_method_mnemonic_words(
 ): Short
-external fun uniffi_cove_checksum_method_bbqrjoinresult_final_result(
-): Short
-external fun uniffi_cove_checksum_method_bbqrjoinresult_is_complete(
-): Short
-external fun uniffi_cove_checksum_method_bbqrjoinresult_parts_left(
-): Short
-external fun uniffi_cove_checksum_method_bbqrjoined_get_grouped_words(
-): Short
-external fun uniffi_cove_checksum_method_bbqrjoined_get_seed_words(
-): Short
-external fun uniffi_cove_checksum_method_multiqr_add_part(
-): Short
-external fun uniffi_cove_checksum_method_multiqr_get_grouped_words(
-): Short
-external fun uniffi_cove_checksum_method_multiqr_handle_scan_result(
-): Short
-external fun uniffi_cove_checksum_method_multiqr_is_bbqr(
-): Short
-external fun uniffi_cove_checksum_method_multiqr_is_seed_qr(
-): Short
-external fun uniffi_cove_checksum_method_multiqr_total_parts(
-): Short
 external fun uniffi_cove_checksum_method_nodeselector_check_and_save_node(
 ): Short
 external fun uniffi_cove_checksum_method_nodeselector_check_selected_node(
@@ -1516,6 +1503,10 @@ external fun uniffi_cove_checksum_method_nodeselector_parse_custom_node(
 external fun uniffi_cove_checksum_method_nodeselector_select_preset_node(
 ): Short
 external fun uniffi_cove_checksum_method_nodeselector_selected_node(
+): Short
+external fun uniffi_cove_checksum_method_qrscanner_reset(
+): Short
+external fun uniffi_cove_checksum_method_qrscanner_scan(
 ): Short
 external fun uniffi_cove_checksum_method_boxedroute_route(
 ): Short
@@ -1663,6 +1654,16 @@ external fun uniffi_cove_checksum_method_unsignedtransaction_sending_amount(
 ): Short
 external fun uniffi_cove_checksum_method_unsignedtransaction_spending_amount(
 ): Short
+external fun uniffi_cove_checksum_method_urresult_data(
+): Short
+external fun uniffi_cove_checksum_method_urresult_is_hdkey(
+): Short
+external fun uniffi_cove_checksum_method_urresult_is_psbt(
+): Short
+external fun uniffi_cove_checksum_method_urresult_is_seed(
+): Short
+external fun uniffi_cove_checksum_method_urresult_ur_type(
+): Short
 external fun uniffi_cove_checksum_method_wallet_id(
 ): Short
 external fun uniffi_cove_checksum_method_balance_spendable(
@@ -1676,6 +1677,26 @@ external fun uniffi_cove_checksum_method_wordvalidator_is_complete(
 external fun uniffi_cove_checksum_method_wordvalidator_is_word_correct(
 ): Short
 external fun uniffi_cove_checksum_method_wordvalidator_possible_words(
+): Short
+external fun uniffi_cove_checksum_method_wordverifystatemachine_animation_complete(
+): Short
+external fun uniffi_cove_checksum_method_wordverifystatemachine_config(
+): Short
+external fun uniffi_cove_checksum_method_wordverifystatemachine_dwell_complete(
+): Short
+external fun uniffi_cove_checksum_method_wordverifystatemachine_is_complete(
+): Short
+external fun uniffi_cove_checksum_method_wordverifystatemachine_possible_words(
+): Short
+external fun uniffi_cove_checksum_method_wordverifystatemachine_reset_to_word(
+): Short
+external fun uniffi_cove_checksum_method_wordverifystatemachine_return_complete(
+): Short
+external fun uniffi_cove_checksum_method_wordverifystatemachine_select_word(
+): Short
+external fun uniffi_cove_checksum_method_wordverifystatemachine_state(
+): Short
+external fun uniffi_cove_checksum_method_wordverifystatemachine_word_number(
 ): Short
 external fun uniffi_cove_checksum_constructor_ffiapp_new(
 ): Short
@@ -1719,13 +1740,9 @@ external fun uniffi_cove_checksum_constructor_mnemonic_new(
 ): Short
 external fun uniffi_cove_checksum_constructor_mnemonic_preview(
 ): Short
-external fun uniffi_cove_checksum_constructor_multiqr_new_from_string(
-): Short
-external fun uniffi_cove_checksum_constructor_multiqr_try_new(
-): Short
-external fun uniffi_cove_checksum_constructor_multiqr_try_new_from_data(
-): Short
 external fun uniffi_cove_checksum_constructor_nodeselector_new(
+): Short
+external fun uniffi_cove_checksum_constructor_qrscanner_new(
 ): Short
 external fun uniffi_cove_checksum_constructor_boxedroute_new(
 ): Short
@@ -1763,6 +1780,8 @@ external fun uniffi_cove_checksum_constructor_transactiondetails_preview_pending
 ): Short
 external fun uniffi_cove_checksum_constructor_unsignedtransaction_preview_new(
 ): Short
+external fun uniffi_cove_checksum_constructor_urresult_new(
+): Short
 external fun uniffi_cove_checksum_constructor_wallet_new_from_export(
 ): Short
 external fun uniffi_cove_checksum_constructor_wallet_new_from_xpub(
@@ -1774,6 +1793,8 @@ external fun uniffi_cove_checksum_constructor_balance_zero(
 external fun uniffi_cove_checksum_constructor_fingerprint_new(
 ): Short
 external fun uniffi_cove_checksum_constructor_wordvalidator_preview(
+): Short
+external fun uniffi_cove_checksum_constructor_wordverifystatemachine_new(
 ): Short
 external fun uniffi_cove_checksum_method_ffireconcile_reconcile(
 ): Short
@@ -1830,6 +1851,7 @@ internal object UniffiLib {
         org.bitcoinppl.cove_core.nfc.uniffiEnsureInitialized()
         org.bitcoinppl.cove_core.tapcard.uniffiEnsureInitialized()
         org.bitcoinppl.cove_core.types.uniffiEnsureInitialized()
+        org.bitcoinppl.cove_core.ur.uniffiEnsureInitialized()
         
     }
     external fun uniffi_cove_fn_clone_ffiapp(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -2174,8 +2196,12 @@ external fun uniffi_cove_fn_method_rustauthmanager_switch_to_decoy_mode(`ptr`: L
 ): Unit
 external fun uniffi_cove_fn_method_rustauthmanager_switch_to_main_mode(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
+external fun uniffi_cove_fn_method_rustauthmanager_validate_new_pin(`ptr`: Long,`newPin`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_rustauthmanager_validate_pin_settings(`ptr`: Long,`pin`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
+external fun uniffi_cove_fn_method_rustauthmanager_validate_security_action(`ptr`: Long,`action`: RustBuffer.ByValue,`unverifiedWalletIds`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
 external fun uniffi_cove_fn_clone_rustcoincontrolmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
 external fun uniffi_cove_fn_free_rustcoincontrolmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -2248,6 +2274,8 @@ external fun uniffi_cove_fn_free_rustsendflowmanager(`handle`: Long,uniffi_out_e
 ): Unit
 external fun uniffi_cove_fn_method_rustsendflowmanager_amount(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
+external fun uniffi_cove_fn_method_rustsendflowmanager_amount_exceeds_balance(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Byte
 external fun uniffi_cove_fn_method_rustsendflowmanager_amount_sats(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
 external fun uniffi_cove_fn_method_rustsendflowmanager_dispatch(`ptr`: Long,`action`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -2416,46 +2444,6 @@ external fun uniffi_cove_fn_clone_bip329labels(`handle`: Long,uniffi_out_err: Un
 ): Long
 external fun uniffi_cove_fn_free_bip329labels(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-external fun uniffi_cove_fn_clone_bbqrjoinresult(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_fn_free_bbqrjoinresult(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Unit
-external fun uniffi_cove_fn_method_bbqrjoinresult_final_result(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_fn_method_bbqrjoinresult_is_complete(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Byte
-external fun uniffi_cove_fn_method_bbqrjoinresult_parts_left(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Int
-external fun uniffi_cove_fn_clone_bbqrjoined(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_fn_free_bbqrjoined(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Unit
-external fun uniffi_cove_fn_method_bbqrjoined_get_grouped_words(`ptr`: Long,`chunks`: Byte,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_fn_method_bbqrjoined_get_seed_words(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_fn_clone_multiqr(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_fn_free_multiqr(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Unit
-external fun uniffi_cove_fn_constructor_multiqr_new_from_string(`qr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_fn_constructor_multiqr_try_new(`qr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_fn_constructor_multiqr_try_new_from_data(`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_fn_method_multiqr_add_part(`ptr`: Long,`qr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_fn_method_multiqr_get_grouped_words(`ptr`: Long,`qr`: RustBuffer.ByValue,`groupsOf`: Byte,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_fn_method_multiqr_handle_scan_result(`ptr`: Long,`qr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_fn_method_multiqr_is_bbqr(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Byte
-external fun uniffi_cove_fn_method_multiqr_is_seed_qr(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Byte
-external fun uniffi_cove_fn_method_multiqr_total_parts(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Int
 external fun uniffi_cove_fn_clone_nodeselector(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
 external fun uniffi_cove_fn_free_nodeselector(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -2482,6 +2470,16 @@ external fun uniffi_cove_fn_clone_pushtx(`handle`: Long,uniffi_out_err: UniffiRu
 ): Long
 external fun uniffi_cove_fn_free_pushtx(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
+external fun uniffi_cove_fn_clone_qrscanner(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Long
+external fun uniffi_cove_fn_free_qrscanner(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
+external fun uniffi_cove_fn_constructor_qrscanner_new(uniffi_out_err: UniffiRustCallStatus, 
+): Long
+external fun uniffi_cove_fn_method_qrscanner_reset(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
+external fun uniffi_cove_fn_method_qrscanner_scan(`ptr`: Long,`qr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
 external fun uniffi_cove_fn_clone_boxedroute(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
 external fun uniffi_cove_fn_free_boxedroute(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -2708,6 +2706,22 @@ external fun uniffi_cove_fn_method_unsignedtransaction_sending_amount(`ptr`: Lon
 ): Long
 external fun uniffi_cove_fn_method_unsignedtransaction_spending_amount(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
+external fun uniffi_cove_fn_clone_urresult(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Long
+external fun uniffi_cove_fn_free_urresult(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
+external fun uniffi_cove_fn_constructor_urresult_new(`data`: RustBuffer.ByValue,`urType`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Long
+external fun uniffi_cove_fn_method_urresult_data(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_urresult_is_hdkey(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Byte
+external fun uniffi_cove_fn_method_urresult_is_psbt(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Byte
+external fun uniffi_cove_fn_method_urresult_is_seed(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Byte
+external fun uniffi_cove_fn_method_urresult_ur_type(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
 external fun uniffi_cove_fn_clone_wallet(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
 external fun uniffi_cove_fn_free_wallet(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -2754,6 +2768,32 @@ external fun uniffi_cove_fn_method_wordvalidator_is_word_correct(`ptr`: Long,`wo
 ): Byte
 external fun uniffi_cove_fn_method_wordvalidator_possible_words(`ptr`: Long,`for`: Byte,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
+external fun uniffi_cove_fn_clone_wordverifystatemachine(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Long
+external fun uniffi_cove_fn_free_wordverifystatemachine(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
+external fun uniffi_cove_fn_constructor_wordverifystatemachine_new(`validator`: Long,`startingWordNumber`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+): Long
+external fun uniffi_cove_fn_method_wordverifystatemachine_animation_complete(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_wordverifystatemachine_config(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_wordverifystatemachine_dwell_complete(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_wordverifystatemachine_is_complete(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Byte
+external fun uniffi_cove_fn_method_wordverifystatemachine_possible_words(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_wordverifystatemachine_reset_to_word(`ptr`: Long,`wordNumber`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
+external fun uniffi_cove_fn_method_wordverifystatemachine_return_complete(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_wordverifystatemachine_select_word(`ptr`: Long,`word`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_wordverifystatemachine_state(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_wordverifystatemachine_word_number(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Byte
 external fun uniffi_cove_fn_init_callback_vtable_ffireconcile(`vtable`: UniffiVTableCallbackInterfaceFfiReconcile,
 ): Unit
 external fun uniffi_cove_fn_init_callback_vtable_authmanagerreconciler(`vtable`: UniffiVTableCallbackInterfaceAuthManagerReconciler,
@@ -2824,9 +2864,17 @@ external fun uniffi_cove_fn_method_mnemonicerror_uniffi_trait_display(`ptr`: Rus
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_mnemonicparseerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_multiformat_uniffi_trait_eq_eq(`ptr`: RustBuffer.ByValue,`other`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Byte
+external fun uniffi_cove_fn_method_multiformat_uniffi_trait_eq_ne(`ptr`: RustBuffer.ByValue,`other`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Byte
 external fun uniffi_cove_fn_method_multiformaterror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_multiqrerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_scanprogress_detail_text(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_scanprogress_display_text(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_bip39error_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
@@ -3571,7 +3619,13 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustauthmanager_switch_to_main_mode() != 36755.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_method_rustauthmanager_validate_new_pin() != 2677.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_method_rustauthmanager_validate_pin_settings() != 50929.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustauthmanager_validate_security_action() != 4302.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustcoincontrolmanager_button_presentation() != 24764.toShort()) {
@@ -3632,6 +3686,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustsendflowmanager_amount() != 50946.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustsendflowmanager_amount_exceeds_balance() != 56944.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustsendflowmanager_amount_sats() != 25668.toShort()) {
@@ -3841,39 +3898,6 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_mnemonic_words() != 8009.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_bbqrjoinresult_final_result() != 4512.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_method_bbqrjoinresult_is_complete() != 57834.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_method_bbqrjoinresult_parts_left() != 18009.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_method_bbqrjoined_get_grouped_words() != 39118.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_method_bbqrjoined_get_seed_words() != 36742.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_method_multiqr_add_part() != 4791.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_method_multiqr_get_grouped_words() != 41176.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_method_multiqr_handle_scan_result() != 10107.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_method_multiqr_is_bbqr() != 45869.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_method_multiqr_is_seed_qr() != 47501.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_method_multiqr_total_parts() != 39268.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
     if (lib.uniffi_cove_checksum_method_nodeselector_check_and_save_node() != 9328.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -3890,6 +3914,12 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_nodeselector_selected_node() != 20791.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_qrscanner_reset() != 17017.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_qrscanner_scan() != 55003.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_boxedroute_route() != 6095.toShort()) {
@@ -4111,6 +4141,21 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_unsignedtransaction_spending_amount() != 60073.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_method_urresult_data() != 20992.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_urresult_is_hdkey() != 16134.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_urresult_is_psbt() != 29188.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_urresult_is_seed() != 5310.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_urresult_ur_type() != 33507.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_method_wallet_id() != 30585.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -4130,6 +4175,36 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_wordvalidator_possible_words() != 58432.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_wordverifystatemachine_animation_complete() != 38406.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_wordverifystatemachine_config() != 39348.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_wordverifystatemachine_dwell_complete() != 24167.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_wordverifystatemachine_is_complete() != 19976.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_wordverifystatemachine_possible_words() != 5700.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_wordverifystatemachine_reset_to_word() != 43945.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_wordverifystatemachine_return_complete() != 53818.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_wordverifystatemachine_select_word() != 45827.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_wordverifystatemachine_state() != 57576.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_wordverifystatemachine_word_number() != 36254.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_constructor_ffiapp_new() != 32653.toShort()) {
@@ -4195,16 +4270,10 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_constructor_mnemonic_preview() != 34768.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_constructor_multiqr_new_from_string() != 58512.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_constructor_multiqr_try_new() != 29401.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_constructor_multiqr_try_new_from_data() != 6690.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
     if (lib.uniffi_cove_checksum_constructor_nodeselector_new() != 62365.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_constructor_qrscanner_new() != 57573.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_constructor_boxedroute_new() != 21632.toShort()) {
@@ -4261,6 +4330,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_constructor_unsignedtransaction_preview_new() != 60973.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_constructor_urresult_new() != 34590.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_constructor_wallet_new_from_export() != 38500.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -4277,6 +4349,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_constructor_wordvalidator_preview() != 63940.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_constructor_wordverifystatemachine_new() != 16955.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_ffireconcile_reconcile() != 36143.toShort()) {
@@ -6026,554 +6101,6 @@ public object FfiConverterTypeBalance: FfiConverter<Balance, Long> {
     override fun allocationSize(value: Balance) = 8UL
 
     override fun write(value: Balance, buf: ByteBuffer) {
-        buf.putLong(lower(value))
-    }
-}
-
-
-// This template implements a class for working with a Rust struct via a handle
-// to the live Rust struct on the other side of the FFI.
-//
-// There's some subtlety here, because we have to be careful not to operate on a Rust
-// struct after it has been dropped, and because we must expose a public API for freeing
-// theq Kotlin wrapper object in lieu of reliable finalizers. The core requirements are:
-//
-//   * Each instance holds an opaque handle to the underlying Rust struct.
-//     Method calls need to read this handle from the object's state and pass it in to
-//     the Rust FFI.
-//
-//   * When an instance is no longer needed, its handle should be passed to a
-//     special destructor function provided by the Rust FFI, which will drop the
-//     underlying Rust struct.
-//
-//   * Given an instance, calling code is expected to call the special
-//     `destroy` method in order to free it after use, either by calling it explicitly
-//     or by using a higher-level helper like the `use` method. Failing to do so risks
-//     leaking the underlying Rust struct.
-//
-//   * We can't assume that calling code will do the right thing, and must be prepared
-//     to handle Kotlin method calls executing concurrently with or even after a call to
-//     `destroy`, and to handle multiple (possibly concurrent!) calls to `destroy`.
-//
-//   * We must never allow Rust code to operate on the underlying Rust struct after
-//     the destructor has been called, and must never call the destructor more than once.
-//     Doing so may trigger memory unsafety.
-//
-//   * To mitigate many of the risks of leaking memory and use-after-free unsafety, a `Cleaner`
-//     is implemented to call the destructor when the Kotlin object becomes unreachable.
-//     This is done in a background thread. This is not a panacea, and client code should be aware that
-//      1. the thread may starve if some there are objects that have poorly performing
-//     `drop` methods or do significant work in their `drop` methods.
-//      2. the thread is shared across the whole library. This can be tuned by using `android_cleaner = true`,
-//         or `android = true` in the [`kotlin` section of the `uniffi.toml` file](https://mozilla.github.io/uniffi-rs/kotlin/configuration.html).
-//
-// If we try to implement this with mutual exclusion on access to the handle, there is the
-// possibility of a race between a method call and a concurrent call to `destroy`:
-//
-//    * Thread A starts a method call, reads the value of the handle, but is interrupted
-//      before it can pass the handle over the FFI to Rust.
-//    * Thread B calls `destroy` and frees the underlying Rust struct.
-//    * Thread A resumes, passing the already-read handle value to Rust and triggering
-//      a use-after-free.
-//
-// One possible solution would be to use a `ReadWriteLock`, with each method call taking
-// a read lock (and thus allowed to run concurrently) and the special `destroy` method
-// taking a write lock (and thus blocking on live method calls). However, we aim not to
-// generate methods with any hidden blocking semantics, and a `destroy` method that might
-// block if called incorrectly seems to meet that bar.
-//
-// So, we achieve our goals by giving each instance an associated `AtomicLong` counter to track
-// the number of in-flight method calls, and an `AtomicBoolean` flag to indicate whether `destroy`
-// has been called. These are updated according to the following rules:
-//
-//    * The initial value of the counter is 1, indicating a live object with no in-flight calls.
-//      The initial value for the flag is false.
-//
-//    * At the start of each method call, we atomically check the counter.
-//      If it is 0 then the underlying Rust struct has already been destroyed and the call is aborted.
-//      If it is nonzero them we atomically increment it by 1 and proceed with the method call.
-//
-//    * At the end of each method call, we atomically decrement and check the counter.
-//      If it has reached zero then we destroy the underlying Rust struct.
-//
-//    * When `destroy` is called, we atomically flip the flag from false to true.
-//      If the flag was already true we silently fail.
-//      Otherwise we atomically decrement and check the counter.
-//      If it has reached zero then we destroy the underlying Rust struct.
-//
-// Astute readers may observe that this all sounds very similar to the way that Rust's `Arc<T>` works,
-// and indeed it is, with the addition of a flag to guard against multiple calls to `destroy`.
-//
-// The overall effect is that the underlying Rust struct is destroyed only when `destroy` has been
-// called *and* all in-flight method calls have completed, avoiding violating any of the expectations
-// of the underlying Rust code.
-//
-// This makes a cleaner a better alternative to _not_ calling `destroy()` as
-// and when the object is finished with, but the abstraction is not perfect: if the Rust object's `drop`
-// method is slow, and/or there are many objects to cleanup, and it's on a low end Android device, then the cleaner
-// thread may be starved, and the app will leak memory.
-//
-// In this case, `destroy`ing manually may be a better solution.
-//
-// The cleaner can live side by side with the manual calling of `destroy`. In the order of responsiveness, uniffi objects
-// with Rust peers are reclaimed:
-//
-// 1. By calling the `destroy` method of the object, which calls `rustObject.free()`. If that doesn't happen:
-// 2. When the object becomes unreachable, AND the Cleaner thread gets to call `rustObject.free()`. If the thread is starved then:
-// 3. The memory is reclaimed when the process terminates.
-//
-// [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
-//
-
-
-public interface BbqrJoinResultInterface {
-    
-    fun `finalResult`(): kotlin.String
-    
-    fun `isComplete`(): kotlin.Boolean
-    
-    fun `partsLeft`(): kotlin.UInt
-    
-    companion object
-}
-
-open class BbqrJoinResult: Disposable, AutoCloseable, BbqrJoinResultInterface
-{
-
-    @Suppress("UNUSED_PARAMETER")
-    /**
-     * @suppress
-     */
-    constructor(withHandle: UniffiWithHandle, handle: Long) {
-        this.handle = handle
-        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
-    }
-
-    /**
-     * @suppress
-     *
-     * This constructor can be used to instantiate a fake object. Only used for tests. Any
-     * attempt to actually use an object constructed this way will fail as there is no
-     * connected Rust object.
-     */
-    @Suppress("UNUSED_PARAMETER")
-    constructor(noHandle: NoHandle) {
-        this.handle = 0
-        this.cleanable = null
-    }
-
-    protected val handle: Long
-    protected val cleanable: UniffiCleaner.Cleanable?
-
-    private val wasDestroyed = AtomicBoolean(false)
-    private val callCounter = AtomicLong(1)
-
-    override fun destroy() {
-        // Only allow a single call to this method.
-        // TODO: maybe we should log a warning if called more than once?
-        if (this.wasDestroyed.compareAndSet(false, true)) {
-            // This decrement always matches the initial count of 1 given at creation time.
-            if (this.callCounter.decrementAndGet() == 0L) {
-                cleanable?.clean()
-            }
-        }
-    }
-
-    @Synchronized
-    override fun close() {
-        this.destroy()
-    }
-
-    internal inline fun <R> callWithHandle(block: (handle: Long) -> R): R {
-        // Check and increment the call counter, to keep the object alive.
-        // This needs a compare-and-set retry loop in case of concurrent updates.
-        do {
-            val c = this.callCounter.get()
-            if (c == 0L) {
-                throw IllegalStateException("${this.javaClass.simpleName} object has already been destroyed")
-            }
-            if (c == Long.MAX_VALUE) {
-                throw IllegalStateException("${this.javaClass.simpleName} call counter would overflow")
-            }
-        } while (! this.callCounter.compareAndSet(c, c + 1L))
-        // Now we can safely do the method call without the handle being freed concurrently.
-        try {
-            return block(this.uniffiCloneHandle())
-        } finally {
-            // This decrement always matches the increment we performed above.
-            if (this.callCounter.decrementAndGet() == 0L) {
-                cleanable?.clean()
-            }
-        }
-    }
-
-    // Use a static inner class instead of a closure so as not to accidentally
-    // capture `this` as part of the cleanable's action.
-    private class UniffiCleanAction(private val handle: Long) : Runnable {
-        override fun run() {
-            if (handle == 0.toLong()) {
-                // Fake object created with `NoHandle`, don't try to free.
-                return;
-            }
-            uniffiRustCall { status ->
-                UniffiLib.uniffi_cove_fn_free_bbqrjoinresult(handle, status)
-            }
-        }
-    }
-
-    /**
-     * @suppress
-     */
-    fun uniffiCloneHandle(): Long {
-        if (handle == 0.toLong()) {
-            throw InternalException("uniffiCloneHandle() called on NoHandle object");
-        }
-        return uniffiRustCall() { status ->
-            UniffiLib.uniffi_cove_fn_clone_bbqrjoinresult(handle, status)
-        }
-    }
-
-    
-    @Throws(MultiQrException::class)override fun `finalResult`(): kotlin.String {
-            return FfiConverterString.lift(
-    callWithHandle {
-    uniffiRustCallWithError(MultiQrException) { _status ->
-    UniffiLib.uniffi_cove_fn_method_bbqrjoinresult_final_result(
-        it,
-        _status)
-}
-    }
-    )
-    }
-    
-
-    override fun `isComplete`(): kotlin.Boolean {
-            return FfiConverterBoolean.lift(
-    callWithHandle {
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_method_bbqrjoinresult_is_complete(
-        it,
-        _status)
-}
-    }
-    )
-    }
-    
-
-    override fun `partsLeft`(): kotlin.UInt {
-            return FfiConverterUInt.lift(
-    callWithHandle {
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_method_bbqrjoinresult_parts_left(
-        it,
-        _status)
-}
-    }
-    )
-    }
-    
-
-    
-
-    
-
-
-    
-    
-    /**
-     * @suppress
-     */
-    companion object
-    
-}
-
-
-/**
- * @suppress
- */
-public object FfiConverterTypeBbqrJoinResult: FfiConverter<BbqrJoinResult, Long> {
-    override fun lower(value: BbqrJoinResult): Long {
-        return value.uniffiCloneHandle()
-    }
-
-    override fun lift(value: Long): BbqrJoinResult {
-        return BbqrJoinResult(UniffiWithHandle, value)
-    }
-
-    override fun read(buf: ByteBuffer): BbqrJoinResult {
-        return lift(buf.getLong())
-    }
-
-    override fun allocationSize(value: BbqrJoinResult) = 8UL
-
-    override fun write(value: BbqrJoinResult, buf: ByteBuffer) {
-        buf.putLong(lower(value))
-    }
-}
-
-
-// This template implements a class for working with a Rust struct via a handle
-// to the live Rust struct on the other side of the FFI.
-//
-// There's some subtlety here, because we have to be careful not to operate on a Rust
-// struct after it has been dropped, and because we must expose a public API for freeing
-// theq Kotlin wrapper object in lieu of reliable finalizers. The core requirements are:
-//
-//   * Each instance holds an opaque handle to the underlying Rust struct.
-//     Method calls need to read this handle from the object's state and pass it in to
-//     the Rust FFI.
-//
-//   * When an instance is no longer needed, its handle should be passed to a
-//     special destructor function provided by the Rust FFI, which will drop the
-//     underlying Rust struct.
-//
-//   * Given an instance, calling code is expected to call the special
-//     `destroy` method in order to free it after use, either by calling it explicitly
-//     or by using a higher-level helper like the `use` method. Failing to do so risks
-//     leaking the underlying Rust struct.
-//
-//   * We can't assume that calling code will do the right thing, and must be prepared
-//     to handle Kotlin method calls executing concurrently with or even after a call to
-//     `destroy`, and to handle multiple (possibly concurrent!) calls to `destroy`.
-//
-//   * We must never allow Rust code to operate on the underlying Rust struct after
-//     the destructor has been called, and must never call the destructor more than once.
-//     Doing so may trigger memory unsafety.
-//
-//   * To mitigate many of the risks of leaking memory and use-after-free unsafety, a `Cleaner`
-//     is implemented to call the destructor when the Kotlin object becomes unreachable.
-//     This is done in a background thread. This is not a panacea, and client code should be aware that
-//      1. the thread may starve if some there are objects that have poorly performing
-//     `drop` methods or do significant work in their `drop` methods.
-//      2. the thread is shared across the whole library. This can be tuned by using `android_cleaner = true`,
-//         or `android = true` in the [`kotlin` section of the `uniffi.toml` file](https://mozilla.github.io/uniffi-rs/kotlin/configuration.html).
-//
-// If we try to implement this with mutual exclusion on access to the handle, there is the
-// possibility of a race between a method call and a concurrent call to `destroy`:
-//
-//    * Thread A starts a method call, reads the value of the handle, but is interrupted
-//      before it can pass the handle over the FFI to Rust.
-//    * Thread B calls `destroy` and frees the underlying Rust struct.
-//    * Thread A resumes, passing the already-read handle value to Rust and triggering
-//      a use-after-free.
-//
-// One possible solution would be to use a `ReadWriteLock`, with each method call taking
-// a read lock (and thus allowed to run concurrently) and the special `destroy` method
-// taking a write lock (and thus blocking on live method calls). However, we aim not to
-// generate methods with any hidden blocking semantics, and a `destroy` method that might
-// block if called incorrectly seems to meet that bar.
-//
-// So, we achieve our goals by giving each instance an associated `AtomicLong` counter to track
-// the number of in-flight method calls, and an `AtomicBoolean` flag to indicate whether `destroy`
-// has been called. These are updated according to the following rules:
-//
-//    * The initial value of the counter is 1, indicating a live object with no in-flight calls.
-//      The initial value for the flag is false.
-//
-//    * At the start of each method call, we atomically check the counter.
-//      If it is 0 then the underlying Rust struct has already been destroyed and the call is aborted.
-//      If it is nonzero them we atomically increment it by 1 and proceed with the method call.
-//
-//    * At the end of each method call, we atomically decrement and check the counter.
-//      If it has reached zero then we destroy the underlying Rust struct.
-//
-//    * When `destroy` is called, we atomically flip the flag from false to true.
-//      If the flag was already true we silently fail.
-//      Otherwise we atomically decrement and check the counter.
-//      If it has reached zero then we destroy the underlying Rust struct.
-//
-// Astute readers may observe that this all sounds very similar to the way that Rust's `Arc<T>` works,
-// and indeed it is, with the addition of a flag to guard against multiple calls to `destroy`.
-//
-// The overall effect is that the underlying Rust struct is destroyed only when `destroy` has been
-// called *and* all in-flight method calls have completed, avoiding violating any of the expectations
-// of the underlying Rust code.
-//
-// This makes a cleaner a better alternative to _not_ calling `destroy()` as
-// and when the object is finished with, but the abstraction is not perfect: if the Rust object's `drop`
-// method is slow, and/or there are many objects to cleanup, and it's on a low end Android device, then the cleaner
-// thread may be starved, and the app will leak memory.
-//
-// In this case, `destroy`ing manually may be a better solution.
-//
-// The cleaner can live side by side with the manual calling of `destroy`. In the order of responsiveness, uniffi objects
-// with Rust peers are reclaimed:
-//
-// 1. By calling the `destroy` method of the object, which calls `rustObject.free()`. If that doesn't happen:
-// 2. When the object becomes unreachable, AND the Cleaner thread gets to call `rustObject.free()`. If the thread is starved then:
-// 3. The memory is reclaimed when the process terminates.
-//
-// [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
-//
-
-
-public interface BbqrJoinedInterface {
-    
-    fun `getGroupedWords`(`chunks`: kotlin.UByte): List<List<kotlin.String>>
-    
-    fun `getSeedWords`(): List<kotlin.String>
-    
-    companion object
-}
-
-open class BbqrJoined: Disposable, AutoCloseable, BbqrJoinedInterface
-{
-
-    @Suppress("UNUSED_PARAMETER")
-    /**
-     * @suppress
-     */
-    constructor(withHandle: UniffiWithHandle, handle: Long) {
-        this.handle = handle
-        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
-    }
-
-    /**
-     * @suppress
-     *
-     * This constructor can be used to instantiate a fake object. Only used for tests. Any
-     * attempt to actually use an object constructed this way will fail as there is no
-     * connected Rust object.
-     */
-    @Suppress("UNUSED_PARAMETER")
-    constructor(noHandle: NoHandle) {
-        this.handle = 0
-        this.cleanable = null
-    }
-
-    protected val handle: Long
-    protected val cleanable: UniffiCleaner.Cleanable?
-
-    private val wasDestroyed = AtomicBoolean(false)
-    private val callCounter = AtomicLong(1)
-
-    override fun destroy() {
-        // Only allow a single call to this method.
-        // TODO: maybe we should log a warning if called more than once?
-        if (this.wasDestroyed.compareAndSet(false, true)) {
-            // This decrement always matches the initial count of 1 given at creation time.
-            if (this.callCounter.decrementAndGet() == 0L) {
-                cleanable?.clean()
-            }
-        }
-    }
-
-    @Synchronized
-    override fun close() {
-        this.destroy()
-    }
-
-    internal inline fun <R> callWithHandle(block: (handle: Long) -> R): R {
-        // Check and increment the call counter, to keep the object alive.
-        // This needs a compare-and-set retry loop in case of concurrent updates.
-        do {
-            val c = this.callCounter.get()
-            if (c == 0L) {
-                throw IllegalStateException("${this.javaClass.simpleName} object has already been destroyed")
-            }
-            if (c == Long.MAX_VALUE) {
-                throw IllegalStateException("${this.javaClass.simpleName} call counter would overflow")
-            }
-        } while (! this.callCounter.compareAndSet(c, c + 1L))
-        // Now we can safely do the method call without the handle being freed concurrently.
-        try {
-            return block(this.uniffiCloneHandle())
-        } finally {
-            // This decrement always matches the increment we performed above.
-            if (this.callCounter.decrementAndGet() == 0L) {
-                cleanable?.clean()
-            }
-        }
-    }
-
-    // Use a static inner class instead of a closure so as not to accidentally
-    // capture `this` as part of the cleanable's action.
-    private class UniffiCleanAction(private val handle: Long) : Runnable {
-        override fun run() {
-            if (handle == 0.toLong()) {
-                // Fake object created with `NoHandle`, don't try to free.
-                return;
-            }
-            uniffiRustCall { status ->
-                UniffiLib.uniffi_cove_fn_free_bbqrjoined(handle, status)
-            }
-        }
-    }
-
-    /**
-     * @suppress
-     */
-    fun uniffiCloneHandle(): Long {
-        if (handle == 0.toLong()) {
-            throw InternalException("uniffiCloneHandle() called on NoHandle object");
-        }
-        return uniffiRustCall() { status ->
-            UniffiLib.uniffi_cove_fn_clone_bbqrjoined(handle, status)
-        }
-    }
-
-    
-    @Throws(MultiQrException::class)override fun `getGroupedWords`(`chunks`: kotlin.UByte): List<List<kotlin.String>> {
-            return FfiConverterSequenceSequenceString.lift(
-    callWithHandle {
-    uniffiRustCallWithError(MultiQrException) { _status ->
-    UniffiLib.uniffi_cove_fn_method_bbqrjoined_get_grouped_words(
-        it,
-        FfiConverterUByte.lower(`chunks`),_status)
-}
-    }
-    )
-    }
-    
-
-    
-    @Throws(MultiQrException::class)override fun `getSeedWords`(): List<kotlin.String> {
-            return FfiConverterSequenceString.lift(
-    callWithHandle {
-    uniffiRustCallWithError(MultiQrException) { _status ->
-    UniffiLib.uniffi_cove_fn_method_bbqrjoined_get_seed_words(
-        it,
-        _status)
-}
-    }
-    )
-    }
-    
-
-    
-
-    
-
-
-    
-    
-    /**
-     * @suppress
-     */
-    companion object
-    
-}
-
-
-/**
- * @suppress
- */
-public object FfiConverterTypeBbqrJoined: FfiConverter<BbqrJoined, Long> {
-    override fun lower(value: BbqrJoined): Long {
-        return value.uniffiCloneHandle()
-    }
-
-    override fun lift(value: Long): BbqrJoined {
-        return BbqrJoined(UniffiWithHandle, value)
-    }
-
-    override fun read(buf: ByteBuffer): BbqrJoined {
-        return lift(buf.getLong())
-    }
-
-    override fun allocationSize(value: BbqrJoined) = 8UL
-
-    override fun write(value: BbqrJoined, buf: ByteBuffer) {
         buf.putLong(lower(value))
     }
 }
@@ -14111,367 +13638,6 @@ public object FfiConverterTypeMnemonic: FfiConverter<Mnemonic, Long> {
 //
 
 
-public interface MultiQrInterface {
-    
-    fun `addPart`(`qr`: kotlin.String): BbqrJoinResult
-    
-    fun `getGroupedWords`(`qr`: StringOrData, `groupsOf`: kotlin.UByte): List<List<kotlin.String>>?
-    
-    fun `handleScanResult`(`qr`: StringOrData): MultiQrScanResult
-    
-    fun `isBbqr`(): kotlin.Boolean
-    
-    fun `isSeedQr`(): kotlin.Boolean
-    
-    fun `totalParts`(): kotlin.UInt
-    
-    companion object
-}
-
-open class MultiQr: Disposable, AutoCloseable, MultiQrInterface
-{
-
-    @Suppress("UNUSED_PARAMETER")
-    /**
-     * @suppress
-     */
-    constructor(withHandle: UniffiWithHandle, handle: Long) {
-        this.handle = handle
-        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
-    }
-
-    /**
-     * @suppress
-     *
-     * This constructor can be used to instantiate a fake object. Only used for tests. Any
-     * attempt to actually use an object constructed this way will fail as there is no
-     * connected Rust object.
-     */
-    @Suppress("UNUSED_PARAMETER")
-    constructor(noHandle: NoHandle) {
-        this.handle = 0
-        this.cleanable = null
-    }
-
-    protected val handle: Long
-    protected val cleanable: UniffiCleaner.Cleanable?
-
-    private val wasDestroyed = AtomicBoolean(false)
-    private val callCounter = AtomicLong(1)
-
-    override fun destroy() {
-        // Only allow a single call to this method.
-        // TODO: maybe we should log a warning if called more than once?
-        if (this.wasDestroyed.compareAndSet(false, true)) {
-            // This decrement always matches the initial count of 1 given at creation time.
-            if (this.callCounter.decrementAndGet() == 0L) {
-                cleanable?.clean()
-            }
-        }
-    }
-
-    @Synchronized
-    override fun close() {
-        this.destroy()
-    }
-
-    internal inline fun <R> callWithHandle(block: (handle: Long) -> R): R {
-        // Check and increment the call counter, to keep the object alive.
-        // This needs a compare-and-set retry loop in case of concurrent updates.
-        do {
-            val c = this.callCounter.get()
-            if (c == 0L) {
-                throw IllegalStateException("${this.javaClass.simpleName} object has already been destroyed")
-            }
-            if (c == Long.MAX_VALUE) {
-                throw IllegalStateException("${this.javaClass.simpleName} call counter would overflow")
-            }
-        } while (! this.callCounter.compareAndSet(c, c + 1L))
-        // Now we can safely do the method call without the handle being freed concurrently.
-        try {
-            return block(this.uniffiCloneHandle())
-        } finally {
-            // This decrement always matches the increment we performed above.
-            if (this.callCounter.decrementAndGet() == 0L) {
-                cleanable?.clean()
-            }
-        }
-    }
-
-    // Use a static inner class instead of a closure so as not to accidentally
-    // capture `this` as part of the cleanable's action.
-    private class UniffiCleanAction(private val handle: Long) : Runnable {
-        override fun run() {
-            if (handle == 0.toLong()) {
-                // Fake object created with `NoHandle`, don't try to free.
-                return;
-            }
-            uniffiRustCall { status ->
-                UniffiLib.uniffi_cove_fn_free_multiqr(handle, status)
-            }
-        }
-    }
-
-    /**
-     * @suppress
-     */
-    fun uniffiCloneHandle(): Long {
-        if (handle == 0.toLong()) {
-            throw InternalException("uniffiCloneHandle() called on NoHandle object");
-        }
-        return uniffiRustCall() { status ->
-            UniffiLib.uniffi_cove_fn_clone_multiqr(handle, status)
-        }
-    }
-
-    
-    @Throws(MultiQrException::class)override fun `addPart`(`qr`: kotlin.String): BbqrJoinResult {
-            return FfiConverterTypeBbqrJoinResult.lift(
-    callWithHandle {
-    uniffiRustCallWithError(MultiQrException) { _status ->
-    UniffiLib.uniffi_cove_fn_method_multiqr_add_part(
-        it,
-        FfiConverterString.lower(`qr`),_status)
-}
-    }
-    )
-    }
-    
-
-    
-    @Throws(MultiQrException::class)override fun `getGroupedWords`(`qr`: StringOrData, `groupsOf`: kotlin.UByte): List<List<kotlin.String>>? {
-            return FfiConverterOptionalSequenceSequenceString.lift(
-    callWithHandle {
-    uniffiRustCallWithError(MultiQrException) { _status ->
-    UniffiLib.uniffi_cove_fn_method_multiqr_get_grouped_words(
-        it,
-        FfiConverterTypeStringOrData.lower(`qr`),FfiConverterUByte.lower(`groupsOf`),_status)
-}
-    }
-    )
-    }
-    
-
-    
-    @Throws(MultiQrException::class)override fun `handleScanResult`(`qr`: StringOrData): MultiQrScanResult {
-            return FfiConverterTypeMultiQrScanResult.lift(
-    callWithHandle {
-    uniffiRustCallWithError(MultiQrException) { _status ->
-    UniffiLib.uniffi_cove_fn_method_multiqr_handle_scan_result(
-        it,
-        FfiConverterTypeStringOrData.lower(`qr`),_status)
-}
-    }
-    )
-    }
-    
-
-    override fun `isBbqr`(): kotlin.Boolean {
-            return FfiConverterBoolean.lift(
-    callWithHandle {
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_method_multiqr_is_bbqr(
-        it,
-        _status)
-}
-    }
-    )
-    }
-    
-
-    override fun `isSeedQr`(): kotlin.Boolean {
-            return FfiConverterBoolean.lift(
-    callWithHandle {
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_method_multiqr_is_seed_qr(
-        it,
-        _status)
-}
-    }
-    )
-    }
-    
-
-    override fun `totalParts`(): kotlin.UInt {
-            return FfiConverterUInt.lift(
-    callWithHandle {
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_method_multiqr_total_parts(
-        it,
-        _status)
-}
-    }
-    )
-    }
-    
-
-    
-
-    
-
-
-    
-    companion object {
-         fun `newFromString`(`qr`: kotlin.String): MultiQr {
-            return FfiConverterTypeMultiQr.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_constructor_multiqr_new_from_string(
-    
-        FfiConverterString.lower(`qr`),_status)
-}
-    )
-    }
-    
-
-        
-    @Throws(MultiQrException::class) fun `tryNew`(`qr`: StringOrData): MultiQr {
-            return FfiConverterTypeMultiQr.lift(
-    uniffiRustCallWithError(MultiQrException) { _status ->
-    UniffiLib.uniffi_cove_fn_constructor_multiqr_try_new(
-    
-        FfiConverterTypeStringOrData.lower(`qr`),_status)
-}
-    )
-    }
-    
-
-        
-    @Throws(MultiQrException::class) fun `tryNewFromData`(`data`: kotlin.ByteArray): MultiQr {
-            return FfiConverterTypeMultiQr.lift(
-    uniffiRustCallWithError(MultiQrException) { _status ->
-    UniffiLib.uniffi_cove_fn_constructor_multiqr_try_new_from_data(
-    
-        FfiConverterByteArray.lower(`data`),_status)
-}
-    )
-    }
-    
-
-        
-    }
-    
-}
-
-
-/**
- * @suppress
- */
-public object FfiConverterTypeMultiQr: FfiConverter<MultiQr, Long> {
-    override fun lower(value: MultiQr): Long {
-        return value.uniffiCloneHandle()
-    }
-
-    override fun lift(value: Long): MultiQr {
-        return MultiQr(UniffiWithHandle, value)
-    }
-
-    override fun read(buf: ByteBuffer): MultiQr {
-        return lift(buf.getLong())
-    }
-
-    override fun allocationSize(value: MultiQr) = 8UL
-
-    override fun write(value: MultiQr, buf: ByteBuffer) {
-        buf.putLong(lower(value))
-    }
-}
-
-
-// This template implements a class for working with a Rust struct via a handle
-// to the live Rust struct on the other side of the FFI.
-//
-// There's some subtlety here, because we have to be careful not to operate on a Rust
-// struct after it has been dropped, and because we must expose a public API for freeing
-// theq Kotlin wrapper object in lieu of reliable finalizers. The core requirements are:
-//
-//   * Each instance holds an opaque handle to the underlying Rust struct.
-//     Method calls need to read this handle from the object's state and pass it in to
-//     the Rust FFI.
-//
-//   * When an instance is no longer needed, its handle should be passed to a
-//     special destructor function provided by the Rust FFI, which will drop the
-//     underlying Rust struct.
-//
-//   * Given an instance, calling code is expected to call the special
-//     `destroy` method in order to free it after use, either by calling it explicitly
-//     or by using a higher-level helper like the `use` method. Failing to do so risks
-//     leaking the underlying Rust struct.
-//
-//   * We can't assume that calling code will do the right thing, and must be prepared
-//     to handle Kotlin method calls executing concurrently with or even after a call to
-//     `destroy`, and to handle multiple (possibly concurrent!) calls to `destroy`.
-//
-//   * We must never allow Rust code to operate on the underlying Rust struct after
-//     the destructor has been called, and must never call the destructor more than once.
-//     Doing so may trigger memory unsafety.
-//
-//   * To mitigate many of the risks of leaking memory and use-after-free unsafety, a `Cleaner`
-//     is implemented to call the destructor when the Kotlin object becomes unreachable.
-//     This is done in a background thread. This is not a panacea, and client code should be aware that
-//      1. the thread may starve if some there are objects that have poorly performing
-//     `drop` methods or do significant work in their `drop` methods.
-//      2. the thread is shared across the whole library. This can be tuned by using `android_cleaner = true`,
-//         or `android = true` in the [`kotlin` section of the `uniffi.toml` file](https://mozilla.github.io/uniffi-rs/kotlin/configuration.html).
-//
-// If we try to implement this with mutual exclusion on access to the handle, there is the
-// possibility of a race between a method call and a concurrent call to `destroy`:
-//
-//    * Thread A starts a method call, reads the value of the handle, but is interrupted
-//      before it can pass the handle over the FFI to Rust.
-//    * Thread B calls `destroy` and frees the underlying Rust struct.
-//    * Thread A resumes, passing the already-read handle value to Rust and triggering
-//      a use-after-free.
-//
-// One possible solution would be to use a `ReadWriteLock`, with each method call taking
-// a read lock (and thus allowed to run concurrently) and the special `destroy` method
-// taking a write lock (and thus blocking on live method calls). However, we aim not to
-// generate methods with any hidden blocking semantics, and a `destroy` method that might
-// block if called incorrectly seems to meet that bar.
-//
-// So, we achieve our goals by giving each instance an associated `AtomicLong` counter to track
-// the number of in-flight method calls, and an `AtomicBoolean` flag to indicate whether `destroy`
-// has been called. These are updated according to the following rules:
-//
-//    * The initial value of the counter is 1, indicating a live object with no in-flight calls.
-//      The initial value for the flag is false.
-//
-//    * At the start of each method call, we atomically check the counter.
-//      If it is 0 then the underlying Rust struct has already been destroyed and the call is aborted.
-//      If it is nonzero them we atomically increment it by 1 and proceed with the method call.
-//
-//    * At the end of each method call, we atomically decrement and check the counter.
-//      If it has reached zero then we destroy the underlying Rust struct.
-//
-//    * When `destroy` is called, we atomically flip the flag from false to true.
-//      If the flag was already true we silently fail.
-//      Otherwise we atomically decrement and check the counter.
-//      If it has reached zero then we destroy the underlying Rust struct.
-//
-// Astute readers may observe that this all sounds very similar to the way that Rust's `Arc<T>` works,
-// and indeed it is, with the addition of a flag to guard against multiple calls to `destroy`.
-//
-// The overall effect is that the underlying Rust struct is destroyed only when `destroy` has been
-// called *and* all in-flight method calls have completed, avoiding violating any of the expectations
-// of the underlying Rust code.
-//
-// This makes a cleaner a better alternative to _not_ calling `destroy()` as
-// and when the object is finished with, but the abstraction is not perfect: if the Rust object's `drop`
-// method is slow, and/or there are many objects to cleanup, and it's on a low end Android device, then the cleaner
-// thread may be starved, and the app will leak memory.
-//
-// In this case, `destroy`ing manually may be a better solution.
-//
-// The cleaner can live side by side with the manual calling of `destroy`. In the order of responsiveness, uniffi objects
-// with Rust peers are reclaimed:
-//
-// 1. By calling the `destroy` method of the object, which calls `rustObject.free()`. If that doesn't happen:
-// 2. When the object becomes unreachable, AND the Cleaner thread gets to call `rustObject.free()`. If the thread is starved then:
-// 3. The memory is reclaimed when the process terminates.
-//
-// [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
-//
-
-
 public interface NodeSelectorInterface {
     
     /**
@@ -15572,6 +14738,317 @@ public object FfiConverterTypePushTx: FfiConverter<PushTx, Long> {
 //
 
 
+/**
+ * FFI wrapper for QrScanner state machine.
+ *
+ * This is the main entry point for QR scanning from Swift/Kotlin.
+ * It wraps the internal state machine in a Mutex for thread safety.
+ */
+public interface QrScannerInterface {
+    
+    /**
+     * Reset the scanner state for a new scan session.
+     */
+    fun `reset`()
+    
+    /**
+     * Scan a QR code and return the result.
+     *
+     * On first scan, detects the format and returns either:
+     * - `Complete(MultiFormat)` for single-part QRs
+     * - `InProgress(ScanProgress)` for multi-part QRs (BBQr or UR)
+     *
+     * On subsequent scans, adds parts and returns updated status.
+     * The haptic field indicates what feedback the platform should trigger.
+     */
+    fun `scan`(`qr`: StringOrData): ScanResult
+    
+    companion object
+}
+
+/**
+ * FFI wrapper for QrScanner state machine.
+ *
+ * This is the main entry point for QR scanning from Swift/Kotlin.
+ * It wraps the internal state machine in a Mutex for thread safety.
+ */
+open class QrScanner: Disposable, AutoCloseable, QrScannerInterface
+{
+
+    @Suppress("UNUSED_PARAMETER")
+    /**
+     * @suppress
+     */
+    constructor(withHandle: UniffiWithHandle, handle: Long) {
+        this.handle = handle
+        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
+    }
+
+    /**
+     * @suppress
+     *
+     * This constructor can be used to instantiate a fake object. Only used for tests. Any
+     * attempt to actually use an object constructed this way will fail as there is no
+     * connected Rust object.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    constructor(noHandle: NoHandle) {
+        this.handle = 0
+        this.cleanable = null
+    }
+    constructor() :
+        this(UniffiWithHandle, 
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_constructor_qrscanner_new(
+    
+        _status)
+}
+    )
+
+    protected val handle: Long
+    protected val cleanable: UniffiCleaner.Cleanable?
+
+    private val wasDestroyed = AtomicBoolean(false)
+    private val callCounter = AtomicLong(1)
+
+    override fun destroy() {
+        // Only allow a single call to this method.
+        // TODO: maybe we should log a warning if called more than once?
+        if (this.wasDestroyed.compareAndSet(false, true)) {
+            // This decrement always matches the initial count of 1 given at creation time.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    @Synchronized
+    override fun close() {
+        this.destroy()
+    }
+
+    internal inline fun <R> callWithHandle(block: (handle: Long) -> R): R {
+        // Check and increment the call counter, to keep the object alive.
+        // This needs a compare-and-set retry loop in case of concurrent updates.
+        do {
+            val c = this.callCounter.get()
+            if (c == 0L) {
+                throw IllegalStateException("${this.javaClass.simpleName} object has already been destroyed")
+            }
+            if (c == Long.MAX_VALUE) {
+                throw IllegalStateException("${this.javaClass.simpleName} call counter would overflow")
+            }
+        } while (! this.callCounter.compareAndSet(c, c + 1L))
+        // Now we can safely do the method call without the handle being freed concurrently.
+        try {
+            return block(this.uniffiCloneHandle())
+        } finally {
+            // This decrement always matches the increment we performed above.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    // Use a static inner class instead of a closure so as not to accidentally
+    // capture `this` as part of the cleanable's action.
+    private class UniffiCleanAction(private val handle: Long) : Runnable {
+        override fun run() {
+            if (handle == 0.toLong()) {
+                // Fake object created with `NoHandle`, don't try to free.
+                return;
+            }
+            uniffiRustCall { status ->
+                UniffiLib.uniffi_cove_fn_free_qrscanner(handle, status)
+            }
+        }
+    }
+
+    /**
+     * @suppress
+     */
+    fun uniffiCloneHandle(): Long {
+        if (handle == 0.toLong()) {
+            throw InternalException("uniffiCloneHandle() called on NoHandle object");
+        }
+        return uniffiRustCall() { status ->
+            UniffiLib.uniffi_cove_fn_clone_qrscanner(handle, status)
+        }
+    }
+
+    
+    /**
+     * Reset the scanner state for a new scan session.
+     */override fun `reset`()
+        = 
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_qrscanner_reset(
+        it,
+        _status)
+}
+    }
+    
+    
+
+    
+    /**
+     * Scan a QR code and return the result.
+     *
+     * On first scan, detects the format and returns either:
+     * - `Complete(MultiFormat)` for single-part QRs
+     * - `InProgress(ScanProgress)` for multi-part QRs (BBQr or UR)
+     *
+     * On subsequent scans, adds parts and returns updated status.
+     * The haptic field indicates what feedback the platform should trigger.
+     */
+    @Throws(MultiQrException::class)override fun `scan`(`qr`: StringOrData): ScanResult {
+            return FfiConverterTypeScanResult.lift(
+    callWithHandle {
+    uniffiRustCallWithError(MultiQrException) { _status ->
+    UniffiLib.uniffi_cove_fn_method_qrscanner_scan(
+        it,
+        FfiConverterTypeStringOrData.lower(`qr`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+
+    
+
+
+    
+    
+    /**
+     * @suppress
+     */
+    companion object
+    
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeQrScanner: FfiConverter<QrScanner, Long> {
+    override fun lower(value: QrScanner): Long {
+        return value.uniffiCloneHandle()
+    }
+
+    override fun lift(value: Long): QrScanner {
+        return QrScanner(UniffiWithHandle, value)
+    }
+
+    override fun read(buf: ByteBuffer): QrScanner {
+        return lift(buf.getLong())
+    }
+
+    override fun allocationSize(value: QrScanner) = 8UL
+
+    override fun write(value: QrScanner, buf: ByteBuffer) {
+        buf.putLong(lower(value))
+    }
+}
+
+
+// This template implements a class for working with a Rust struct via a handle
+// to the live Rust struct on the other side of the FFI.
+//
+// There's some subtlety here, because we have to be careful not to operate on a Rust
+// struct after it has been dropped, and because we must expose a public API for freeing
+// theq Kotlin wrapper object in lieu of reliable finalizers. The core requirements are:
+//
+//   * Each instance holds an opaque handle to the underlying Rust struct.
+//     Method calls need to read this handle from the object's state and pass it in to
+//     the Rust FFI.
+//
+//   * When an instance is no longer needed, its handle should be passed to a
+//     special destructor function provided by the Rust FFI, which will drop the
+//     underlying Rust struct.
+//
+//   * Given an instance, calling code is expected to call the special
+//     `destroy` method in order to free it after use, either by calling it explicitly
+//     or by using a higher-level helper like the `use` method. Failing to do so risks
+//     leaking the underlying Rust struct.
+//
+//   * We can't assume that calling code will do the right thing, and must be prepared
+//     to handle Kotlin method calls executing concurrently with or even after a call to
+//     `destroy`, and to handle multiple (possibly concurrent!) calls to `destroy`.
+//
+//   * We must never allow Rust code to operate on the underlying Rust struct after
+//     the destructor has been called, and must never call the destructor more than once.
+//     Doing so may trigger memory unsafety.
+//
+//   * To mitigate many of the risks of leaking memory and use-after-free unsafety, a `Cleaner`
+//     is implemented to call the destructor when the Kotlin object becomes unreachable.
+//     This is done in a background thread. This is not a panacea, and client code should be aware that
+//      1. the thread may starve if some there are objects that have poorly performing
+//     `drop` methods or do significant work in their `drop` methods.
+//      2. the thread is shared across the whole library. This can be tuned by using `android_cleaner = true`,
+//         or `android = true` in the [`kotlin` section of the `uniffi.toml` file](https://mozilla.github.io/uniffi-rs/kotlin/configuration.html).
+//
+// If we try to implement this with mutual exclusion on access to the handle, there is the
+// possibility of a race between a method call and a concurrent call to `destroy`:
+//
+//    * Thread A starts a method call, reads the value of the handle, but is interrupted
+//      before it can pass the handle over the FFI to Rust.
+//    * Thread B calls `destroy` and frees the underlying Rust struct.
+//    * Thread A resumes, passing the already-read handle value to Rust and triggering
+//      a use-after-free.
+//
+// One possible solution would be to use a `ReadWriteLock`, with each method call taking
+// a read lock (and thus allowed to run concurrently) and the special `destroy` method
+// taking a write lock (and thus blocking on live method calls). However, we aim not to
+// generate methods with any hidden blocking semantics, and a `destroy` method that might
+// block if called incorrectly seems to meet that bar.
+//
+// So, we achieve our goals by giving each instance an associated `AtomicLong` counter to track
+// the number of in-flight method calls, and an `AtomicBoolean` flag to indicate whether `destroy`
+// has been called. These are updated according to the following rules:
+//
+//    * The initial value of the counter is 1, indicating a live object with no in-flight calls.
+//      The initial value for the flag is false.
+//
+//    * At the start of each method call, we atomically check the counter.
+//      If it is 0 then the underlying Rust struct has already been destroyed and the call is aborted.
+//      If it is nonzero them we atomically increment it by 1 and proceed with the method call.
+//
+//    * At the end of each method call, we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+//    * When `destroy` is called, we atomically flip the flag from false to true.
+//      If the flag was already true we silently fail.
+//      Otherwise we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+// Astute readers may observe that this all sounds very similar to the way that Rust's `Arc<T>` works,
+// and indeed it is, with the addition of a flag to guard against multiple calls to `destroy`.
+//
+// The overall effect is that the underlying Rust struct is destroyed only when `destroy` has been
+// called *and* all in-flight method calls have completed, avoiding violating any of the expectations
+// of the underlying Rust code.
+//
+// This makes a cleaner a better alternative to _not_ calling `destroy()` as
+// and when the object is finished with, but the abstraction is not perfect: if the Rust object's `drop`
+// method is slow, and/or there are many objects to cleanup, and it's on a low end Android device, then the cleaner
+// thread may be starved, and the app will leak memory.
+//
+// In this case, `destroy`ing manually may be a better solution.
+//
+// The cleaner can live side by side with the manual calling of `destroy`. In the order of responsiveness, uniffi objects
+// with Rust peers are reclaimed:
+//
+// 1. By calling the `destroy` method of the object, which calls `rustObject.free()`. If that doesn't happen:
+// 2. When the object becomes unreachable, AND the Cleaner thread gets to call `rustObject.free()`. If the thread is starved then:
+// 3. The memory is reclaimed when the process terminates.
+//
+// [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
+//
+
+
 public interface RouteFactoryInterface {
     
     fun `coinControlSend`(`id`: WalletId, `utxos`: List<Utxo>): Route
@@ -16193,9 +15670,19 @@ public interface RustAuthManagerInterface {
     fun `switchToMainMode`()
     
     /**
+     * Validate a new PIN doesn't conflict with existing PINs
+     */
+    fun `validateNewPin`(`newPin`: kotlin.String): kotlin.String?
+    
+    /**
      * Validate if we have the correct settings to be able to set a decoy or wipe data pin
      */
     fun `validatePinSettings`(`pin`: kotlin.String)
+    
+    /**
+     * Validate a security settings action and return what UI to show
+     */
+    fun `validateSecurityAction`(`action`: SecuritySettingsAction, `unverifiedWalletIds`: List<WalletId>): SecuritySettingsResult
     
     companion object
 }
@@ -16571,6 +16058,22 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
 
     
     /**
+     * Validate a new PIN doesn't conflict with existing PINs
+     */override fun `validateNewPin`(`newPin`: kotlin.String): kotlin.String? {
+            return FfiConverterOptionalString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustauthmanager_validate_new_pin(
+        it,
+        FfiConverterString.lower(`newPin`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
      * Validate if we have the correct settings to be able to set a decoy or wipe data pin
      */
     @Throws(TrickPinException::class)override fun `validatePinSettings`(`pin`: kotlin.String)
@@ -16583,6 +16086,22 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
 }
     }
     
+    
+
+    
+    /**
+     * Validate a security settings action and return what UI to show
+     */override fun `validateSecurityAction`(`action`: SecuritySettingsAction, `unverifiedWalletIds`: List<WalletId>): SecuritySettingsResult {
+            return FfiConverterTypeSecuritySettingsResult.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustauthmanager_validate_security_action(
+        it,
+        FfiConverterTypeSecuritySettingsAction.lower(`action`),FfiConverterSequenceTypeWalletId.lower(`unverifiedWalletIds`),_status)
+}
+    }
+    )
+    }
     
 
     
@@ -17766,6 +17285,8 @@ public interface RustSendFlowManagerInterface {
     
     fun `amount`(): Amount
     
+    fun `amountExceedsBalance`(): kotlin.Boolean
+    
     fun `amountSats`(): kotlin.ULong
     
     /**
@@ -17918,6 +17439,19 @@ open class RustSendFlowManager: Disposable, AutoCloseable, RustSendFlowManagerIn
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustsendflowmanager_amount(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    override fun `amountExceedsBalance`(): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustsendflowmanager_amount_exceeds_balance(
         it,
         _status)
 }
@@ -22486,6 +22020,330 @@ public object FfiConverterTypeUnsignedTransactionsTable: FfiConverter<UnsignedTr
 //
 
 
+/**
+ * Result of a completed UR decode
+ */
+public interface UrResultInterface {
+    
+    fun `data`(): kotlin.ByteArray
+    
+    fun `isHdkey`(): kotlin.Boolean
+    
+    fun `isPsbt`(): kotlin.Boolean
+    
+    fun `isSeed`(): kotlin.Boolean
+    
+    fun `urType`(): UrType
+    
+    companion object
+}
+
+/**
+ * Result of a completed UR decode
+ */
+open class UrResult: Disposable, AutoCloseable, UrResultInterface
+{
+
+    @Suppress("UNUSED_PARAMETER")
+    /**
+     * @suppress
+     */
+    constructor(withHandle: UniffiWithHandle, handle: Long) {
+        this.handle = handle
+        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
+    }
+
+    /**
+     * @suppress
+     *
+     * This constructor can be used to instantiate a fake object. Only used for tests. Any
+     * attempt to actually use an object constructed this way will fail as there is no
+     * connected Rust object.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    constructor(noHandle: NoHandle) {
+        this.handle = 0
+        this.cleanable = null
+    }
+    constructor(`data`: kotlin.ByteArray, `urType`: UrType) :
+        this(UniffiWithHandle, 
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_constructor_urresult_new(
+    
+        FfiConverterByteArray.lower(`data`),FfiConverterTypeUrType.lower(`urType`),_status)
+}
+    )
+
+    protected val handle: Long
+    protected val cleanable: UniffiCleaner.Cleanable?
+
+    private val wasDestroyed = AtomicBoolean(false)
+    private val callCounter = AtomicLong(1)
+
+    override fun destroy() {
+        // Only allow a single call to this method.
+        // TODO: maybe we should log a warning if called more than once?
+        if (this.wasDestroyed.compareAndSet(false, true)) {
+            // This decrement always matches the initial count of 1 given at creation time.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    @Synchronized
+    override fun close() {
+        this.destroy()
+    }
+
+    internal inline fun <R> callWithHandle(block: (handle: Long) -> R): R {
+        // Check and increment the call counter, to keep the object alive.
+        // This needs a compare-and-set retry loop in case of concurrent updates.
+        do {
+            val c = this.callCounter.get()
+            if (c == 0L) {
+                throw IllegalStateException("${this.javaClass.simpleName} object has already been destroyed")
+            }
+            if (c == Long.MAX_VALUE) {
+                throw IllegalStateException("${this.javaClass.simpleName} call counter would overflow")
+            }
+        } while (! this.callCounter.compareAndSet(c, c + 1L))
+        // Now we can safely do the method call without the handle being freed concurrently.
+        try {
+            return block(this.uniffiCloneHandle())
+        } finally {
+            // This decrement always matches the increment we performed above.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    // Use a static inner class instead of a closure so as not to accidentally
+    // capture `this` as part of the cleanable's action.
+    private class UniffiCleanAction(private val handle: Long) : Runnable {
+        override fun run() {
+            if (handle == 0.toLong()) {
+                // Fake object created with `NoHandle`, don't try to free.
+                return;
+            }
+            uniffiRustCall { status ->
+                UniffiLib.uniffi_cove_fn_free_urresult(handle, status)
+            }
+        }
+    }
+
+    /**
+     * @suppress
+     */
+    fun uniffiCloneHandle(): Long {
+        if (handle == 0.toLong()) {
+            throw InternalException("uniffiCloneHandle() called on NoHandle object");
+        }
+        return uniffiRustCall() { status ->
+            UniffiLib.uniffi_cove_fn_clone_urresult(handle, status)
+        }
+    }
+
+    override fun `data`(): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_urresult_data(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    override fun `isHdkey`(): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_urresult_is_hdkey(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    override fun `isPsbt`(): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_urresult_is_psbt(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    override fun `isSeed`(): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_urresult_is_seed(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    override fun `urType`(): UrType {
+            return FfiConverterTypeUrType.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_urresult_ur_type(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    
+
+    
+
+
+    
+    
+    /**
+     * @suppress
+     */
+    companion object
+    
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeUrResult: FfiConverter<UrResult, Long> {
+    override fun lower(value: UrResult): Long {
+        return value.uniffiCloneHandle()
+    }
+
+    override fun lift(value: Long): UrResult {
+        return UrResult(UniffiWithHandle, value)
+    }
+
+    override fun read(buf: ByteBuffer): UrResult {
+        return lift(buf.getLong())
+    }
+
+    override fun allocationSize(value: UrResult) = 8UL
+
+    override fun write(value: UrResult, buf: ByteBuffer) {
+        buf.putLong(lower(value))
+    }
+}
+
+
+// This template implements a class for working with a Rust struct via a handle
+// to the live Rust struct on the other side of the FFI.
+//
+// There's some subtlety here, because we have to be careful not to operate on a Rust
+// struct after it has been dropped, and because we must expose a public API for freeing
+// theq Kotlin wrapper object in lieu of reliable finalizers. The core requirements are:
+//
+//   * Each instance holds an opaque handle to the underlying Rust struct.
+//     Method calls need to read this handle from the object's state and pass it in to
+//     the Rust FFI.
+//
+//   * When an instance is no longer needed, its handle should be passed to a
+//     special destructor function provided by the Rust FFI, which will drop the
+//     underlying Rust struct.
+//
+//   * Given an instance, calling code is expected to call the special
+//     `destroy` method in order to free it after use, either by calling it explicitly
+//     or by using a higher-level helper like the `use` method. Failing to do so risks
+//     leaking the underlying Rust struct.
+//
+//   * We can't assume that calling code will do the right thing, and must be prepared
+//     to handle Kotlin method calls executing concurrently with or even after a call to
+//     `destroy`, and to handle multiple (possibly concurrent!) calls to `destroy`.
+//
+//   * We must never allow Rust code to operate on the underlying Rust struct after
+//     the destructor has been called, and must never call the destructor more than once.
+//     Doing so may trigger memory unsafety.
+//
+//   * To mitigate many of the risks of leaking memory and use-after-free unsafety, a `Cleaner`
+//     is implemented to call the destructor when the Kotlin object becomes unreachable.
+//     This is done in a background thread. This is not a panacea, and client code should be aware that
+//      1. the thread may starve if some there are objects that have poorly performing
+//     `drop` methods or do significant work in their `drop` methods.
+//      2. the thread is shared across the whole library. This can be tuned by using `android_cleaner = true`,
+//         or `android = true` in the [`kotlin` section of the `uniffi.toml` file](https://mozilla.github.io/uniffi-rs/kotlin/configuration.html).
+//
+// If we try to implement this with mutual exclusion on access to the handle, there is the
+// possibility of a race between a method call and a concurrent call to `destroy`:
+//
+//    * Thread A starts a method call, reads the value of the handle, but is interrupted
+//      before it can pass the handle over the FFI to Rust.
+//    * Thread B calls `destroy` and frees the underlying Rust struct.
+//    * Thread A resumes, passing the already-read handle value to Rust and triggering
+//      a use-after-free.
+//
+// One possible solution would be to use a `ReadWriteLock`, with each method call taking
+// a read lock (and thus allowed to run concurrently) and the special `destroy` method
+// taking a write lock (and thus blocking on live method calls). However, we aim not to
+// generate methods with any hidden blocking semantics, and a `destroy` method that might
+// block if called incorrectly seems to meet that bar.
+//
+// So, we achieve our goals by giving each instance an associated `AtomicLong` counter to track
+// the number of in-flight method calls, and an `AtomicBoolean` flag to indicate whether `destroy`
+// has been called. These are updated according to the following rules:
+//
+//    * The initial value of the counter is 1, indicating a live object with no in-flight calls.
+//      The initial value for the flag is false.
+//
+//    * At the start of each method call, we atomically check the counter.
+//      If it is 0 then the underlying Rust struct has already been destroyed and the call is aborted.
+//      If it is nonzero them we atomically increment it by 1 and proceed with the method call.
+//
+//    * At the end of each method call, we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+//    * When `destroy` is called, we atomically flip the flag from false to true.
+//      If the flag was already true we silently fail.
+//      Otherwise we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+// Astute readers may observe that this all sounds very similar to the way that Rust's `Arc<T>` works,
+// and indeed it is, with the addition of a flag to guard against multiple calls to `destroy`.
+//
+// The overall effect is that the underlying Rust struct is destroyed only when `destroy` has been
+// called *and* all in-flight method calls have completed, avoiding violating any of the expectations
+// of the underlying Rust code.
+//
+// This makes a cleaner a better alternative to _not_ calling `destroy()` as
+// and when the object is finished with, but the abstraction is not perfect: if the Rust object's `drop`
+// method is slow, and/or there are many objects to cleanup, and it's on a low end Android device, then the cleaner
+// thread may be starved, and the app will leak memory.
+//
+// In this case, `destroy`ing manually may be a better solution.
+//
+// The cleaner can live side by side with the manual calling of `destroy`. In the order of responsiveness, uniffi objects
+// with Rust peers are reclaimed:
+//
+// 1. By calling the `destroy` method of the object, which calls `rustObject.free()`. If that doesn't happen:
+// 2. When the object becomes unreachable, AND the Cleaner thread gets to call `rustObject.free()`. If the thread is starved then:
+// 3. The memory is reclaimed when the process terminates.
+//
+// [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
+//
+
+
 public interface WalletInterface {
     
     fun `id`(): WalletId
@@ -23732,6 +23590,491 @@ public object FfiConverterTypeWordValidator: FfiConverter<WordValidator, Long> {
 }
 
 
+// This template implements a class for working with a Rust struct via a handle
+// to the live Rust struct on the other side of the FFI.
+//
+// There's some subtlety here, because we have to be careful not to operate on a Rust
+// struct after it has been dropped, and because we must expose a public API for freeing
+// theq Kotlin wrapper object in lieu of reliable finalizers. The core requirements are:
+//
+//   * Each instance holds an opaque handle to the underlying Rust struct.
+//     Method calls need to read this handle from the object's state and pass it in to
+//     the Rust FFI.
+//
+//   * When an instance is no longer needed, its handle should be passed to a
+//     special destructor function provided by the Rust FFI, which will drop the
+//     underlying Rust struct.
+//
+//   * Given an instance, calling code is expected to call the special
+//     `destroy` method in order to free it after use, either by calling it explicitly
+//     or by using a higher-level helper like the `use` method. Failing to do so risks
+//     leaking the underlying Rust struct.
+//
+//   * We can't assume that calling code will do the right thing, and must be prepared
+//     to handle Kotlin method calls executing concurrently with or even after a call to
+//     `destroy`, and to handle multiple (possibly concurrent!) calls to `destroy`.
+//
+//   * We must never allow Rust code to operate on the underlying Rust struct after
+//     the destructor has been called, and must never call the destructor more than once.
+//     Doing so may trigger memory unsafety.
+//
+//   * To mitigate many of the risks of leaking memory and use-after-free unsafety, a `Cleaner`
+//     is implemented to call the destructor when the Kotlin object becomes unreachable.
+//     This is done in a background thread. This is not a panacea, and client code should be aware that
+//      1. the thread may starve if some there are objects that have poorly performing
+//     `drop` methods or do significant work in their `drop` methods.
+//      2. the thread is shared across the whole library. This can be tuned by using `android_cleaner = true`,
+//         or `android = true` in the [`kotlin` section of the `uniffi.toml` file](https://mozilla.github.io/uniffi-rs/kotlin/configuration.html).
+//
+// If we try to implement this with mutual exclusion on access to the handle, there is the
+// possibility of a race between a method call and a concurrent call to `destroy`:
+//
+//    * Thread A starts a method call, reads the value of the handle, but is interrupted
+//      before it can pass the handle over the FFI to Rust.
+//    * Thread B calls `destroy` and frees the underlying Rust struct.
+//    * Thread A resumes, passing the already-read handle value to Rust and triggering
+//      a use-after-free.
+//
+// One possible solution would be to use a `ReadWriteLock`, with each method call taking
+// a read lock (and thus allowed to run concurrently) and the special `destroy` method
+// taking a write lock (and thus blocking on live method calls). However, we aim not to
+// generate methods with any hidden blocking semantics, and a `destroy` method that might
+// block if called incorrectly seems to meet that bar.
+//
+// So, we achieve our goals by giving each instance an associated `AtomicLong` counter to track
+// the number of in-flight method calls, and an `AtomicBoolean` flag to indicate whether `destroy`
+// has been called. These are updated according to the following rules:
+//
+//    * The initial value of the counter is 1, indicating a live object with no in-flight calls.
+//      The initial value for the flag is false.
+//
+//    * At the start of each method call, we atomically check the counter.
+//      If it is 0 then the underlying Rust struct has already been destroyed and the call is aborted.
+//      If it is nonzero them we atomically increment it by 1 and proceed with the method call.
+//
+//    * At the end of each method call, we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+//    * When `destroy` is called, we atomically flip the flag from false to true.
+//      If the flag was already true we silently fail.
+//      Otherwise we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+// Astute readers may observe that this all sounds very similar to the way that Rust's `Arc<T>` works,
+// and indeed it is, with the addition of a flag to guard against multiple calls to `destroy`.
+//
+// The overall effect is that the underlying Rust struct is destroyed only when `destroy` has been
+// called *and* all in-flight method calls have completed, avoiding violating any of the expectations
+// of the underlying Rust code.
+//
+// This makes a cleaner a better alternative to _not_ calling `destroy()` as
+// and when the object is finished with, but the abstraction is not perfect: if the Rust object's `drop`
+// method is slow, and/or there are many objects to cleanup, and it's on a low end Android device, then the cleaner
+// thread may be starved, and the app will leak memory.
+//
+// In this case, `destroy`ing manually may be a better solution.
+//
+// The cleaner can live side by side with the manual calling of `destroy`. In the order of responsiveness, uniffi objects
+// with Rust peers are reclaimed:
+//
+// 1. By calling the `destroy` method of the object, which calls `rustObject.free()`. If that doesn't happen:
+// 2. When the object becomes unreachable, AND the Cleaner thread gets to call `rustObject.free()`. If the thread is starved then:
+// 3. The memory is reclaimed when the process terminates.
+//
+// [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
+//
+
+
+/**
+ * State machine for word verification flow
+ *
+ * UI sends events (select_word, animation_complete, etc.) and receives
+ * StateTransition results that tell it what state to render and what
+ * animations to play.
+ */
+public interface WordVerifyStateMachineInterface {
+    
+    /**
+     * Animation to target complete - transition to Correct or Incorrect
+     *
+     * Returns a transition with the result state and dwell duration.
+     */
+    fun `animationComplete`(): StateTransition
+    
+    /**
+     * Get the animation configuration
+     */
+    fun `config`(): WordVerifyAnimationConfig
+    
+    /**
+     * Dwell time complete - advance word or start return animation
+     *
+     * If correct: transitions to None and signals to advance word.
+     * If incorrect: transitions to Returning state.
+     */
+    fun `dwellComplete`(): StateTransition
+    
+    /**
+     * Check if all words have been verified
+     */
+    fun `isComplete`(): kotlin.Boolean
+    
+    /**
+     * Get possible words for the current word number
+     */
+    fun `possibleWords`(): List<kotlin.String>
+    
+    /**
+     * Reset to a specific word number (useful for going back)
+     */
+    fun `resetToWord`(`wordNumber`: kotlin.UByte)
+    
+    /**
+     * Return animation complete (after incorrect) - back to None
+     */
+    fun `returnComplete`(): StateTransition
+    
+    /**
+     * User tapped a word - start the checking animation
+     *
+     * Returns a transition with Checking state and the animation duration.
+     * If already animating, returns no-change.
+     */
+    fun `selectWord`(`word`: kotlin.String): StateTransition
+    
+    /**
+     * Get the current state
+     */
+    fun `state`(): WordCheckState
+    
+    /**
+     * Get the current word number being verified (1-indexed)
+     */
+    fun `wordNumber`(): kotlin.UByte
+    
+    companion object
+}
+
+/**
+ * State machine for word verification flow
+ *
+ * UI sends events (select_word, animation_complete, etc.) and receives
+ * StateTransition results that tell it what state to render and what
+ * animations to play.
+ */
+open class WordVerifyStateMachine: Disposable, AutoCloseable, WordVerifyStateMachineInterface
+{
+
+    @Suppress("UNUSED_PARAMETER")
+    /**
+     * @suppress
+     */
+    constructor(withHandle: UniffiWithHandle, handle: Long) {
+        this.handle = handle
+        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
+    }
+
+    /**
+     * @suppress
+     *
+     * This constructor can be used to instantiate a fake object. Only used for tests. Any
+     * attempt to actually use an object constructed this way will fail as there is no
+     * connected Rust object.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    constructor(noHandle: NoHandle) {
+        this.handle = 0
+        this.cleanable = null
+    }
+    /**
+     * Create a new state machine with the given validator
+     */
+    constructor(`validator`: WordValidator, `startingWordNumber`: kotlin.UByte) :
+        this(UniffiWithHandle, 
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_constructor_wordverifystatemachine_new(
+    
+        FfiConverterTypeWordValidator.lower(`validator`),FfiConverterUByte.lower(`startingWordNumber`),_status)
+}
+    )
+
+    protected val handle: Long
+    protected val cleanable: UniffiCleaner.Cleanable?
+
+    private val wasDestroyed = AtomicBoolean(false)
+    private val callCounter = AtomicLong(1)
+
+    override fun destroy() {
+        // Only allow a single call to this method.
+        // TODO: maybe we should log a warning if called more than once?
+        if (this.wasDestroyed.compareAndSet(false, true)) {
+            // This decrement always matches the initial count of 1 given at creation time.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    @Synchronized
+    override fun close() {
+        this.destroy()
+    }
+
+    internal inline fun <R> callWithHandle(block: (handle: Long) -> R): R {
+        // Check and increment the call counter, to keep the object alive.
+        // This needs a compare-and-set retry loop in case of concurrent updates.
+        do {
+            val c = this.callCounter.get()
+            if (c == 0L) {
+                throw IllegalStateException("${this.javaClass.simpleName} object has already been destroyed")
+            }
+            if (c == Long.MAX_VALUE) {
+                throw IllegalStateException("${this.javaClass.simpleName} call counter would overflow")
+            }
+        } while (! this.callCounter.compareAndSet(c, c + 1L))
+        // Now we can safely do the method call without the handle being freed concurrently.
+        try {
+            return block(this.uniffiCloneHandle())
+        } finally {
+            // This decrement always matches the increment we performed above.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    // Use a static inner class instead of a closure so as not to accidentally
+    // capture `this` as part of the cleanable's action.
+    private class UniffiCleanAction(private val handle: Long) : Runnable {
+        override fun run() {
+            if (handle == 0.toLong()) {
+                // Fake object created with `NoHandle`, don't try to free.
+                return;
+            }
+            uniffiRustCall { status ->
+                UniffiLib.uniffi_cove_fn_free_wordverifystatemachine(handle, status)
+            }
+        }
+    }
+
+    /**
+     * @suppress
+     */
+    fun uniffiCloneHandle(): Long {
+        if (handle == 0.toLong()) {
+            throw InternalException("uniffiCloneHandle() called on NoHandle object");
+        }
+        return uniffiRustCall() { status ->
+            UniffiLib.uniffi_cove_fn_clone_wordverifystatemachine(handle, status)
+        }
+    }
+
+    
+    /**
+     * Animation to target complete - transition to Correct or Incorrect
+     *
+     * Returns a transition with the result state and dwell duration.
+     */override fun `animationComplete`(): StateTransition {
+            return FfiConverterTypeStateTransition.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_wordverifystatemachine_animation_complete(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Get the animation configuration
+     */override fun `config`(): WordVerifyAnimationConfig {
+            return FfiConverterTypeWordVerifyAnimationConfig.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_wordverifystatemachine_config(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Dwell time complete - advance word or start return animation
+     *
+     * If correct: transitions to None and signals to advance word.
+     * If incorrect: transitions to Returning state.
+     */override fun `dwellComplete`(): StateTransition {
+            return FfiConverterTypeStateTransition.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_wordverifystatemachine_dwell_complete(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Check if all words have been verified
+     */override fun `isComplete`(): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_wordverifystatemachine_is_complete(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Get possible words for the current word number
+     */override fun `possibleWords`(): List<kotlin.String> {
+            return FfiConverterSequenceString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_wordverifystatemachine_possible_words(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Reset to a specific word number (useful for going back)
+     */override fun `resetToWord`(`wordNumber`: kotlin.UByte)
+        = 
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_wordverifystatemachine_reset_to_word(
+        it,
+        FfiConverterUByte.lower(`wordNumber`),_status)
+}
+    }
+    
+    
+
+    
+    /**
+     * Return animation complete (after incorrect) - back to None
+     */override fun `returnComplete`(): StateTransition {
+            return FfiConverterTypeStateTransition.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_wordverifystatemachine_return_complete(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * User tapped a word - start the checking animation
+     *
+     * Returns a transition with Checking state and the animation duration.
+     * If already animating, returns no-change.
+     */override fun `selectWord`(`word`: kotlin.String): StateTransition {
+            return FfiConverterTypeStateTransition.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_wordverifystatemachine_select_word(
+        it,
+        FfiConverterString.lower(`word`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Get the current state
+     */override fun `state`(): WordCheckState {
+            return FfiConverterTypeWordCheckState.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_wordverifystatemachine_state(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Get the current word number being verified (1-indexed)
+     */override fun `wordNumber`(): kotlin.UByte {
+            return FfiConverterUByte.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_wordverifystatemachine_word_number(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    
+
+    
+
+
+    
+    
+    /**
+     * @suppress
+     */
+    companion object
+    
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeWordVerifyStateMachine: FfiConverter<WordVerifyStateMachine, Long> {
+    override fun lower(value: WordVerifyStateMachine): Long {
+        return value.uniffiCloneHandle()
+    }
+
+    override fun lift(value: Long): WordVerifyStateMachine {
+        return WordVerifyStateMachine(UniffiWithHandle, value)
+    }
+
+    override fun read(buf: ByteBuffer): WordVerifyStateMachine {
+        return lift(buf.getLong())
+    }
+
+    override fun allocationSize(value: WordVerifyStateMachine) = 8UL
+
+    override fun write(value: WordVerifyStateMachine, buf: ByteBuffer) {
+        buf.putLong(lower(value))
+    }
+}
+
+
 
 data class AppState (
     var `router`: Router
@@ -24703,6 +25046,61 @@ public object FfiConverterTypeSendRouteConfirmArgs: FfiConverterRustBuffer<SendR
 
 
 
+/**
+ * Result of a state transition
+ */
+data class StateTransition (
+    /**
+     * The new state after the transition
+     */
+    var `newState`: WordCheckState
+    , 
+    /**
+     * Whether the UI should advance to the next word
+     */
+    var `shouldAdvanceWord`: kotlin.Boolean
+    , 
+    /**
+     * Suggested animation/delay duration in ms (None if no animation needed)
+     */
+    var `animationDurationMs`: kotlin.UInt?
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeStateTransition: FfiConverterRustBuffer<StateTransition> {
+    override fun read(buf: ByteBuffer): StateTransition {
+        return StateTransition(
+            FfiConverterTypeWordCheckState.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterOptionalUInt.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: StateTransition) = (
+            FfiConverterTypeWordCheckState.allocationSize(value.`newState`) +
+            FfiConverterBoolean.allocationSize(value.`shouldAdvanceWord`) +
+            FfiConverterOptionalUInt.allocationSize(value.`animationDurationMs`)
+    )
+
+    override fun write(value: StateTransition, buf: ByteBuffer) {
+            FfiConverterTypeWordCheckState.write(value.`newState`, buf)
+            FfiConverterBoolean.write(value.`shouldAdvanceWord`, buf)
+            FfiConverterOptionalUInt.write(value.`animationDurationMs`, buf)
+    }
+}
+
+
+
 data class TapSignerConfirmPinArgs (
     var `tapSigner`: TapSigner
     , 
@@ -25029,6 +25427,69 @@ public object FfiConverterTypeWalletMetadata: FfiConverterRustBuffer<WalletMetad
             FfiConverterOptionalTypeHardwareWalletMetadata.write(value.`hardwareMetadata`, buf)
             FfiConverterBoolean.write(value.`showLabels`, buf)
             FfiConverterTypeInternalOnlyMetadata.write(value.`internal`, buf)
+    }
+}
+
+
+
+/**
+ * Animation timing configuration
+ */
+data class WordVerifyAnimationConfig (
+    /**
+     * Duration (ms) for chip to travel to target when correct
+     */
+    var `moveDurationMsCorrect`: kotlin.UInt
+    , 
+    /**
+     * Duration (ms) for chip to travel to target when incorrect
+     */
+    var `moveDurationMsIncorrect`: kotlin.UInt
+    , 
+    /**
+     * How long (ms) chip stays at target after arriving (correct)
+     */
+    var `dwellDurationMsCorrect`: kotlin.UInt
+    , 
+    /**
+     * How long (ms) chip stays at target after arriving (incorrect)
+     */
+    var `dwellDurationMsIncorrect`: kotlin.UInt
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeWordVerifyAnimationConfig: FfiConverterRustBuffer<WordVerifyAnimationConfig> {
+    override fun read(buf: ByteBuffer): WordVerifyAnimationConfig {
+        return WordVerifyAnimationConfig(
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: WordVerifyAnimationConfig) = (
+            FfiConverterUInt.allocationSize(value.`moveDurationMsCorrect`) +
+            FfiConverterUInt.allocationSize(value.`moveDurationMsIncorrect`) +
+            FfiConverterUInt.allocationSize(value.`dwellDurationMsCorrect`) +
+            FfiConverterUInt.allocationSize(value.`dwellDurationMsIncorrect`)
+    )
+
+    override fun write(value: WordVerifyAnimationConfig, buf: ByteBuffer) {
+            FfiConverterUInt.write(value.`moveDurationMsCorrect`, buf)
+            FfiConverterUInt.write(value.`moveDurationMsIncorrect`, buf)
+            FfiConverterUInt.write(value.`dwellDurationMsCorrect`, buf)
+            FfiConverterUInt.write(value.`dwellDurationMsIncorrect`, buf)
     }
 }
 
@@ -25743,6 +26204,9 @@ sealed class AppStateReconcileMessage: Disposable  {
     object AcceptedTerms : AppStateReconcileMessage()
     
     
+    object WalletsChanged : AppStateReconcileMessage()
+    
+    
 
     
     @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
@@ -25823,6 +26287,8 @@ sealed class AppStateReconcileMessage: Disposable  {
             }
             is AppStateReconcileMessage.AcceptedTerms -> {// Nothing to destroy
             }
+            is AppStateReconcileMessage.WalletsChanged -> {// Nothing to destroy
+            }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
     
@@ -25873,6 +26339,7 @@ public object FfiConverterTypeAppStateReconcileMessage : FfiConverterRustBuffer<
                 FfiConverterTypeRoute.read(buf),
                 )
             12 -> AppStateReconcileMessage.AcceptedTerms
+            13 -> AppStateReconcileMessage.WalletsChanged
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -25961,6 +26428,12 @@ public object FfiConverterTypeAppStateReconcileMessage : FfiConverterRustBuffer<
                 4UL
             )
         }
+        is AppStateReconcileMessage.WalletsChanged -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
     }
 
     override fun write(value: AppStateReconcileMessage, buf: ByteBuffer) {
@@ -26022,6 +26495,10 @@ public object FfiConverterTypeAppStateReconcileMessage : FfiConverterRustBuffer<
             }
             is AppStateReconcileMessage.AcceptedTerms -> {
                 buf.putInt(12)
+                Unit
+            }
+            is AppStateReconcileMessage.WalletsChanged -> {
+                buf.putInt(13)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -29719,6 +30196,53 @@ public object FfiConverterTypeGlobalFlagTableError : FfiConverterRustBuffer<Glob
 
 
 
+/**
+ * Haptic feedback hint for the platform to trigger
+ */
+
+enum class HapticFeedback {
+    
+    /**
+     * Light tap - new part scanned in multi-part QR
+     */
+    PROGRESS,
+    /**
+     * Success notification - scan complete (single or multi-part)
+     */
+    SUCCESS,
+    /**
+     * No haptic feedback (duplicate part, no change)
+     */
+    NONE;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeHapticFeedback: FfiConverterRustBuffer<HapticFeedback> {
+    override fun read(buf: ByteBuffer) = try {
+        HapticFeedback.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: HapticFeedback) = 4UL
+
+    override fun write(value: HapticFeedback, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
 sealed class HardwareWalletMetadata: Disposable  {
     
     data class TapSigner(
@@ -31061,6 +31585,16 @@ sealed class MultiFormat: Disposable  {
     {
         
 
+    // The local Rust `Eq` implementation - only `eq` is used.
+    override fun equals(other: Any?): Boolean {
+        if (other !is MultiFormat) return false
+        return FfiConverterBoolean.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_multiformat_uniffi_trait_eq_eq(FfiConverterTypeMultiFormat.lower(this),
+        FfiConverterTypeMultiFormat.lower(`other`),_status)
+}
+    )
+    }
         companion object
     }
     
@@ -31070,6 +31604,16 @@ sealed class MultiFormat: Disposable  {
     {
         
 
+    // The local Rust `Eq` implementation - only `eq` is used.
+    override fun equals(other: Any?): Boolean {
+        if (other !is MultiFormat) return false
+        return FfiConverterBoolean.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_multiformat_uniffi_trait_eq_eq(FfiConverterTypeMultiFormat.lower(this),
+        FfiConverterTypeMultiFormat.lower(`other`),_status)
+}
+    )
+    }
         companion object
     }
     
@@ -31079,6 +31623,16 @@ sealed class MultiFormat: Disposable  {
     {
         
 
+    // The local Rust `Eq` implementation - only `eq` is used.
+    override fun equals(other: Any?): Boolean {
+        if (other !is MultiFormat) return false
+        return FfiConverterBoolean.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_multiformat_uniffi_trait_eq_eq(FfiConverterTypeMultiFormat.lower(this),
+        FfiConverterTypeMultiFormat.lower(`other`),_status)
+}
+    )
+    }
         companion object
     }
     
@@ -31088,6 +31642,16 @@ sealed class MultiFormat: Disposable  {
     {
         
 
+    // The local Rust `Eq` implementation - only `eq` is used.
+    override fun equals(other: Any?): Boolean {
+        if (other !is MultiFormat) return false
+        return FfiConverterBoolean.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_multiformat_uniffi_trait_eq_eq(FfiConverterTypeMultiFormat.lower(this),
+        FfiConverterTypeMultiFormat.lower(`other`),_status)
+}
+    )
+    }
         companion object
     }
     
@@ -31097,6 +31661,16 @@ sealed class MultiFormat: Disposable  {
     {
         
 
+    // The local Rust `Eq` implementation - only `eq` is used.
+    override fun equals(other: Any?): Boolean {
+        if (other !is MultiFormat) return false
+        return FfiConverterBoolean.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_multiformat_uniffi_trait_eq_eq(FfiConverterTypeMultiFormat.lower(this),
+        FfiConverterTypeMultiFormat.lower(`other`),_status)
+}
+    )
+    }
         companion object
     }
     
@@ -31109,6 +31683,16 @@ sealed class MultiFormat: Disposable  {
     {
         
 
+    // The local Rust `Eq` implementation - only `eq` is used.
+    override fun equals(other: Any?): Boolean {
+        if (other !is MultiFormat) return false
+        return FfiConverterBoolean.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_multiformat_uniffi_trait_eq_eq(FfiConverterTypeMultiFormat.lower(this),
+        FfiConverterTypeMultiFormat.lower(`other`),_status)
+}
+    )
+    }
         companion object
     }
     
@@ -31121,6 +31705,16 @@ sealed class MultiFormat: Disposable  {
     {
         
 
+    // The local Rust `Eq` implementation - only `eq` is used.
+    override fun equals(other: Any?): Boolean {
+        if (other !is MultiFormat) return false
+        return FfiConverterBoolean.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_multiformat_uniffi_trait_eq_eq(FfiConverterTypeMultiFormat.lower(this),
+        FfiConverterTypeMultiFormat.lower(`other`),_status)
+}
+    )
+    }
         companion object
     }
     
@@ -31185,6 +31779,16 @@ sealed class MultiFormat: Disposable  {
     
     
 
+    // The local Rust `Eq` implementation - only `eq` is used.
+    override fun equals(other: Any?): Boolean {
+        if (other !is MultiFormat) return false
+        return FfiConverterBoolean.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_multiformat_uniffi_trait_eq_eq(FfiConverterTypeMultiFormat.lower(this),
+        FfiConverterTypeMultiFormat.lower(`other`),_status)
+}
+    )
+    }
 
     companion object
 }
@@ -31341,18 +31945,18 @@ sealed class MultiFormatException: kotlin.Exception() {
             get() = ""
     }
     
-    class UrFormatNotSupported(
-        ) : MultiFormatException() {
-        override val message
-            get() = ""
-    }
-    
     class InvalidTapSigner(
         
         val v1: TapCardParseException
         ) : MultiFormatException() {
         override val message
             get() = "v1=${ v1 }"
+    }
+    
+    class TaprootNotSupported(
+        ) : MultiFormatException() {
+        override val message
+            get() = ""
     }
     
 
@@ -31388,10 +31992,10 @@ public object FfiConverterTypeMultiFormatError : FfiConverterRustBuffer<MultiFor
                 )
             2 -> MultiFormatException.UnsupportedNetworkAddress()
             3 -> MultiFormatException.UnrecognizedFormat()
-            4 -> MultiFormatException.UrFormatNotSupported()
-            5 -> MultiFormatException.InvalidTapSigner(
+            4 -> MultiFormatException.InvalidTapSigner(
                 FfiConverterTypeTapCardParseError.read(buf),
                 )
+            5 -> MultiFormatException.TaprootNotSupported()
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
@@ -31411,14 +32015,14 @@ public object FfiConverterTypeMultiFormatError : FfiConverterRustBuffer<MultiFor
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
             )
-            is MultiFormatException.UrFormatNotSupported -> (
-                // Add the size for the Int that specifies the variant plus the size needed for all fields
-                4UL
-            )
             is MultiFormatException.InvalidTapSigner -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
                 + FfiConverterTypeTapCardParseError.allocationSize(value.v1)
+            )
+            is MultiFormatException.TaprootNotSupported -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
             )
         }
     }
@@ -31438,13 +32042,13 @@ public object FfiConverterTypeMultiFormatError : FfiConverterRustBuffer<MultiFor
                 buf.putInt(3)
                 Unit
             }
-            is MultiFormatException.UrFormatNotSupported -> {
+            is MultiFormatException.InvalidTapSigner -> {
                 buf.putInt(4)
+                FfiConverterTypeTapCardParseError.write(value.v1, buf)
                 Unit
             }
-            is MultiFormatException.InvalidTapSigner -> {
+            is MultiFormatException.TaprootNotSupported -> {
                 buf.putInt(5)
-                FfiConverterTypeTapCardParseError.write(value.v1, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -31457,18 +32061,6 @@ public object FfiConverterTypeMultiFormatError : FfiConverterRustBuffer<MultiFor
 
 
 sealed class MultiQrException: kotlin.Exception() {
-    
-    class CannotAddPartToSingleQr(
-        ) : MultiQrException() {
-        override val message
-            get() = ""
-    }
-    
-    class CannotAddPartToSeedQr(
-        ) : MultiQrException() {
-        override val message
-            get() = ""
-    }
     
     class ParseException(
         
@@ -31484,24 +32076,10 @@ sealed class MultiQrException: kotlin.Exception() {
             get() = ""
     }
     
-    class NotYetAvailable(
+    class RequiresStringData(
         ) : MultiQrException() {
         override val message
             get() = ""
-    }
-    
-    class CannotAddBinaryDataToBbqr(
-        ) : MultiQrException() {
-        override val message
-            get() = ""
-    }
-    
-    class BbqrDidNotContainSeedWords(
-        
-        val v1: kotlin.String
-        ) : MultiQrException() {
-        override val message
-            get() = "v1=${ v1 }"
     }
     
     class InvalidSeedQr(
@@ -31512,12 +32090,18 @@ sealed class MultiQrException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
-    class InvalidPlainTextQr(
+    class Ur(
         
-        val v1: kotlin.String
+        val v1: UrException
         ) : MultiQrException() {
         override val message
             get() = "v1=${ v1 }"
+    }
+    
+    class BbqrCborNotSupported(
+        ) : MultiQrException() {
+        override val message
+            get() = ""
     }
     
 
@@ -31548,37 +32132,24 @@ public object FfiConverterTypeMultiQrError : FfiConverterRustBuffer<MultiQrExcep
         
 
         return when(buf.getInt()) {
-            1 -> MultiQrException.CannotAddPartToSingleQr()
-            2 -> MultiQrException.CannotAddPartToSeedQr()
-            3 -> MultiQrException.ParseException(
+            1 -> MultiQrException.ParseException(
                 FfiConverterString.read(buf),
                 )
-            4 -> MultiQrException.InvalidUtf8()
-            5 -> MultiQrException.NotYetAvailable()
-            6 -> MultiQrException.CannotAddBinaryDataToBbqr()
-            7 -> MultiQrException.BbqrDidNotContainSeedWords(
-                FfiConverterString.read(buf),
-                )
-            8 -> MultiQrException.InvalidSeedQr(
+            2 -> MultiQrException.InvalidUtf8()
+            3 -> MultiQrException.RequiresStringData()
+            4 -> MultiQrException.InvalidSeedQr(
                 FfiConverterTypeSeedQrError.read(buf),
                 )
-            9 -> MultiQrException.InvalidPlainTextQr(
-                FfiConverterString.read(buf),
+            5 -> MultiQrException.Ur(
+                FfiConverterTypeUrError.read(buf),
                 )
+            6 -> MultiQrException.BbqrCborNotSupported()
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
 
     override fun allocationSize(value: MultiQrException): ULong {
         return when(value) {
-            is MultiQrException.CannotAddPartToSingleQr -> (
-                // Add the size for the Int that specifies the variant plus the size needed for all fields
-                4UL
-            )
-            is MultiQrException.CannotAddPartToSeedQr -> (
-                // Add the size for the Int that specifies the variant plus the size needed for all fields
-                4UL
-            )
             is MultiQrException.ParseException -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
@@ -31588,243 +32159,60 @@ public object FfiConverterTypeMultiQrError : FfiConverterRustBuffer<MultiQrExcep
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
             )
-            is MultiQrException.NotYetAvailable -> (
+            is MultiQrException.RequiresStringData -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
-            )
-            is MultiQrException.CannotAddBinaryDataToBbqr -> (
-                // Add the size for the Int that specifies the variant plus the size needed for all fields
-                4UL
-            )
-            is MultiQrException.BbqrDidNotContainSeedWords -> (
-                // Add the size for the Int that specifies the variant plus the size needed for all fields
-                4UL
-                + FfiConverterString.allocationSize(value.v1)
             )
             is MultiQrException.InvalidSeedQr -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
                 + FfiConverterTypeSeedQrError.allocationSize(value.v1)
             )
-            is MultiQrException.InvalidPlainTextQr -> (
+            is MultiQrException.Ur -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
-                + FfiConverterString.allocationSize(value.v1)
+                + FfiConverterTypeUrError.allocationSize(value.v1)
+            )
+            is MultiQrException.BbqrCborNotSupported -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
             )
         }
     }
 
     override fun write(value: MultiQrException, buf: ByteBuffer) {
         when(value) {
-            is MultiQrException.CannotAddPartToSingleQr -> {
-                buf.putInt(1)
-                Unit
-            }
-            is MultiQrException.CannotAddPartToSeedQr -> {
-                buf.putInt(2)
-                Unit
-            }
             is MultiQrException.ParseException -> {
-                buf.putInt(3)
+                buf.putInt(1)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
             is MultiQrException.InvalidUtf8 -> {
-                buf.putInt(4)
+                buf.putInt(2)
                 Unit
             }
-            is MultiQrException.NotYetAvailable -> {
-                buf.putInt(5)
-                Unit
-            }
-            is MultiQrException.CannotAddBinaryDataToBbqr -> {
-                buf.putInt(6)
-                Unit
-            }
-            is MultiQrException.BbqrDidNotContainSeedWords -> {
-                buf.putInt(7)
-                FfiConverterString.write(value.v1, buf)
+            is MultiQrException.RequiresStringData -> {
+                buf.putInt(3)
                 Unit
             }
             is MultiQrException.InvalidSeedQr -> {
-                buf.putInt(8)
+                buf.putInt(4)
                 FfiConverterTypeSeedQrError.write(value.v1, buf)
                 Unit
             }
-            is MultiQrException.InvalidPlainTextQr -> {
-                buf.putInt(9)
-                FfiConverterString.write(value.v1, buf)
+            is MultiQrException.Ur -> {
+                buf.putInt(5)
+                FfiConverterTypeUrError.write(value.v1, buf)
+                Unit
+            }
+            is MultiQrException.BbqrCborNotSupported -> {
+                buf.putInt(6)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
 
 }
-
-
-
-sealed class MultiQrScanResult: Disposable  {
-    
-    data class SeedQr(
-        val v1: org.bitcoinppl.cove_core.SeedQr) : MultiQrScanResult()
-        
-    {
-        
-
-        companion object
-    }
-    
-    data class Single(
-        val v1: kotlin.String) : MultiQrScanResult()
-        
-    {
-        
-
-        companion object
-    }
-    
-    data class CompletedBBqr(
-        val v1: org.bitcoinppl.cove_core.BbqrJoined) : MultiQrScanResult()
-        
-    {
-        
-
-        companion object
-    }
-    
-    data class InProgressBBqr(
-        val v1: kotlin.UInt) : MultiQrScanResult()
-        
-    {
-        
-
-        companion object
-    }
-    
-
-    
-    @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
-    override fun destroy() {
-        when(this) {
-            is MultiQrScanResult.SeedQr -> {
-                
-    Disposable.destroy(
-        this.v1
-    )
-                
-            }
-            is MultiQrScanResult.Single -> {
-                
-    Disposable.destroy(
-        this.v1
-    )
-                
-            }
-            is MultiQrScanResult.CompletedBBqr -> {
-                
-    Disposable.destroy(
-        this.v1
-    )
-                
-            }
-            is MultiQrScanResult.InProgressBBqr -> {
-                
-    Disposable.destroy(
-        this.v1
-    )
-                
-            }
-        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
-    }
-    
-
-    
-    
-
-
-    companion object
-}
-
-/**
- * @suppress
- */
-public object FfiConverterTypeMultiQrScanResult : FfiConverterRustBuffer<MultiQrScanResult>{
-    override fun read(buf: ByteBuffer): MultiQrScanResult {
-        return when(buf.getInt()) {
-            1 -> MultiQrScanResult.SeedQr(
-                FfiConverterTypeSeedQr.read(buf),
-                )
-            2 -> MultiQrScanResult.Single(
-                FfiConverterString.read(buf),
-                )
-            3 -> MultiQrScanResult.CompletedBBqr(
-                FfiConverterTypeBbqrJoined.read(buf),
-                )
-            4 -> MultiQrScanResult.InProgressBBqr(
-                FfiConverterUInt.read(buf),
-                )
-            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
-        }
-    }
-
-    override fun allocationSize(value: MultiQrScanResult) = when(value) {
-        is MultiQrScanResult.SeedQr -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterTypeSeedQr.allocationSize(value.v1)
-            )
-        }
-        is MultiQrScanResult.Single -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterString.allocationSize(value.v1)
-            )
-        }
-        is MultiQrScanResult.CompletedBBqr -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterTypeBbqrJoined.allocationSize(value.v1)
-            )
-        }
-        is MultiQrScanResult.InProgressBBqr -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterUInt.allocationSize(value.v1)
-            )
-        }
-    }
-
-    override fun write(value: MultiQrScanResult, buf: ByteBuffer) {
-        when(value) {
-            is MultiQrScanResult.SeedQr -> {
-                buf.putInt(1)
-                FfiConverterTypeSeedQr.write(value.v1, buf)
-                Unit
-            }
-            is MultiQrScanResult.Single -> {
-                buf.putInt(2)
-                FfiConverterString.write(value.v1, buf)
-                Unit
-            }
-            is MultiQrScanResult.CompletedBBqr -> {
-                buf.putInt(3)
-                FfiConverterTypeBbqrJoined.write(value.v1, buf)
-                Unit
-            }
-            is MultiQrScanResult.InProgressBBqr -> {
-                buf.putInt(4)
-                FfiConverterUInt.write(value.v1, buf)
-                Unit
-            }
-        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
-    }
-}
-
-
 
 
 
@@ -32759,6 +33147,256 @@ public object FfiConverterTypeRoute : FfiConverterRustBuffer<Route>{
 
 
 
+/**
+ * Progress information for multi-part QR scans
+ */
+sealed class ScanProgress {
+    
+    /**
+     * BBQR progress with scanned/total parts
+     */
+    data class Bbqr(
+        val `scanned`: kotlin.UInt, 
+        val `total`: kotlin.UInt) : ScanProgress()
+        
+    {
+        
+
+        companion object
+    }
+    
+    /**
+     * UR progress as percentage (0.0 to 1.0)
+     */
+    data class Ur(
+        val `percentage`: kotlin.Double) : ScanProgress()
+        
+    {
+        
+
+        companion object
+    }
+    
+
+    
+
+    
+    
+    /**
+     * Detail text for the progress (e.g., "7 parts left"), or None for UR
+     */ fun `detailText`(): kotlin.String? {
+            return FfiConverterOptionalString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_scanprogress_detail_text(FfiConverterTypeScanProgress.lower(this),
+        _status)
+}
+    )
+    }
+    
+
+    
+    /**
+     * Display text for the progress (e.g., "Scanned 3 of 10" or "Scanned 45%")
+     */ fun `displayText`(): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_scanprogress_display_text(FfiConverterTypeScanProgress.lower(this),
+        _status)
+}
+    )
+    }
+    
+
+    
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeScanProgress : FfiConverterRustBuffer<ScanProgress>{
+    override fun read(buf: ByteBuffer): ScanProgress {
+        return when(buf.getInt()) {
+            1 -> ScanProgress.Bbqr(
+                FfiConverterUInt.read(buf),
+                FfiConverterUInt.read(buf),
+                )
+            2 -> ScanProgress.Ur(
+                FfiConverterDouble.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: ScanProgress) = when(value) {
+        is ScanProgress.Bbqr -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterUInt.allocationSize(value.`scanned`)
+                + FfiConverterUInt.allocationSize(value.`total`)
+            )
+        }
+        is ScanProgress.Ur -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterDouble.allocationSize(value.`percentage`)
+            )
+        }
+    }
+
+    override fun write(value: ScanProgress, buf: ByteBuffer) {
+        when(value) {
+            is ScanProgress.Bbqr -> {
+                buf.putInt(1)
+                FfiConverterUInt.write(value.`scanned`, buf)
+                FfiConverterUInt.write(value.`total`, buf)
+                Unit
+            }
+            is ScanProgress.Ur -> {
+                buf.putInt(2)
+                FfiConverterDouble.write(value.`percentage`, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+/**
+ * Result of a QR scan - either complete with parsed data or in progress
+ */
+sealed class ScanResult: Disposable  {
+    
+    /**
+     * Scan complete - here's the parsed data
+     */
+    data class Complete(
+        val `data`: org.bitcoinppl.cove_core.MultiFormat, 
+        /**
+         * Haptic feedback to trigger
+         */
+        val `haptic`: org.bitcoinppl.cove_core.HapticFeedback) : ScanResult()
+        
+    {
+        
+
+        companion object
+    }
+    
+    /**
+     * Multi-part scan in progress
+     */
+    data class InProgress(
+        val `progress`: org.bitcoinppl.cove_core.ScanProgress, 
+        /**
+         * Haptic feedback to trigger
+         */
+        val `haptic`: org.bitcoinppl.cove_core.HapticFeedback) : ScanResult()
+        
+    {
+        
+
+        companion object
+    }
+    
+
+    
+    @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
+    override fun destroy() {
+        when(this) {
+            is ScanResult.Complete -> {
+                
+    Disposable.destroy(
+        this.`data`,
+        this.`haptic`
+    )
+                
+            }
+            is ScanResult.InProgress -> {
+                
+    Disposable.destroy(
+        this.`progress`,
+        this.`haptic`
+    )
+                
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+    
+
+    
+    
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeScanResult : FfiConverterRustBuffer<ScanResult>{
+    override fun read(buf: ByteBuffer): ScanResult {
+        return when(buf.getInt()) {
+            1 -> ScanResult.Complete(
+                FfiConverterTypeMultiFormat.read(buf),
+                FfiConverterTypeHapticFeedback.read(buf),
+                )
+            2 -> ScanResult.InProgress(
+                FfiConverterTypeScanProgress.read(buf),
+                FfiConverterTypeHapticFeedback.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: ScanResult) = when(value) {
+        is ScanResult.Complete -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeMultiFormat.allocationSize(value.`data`)
+                + FfiConverterTypeHapticFeedback.allocationSize(value.`haptic`)
+            )
+        }
+        is ScanResult.InProgress -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeScanProgress.allocationSize(value.`progress`)
+                + FfiConverterTypeHapticFeedback.allocationSize(value.`haptic`)
+            )
+        }
+    }
+
+    override fun write(value: ScanResult, buf: ByteBuffer) {
+        when(value) {
+            is ScanResult.Complete -> {
+                buf.putInt(1)
+                FfiConverterTypeMultiFormat.write(value.`data`, buf)
+                FfiConverterTypeHapticFeedback.write(value.`haptic`, buf)
+                Unit
+            }
+            is ScanResult.InProgress -> {
+                buf.putInt(2)
+                FfiConverterTypeScanProgress.write(value.`progress`, buf)
+                FfiConverterTypeHapticFeedback.write(value.`haptic`, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
 sealed class ScanState {
     
     object NotStarted : ScanState()
@@ -32912,6 +33550,521 @@ public object FfiConverterTypeScannerResponse : FfiConverterRustBuffer<ScannerRe
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+/**
+ * What alert to show for validation messages
+ */
+sealed class SecurityAlertState {
+    
+    data class UnverifiedWallets(
+        val `walletId`: org.bitcoinppl.cove_core.types.WalletId) : SecurityAlertState()
+        
+    {
+        
+
+        companion object
+    }
+    
+    object ConfirmEnableWipeMePin : SecurityAlertState()
+    
+    
+    object ConfirmDecoyPin : SecurityAlertState()
+    
+    
+    object NoteNoFaceIdWhenTrickPins : SecurityAlertState()
+    
+    
+    object NoteNoFaceIdWhenWipeMePin : SecurityAlertState()
+    
+    
+    object NoteNoFaceIdWhenDecoyPin : SecurityAlertState()
+    
+    
+    object NotePinRequired : SecurityAlertState()
+    
+    
+    /**
+     * Disabling biometric, then show confirm for wipe me PIN
+     */
+    object NoteFaceIdDisablingForWipeMePin : SecurityAlertState()
+    
+    
+    /**
+     * Disabling biometric, then show confirm for decoy PIN
+     */
+    object NoteFaceIdDisablingForDecoyPin : SecurityAlertState()
+    
+    
+    data class ExtraSetPinError(
+        val `message`: kotlin.String) : SecurityAlertState()
+        
+    {
+        
+
+        companion object
+    }
+    
+
+    
+
+    
+    
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeSecurityAlertState : FfiConverterRustBuffer<SecurityAlertState>{
+    override fun read(buf: ByteBuffer): SecurityAlertState {
+        return when(buf.getInt()) {
+            1 -> SecurityAlertState.UnverifiedWallets(
+                FfiConverterTypeWalletId.read(buf),
+                )
+            2 -> SecurityAlertState.ConfirmEnableWipeMePin
+            3 -> SecurityAlertState.ConfirmDecoyPin
+            4 -> SecurityAlertState.NoteNoFaceIdWhenTrickPins
+            5 -> SecurityAlertState.NoteNoFaceIdWhenWipeMePin
+            6 -> SecurityAlertState.NoteNoFaceIdWhenDecoyPin
+            7 -> SecurityAlertState.NotePinRequired
+            8 -> SecurityAlertState.NoteFaceIdDisablingForWipeMePin
+            9 -> SecurityAlertState.NoteFaceIdDisablingForDecoyPin
+            10 -> SecurityAlertState.ExtraSetPinError(
+                FfiConverterString.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: SecurityAlertState) = when(value) {
+        is SecurityAlertState.UnverifiedWallets -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeWalletId.allocationSize(value.`walletId`)
+            )
+        }
+        is SecurityAlertState.ConfirmEnableWipeMePin -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is SecurityAlertState.ConfirmDecoyPin -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is SecurityAlertState.NoteNoFaceIdWhenTrickPins -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is SecurityAlertState.NoteNoFaceIdWhenWipeMePin -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is SecurityAlertState.NoteNoFaceIdWhenDecoyPin -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is SecurityAlertState.NotePinRequired -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is SecurityAlertState.NoteFaceIdDisablingForWipeMePin -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is SecurityAlertState.NoteFaceIdDisablingForDecoyPin -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is SecurityAlertState.ExtraSetPinError -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`message`)
+            )
+        }
+    }
+
+    override fun write(value: SecurityAlertState, buf: ByteBuffer) {
+        when(value) {
+            is SecurityAlertState.UnverifiedWallets -> {
+                buf.putInt(1)
+                FfiConverterTypeWalletId.write(value.`walletId`, buf)
+                Unit
+            }
+            is SecurityAlertState.ConfirmEnableWipeMePin -> {
+                buf.putInt(2)
+                Unit
+            }
+            is SecurityAlertState.ConfirmDecoyPin -> {
+                buf.putInt(3)
+                Unit
+            }
+            is SecurityAlertState.NoteNoFaceIdWhenTrickPins -> {
+                buf.putInt(4)
+                Unit
+            }
+            is SecurityAlertState.NoteNoFaceIdWhenWipeMePin -> {
+                buf.putInt(5)
+                Unit
+            }
+            is SecurityAlertState.NoteNoFaceIdWhenDecoyPin -> {
+                buf.putInt(6)
+                Unit
+            }
+            is SecurityAlertState.NotePinRequired -> {
+                buf.putInt(7)
+                Unit
+            }
+            is SecurityAlertState.NoteFaceIdDisablingForWipeMePin -> {
+                buf.putInt(8)
+                Unit
+            }
+            is SecurityAlertState.NoteFaceIdDisablingForDecoyPin -> {
+                buf.putInt(9)
+                Unit
+            }
+            is SecurityAlertState.ExtraSetPinError -> {
+                buf.putInt(10)
+                FfiConverterString.write(value.`message`, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+/**
+ * Action the user wants to take on security settings
+ */
+sealed class SecuritySettingsAction {
+    
+    data class ToggleBiometric(
+        val `enable`: kotlin.Boolean) : SecuritySettingsAction()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class TogglePin(
+        val `enable`: kotlin.Boolean) : SecuritySettingsAction()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class ToggleWipeDataPin(
+        val `enable`: kotlin.Boolean) : SecuritySettingsAction()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class ToggleDecoyPin(
+        val `enable`: kotlin.Boolean) : SecuritySettingsAction()
+        
+    {
+        
+
+        companion object
+    }
+    
+    object ChangePin : SecuritySettingsAction()
+    
+    
+
+    
+
+    
+    
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeSecuritySettingsAction : FfiConverterRustBuffer<SecuritySettingsAction>{
+    override fun read(buf: ByteBuffer): SecuritySettingsAction {
+        return when(buf.getInt()) {
+            1 -> SecuritySettingsAction.ToggleBiometric(
+                FfiConverterBoolean.read(buf),
+                )
+            2 -> SecuritySettingsAction.TogglePin(
+                FfiConverterBoolean.read(buf),
+                )
+            3 -> SecuritySettingsAction.ToggleWipeDataPin(
+                FfiConverterBoolean.read(buf),
+                )
+            4 -> SecuritySettingsAction.ToggleDecoyPin(
+                FfiConverterBoolean.read(buf),
+                )
+            5 -> SecuritySettingsAction.ChangePin
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: SecuritySettingsAction) = when(value) {
+        is SecuritySettingsAction.ToggleBiometric -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterBoolean.allocationSize(value.`enable`)
+            )
+        }
+        is SecuritySettingsAction.TogglePin -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterBoolean.allocationSize(value.`enable`)
+            )
+        }
+        is SecuritySettingsAction.ToggleWipeDataPin -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterBoolean.allocationSize(value.`enable`)
+            )
+        }
+        is SecuritySettingsAction.ToggleDecoyPin -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterBoolean.allocationSize(value.`enable`)
+            )
+        }
+        is SecuritySettingsAction.ChangePin -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+    }
+
+    override fun write(value: SecuritySettingsAction, buf: ByteBuffer) {
+        when(value) {
+            is SecuritySettingsAction.ToggleBiometric -> {
+                buf.putInt(1)
+                FfiConverterBoolean.write(value.`enable`, buf)
+                Unit
+            }
+            is SecuritySettingsAction.TogglePin -> {
+                buf.putInt(2)
+                FfiConverterBoolean.write(value.`enable`, buf)
+                Unit
+            }
+            is SecuritySettingsAction.ToggleWipeDataPin -> {
+                buf.putInt(3)
+                FfiConverterBoolean.write(value.`enable`, buf)
+                Unit
+            }
+            is SecuritySettingsAction.ToggleDecoyPin -> {
+                buf.putInt(4)
+                FfiConverterBoolean.write(value.`enable`, buf)
+                Unit
+            }
+            is SecuritySettingsAction.ChangePin -> {
+                buf.putInt(5)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+/**
+ * Result of validating a security settings action
+ */
+sealed class SecuritySettingsResult {
+    
+    /**
+     * Proceed to show a sheet for PIN entry
+     */
+    data class ProceedToSheet(
+        val v1: org.bitcoinppl.cove_core.SecuritySheetState) : SecuritySettingsResult()
+        
+    {
+        
+
+        companion object
+    }
+    
+    /**
+     * Show an alert dialog
+     */
+    data class ShowAlert(
+        val v1: org.bitcoinppl.cove_core.SecurityAlertState) : SecuritySettingsResult()
+        
+    {
+        
+
+        companion object
+    }
+    
+    /**
+     * Decoy mode - just update local UI, don't persist
+     */
+    object DecoyModeLocalUpdate : SecuritySettingsResult()
+    
+    
+
+    
+
+    
+    
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeSecuritySettingsResult : FfiConverterRustBuffer<SecuritySettingsResult>{
+    override fun read(buf: ByteBuffer): SecuritySettingsResult {
+        return when(buf.getInt()) {
+            1 -> SecuritySettingsResult.ProceedToSheet(
+                FfiConverterTypeSecuritySheetState.read(buf),
+                )
+            2 -> SecuritySettingsResult.ShowAlert(
+                FfiConverterTypeSecurityAlertState.read(buf),
+                )
+            3 -> SecuritySettingsResult.DecoyModeLocalUpdate
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: SecuritySettingsResult) = when(value) {
+        is SecuritySettingsResult.ProceedToSheet -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeSecuritySheetState.allocationSize(value.v1)
+            )
+        }
+        is SecuritySettingsResult.ShowAlert -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeSecurityAlertState.allocationSize(value.v1)
+            )
+        }
+        is SecuritySettingsResult.DecoyModeLocalUpdate -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+    }
+
+    override fun write(value: SecuritySettingsResult, buf: ByteBuffer) {
+        when(value) {
+            is SecuritySettingsResult.ProceedToSheet -> {
+                buf.putInt(1)
+                FfiConverterTypeSecuritySheetState.write(value.v1, buf)
+                Unit
+            }
+            is SecuritySettingsResult.ShowAlert -> {
+                buf.putInt(2)
+                FfiConverterTypeSecurityAlertState.write(value.v1, buf)
+                Unit
+            }
+            is SecuritySettingsResult.DecoyModeLocalUpdate -> {
+                buf.putInt(3)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+/**
+ * What sheet to show for PIN entry flows
+ */
+
+enum class SecuritySheetState {
+    
+    NONE,
+    NEW_PIN,
+    REMOVE_PIN,
+    CHANGE_PIN,
+    ENABLE_BIOMETRIC,
+    DISABLE_BIOMETRIC,
+    ENABLE_WIPE_DATA_PIN,
+    REMOVE_WIPE_DATA_PIN,
+    /**
+     * Remove wipe data PIN, then enable biometric
+     */
+    REMOVE_WIPE_DATA_PIN_THEN_ENABLE_BIOMETRIC,
+    ENABLE_DECOY_PIN,
+    REMOVE_DECOY_PIN,
+    /**
+     * Remove decoy PIN, then enable biometric
+     */
+    REMOVE_DECOY_PIN_THEN_ENABLE_BIOMETRIC,
+    REMOVE_ALL_TRICK_PINS;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeSecuritySheetState: FfiConverterRustBuffer<SecuritySheetState> {
+    override fun read(buf: ByteBuffer) = try {
+        SecuritySheetState.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: SecuritySheetState) = 4UL
+
+    override fun write(value: SecuritySheetState, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
     }
 }
 
@@ -37318,6 +38471,173 @@ public object FfiConverterTypeUnsignedTransactionsTableError : FfiConverterRustB
 
 
 
+/**
+ * Supported UR types for Bitcoin operations
+ */
+sealed class UrType {
+    
+    /**
+     * crypto-psbt - Partially Signed Bitcoin Transaction
+     */
+    object CryptoPsbt : UrType()
+    
+    
+    /**
+     * crypto-seed - BIP39 seed
+     */
+    object CryptoSeed : UrType()
+    
+    
+    /**
+     * crypto-hdkey - HD key (xpub/xprv)
+     */
+    object CryptoHdkey : UrType()
+    
+    
+    /**
+     * crypto-account - Account descriptor
+     */
+    object CryptoAccount : UrType()
+    
+    
+    /**
+     * crypto-output - Output descriptor
+     */
+    object CryptoOutput : UrType()
+    
+    
+    /**
+     * bytes - Raw bytes
+     */
+    object Bytes : UrType()
+    
+    
+    /**
+     * Unknown type with raw string
+     */
+    data class Unknown(
+        val v1: kotlin.String) : UrType()
+        
+    {
+        
+
+        companion object
+    }
+    
+
+    
+
+    
+    
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeUrType : FfiConverterRustBuffer<UrType>{
+    override fun read(buf: ByteBuffer): UrType {
+        return when(buf.getInt()) {
+            1 -> UrType.CryptoPsbt
+            2 -> UrType.CryptoSeed
+            3 -> UrType.CryptoHdkey
+            4 -> UrType.CryptoAccount
+            5 -> UrType.CryptoOutput
+            6 -> UrType.Bytes
+            7 -> UrType.Unknown(
+                FfiConverterString.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: UrType) = when(value) {
+        is UrType.CryptoPsbt -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is UrType.CryptoSeed -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is UrType.CryptoHdkey -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is UrType.CryptoAccount -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is UrType.CryptoOutput -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is UrType.Bytes -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is UrType.Unknown -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+        }
+    }
+
+    override fun write(value: UrType, buf: ByteBuffer) {
+        when(value) {
+            is UrType.CryptoPsbt -> {
+                buf.putInt(1)
+                Unit
+            }
+            is UrType.CryptoSeed -> {
+                buf.putInt(2)
+                Unit
+            }
+            is UrType.CryptoHdkey -> {
+                buf.putInt(3)
+                Unit
+            }
+            is UrType.CryptoAccount -> {
+                buf.putInt(4)
+                Unit
+            }
+            is UrType.CryptoOutput -> {
+                buf.putInt(5)
+                Unit
+            }
+            is UrType.Bytes -> {
+                buf.putInt(6)
+                Unit
+            }
+            is UrType.Unknown -> {
+                buf.putInt(7)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
 
 enum class WalletAddressType {
     
@@ -40208,6 +41528,169 @@ public object FfiConverterTypeWalletType: FfiConverterRustBuffer<WalletType> {
 
 
 
+/**
+ * The current state of the word verification check
+ */
+sealed class WordCheckState {
+    
+    /**
+     * No word is being checked
+     */
+    object None : WordCheckState()
+    
+    
+    /**
+     * User tapped a word, animating to target
+     */
+    data class Checking(
+        val `word`: kotlin.String) : WordCheckState()
+        
+    {
+        
+
+        companion object
+    }
+    
+    /**
+     * Word was correct, showing green
+     */
+    data class Correct(
+        val `word`: kotlin.String) : WordCheckState()
+        
+    {
+        
+
+        companion object
+    }
+    
+    /**
+     * Word was incorrect, showing red
+     */
+    data class Incorrect(
+        val `word`: kotlin.String) : WordCheckState()
+        
+    {
+        
+
+        companion object
+    }
+    
+    /**
+     * Returning to origin after incorrect
+     */
+    data class Returning(
+        val `word`: kotlin.String) : WordCheckState()
+        
+    {
+        
+
+        companion object
+    }
+    
+
+    
+
+    
+    
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeWordCheckState : FfiConverterRustBuffer<WordCheckState>{
+    override fun read(buf: ByteBuffer): WordCheckState {
+        return when(buf.getInt()) {
+            1 -> WordCheckState.None
+            2 -> WordCheckState.Checking(
+                FfiConverterString.read(buf),
+                )
+            3 -> WordCheckState.Correct(
+                FfiConverterString.read(buf),
+                )
+            4 -> WordCheckState.Incorrect(
+                FfiConverterString.read(buf),
+                )
+            5 -> WordCheckState.Returning(
+                FfiConverterString.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: WordCheckState) = when(value) {
+        is WordCheckState.None -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is WordCheckState.Checking -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`word`)
+            )
+        }
+        is WordCheckState.Correct -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`word`)
+            )
+        }
+        is WordCheckState.Incorrect -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`word`)
+            )
+        }
+        is WordCheckState.Returning -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`word`)
+            )
+        }
+    }
+
+    override fun write(value: WordCheckState, buf: ByteBuffer) {
+        when(value) {
+            is WordCheckState.None -> {
+                buf.putInt(1)
+                Unit
+            }
+            is WordCheckState.Checking -> {
+                buf.putInt(2)
+                FfiConverterString.write(value.`word`, buf)
+                Unit
+            }
+            is WordCheckState.Correct -> {
+                buf.putInt(3)
+                FfiConverterString.write(value.`word`, buf)
+                Unit
+            }
+            is WordCheckState.Incorrect -> {
+                buf.putInt(4)
+                FfiConverterString.write(value.`word`, buf)
+                Unit
+            }
+            is WordCheckState.Returning -> {
+                buf.putInt(5)
+                FfiConverterString.write(value.`word`, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
 
 
 sealed class XpubException: kotlin.Exception() {
@@ -41803,38 +43286,6 @@ public object FfiConverterOptionalSequenceTypeUtxo: FfiConverterRustBuffer<List<
 /**
  * @suppress
  */
-public object FfiConverterOptionalSequenceSequenceString: FfiConverterRustBuffer<List<List<kotlin.String>>?> {
-    override fun read(buf: ByteBuffer): List<List<kotlin.String>>? {
-        if (buf.get().toInt() == 0) {
-            return null
-        }
-        return FfiConverterSequenceSequenceString.read(buf)
-    }
-
-    override fun allocationSize(value: List<List<kotlin.String>>?): ULong {
-        if (value == null) {
-            return 1UL
-        } else {
-            return 1UL + FfiConverterSequenceSequenceString.allocationSize(value)
-        }
-    }
-
-    override fun write(value: List<List<kotlin.String>>?, buf: ByteBuffer) {
-        if (value == null) {
-            buf.put(0)
-        } else {
-            buf.put(1)
-            FfiConverterSequenceSequenceString.write(value, buf)
-        }
-    }
-}
-
-
-
-
-/**
- * @suppress
- */
 public object FfiConverterOptionalTypeWalletId: FfiConverterRustBuffer<WalletId?> {
     override fun read(buf: ByteBuffer): WalletId? {
         if (buf.get().toInt() == 0) {
@@ -42557,6 +44008,19 @@ object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<A
 
 
 
+
+
+
+object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrException> {
+    override fun lift(error_buf: RustBuffer.ByValue): UrException =
+        org.bitcoinppl.cove_core.ur.UrException.ErrorHandler.lift(
+            RustBufferUrError.ByValue().apply {
+                capacity = error_buf.capacity
+                len = error_buf.len
+                data = error_buf.data
+            }
+        )
+}
 
 
 

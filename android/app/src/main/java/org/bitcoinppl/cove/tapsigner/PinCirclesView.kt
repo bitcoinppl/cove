@@ -2,7 +2,6 @@ package org.bitcoinppl.cove.tapsigner
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
@@ -38,10 +37,7 @@ private fun PinCircle(
     modifier: Modifier = Modifier,
 ) {
     Surface(
-        modifier =
-            modifier
-                .size(18.dp)
-                .padding(horizontal = 10.dp),
+        modifier = modifier.size(18.dp),
         shape = CircleShape,
         color = if (isFilled) MaterialTheme.colorScheme.primary else Color.Transparent,
         border =

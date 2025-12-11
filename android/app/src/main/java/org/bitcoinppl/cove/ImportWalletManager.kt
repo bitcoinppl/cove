@@ -2,6 +2,11 @@ package org.bitcoinppl.cove
 
 import android.util.Log
 import androidx.compose.runtime.Stable
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
 import java.io.Closeable
@@ -13,6 +18,8 @@ class ImportWalletManager :
     Closeable {
     private val tag = "ImportWalletManager"
     private val isClosed = AtomicBoolean(false)
+    private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     val rust: RustImportWalletManager
 
@@ -24,10 +31,13 @@ class ImportWalletManager :
 
     override fun reconcile(message: ImportWalletManagerReconcileMessage) {
         Log.d(tag, "Reconcile: $message")
-
-        when (message) {
-            ImportWalletManagerReconcileMessage.NO_OP -> {
-                // no-op
+        ioScope.launch {
+            mainScope.launch {
+                when (message) {
+                    ImportWalletManagerReconcileMessage.NO_OP -> {
+                        // no-op
+                    }
+                }
             }
         }
     }
@@ -51,6 +61,8 @@ class ImportWalletManager :
     override fun close() {
         if (!isClosed.compareAndSet(false, true)) return
         Log.d(tag, "Closing ImportWalletManager")
+        ioScope.cancel()
+        mainScope.cancel()
         rust.close()
     }
 }

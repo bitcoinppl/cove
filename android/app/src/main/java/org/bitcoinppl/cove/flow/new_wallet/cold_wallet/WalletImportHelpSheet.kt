@@ -17,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import org.bitcoinppl.cove.ui.theme.title3
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -32,7 +33,7 @@ fun WalletImportHelpSheet(onDismiss: () -> Unit) {
         ) {
             Text(
                 text = "How do I get my wallet export QR code?",
-                style = MaterialTheme.typography.titleLarge,
+                style = MaterialTheme.typography.title3,
                 fontWeight = FontWeight.Bold,
             )
 

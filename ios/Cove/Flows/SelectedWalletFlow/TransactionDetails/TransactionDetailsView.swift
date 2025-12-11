@@ -24,8 +24,19 @@ struct TransactionDetailsView: View {
 
     // public
     let id: WalletId
-    @State var transactionDetails: TransactionDetails
+    private let initialDetails: TransactionDetails
     var manager: WalletManager
+
+    // read from cache (observable), fallback to initial details
+    var transactionDetails: TransactionDetails {
+        manager.transactionDetails[initialDetails.txId()] ?? initialDetails
+    }
+
+    init(id: WalletId, transactionDetails: TransactionDetails, manager: WalletManager) {
+        self.id = id
+        self.initialDetails = transactionDetails
+        self.manager = manager
+    }
 
     var headerIcon: HeaderIcon {
         HeaderIcon(
@@ -152,6 +163,7 @@ struct TransactionDetailsView: View {
                     .foregroundColor(.gray)
 
                 Text(transactionDetails.confirmationDateTime() ?? "Unknown")
+                    .fontWeight(.semibold)
                     .foregroundColor(.gray)
             }
             .multilineTextAlignment(.center)
@@ -282,7 +294,13 @@ struct TransactionDetailsView: View {
                 .offset(y: -20)
             }
         }
+        .refreshable {
+            await refreshTransactionDetails()
+        }
         .task {
+            // fetch fresh details on load
+            await refreshTransactionDetails()
+
             // start watcher after a delay to avoid race condition with onDisappear
             if !transactionDetails.isConfirmed() {
                 try? await Task.sleep(for: .seconds(2))
@@ -306,8 +324,31 @@ struct TransactionDetailsView: View {
         )
     }
 
-    func getAndSetNumberOfConfirmations() async -> Int? {
-        if let blockNumber = transactionDetails.blockNumber() {
+    func refreshTransactionDetails() async {
+        let txId = initialDetails.txId()
+        do {
+            let details = try await manager.rust.transactionDetails(txId: txId)
+            await MainActor.run {
+                manager.updateTransactionDetailsCache(txId: txId, details: details)
+            }
+
+            // also update confirmations
+            if let blockNumber = details.blockNumber() {
+                if let confirmations = try? await manager.rust.numberOfConfirmations(blockHeight: blockNumber) {
+                    await MainActor.run {
+                        withAnimation {
+                            self.numberOfConfirmations = Int(confirmations)
+                        }
+                    }
+                }
+            }
+        } catch {
+            Log.error("Error refreshing transaction details: \(error)")
+        }
+    }
+
+    func getAndSetNumberOfConfirmations(from details: TransactionDetails) async -> Int? {
+        if let blockNumber = details.blockNumber() {
             let numberOfConfirmations = try? await manager.rust.numberOfConfirmations(
                 blockHeight: blockNumber)
 
@@ -326,7 +367,7 @@ struct TransactionDetailsView: View {
     }
 
     func updateNumberOfConfirmations() async {
-        let txId = transactionDetails.txId()
+        let txId = initialDetails.txId()
         var needsFrequentCheck = true
         var errors = 0
 
@@ -336,17 +377,19 @@ struct TransactionDetailsView: View {
             )
 
             do {
+                // fetch fresh details and update cache
                 if let details = try? await manager.rust.transactionDetails(txId: txId) {
                     await MainActor.run {
-                        withAnimation { transactionDetails = details }
+                        manager.updateTransactionDetailsCache(txId: txId, details: details)
                     }
-                }
 
-                let numberOfConfirmations = await getAndSetNumberOfConfirmations()
-                if let numberOfConfirmations, numberOfConfirmations >= 3, needsFrequentCheck {
-                    Log.debug(
-                        "transaction fully confirmed with \(needsFrequentCheck) confirmations")
-                    needsFrequentCheck = false
+                    // get confirmations from fresh details
+                    let numberOfConfirmations = await getAndSetNumberOfConfirmations(from: details)
+                    if let numberOfConfirmations, numberOfConfirmations >= 3, needsFrequentCheck {
+                        Log.debug(
+                            "transaction fully confirmed with \(numberOfConfirmations) confirmations")
+                        needsFrequentCheck = false
+                    }
                 }
 
                 if needsFrequentCheck {

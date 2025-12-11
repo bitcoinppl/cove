@@ -131,4 +131,53 @@ sealed class AppAlertState {
             is TapSignerNoBackup -> "No Backup Found"
             is General -> title
         }
+
+    fun message(): String =
+        when (this) {
+            is InvalidWordGroup -> "The words do not create a valid wallet. Please check the words and try again."
+            is DuplicateWallet -> "This wallet has already been imported! Taking you there now..."
+            is ErrorImportingHotWallet -> message
+            is ImportedSuccessfully -> "Wallet imported successfully"
+            is ImportedLabelsSuccessfully -> "Labels imported successfully"
+            is UnableToSelectWallet -> "Unable to select wallet, please try again"
+            is ErrorImportingHardwareWallet -> message
+            is InvalidFileFormat -> message
+            is InvalidFormat -> message
+            is AddressWrongNetwork -> "This address is for ${network.name}, but you're on ${currentNetwork.name}"
+            is NoWalletSelected -> "Please select a wallet to send to this address"
+            is FoundAddress -> "Address: ${address.spacedOut()}"
+            is NoCameraPermission -> "Please enable camera access in settings to scan QR codes"
+            is FailedToScanQr -> error
+            is NoUnsignedTransactionFound -> "No unsigned transaction found for this transaction"
+            is UnableToGetAddress -> error
+            is CantSendOnWatchOnlyWallet -> "You cannot send from a watch-only wallet"
+            is UninitializedTapSigner -> "This TAPSIGNER needs to be set up before it can be used"
+            is TapSignerSetupFailed -> message
+            is TapSignerDeriveFailed -> message
+            is TapSignerInvalidAuth -> "The PIN you entered is incorrect"
+            is TapSignerWalletFound -> "A wallet for this TAPSIGNER was found"
+            is InitializedTapSigner -> "Would you like to import this TAPSIGNER?"
+            is TapSignerNoBackup -> "No backup found for this TAPSIGNER"
+            is General -> message
+        }
+
+    fun isSnackbar(): Boolean =
+        when (this) {
+            is ImportedLabelsSuccessfully,
+            is InvalidWordGroup,
+            is ErrorImportingHotWallet,
+            is UnableToSelectWallet,
+            is ErrorImportingHardwareWallet,
+            is InvalidFileFormat,
+            is InvalidFormat,
+            is NoUnsignedTransactionFound,
+            is UnableToGetAddress,
+            is FailedToScanQr,
+            is CantSendOnWatchOnlyWallet,
+            is TapSignerSetupFailed,
+            is TapSignerDeriveFailed,
+            is TapSignerInvalidAuth,
+            -> true
+            else -> false
+        }
 }

@@ -30,18 +30,20 @@ class CoinControlManager(
     private val tag = "CoinControlManager"
 
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val isClosed = AtomicBoolean(false)
 
-    private var sort by mutableStateOf<CoinControlListSort?>(
+    var sort by mutableStateOf<CoinControlListSort?>(
         CoinControlListSort.Date(ListSortDirection.DESCENDING),
     )
+        private set
 
     var search by mutableStateOf("")
 
     var totalSelected by mutableStateOf(Amount.fromSat(0u))
         private set
 
-    var selected by mutableStateOf<Set<OutPoint>>(emptySet())
+    var selected by mutableStateOf<Set<ULong>>(emptySet())
 
     var utxos by mutableStateOf<List<Utxo>>(emptyList())
         private set
@@ -75,9 +77,10 @@ class CoinControlManager(
     /**
      * update selected utxos and dispatch notification
      */
-    fun updateSelected(value: Set<OutPoint>) {
+    fun updateSelected(value: Set<ULong>) {
         selected = value
-        dispatch(CoinControlManagerAction.NotifySelectedUtxosChanged(value.toList()))
+        val outpoints = utxos.filter { value.contains(it.outpoint.hashToUint()) }.map { it.outpoint }
+        dispatch(CoinControlManagerAction.NotifySelectedUtxosChanged(outpoints))
     }
 
     /**
@@ -120,15 +123,15 @@ class CoinControlManager(
 
     /**
      * called when user presses continue button
-     * applies selection to SendFlowManager
+     * navigates forward to CoinControlSetAmount screen with selected UTXOs
      */
-    fun continuePressed() {
-        val sfm = AppManager.getInstance().sendFlowManager ?: return
-        updateSendFlowManagerTask?.cancel()
-        updateSendFlowManagerTask = null
+    fun continuePressed(app: AppManager) {
+        val walletId = rust.id()
+        val selectedUtxos = utxos.filter { selected.contains(it.outpoint.hashToUint()) }
 
-        val selectedUtxos = utxos.filter { selected.contains(it.outpoint) }
-        sfm.dispatch(SendFlowManagerAction.SetCoinControlMode(selectedUtxos))
+        // navigate forward to coin control set amount screen
+        val sendRoute = SendRoute.CoinControlSetAmount(walletId, selectedUtxos)
+        app.pushRoute(Route.Send(sendRoute))
     }
 
     private fun updateSendFlowManager() {
@@ -138,7 +141,7 @@ class CoinControlManager(
             mainScope.launch {
                 delay(100)
                 if (!isActive) return@launch
-                val selectedUtxos = utxos.filter { selected.contains(it.outpoint) }
+                val selectedUtxos = utxos.filter { selected.contains(it.outpoint.hashToUint()) }
                 sfm.dispatch(SendFlowManagerAction.SetCoinControlMode(selectedUtxos))
             }
     }
@@ -163,7 +166,7 @@ class CoinControlManager(
 
             is CoinControlManagerReconcileMessage.UpdateSelectedUtxos -> {
                 updateSendFlowManager()
-                selected = message.utxos.toSet()
+                selected = message.utxos.map { it.hashToUint() }.toSet()
                 totalSelected = message.totalValue
             }
 
@@ -189,12 +192,16 @@ class CoinControlManager(
 
     override fun reconcile(message: CoinControlManagerReconcileMessage) {
         logDebug("reconcile: $message")
-        mainScope.launch { apply(message) }
+        ioScope.launch {
+            mainScope.launch { apply(message) }
+        }
     }
 
     override fun reconcileMany(messages: List<CoinControlManagerReconcileMessage>) {
         logDebug("reconcile_messages: ${messages.size} messages")
-        mainScope.launch { messages.forEach { apply(it) } }
+        ioScope.launch {
+            mainScope.launch { messages.forEach { apply(it) } }
+        }
     }
 
     fun dispatch(action: CoinControlManagerAction) {
@@ -206,6 +213,7 @@ class CoinControlManager(
         if (!isClosed.compareAndSet(false, true)) return
         logDebug("Closing CoinControlManager")
         updateSendFlowManagerTask?.cancel()
+        ioScope.cancel()
         mainScope.cancel() // stop callbacks into Rust
         rust.close() // free Rust Arc
     }

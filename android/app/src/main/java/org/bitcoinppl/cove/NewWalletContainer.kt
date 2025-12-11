@@ -39,13 +39,7 @@ fun NewWalletContainer(
                     app.pushRoute(RouteFactory().qrImport())
                 },
                 onOpenNfcScan = {
-                    app.pushRoute(
-                        HotWalletRoute
-                            .Import(
-                                v1 = NumberOfBip39Words.TWENTY_FOUR,
-                                v2 = ImportType.NFC,
-                            ).intoRoute(),
-                    )
+                    app.scanNfc()
                 },
             )
         }

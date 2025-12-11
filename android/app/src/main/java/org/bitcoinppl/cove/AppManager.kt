@@ -25,6 +25,9 @@ class AppManager private constructor() : FfiReconcile {
     // Scope for UI-bound work; reconcile() hops to Main here
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
+    // Scope for IO-bound work; FFI calls run here first before dispatching to mainScope
+    private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     // rust bridge - not observable
     internal var rust: FfiApp = FfiApp()
         private set
@@ -52,9 +55,6 @@ class AppManager private constructor() : FfiReconcile {
         private set
 
     var selectedNetwork by mutableStateOf(Database().globalConfig().selectedNetwork())
-        private set
-
-    var previousSelectedNetwork: Network? by mutableStateOf(null)
         private set
 
     var colorSchemeSelection by mutableStateOf(Database().globalConfig().colorScheme())
@@ -172,6 +172,15 @@ class AppManager private constructor() : FfiReconcile {
         return manager
     }
 
+    fun clearSendFlowManager() {
+        try {
+            sendFlowManager?.close()
+        } catch (e: Exception) {
+            android.util.Log.w("AppManager", "Error closing SendFlowManager", e)
+        }
+        sendFlowManager = null
+    }
+
     val fullVersionId: String
         get() {
             val appVersion = BuildConfig.VERSION_NAME
@@ -233,6 +242,14 @@ class AppManager private constructor() : FfiReconcile {
         wallets = runCatching { database.wallets().all() }.getOrElse { emptyList() }
     }
 
+    fun closeSidebarAndNavigate(action: suspend () -> Unit) {
+        isSidebarVisible = false
+        mainScope.launch {
+            kotlinx.coroutines.delay(300)
+            action()
+        }
+    }
+
     fun pushRoute(route: Route) {
         logDebug("pushRoute: $route")
         isSidebarVisible = false
@@ -282,6 +299,10 @@ class AppManager private constructor() : FfiReconcile {
 
     fun scanQr() {
         sheetState = TaggedItem(AppSheetState.Qr)
+    }
+
+    fun scanNfc() {
+        sheetState = TaggedItem(AppSheetState.Nfc)
     }
 
     /**
@@ -490,10 +511,6 @@ class AppManager private constructor() : FfiReconcile {
         rust.loadAndResetDefaultRoute(to)
     }
 
-    fun confirmNetworkChange() {
-        previousSelectedNetwork = null
-    }
-
     fun agreeToTerms() {
         dispatch(AppAction.AcceptTerms)
         isTermsAccepted = true
@@ -501,78 +518,79 @@ class AppManager private constructor() : FfiReconcile {
 
     override fun reconcile(message: AppStateReconcileMessage) {
         logDebug("Reconcile: $message")
-        // Ensure all Compose state mutations occur on Main
-        mainScope.launch {
-            when (message) {
-                is AppStateReconcileMessage.RouteUpdated -> {
-                    router.updateRoutes(message.v1.toList())
-                }
-
-                is AppStateReconcileMessage.PushedRoute -> {
-                    val newRoutes = (router.routes + message.v1).toList()
-                    router.updateRoutes(newRoutes)
-                }
-
-                is AppStateReconcileMessage.DatabaseUpdated -> {
-                    database = Database()
-                }
-
-                is AppStateReconcileMessage.ColorSchemeChanged -> {
-                    colorSchemeSelection = message.v1
-                }
-
-                is AppStateReconcileMessage.SelectedNodeChanged -> {
-                    selectedNode = message.v1
-                }
-
-                is AppStateReconcileMessage.SelectedNetworkChanged -> {
-                    if (previousSelectedNetwork == null) {
-                        previousSelectedNetwork = selectedNetwork
+        // Run on IO first to avoid blocking main thread on FFI calls, then dispatch to Main for UI updates
+        ioScope.launch {
+            mainScope.launch {
+                when (message) {
+                    is AppStateReconcileMessage.RouteUpdated -> {
+                        router.updateRoutes(message.v1.toList())
                     }
-                    selectedNetwork = message.v1
-                }
 
-                is AppStateReconcileMessage.DefaultRouteChanged -> {
-                    router.default = message.v1
-                    router.updateRoutes(message.v2.toList())
-                    routeId = UUID.randomUUID().toString()
-                    logDebug("Route ID changed to: $routeId")
-                }
+                    is AppStateReconcileMessage.PushedRoute -> {
+                        val newRoutes = (router.routes + message.v1).toList()
+                        router.updateRoutes(newRoutes)
+                    }
 
-                is AppStateReconcileMessage.FiatPricesChanged -> {
-                    prices = message.v1
-                }
+                    is AppStateReconcileMessage.DatabaseUpdated -> {
+                        database = Database()
+                    }
 
-                is AppStateReconcileMessage.FeesChanged -> {
-                    fees = message.v1
-                }
+                    is AppStateReconcileMessage.ColorSchemeChanged -> {
+                        colorSchemeSelection = message.v1
+                    }
 
-                is AppStateReconcileMessage.FiatCurrencyChanged -> {
-                    selectedFiatCurrency = message.v1
+                    is AppStateReconcileMessage.SelectedNodeChanged -> {
+                        selectedNode = message.v1
+                    }
 
-                    // refresh fiat values in the wallet manager using IO
-                    walletManager?.let { wm ->
-                        launch(Dispatchers.IO) {
-                            wm.forceWalletScan()
-                            wm.updateWalletBalance()
+                    is AppStateReconcileMessage.SelectedNetworkChanged -> {
+                        selectedNetwork = message.v1
+                        loadWallets()
+                    }
+
+                    is AppStateReconcileMessage.DefaultRouteChanged -> {
+                        router.default = message.v1
+                        router.updateRoutes(message.v2.toList())
+                        routeId = UUID.randomUUID().toString()
+                        logDebug("Route ID changed to: $routeId")
+                    }
+
+                    is AppStateReconcileMessage.FiatPricesChanged -> {
+                        prices = message.v1
+                    }
+
+                    is AppStateReconcileMessage.FeesChanged -> {
+                        fees = message.v1
+                    }
+
+                    is AppStateReconcileMessage.FiatCurrencyChanged -> {
+                        selectedFiatCurrency = message.v1
+
+                        // refresh fiat values in the wallet manager using IO
+                        walletManager?.let { wm ->
+                            launch(Dispatchers.IO) {
+                                wm.forceWalletScan()
+                                wm.updateWalletBalance()
+                            }
                         }
                     }
-                }
 
-                is AppStateReconcileMessage.AcceptedTerms -> {
-                    isTermsAccepted = true
-                }
-
-                is AppStateReconcileMessage.WalletModeChanged -> {
-                    isLoading = true
-                    launch {
-                        kotlinx.coroutines.delay(200)
-                        isLoading = false
+                    is AppStateReconcileMessage.AcceptedTerms -> {
+                        isTermsAccepted = true
                     }
-                }
 
-                is AppStateReconcileMessage.WalletsChanged -> {
-                    wallets = runCatching { database.wallets().all() }.getOrElse { emptyList() }
+                    is AppStateReconcileMessage.WalletModeChanged -> {
+                        isLoading = true
+                        loadWallets()
+                        launch {
+                            kotlinx.coroutines.delay(200)
+                            isLoading = false
+                        }
+                    }
+
+                    is AppStateReconcileMessage.WalletsChanged -> {
+                        wallets = runCatching { database.wallets().all() }.getOrElse { emptyList() }
+                    }
                 }
             }
         }

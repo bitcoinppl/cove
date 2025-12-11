@@ -28,6 +28,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -42,10 +43,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import androidx.fragment.app.FragmentActivity
-import org.bitcoinppl.cove.App
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import org.bitcoinppl.cove.Auth
 import org.bitcoinppl.cove.UnlockMode
+import org.bitcoinppl.cove.findFragmentActivity
 import org.bitcoinppl.cove_core.AuthType
 
 private enum class Screen {
@@ -58,10 +61,9 @@ fun LockView(
     content: @Composable () -> Unit,
 ) {
     val auth = Auth
-    val app = App
     var screen by remember { mutableStateOf(Screen.BIOMETRIC) }
     val context = LocalContext.current
-    val activity = context as? FragmentActivity
+    val activity = context.findFragmentActivity()
     val biometricManager = remember { BiometricManager.from(context) }
 
     val isBiometricAvailable =
@@ -69,9 +71,7 @@ fun LockView(
             biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) == BiometricManager.BIOMETRIC_SUCCESS
         }
 
-    // biometric prompt
-    var showBiometric by remember { mutableStateOf(false) }
-
+    // keep promptInfo cached (it's just config, doesn't go stale)
     val promptInfo =
         remember {
             PromptInfo
@@ -82,24 +82,26 @@ fun LockView(
                 .build()
         }
 
-    val biometricPrompt =
-        remember(activity) {
-            if (activity == null) return@remember null
+    // trigger function creates FRESH BiometricPrompt each time (like iOS creates fresh LAContext)
+    fun triggerBiometric() {
+        val act = activity ?: return
+        if (auth.isUsingBiometrics) return
 
+        auth.isUsingBiometrics = true
+
+        val biometricPrompt =
             BiometricPrompt(
-                activity,
+                act,
                 ContextCompat.getMainExecutor(context),
                 object : BiometricPrompt.AuthenticationCallback() {
                     override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
                         super.onAuthenticationError(errorCode, errString)
                         auth.isUsingBiometrics = false
-                        showBiometric = false
                     }
 
                     override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                         super.onAuthenticationSucceeded(result)
                         auth.isUsingBiometrics = false
-                        showBiometric = false
 
                         // if in decoy mode, switch back to main mode (biometric = trusted user = main mode)
                         if (auth.isInDecoyMode()) {
@@ -111,15 +113,19 @@ fun LockView(
 
                     override fun onAuthenticationFailed() {
                         super.onAuthenticationFailed()
+                        // user can retry, don't clear flag yet
                     }
                 },
             )
-        }
 
-    // auto-trigger biometric on lock if auth type is biometric or both
+        biometricPrompt.authenticate(promptInfo)
+    }
+
+    // set screen to biometric when locked with biometric auth
+    // (don't trigger biometric here - BiometricView's LaunchedEffect does that)
     LaunchedEffect(auth.isLocked, auth.type) {
         if (auth.isLocked && (auth.type == AuthType.BIOMETRIC || auth.type == AuthType.BOTH)) {
-            if (isBiometricAvailable && !showBiometric) {
+            if (isBiometricAvailable) {
                 screen = Screen.BIOMETRIC
             }
         }
@@ -151,17 +157,8 @@ fun LockView(
                     screen == Screen.BIOMETRIC && (auth.type == AuthType.BIOMETRIC || auth.type == AuthType.BOTH) && isBiometricAvailable -> {
                         BiometricView(
                             showBoth = auth.type == AuthType.BOTH,
-                            onBiometricTap = {
-                                // guard against re-entry
-                                if (!auth.isUsingBiometrics) {
-                                    auth.isUsingBiometrics = true
-                                    showBiometric = true
-                                    biometricPrompt?.authenticate(promptInfo)
-                                }
-                            },
-                            onEnterPinTap = {
-                                screen = Screen.PIN
-                            },
+                            onBiometricTap = { triggerBiometric() },
+                            onEnterPinTap = { screen = Screen.PIN },
                         )
                     }
                     // show PIN screen
@@ -226,6 +223,30 @@ private fun BiometricView(
     onBiometricTap: () -> Unit,
     onEnterPinTap: () -> Unit,
 ) {
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    // trigger biometric when Activity is RESUMED
+    // BiometricPrompt fails silently if called during onStart, before onResume
+    DisposableEffect(lifecycleOwner) {
+        val observer =
+            LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_RESUME) {
+                    onBiometricTap()
+                }
+            }
+        lifecycleOwner.lifecycle.addObserver(observer)
+
+        // also trigger immediately if already resumed (fixes race condition where
+        // composable enters composition after ON_RESUME event already fired)
+        if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+            onBiometricTap()
+        }
+
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -285,10 +306,5 @@ private fun BiometricView(
                 )
             }
         }
-    }
-
-    // auto-trigger biometric on appear
-    LaunchedEffect(Unit) {
-        onBiometricTap()
     }
 }

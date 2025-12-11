@@ -55,7 +55,9 @@ import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.PendingWalletManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
 import org.bitcoinppl.cove.utils.intoRoute
+import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.DashDotsIndicator
 import org.bitcoinppl.cove.views.DotsIndicator
 import org.bitcoinppl.cove.views.ImageButton
@@ -90,6 +92,7 @@ fun HotWalletCreateScreen(
     var showBackConfirmation by remember { mutableStateOf(false) }
     var showSaveError by remember { mutableStateOf(false) }
     var saveErrorMessage by remember { mutableStateOf("") }
+    var isSaving by remember { mutableStateOf(false) }
 
     // sync page state
     LaunchedEffect(pagerState.currentPage) {
@@ -99,6 +102,10 @@ fun HotWalletCreateScreen(
     val isLastPage = currentPage == groupedWords.size - 1
 
     fun handleSaveWallet() {
+        // guard against multiple calls
+        if (isSaving) return
+        isSaving = true
+
         try {
             val walletId = manager.rust.saveWallet().id
             app.resetRoute(
@@ -111,8 +118,12 @@ fun HotWalletCreateScreen(
             Log.e("HotWalletCreate", "error saving wallet", e)
             saveErrorMessage = e.message ?: "Unknown error occurred"
             showSaveError = true
+            isSaving = false
         }
     }
+
+    // force white status bar icons for midnight blue background
+    ForceLightStatusBarIcons()
 
     Scaffold(
         containerColor = CoveColor.midnightBlue,
@@ -274,6 +285,7 @@ fun HotWalletCreateScreen(
                                 }
                             }
                         },
+                        enabled = !isSaving,
                         colors =
                             ButtonDefaults.buttonColors(
                                 containerColor = CoveColor.btnPrimary,
@@ -357,18 +369,20 @@ private fun WordCardView(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text(
+                            AutoSizeText(
                                 text = "${groupedWord.number}.",
                                 color = Color.Black.copy(alpha = 0.5f),
                                 fontWeight = FontWeight.Medium,
-                                fontSize = 12.sp,
+                                maxFontSize = 12.sp,
+                                minimumScaleFactor = 0.8f,
                             )
                             Spacer(Modifier.weight(1f))
-                            Text(
+                            AutoSizeText(
                                 text = groupedWord.word,
                                 color = CoveColor.midnightBlue,
                                 fontWeight = FontWeight.Medium,
-                                fontSize = 14.sp,
+                                maxFontSize = 14.sp,
+                                minimumScaleFactor = 0.2f,
                             )
                             Spacer(Modifier.weight(1f))
                         }

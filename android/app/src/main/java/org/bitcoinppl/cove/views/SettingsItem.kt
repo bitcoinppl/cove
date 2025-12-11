@@ -58,11 +58,54 @@ fun MaterialSettingsItem(
     switchCheckedState: Boolean = false,
     onCheckChanged: ((Boolean) -> Unit)? = null,
 ) {
+    MaterialSettingsItem(
+        title = title,
+        onClick = onClick,
+        subtitle = subtitle,
+        leadingContent = {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(24.dp),
+            )
+        },
+        trailingContent =
+            if (isSwitch) {
+                {
+                    ThemedSwitch(
+                        isChecked = switchCheckedState,
+                        onCheckChanged = onCheckChanged ?: {},
+                    )
+                }
+            } else {
+                {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Default.ArrowForward,
+                        contentDescription = "Navigate",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            },
+    )
+}
+
+// Material Design 3 settings item with custom content
+@Composable
+fun MaterialSettingsItem(
+    title: String,
+    onClick: (() -> Unit)? = null,
+    subtitle: String? = null,
+    leadingContent: (@Composable () -> Unit)? = null,
+    trailingContent: (@Composable () -> Unit)? = null,
+    titleColor: Color? = null,
+) {
     ListItem(
         headlineContent = {
             Text(
                 text = title,
                 style = MaterialTheme.typography.bodyLarge,
+                color = titleColor ?: Color.Unspecified,
             )
         },
         supportingContent =
@@ -75,28 +118,8 @@ fun MaterialSettingsItem(
                     )
                 }
             },
-        leadingContent = {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(24.dp),
-            )
-        },
-        trailingContent = {
-            if (isSwitch) {
-                ThemedSwitch(
-                    isChecked = switchCheckedState,
-                    onCheckChanged = onCheckChanged ?: {},
-                )
-            } else {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Default.ArrowForward,
-                    contentDescription = "Navigate",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        },
+        leadingContent = leadingContent,
+        trailingContent = trailingContent,
         modifier =
             Modifier
                 .then(

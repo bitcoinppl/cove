@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
@@ -36,6 +38,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
@@ -55,10 +60,11 @@ fun TransactionLabelView(
     modifier: Modifier = Modifier,
 ) {
     var isEditing by remember { mutableStateOf(false) }
-    var editingLabel by remember { mutableStateOf("") }
+    var editingLabel by remember { mutableStateOf(TextFieldValue()) }
     var showMenu by remember { mutableStateOf(false) }
     var currentLabel by remember { mutableStateOf(transactionDetails.transactionLabel()) }
     var isOperationInProgress by remember { mutableStateOf(false) }
+    var hasFocusedOnce by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val focusRequester = remember { FocusRequester() }
     val context = LocalContext.current
@@ -104,12 +110,13 @@ fun TransactionLabelView(
                 val metadata = manager.walletMetadata
                 labelManager.insertOrUpdateLabelsForTxn(
                     details = transactionDetails,
-                    label = editingLabel.trim(),
+                    label = editingLabel.text.trim(),
                     origin = metadata?.origin,
                 )
 
                 updateDetails()
                 isEditing = false
+                hasFocusedOnce = false
             } catch (e: Exception) {
                 android.util.Log.e(TAG, "Unable to save label", e)
                 val message = context.getString(R.string.label_save_error, e.message ?: "Unknown error")
@@ -131,7 +138,8 @@ fun TransactionLabelView(
             try {
                 labelManager.deleteLabelsForTxn(txId = txId)
                 isEditing = false
-                editingLabel = ""
+                hasFocusedOnce = false
+                editingLabel = TextFieldValue()
                 currentLabel = null
 
                 updateDetails()
@@ -149,7 +157,8 @@ fun TransactionLabelView(
     }
 
     fun setEditing() {
-        editingLabel = currentLabel ?: ""
+        val text = currentLabel ?: ""
+        editingLabel = TextFieldValue(text = text, selection = TextRange(text.length))
         isEditing = true
     }
 
@@ -171,6 +180,7 @@ fun TransactionLabelView(
                     imageVector = Icons.Default.Edit,
                     contentDescription = null,
                     tint = secondaryColor,
+                    modifier = Modifier.size(13.dp),
                 )
 
                 Spacer(Modifier.width(8.dp))
@@ -181,15 +191,19 @@ fun TransactionLabelView(
                     textStyle =
                         LocalTextStyle.current.copy(
                             color = secondaryColor,
-                            fontSize = 14.sp,
+                            fontSize = 13.sp,
                         ),
                     cursorBrush = SolidColor(secondaryColor),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { saveLabel() }),
                     modifier =
                         Modifier
                             .focusRequester(focusRequester)
                             .onFocusChanged { focusState ->
-                                // auto-save when focus is lost
-                                if (!focusState.isFocused && isEditing) {
+                                if (focusState.isFocused) {
+                                    hasFocusedOnce = true
+                                } else if (hasFocusedOnce && isEditing) {
+                                    // only save when focus is actually lost (was focused, now unfocused)
                                     saveLabel()
                                 }
                             },
@@ -218,6 +232,7 @@ fun TransactionLabelView(
                         imageVector = Icons.Default.Edit,
                         contentDescription = null,
                         tint = secondaryColor,
+                        modifier = Modifier.size(16.dp),
                     )
 
                     Spacer(Modifier.width(8.dp))
@@ -225,7 +240,7 @@ fun TransactionLabelView(
                     Text(
                         text = currentLabel!!,
                         color = secondaryColor,
-                        fontSize = 14.sp,
+                        fontSize = 13.sp, // iOS footnote parity
                     )
 
                     if (isOperationInProgress) {
@@ -295,7 +310,7 @@ fun TransactionLabelView(
                     Text(
                         text = stringResource(R.string.btn_add_label),
                         color = secondaryColor,
-                        fontSize = 14.sp,
+                        fontSize = 13.sp, // iOS footnote parity
                     )
                 }
             }

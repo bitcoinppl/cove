@@ -900,7 +900,7 @@ impl WalletActor {
         self.transaction_watchers.remove(&tx_id);
     }
 
-    async fn perform_scan_for_single_tx_id(&mut self, tx_id: Txid) -> ActorResult<()> {
+    pub async fn perform_scan_for_single_tx_id(&mut self, tx_id: Txid) -> ActorResult<()> {
         let start = UNIX_EPOCH.elapsed().unwrap().as_secs();
         let _ = self.update_height().await?.await;
 

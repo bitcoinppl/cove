@@ -42,6 +42,7 @@ import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.Auth
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
 import org.bitcoinppl.cove.views.RecoveryWordChip
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
@@ -87,6 +88,9 @@ fun SecretWordsScreen(
             words = null
         }
     }
+
+    // force white status bar icons for midnight blue background
+    ForceLightStatusBarIcons()
 
     Scaffold(
         containerColor = CoveColor.midnightBlue,
