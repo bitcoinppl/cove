@@ -3,6 +3,7 @@
 
 use minicbor::{Decoder, data::Tag};
 use pubport::descriptor::ScriptType;
+use tracing::warn;
 
 use crate::{
     crypto_hdkey::CryptoHdkey,
@@ -10,7 +11,7 @@ use crate::{
     error::*,
     registry::{
         CRYPTO_ACCOUNT, CRYPTO_HDKEY, CRYPTO_OUTPUT, PAY_TO_PUBKEY_HASH, SCRIPT_HASH, TAPROOT,
-        WITNESS_PUBKEY_HASH, account_keys, hdkey_keys, lengths,
+        WITNESS_PUBKEY_HASH, account_keys, cbor_type, hdkey_keys, lengths,
     },
 };
 
@@ -34,14 +35,26 @@ pub struct OutputDescriptor {
 }
 
 impl CryptoAccount {
-    /// Decode from CBOR bytes (with tag 311)
+    /// Decode from CBOR bytes (with or without tag 311)
+    ///
+    /// Some hardware wallets (like Jade Plus) send crypto-account without the outer tag,
+    /// while others include it. This method handles both cases.
     pub fn from_cbor(cbor: &[u8]) -> Result<Self> {
+        let first_byte =
+            *cbor.first().ok_or_else(|| UrError::CborDecodeError("Empty CBOR data".to_string()))?;
+
+        // if first byte indicates a map, this is untagged format
+        if cbor_type::is_map(first_byte) {
+            return Self::from_cbor_untagged(cbor);
+        }
+
         let mut decoder = Decoder::new(cbor);
 
         // read and verify tag 311
         let tag = decoder.tag().map_err_cbor_decode()?;
 
         if tag != Tag::new(CRYPTO_ACCOUNT) {
+            warn!("CryptoAccount: expected tag {}, got {}", CRYPTO_ACCOUNT, tag.as_u64());
             return Err(UrError::InvalidTag { expected: CRYPTO_ACCOUNT, actual: tag.as_u64() });
         }
 
@@ -350,8 +363,9 @@ mod tests {
         // decode CBOR hex
         let cbor = hex::decode(BCR_SPEC_CBOR_HEX).unwrap();
 
-        // parse the crypto-account (no outer tag 311 in this CBOR)
-        let account = CryptoAccount::from_cbor_untagged(&cbor).unwrap();
+        // BCR spec vector is untagged (starts with map, no tag 311)
+        // from_cbor should auto-detect this
+        let account = CryptoAccount::from_cbor(&cbor).unwrap();
 
         // verify master fingerprint = 37b5eed4
         assert_eq!(account.master_fingerprint, [0x37, 0xb5, 0xee, 0xd4]);
@@ -393,7 +407,7 @@ mod tests {
     #[test]
     fn test_to_pubport_json_with_bcr_spec_vector() {
         let cbor = hex::decode(BCR_SPEC_CBOR_HEX).unwrap();
-        let account = CryptoAccount::from_cbor_untagged(&cbor).unwrap();
+        let account = CryptoAccount::from_cbor(&cbor).unwrap();
 
         // convert to pubport Json format
         let json = account
@@ -552,7 +566,7 @@ mod tests {
 
         // truncate the CBOR data
         let truncated = &cbor[..cbor.len() - 20];
-        let result = CryptoAccount::from_cbor_untagged(truncated);
+        let result = CryptoAccount::from_cbor(truncated);
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), UrError::CborDecodeError(_)));
     }

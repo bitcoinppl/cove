@@ -242,7 +242,7 @@ impl MultiFormat {
 
             UrType::CryptoAccount => {
                 let account = cove_ur::CryptoAccount::from_cbor(data).map_err(|e| {
-                    warn!("Failed to decode CryptoAccount CBOR: {:?}", e);
+                    warn!("Failed to decode CryptoAccount: {e:?}");
                     MultiFormatError::UnrecognizedFormat
                 })?;
 
@@ -280,8 +280,8 @@ impl MultiFormat {
                 Ok(Self::HardwareExport(hardware_export.into()))
             }
 
-            UrType::Unknown(_) => {
-                // unsupported UR type
+            UrType::Unknown(type_str) => {
+                warn!("Unknown/unsupported UR type: {}", type_str);
                 Err(MultiFormatError::UnrecognizedFormat)
             }
         }

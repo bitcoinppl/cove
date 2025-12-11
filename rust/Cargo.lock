@@ -972,6 +972,7 @@ dependencies = [
  "pubport",
  "serde_json",
  "thiserror 2.0.17",
+ "tracing",
  "uniffi 0.30.0",
 ]
 

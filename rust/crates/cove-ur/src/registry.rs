@@ -101,3 +101,32 @@ pub mod lengths {
 
 /// Valid BIP39 entropy lengths in bytes
 pub const VALID_BIP39_ENTROPY_LENGTHS: [usize; 5] = [16, 20, 24, 28, 32];
+
+// =============================================================================
+// CBOR Major Types (RFC 8949)
+// =============================================================================
+
+/// CBOR major type indicators (high 3 bits of initial byte)
+pub mod cbor_type {
+    /// Map with 0-23 items (0xa0-0xb7)
+    pub const MAP_SMALL_MIN: u8 = 0xa0;
+    pub const MAP_SMALL_MAX: u8 = 0xb7;
+
+    /// Map with 1-byte length follows (0xb8)
+    pub const MAP_1BYTE_LEN: u8 = 0xb8;
+    /// Map with 2-byte length follows (0xb9)
+    pub const MAP_2BYTE_LEN: u8 = 0xb9;
+    /// Map with 4-byte length follows (0xba)
+    pub const MAP_4BYTE_LEN: u8 = 0xba;
+    /// Map with 8-byte length follows (0xbb)
+    pub const MAP_8BYTE_LEN: u8 = 0xbb;
+
+    /// Check if a byte indicates a CBOR map
+    pub fn is_map(byte: u8) -> bool {
+        (MAP_SMALL_MIN..=MAP_SMALL_MAX).contains(&byte)
+            || byte == MAP_1BYTE_LEN
+            || byte == MAP_2BYTE_LEN
+            || byte == MAP_4BYTE_LEN
+            || byte == MAP_8BYTE_LEN
+    }
+}

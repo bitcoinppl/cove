@@ -16,7 +16,7 @@ use bbqr::{
 use cove_ur::Ur;
 use foundation_ur::Decoder as UrDecoder;
 use parking_lot::Mutex;
-use tracing::debug;
+use tracing::{debug, warn};
 
 use crate::{
     multi_format::StringOrData,
@@ -464,12 +464,17 @@ impl QrScanner {
                 .map_err(|e| UrError::UrParseError(e.to_string()))?
                 .ok_or_else(|| UrError::UrParseError("No message".into()))?;
             let ur_type_str = ur.decoder.ur_type().unwrap_or("bytes");
-            debug!("UR complete, type: {}, message len: {}", ur_type_str, message.len());
+            debug!("UR complete: type={ur_type_str}, len={}", message.len());
 
             let ur_type = crate::ur::UrType::from_str(ur_type_str);
-            let multi_format =
-                crate::multi_format::MultiFormat::try_from_ur_payload(message, &ur_type)
-                    .map_err(|e| MultiQrError::ParseError(e.to_string()))?;
+            let multi_format = crate::multi_format::MultiFormat::try_from_ur_payload(
+                message, &ur_type,
+            )
+            .map_err(|e| {
+                warn!("Failed to parse UR payload: type={ur_type_str}, error={e:?}");
+                MultiQrError::ParseError(e.to_string())
+            })?;
+
             let result =
                 ScanResult::Complete { data: multi_format, haptic: HapticFeedback::Success };
             Ok((Self::Complete(result.clone()), result))

@@ -16,6 +16,7 @@ bip39 = { workspace = true }
 foundation-ur = { workspace = true }
 pubport = { workspace = true }
 hex = { workspace = true }
+tracing = { workspace = true }
 
 [dev-dependencies]
 serde_json = { workspace = true }
