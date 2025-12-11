@@ -46,6 +46,15 @@ This document covers platform-specific gotchas and patterns for achieving visual
 
 ---
 
+## Color Values
+
+- **Never hardcode colors**: Always use system-provided or theme-defined color values, never raw hex codes or Color literals.
+- **Android**: Use `MaterialTheme.colorScheme.*` (e.g., `onSurface`, `primary`, `surfaceVariant`) or custom colors defined in `Theme.kt`.
+- **iOS**: Use system colors (`.primary`, `.secondary`) or custom colors from the asset catalog.
+- **Why**: Hardcoded colors break dark mode, accessibility settings, and dynamic theming. Theme colors automatically adapt to light/dark mode and user preferences.
+
+---
+
 ## Text Auto-Sizing
 
 iOS has built-in text shrinking via `minimumScaleFactor`. Android options:
@@ -136,3 +145,14 @@ Since Android has no system NFC UI, `TapSignerScanningOverlay` composable provid
 - NFC icon, animated "Scanning..." dots, message text, progress indicator
 - Message updates via callback → `manager.scanMessage` state → recomposition
 - Shown in `TapSignerContainer` when `manager.isScanning` is true
+
+---
+
+## Slider Step Behavior
+
+- **iOS/SwiftUI**: `Slider(step:)` defines the **increment size** for a continuous slider
+- **Android/Compose**: `Slider(steps:)` creates **discrete stop points** (N positions total)
+
+**Critical**: These are not equivalent! Calculating `steps = (max - min) / stepSize` can create millions of discrete positions, causing severe lag/freeze.
+
+**Guideline**: For continuous sliders matching iOS, omit `steps` entirely on Android. Handle step snapping in `onValueChange` if needed.
