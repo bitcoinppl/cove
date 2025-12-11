@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.NorthEast
 import androidx.compose.material.icons.filled.QrCode2
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.SouthWest
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -46,7 +47,9 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -73,6 +76,7 @@ import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletLoadState
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
 import org.bitcoinppl.cove.ui.theme.isLight
 import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.BalanceAutoSizeText
@@ -120,7 +124,6 @@ private fun WalletTransactionsDarkPreview() {
         onQrCode = {},
         onMore = {},
         isDarkList = true,
-        initialBalanceHidden = true,
         snackbarHostState = snack,
     )
 }
@@ -137,7 +140,6 @@ fun WalletTransactionsScreen(
     isDarkList: Boolean,
     manager: WalletManager? = null,
     app: AppManager? = null,
-    initialBalanceHidden: Boolean = false,
     usdAmount: String = "$1,351.93",
     satsAmount: String = "1,166,369 SATS",
     walletName: String = "Main",
@@ -150,10 +152,10 @@ fun WalletTransactionsScreen(
             val spendable = it.balance.spendable()
             it.displayAmount(spendable, showUnit = true)
         } ?: satsAmount
-    val actualFiatAmount: String? =
+    val actualFiatAmount =
         manager?.fiatBalance?.let {
             manager.rust.displayFiatAmount(it)
-        }
+        } ?: usdAmount
     val transactions =
         when (val state = manager?.loadState) {
             is WalletLoadState.LOADED -> state.txns
@@ -161,6 +163,11 @@ fun WalletTransactionsScreen(
             else -> emptyList()
         }
     val unsignedTransactions = manager?.unsignedTransactions ?: emptyList()
+
+    // clear SendFlowManager when returning to wallet screen (matches iOS SelectedWalletScreen)
+    LaunchedEffect(Unit) {
+        app?.clearSendFlowManager()
+    }
 
     // use Material Design system colors for native Android feel
     val listBg = MaterialTheme.colorScheme.background
@@ -173,9 +180,16 @@ fun WalletTransactionsScreen(
     val listState = rememberLazyListState()
     val isScrolled = listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0
 
+    // pull-to-refresh state
+    var isRefreshing by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
     // state for wallet name rename dropdown
     var showRenameMenu by remember { mutableStateOf(false) }
     val isColdWallet = manager?.walletMetadata?.walletType == WalletType.COLD
+
+    // force white status bar icons for midnight blue background
+    ForceLightStatusBarIcons()
 
     Scaffold(
         containerColor = CoveColor.midnightBlue,
@@ -294,6 +308,9 @@ fun WalletTransactionsScreen(
                         .align(Alignment.TopCenter),
             )
 
+            val fiatOrBtc = manager?.walletMetadata?.fiatOrBtc ?: FiatOrBtc.BTC
+            val sensitiveVisible = manager?.walletMetadata?.sensitiveVisible ?: true
+
             Column(
                 modifier = Modifier.fillMaxSize(),
             ) {
@@ -304,14 +321,18 @@ fun WalletTransactionsScreen(
                             .padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 32.dp),
                     verticalArrangement = Arrangement.spacedBy(24.dp),
                 ) {
-                    val fiatOrBtc = manager?.walletMetadata?.fiatOrBtc ?: FiatOrBtc.BTC
+                    val (primaryAmount, secondaryAmount) =
+                        when (fiatOrBtc) {
+                            FiatOrBtc.FIAT -> actualFiatAmount to actualSatsAmount
+                            FiatOrBtc.BTC -> actualSatsAmount to actualFiatAmount
+                        }
 
                     BalanceWidget(
-                        hidden = initialBalanceHidden,
-                        fiatAmount = actualFiatAmount,
-                        btcAmount = actualSatsAmount,
-                        fiatOrBtc = fiatOrBtc,
-                        onToggle = { manager?.dispatch(WalletManagerAction.ToggleFiatBtcPrimarySecondary) },
+                        sensitiveVisible = sensitiveVisible,
+                        primaryAmount = primaryAmount,
+                        secondaryAmount = secondaryAmount,
+                        onToggleUnit = { manager?.dispatch(WalletManagerAction.ToggleFiatBtcPrimarySecondary) },
+                        onToggleSensitive = { manager?.dispatch(WalletManagerAction.ToggleSensitiveVisibility) },
                     )
 
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -340,168 +361,242 @@ fun WalletTransactionsScreen(
                     }
                 }
 
-                Column(
+                PullToRefreshBox(
+                    isRefreshing = isRefreshing,
+                    onRefresh = {
+                        if (manager != null && manager.loadState is WalletLoadState.LOADED) {
+                            scope.launch {
+                                isRefreshing = true
+
+                                manager.setScanning()
+                                manager.forceWalletScan()
+                                manager.rust.forceUpdateHeight()
+                                manager.updateWalletBalance()
+                                manager.rust.getTransactions()
+
+                                isRefreshing = false
+                            }
+                        }
+                    },
                     modifier =
                         Modifier
                             .fillMaxWidth()
-                            .weight(1f) // Fill remaining space
+                            .weight(1f)
                             .background(listBg),
                 ) {
-                    VerifyReminder(
-                        walletId = manager?.walletMetadata?.id ?: "",
-                        isVerified = manager?.isVerified ?: true,
-                        app = app,
-                    )
-
-                    Column(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 20.dp, vertical = 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Text(
-                            text = stringResource(R.string.title_transactions),
-                            color = secondaryText,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        VerifyReminder(
+                            walletId = manager?.walletMetadata?.id ?: "",
+                            isVerified = manager?.isVerified ?: true,
+                            app = app,
                         )
 
-                        // render real transactions or show empty state
-                        if (transactions.isEmpty() && unsignedTransactions.isEmpty()) {
-                            // empty state
-                            Box(
-                                modifier =
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 32.dp),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.no_transactions_yet),
-                                    color = secondaryText,
-                                    fontSize = 14.sp,
-                                )
-                            }
-                        } else {
-                            // render transactions dynamically in scrollable list
-                            LazyColumn(
-                                state = listState,
-                                modifier = Modifier.weight(1f),
-                            ) {
-                                // render unsigned transactions first (pending signature)
-                                items(
-                                    items = unsignedTransactions,
-                                    key = { it.id().toString() },
-                                ) { unsignedTxn ->
-                                    UnsignedTransactionWidget(
-                                        txn = unsignedTxn,
-                                        primaryText = primaryText,
-                                        secondaryText = secondaryText,
-                                        app = app,
-                                        manager = manager,
+                        Column(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Text(
+                                text = stringResource(R.string.title_transactions),
+                                color = secondaryText,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                            )
+
+                            val isScanning =
+                                manager?.loadState is WalletLoadState.SCANNING ||
+                                    manager?.loadState is WalletLoadState.LOADING
+                            val isFirstScan = manager?.walletMetadata?.internal?.lastScanFinished == null
+                            val hasTransactions = transactions.isNotEmpty() || unsignedTransactions.isNotEmpty()
+
+                            // small inline spinner when scanning with existing transactions
+                            if (isScanning && hasTransactions) {
+                                Box(
+                                    modifier =
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .padding(bottom = 10.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(20.dp),
+                                        strokeWidth = 2.dp,
+                                        color = primaryText,
                                     )
-                                    HorizontalDivider(color = dividerColor, thickness = 0.5.dp)
                                 }
+                            }
 
-                                itemsIndexed(transactions) { index, txn ->
-                                    when (txn) {
-                                        is Transaction.Confirmed -> {
-                                            val direction = txn.v1.sentAndReceived().direction()
-                                            val txType =
-                                                when (direction) {
-                                                    TransactionDirection.INCOMING -> TransactionType.RECEIVED
-                                                    TransactionDirection.OUTGOING -> TransactionType.SENT
-                                                }
-
-                                            val txLabel =
-                                                if (manager?.walletMetadata?.showLabels == true) {
-                                                    txn.v1.label()
-                                                } else {
-                                                    stringResource(
-                                                        when (txType) {
-                                                            TransactionType.SENT -> R.string.label_transaction_sent
-                                                            TransactionType.RECEIVED -> R.string.label_transaction_received
-                                                        },
-                                                    )
-                                                }
-
-                                            // format amount with manager if available
-                                            val formattedAmount =
-                                                manager?.let {
-                                                    val amount = txn.v1.sentAndReceived().amount()
-                                                    val prefix = if (direction == TransactionDirection.OUTGOING) "-" else ""
-                                                    prefix + it.displayAmount(amount, showUnit = true)
-                                                } ?: txn.v1.sentAndReceived().label()
-
-                                            TransactionWidget(
-                                                type = txType,
-                                                label = txLabel,
-                                                date = txn.v1.confirmedAtFmt(),
-                                                amount = formattedAmount,
-                                                balanceAfter = txn.v1.blockHeightFmt(),
-                                                listCard = listCard,
-                                                primaryText = primaryText,
-                                                secondaryText = secondaryText,
-                                                transaction = txn,
-                                                app = app,
-                                                manager = manager,
-                                            )
-                                        }
-
-                                        is Transaction.Unconfirmed -> {
-                                            val direction = txn.v1.sentAndReceived().direction()
-                                            val txType =
-                                                when (direction) {
-                                                    TransactionDirection.INCOMING -> TransactionType.RECEIVED
-                                                    TransactionDirection.OUTGOING -> TransactionType.SENT
-                                                }
-
-                                            val txLabel =
-                                                if (manager?.walletMetadata?.showLabels == true) {
-                                                    txn.v1.label()
-                                                } else {
-                                                    stringResource(
-                                                        when (txType) {
-                                                            TransactionType.SENT -> R.string.label_transaction_sent
-                                                            TransactionType.RECEIVED -> R.string.label_transaction_received
-                                                        },
-                                                    )
-                                                }
-
-                                            // format amount with manager if available
-                                            val formattedAmount =
-                                                manager?.let {
-                                                    val amount = txn.v1.sentAndReceived().amount()
-                                                    val prefix = if (direction == TransactionDirection.OUTGOING) "-" else ""
-                                                    prefix + it.displayAmount(amount, showUnit = true)
-                                                } ?: txn.v1.sentAndReceived().label()
-
-                                            TransactionWidget(
-                                                type = txType,
-                                                label = txLabel,
-                                                date = stringResource(R.string.pending),
-                                                amount = formattedAmount,
-                                                balanceAfter = stringResource(R.string.unconfirmed),
-                                                listCard = listCard,
-                                                primaryText = primaryText,
-                                                secondaryText = secondaryText,
-                                                transaction = txn,
-                                                app = app,
-                                                manager = manager,
-                                            )
-                                        }
+                            // render transactions, empty state, or full loading spinner
+                            if (!hasTransactions) {
+                                if (isFirstScan) {
+                                    // first scan never completed - show large centered spinner
+                                    Box(
+                                        modifier =
+                                            Modifier
+                                                .fillMaxWidth()
+                                                .weight(1f),
+                                        contentAlignment = Alignment.TopCenter,
+                                    ) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.padding(top = 80.dp),
+                                            color = primaryText,
+                                        )
                                     }
-
-                                    // add divider between transactions (but not after the last one)
-                                    if (index < transactions.size - 1) {
+                                } else {
+                                    // scan complete but no transactions
+                                    Box(
+                                        modifier =
+                                            Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 32.dp),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Text(
+                                            text = stringResource(R.string.no_transactions_yet),
+                                            color = secondaryText,
+                                            fontSize = 14.sp,
+                                        )
+                                    }
+                                }
+                            } else {
+                                // render transactions dynamically in scrollable list
+                                LazyColumn(
+                                    state = listState,
+                                    modifier = Modifier.weight(1f),
+                                ) {
+                                    // render unsigned transactions first (pending signature)
+                                    items(
+                                        items = unsignedTransactions,
+                                        key = { it.id().toString() },
+                                    ) { unsignedTxn ->
+                                        UnsignedTransactionWidget(
+                                            txn = unsignedTxn,
+                                            primaryText = primaryText,
+                                            secondaryText = secondaryText,
+                                            app = app,
+                                            manager = manager,
+                                            fiatOrBtc = fiatOrBtc,
+                                            sensitiveVisible = manager?.walletMetadata?.sensitiveVisible ?: true,
+                                        )
                                         HorizontalDivider(color = dividerColor, thickness = 0.5.dp)
                                     }
-                                }
 
-                                // add bottom spacing
-                                item {
-                                    Spacer(Modifier.height(12.dp))
+                                    itemsIndexed(transactions) { index, txn ->
+                                        when (txn) {
+                                            is Transaction.Confirmed -> {
+                                                val direction = txn.v1.sentAndReceived().direction()
+                                                val txType =
+                                                    when (direction) {
+                                                        TransactionDirection.INCOMING -> TransactionType.RECEIVED
+                                                        TransactionDirection.OUTGOING -> TransactionType.SENT
+                                                    }
+
+                                                val txLabel =
+                                                    if (manager?.walletMetadata?.showLabels == true) {
+                                                        txn.v1.label()
+                                                    } else {
+                                                        stringResource(
+                                                            when (txType) {
+                                                                TransactionType.SENT -> R.string.label_transaction_sent
+                                                                TransactionType.RECEIVED -> R.string.label_transaction_received
+                                                            },
+                                                        )
+                                                    }
+
+                                                val formattedAmount: String =
+                                                    manager?.let {
+                                                        val amount = txn.v1.sentAndReceived().amount()
+                                                        val prefix = if (direction == TransactionDirection.OUTGOING) "-" else ""
+                                                        when (fiatOrBtc) {
+                                                            FiatOrBtc.BTC -> prefix + it.displayAmount(amount, showUnit = true)
+                                                            FiatOrBtc.FIAT -> {
+                                                                val fiatAmount = txn.v1.fiatAmount()
+                                                                if (fiatAmount != null) {
+                                                                    prefix + it.rust.displayFiatAmount(fiatAmount.amount)
+                                                                } else {
+                                                                    "---"
+                                                                }
+                                                            }
+                                                        }
+                                                    } ?: txn.v1.sentAndReceived().label()
+
+                                                ConfirmedTransactionWidget(
+                                                    type = txType,
+                                                    label = txLabel,
+                                                    date = txn.v1.confirmedAtFmt(),
+                                                    amount = formattedAmount,
+                                                    balanceAfter = txn.v1.blockHeightFmt(),
+                                                    primaryText = primaryText,
+                                                    secondaryText = secondaryText,
+                                                    transaction = txn,
+                                                    app = app,
+                                                    manager = manager,
+                                                    sensitiveVisible = manager?.walletMetadata?.sensitiveVisible ?: true,
+                                                )
+                                            }
+
+                                            is Transaction.Unconfirmed -> {
+                                                val direction = txn.v1.sentAndReceived().direction()
+                                                val txType =
+                                                    when (direction) {
+                                                        TransactionDirection.INCOMING -> TransactionType.RECEIVED
+                                                        TransactionDirection.OUTGOING -> TransactionType.SENT
+                                                    }
+
+                                                val txLabel =
+                                                    if (manager?.walletMetadata?.showLabels == true) {
+                                                        txn.v1.label()
+                                                    } else {
+                                                        stringResource(
+                                                            when (txType) {
+                                                                TransactionType.SENT -> R.string.label_transaction_sending
+                                                                TransactionType.RECEIVED -> R.string.label_transaction_receiving
+                                                            },
+                                                        )
+                                                    }
+
+                                                val formattedAmount: String =
+                                                    manager?.let {
+                                                        val amount = txn.v1.sentAndReceived().amount()
+                                                        val prefix = if (direction == TransactionDirection.OUTGOING) "-" else ""
+                                                        when (fiatOrBtc) {
+                                                            FiatOrBtc.BTC -> prefix + it.displayAmount(amount, showUnit = true)
+                                                            FiatOrBtc.FIAT -> {
+                                                                val fiatAmount = txn.v1.fiatAmount()
+                                                                if (fiatAmount != null) {
+                                                                    prefix + it.rust.displayFiatAmount(fiatAmount.amount)
+                                                                } else {
+                                                                    "---"
+                                                                }
+                                                            }
+                                                        }
+                                                    } ?: txn.v1.sentAndReceived().label()
+
+                                                UnconfirmedTransactionWidget(
+                                                    type = txType,
+                                                    label = txLabel,
+                                                    amount = formattedAmount,
+                                                    primaryText = primaryText,
+                                                    transaction = txn,
+                                                    app = app,
+                                                    manager = manager,
+                                                    sensitiveVisible = manager?.walletMetadata?.sensitiveVisible ?: true,
+                                                )
+                                            }
+                                        }
+
+                                        // add divider between transactions (but not after the last one)
+                                        if (index < transactions.size - 1) {
+                                            HorizontalDivider(color = dividerColor, thickness = 0.5.dp)
+                                        }
+                                    }
+
+                                    // add bottom spacing
+                                    item {
+                                        Spacer(Modifier.height(12.dp))
+                                    }
                                 }
                             }
                         }
@@ -513,53 +608,43 @@ fun WalletTransactionsScreen(
 }
 
 @Composable
-private fun TransactionWidget(
+private fun ConfirmedTransactionWidget(
     type: TransactionType,
     label: String,
     date: String,
     amount: String,
     balanceAfter: String,
-    listCard: Color,
     primaryText: Color,
     secondaryText: Color,
-    transaction: Transaction,
+    transaction: Transaction.Confirmed,
     app: AppManager?,
     manager: WalletManager?,
+    sensitiveVisible: Boolean,
 ) {
     val scope = rememberCoroutineScope()
     val isDark = !MaterialTheme.colorScheme.isLight
 
-    // get transaction id for navigation
-    val txId =
-        when (transaction) {
-            is Transaction.Confirmed -> transaction.v1.id()
-            is Transaction.Unconfirmed -> transaction.v1.id()
-        }
+    fun privateShow(text: String, placeholder: String = "••••••"): String =
+        if (sensitiveVisible) text else placeholder
 
-    // icon background color based on dark mode
-    val iconBackground =
-        if (isDark) {
-            Color.Gray.copy(alpha = 0.35f)
-        } else {
-            Color.Black.copy(alpha = 0.75f)
-        }
+    val iconBackground = if (isDark) Color.Gray.copy(alpha = 0.35f) else Color.Black.copy(alpha = 0.75f)
+    val icon = if (type == TransactionType.SENT) Icons.Filled.NorthEast else Icons.Filled.SouthWest
 
     Row(
         modifier =
             Modifier
                 .fillMaxWidth()
                 .clickable {
-                    // navigate to transaction details
                     if (app != null && manager != null) {
                         scope.launch {
                             try {
-                                val details = manager.transactionDetails(txId)
+                                val details = manager.transactionDetails(transaction.v1.id())
                                 val walletId = manager.walletMetadata?.id
                                 if (walletId != null) {
                                     app.pushRoute(Route.TransactionDetails(walletId, details))
                                 }
                             } catch (e: Exception) {
-                                android.util.Log.e("TransactionWidget", "Failed to load transaction details", e)
+                                android.util.Log.e("ConfirmedTxWidget", "Failed to load transaction details", e)
                             }
                         }
                     }
@@ -575,7 +660,7 @@ private fun TransactionWidget(
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                imageVector = if (type == TransactionType.SENT) Icons.Filled.NorthEast else Icons.Filled.SouthWest,
+                imageVector = icon,
                 contentDescription = label,
                 tint = Color.White,
                 modifier = Modifier.size(24.dp),
@@ -595,7 +680,7 @@ private fun TransactionWidget(
                 fontWeight = FontWeight.Medium,
             )
             AutoSizeText(
-                text = date,
+                text = privateShow(date),
                 color = secondaryText,
                 maxFontSize = 12.sp,
                 minimumScaleFactor = 0.90f,
@@ -604,16 +689,111 @@ private fun TransactionWidget(
         }
 
         Column(horizontalAlignment = Alignment.End) {
+            val amountColor =
+                if (type == TransactionType.RECEIVED) {
+                    CoveColor.TransactionReceived
+                } else {
+                    primaryText.copy(alpha = 0.8f)
+                }
             Text(
-                text = amount,
-                color = if (type == TransactionType.RECEIVED) CoveColor.TransactionReceived else primaryText.copy(alpha = 0.8f),
+                text = privateShow(amount),
+                color = amountColor,
                 fontSize = 17.sp,
                 fontWeight = FontWeight.Normal,
             )
             Text(
-                text = balanceAfter,
+                text = privateShow(balanceAfter),
                 color = secondaryText,
                 fontSize = 12.sp,
+                fontWeight = FontWeight.Normal,
+            )
+        }
+    }
+}
+
+@Composable
+private fun UnconfirmedTransactionWidget(
+    type: TransactionType,
+    label: String,
+    amount: String,
+    primaryText: Color,
+    transaction: Transaction.Unconfirmed,
+    app: AppManager?,
+    manager: WalletManager?,
+    sensitiveVisible: Boolean,
+) {
+    val scope = rememberCoroutineScope()
+    val isDark = !MaterialTheme.colorScheme.isLight
+
+    fun privateShow(text: String, placeholder: String = "••••••"): String =
+        if (sensitiveVisible) text else placeholder
+
+    val iconBackground = if (isDark) Color.Gray.copy(alpha = 0.35f) else Color.Black.copy(alpha = 0.75f)
+
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable {
+                    if (app != null && manager != null) {
+                        scope.launch {
+                            try {
+                                val details = manager.transactionDetails(transaction.v1.id())
+                                val walletId = manager.walletMetadata?.id
+                                if (walletId != null) {
+                                    app.pushRoute(Route.TransactionDetails(walletId, details))
+                                }
+                            } catch (e: Exception) {
+                                android.util.Log.e("UnconfirmedTxWidget", "Failed to load transaction details", e)
+                            }
+                        }
+                    }
+                }.padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(modifier = Modifier.graphicsLayer { alpha = 0.6f }) {
+            Box(
+                modifier =
+                    Modifier
+                        .size(50.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(iconBackground),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Schedule,
+                    contentDescription = label,
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp),
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.size(12.dp))
+
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = label,
+                color = primaryText.copy(alpha = 0.4f),
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Medium,
+            )
+        }
+
+        Column(horizontalAlignment = Alignment.End) {
+            val amountColor =
+                if (type == TransactionType.RECEIVED) {
+                    CoveColor.TransactionReceived
+                } else {
+                    primaryText.copy(alpha = 0.8f)
+                }
+            Text(
+                text = privateShow(amount),
+                color = amountColor.copy(alpha = 0.65f),
+                fontSize = 17.sp,
                 fontWeight = FontWeight.Normal,
             )
         }
@@ -628,9 +808,25 @@ private fun UnsignedTransactionWidget(
     secondaryText: Color,
     app: AppManager?,
     manager: WalletManager?,
+    fiatOrBtc: FiatOrBtc,
+    sensitiveVisible: Boolean,
 ) {
     val isDark = !MaterialTheme.colorScheme.isLight
     var showDeleteMenu by remember { mutableStateOf(false) }
+    var fiatAmount by remember { mutableStateOf<Double?>(null) }
+
+    // fetch fiat amount asynchronously (matches iOS .task behavior)
+    LaunchedEffect(txn.id()) {
+        fiatAmount =
+            try {
+                manager?.rust?.amountInFiat(txn.spendingAmount())
+            } catch (e: Exception) {
+                null
+            }
+    }
+
+    fun privateShow(text: String, placeholder: String = "••••••"): String =
+        if (sensitiveVisible) text else placeholder
 
     // icon background: same values as iOS (0.35 dark, 0.75 light)
     val iconBackground =
@@ -643,7 +839,17 @@ private fun UnsignedTransactionWidget(
     // format the spending amount
     val formattedAmount =
         manager?.let {
-            it.displayAmount(txn.spendingAmount(), showUnit = true)
+            when (fiatOrBtc) {
+                FiatOrBtc.BTC -> it.displayAmount(txn.spendingAmount(), showUnit = true)
+                FiatOrBtc.FIAT -> {
+                    val amount = fiatAmount
+                    if (amount != null) {
+                        it.rust.displayFiatAmount(amount)
+                    } else {
+                        "---"
+                    }
+                }
+            }
         } ?: txn.spendingAmount().satsStringWithUnit()
 
     Box {
@@ -717,7 +923,7 @@ private fun UnsignedTransactionWidget(
 
             Column(horizontalAlignment = Alignment.End) {
                 Text(
-                    text = formattedAmount,
+                    text = privateShow(formattedAmount),
                     color = primaryText.copy(alpha = 0.6f),
                     fontSize = 17.sp,
                     fontWeight = FontWeight.Normal,
@@ -752,77 +958,46 @@ private fun UnsignedTransactionWidget(
 
 @Composable
 private fun BalanceWidget(
-    hidden: Boolean,
-    fiatAmount: String?,
-    btcAmount: String,
-    fiatOrBtc: FiatOrBtc,
-    onToggle: () -> Unit,
+    sensitiveVisible: Boolean,
+    primaryAmount: String,
+    secondaryAmount: String,
+    onToggleUnit: () -> Unit,
+    onToggleSensitive: () -> Unit,
 ) {
-    var isHidden by remember { mutableStateOf(hidden) }
-
-    // determine primary/secondary based on fiatOrBtc preference
-    val primaryIsFiat = fiatOrBtc == FiatOrBtc.FIAT
-    val primaryAmount = if (primaryIsFiat) fiatAmount else btcAmount
-    val secondaryAmount = if (primaryIsFiat) btcAmount else fiatAmount
+    val isHidden = !sensitiveVisible
 
     Column(
-        modifier = Modifier.clickable { onToggle() },
+        modifier = Modifier.clickable { onToggleUnit() },
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        // secondary balance (top, smaller)
-        if (isHidden) {
-            Text(
-                text = "••••••",
-                color = Color.White.copy(alpha = 0.7f),
-                fontSize = 13.sp,
-            )
-        } else if (secondaryAmount != null) {
-            Text(
-                text = secondaryAmount,
-                color = Color.White.copy(alpha = 0.7f),
-                fontSize = 13.sp,
-            )
-        } else {
-            CircularProgressIndicator(
-                modifier = Modifier.size(12.dp),
-                color = Color.White.copy(alpha = 0.7f),
-                strokeWidth = 1.5.dp,
-            )
-        }
+        Text(
+            text = if (isHidden) "••••••" else secondaryAmount,
+            color = Color.White.copy(alpha = 0.7f),
+            fontSize = 13.sp,
+        )
 
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            // primary balance (bottom, larger)
-            if (isHidden) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(modifier = Modifier.weight(1f)) {
                 BalanceAutoSizeText(
-                    text = "••••••",
+                    text = if (isHidden) "••••••" else primaryAmount,
                     modifier = Modifier.padding(end = 12.dp),
                     color = Color.White,
                     baseFontSize = 34.sp,
                     minimumScaleFactor = 0.5f,
                     fontWeight = FontWeight.Bold,
-                )
-            } else if (primaryAmount != null) {
-                BalanceAutoSizeText(
-                    text = primaryAmount,
-                    modifier = Modifier.padding(end = 12.dp),
-                    color = Color.White,
-                    baseFontSize = 34.sp,
-                    minimumScaleFactor = 0.5f,
-                    fontWeight = FontWeight.Bold,
-                )
-            } else {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(24.dp),
-                    color = Color.White,
-                    strokeWidth = 2.dp,
                 )
             }
-            Spacer(modifier = Modifier.weight(1f))
             Icon(
                 imageVector = if (isHidden) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                contentDescription = if (isHidden) "Show" else "Hide",
-                tint = Color.White.copy(alpha = 0.7f),
-                modifier = Modifier.clickable { isHidden = !isHidden },
+                contentDescription = if (isHidden) "Hidden" else "Visible",
+                tint = Color.White,
+                modifier =
+                    Modifier
+                        .size(24.dp)
+                        .clickable { onToggleSensitive() },
             )
         }
     }

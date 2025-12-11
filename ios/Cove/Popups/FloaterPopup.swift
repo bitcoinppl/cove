@@ -13,10 +13,10 @@ struct FloaterPopup: TopPopup {
     let text: String
 
     // optional
-    let backgroundColor = Color.black
-    let textColor = Color.white
-    let iconColor = Color.green
-    let icon = "checkmark"
+    var backgroundColor: Color = .black
+    var textColor: Color = .white
+    var iconColor: Color = .green
+    var icon: String = "checkmark"
 
     var body: some View {
         FloaterPopupView(

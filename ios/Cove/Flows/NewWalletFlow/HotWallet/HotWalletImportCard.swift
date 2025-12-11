@@ -6,8 +6,55 @@
 //
 
 import SwiftUI
+import SwiftUIIntrospect
 
 private let rowHeight = 30.0
+
+/// Handles return key press without dismissing keyboard, forwarding other calls to original delegate
+private final class TextFieldReturnHandler: NSObject, UITextFieldDelegate {
+    var onReturn: () -> Void
+    weak var originalDelegate: UITextFieldDelegate?
+
+    init(onReturn: @escaping () -> Void, originalDelegate: UITextFieldDelegate?) {
+        self.onReturn = onReturn
+        self.originalDelegate = originalDelegate
+    }
+
+    func textFieldShouldReturn(_: UITextField) -> Bool {
+        onReturn()
+        return false // prevents keyboard dismissal
+    }
+
+    // forward all other delegate methods to original
+    func textFieldDidBeginEditing(_ textField: UITextField) {
+        originalDelegate?.textFieldDidBeginEditing?(textField)
+    }
+
+    func textFieldDidEndEditing(_ textField: UITextField) {
+        originalDelegate?.textFieldDidEndEditing?(textField)
+    }
+
+    func textFieldDidChangeSelection(_ textField: UITextField) {
+        originalDelegate?.textFieldDidChangeSelection?(textField)
+    }
+
+    func textField(_ textField: UITextField, shouldChangeCharactersIn range: NSRange, replacementString string: String) -> Bool {
+        originalDelegate?.textField?(textField, shouldChangeCharactersIn: range, replacementString: string) ?? true
+    }
+
+    func textFieldShouldBeginEditing(_ textField: UITextField) -> Bool {
+        originalDelegate?.textFieldShouldBeginEditing?(textField) ?? true
+    }
+
+    func textFieldShouldEndEditing(_ textField: UITextField) -> Bool {
+        originalDelegate?.textFieldShouldEndEditing?(textField) ?? true
+    }
+
+    func textFieldShouldClear(_ textField: UITextField) -> Bool {
+        originalDelegate?.textFieldShouldClear?(textField) ?? true
+    }
+}
+
 private let numberOfRows = 6
 
 private let groupsOf = HotWalletImportScreen.GROUPS_OF
@@ -111,6 +158,7 @@ private struct AutocompleteField: View {
     @State private var state: FieldState = .initial
     @State private var showSuggestions = false
     @State private var offset: CGPoint = .zero
+    @State private var returnHandler: TextFieldReturnHandler?
 
     private enum FieldState {
         case initial
@@ -190,6 +238,21 @@ private struct AutocompleteField: View {
     func submitFocusField() {
         filteredSuggestions = []
 
+        // only advance if word is valid, otherwise stay on current field
+        let isValid = autocomplete.isValidWord(word: text, allWords: allEnteredWords)
+
+        if text.isEmpty {
+            state = .typing
+            return
+        }
+
+        if !isValid {
+            state = .invalid
+            return
+        }
+
+        state = .valid
+
         let currentFocusField = UInt8(focusField?.fieldNumber ?? 1)
         let nextFieldNumber = Int(
             autocomplete.nextFieldNumber(
@@ -204,10 +267,6 @@ private struct AutocompleteField: View {
                 tabIndex = Int(nextFieldNumber / groupsOf)
             }
         }
-
-        if text == "" { return state = .typing }
-        if autocomplete.isValidWord(word: text, allWords: allEnteredWords) { return state = .valid }
-        state = .invalid
     }
 
     var textField: some View {
@@ -240,7 +299,17 @@ private struct AutocompleteField: View {
                     state = .invalid
                 }
             }
-            .onSubmit { submitFocusField() }
+            .introspect(.textField, on: .iOS(.v18, .v26)) { textField in
+                // only set up handler once, capturing original delegate
+                if returnHandler == nil {
+                    let handler = TextFieldReturnHandler(
+                        onReturn: { [self] in submitFocusField() },
+                        originalDelegate: textField.delegate
+                    )
+                    returnHandler = handler
+                    textField.delegate = handler
+                }
+            }
             .onChange(of: text, initial: false) { oldText, newText in
                 text = newText.trimmingCharacters(in: .whitespacesAndNewlines)
 

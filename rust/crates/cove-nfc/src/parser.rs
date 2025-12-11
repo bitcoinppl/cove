@@ -15,7 +15,7 @@ use crate::{
     header::NdefHeader,
     message_info::MessageInfo,
     ndef_type::NdefType,
-    payload::{NdefPayload, TextPayload, TextPayloadFormat},
+    payload::{NdefPayload, TextPayload, TextPayloadFormat, URI_PREFIXES},
     record::NdefRecord,
 };
 
@@ -133,6 +133,19 @@ fn parse_payload(
     payload_length: u32,
     type_: &[u8],
 ) -> ModalResult<NdefPayload> {
+    // URI record (type "U") - used by ColdCard PushTx
+    if type_ == b"U" {
+        let prefix_code = be_u8.parse_next(input)?;
+        let uri_data = take(payload_length as usize - 1).parse_next(input)?;
+
+        let prefix = URI_PREFIXES.get(prefix_code as usize).unwrap_or(&"");
+        let uri_suffix = String::from_utf8_lossy(uri_data);
+        let full_uri = format!("{prefix}{uri_suffix}");
+
+        return Ok(NdefPayload::Uri(full_uri));
+    }
+
+    // text record (type "T")
     if type_ == b"T" {
         let (is_utf16, language_code_length): (bool, u8) =
             bits::<_, _, ErrMode<ContextError>, _, _>((take_bool, take_bits(7_u8)))

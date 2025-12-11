@@ -3,6 +3,7 @@ package org.bitcoinppl.cove.views
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
@@ -12,6 +13,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -23,13 +26,16 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /**
@@ -202,6 +208,7 @@ fun BalanceAutoSizeText(
  * @param color Text color
  * @param fontWeight Font weight
  * @param textAlign Text alignment
+ * @param reservedWidth Width to reserve for overlaid elements (e.g., clear button), reduces effective width for sizing
  * @param onTextWidthChanged Callback with measured text width in Dp (for positioning related elements)
  */
 @Composable
@@ -214,8 +221,11 @@ fun AutoSizeTextField(
     color: Color = Color.Unspecified,
     fontWeight: FontWeight? = null,
     textAlign: TextAlign? = null,
+    reservedWidth: Dp = 0.dp,
     onTextWidthChanged: ((androidx.compose.ui.unit.Dp) -> Unit)? = null,
     onFocusChanged: ((Boolean) -> Unit)? = null,
+    keyboardActions: KeyboardActions? = null,
+    focusRequester: FocusRequester? = null,
 ) {
     val density = LocalDensity.current
     val fontFamilyResolver = LocalFontFamilyResolver.current
@@ -223,28 +233,25 @@ fun AutoSizeTextField(
     val style = LocalTextStyle.current
 
     // use TextFieldValue internally to control cursor position
-    // track the last external value to detect when it changes
-    var lastExternalValue by remember { mutableStateOf(value) }
     var textFieldValue by remember {
         mutableStateOf(TextFieldValue(value, TextRange(value.length)))
     }
 
-    // sync from external value changes (e.g., formatting), keeping cursor at end
-    // this runs during composition for immediate effect, not in a side effect
-    if (value != lastExternalValue) {
-        lastExternalValue = value
-        if (textFieldValue.text != value) {
-            textFieldValue = TextFieldValue(value, TextRange(value.length))
-        }
+    // sync from external value if it differs from internal state
+    // this handles both formatting changes AND rejected input (e.g., sanitization)
+    if (textFieldValue.text != value) {
+        textFieldValue = TextFieldValue(value, TextRange(value.length))
     }
 
     BoxWithConstraints(modifier = modifier) {
         val maxWidthPx = with(density) { maxWidth.toPx() }
+        val reservedWidthPx = with(density) { reservedWidth.toPx() }
+        val effectiveMaxWidthPx = (maxWidthPx - reservedWidthPx).coerceAtLeast(0f)
 
         val (fontSize, textWidthPx) =
             remember(
                 textFieldValue.text,
-                maxWidthPx,
+                effectiveMaxWidthPx,
                 maxFontSize,
                 minFontSize,
                 style,
@@ -254,7 +261,7 @@ fun AutoSizeTextField(
                     text = textFieldValue.text,
                     maxFontSize = maxFontSize,
                     minFontSize = minFontSize,
-                    maxWidthPx = maxWidthPx,
+                    maxWidthPx = effectiveMaxWidthPx,
                     style = style,
                     fontWeight = fontWeight,
                     fontStyle = null,
@@ -284,11 +291,17 @@ fun AutoSizeTextField(
                     textAlign = textAlign ?: TextAlign.Unspecified,
                 ),
             singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            keyboardOptions =
+                KeyboardOptions(
+                    keyboardType = KeyboardType.Decimal,
+                    imeAction = ImeAction.Done,
+                ),
+            keyboardActions = keyboardActions ?: KeyboardActions.Default,
             cursorBrush = SolidColor(color),
             modifier =
                 Modifier
                     .fillMaxWidth()
+                    .then(focusRequester?.let { Modifier.focusRequester(it) } ?: Modifier)
                     .onFocusChanged { focusState ->
                         onFocusChanged?.invoke(focusState.isFocused)
                     },

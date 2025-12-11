@@ -41,6 +41,8 @@ import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppAlertState
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.TaggedItem
+import org.bitcoinppl.cove.findActivity
+import org.bitcoinppl.cove.nfc.TapCardNfcManager
 import org.bitcoinppl.cove_core.TapSignerConfirmPinArgs
 import org.bitcoinppl.cove_core.TapSignerPinAction
 import org.bitcoinppl.cove_core.TapSignerRoute
@@ -71,7 +73,7 @@ fun TapSignerConfirmPinView(
         if (confirmPin.length == 6) {
             delay(200)
             scope.launch {
-                val activity = context as? android.app.Activity
+                val activity = context.findActivity()
                 if (activity == null) {
                     app.alertState =
                         TaggedItem(
@@ -218,8 +220,19 @@ private suspend fun setupTapSigner(
             }
         }
 
+    // set up message callback for progress updates
+    val nfcManager = TapCardNfcManager.getInstance()
+    nfcManager.onMessageUpdate = { message ->
+        manager.scanMessage = message
+    }
+
+    manager.scanMessage = "Hold your phone near the TapSigner to set up"
+    manager.isScanning = true
+
     try {
         val response = nfc.setupTapSigner(args.startingPin, args.newPin, chainCodeBytes)
+        manager.isScanning = false
+        nfcManager.onMessageUpdate = null
 
         when (response) {
             is org.bitcoinppl.cove_core.SetupCmdResponse.Complete -> {
@@ -230,6 +243,9 @@ private suspend fun setupTapSigner(
             }
         }
     } catch (e: Exception) {
+        manager.isScanning = false
+        nfcManager.onMessageUpdate = null
+
         // check if we can continue from last response
         val lastResponse = nfc.lastResponse()
         val setupResponse =
@@ -257,9 +273,21 @@ private suspend fun changeTapSignerPin(
 ) {
     val nfc = manager.getOrCreateNfc(args.tapSigner)
 
+    // set up message callback for progress updates
+    val nfcManager = TapCardNfcManager.getInstance()
+    nfcManager.onMessageUpdate = { message ->
+        manager.scanMessage = message
+    }
+
+    manager.scanMessage = "Hold your phone near the TapSigner to change PIN"
+    manager.isScanning = true
+
     try {
         nfc.changePin(args.startingPin, args.newPin)
+        manager.isScanning = false
+        nfcManager.onMessageUpdate = null
 
+        app.sheetState = null
         app.alertState =
             TaggedItem(
                 AppAlertState.General(
@@ -268,6 +296,9 @@ private suspend fun changeTapSignerPin(
                 ),
             )
     } catch (e: Exception) {
+        manager.isScanning = false
+        nfcManager.onMessageUpdate = null
+
         android.util.Log.e("TapSignerConfirmPin", "Error changing PIN", e)
 
         // check error type and show appropriate alert

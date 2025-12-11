@@ -15,19 +15,13 @@ We provide hot wallet support but one of the main goals is to be the best mobile
 
 ## Build from Source
 
-### Requirements
+See [CONTRIBUTING.md](CONTRIBUTING.md) for prerequisites and build instructions.
 
-- Xcode 16.0+
-- Swift 5.5+
-- [Rust](http://rustup.rs)
-- [Just](https://github.com/casey/just)
+## Documentation
 
-### Setup
-
-1. Clone the repository
-2. Build the Rust library and bindings with `just build-ios-debug-device` for a debug build or `just build-ios-release` for a release build.
-3. Open `ios/Cove.xcodeproj` in Xcode.
-4. Build and run the app.
+- [CONTRIBUTING.md](CONTRIBUTING.md) - Development setup, commands, workflow
+- [ARCHITECTURE.md](ARCHITECTURE.md) - System design and codebase structure
+- [docs/IOS_ANDROID_PARITY.md](docs/IOS_ANDROID_PARITY.md) - iOS/Android UI patterns
 
 ## Features
 

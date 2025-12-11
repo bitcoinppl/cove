@@ -35,10 +35,10 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,12 +53,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.App
 import org.bitcoinppl.cove.AppAlertState
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
 import org.bitcoinppl.cove.ui.theme.title3
 import org.bitcoinppl.cove.views.DashDotsIndicator
 import org.bitcoinppl.cove.views.ImageButton
@@ -95,17 +98,15 @@ fun NewWalletSelectScreen(
     var showNfcHelpSheet by remember { mutableStateOf(false) }
     var nfcCalled by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     // function to trigger NFC scan and show help after delay (matching iOS behavior)
     fun triggerNfcScan() {
         onOpenNfcScan()
-        // after 0.8s delay, show NFC Help button (matching iOS)
-        nfcCalled = true
-    }
-
-    // reset nfcCalled when returning to this screen
-    LaunchedEffect(Unit) {
-        // initial state - don't reset if coming back from NFC
+        scope.launch {
+            delay(800)
+            nfcCalled = true
+        }
     }
 
     fun importWallet(content: String) {
@@ -183,6 +184,9 @@ fun NewWalletSelectScreen(
             ?.text
             ?.toString()
     }
+
+    // force white status bar icons for midnight blue background
+    ForceLightStatusBarIcons()
 
     Scaffold(containerColor = CoveColor.midnightBlue, topBar = {
         CenterAlignedTopAppBar(

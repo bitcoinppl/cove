@@ -188,7 +188,7 @@ private fun SearchBar(
             onValueChange = onQueryChange,
             textStyle =
                 MaterialTheme.typography.bodyMedium.copy(
-                    color = Color(0xFF000000),
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 17.sp,
                 ),
             singleLine = true,
@@ -197,7 +197,7 @@ private fun SearchBar(
                 if (query.isEmpty()) {
                     Text(
                         "Search Wallets",
-                        color = Color(0xFF8E8E93),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 17.sp,
                     )
                 }

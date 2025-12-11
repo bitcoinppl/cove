@@ -133,6 +133,10 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
         return details
     }
 
+    func updateTransactionDetailsCache(txId: TxId, details: TransactionDetails) {
+        transactionDetails[txId] = details
+    }
+
     func updateFiatBalance() {
         fiatBalance = rust.amountInFiat(amount: balance.spendable())
     }

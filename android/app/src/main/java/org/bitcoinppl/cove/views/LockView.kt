@@ -43,12 +43,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import org.bitcoinppl.cove.Auth
 import org.bitcoinppl.cove.UnlockMode
+import org.bitcoinppl.cove.findFragmentActivity
 import org.bitcoinppl.cove_core.AuthType
 
 private enum class Screen {
@@ -63,7 +63,7 @@ fun LockView(
     val auth = Auth
     var screen by remember { mutableStateOf(Screen.BIOMETRIC) }
     val context = LocalContext.current
-    val activity = context as? FragmentActivity
+    val activity = context.findFragmentActivity()
     val biometricManager = remember { BiometricManager.from(context) }
 
     val isBiometricAvailable =

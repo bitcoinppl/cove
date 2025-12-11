@@ -2,8 +2,10 @@ package org.bitcoinppl.cove
 
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.graphics.Color
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -16,7 +18,6 @@ import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.tapcard.TapSigner
 import org.bitcoinppl.cove_core.types.*
 import java.io.Closeable
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -59,8 +60,8 @@ class WalletManager :
     var errorAlert by mutableStateOf<WalletErrorAlert?>(null)
     var sendFlowErrorAlert by mutableStateOf<TaggedItem<SendFlowErrorAlert>?>(null)
 
-    // cached transaction details
-    private val transactionDetailsCache = ConcurrentHashMap<TxId, TransactionDetails>()
+    // cached transaction details (observable for Compose)
+    val transactionDetailsCache: SnapshotStateMap<TxId, TransactionDetails> = mutableStateMapOf()
 
     // computed properties
     val unit: String
@@ -97,7 +98,7 @@ class WalletManager :
         this.unsignedTransactions = runCatching { rustManager.getUnsignedTransactions() }.getOrElse { emptyList() }
 
         // start fiat balance update
-        updateFiatBalance()
+        mainScope.launch(Dispatchers.IO) { updateFiatBalance() }
 
         rustManager.listenForUpdates(this)
     }
@@ -148,6 +149,16 @@ class WalletManager :
         rust.forceWalletScan()
     }
 
+    fun setScanning() {
+        val currentTxns =
+            when (val state = loadState) {
+                is WalletLoadState.LOADED -> state.txns
+                is WalletLoadState.SCANNING -> state.txns
+                else -> emptyList()
+            }
+        loadState = WalletLoadState.SCANNING(currentTxns)
+    }
+
     suspend fun firstAddress(): AddressInfo = rust.addressAt(0u)
 
     fun amountFmt(amount: Amount): String =
@@ -180,16 +191,26 @@ class WalletManager :
         transactionDetailsCache[txId] = details
     }
 
-    internal fun updateFiatBalance() {
-        fiatBalance = rust.amountInFiat(balance.spendable())
+    private suspend fun updateFiatBalance() {
+        try {
+            val fiatBal = rust.balanceInFiat()
+            withContext(Dispatchers.Main) {
+                fiatBalance = fiatBal
+            }
+        } catch (e: Exception) {
+            logError("error getting fiat balance", e)
+            withContext(Dispatchers.Main) {
+                fiatBalance = 0.0
+            }
+        }
     }
 
     suspend fun updateWalletBalance() {
         val bal = rust.balance()
         withContext(Dispatchers.Main) {
             balance = bal
-            updateFiatBalance()
         }
+        updateFiatBalance()
     }
 
     private fun apply(message: WalletManagerReconcileMessage) {
@@ -203,12 +224,8 @@ class WalletManager :
             }
 
             is WalletManagerReconcileMessage.AvailableTransactions -> {
-                // accept cached transactions in loading/scanning states, or if new count > current
-                loadState = when (val current = loadState) {
-                    is WalletLoadState.LOADING, is WalletLoadState.SCANNING ->
-                        WalletLoadState.SCANNING(message.v1)
-                    is WalletLoadState.LOADED ->
-                        if (message.v1.size > current.txns.size) WalletLoadState.SCANNING(message.v1) else current
+                if (loadState is WalletLoadState.LOADING) {
+                    loadState = WalletLoadState.SCANNING(message.v1)
                 }
             }
 
@@ -228,7 +245,8 @@ class WalletManager :
 
             is WalletManagerReconcileMessage.WalletBalanceChanged -> {
                 balance = message.v1
-                updateFiatBalance()
+                // update fiat balance in background
+                mainScope.launch(Dispatchers.IO) { updateFiatBalance() }
             }
 
             is WalletManagerReconcileMessage.UnsignedTransactionsChanged -> {

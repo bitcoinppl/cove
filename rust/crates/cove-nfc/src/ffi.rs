@@ -45,6 +45,7 @@ impl FfiNfcReader {
     pub fn string_from_record(&self, record: NdefRecord) -> Option<String> {
         match record.payload {
             crate::payload::NdefPayload::Text(text_payload) => Some(text_payload.text),
+            crate::payload::NdefPayload::Uri(uri) => Some(uri),
             crate::payload::NdefPayload::Data(data) => String::from_utf8(data).ok(),
         }
     }

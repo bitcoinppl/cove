@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
 import org.bitcoinppl.cove.ui.theme.title3
 import org.bitcoinppl.cove.utils.intoRoute
 import org.bitcoinppl.cove.views.DashDotsIndicator
@@ -89,6 +90,9 @@ fun HotWalletSelectScreen(
             }
         app.pushRoute(route)
     }
+
+    // force white status bar icons for midnight blue background
+    ForceLightStatusBarIcons()
 
     Scaffold(
         containerColor = CoveColor.midnightBlue,
@@ -175,7 +179,7 @@ fun HotWalletSelectScreen(
                     )
 
                     Column(
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         ImageButton(
@@ -232,12 +236,13 @@ fun HotWalletSelectScreen(
                         modifier = Modifier.padding(bottom = 8.dp),
                     )
 
-                    // show QR and NFC options for import
+                    // show QR and NFC options for import - use app-level scan sheets
+                    // which handle all formats (mnemonic, TapSigner, hardware export, etc.)
                     if (nextScreen == NextScreenDialog.Import) {
                         TextButton(
                             onClick = {
-                                navigateToRoute(NumberOfBip39Words.TWENTY_FOUR, ImportType.QR)
                                 showSheet = false
+                                app.scanQr()
                             },
                             modifier = Modifier.fillMaxWidth(),
                         ) {
@@ -246,8 +251,8 @@ fun HotWalletSelectScreen(
 
                         TextButton(
                             onClick = {
-                                navigateToRoute(NumberOfBip39Words.TWENTY_FOUR, ImportType.NFC)
                                 showSheet = false
+                                app.scanNfc()
                             },
                             modifier = Modifier.fillMaxWidth(),
                         ) {

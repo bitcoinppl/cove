@@ -189,12 +189,18 @@ struct HotWalletImportScreen: View {
                     if let words = try? groupedPlainWordsOf(mnemonic: mnemonicString, groups: UInt8(groupsOf)) {
                         setWords(words)
                     }
+                } else {
+                    sheetState = .none
+                    app.alertState = TaggedItem(.general(
+                        title: "Invalid QR Code",
+                        message: "Please scan a valid seed phrase QR code"
+                    ))
                 }
                 scanner.reset()
 
             case let .inProgress(_, haptic):
-                haptic.trigger()
                 // multi-part QR in progress - keep scanning
+                haptic.trigger()
             }
         } catch {
             Log.error("Seed QR failed to scan: \(error.localizedDescription)")
@@ -547,6 +553,8 @@ struct HotWalletImportScreen: View {
     }
 
     func onChangeNfcMessage(_: NfcMessage?, _ new: NfcMessage?) {
+        guard new != nil else { return }
+
         // try string first
         if let string = new?.string() {
             do {
@@ -558,14 +566,21 @@ struct HotWalletImportScreen: View {
         }
 
         // if string doesn't work, try data
-        guard let data = new?.data() else { return }
-        do {
-            let seedQR = try SeedQr.newFromData(data: data)
-            let words = seedQR.groupedPlainWords(groupsOf: UInt8(groupsOf))
-            setWords(words)
-        } catch {
-            Log.error("Error NFC word parsing from data: \(error)")
+        if let data = new?.data() {
+            do {
+                let seedQR = try SeedQr.newFromData(data: data)
+                let words = seedQR.groupedPlainWords(groupsOf: UInt8(groupsOf))
+                return setWords(words)
+            } catch {
+                Log.error("Error NFC word parsing from data: \(error)")
+            }
         }
+
+        // both failed - show error
+        app.alertState = TaggedItem(.general(
+            title: "Invalid NFC Tag",
+            message: "Please scan a valid seed phrase NFC tag"
+        ))
     }
 
     func onChangeEnteredWords(_: [[String]], _ new: [[String]]) {

@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AC85E3B52EE343C300BCEE4B /* SwiftUIIntrospect in Frameworks */ = {isa = PBXBuildFile; productRef = AC85E3B42EE343C300BCEE4B /* SwiftUIIntrospect */; };
 		AC9AB5792C34956C00BAE3BE /* Logger.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC9AB5782C34956C00BAE3BE /* Logger.swift */; };
 		ACA4CBEF2C2365430008F63E /* KeychainSwift in Frameworks */ = {isa = PBXBuildFile; productRef = ACA4CBEE2C2365430008F63E /* KeychainSwift */; };
 		ACC61E2F2ECBD8BE00D13947 /* MijickPopups in Frameworks */ = {isa = PBXBuildFile; productRef = ACC61E2E2ECBD8BE00D13947 /* MijickPopups */; };
@@ -54,6 +55,7 @@
 				ACD0053C2DB5309A003DC493 /* CoveCore in Frameworks */,
 				ACA4CBEF2C2365430008F63E /* KeychainSwift in Frameworks */,
 				ACC61E2F2ECBD8BE00D13947 /* MijickPopups in Frameworks */,
+				AC85E3B52EE343C300BCEE4B /* SwiftUIIntrospect in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -103,6 +105,7 @@
 				ACA4CBEE2C2365430008F63E /* KeychainSwift */,
 				ACD0053B2DB5309A003DC493 /* CoveCore */,
 				ACC61E2E2ECBD8BE00D13947 /* MijickPopups */,
+				AC85E3B42EE343C300BCEE4B /* SwiftUIIntrospect */,
 			);
 			productName = Cove;
 			productReference = D0245F4C2C0F7B4E0042B447 /* Cove.app */;
@@ -136,6 +139,7 @@
 				ACA4CBED2C2365430008F63E /* XCRemoteSwiftPackageReference "keychain-swift" */,
 				ACD0053A2DB5309A003DC493 /* XCLocalSwiftPackageReference "CoveCore" */,
 				ACC61E2D2ECBD8BE00D13947 /* XCRemoteSwiftPackageReference "Popups" */,
+				AC85E3B32EE343C300BCEE4B /* XCRemoteSwiftPackageReference "swiftui-introspect" */,
 			);
 			productRefGroup = D0245F4D2C0F7B4E0042B447 /* Products */;
 			projectDirPath = "";
@@ -302,7 +306,7 @@
 				CODE_SIGN_ENTITLEMENTS = Cove/Cove.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 48;
+				CURRENT_PROJECT_VERSION = 49;
 				DEVELOPMENT_ASSET_PATHS = "\"Cove/Preview Content\"";
 				DEVELOPMENT_TEAM = Q8UP8C53Y8;
 				ENABLE_APP_SANDBOX = YES;
@@ -352,7 +356,7 @@
 				CODE_SIGN_ENTITLEMENTS = Cove/Cove.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 48;
+				CURRENT_PROJECT_VERSION = 49;
 				DEVELOPMENT_ASSET_PATHS = "\"Cove/Preview Content\"";
 				DEVELOPMENT_TEAM = Q8UP8C53Y8;
 				ENABLE_APP_SANDBOX = YES;
@@ -424,6 +428,14 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		AC85E3B32EE343C300BCEE4B /* XCRemoteSwiftPackageReference "swiftui-introspect" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/siteline/swiftui-introspect";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 26.0.0;
+			};
+		};
 		ACA4CBED2C2365430008F63E /* XCRemoteSwiftPackageReference "keychain-swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/evgenyneu/keychain-swift";
@@ -443,6 +455,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		AC85E3B42EE343C300BCEE4B /* SwiftUIIntrospect */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AC85E3B32EE343C300BCEE4B /* XCRemoteSwiftPackageReference "swiftui-introspect" */;
+			productName = SwiftUIIntrospect;
+		};
 		ACA4CBEE2C2365430008F63E /* KeychainSwift */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = ACA4CBED2C2365430008F63E /* XCRemoteSwiftPackageReference "keychain-swift" */;

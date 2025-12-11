@@ -34,6 +34,9 @@ class TapCardNfcManager private constructor() {
     private var tagDetected = CompletableDeferred<Tag>()
     private var isScanning = false
 
+    // message callback for UI updates (setMessage/appendMessage from transport)
+    var onMessageUpdate: ((String) -> Unit)? = null
+
     // prevents concurrent NFC operations
     private val operationMutex = Mutex()
 
@@ -82,20 +85,24 @@ class TapCardNfcManager private constructor() {
                 isScanning = true
 
                 // enable reader mode for ISO14443 tags (TapSigner uses ISO7816)
-                nfcAdapter.enableReaderMode(
-                    activity,
-                    { nfcTag ->
-                        Log.d(tag, "NFC tag detected: ${nfcTag.techList.joinToString()}")
-                        if (!tagDetected.isCompleted) {
-                            tagDetected.complete(nfcTag)
-                        }
-                    },
-                    NfcAdapter.FLAG_READER_NFC_A or
-                        NfcAdapter.FLAG_READER_NFC_B or
-                        NfcAdapter.FLAG_READER_SKIP_NDEF_CHECK or
-                        NfcAdapter.FLAG_READER_NO_PLATFORM_SOUNDS,
-                    null,
-                )
+                // must be called on UI thread
+                activity.runOnUiThread {
+                    nfcAdapter.enableReaderMode(
+                        activity,
+                        { nfcTag ->
+                            Log.d(tag, "NFC tag detected: ${nfcTag.techList.joinToString()}")
+                            if (!tagDetected.isCompleted) {
+                                tagDetected.complete(nfcTag)
+                            }
+                        },
+                        NfcAdapter.FLAG_READER_NFC_A or
+                            NfcAdapter.FLAG_READER_NFC_B or
+                            NfcAdapter.FLAG_READER_SKIP_NDEF_CHECK or
+                            NfcAdapter.FLAG_READER_NO_PLATFORM_SOUNDS,
+                        null,
+                    )
+                    Log.d(tag, "NFC reader mode enabled")
+                }
 
                 // handle tag detection and command execution
                 val job =
@@ -122,8 +129,8 @@ class TapCardNfcManager private constructor() {
 
                             Log.d(tag, "Connected to IsoDep tag")
 
-                            // create transport
-                            val transport = TapCardTransport(isoDep)
+                            // create transport with message callback
+                            val transport = TapCardTransport(isoDep, onMessageUpdate)
 
                             // create TapSignerReader using factory function (workaround for UniFFI async constructor limitation)
                             Log.d(tag, "Creating TapSignerReader with command using factory function")
@@ -203,16 +210,21 @@ class TapCardNfcManager private constructor() {
  */
 private class TapCardTransport(
     private val isoDep: IsoDep,
+    private val onMessageUpdate: ((String) -> Unit)?,
 ) : TapcardTransportProtocol {
     private val tag = "TapCardTransport"
+    private var currentMessage = ""
 
     override fun setMessage(message: String) {
-        // Android NFC doesn't support updating UI message during transaction
         Log.d(tag, "Message: $message")
+        currentMessage = message
+        onMessageUpdate?.invoke(currentMessage)
     }
 
     override fun appendMessage(message: String) {
         Log.d(tag, "Append: $message")
+        currentMessage += message
+        onMessageUpdate?.invoke(currentMessage)
     }
 
     override suspend fun transmitApdu(commandApdu: ByteArray): ByteArray {

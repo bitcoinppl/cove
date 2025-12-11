@@ -29,6 +29,8 @@ import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppAlertState
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.TaggedItem
+import org.bitcoinppl.cove.findActivity
+import org.bitcoinppl.cove.nfc.TapCardNfcManager
 import org.bitcoinppl.cove_core.SetupCmdResponse
 import org.bitcoinppl.cove_core.TapSignerRoute
 
@@ -109,7 +111,7 @@ fun TapSignerSetupRetryView(
         Button(
             onClick = {
                 scope.launch {
-                    val activity = context as? android.app.Activity
+                    val activity = context.findActivity()
                     if (activity == null) {
                         app.alertState =
                             TaggedItem(
@@ -122,8 +124,21 @@ fun TapSignerSetupRetryView(
                     }
 
                     val nfc = manager.getOrCreateNfc(tapSigner)
+
+                    // set up message callback for progress updates
+                    val nfcManager = TapCardNfcManager.getInstance()
+                    nfcManager.onMessageUpdate = { message ->
+                        manager.scanMessage = message
+                    }
+
+                    manager.scanMessage = "Hold your phone near the TapSigner to continue setup"
+                    manager.isScanning = true
+
                     try {
                         val result = nfc.continueSetup(response)
+                        manager.isScanning = false
+                        nfcManager.onMessageUpdate = null
+
                         when (result) {
                             is SetupCmdResponse.Complete -> {
                                 manager.resetRoute(TapSignerRoute.SetupSuccess(tapSigner, result.v1))
@@ -133,6 +148,9 @@ fun TapSignerSetupRetryView(
                             }
                         }
                     } catch (e: Exception) {
+                        manager.isScanning = false
+                        nfcManager.onMessageUpdate = null
+
                         app.sheetState = null
                         app.alertState =
                             TaggedItem(

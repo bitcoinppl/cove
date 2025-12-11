@@ -33,73 +33,48 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
-import org.bitcoinppl.cove.AppAlertState
-import org.bitcoinppl.cove.AppManager
-import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.findActivity
 import org.bitcoinppl.cove.ui.theme.title3
-import org.bitcoinppl.cove_core.multiFormatTryFromNfcMessage
-import org.bitcoinppl.cove_core.nfc.NfcMessage
 
-private const val TAG = "NfcScanSheet"
+private const val TAG = "NfcWriteSheet"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NfcScanSheet(
-    app: AppManager,
+fun NfcWriteSheet(
+    data: ByteArray,
     onDismiss: () -> Unit,
+    onSuccess: () -> Unit,
 ) {
     val context = LocalContext.current
     val activity = context.findActivity()
 
     var errorMessage by remember { mutableStateOf<String?>(null) }
-    var isScanning by remember { mutableStateOf(false) }
 
-    val nfcReader =
+    val nfcWriter =
         remember(activity) {
-            activity?.let { NfcReader(it) }
+            activity?.let { NfcWriter(it) }
         }
 
-    // start scanning when sheet opens
-    LaunchedEffect(nfcReader) {
-        if (nfcReader == null) {
+    // start writing when sheet opens
+    LaunchedEffect(nfcWriter, data) {
+        if (nfcWriter == null) {
             errorMessage = "NFC is not available"
             return@LaunchedEffect
         }
 
-        nfcReader.startScanning()
-        isScanning = true
+        nfcWriter.startWriting(data)
     }
 
-    // collect scan results
-    LaunchedEffect(nfcReader) {
-        nfcReader?.scanResults?.collect { result ->
+    // collect write results
+    LaunchedEffect(nfcWriter) {
+        nfcWriter?.writeResults?.collect { result ->
             when (result) {
-                is NfcScanResult.Success -> {
-                    isScanning = false
-                    app.sheetState = null
-
-                    try {
-                        // create NfcMessage from scanned data
-                        val nfcMessage =
-                            NfcMessage.tryNew(
-                                string = result.text,
-                                data = result.data,
-                            )
-
-                        // convert to MultiFormat and handle
-                        val multiFormat = multiFormatTryFromNfcMessage(nfcMessage)
-                        app.handleMultiFormat(multiFormat)
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to process NFC data: ${e.message}", e)
-                        app.alertState =
-                            TaggedItem(
-                                AppAlertState.InvalidFormat(e.message ?: "Failed to process NFC data"),
-                            )
-                    }
+                is NfcWriteResult.Success -> {
+                    Log.d(TAG, "NFC write successful")
+                    onSuccess()
                 }
-                is NfcScanResult.Error -> {
-                    isScanning = false
+                is NfcWriteResult.Error -> {
+                    Log.e(TAG, "NFC write error: ${result.message}")
                     errorMessage = result.message
                 }
             }
@@ -107,15 +82,15 @@ fun NfcScanSheet(
     }
 
     // cleanup when dismissed
-    DisposableEffect(nfcReader) {
+    DisposableEffect(nfcWriter) {
         onDispose {
-            nfcReader?.stopScanning()
+            nfcWriter?.stopWriting()
         }
     }
 
     ModalBottomSheet(
         onDismissRequest = {
-            nfcReader?.stopScanning()
+            nfcWriter?.stopWriting()
             onDismiss()
         },
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -129,7 +104,7 @@ fun NfcScanSheet(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
-            val readingState = nfcReader?.readingState ?: NfcReadingState.WAITING
+            val writingState = nfcWriter?.writingState ?: NfcWritingState.WAITING
 
             if (errorMessage != null) {
                 Text(
@@ -146,12 +121,11 @@ fun NfcScanSheet(
                 Spacer(modifier = Modifier.height(16.dp))
                 TextButton(onClick = {
                     errorMessage = null
-                    nfcReader?.startScanning()
-                    isScanning = true
+                    nfcWriter?.startWriting(data)
                 }) {
                     Text("Try Again")
                 }
-            } else if (readingState == NfcReadingState.SUCCESS) {
+            } else if (writingState == NfcWritingState.SUCCESS) {
                 // success state - show checkmark
                 Icon(
                     imageVector = Icons.Default.CheckCircle,
@@ -161,13 +135,13 @@ fun NfcScanSheet(
                 )
                 Spacer(modifier = Modifier.height(24.dp))
                 Text(
-                    text = nfcReader?.message ?: "Tag read successfully!",
+                    text = nfcWriter?.message ?: "Tag written successfully!",
                     style = MaterialTheme.typography.title3,
                 )
-            } else if (readingState == NfcReadingState.TAG_DETECTED ||
-                readingState == NfcReadingState.READING
+            } else if (writingState == NfcWritingState.TAG_DETECTED ||
+                writingState == NfcWritingState.WRITING
             ) {
-                // reading state - show animated dots
+                // writing state - show animated dots
                 var dotCount by remember { mutableIntStateOf(1) }
 
                 LaunchedEffect(Unit) {
@@ -182,7 +156,7 @@ fun NfcScanSheet(
                 )
                 Spacer(modifier = Modifier.height(24.dp))
                 Text(
-                    text = "Reading" + ".".repeat(dotCount),
+                    text = "Writing" + ".".repeat(dotCount),
                     style = MaterialTheme.typography.title3,
                 )
                 Spacer(modifier = Modifier.height(8.dp))
@@ -193,18 +167,18 @@ fun NfcScanSheet(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             } else {
-                // waiting state - ready to scan
+                // waiting state - ready to write
                 CircularProgressIndicator(
                     modifier = Modifier.size(48.dp),
                 )
                 Spacer(modifier = Modifier.height(24.dp))
                 Text(
-                    text = "Ready to Scan",
+                    text = "Ready to Write",
                     style = MaterialTheme.typography.title3,
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = nfcReader?.message ?: "Hold your phone near the NFC tag",
+                    text = nfcWriter?.message ?: "Hold your phone near the NFC tag",
                     style = MaterialTheme.typography.bodyMedium,
                     textAlign = TextAlign.Center,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
