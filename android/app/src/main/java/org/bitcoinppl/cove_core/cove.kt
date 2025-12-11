@@ -3324,7 +3324,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_ffiapp_listen_for_updates() != 31459.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_ffiapp_load_and_reset_default_route() != 39591.toShort()) {
+    if (lib.uniffi_cove_checksum_method_ffiapp_load_and_reset_default_route() != 12168.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_ffiapp_load_and_reset_default_route_after() != 60004.toShort()) {
@@ -8910,7 +8910,7 @@ public interface FfiAppInterface {
     fun `listenForUpdates`(`updater`: FfiReconcile)
     
     /**
-     * Load and reset the default route after 800ms delay
+     * Load and reset the default route after default delay
      */
     fun `loadAndResetDefaultRoute`(`route`: Route)
     
@@ -9316,7 +9316,7 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
 
     
     /**
-     * Load and reset the default route after 800ms delay
+     * Load and reset the default route after default delay
      */override fun `loadAndResetDefaultRoute`(`route`: Route)
         = 
     callWithHandle {
