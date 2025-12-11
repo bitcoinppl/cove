@@ -33,7 +33,7 @@ final class KeyboardObserver {
             forName: UIResponder.keyboardWillHideNotification,
             object: nil,
             queue: .main
-        ) { [weak self] notification in
+        ) { [weak self] _ in
             guard let self else { return }
 
             Task { @MainActor in
