@@ -43,6 +43,14 @@ class NfcWriter(
 
     private var dataToWrite: ByteArray? = null
 
+    private fun sendError(errorMessage: String) {
+        mainHandler.post {
+            writingState = NfcWritingState.WAITING
+            message = "Hold your phone near the NFC tag"
+        }
+        _writeResults.trySend(NfcWriteResult.Error(errorMessage))
+    }
+
     fun startWriting(data: ByteArray) {
         if (nfcAdapter == null) {
             _writeResults.trySend(NfcWriteResult.Error("NFC is not supported on this device"))
@@ -94,7 +102,7 @@ class NfcWriter(
 
         val data = dataToWrite
         if (data == null) {
-            _writeResults.trySend(NfcWriteResult.Error("No data to write"))
+            sendError("No data to write")
             return
         }
 
@@ -123,10 +131,10 @@ class NfcWriter(
                 return
             }
 
-            _writeResults.trySend(NfcWriteResult.Error("Tag doesn't support NDEF"))
+            sendError("Tag doesn't support NDEF")
         } catch (e: Exception) {
             Log.e(TAG, "Error writing NFC tag", e)
-            _writeResults.trySend(NfcWriteResult.Error("Error writing tag: ${e.message}"))
+            sendError("Error writing tag: ${e.message}")
         }
     }
 
@@ -144,18 +152,14 @@ class NfcWriter(
 
             if (!ndef.isWritable) {
                 ndef.close()
-                _writeResults.trySend(NfcWriteResult.Error("Tag is not writable"))
+                sendError("Tag is not writable")
                 return
             }
 
             val messageSize = message.toByteArray().size
             if (messageSize > ndef.maxSize) {
                 ndef.close()
-                _writeResults.trySend(
-                    NfcWriteResult.Error(
-                        "Data too large for tag ($messageSize bytes, max ${ndef.maxSize})",
-                    ),
-                )
+                sendError("Data too large for tag ($messageSize bytes, max ${ndef.maxSize})")
                 return
             }
 
@@ -182,7 +186,7 @@ class NfcWriter(
             } catch (closeError: Exception) {
                 // ignore close errors
             }
-            _writeResults.trySend(NfcWriteResult.Error("Write failed: ${e.message}"))
+            sendError("Write failed: ${e.message}")
         }
     }
 
@@ -220,7 +224,7 @@ class NfcWriter(
             } catch (closeError: Exception) {
                 // ignore close errors
             }
-            _writeResults.trySend(NfcWriteResult.Error("Format failed: ${e.message}"))
+            sendError("Format failed: ${e.message}")
         }
     }
 
