@@ -1,7 +1,6 @@
 package org.bitcoinppl.cove
 
 import android.Manifest
-import android.util.Log
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis

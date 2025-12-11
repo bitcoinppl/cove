@@ -88,7 +88,7 @@ class AppManager private constructor() : FfiReconcile {
         private set
 
     init {
-        logDebug("Initializing AppManager")
+        Log.d(tag, "Initializing AppManager")
         rust.listenForUpdates(this)
         wallets = runCatching { Database().wallets().all() }.getOrElse { emptyList() }
     }
@@ -103,23 +103,11 @@ class AppManager private constructor() : FfiReconcile {
             }
     }
 
-    private fun logDebug(message: String) {
-        android.util.Log.d(tag, message)
-    }
-
-    private fun logError(message: String, throwable: Throwable? = null) {
-        if (throwable != null) {
-            android.util.Log.e(tag, message, throwable)
-        } else {
-            android.util.Log.e(tag, message)
-        }
-    }
-
     /**
      * set the cached wallet manager instance
      */
     internal fun setWalletManager(manager: WalletManager) {
-        logDebug("setting wallet manager for wallet ${manager.id}")
+        Log.d(tag, "setting wallet manager for wallet ${manager.id}")
         walletManager = manager
     }
 
@@ -130,22 +118,22 @@ class AppManager private constructor() : FfiReconcile {
     fun getWalletManager(id: WalletId): WalletManager {
         walletManager?.let {
             if (it.id == id) {
-                logDebug("found and using wallet manager for $id")
+                Log.d(tag, "found and using wallet manager for $id")
                 return it
             }
             // close old manager before replacing
-            logDebug("closing old wallet manager for ${it.id}")
+            Log.d(tag, "closing old wallet manager for ${it.id}")
             it.close()
         }
 
-        logDebug("did not find wallet manager for $id, creating new: ${walletManager?.id}")
+        Log.d(tag, "did not find wallet manager for $id, creating new: ${walletManager?.id}")
 
         return try {
             val manager = WalletManager(id = id)
             walletManager = manager
             manager
         } catch (e: Exception) {
-            logError("Failed to create wallet manager", e)
+            Log.e(tag, "Failed to create wallet manager", e)
             throw e
         }
     }
@@ -157,16 +145,16 @@ class AppManager private constructor() : FfiReconcile {
     fun getSendFlowManager(wm: WalletManager, presenter: SendFlowPresenter): SendFlowManager {
         sendFlowManager?.let {
             if (it.id == wm.id) {
-                logDebug("found and using sendflow manager for ${wm.id}")
+                Log.d(tag, "found and using sendflow manager for ${wm.id}")
                 it.presenter = presenter
                 return it
             }
             // close old manager before replacing
-            logDebug("closing old sendflow manager for ${it.id}")
+            Log.d(tag, "closing old sendflow manager for ${it.id}")
             it.close()
         }
 
-        logDebug("did not find SendFlowManager for ${wm.id}, creating new")
+        Log.d(tag, "did not find SendFlowManager for ${wm.id}, creating new")
         val manager = SendFlowManager(wm.rust.newSendFlowManager(), presenter)
         sendFlowManager = manager
         return manager
@@ -176,7 +164,7 @@ class AppManager private constructor() : FfiReconcile {
         try {
             sendFlowManager?.close()
         } catch (e: Exception) {
-            android.util.Log.w("AppManager", "Error closing SendFlowManager", e)
+            Log.w(tag, "Error closing SendFlowManager: ${e.message}")
         }
         sendFlowManager = null
     }
@@ -230,7 +218,7 @@ class AppManager private constructor() : FfiReconcile {
             rust.selectWallet(id)
             isSidebarVisible = false
         } catch (e: Exception) {
-            logError("Unable to select wallet $id", e)
+            Log.e(tag, "Unable to select wallet $id", e)
         }
     }
 
@@ -251,7 +239,7 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     fun pushRoute(route: Route) {
-        logDebug("pushRoute: $route")
+        Log.d(tag, "pushRoute: $route")
         isSidebarVisible = false
         val newRoutes = router.routes.toMutableList().apply { add(route) }
 
@@ -263,7 +251,7 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     fun pushRoutes(routes: List<Route>) {
-        logDebug("pushRoutes: ${routes.size} routes")
+        Log.d(tag, "pushRoutes: ${routes.size} routes")
         isSidebarVisible = false
         val newRoutes = router.routes.toMutableList().apply { addAll(routes) }
 
@@ -275,7 +263,7 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     fun popRoute() {
-        logDebug("popRoute")
+        Log.d(tag, "popRoute")
         if (rust.canGoBack()) {
             val newRoutes = router.routes.dropLast(1)
 
@@ -288,7 +276,7 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     fun setRoute(routes: List<Route>) {
-        logDebug("setRoute: ${routes.size} routes")
+        Log.d(tag, "setRoute: ${routes.size} routes")
 
         // only dispatch if routes actually changed
         if (routes != router.routes) {
@@ -361,7 +349,7 @@ class AppManager private constructor() : FfiReconcile {
                             }
                         }
                     } catch (e: Exception) {
-                        logError("Failed to import labels", e)
+                        Log.e(tag, "Failed to import labels", e)
                         alertState =
                             TaggedItem(
                                 AppAlertState.InvalidFileFormat(
@@ -372,7 +360,7 @@ class AppManager private constructor() : FfiReconcile {
                 }
             }
         } catch (e: Exception) {
-            logError("Unable to handle scanned code", e)
+            Log.e(tag, "Unable to handle scanned code", e)
             alertState =
                 TaggedItem(
                     AppAlertState.InvalidFileFormat(e.message ?: "Unknown error"),
@@ -389,17 +377,17 @@ class AppManager private constructor() : FfiReconcile {
             val walletMetadata = manager.rust.importWallet(listOf(words))
             rust.selectWallet(walletMetadata.id)
         } catch (e: ImportWalletException.InvalidWordGroup) {
-            logDebug("Invalid word group detected")
+            Log.d(tag, "Invalid word group detected")
             alertState = TaggedItem(AppAlertState.InvalidWordGroup)
         } catch (e: ImportWalletException.WalletAlreadyExists) {
             alertState = TaggedItem(AppAlertState.DuplicateWallet(e.v1))
             try {
                 rust.selectWallet(e.v1)
             } catch (selectError: Exception) {
-                logError("Unable to select existing wallet", selectError)
+                Log.e(tag, "Unable to select existing wallet", selectError)
             }
         } catch (e: Exception) {
-            logError("Unable to import wallet", e)
+            Log.e(tag, "Unable to import wallet", e)
             alertState =
                 TaggedItem(
                     AppAlertState.ErrorImportingHotWallet(e.message ?: "Unknown error"),
@@ -417,7 +405,7 @@ class AppManager private constructor() : FfiReconcile {
             val wallet = Wallet.newFromExport(export)
             try {
                 val id = wallet.id()
-                logDebug("Imported Wallet: $id")
+                Log.d(tag, "Imported Wallet: $id")
                 alertState = TaggedItem(AppAlertState.ImportedSuccessfully)
                 rust.selectWallet(id)
             } finally {
@@ -428,11 +416,11 @@ class AppManager private constructor() : FfiReconcile {
             try {
                 rust.selectWallet(e.v1)
             } catch (selectError: Exception) {
-                logError("Unable to select existing wallet", selectError)
+                Log.e(tag, "Unable to select existing wallet", selectError)
                 alertState = TaggedItem(AppAlertState.UnableToSelectWallet)
             }
         } catch (e: Exception) {
-            logError("Error importing hardware wallet", e)
+            Log.e(tag, "Error importing hardware wallet", e)
             alertState =
                 TaggedItem(
                     AppAlertState.ErrorImportingHardwareWallet(e.message ?: "Unknown error"),
@@ -474,13 +462,13 @@ class AppManager private constructor() : FfiReconcile {
      * Handle scanned signed transaction
      */
     private fun handleTransaction(transaction: BitcoinTransaction) {
-        logDebug("Received BitcoinTransaction: $transaction: ${transaction.txIdHash()}")
+        Log.d(tag, "Received BitcoinTransaction: $transaction: ${transaction.txIdHash()}")
 
         val db = database.unsignedTransactions()
         val txnRecord = db.getTx(transaction.txId())
 
         if (txnRecord == null) {
-            logError("No unsigned transaction found for ${transaction.txId()}")
+            Log.e(tag, "No unsigned transaction found for ${transaction.txId()}")
             alertState = TaggedItem(AppAlertState.NoUnsignedTransactionFound(transaction.txId()))
             return
         }
@@ -517,7 +505,7 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     override fun reconcile(message: AppStateReconcileMessage) {
-        logDebug("Reconcile: $message")
+        Log.d(tag, "Reconcile: $message")
         // Run on IO first to avoid blocking main thread on FFI calls, then dispatch to Main for UI updates
         ioScope.launch {
             mainScope.launch {
@@ -552,7 +540,7 @@ class AppManager private constructor() : FfiReconcile {
                         router.default = message.v1
                         router.updateRoutes(message.v2.toList())
                         routeId = UUID.randomUUID().toString()
-                        logDebug("Route ID changed to: $routeId")
+                        Log.d(tag, "Route ID changed to: $routeId")
                     }
 
                     is AppStateReconcileMessage.FiatPricesChanged -> {
@@ -597,7 +585,7 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     fun dispatch(action: AppAction) {
-        logDebug("dispatch $action")
+        Log.d(tag, "dispatch $action")
         rust.dispatch(action)
     }
 }

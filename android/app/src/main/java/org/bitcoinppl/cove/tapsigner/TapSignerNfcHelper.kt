@@ -1,6 +1,6 @@
 package org.bitcoinppl.cove.tapsigner
 
-import android.util.Log
+import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.nfc.TapCardNfcManager
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.tapcard.TapSigner

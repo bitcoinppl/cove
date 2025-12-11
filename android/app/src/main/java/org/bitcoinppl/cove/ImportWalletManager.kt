@@ -1,6 +1,5 @@
 package org.bitcoinppl.cove
 
-import android.util.Log
 import androidx.compose.runtime.Stable
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

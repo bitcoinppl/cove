@@ -1,6 +1,5 @@
 package org.bitcoinppl.cove.flow.new_wallet.hot_wallet
 
-import android.util.Log
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -78,6 +77,7 @@ import kotlinx.coroutines.delay
 import org.bitcoinppl.cove.AppAlertState
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.ImportWalletManager
+import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.QrCodeScanView
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.TaggedItem

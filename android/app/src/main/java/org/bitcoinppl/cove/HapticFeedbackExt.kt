@@ -5,7 +5,6 @@ import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
-import android.util.Log
 import org.bitcoinppl.cove_core.HapticFeedback
 
 fun HapticFeedback.trigger(context: Context) {

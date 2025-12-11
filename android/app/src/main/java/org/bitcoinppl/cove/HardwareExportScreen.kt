@@ -4,7 +4,6 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -229,7 +228,7 @@ fun HardwareExportScreen(
                             walletManager.rust.deleteUnsignedTransaction(details.id())
                             app.popRoute()
                         } catch (e: Exception) {
-                            android.util.Log.e(
+                            Log.e(
                                 "HardwareExport",
                                 "Unable to delete transaction ${details.id()}: $e",
                             )
