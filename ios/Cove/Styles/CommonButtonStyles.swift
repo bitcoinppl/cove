@@ -31,8 +31,8 @@ struct GradientButtonStyle: ButtonStyle {
                     ) :
                     LinearGradient(
                         gradient: Gradient(colors: [
-                            Color(red: 0.2, green: 0.4, blue: 1.0),
-                            Color(red: 0.1, green: 0.5, blue: 1.0),
+                            Color.btnGradientLight,
+                            Color.btnGradientDark,
                         ]),
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
@@ -75,8 +75,8 @@ struct GlassyButtonStyle: ButtonStyle {
                     ) :
                     LinearGradient(
                         colors: [
-                            Color(red: 0.2, green: 0.4, blue: 1.0),
-                            Color(red: 0.1, green: 0.5, blue: 1.0),
+                            Color.btnGradientLight,
+                            Color.btnGradientDark,
                         ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing

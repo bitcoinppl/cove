@@ -28,6 +28,16 @@ extension Color {
         Color(red: 0.463, green: 0.898, blue: 0.584) // #76e595
     }
 
+    // MARK: - Button Gradient Colors
+
+    static var btnGradientLight: Color {
+        Color(red: 0.2, green: 0.4, blue: 1.0) // #3366FF
+    }
+
+    static var btnGradientDark: Color {
+        Color(red: 0.1, green: 0.5, blue: 1.0) // #1A80FF
+    }
+
     static var background: Color {
         Color(UIColor.systemBackground)
     }
@@ -227,6 +237,8 @@ extension Color {
         (pastelRed, "pastelRed"),
         (pastelTeal, "pastelTeal"),
         (pastelYellow, "pastelYellow"),
+        (btnGradientLight, "btnGradientLight"),
+        (btnGradientDark, "btnGradientDark"),
 
         // SwiftUI Colors
         (white, "white"),
