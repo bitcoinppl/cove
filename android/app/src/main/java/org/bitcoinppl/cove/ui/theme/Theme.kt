@@ -43,13 +43,6 @@ fun ForceLightStatusBarIcons() {
 val ColorScheme.isLight: Boolean
     get() = this.surface.luminance() > 0.5f
 
-/**
- * Extension to check if the current ColorScheme is light mode.
- * Uses surface luminance to reliably detect theme (works with dynamic colors).
- */
-val ColorScheme.isLight: Boolean
-    get() = this.surface.luminance() > 0.5f
-
 private val DarkColorScheme =
     darkColorScheme(
         // Brand colors (Cove identity)

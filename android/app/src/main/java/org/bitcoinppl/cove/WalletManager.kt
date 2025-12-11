@@ -193,7 +193,7 @@ class WalletManager :
 
     private suspend fun updateFiatBalance() {
         try {
-            val fiatBal = rust.balanceInFiat()
+            val fiatBal = rust.amountInFiat(balance.spendable())
             withContext(Dispatchers.Main) {
                 fiatBalance = fiatBal
             }
