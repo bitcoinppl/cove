@@ -468,6 +468,7 @@ private fun SendFlowRouteToScreen(
                 onAddressChanged = { newAddress ->
                     sendFlowManager.enteringAddress = newAddress
                 },
+                onAddressDone = { presenter.focusField = null },
             )
         }
         is SendRoute.Confirm -> {

@@ -34,6 +34,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
@@ -56,6 +57,7 @@ import org.bitcoinppl.cove.views.BalanceAutoSizeText
 import org.bitcoinppl.cove.views.ImageButton
 import org.bitcoinppl.cove_core.MultiFormat
 import org.bitcoinppl.cove_core.SendFlowManagerAction
+import org.bitcoinppl.cove_core.SetAmountFocusField
 import org.bitcoinppl.cove_core.types.addressStringSpacedOut
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -87,10 +89,23 @@ fun CoinControlSetAmountScreen(
     walletManager: org.bitcoinppl.cove.WalletManager,
     presenter: org.bitcoinppl.cove.SendFlowPresenter,
     onAddressChanged: (String) -> Unit,
+    onAddressDone: () -> Unit = {},
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
     // force white status bar icons for midnight blue background
     ForceLightStatusBarIcons()
+
+    val focusManager = LocalFocusManager.current
+    val addressFocusRequester = remember { FocusRequester() }
+
+    // bidirectional sync: observe presenter.focusField and update UI focus
+    androidx.compose.runtime.LaunchedEffect(presenter.focusField) {
+        when (presenter.focusField) {
+            SetAmountFocusField.ADDRESS -> addressFocusRequester.requestFocus()
+            null -> focusManager.clearFocus()
+            else -> {}
+        }
+    }
 
     Scaffold(
         containerColor = CoveColor.midnightBlue,
@@ -153,12 +168,15 @@ fun CoinControlSetAmountScreen(
                         onAmountTap = onAmountTap,
                     )
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
-                    val addressFocusRequester = remember { FocusRequester() }
                     AddressWidget(
                         onScanQr = onScanQr,
                         initialAddress = initialAddress,
                         onAddressChanged = onAddressChanged,
                         focusRequester = addressFocusRequester,
+                        onDone = onAddressDone,
+                        onFocusChanged = { focused ->
+                            presenter.focusField = if (focused) SetAmountFocusField.ADDRESS else null
+                        },
                     )
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
                     SpendingWidget(
@@ -212,6 +230,8 @@ fun CoinControlSetAmountScreen(
                             when (multiFormat) {
                                 is MultiFormat.Address -> {
                                     sendFlowManager.enteringAddress = multiFormat.v1.address().string()
+                                    // clear focus to show formatted address
+                                    presenter.focusField = null
                                 }
                                 else -> {
                                     app.alertState =
@@ -393,6 +413,8 @@ private fun AddressWidget(
     initialAddress: String,
     onAddressChanged: (String) -> Unit,
     focusRequester: FocusRequester,
+    onDone: () -> Unit = {},
+    onFocusChanged: (Boolean) -> Unit = {},
 ) {
     var address by remember { mutableStateOf(initialAddress) }
     var isFocused by remember { mutableStateOf(false) }
@@ -461,13 +483,14 @@ private fun AddressWidget(
                         fontWeight = FontWeight.Medium,
                     ),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = {}),
+                keyboardActions = KeyboardActions(onDone = { onDone() }),
                 modifier =
                     Modifier
                         .fillMaxWidth()
                         .focusRequester(focusRequester)
                         .onFocusChanged { focusState ->
                             isFocused = focusState.isFocused
+                            onFocusChanged(focusState.isFocused)
                         },
             )
             // show spaced-out address when not focused
