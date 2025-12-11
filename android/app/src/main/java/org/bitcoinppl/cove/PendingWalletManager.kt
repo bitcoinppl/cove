@@ -71,6 +71,7 @@ class PendingWalletManager(
     override fun close() {
         if (!isClosed.compareAndSet(false, true)) return
         logDebug("Closing PendingWalletManager")
+        bip39Words = emptyList()
         ioScope.cancel()
         mainScope.cancel()
         rust.close()

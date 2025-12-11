@@ -83,5 +83,6 @@ class TapSignerManager(
         path.clear()
         initialRoute = to
         id = UUID.randomUUID()
+        enteredPin = null
     }
 }

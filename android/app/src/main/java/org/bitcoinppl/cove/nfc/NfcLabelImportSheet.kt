@@ -99,7 +99,7 @@ fun NfcLabelImportSheet(
                     } catch (e: Exception) {
                         Log.e("NfcLabelImportSheet", "Error importing labels from NFC", e)
                         nfcReader.reset()
-                        onError("Unable to import labels: ${e.message}")
+                        onError("Unable to import labels, please try again")
                     }
                 }
                 is NfcScanResult.Error -> {
