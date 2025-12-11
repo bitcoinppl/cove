@@ -60,6 +60,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.ui.theme.midnightBtn
 import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.ImageButton
 import java.text.SimpleDateFormat
@@ -93,15 +94,10 @@ fun UtxoListScreen(
     modifier: Modifier = Modifier,
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
-    val selected =
-        remember(manager.selected) {
-            manager.selected.map { it.hashToUint() }.toSet()
-        }
-
     UtxoListScreenContent(
         manager = manager,
         utxos = manager.utxos,
-        selected = selected,
+        selected = manager.selected,
         totalSelectedAmount = manager.totalSelectedAmount,
         searchQuery = manager.search,
         onBack = { app.popRoute() },
@@ -109,16 +105,13 @@ fun UtxoListScreen(
             manager.dispatch(org.bitcoinppl.cove_core.CoinControlManagerAction.ToggleUnit)
         },
         onToggle = { hash ->
-            val outpoint = manager.utxos.find { it.outpoint.hashToUint() == hash }?.outpoint
-            if (outpoint != null) {
-                val newSelected =
-                    if (manager.selected.contains(outpoint)) {
-                        manager.selected - outpoint
-                    } else {
-                        manager.selected + outpoint
-                    }
-                manager.updateSelected(newSelected)
-            }
+            val newSelected =
+                if (manager.selected.contains(hash)) {
+                    manager.selected - hash
+                } else {
+                    manager.selected + hash
+                }
+            manager.updateSelected(newSelected)
         },
         onToggleSelectAll = {
             manager.dispatch(org.bitcoinppl.cove_core.CoinControlManagerAction.ToggleSelectAll)
@@ -398,7 +391,7 @@ private fun UtxoListScreenContent(
                         enabled = anySelected,
                         colors =
                             ButtonDefaults.buttonColors(
-                                containerColor = if (anySelected) CoveColor.midnightBlue else MaterialTheme.colorScheme.surfaceVariant,
+                                containerColor = if (anySelected) midnightBtn() else MaterialTheme.colorScheme.surfaceVariant,
                                 contentColor = if (anySelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
                             ),
                         modifier = Modifier.fillMaxWidth(),
@@ -444,7 +437,7 @@ private fun UtxoItemRow(
             Spacer(Modifier.height(4.dp))
             Text(
                 text = utxo.address.string(),
-                color = Color(0xFF8E8E93),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 12.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -455,12 +448,12 @@ private fun UtxoItemRow(
                 manager.displayAmount(utxo.amount),
                 fontWeight = FontWeight.Normal,
                 fontSize = 14.sp,
-                color = Color(0xFF000000),
+                color = MaterialTheme.colorScheme.onSurface,
             )
             Spacer(Modifier.height(4.dp))
             Text(
                 utxo.displayDate,
-                color = Color(0xFF8E8E93),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 12.sp,
             )
         }
@@ -469,6 +462,8 @@ private fun UtxoItemRow(
 
 @Composable
 private fun SelectionCircle(selected: Boolean) {
+    val selectedColor = CoveColor.LinkBlue
+    val unselectedColor = MaterialTheme.colorScheme.outlineVariant
     Box(
         modifier =
             Modifier
@@ -476,9 +471,9 @@ private fun SelectionCircle(selected: Boolean) {
                 .clip(CircleShape)
                 .border(
                     width = 2.dp,
-                    color = if (selected) Color(0xFF007AFF) else Color(0xFFD1D1D6),
+                    color = if (selected) selectedColor else unselectedColor,
                     shape = CircleShape,
-                ).background(if (selected) Color(0xFF007AFF) else Color.Transparent),
+                ).background(if (selected) selectedColor else Color.Transparent),
         contentAlignment = Alignment.Center,
     ) {
         if (selected) {
@@ -629,7 +624,7 @@ private fun SearchBar(
             },
             textStyle =
                 MaterialTheme.typography.bodyMedium.copy(
-                    color = Color(0xFF000000),
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 17.sp,
                 ),
             singleLine = true,
@@ -638,7 +633,7 @@ private fun SearchBar(
                 if (query.isEmpty()) {
                     Text(
                         stringResource(R.string.search_utxos),
-                        color = Color(0xFF8E8E93),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 17.sp,
                     )
                 }

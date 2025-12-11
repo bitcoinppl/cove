@@ -92,6 +92,7 @@ import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.components.ConfirmationIndicatorView
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.isLight
+import org.bitcoinppl.cove.ui.theme.midnightBtn
 import org.bitcoinppl.cove.utils.toColor
 import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.BalanceAutoSizeText
@@ -593,7 +594,7 @@ fun TransactionDetailsScreen(
                             },
                             colors =
                                 ButtonDefaults.buttonColors(
-                                    containerColor = if (isDark) CoveColor.midnightBtnDark else CoveColor.midnightBlue,
+                                    containerColor = midnightBtn(),
                                     contentColor = Color.White,
                                 ),
                             modifier =

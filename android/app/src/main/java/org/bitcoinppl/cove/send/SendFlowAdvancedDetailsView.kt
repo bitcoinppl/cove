@@ -36,7 +36,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -359,7 +358,10 @@ private fun TxRow(
                                             Modifier
                                                 .size(6.dp)
                                                 .clip(CircleShape)
-                                                .background(Color(0xFFCC8800).copy(alpha = 0.8f)),
+                                                .background(
+                                                    org.bitcoinppl.cove.ui.theme.CoveColor.WarningOrange
+                                                        .copy(alpha = 0.8f),
+                                                ),
                                     )
                                 }
                             }

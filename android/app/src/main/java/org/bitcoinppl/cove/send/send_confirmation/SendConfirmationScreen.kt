@@ -67,8 +67,6 @@ private const val SWIPE_COMPLETE_THRESHOLD = 0.9f
 // Target text color (white) that text animates to during swipe gesture.
 private val SWIPE_BUTTON_TEXT_COLOR_TARGET = CoveColor.SwipeButtonText
 
-// Target background color (midnight blue) that button background animates to during swipe gesture.
-private val SWIPE_BUTTON_BG_COLOR_TARGET = CoveColor.midnightBlue
 
 // Preview removed - requires app, walletManager, and details parameters
 
@@ -169,7 +167,7 @@ fun SendConfirmationScreen(
                         sendState = sendState,
                         onComplete = onSwipeToSend,
                         containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        targetContainerColor = SWIPE_BUTTON_BG_COLOR_TARGET,
+                        targetContainerColor = midnightBtn(),
                         knobColor = midnightBtn(),
                         textColor = MaterialTheme.colorScheme.onSurface,
                         targetTextColor = SWIPE_BUTTON_TEXT_COLOR_TARGET,
