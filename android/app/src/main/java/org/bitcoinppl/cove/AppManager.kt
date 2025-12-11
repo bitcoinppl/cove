@@ -1,7 +1,5 @@
 package org.bitcoinppl.cove
 
-private const val WALLET_MODE_CHANGE_DELAY_MS = 250L
-
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -172,6 +170,15 @@ class AppManager private constructor() : FfiReconcile {
         val manager = SendFlowManager(wm.rust.newSendFlowManager(), presenter)
         sendFlowManager = manager
         return manager
+    }
+
+    fun clearSendFlowManager() {
+        try {
+            sendFlowManager?.close()
+        } catch (e: Exception) {
+            android.util.Log.w("AppManager", "Error closing SendFlowManager", e)
+        }
+        sendFlowManager = null
     }
 
     val fullVersionId: String
@@ -550,7 +557,6 @@ class AppManager private constructor() : FfiReconcile {
 
                     is AppStateReconcileMessage.FiatPricesChanged -> {
                         prices = message.v1
-                        walletManager?.updateFiatBalance()
                     }
 
                     is AppStateReconcileMessage.FeesChanged -> {
@@ -577,7 +583,7 @@ class AppManager private constructor() : FfiReconcile {
                         isLoading = true
                         loadWallets()
                         launch {
-                            kotlinx.coroutines.delay(WALLET_MODE_CHANGE_DELAY_MS)
+                            kotlinx.coroutines.delay(200)
                             isLoading = false
                         }
                     }

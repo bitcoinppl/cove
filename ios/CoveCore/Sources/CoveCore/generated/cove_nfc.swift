@@ -1530,6 +1530,8 @@ public enum NdefPayload: Equatable, Hashable {
     
     case text(TextPayload
     )
+    case uri(String
+    )
     case data(Data
     )
 
@@ -1556,7 +1558,10 @@ public struct FfiConverterTypeNdefPayload: FfiConverterRustBuffer {
         case 1: return .text(try FfiConverterTypeTextPayload.read(from: &buf)
         )
         
-        case 2: return .data(try FfiConverterData.read(from: &buf)
+        case 2: return .uri(try FfiConverterString.read(from: &buf)
+        )
+        
+        case 3: return .data(try FfiConverterData.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -1572,8 +1577,13 @@ public struct FfiConverterTypeNdefPayload: FfiConverterRustBuffer {
             FfiConverterTypeTextPayload.write(v1, into: &buf)
             
         
-        case let .data(v1):
+        case let .uri(v1):
             writeInt(&buf, Int32(2))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .data(v1):
+            writeInt(&buf, Int32(3))
             FfiConverterData.write(v1, into: &buf)
             
         }

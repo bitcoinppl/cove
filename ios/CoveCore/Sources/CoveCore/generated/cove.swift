@@ -7151,6 +7151,8 @@ public protocol RustSendFlowManagerProtocol: AnyObject, Sendable {
     
     func amount()  -> Amount
     
+    func amountExceedsBalance()  -> Bool
+    
     func amountSats()  -> UInt64
     
     /**
@@ -7256,6 +7258,14 @@ open class RustSendFlowManager: RustSendFlowManagerProtocol, @unchecked Sendable
 open func amount() -> Amount  {
     return try!  FfiConverterTypeAmount_lift(try! rustCall() {
     uniffi_cove_fn_method_rustsendflowmanager_amount(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+open func amountExceedsBalance() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_method_rustsendflowmanager_amount_exceeds_balance(
             self.uniffiCloneHandle(),$0
     )
 })
@@ -28601,6 +28611,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustsendflowmanager_amount() != 50946) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustsendflowmanager_amount_exceeds_balance() != 56944) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustsendflowmanager_amount_sats() != 25668) {

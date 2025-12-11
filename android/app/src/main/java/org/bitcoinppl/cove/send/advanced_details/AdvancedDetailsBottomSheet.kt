@@ -11,7 +11,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -110,7 +109,7 @@ private fun AdvancedDetailsBottomSheetPreview() {
             ModalBottomSheet(
                 onDismissRequest = { showBottomSheet = false },
                 sheetState = bottomSheetState,
-                containerColor = Color(0xFFF3F4F6),
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                 dragHandle = null,
                 shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp),
             ) {
@@ -132,7 +131,7 @@ fun AdvancedDetailsBottomSheet(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .background(Color(0xFFF3F4F6)),
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh),
     ) {
         Box(
             modifier =
@@ -147,7 +146,7 @@ fun AdvancedDetailsBottomSheet(
                         .width(36.dp)
                         .height(4.dp)
                         .background(
-                            Color(0xFFD1D5DB),
+                            MaterialTheme.colorScheme.outlineVariant,
                             RoundedCornerShape(2.dp),
                         ),
             )
@@ -165,14 +164,14 @@ fun AdvancedDetailsBottomSheet(
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
                     text = stringResource(R.string.title_advanced_details),
-                    color = Color(0xFF101010),
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = stringResource(R.string.subtitle_advanced_details),
-                    color = Color(0xFF9CA3AF),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 14.sp,
                 )
             }
@@ -183,14 +182,14 @@ fun AdvancedDetailsBottomSheet(
                 Icon(
                     imageVector = Icons.Default.Close,
                     contentDescription = "Close",
-                    tint = Color(0xFF6B7280),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(24.dp),
                 )
             }
         }
         Spacer(modifier = Modifier.height(20.dp))
         HorizontalDivider(
-            color = Color(0xFFD1D5DB),
+            color = MaterialTheme.colorScheme.outlineVariant,
             thickness = 1.dp,
         )
         Column(
@@ -204,7 +203,7 @@ fun AdvancedDetailsBottomSheet(
             if (data.utxosUsed.isNotEmpty()) {
                 Text(
                     text = stringResource(R.string.label_utxos_used),
-                    color = Color(0xFF9CA3AF),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
                     modifier = Modifier.padding(start = 12.dp),
@@ -218,7 +217,7 @@ fun AdvancedDetailsBottomSheet(
                 Spacer(modifier = Modifier.height(20.dp))
             }
             HorizontalDivider(
-                color = Color(0xFFD1D5DB),
+                color = MaterialTheme.colorScheme.outlineVariant,
                 thickness = 1.dp,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -226,7 +225,7 @@ fun AdvancedDetailsBottomSheet(
             if (data.sentToSelf.isNotEmpty()) {
                 Text(
                     text = stringResource(R.string.label_sent_to_self),
-                    color = Color(0xFF9CA3AF),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
                     modifier = Modifier.padding(start = 12.dp),
@@ -238,7 +237,7 @@ fun AdvancedDetailsBottomSheet(
                 Spacer(modifier = Modifier.height(20.dp))
             }
             HorizontalDivider(
-                color = Color(0xFFD1D5DB),
+                color = MaterialTheme.colorScheme.outlineVariant,
                 thickness = 1.dp,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -250,13 +249,13 @@ fun AdvancedDetailsBottomSheet(
             ) {
                 Text(
                     text = stringResource(R.string.label_fee),
-                    color = Color(0xFF9CA3AF),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontWeight = FontWeight.Medium,
                     fontSize = 14.sp,
                 )
                 Text(
                     text = data.fee,
-                    color = Color(0xFF101010),
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -272,7 +271,7 @@ private fun UtxoCard(item: UtxoItem) {
         shape = RoundedCornerShape(12.dp),
         colors =
             CardDefaults.cardColors(
-                containerColor = Color.White,
+                containerColor = MaterialTheme.colorScheme.surface,
             ),
         border = null,
     ) {
@@ -290,7 +289,7 @@ private fun UtxoCard(item: UtxoItem) {
                 if (item.label.isNotEmpty()) {
                     Text(
                         text = item.label,
-                        color = Color(0xFF101010),
+                        color = MaterialTheme.colorScheme.onSurface,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium,
                     )
@@ -299,7 +298,7 @@ private fun UtxoCard(item: UtxoItem) {
                 }
                 Text(
                     text = item.address,
-                    color = Color(0xFF9CA3AF),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Normal,
                 )
@@ -307,7 +306,7 @@ private fun UtxoCard(item: UtxoItem) {
             Spacer(modifier = Modifier.width(12.dp))
             Text(
                 text = item.amount,
-                color = Color(0xFF101010),
+                color = MaterialTheme.colorScheme.onSurface,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -322,7 +321,7 @@ private fun SentToSelfCard(items: List<UtxoItem>) {
         shape = RoundedCornerShape(12.dp),
         colors =
             CardDefaults.cardColors(
-                containerColor = Color.White,
+                containerColor = MaterialTheme.colorScheme.surface,
             ),
         border = null,
     ) {
@@ -340,7 +339,7 @@ private fun SentToSelfCard(items: List<UtxoItem>) {
                 ) {
                     Text(
                         text = item.address,
-                        color = Color(0xFF9CA3AF),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Normal,
                         modifier = Modifier.weight(1f),
@@ -348,14 +347,14 @@ private fun SentToSelfCard(items: List<UtxoItem>) {
                     Spacer(modifier = Modifier.width(12.dp))
                     Text(
                         text = item.amount,
-                        color = Color(0xFF101010),
+                        color = MaterialTheme.colorScheme.onSurface,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold,
                     )
                 }
                 if (index < items.size - 1) {
                     HorizontalDivider(
-                        color = Color(0xFFD1D5DB),
+                        color = MaterialTheme.colorScheme.outlineVariant,
                         thickness = 1.dp,
                         modifier = Modifier.padding(start = 12.dp),
                     )

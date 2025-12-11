@@ -27,6 +27,12 @@ import org.bitcoinppl.cove.wallet_transactions.WalletTransactionsScreen
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
 
+// delay to allow UI to settle before updating balance
+private const val BALANCE_UPDATE_DELAY_MS = 500L
+
+// delay before starting wallet scan to allow initial load to complete
+private const val WALLET_SCAN_DELAY_MS = 400L
+
 // delay before showing export loading alert
 private const val EXPORT_LOADING_ALERT_DELAY_MS = 500L
 
@@ -71,6 +77,9 @@ fun SelectedWalletContainer(
             if (isActive && requestedId == id) {
                 manager = wm
                 loadedId = requestedId
+
+                // small delay then update balance
+                delay(BALANCE_UPDATE_DELAY_MS)
                 wm.updateWalletBalance()
             } else {
                 android.util.Log.d(tag, "discarding stale wallet load for $requestedId, now loading $id")
@@ -98,6 +107,9 @@ fun SelectedWalletContainer(
     LaunchedEffect(manager) {
         manager?.let { wm ->
             try {
+                // small delay and then start scanning wallet
+                delay(WALLET_SCAN_DELAY_MS)
+                if (!isActive) return@LaunchedEffect
                 wm.rust.getTransactions()
                 wm.updateWalletBalance()
                 wm.rust.startWalletScan()

@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use flume::{Receiver, Sender};
 use parking_lot::RwLock;
-use tracing::error;
 
 use crate::{
     database::{self, Database},

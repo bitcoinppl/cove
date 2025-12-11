@@ -39,7 +39,7 @@ struct TapSignerStartingPin: View {
                         .offset(y: 10)
                         .clipped()
                 }
-                .background(Color(hex: "3A4254"))
+                .background(Color.duskBlue)
 
                 VStack(spacing: 20) {
                     Text("Enter Starting PIN")

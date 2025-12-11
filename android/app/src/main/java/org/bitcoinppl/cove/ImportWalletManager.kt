@@ -5,6 +5,7 @@ import androidx.compose.runtime.Stable
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
@@ -60,6 +61,8 @@ class ImportWalletManager :
     override fun close() {
         if (!isClosed.compareAndSet(false, true)) return
         Log.d(tag, "Closing ImportWalletManager")
+        ioScope.cancel()
+        mainScope.cancel()
         rust.close()
     }
 }

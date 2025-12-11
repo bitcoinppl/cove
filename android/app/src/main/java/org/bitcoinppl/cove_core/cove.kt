@@ -1352,6 +1352,8 @@ external fun uniffi_cove_checksum_method_rustpendingwalletmanager_save_wallet(
 ): Short
 external fun uniffi_cove_checksum_method_rustsendflowmanager_amount(
 ): Short
+external fun uniffi_cove_checksum_method_rustsendflowmanager_amount_exceeds_balance(
+): Short
 external fun uniffi_cove_checksum_method_rustsendflowmanager_amount_sats(
 ): Short
 external fun uniffi_cove_checksum_method_rustsendflowmanager_dispatch(
@@ -2270,6 +2272,8 @@ external fun uniffi_cove_fn_free_rustsendflowmanager(`handle`: Long,uniffi_out_e
 ): Unit
 external fun uniffi_cove_fn_method_rustsendflowmanager_amount(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
+external fun uniffi_cove_fn_method_rustsendflowmanager_amount_exceeds_balance(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Byte
 external fun uniffi_cove_fn_method_rustsendflowmanager_amount_sats(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
 external fun uniffi_cove_fn_method_rustsendflowmanager_dispatch(`ptr`: Long,`action`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -3678,6 +3682,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustsendflowmanager_amount() != 50946.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustsendflowmanager_amount_exceeds_balance() != 56944.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustsendflowmanager_amount_sats() != 25668.toShort()) {
@@ -17271,6 +17278,8 @@ public interface RustSendFlowManagerInterface {
     
     fun `amount`(): Amount
     
+    fun `amountExceedsBalance`(): kotlin.Boolean
+    
     fun `amountSats`(): kotlin.ULong
     
     /**
@@ -17423,6 +17432,19 @@ open class RustSendFlowManager: Disposable, AutoCloseable, RustSendFlowManagerIn
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustsendflowmanager_amount(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    override fun `amountExceedsBalance`(): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustsendflowmanager_amount_exceeds_balance(
         it,
         _status)
 }

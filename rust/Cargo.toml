@@ -268,10 +268,17 @@ uniffi = { workspace = true, features = ["bindgen-tests"] }
 codegen-units = 1   # Reduce number of codegen units to increase optimizations.
 strip = "debuginfo"
 
-[profile.release-smaller]
+[profile.release-base]
 inherits = "release"
-opt-level = 'z'      # Optimize for size.
 lto = true           # Enable Link Time Optimization
 codegen-units = 1    # Reduce number of codegen units to increase optimizations.
 panic = "abort"      # Abort on panic
 strip = "debuginfo"
+
+[profile.release-speed]
+inherits = "release-base"
+opt-level = 3             # Optimize for speed
+
+[profile.release-smaller]
+inherits = "release-base"
+opt-level = 'z'           # Optimize for size.

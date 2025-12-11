@@ -56,11 +56,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
@@ -84,6 +84,7 @@ import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.findActivity
 import org.bitcoinppl.cove.nfc.NfcReadingState
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
 import org.bitcoinppl.cove.ui.theme.title3
 import org.bitcoinppl.cove.views.DashDotsIndicator
 import org.bitcoinppl.cove.views.ImageButton
@@ -211,6 +212,9 @@ fun HotWalletImportScreen(
             alertState = AlertState.GenericError
         }
     }
+
+    // force white status bar icons for midnight blue background
+    ForceLightStatusBarIcons()
 
     Scaffold(
         containerColor = CoveColor.midnightBlue,
@@ -613,13 +617,14 @@ private fun WordInputField(
     // for last word, show checksum suggestions even when empty
     // don't show suggestions if word is already valid (user selected one)
     LaunchedEffect(word, isFocused, allEnteredWords) {
-        suggestions = when {
-            !isFocused -> emptyList()
-            isValid -> emptyList()
-            isLastWord -> autocomplete.autocomplete(word, allEnteredWords)
-            word.isNotEmpty() -> autocomplete.autocomplete(word, allEnteredWords)
-            else -> emptyList()
-        }
+        suggestions =
+            when {
+                !isFocused -> emptyList()
+                isValid -> emptyList()
+                isLastWord -> autocomplete.autocomplete(word, allEnteredWords)
+                word.isNotEmpty() -> autocomplete.autocomplete(word, allEnteredWords)
+                else -> emptyList()
+            }
     }
 
     Column {

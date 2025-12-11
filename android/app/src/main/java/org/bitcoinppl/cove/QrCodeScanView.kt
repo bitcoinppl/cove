@@ -155,6 +155,7 @@ private fun QrScannerContent(
 
     // Rust QR scanner state machine
     val scanner = remember { QrScanner() }
+    var isDisposed by remember { mutableStateOf(false) }
     var progress by remember { mutableStateOf<ScanProgress?>(null) }
     var scanComplete by remember { mutableStateOf(false) }
     var scannedData by remember { mutableStateOf<MultiFormat?>(null) }
@@ -233,7 +234,7 @@ private fun QrScannerContent(
                                             barcodeScanner
                                                 .process(image)
                                                 .addOnSuccessListener(mainExecutor) { barcodes ->
-                                                    if (scanComplete) return@addOnSuccessListener
+                                                    if (scanComplete || isDisposed) return@addOnSuccessListener
 
                                                     for (barcode in barcodes) {
                                                         if (barcode.format == Barcode.FORMAT_QR_CODE) {
@@ -245,10 +246,10 @@ private fun QrScannerContent(
                                                                 onComplete = { data ->
                                                                     scanComplete = true
                                                                     scannedData = data
-                                                                    scanner.reset()
+                                                                    if (!isDisposed) scanner.reset()
                                                                 },
                                                                 onError = { error ->
-                                                                    scanner.reset()
+                                                                    if (!isDisposed) scanner.reset()
                                                                     onDismiss()
                                                                     app.alertState =
                                                                         TaggedItem(
@@ -433,6 +434,7 @@ private fun QrScannerContent(
 
     DisposableEffect(Unit) {
         onDispose {
+            isDisposed = true
             analysisRef.value?.clearAnalyzer()
 
             cameraProviderRef.value?.let { cp ->
@@ -478,6 +480,9 @@ private fun handleQrCode(
                 onProgress(result.progress)
             }
         }
+    } catch (e: IllegalStateException) {
+        // scanner was destroyed during async callback, ignore
+        Log.d("QrCodeScanView", "Scanner already destroyed, ignoring: ${e.message}")
     } catch (e: Exception) {
         onError("Unable to scan QR code: ${e.message ?: "Unknown scanning error"}")
     }

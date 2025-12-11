@@ -6,6 +6,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -201,6 +203,20 @@ private fun SendFlowRouteToScreen(
 ) {
     when (sendRoute) {
         is SendRoute.SetAmount -> {
+            val exceedsBalance = sendFlowManager.rust.amountExceedsBalance()
+            var previouslyExceeded by remember { mutableStateOf(false) }
+            val snackbarHostState = remember { SnackbarHostState() }
+
+            LaunchedEffect(exceedsBalance) {
+                if (exceedsBalance && !previouslyExceeded) {
+                    snackbarHostState.showSnackbar(
+                        message = "Exceeds available balance",
+                        duration = SnackbarDuration.Short,
+                    )
+                }
+                previouslyExceeded = exceedsBalance
+            }
+
             SendScreen(
                 onBack = { app.popRoute() },
                 onNext = {
@@ -295,6 +311,33 @@ private fun SendFlowRouteToScreen(
                 onAddressChanged = { newAddress ->
                     sendFlowManager.enteringAddress = newAddress
                 },
+                onAmountFocusChanged = { focused ->
+                    presenter.focusField = if (focused) SetAmountFocusField.AMOUNT else null
+                },
+                onAddressFocusChanged = { focused ->
+                    presenter.focusField = if (focused) SetAmountFocusField.ADDRESS else null
+                },
+                onAmountDone = {
+                    // if address is invalid, focus address; otherwise dismiss
+                    presenter.focusField =
+                        if (!sendFlowManager.rust.validateAddress()) {
+                            SetAmountFocusField.ADDRESS
+                        } else {
+                            null
+                        }
+                },
+                onAddressDone = {
+                    // if amount is invalid, focus amount; otherwise dismiss
+                    presenter.focusField =
+                        if (!sendFlowManager.rust.validateAmount()) {
+                            SetAmountFocusField.AMOUNT
+                        } else {
+                            null
+                        }
+                },
+                focusField = presenter.focusField,
+                exceedsBalance = exceedsBalance,
+                snackbarHostState = snackbarHostState,
             )
 
             // handle sheets for SendScreen
@@ -310,7 +353,19 @@ private fun SendFlowRouteToScreen(
                                     presenter.sheetState = null
                                     when (multiFormat) {
                                         is MultiFormat.Address -> {
-                                            sendFlowManager.enteringAddress = multiFormat.v1.address().string()
+                                            val addressWithNetwork = multiFormat.v1
+                                            sendFlowManager.enteringAddress = addressWithNetwork.address().string()
+                                            // if QR contains an amount (BIP21), set it
+                                            addressWithNetwork.amount()?.let { amount ->
+                                                sendFlowManager.updateAmount(amount)
+                                            }
+                                            // focus management: if amount valid clear focus, otherwise focus amount
+                                            presenter.focusField =
+                                                if (sendFlowManager.rust.validateAmount()) {
+                                                    null
+                                                } else {
+                                                    SetAmountFocusField.AMOUNT
+                                                }
                                         }
                                         else -> {
                                             app.alertState =
@@ -413,6 +468,7 @@ private fun SendFlowRouteToScreen(
                 onAddressChanged = { newAddress ->
                     sendFlowManager.enteringAddress = newAddress
                 },
+                onAddressDone = { presenter.focusField = null },
             )
         }
         is SendRoute.Confirm -> {
@@ -447,6 +503,9 @@ private fun SendFlowRouteToScreen(
             }
 
             SendConfirmationScreen(
+                app = app,
+                walletManager = walletManager,
+                details = details,
                 onBack = { app.popRoute() },
                 sendState = sendState,
                 onSwipeToSend = {
@@ -486,7 +545,6 @@ private fun SendFlowRouteToScreen(
                         ?.masterFingerprint
                         ?.asUppercase()
                         ?.take(8) ?: "",
-                address = details.sendingTo().string(),
                 networkFee = walletManager.amountFmtUnit(details.feeTotal()),
                 willReceive = walletManager.amountFmtUnit(details.sendingAmount()),
                 willPay = walletManager.amountFmtUnit(details.spendingAmount()),
@@ -497,7 +555,7 @@ private fun SendFlowRouteToScreen(
                 AlertDialog(
                     onDismissRequest = {
                         showSuccessAlert = false
-                        app.popRoute()
+                        app.loadAndReset(Route.SelectedWallet(walletManager.id))
                     },
                     title = { Text("Success") },
                     text = { Text("Transaction sent successfully!") },
@@ -505,7 +563,7 @@ private fun SendFlowRouteToScreen(
                         TextButton(
                             onClick = {
                                 showSuccessAlert = false
-                                app.popRoute()
+                                app.loadAndReset(Route.SelectedWallet(walletManager.id))
                             },
                         ) {
                             Text("OK")

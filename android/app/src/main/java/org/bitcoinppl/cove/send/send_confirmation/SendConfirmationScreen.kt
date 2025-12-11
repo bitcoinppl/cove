@@ -1,6 +1,5 @@
 package org.bitcoinppl.cove.send.send_confirmation
 
-import android.util.Log
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -9,6 +8,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
@@ -33,21 +33,30 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
+import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.SendState
+import org.bitcoinppl.cove.WalletManager
+import org.bitcoinppl.cove.send.SendFlowAdvancedDetailsView
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
+import org.bitcoinppl.cove.ui.theme.coveColors
 import org.bitcoinppl.cove.views.AutoSizeText
-import org.bitcoinppl.cove.views.BalanceAutoSizeText
+import org.bitcoinppl.cove_core.types.ConfirmDetails
+
+private enum class SheetState {
+    AdvancedDetails,
+}
 
 // Animation duration in milliseconds for swipe button returning to start position when swipe is incomplete.
 private const val SWIPE_RETURN_DURATION_MS = 500
@@ -58,33 +67,14 @@ private const val SWIPE_COMPLETE_THRESHOLD = 0.9f
 // Target text color (white) that text animates to during swipe gesture.
 private val SWIPE_BUTTON_TEXT_COLOR_TARGET = CoveColor.SwipeButtonText
 
-// Target background color (cyan) that button background animates to during swipe gesture.
-private val SWIPE_BUTTON_BG_COLOR_TARGET = CoveColor.SwipeButtonBg
-
-@Preview(showBackground = true)
-@Composable
-private fun SendConfirmationScreenPreview() {
-    SendConfirmationScreen(
-        onBack = {},
-        onSwipeToSend = { Log.d("SendConfirmationPreview", "Swipe completed in preview") },
-        onToggleBalanceVisibility = {},
-        isBalanceHidden = false,
-        balanceAmount = "1,166,369",
-        balanceDenomination = "sats",
-        sendingAmount = "25,555",
-        sendingAmountDenomination = "sats",
-        dollarEquivalentText = "$28.88",
-        accountShort = "560072A4",
-        address = "tb1qt 5alnv 8pm66 hv2zd cdzxr kyqfn wpuh8 9zrey kx",
-        networkFee = "1,128 sats",
-        willReceive = "25,555 sats",
-        willPay = "26,683 sats",
-    )
-}
+// Preview removed - requires app, walletManager, and details parameters
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SendConfirmationScreen(
+    app: AppManager,
+    walletManager: WalletManager,
+    details: ConfirmDetails,
     onBack: () -> Unit,
     onSwipeToSend: () -> Unit,
     sendState: SendState = SendState.Idle,
@@ -96,13 +86,18 @@ fun SendConfirmationScreen(
     sendingAmountDenomination: String,
     dollarEquivalentText: String,
     accountShort: String,
-    address: String,
     networkFee: String,
     willReceive: String,
     willPay: String,
 ) {
+    var sheetState by remember { mutableStateOf<SheetState?>(null) }
+    val address = details.sendingTo().spacedOut()
+
+    // force white status bar icons for midnight blue background
+    ForceLightStatusBarIcons()
+
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.surface,
+        containerColor = CoveColor.midnightBlue,
         topBar = {
             CenterAlignedTopAppBar(
                 colors =
@@ -163,6 +158,7 @@ fun SendConfirmationScreen(
                         networkFee = networkFee,
                         willReceive = willReceive,
                         willPay = willPay,
+                        onAddressClick = { sheetState = SheetState.AdvancedDetails },
                     )
                     Spacer(Modifier.weight(1f))
                     SwipeToSendStub(
@@ -170,8 +166,8 @@ fun SendConfirmationScreen(
                         sendState = sendState,
                         onComplete = onSwipeToSend,
                         containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        targetContainerColor = SWIPE_BUTTON_BG_COLOR_TARGET,
-                        knobColor = MaterialTheme.colorScheme.surface,
+                        targetContainerColor = MaterialTheme.coveColors.midnightBtn,
+                        knobColor = MaterialTheme.coveColors.midnightBtn,
                         textColor = MaterialTheme.colorScheme.onSurface,
                         targetTextColor = SWIPE_BUTTON_TEXT_COLOR_TARGET,
                         modifier =
@@ -182,6 +178,25 @@ fun SendConfirmationScreen(
                 }
             }
         }
+    }
+
+    // AdvancedDetails bottom sheet
+    when (sheetState) {
+        SheetState.AdvancedDetails -> {
+            ModalBottomSheet(
+                onDismissRequest = { sheetState = null },
+                sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            ) {
+                SendFlowAdvancedDetailsView(
+                    app = app,
+                    walletManager = walletManager,
+                    details = details,
+                    onDismiss = { sheetState = null },
+                )
+            }
+        }
+        null -> {}
     }
 }
 
@@ -233,12 +248,13 @@ private fun BalanceWidget(
             }
             IconButton(
                 onClick = onToggleVisibility,
-                modifier = Modifier.offset(y = 8.dp, x = 8.dp),
+                modifier = Modifier.align(Alignment.CenterVertically),
             ) {
                 Icon(
                     imageVector = if (isHidden) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                    contentDescription = null,
+                    contentDescription = if (isHidden) "Hidden" else "Visible",
                     tint = Color.White,
+                    modifier = Modifier.size(24.dp),
                 )
             }
         }
@@ -252,6 +268,9 @@ private fun AmountWidget(
     dollarText: String,
     accountShort: String,
 ) {
+    val density = LocalDensity.current
+    var unitLabelWidth by remember { mutableStateOf(0.dp) }
+
     Column(modifier = Modifier.fillMaxWidth()) {
         Spacer(Modifier.height(16.dp))
         Text(
@@ -267,41 +286,51 @@ private fun AmountWidget(
             fontSize = 14.sp,
         )
         Spacer(Modifier.height(24.dp))
-        Row(
+
+        // amount display - centered with dynamic offset based on unit label width
+        Column(
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.Bottom,
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                BalanceAutoSizeText(
+            Row(
+                verticalAlignment = Alignment.Bottom,
+                modifier = Modifier.offset(x = unitLabelWidth / 2),
+            ) {
+                AutoSizeText(
                     text = amount,
                     color = MaterialTheme.colorScheme.onSurface,
-                    baseFontSize = 48.sp,
+                    maxFontSize = 48.sp,
                     minimumScaleFactor = 0.5f,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.fillMaxWidth(),
                 )
+
+                Row(
+                    verticalAlignment = Alignment.Bottom,
+                    modifier =
+                        Modifier
+                            .padding(start = 8.dp, bottom = 10.dp)
+                            .onSizeChanged { size ->
+                                unitLabelWidth = with(density) { size.width.toDp() }
+                            },
+                ) {
+                    Text(denomination, color = MaterialTheme.colorScheme.onSurface, fontSize = 18.sp, maxLines = 1)
+                    Spacer(Modifier.width(4.dp))
+                    Icon(
+                        imageVector = Icons.Filled.ArrowDropDown,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
             }
-            Spacer(Modifier.width(32.dp))
-            Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.offset(y = (-4).dp)) {
-                Text(denomination, color = MaterialTheme.colorScheme.onSurface, fontSize = 18.sp, maxLines = 1)
-                Spacer(Modifier.width(4.dp))
-                Icon(
-                    imageVector = Icons.Filled.ArrowDropDown,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
+
+            Spacer(Modifier.height(12.dp))
+            Text(
+                dollarText,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 20.sp,
+            )
         }
-        Spacer(Modifier.height(12.dp))
-        AutoSizeText(
-            dollarText,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxFontSize = 20.sp,
-            minimumScaleFactor = 0.90f,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth(),
-        )
         Spacer(Modifier.height(28.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -335,6 +364,7 @@ private fun SummaryWidget(
     networkFee: String,
     willReceive: String,
     willPay: String,
+    onAddressClick: () -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -346,6 +376,7 @@ private fun SummaryWidget(
             valueColor = MaterialTheme.colorScheme.onSurface,
             keyColor = MaterialTheme.colorScheme.onSurfaceVariant,
             boldValue = true,
+            onClick = onAddressClick,
         )
         Spacer(Modifier.height(20.dp))
         KeyValueRow(
@@ -384,9 +415,18 @@ private fun KeyValueRow(
     valueColor: Color,
     boldValue: Boolean = false,
     boldKey: Boolean = false,
+    onClick: (() -> Unit)? = null,
 ) {
+    val rowModifier =
+        if (onClick != null) {
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+        } else {
+            Modifier.fillMaxWidth()
+        }
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = rowModifier,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
@@ -402,7 +442,8 @@ private fun KeyValueRow(
             fontSize = 14.sp,
             fontWeight = if (boldValue) FontWeight.SemiBold else FontWeight.Normal,
             textAlign = TextAlign.Right,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(2f),
+            maxLines = 4,
         )
     }
 }

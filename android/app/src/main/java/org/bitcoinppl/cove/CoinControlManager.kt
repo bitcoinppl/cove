@@ -43,7 +43,7 @@ class CoinControlManager(
     var totalSelected by mutableStateOf(Amount.fromSat(0u))
         private set
 
-    var selected by mutableStateOf<Set<OutPoint>>(emptySet())
+    var selected by mutableStateOf<Set<ULong>>(emptySet())
 
     var utxos by mutableStateOf<List<Utxo>>(emptyList())
         private set
@@ -77,9 +77,10 @@ class CoinControlManager(
     /**
      * update selected utxos and dispatch notification
      */
-    fun updateSelected(value: Set<OutPoint>) {
+    fun updateSelected(value: Set<ULong>) {
         selected = value
-        dispatch(CoinControlManagerAction.NotifySelectedUtxosChanged(value.toList()))
+        val outpoints = utxos.filter { value.contains(it.outpoint.hashToUint()) }.map { it.outpoint }
+        dispatch(CoinControlManagerAction.NotifySelectedUtxosChanged(outpoints))
     }
 
     /**
@@ -126,7 +127,7 @@ class CoinControlManager(
      */
     fun continuePressed(app: AppManager) {
         val walletId = rust.id()
-        val selectedUtxos = utxos.filter { selected.contains(it.outpoint) }
+        val selectedUtxos = utxos.filter { selected.contains(it.outpoint.hashToUint()) }
 
         // navigate forward to coin control set amount screen
         val sendRoute = SendRoute.CoinControlSetAmount(walletId, selectedUtxos)
@@ -140,7 +141,7 @@ class CoinControlManager(
             mainScope.launch {
                 delay(100)
                 if (!isActive) return@launch
-                val selectedUtxos = utxos.filter { selected.contains(it.outpoint) }
+                val selectedUtxos = utxos.filter { selected.contains(it.outpoint.hashToUint()) }
                 sfm.dispatch(SendFlowManagerAction.SetCoinControlMode(selectedUtxos))
             }
     }
@@ -165,7 +166,7 @@ class CoinControlManager(
 
             is CoinControlManagerReconcileMessage.UpdateSelectedUtxos -> {
                 updateSendFlowManager()
-                selected = message.utxos.toSet()
+                selected = message.utxos.map { it.hashToUint() }.toSet()
                 totalSelected = message.totalValue
             }
 

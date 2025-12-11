@@ -253,6 +253,24 @@ impl RustSendFlowManager {
     }
 
     #[uniffi::method]
+    pub fn amount_exceeds_balance(&self) -> bool {
+        let amount = self.state.lock().amount_sats.unwrap_or(0);
+        if amount == 0 {
+            return false;
+        }
+
+        let spendable = self
+            .state
+            .lock()
+            .wallet_balance
+            .clone()
+            .map(|b| b.trusted_spendable().to_sat())
+            .unwrap_or(0);
+
+        amount > spendable
+    }
+
+    #[uniffi::method]
     pub fn send_amount_btc(&self) -> String {
         let selected_unit = self.state.lock().metadata.selected_unit;
         let send_amount = self.send_amount().unwrap_or(Amount::ZERO);

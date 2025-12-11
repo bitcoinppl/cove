@@ -21,12 +21,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
@@ -56,7 +60,9 @@ import org.bitcoinppl.cove.sidebar.SidebarContainer
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove.views.LockView
 import org.bitcoinppl.cove_core.AfterPinAction
+import org.bitcoinppl.cove_core.Database
 import org.bitcoinppl.cove_core.Route
+import org.bitcoinppl.cove_core.RouteFactory
 import org.bitcoinppl.cove_core.TapSignerRoute
 import org.bitcoinppl.cove_core.types.ColorSchemeSelection
 
@@ -172,7 +178,12 @@ class MainActivity : FragmentActivity() {
                         Scaffold(
                             containerColor = Color.Transparent,
                             contentWindowInsets = WindowInsets(0),
-                            snackbarHost = { SnackbarHost(snackbarHostState) },
+                            snackbarHost = {
+                                SnackbarHost(
+                                    hostState = snackbarHostState,
+                                    modifier = Modifier.padding(WindowInsets.navigationBars.asPaddingValues()),
+                                )
+                            },
                         ) { _ ->
                             Box(modifier = Modifier.fillMaxSize()) {
                                 LockView {
@@ -394,18 +405,29 @@ private fun GlobalAlertDialog(
         }
 
         is AppAlertState.FoundAddress -> {
+            val selectedWallet = Database().globalConfig().selectedWallet()
             AlertDialog(
                 onDismissRequest = onDismiss,
                 title = { Text(state.title()) },
                 text = { Text(state.message()) },
                 confirmButton = {
-                    TextButton(onClick = {
-                        copyToClipboard(state.address.string())
-                        onDismiss()
-                    }) { Text("Copy Address") }
-                },
-                dismissButton = {
-                    TextButton(onClick = onDismiss) { Text("Cancel") }
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        if (selectedWallet != null) {
+                            FilledTonalButton(onClick = {
+                                val route = RouteFactory().sendSetAmount(selectedWallet, state.address, state.amount)
+                                app.pushRoute(route)
+                                onDismiss()
+                            }) { Text("Send To Address") }
+                        }
+                        TextButton(onClick = {
+                            copyToClipboard(state.address.string())
+                            onDismiss()
+                        }) { Text("Copy Address") }
+                        TextButton(onClick = onDismiss) { Text("Cancel") }
+                    }
                 },
             )
         }

@@ -2,6 +2,18 @@
 
 This document covers platform-specific gotchas and patterns for achieving visual and behavioral parity between Android (Jetpack Compose) and iOS (SwiftUI).
 
+## Table of Contents
+
+- [List Key Serialization](#list-key-serialization)
+- [Opacity / Alpha](#opacity--alpha)
+- [Text Colors and Dark Mode](#text-colors-and-dark-mode)
+- [Color Values](#color-values)
+  - [Theme-Aware Custom Colors (CoveColorScheme)](#theme-aware-custom-colors-covecolorscheme)
+- [Text Auto-Sizing](#text-auto-sizing)
+- [Button Text Centering](#button-text-centering)
+- [NFC Scanning UI](#nfc-scanning-ui)
+- [Slider Step Behavior](#slider-step-behavior)
+
 ---
 
 ## List Key Serialization
@@ -43,6 +55,24 @@ This document covers platform-specific gotchas and patterns for achieving visual
   - `Scaffold` → sets appropriate content colors for each slot
   - `Column`/`Box` with `.background()` → does NOT set `LocalContentColor`
 - **Guideline**: For content areas needing dark mode support, either use `Surface` instead of `Column` with `.background()`, or explicitly set `color = MaterialTheme.colorScheme.onSurface` on Text components.
+
+---
+
+## Color Values
+
+- **Never hardcode colors**: Always use system-provided or theme-defined color values, never raw hex codes or Color literals.
+- **Android**: Use `MaterialTheme.colorScheme.*` (e.g., `onSurface`, `primary`, `surfaceVariant`) or custom Cove colors via `MaterialTheme.coveColors.*`.
+- **iOS**: Use system colors (`.primary`, `.secondary`) or custom colors from the asset catalog.
+- **Why**: Hardcoded colors break dark mode, accessibility settings, and dynamic theming. Theme colors automatically adapt to light/dark mode and user preferences.
+
+### Theme-Aware Custom Colors (CoveColorScheme)
+
+For Cove-specific colors that need light/dark variants:
+
+- **iOS**: Asset catalog `.colorset` files with light/dark appearances
+- **Android**: `CoveColorScheme` in `Color.kt` with `LightCoveColors` and `DarkCoveColors` instances, provided via `CompositionLocal` in `CoveTheme`
+
+**Guideline**: Add new theme-aware colors to `CoveColorScheme` in `Color.kt`. Access via `MaterialTheme.coveColors.*` (e.g., `MaterialTheme.coveColors.midnightBtn`).
 
 ---
 
@@ -136,3 +166,14 @@ Since Android has no system NFC UI, `TapSignerScanningOverlay` composable provid
 - NFC icon, animated "Scanning..." dots, message text, progress indicator
 - Message updates via callback → `manager.scanMessage` state → recomposition
 - Shown in `TapSignerContainer` when `manager.isScanning` is true
+
+---
+
+## Slider Step Behavior
+
+- **iOS/SwiftUI**: `Slider(step:)` defines the **increment size** for a continuous slider
+- **Android/Compose**: `Slider(steps:)` creates **discrete stop points** (N positions total)
+
+**Critical**: These are not equivalent! Calculating `steps = (max - min) / stepSize` can create millions of discrete positions, causing severe lag/freeze.
+
+**Guideline**: For continuous sliders matching iOS, omit `steps` entirely on Android. Handle step snapping in `onValueChange` if needed.
