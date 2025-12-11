@@ -35,7 +35,6 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -102,11 +101,6 @@ fun NewWalletSelectScreen(
         onOpenNfcScan()
         // after 0.8s delay, show NFC Help button (matching iOS)
         nfcCalled = true
-    }
-
-    // reset nfcCalled when returning to this screen
-    LaunchedEffect(Unit) {
-        // initial state - don't reset if coming back from NFC
     }
 
     fun importWallet(content: String) {

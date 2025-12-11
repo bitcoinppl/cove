@@ -173,6 +173,11 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     fun clearSendFlowManager() {
+        try {
+            sendFlowManager?.close()
+        } catch (e: Exception) {
+            android.util.Log.w("AppManager", "Error closing SendFlowManager", e)
+        }
         sendFlowManager = null
     }
 
