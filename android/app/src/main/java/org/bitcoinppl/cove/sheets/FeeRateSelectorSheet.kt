@@ -18,8 +18,7 @@ import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.SendFlowManager
 import org.bitcoinppl.cove.SendFlowPresenter
 import org.bitcoinppl.cove.WalletManager
-import org.bitcoinppl.cove.ui.theme.CoveColor
-import org.bitcoinppl.cove.ui.theme.midnightBtn
+import org.bitcoinppl.cove.ui.theme.coveColors
 import org.bitcoinppl.cove.utils.toColor
 import org.bitcoinppl.cove_core.types.FeeRateOptionWithTotalFee
 import org.bitcoinppl.cove_core.types.FeeRateOptionsWithTotalFee
@@ -135,7 +134,7 @@ fun FeeRateSelectorSheet(
                         .padding(horizontal = 24.dp),
                 colors =
                     ButtonDefaults.buttonColors(
-                        containerColor = midnightBtn(),
+                        containerColor = MaterialTheme.coveColors.midnightBtn,
                         contentColor = Color.White,
                     ),
                 shape = RoundedCornerShape(10.dp),
@@ -182,7 +181,7 @@ private fun FeeOptionCard(
 ) {
     val backgroundColor =
         if (isSelected) {
-            midnightBtn().copy(alpha = 0.8f)
+            MaterialTheme.coveColors.midnightBtn.copy(alpha = 0.8f)
         } else {
             MaterialTheme.colorScheme.surfaceVariant
         }

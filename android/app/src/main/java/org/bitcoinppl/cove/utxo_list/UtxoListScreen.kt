@@ -60,7 +60,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
-import org.bitcoinppl.cove.ui.theme.midnightBtn
+import org.bitcoinppl.cove.ui.theme.coveColors
 import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.ImageButton
 import java.text.SimpleDateFormat
@@ -391,7 +391,7 @@ private fun UtxoListScreenContent(
                         enabled = anySelected,
                         colors =
                             ButtonDefaults.buttonColors(
-                                containerColor = if (anySelected) midnightBtn() else MaterialTheme.colorScheme.surfaceVariant,
+                                containerColor = if (anySelected) MaterialTheme.coveColors.midnightBtn else MaterialTheme.colorScheme.surfaceVariant,
                                 contentColor = if (anySelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
                             ),
                         modifier = Modifier.fillMaxWidth(),

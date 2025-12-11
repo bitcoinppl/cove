@@ -51,7 +51,7 @@ import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.sheets.FeeRateSelectorSheet
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
-import org.bitcoinppl.cove.ui.theme.midnightBtn
+import org.bitcoinppl.cove.ui.theme.coveColors
 import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.BalanceAutoSizeText
 import org.bitcoinppl.cove.views.ImageButton
@@ -195,7 +195,7 @@ fun CoinControlSetAmountScreen(
                         onClick = onNext,
                         colors =
                             ButtonDefaults.buttonColors(
-                                containerColor = midnightBtn(),
+                                containerColor = MaterialTheme.coveColors.midnightBtn,
                                 contentColor = Color.White,
                             ),
                         modifier =

@@ -27,8 +27,7 @@ import org.bitcoinppl.cove.SendFlowManager
 import org.bitcoinppl.cove.SendFlowPresenter
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.WalletManager
-import org.bitcoinppl.cove.ui.theme.CoveColor
-import org.bitcoinppl.cove.ui.theme.midnightBtn
+import org.bitcoinppl.cove.ui.theme.coveColors
 import org.bitcoinppl.cove.utils.toColor
 import org.bitcoinppl.cove_core.SendFlowAlertState
 import org.bitcoinppl.cove_core.SendFlowException
@@ -323,7 +322,7 @@ fun CustomFeeRateSheet(
                         .padding(horizontal = 28.dp),
                 colors =
                     ButtonDefaults.buttonColors(
-                        containerColor = midnightBtn(),
+                        containerColor = MaterialTheme.coveColors.midnightBtn,
                         contentColor = Color.White,
                     ),
                 shape = RoundedCornerShape(10.dp),

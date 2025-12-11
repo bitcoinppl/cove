@@ -2,6 +2,18 @@
 
 This document covers platform-specific gotchas and patterns for achieving visual and behavioral parity between Android (Jetpack Compose) and iOS (SwiftUI).
 
+## Table of Contents
+
+- [List Key Serialization](#list-key-serialization)
+- [Opacity / Alpha](#opacity--alpha)
+- [Text Colors and Dark Mode](#text-colors-and-dark-mode)
+- [Color Values](#color-values)
+  - [Theme-Aware Custom Colors (CoveColorScheme)](#theme-aware-custom-colors-covecolorscheme)
+- [Text Auto-Sizing](#text-auto-sizing)
+- [Button Text Centering](#button-text-centering)
+- [NFC Scanning UI](#nfc-scanning-ui)
+- [Slider Step Behavior](#slider-step-behavior)
+
 ---
 
 ## List Key Serialization
@@ -49,9 +61,18 @@ This document covers platform-specific gotchas and patterns for achieving visual
 ## Color Values
 
 - **Never hardcode colors**: Always use system-provided or theme-defined color values, never raw hex codes or Color literals.
-- **Android**: Use `MaterialTheme.colorScheme.*` (e.g., `onSurface`, `primary`, `surfaceVariant`) or custom colors defined in `Theme.kt`.
+- **Android**: Use `MaterialTheme.colorScheme.*` (e.g., `onSurface`, `primary`, `surfaceVariant`) or custom Cove colors via `MaterialTheme.coveColors.*`.
 - **iOS**: Use system colors (`.primary`, `.secondary`) or custom colors from the asset catalog.
 - **Why**: Hardcoded colors break dark mode, accessibility settings, and dynamic theming. Theme colors automatically adapt to light/dark mode and user preferences.
+
+### Theme-Aware Custom Colors (CoveColorScheme)
+
+For Cove-specific colors that need light/dark variants:
+
+- **iOS**: Asset catalog `.colorset` files with light/dark appearances
+- **Android**: `CoveColorScheme` in `Color.kt` with `LightCoveColors` and `DarkCoveColors` instances, provided via `CompositionLocal` in `CoveTheme`
+
+**Guideline**: Add new theme-aware colors to `CoveColorScheme` in `Color.kt`. Access via `MaterialTheme.coveColors.*` (e.g., `MaterialTheme.coveColors.midnightBtn`).
 
 ---
 

@@ -80,7 +80,7 @@ import org.bitcoinppl.cove.nfc.NfcWriteSheet
 import org.bitcoinppl.cove.send.SendFlowAdvancedDetailsView
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
-import org.bitcoinppl.cove.ui.theme.midnightBtn
+import org.bitcoinppl.cove.ui.theme.coveColors
 import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.BitcoinShieldIcon
 import org.bitcoinppl.cove_core.*
@@ -1032,7 +1032,7 @@ private fun TransactionDetailsSheet(
             modifier = Modifier.fillMaxWidth(),
             colors =
                 ButtonDefaults.buttonColors(
-                    containerColor = midnightBtn(),
+                    containerColor = MaterialTheme.coveColors.midnightBtn,
                     contentColor = Color.White,
                 ),
             shape = RoundedCornerShape(10.dp),

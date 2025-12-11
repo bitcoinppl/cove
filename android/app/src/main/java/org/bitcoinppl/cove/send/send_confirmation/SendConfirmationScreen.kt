@@ -50,7 +50,7 @@ import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.send.SendFlowAdvancedDetailsView
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
-import org.bitcoinppl.cove.ui.theme.midnightBtn
+import org.bitcoinppl.cove.ui.theme.coveColors
 import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove_core.types.ConfirmDetails
 
@@ -66,7 +66,6 @@ private const val SWIPE_COMPLETE_THRESHOLD = 0.9f
 
 // Target text color (white) that text animates to during swipe gesture.
 private val SWIPE_BUTTON_TEXT_COLOR_TARGET = CoveColor.SwipeButtonText
-
 
 // Preview removed - requires app, walletManager, and details parameters
 
@@ -167,8 +166,8 @@ fun SendConfirmationScreen(
                         sendState = sendState,
                         onComplete = onSwipeToSend,
                         containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        targetContainerColor = midnightBtn(),
-                        knobColor = midnightBtn(),
+                        targetContainerColor = MaterialTheme.coveColors.midnightBtn,
+                        knobColor = MaterialTheme.coveColors.midnightBtn,
                         textColor = MaterialTheme.colorScheme.onSurface,
                         targetTextColor = SWIPE_BUTTON_TEXT_COLOR_TARGET,
                         modifier =
