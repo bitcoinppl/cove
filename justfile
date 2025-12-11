@@ -173,6 +173,10 @@ fmt-rust:
     cargo fmt --all
 
 # Format Swift code
+[private]
+alias fmt-ios := fmt-swift
+alias fi := fmt-swift
+
 [group('format'), private]
 fmt-swift:
     swiftformat ios --swiftversion 6
