@@ -121,15 +121,14 @@ watch-test test="" flags="":
 compile:
     just compile-ios && just compile-android
 
-
 # build android
 alias ba := build-android
 build-android:
-    cd rust && cargo xtask build-android debug && say "done android"
+    cd rust && cargo xtask build-android debug && just say "done android"
 
 alias bar := build-android-release
 build-android-release:
-    cd rust && cargo xtask build-android release-speed && say "done android release"
+    cd rust && cargo xtask build-android release-speed && just say "done android release"
 
 alias ra := run-android
 run-android profile="debug":
@@ -141,15 +140,15 @@ compile-android:
 # build ios
 alias bi := build-ios
 build-ios profile="debug" *flags="":
-    cd rust && cargo xtask build-ios {{profile}} {{flags}} && say "done ios"
+    cd rust && cargo xtask build-ios {{profile}} {{flags}} && just say "done ios"
 
 alias bir := build-ios-release
 build-ios-release:
-    cd rust && cargo xtask build-ios release-speed --device && say "done ios release"
+    cd rust && cargo xtask build-ios release-speed --device && just say "done ios release"
 
 alias bidd := build-ios-debug-device
 build-ios-debug-device:
-    cd rust && cargo xtask build-ios debug --device && say "done ios device"
+    cd rust && cargo xtask build-ios debug --device && just say "done ios device"
 
 run-ios:
     cd rust && cargo xtask run-ios
@@ -159,3 +158,9 @@ compile-ios:
 
 xtask *args:
     cd rust && cargo xtask {{args}}
+
+
+# helpers
+say *args:
+    @say args || @echo {{args}}
+
