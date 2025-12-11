@@ -50,8 +50,19 @@ fix *flags="":
 clippy *flags="":
     cd rust && cargo clippy {{flags}}
 
+# lint all platforms
+
+lint *flags="":
+    just lint-rust {{flags}} && just lint-swift {{flags}} && just lint-android {{flags}}
+
+lint-rust *flags="":
+    cd rust && cargo clippy --all-targets --all-features -- -D warnings {{flags}}
+
 lint-android *flags="":
     cd android && ./gradlew ktlintCheck {{flags}}
+
+lint-swift *flags="":
+    swiftformat --lint ios --swiftversion 6 {{flags}}
 
 update pkg="":
     cd rust && cargo update {{pkg}}
@@ -71,14 +82,10 @@ xcode-clean:
     cd ios && xcodebuild clean
 
 ci:
-    just fmt
-    cd rust && cargo clippy --all-targets --all-features
-    just test
-    just lint-android
-    cd rust && cargo clippy --all-targets --all-features -- -D warnings
-    cd rust && cargo fmt --check
-    swiftformat --lint ios --swiftversion 6
-    cd android && ./gradlew ktlintCheck
+    just fmt && \
+    cd rust && cargo fmt --check && \
+    just lint && \
+    just test && \
     just compile
 
 alias xr := xcode-reset

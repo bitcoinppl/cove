@@ -77,6 +77,8 @@ class NfcWriter(
     }
 
     fun stopWriting() {
+        // clear any pending delayed callbacks first
+        mainHandler.removeCallbacksAndMessages(null)
         isWriting = false
         message = ""
         writingState = NfcWritingState.WAITING
@@ -228,6 +230,12 @@ class NfcWriter(
         message = ""
         writingState = NfcWritingState.WAITING
         dataToWrite = null
+    }
+
+    fun close() {
+        stopWriting()
+        mainHandler.removeCallbacksAndMessages(null)
+        _writeResults.close()
     }
 
     companion object {

@@ -154,9 +154,11 @@ fun QrExportView(
                             .padding(horizontal = 11.dp),
                     contentAlignment = Alignment.Center,
                 ) {
+                    val safeIndex = currentIndex.coerceIn(0, qrStrings.lastIndex.coerceAtLeast(0))
+                    val qrString = qrStrings.getOrNull(safeIndex) ?: qrStrings.firstOrNull() ?: ""
                     val bitmap =
-                        remember(qrStrings[currentIndex]) {
-                            QrCodeGenerator.generate(qrStrings[currentIndex], size = 512)
+                        remember(qrString) {
+                            QrCodeGenerator.generate(qrString, size = 512)
                         }
 
                     Image(
