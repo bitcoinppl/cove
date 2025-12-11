@@ -244,11 +244,19 @@ impl RustWalletManager {
         let id = metadata.id.clone();
         let wallet = Wallet::try_load_persisted(id.clone())?;
         let metadata = wallet.metadata.clone();
+
+        // read cached and send to UI immediately
+        let cached_balance: Balance = wallet.balance();
+        let cached_transactions: Vec<Transaction> = wallet.transactions();
+
+        let reconciler = MessageSender::new(sender.clone());
+        reconciler.send(Message::WalletBalanceChanged(cached_balance.into()));
+        reconciler.send(Message::AvailableTransactions(cached_transactions));
+
         let actor = task::spawn_actor(WalletActor::new(wallet, sender.clone()));
 
-        // only creates the scanner if its not already complet
-        let scanner =
-            WalletScanner::try_new(metadata.clone(), sender.clone()).ok().map(spawn_actor);
+        // will only create the scanner if its not already complete
+        let scanner = WalletScanner::try_new(metadata.clone(), sender).ok().map(spawn_actor);
 
         let label_manager = LabelManager::new(id.clone()).into();
 
@@ -256,7 +264,7 @@ impl RustWalletManager {
             id,
             actor,
             metadata: Arc::new(RwLock::new(metadata)),
-            reconciler: MessageSender::new(sender),
+            reconciler,
             reconcile_receiver: Arc::new(receiver),
             label_manager,
             scanner,
@@ -498,22 +506,11 @@ impl RustWalletManager {
         Ok(())
     }
 
+    /// Sync method using cached prices, returns None if no cached prices
     #[uniffi::method]
-    pub async fn balance_in_fiat(&self) -> Result<f64, Error> {
-        let balance = call!(self.actor.balance())
-            .await
-            .map_err(|_| Error::WalletBalanceError("unable to get balance".to_string()))?;
-
-        self.amount_in_fiat(balance.spendable().into()).await
-    }
-
-    #[uniffi::method]
-    pub async fn amount_in_fiat(&self, amount: Arc<Amount>) -> Result<f64, Error> {
+    pub fn amount_in_fiat(&self, amount: Arc<Amount>) -> Option<f64> {
         let currency = self.selected_fiat_currency();
-
-        FIAT_CLIENT.current_value_in_currency(*amount, currency).await.map_err(|error| {
-            Error::FiatError(format!("unable to get fiat value for amount: {error}"))
-        })
+        FIAT_CLIENT.value_in_currency_cached(*amount, currency)
     }
 
     #[uniffi::method(default(show_unit = true))]

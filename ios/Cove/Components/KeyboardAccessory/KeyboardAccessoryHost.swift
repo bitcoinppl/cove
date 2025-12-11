@@ -35,15 +35,35 @@ final class KeyboardAccessoryController: ObservableObject {
     private var container: UIView?
     private weak var currentResponder: UIView?
     private var isAttached: Bool = false
-    private var notificationObserver: NSObjectProtocol?
+    private var didBecomeActiveObserver: NSObjectProtocol?
+    private var keyboardDidShowObserver: NSObjectProtocol?
+    private var keyboardWillHideObserver: NSObjectProtocol?
 
     init() {
-        notificationObserver = NotificationCenter.default.addObserver(
+        didBecomeActiveObserver = NotificationCenter.default.addObserver(
             forName: UIApplication.didBecomeActiveNotification,
             object: nil,
             queue: .main
         ) { [weak self] _ in
             self?.reattachIfNeeded()
+        }
+
+        keyboardDidShowObserver = NotificationCenter.default.addObserver(
+            forName: UIResponder.keyboardWillShowNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.reattachOnKeyboardShow()
+        }
+
+        keyboardWillHideObserver = NotificationCenter.default.addObserver(
+            forName: UIResponder.keyboardWillHideNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            // mark as detached so we know to reattach when keyboard shows again
+            self?.isAttached = false
+            self?.currentResponder = nil
         }
     }
 
@@ -66,8 +86,31 @@ final class KeyboardAccessoryController: ObservableObject {
         }
     }
 
+    /// Reattach accessory when keyboard appears after focus transitions.
+    /// Handles the case where first responder changes between text fields.
+    private func reattachOnKeyboardShow() {
+        guard let container = self.container else { return }
+
+        // re-capture first responder
+        UIResponder.captureCurrentFirstResponder(from: nil)
+        guard let responder = UIResponder.currentFirstResponderView else { return }
+
+        // always reattach when keyboard shows (we track hide state via keyboardWillHide)
+        // force rebuild: clear first, then re-set
+        self.setAccessory(on: responder, accessoryView: nil, forceReload: false)
+        self.setAccessory(on: responder, accessoryView: container, forceReload: true)
+        self.currentResponder = responder
+        self.isAttached = true
+    }
+
     deinit {
-        if let observer = notificationObserver {
+        if let observer = didBecomeActiveObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        if let observer = keyboardDidShowObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        if let observer = keyboardWillHideObserver {
             NotificationCenter.default.removeObserver(observer)
         }
     }

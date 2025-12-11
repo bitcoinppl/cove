@@ -21,11 +21,6 @@ struct SelectedWalletContainer: View {
         do {
             Log.debug("Getting wallet \(id)")
             manager = try app.getWalletManager(id: id)
-
-            Task {
-                try await Task.sleep(for: .milliseconds(500))
-                await manager?.updateWalletBalance()
-            }
         } catch {
             Log.error("Something went very wrong: \(error)")
             do {
@@ -76,12 +71,9 @@ struct SelectedWalletContainer: View {
         }
         .onAppear(perform: loadManager)
         .task {
-            // small delay and then start scanning wallet
+            // start scan immediately (sends cached data first, then scans)
             if let manager {
                 do {
-                    try await Task.sleep(for: .milliseconds(400))
-                    await manager.rust.getTransactions()
-                    await manager.updateWalletBalance()
                     try await manager.rust.startWalletScan()
                 } catch {
                     Log.error("Wallet Scan Failed \(error.localizedDescription)")

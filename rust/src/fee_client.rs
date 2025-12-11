@@ -1,9 +1,10 @@
 use std::{
     sync::{Arc, LazyLock},
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 use arc_swap::ArcSwap;
+use backon::{ExponentialBuilder, Retryable as _};
 use eyre::Result;
 use tracing::warn;
 
@@ -149,10 +150,13 @@ pub async fn init_fees() {
         return;
     }
 
-    let result = tryhard::retry_fn(move || FEE_CLIENT.fetch_and_get_fees())
-        .retries(20)
-        .exponential_backoff(std::time::Duration::from_millis(10))
-        .max_delay(std::time::Duration::from_secs(5))
+    let result = (|| FEE_CLIENT.fetch_and_get_fees())
+        .retry(
+            ExponentialBuilder::default()
+                .with_min_delay(Duration::from_millis(10))
+                .with_max_delay(Duration::from_secs(5))
+                .with_max_times(20),
+        )
         .await;
 
     if let Err(error) = result {
