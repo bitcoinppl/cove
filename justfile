@@ -319,4 +319,4 @@ xtask *args:
 # text-to-speech helper
 [private]
 say *args:
-    @say args || @echo {{args}} || echo {{args}} || true
+    @say {{args}} || @echo {{args}} || echo {{args}} || true
