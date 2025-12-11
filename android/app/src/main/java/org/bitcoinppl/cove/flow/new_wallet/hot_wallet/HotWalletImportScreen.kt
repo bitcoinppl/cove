@@ -195,6 +195,15 @@ fun HotWalletImportScreen(
                     ).isValidWord(word, enteredWords)
             }
 
+    val focusManager = LocalFocusManager.current
+
+    // dismiss keyboard when all words become valid
+    LaunchedEffect(enteredWords) {
+        if (isAllWordsValid()) {
+            focusManager.clearFocus()
+        }
+    }
+
     fun importWallet() {
         try {
             val walletMetadata = manager.importWallet(enteredWords)
@@ -566,6 +575,7 @@ private fun WordInputField(
     onFocusChanged: (Boolean) -> Unit,
     onNext: () -> Unit,
 ) {
+    val focusManager = LocalFocusManager.current
     val autocomplete =
         remember(number) {
             Bip39WordSpecificAutocomplete(
@@ -575,7 +585,7 @@ private fun WordInputField(
         }
 
     var suggestions by remember { mutableStateOf<List<String>>(emptyList()) }
-    val focusManager = LocalFocusManager.current
+    var previousWord by remember { mutableStateOf("") }
 
     val isValid = word.isNotEmpty() && autocomplete.isValidWord(word, allEnteredWords)
     val hasInput = word.isNotEmpty()
@@ -648,17 +658,29 @@ private fun WordInputField(
                     value = word,
                     onValueChange = { newValue ->
                         val trimmed = newValue.trim().lowercase()
+                        val oldWord = previousWord
+                        previousWord = trimmed
+
+                        // get new suggestions
+                        val newSuggestions = autocomplete.autocomplete(trimmed, allEnteredWords)
+
+                        // auto-select if only one suggestion left and user added a letter (not backspace)
+                        if (newSuggestions.size == 1 && trimmed.length > oldWord.length) {
+                            val autoWord = newSuggestions.first()
+                            onWordChanged(autoWord)
+                            suggestions = emptyList()
+                            // keyboard dismiss handled by LaunchedEffect on enteredWords
+                            onNext()
+                            return@BasicTextField
+                        }
+
                         onWordChanged(trimmed)
 
                         // auto-advance when word is complete and valid
                         if (trimmed.isNotEmpty() && autocomplete.isValidWord(trimmed, allEnteredWords)) {
                             suggestions = emptyList()
-                            if (isLastWord) {
-                                // dismiss keyboard, let user manually click Import Wallet
-                                focusManager.clearFocus()
-                            } else {
-                                onNext()
-                            }
+                            // keyboard dismiss handled by LaunchedEffect on enteredWords
+                            onNext()
                         }
                     },
                     textStyle =
@@ -728,12 +750,8 @@ private fun WordInputField(
                                 .clickable {
                                     onWordChanged(suggestion)
                                     suggestions = emptyList()
-                                    if (isLastWord) {
-                                        // dismiss keyboard, let user manually click Import Wallet
-                                        focusManager.clearFocus()
-                                    } else {
-                                        onNext()
-                                    }
+                                    // keyboard dismiss handled by LaunchedEffect on enteredWords
+                                    onNext()
                                 }.padding(horizontal = 12.dp, vertical = 10.dp),
                     )
                 }
