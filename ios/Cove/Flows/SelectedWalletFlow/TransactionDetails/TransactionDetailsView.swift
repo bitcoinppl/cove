@@ -322,6 +322,15 @@ struct TransactionDetailsView: View {
                     .opacity(max(0, 1 + (currentOffset / 275)))
             }
         )
+        .onAppear {
+            UIRefreshControl.appearance().tintColor = colorScheme == .light ? .darkGray : .white
+        }
+        .onChange(of: colorScheme) { _, newScheme in
+            UIRefreshControl.appearance().tintColor = newScheme == .light ? .darkGray : .white
+        }
+        .onDisappear {
+            UIRefreshControl.appearance().tintColor = .white
+        }
     }
 
     func refreshTransactionDetails() async {
