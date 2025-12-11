@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import UIKit
 
 private let groupsOf = HotWalletImportScreen.GROUPS_OF
 
@@ -78,10 +77,9 @@ struct HotWalletImportScreen: View {
     @Environment(AppManager.self) private var app
 
     @State private var tabIndex: Int = 0
-    @State private var hasStartedTyping: Bool = false
     @FocusState var focusField: ImportFieldNumber?
 
-    @StateObject private var keyboardAccessoryController: KeyboardAccessoryController = .init()
+    @State private var keyboardObserver = KeyboardObserver()
 
     private var accessoryHeight: CGFloat {
         switch sizeCategory {
@@ -97,10 +95,6 @@ struct HotWalletImportScreen: View {
         let maxWidth = screenWidth - 32
         let target: CGFloat = 240 // three-chip feel
         return min(maxWidth, target)
-    }
-
-    private var needsCustomToolbar: Bool {
-        if #available(iOS 26, *) { true } else { false }
     }
 
     @State var manager: ImportWalletManager = .init()
@@ -255,6 +249,7 @@ struct HotWalletImportScreen: View {
         }
 
         enteredWords[outerIndex][innerIndex] = word
+        filteredSuggestions = []
 
         let newFocusFieldNumber = Int(
             autocomplete.nextFieldNumber(
@@ -269,8 +264,6 @@ struct HotWalletImportScreen: View {
         if (newFocusFieldNumber % groupsOf) == 1 {
             tabIndex = Int(newFocusFieldNumber / groupsOf)
         }
-
-        filteredSuggestions = []
     }
 
     @ViewBuilder
@@ -309,19 +302,6 @@ struct HotWalletImportScreen: View {
 
     @ToolbarContentBuilder
     var ToolbarContent: some ToolbarContent {
-        if !needsCustomToolbar, hasStartedTyping {
-            ToolbarItem(placement: .keyboard) {
-                KeyboardAutoCompleteView
-                    .foregroundStyle(.primary)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    .opacity(!filteredSuggestions.isEmpty ? 1 : 0)
-                    .frame(minWidth: accessoryMinWidth, alignment: .center)
-                    .animation(.easeInOut(duration: 0.2), value: !filteredSuggestions.isEmpty)
-                    .allowsHitTesting(!filteredSuggestions.isEmpty)
-            }
-        }
-
         ToolbarItem(placement: .principal) {
             Text("Import Wallet")
                 .font(.callout)
@@ -347,7 +327,42 @@ struct HotWalletImportScreen: View {
     }
 
     var body: some View {
-        MainContent
+        GeometryReader { geometry in
+            let bottomSafeArea = geometry.safeAreaInsets.bottom
+
+            ZStack(alignment: .bottom) {
+                MainContent
+
+                if keyboardObserver.keyboardIsShowing, focusField != nil, !filteredSuggestions.isEmpty {
+                    KeyboardToolbar
+                        .offset(y: -(keyboardObserver.keyboardHeight - bottomSafeArea))
+                        .transition(.opacity)
+                        .animation(.easeInOut(duration: 0.2), value: filteredSuggestions.isEmpty)
+                }
+            }
+            .frame(width: geometry.size.width, height: geometry.size.height)
+        }
+        .ignoresSafeArea(.keyboard)
+    }
+
+    @ViewBuilder
+    private var KeyboardToolbar: some View {
+        HStack {
+            ForEach(filteredSuggestions, id: \.self) { word in
+                Spacer()
+                Button(word) { selectWordInKeyboard(word) }
+                    .foregroundColor(.primary)
+                Spacer()
+
+                if filteredSuggestions.count > 1, filteredSuggestions.last != word {
+                    Divider()
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: accessoryHeight)
+        .background(.regularMaterial)
+        .modifier(KeyboardToolbarShapeModifier())
     }
 
     @ViewBuilder
@@ -364,7 +379,9 @@ struct HotWalletImportScreen: View {
     @ViewBuilder
     var MainContent: some View {
         VStack {
-            Spacer()
+            if !keyboardObserver.keyboardIsShowing {
+                Spacer()
+            }
 
             if isMiniDeviceOrLargeText(sizeCategory) {
                 ScrollView {
@@ -384,6 +401,7 @@ struct HotWalletImportScreen: View {
 
             ImportButton
         }
+        .animation(.easeInOut(duration: 0.25), value: keyboardObserver.keyboardIsShowing)
         .padding()
         .padding(.bottom, 24)
         .toolbar { ToolbarContent }
@@ -415,7 +433,11 @@ struct HotWalletImportScreen: View {
         }
         .onChange(of: focusField, initial: false, onChangeFocusField)
         .onChange(of: nfcReader.scannedMessage, initial: false, onChangeNfcMessage)
-        .onChange(of: enteredWords, initial: false, onChangeEnteredWords)
+        .onChange(of: enteredWords) {
+            if isAllWordsValid {
+                focusField = nil
+            }
+        }
         .onDisappear {
             focusField = nil
             nfcReader.resetReader()
@@ -433,40 +455,6 @@ struct HotWalletImportScreen: View {
                 .opacity(0.5)
         )
         .background(Color.midnightBlue)
-        .background {
-            if needsCustomToolbar {
-                KeyboardAccessoryHost(
-                    controller: keyboardAccessoryController,
-                    isVisible: focusField != nil,
-                    height: accessoryHeight
-                ) {
-                    HStack(spacing: 0) {
-                        Spacer(minLength: 8)
-                        ZStack {
-                            Capsule()
-                                .fill(.thickMaterial)
-                                .frame(minWidth: accessoryMinWidth, minHeight: accessoryHeight)
-                                .shadow(color: Color.black.opacity(0.18), radius: 8, x: 0, y: -1)
-
-                            KeyboardAutoCompleteView
-                                .foregroundStyle(.primary)
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 8)
-                                .opacity(!filteredSuggestions.isEmpty ? 1 : 0)
-                                .frame(minWidth: accessoryMinWidth, alignment: .center)
-                                .animation(.easeInOut(duration: 0.2), value: !filteredSuggestions.isEmpty)
-                                .allowsHitTesting(!filteredSuggestions.isEmpty)
-                        }
-
-                        Spacer(minLength: 8)
-                    }
-                    .padding(.horizontal, 12) // native toolbar side insets
-                    .frame(height: accessoryHeight, alignment: .center)
-                    .background(Color.midnightBlue)
-                    .contentShape(Rectangle())
-                }
-            }
-        }
         .tint(.white)
     }
 
@@ -583,23 +571,6 @@ struct HotWalletImportScreen: View {
         ))
     }
 
-    func onChangeEnteredWords(_: [[String]], _ new: [[String]]) {
-        // early exit if already set to true
-        if hasStartedTyping {
-            return
-        }
-
-        // check if user has started typing
-        for group in new {
-            for word in group {
-                if !word.isEmpty {
-                    hasStartedTyping = true
-                    return
-                }
-            }
-        }
-    }
-
     func setWords(_ words: [[String]]) {
         let numberOfWords = words.compactMap(\.count).reduce(0, +)
         switch numberOfWords {
@@ -622,6 +593,18 @@ struct HotWalletImportScreen: View {
         enteredWords = words
         sheetState = .none
         tabIndex = lastIndex
+    }
+}
+
+private struct KeyboardToolbarShapeModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26, *) {
+            content
+                .clipShape(Capsule())
+                .padding(.horizontal, 8)
+        } else {
+            content
+        }
     }
 }
 
