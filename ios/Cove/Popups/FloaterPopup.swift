@@ -29,7 +29,7 @@ struct FloaterPopup: TopPopup {
         config
             .tapOutsideToDismissPopup(true)
             .popupHorizontalPadding(30)
-            .overlayColor(.clear)
+            .overlayColor(.black.opacity(0.001))
             .backgroundColor(.clear)
     }
 }

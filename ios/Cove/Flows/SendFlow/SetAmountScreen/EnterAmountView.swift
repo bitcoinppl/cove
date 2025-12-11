@@ -207,7 +207,9 @@ struct EnterAmountView: View {
                     textColor: .white,
                     iconColor: .white,
                     icon: "exclamationmark.triangle"
-                ).present()
+                )
+                .dismissAfter(2)
+                .present()
             }
         }
         previouslyExceeded = newValue
