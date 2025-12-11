@@ -47,6 +47,7 @@ import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.QrCodeGenerator
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.ui.theme.coveColors
 import org.bitcoinppl.cove.ui.theme.isLight
 import org.bitcoinppl.cove.ui.theme.title3
 import org.bitcoinppl.cove_core.types.AddressInfoWithDerivation
@@ -288,7 +289,7 @@ private fun ReceiveAddressSheetContent(
                     .height(50.dp),
             colors =
                 ButtonDefaults.buttonColors(
-                    containerColor = CoveColor.midnightBlue,
+                    containerColor = MaterialTheme.coveColors.midnightBtn,
                     contentColor = Color.White,
                     disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
                     disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
