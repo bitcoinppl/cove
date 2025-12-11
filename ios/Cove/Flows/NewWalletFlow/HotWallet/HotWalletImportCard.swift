@@ -235,11 +235,26 @@ private struct AutocompleteField: View {
         .frame(maxWidth: .infinity)
     }
 
+    var isLastWord: Bool {
+        number == numberOfWords.toWordCount()
+    }
+
     func submitFocusField() {
         filteredSuggestions = []
 
         // only advance if word is valid, otherwise stay on current field
         let isValid = autocomplete.isValidWord(word: text, allWords: allEnteredWords)
+
+        // on last word, always dismiss keyboard so user can tap Import button
+        if isLastWord {
+            if !text.isEmpty, !isValid {
+                state = .invalid
+            } else if isValid {
+                state = .valid
+            }
+            focusField = nil
+            return
+        }
 
         if text.isEmpty {
             state = .typing
