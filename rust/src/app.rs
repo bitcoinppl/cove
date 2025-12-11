@@ -334,7 +334,9 @@ impl FfiApp {
             return "DEBUG".to_string();
         }
 
-        if crate::build::profile() == "release-smaller" {
+        if crate::build::profile() == "release-smaller"
+            || crate::build::profile() == "release-speed"
+        {
             return "".to_string();
         }
 
