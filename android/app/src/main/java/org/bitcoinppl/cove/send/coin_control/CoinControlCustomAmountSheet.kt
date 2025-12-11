@@ -1,8 +1,10 @@
 package org.bitcoinppl.cove.send.coin_control
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
@@ -14,7 +16,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -178,8 +179,7 @@ fun CoinControlCustomAmountSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = Color(0xFFF2F2F7),
-        dragHandle = null,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         modifier = modifier,
     ) {
         Column(
@@ -210,26 +210,38 @@ fun CoinControlCustomAmountSheet(
                     )
                 }
 
-                IconButton(onClick = onDismiss) {
+                Box(
+                    modifier =
+                        Modifier
+                            .size(32.dp)
+                            .background(
+                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
+                                CircleShape,
+                            ).clickable { onDismiss() },
+                    contentAlignment = Alignment.Center,
+                ) {
                     Icon(
                         imageVector = Icons.Default.Close,
                         contentDescription = "Close",
                         tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
-                        modifier = Modifier.size(20.dp),
+                        modifier = Modifier.size(16.dp),
                     )
                 }
             }
 
-            Spacer(Modifier.height(16.dp))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(24.dp))
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme.outlineVariant,
+                thickness = 1.dp,
+            )
+            Spacer(Modifier.height(24.dp))
 
             // UTXO List
             Column(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 200.dp)
+                        .weight(1f, fill = false)
                         .verticalScroll(rememberScrollState()),
             ) {
                 utxos.forEachIndexed { index, utxo ->
@@ -244,11 +256,7 @@ fun CoinControlCustomAmountSheet(
 
             // Amount setter section
             Column(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .background(Color.White, RoundedCornerShape(12.dp))
-                        .padding(16.dp),
+                modifier = Modifier.fillMaxWidth(),
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -367,7 +375,7 @@ private fun UtxoDetailRow(
             Spacer(Modifier.height(4.dp))
             Text(
                 text = utxo.address.string(),
-                color = Color(0xFF8E8E93),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 12.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -383,7 +391,7 @@ private fun UtxoDetailRow(
             Spacer(Modifier.height(4.dp))
             Text(
                 utxo.displayDate,
-                color = Color(0xFF8E8E93),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 12.sp,
             )
         }
