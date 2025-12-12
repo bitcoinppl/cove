@@ -7610,7 +7610,7 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
     
     func newCoinControlManager() async  -> RustCoinControlManager
     
-    func newSendFlowManager()  -> RustSendFlowManager
+    func newSendFlowManager(balance: Balance)  -> RustSendFlowManager
     
     /**
      * Get the next address for the wallet
@@ -8119,10 +8119,11 @@ open func newCoinControlManager()async  -> RustCoinControlManager  {
         )
 }
     
-open func newSendFlowManager() -> RustSendFlowManager  {
+open func newSendFlowManager(balance: Balance) -> RustSendFlowManager  {
     return try!  FfiConverterTypeRustSendFlowManager_lift(try! rustCall() {
     uniffi_cove_fn_method_rustwalletmanager_new_send_flow_manager(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),
+        FfiConverterTypeBalance_lower(balance),$0
     )
 })
 }
@@ -28785,7 +28786,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustwalletmanager_new_coin_control_manager() != 11951) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustwalletmanager_new_send_flow_manager() != 59611) {
+    if (uniffi_cove_checksum_method_rustwalletmanager_new_send_flow_manager() != 21514) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_next_address() != 38399) {

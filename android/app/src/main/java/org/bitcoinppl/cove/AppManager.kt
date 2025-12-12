@@ -155,7 +155,7 @@ class AppManager private constructor() : FfiReconcile {
         }
 
         Log.d(tag, "did not find SendFlowManager for ${wm.id}, creating new")
-        val manager = SendFlowManager(wm.rust.newSendFlowManager(), presenter)
+        val manager = SendFlowManager(wm.rust.newSendFlowManager(wm.balance), presenter)
         sendFlowManager = manager
         return manager
     }

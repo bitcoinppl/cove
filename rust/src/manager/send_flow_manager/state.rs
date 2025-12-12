@@ -101,8 +101,8 @@ impl CoinControlMode {
 
 /// MARK: State
 impl State {
-    pub fn new(metadata: WalletMetadata) -> Self {
-        Self(Arc::new(Mutex::new(SendFlowManagerState::new(metadata))))
+    pub fn new(metadata: WalletMetadata, balance: Arc<Balance>) -> Self {
+        Self(Arc::new(Mutex::new(SendFlowManagerState::new(metadata, balance))))
     }
 
     pub fn into_inner(self) -> Arc<Mutex<SendFlowManagerState>> {
@@ -116,7 +116,7 @@ impl State {
 
 /// MARK: SendFlowManagerState
 impl SendFlowManagerState {
-    pub fn new(metadata: WalletMetadata) -> Self {
+    pub fn new(metadata: WalletMetadata, balance: Arc<Balance>) -> Self {
         let selected_fiat_currency =
             Database::global().global_config.fiat_currency().unwrap_or_default();
 
@@ -136,7 +136,7 @@ impl SendFlowManagerState {
             focus_field: None,
             address: None,
             selected_fee_rate: None,
-            wallet_balance: None,
+            wallet_balance: Some(balance),
             fee_rate_options: None,
             btc_price_in_fiat,
             selected_fiat_currency,

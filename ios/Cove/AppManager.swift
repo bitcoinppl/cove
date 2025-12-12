@@ -99,7 +99,7 @@ private let walletModeChangeDelayMs = 250
             return manager
         }
 
-        let sendFlowManager = SendFlowManager(wm.rust.newSendFlowManager(), presenter: presenter)
+        let sendFlowManager = SendFlowManager(wm.rust.newSendFlowManager(balance: wm.balance), presenter: presenter)
         logger.debug("did not find SendFlowManager for \(id), creating new")
 
         self.sendFlowManager = sendFlowManager

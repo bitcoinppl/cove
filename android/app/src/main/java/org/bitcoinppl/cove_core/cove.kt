@@ -2392,7 +2392,7 @@ external fun uniffi_cove_fn_method_rustwalletmanager_master_fingerprint(`ptr`: L
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_rustwalletmanager_new_coin_control_manager(`ptr`: Long,
 ): Long
-external fun uniffi_cove_fn_method_rustwalletmanager_new_send_flow_manager(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_method_rustwalletmanager_new_send_flow_manager(`ptr`: Long,`balance`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
 external fun uniffi_cove_fn_method_rustwalletmanager_next_address(`ptr`: Long,
 ): Long
@@ -3837,7 +3837,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_new_coin_control_manager() != 11951.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_new_send_flow_manager() != 59611.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_new_send_flow_manager() != 21514.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_next_address() != 38399.toShort()) {
@@ -17966,7 +17966,7 @@ public interface RustWalletManagerInterface {
     
     suspend fun `newCoinControlManager`(): RustCoinControlManager
     
-    fun `newSendFlowManager`(): RustSendFlowManager
+    fun `newSendFlowManager`(`balance`: Balance): RustSendFlowManager
     
     /**
      * Get the next address for the wallet
@@ -18602,13 +18602,13 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     )
     }
 
-    override fun `newSendFlowManager`(): RustSendFlowManager {
+    override fun `newSendFlowManager`(`balance`: Balance): RustSendFlowManager {
             return FfiConverterTypeRustSendFlowManager.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustwalletmanager_new_send_flow_manager(
         it,
-        _status)
+        FfiConverterTypeBalance.lower(`balance`),_status)
 }
     }
     )
