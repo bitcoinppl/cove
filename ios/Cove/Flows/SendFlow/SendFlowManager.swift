@@ -188,7 +188,7 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             logger.debug("reconcile_messages: \(messages)")
-            messages.forEach { apply($0) }
+            messages.forEach { self.apply($0) }
         }
     }
 
