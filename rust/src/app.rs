@@ -547,12 +547,8 @@ impl FfiApp {
 
         // get / update fees
         crate::task::spawn(async move {
-            crate::fee_client::init_fees().await;
-
-            let fees = FEE_CLIENT.fetch_and_get_fees().await;
-            if let Ok(fees) = fees {
-                Updater::send_update(AppMessage::FeesChanged(fees));
-            }
+            // init fees from database cache or network and update the UI
+            crate::fee_client::init_and_update_fees().await;
         });
     }
 }
