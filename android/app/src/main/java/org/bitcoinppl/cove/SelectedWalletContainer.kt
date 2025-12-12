@@ -1,7 +1,5 @@
 package org.bitcoinppl.cove
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -12,20 +10,22 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.components.FullPageLoadingView
-import org.bitcoinppl.cove.nfc.NfcLabelImportSheet
-import org.bitcoinppl.cove.wallet_transactions.ReceiveAddressSheet
-import org.bitcoinppl.cove.wallet_transactions.WalletMoreOptionsSheet
+import org.bitcoinppl.cove.wallet.WalletExportState
+import org.bitcoinppl.cove.wallet.WalletSheetsHost
+import org.bitcoinppl.cove.wallet.rememberWalletExportLaunchers
 import org.bitcoinppl.cove.wallet_transactions.WalletTransactionsScreen
-import org.bitcoinppl.cove_core.*
-import org.bitcoinppl.cove_core.types.*
+import org.bitcoinppl.cove_core.Database
+import org.bitcoinppl.cove_core.Route
+import org.bitcoinppl.cove_core.RouteFactory
+import org.bitcoinppl.cove_core.SendRoute
+import org.bitcoinppl.cove_core.WalletLoadState
+import org.bitcoinppl.cove_core.WalletManagerAction
+import org.bitcoinppl.cove_core.types.WalletId
 
 // delay to allow UI to settle before updating balance
 private const val BALANCE_UPDATE_DELAY_MS = 500L
@@ -33,22 +33,9 @@ private const val BALANCE_UPDATE_DELAY_MS = 500L
 // delay before starting wallet scan to allow initial load to complete
 private const val WALLET_SCAN_DELAY_MS = 400L
 
-// delay before showing export loading alert
-private const val EXPORT_LOADING_ALERT_DELAY_MS = 500L
-
-// delay before showing file picker after dismissing alert
-private const val ALERT_DISMISS_DELAY_MS = 500L
-
-// export type for tracking what is being exported
-sealed class ExportType {
-    data object Labels : ExportType()
-
-    data object Transactions : ExportType()
-}
-
 /**
- * selected wallet container - manages WalletManager lifecycle
- * ported from iOS SelectedWalletContainer.swift
+ * Selected wallet container - manages WalletManager lifecycle
+ * Ported from iOS SelectedWalletContainer.swift
  */
 @Composable
 fun SelectedWalletContainer(
@@ -141,161 +128,29 @@ fun SelectedWalletContainer(
     var showMoreOptions by remember { mutableStateOf(false) }
     var showReceiveSheet by remember { mutableStateOf(false) }
     var showNfcScanner by remember { mutableStateOf(false) }
-    var exportType by remember { mutableStateOf<ExportType?>(null) }
-    var isExporting by remember { mutableStateOf(false) }
-    var isImporting by remember { mutableStateOf(false) }
+    val exportState = remember { WalletExportState() }
 
-    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
     // cleanup on dispose - clear alert state if export is in progress
     DisposableEffect(Unit) {
         onDispose {
-            if (isExporting && app.alertState != null) {
+            if (exportState.isExporting && app.alertState != null) {
                 app.alertState = null
             }
         }
     }
 
-    // file import launcher (for labels) - accepts plain text and JSON files
-    val importLabelLauncher =
-        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-            uri?.let {
-                scope.launch {
-                    isImporting = true
-                    try {
-                        val fileContents =
-                            withContext(Dispatchers.IO) {
-                                context.contentResolver.openInputStream(uri)?.use { input ->
-                                    input.bufferedReader().use { it.readText() }
-                                }
-                            } ?: throw Exception("Unable to read file")
-
-                        // validate import was successful before showing success message
-                        val labelManager =
-                            manager?.rust?.labelManager()
-                                ?: throw Exception("Label manager not available")
-
-                        labelManager.import(fileContents.trim())
-
-                        // refresh transactions with updated labels
-                        try {
-                            manager?.rust?.getTransactions()
-                        } catch (refreshError: Exception) {
-                            android.util.Log.e(tag, "failed to refresh transactions after label import", refreshError)
-                            snackbarHostState.showSnackbar("Labels imported successfully, but transaction list may need manual refresh")
-                            return@launch
-                        }
-
-                        snackbarHostState.showSnackbar("Labels imported successfully")
-                    } catch (e: Exception) {
-                        android.util.Log.e(tag, "error importing labels", e)
-                        snackbarHostState.showSnackbar("Unable to import labels: ${e.localizedMessage ?: e.message}")
-                    } finally {
-                        isImporting = false
-                    }
-                }
-            }
-        }
-
-    // file export launcher (for labels and transactions)
-    val exportFileLauncher =
-        rememberLauncherForActivityResult(
-            ActivityResultContracts.CreateDocument("text/plain"),
-        ) { uri ->
-            uri?.let {
-                scope.launch {
-                    isExporting = true
-                    val currentExportType = exportType
-                    var showedLoadingAlert = false
-
-                    try {
-                        // show loading alert for transaction exports after a delay
-                        val alertJob =
-                            scope.launch {
-                                delay(EXPORT_LOADING_ALERT_DELAY_MS)
-                                if (isExporting && currentExportType is ExportType.Transactions) {
-                                    app.alertState =
-                                        TaggedItem(
-                                            AppAlertState.General(
-                                                title = "Exporting, please wait...",
-                                                message = "Creating a transaction export file. If this is the first time it might take a while",
-                                            ),
-                                        )
-                                    showedLoadingAlert = true
-                                }
-                            }
-
-                        val content =
-                            when (currentExportType) {
-                                is ExportType.Transactions -> {
-                                    withContext(Dispatchers.IO) {
-                                        manager?.rust?.createTransactionsWithFiatExport()
-                                    }
-                                }
-                                is ExportType.Labels -> {
-                                    withContext(Dispatchers.IO) {
-                                        manager?.rust?.labelManager()?.export()
-                                    }
-                                }
-                                null -> null
-                            }
-
-                        // cancel and clear loading alert if shown
-                        alertJob.cancel()
-                        if (showedLoadingAlert) {
-                            app.alertState = null
-                            delay(ALERT_DISMISS_DELAY_MS)
-                        }
-
-                        content?.let { data ->
-                            withContext(Dispatchers.IO) {
-                                context.contentResolver.openOutputStream(uri)?.use { output ->
-                                    output.bufferedWriter().use { it.write(data) }
-                                }
-                            }
-
-                            val message =
-                                when (currentExportType) {
-                                    is ExportType.Transactions -> "Transactions exported successfully"
-                                    is ExportType.Labels -> "Labels exported successfully"
-                                    null -> "Export completed"
-                                }
-                            snackbarHostState.showSnackbar(message)
-                        } ?: run {
-                            val errorType =
-                                when (currentExportType) {
-                                    is ExportType.Transactions -> "transactions"
-                                    is ExportType.Labels -> "labels"
-                                    null -> "export"
-                                }
-                            snackbarHostState.showSnackbar("Unable to generate $errorType export data")
-                        }
-                    } catch (e: Exception) {
-                        android.util.Log.e(tag, "error exporting file", e)
-                        // clear any loading alert on error
-                        if (showedLoadingAlert) {
-                            app.alertState = null
-                        }
-
-                        val errorType =
-                            when (currentExportType) {
-                                is ExportType.Transactions -> "transactions"
-                                is ExportType.Labels -> "labels"
-                                null -> "export"
-                            }
-                        snackbarHostState.showSnackbar("Unable to export $errorType: ${e.localizedMessage ?: e.message}")
-                    } finally {
-                        isExporting = false
-                        exportType = null
-                    }
-                }
-            } ?: run {
-                // reset state if user cancelled the document picker
-                exportType = null
-            }
-        }
+    // setup export launchers
+    val exportLaunchers =
+        rememberWalletExportLaunchers(
+            app = app,
+            manager = manager,
+            snackbarHostState = snackbarHostState,
+            exportState = exportState,
+            tag = tag,
+        )
 
     // render
     when (val wm = manager) {
@@ -340,86 +195,20 @@ fun SelectedWalletContainer(
                 snackbarHostState = snackbarHostState,
             )
 
-            // show more options bottom sheet
-            if (showMoreOptions) {
-                WalletMoreOptionsSheet(
-                    app = app,
-                    manager = wm,
-                    onDismiss = { showMoreOptions = false },
-                    onScanNfc = {
-                        showMoreOptions = false
-                        showNfcScanner = true
-                    },
-                    onImportLabels = {
-                        showMoreOptions = false
-                        importLabelLauncher.launch(arrayOf("text/plain", "application/json", "application/x-jsonlines"))
-                    },
-                    onExportLabels = {
-                        showMoreOptions = false
-                        exportType = ExportType.Labels
-                        val metadata = wm.walletMetadata
-                        val fileName = wm.rust.labelManager().exportDefaultFileName(metadata?.name ?: "wallet")
-                        exportFileLauncher.launch(fileName)
-                    },
-                    onExportTransactions = {
-                        showMoreOptions = false
-                        exportType = ExportType.Transactions
-                        val metadata = wm.walletMetadata
-                        val fileName = "${metadata?.name?.lowercase() ?: "wallet"}_transactions.csv"
-                        exportFileLauncher.launch(fileName)
-                    },
-                )
-            }
-
-            // show NFC label import sheet
-            if (showNfcScanner) {
-                val labelManager =
-                    try {
-                        wm.rust.labelManager()
-                    } catch (e: Exception) {
-                        android.util.Log.e(tag, "Failed to get label manager", e)
-                        showNfcScanner = false
-                        scope.launch {
-                            snackbarHostState.showSnackbar("Unable to access label manager")
-                        }
-                        null
-                    }
-
-                labelManager?.let {
-                    NfcLabelImportSheet(
-                        labelManager = it,
-                        onDismiss = { showNfcScanner = false },
-                        onSuccess = {
-                            showNfcScanner = false
-                            scope.launch {
-                                // refresh transactions with updated labels
-                                try {
-                                    wm.rust.getTransactions()
-                                    snackbarHostState.showSnackbar("Labels imported successfully")
-                                } catch (e: Exception) {
-                                    android.util.Log.e(tag, "Failed to refresh transactions after NFC label import", e)
-                                    snackbarHostState.showSnackbar("Labels imported, but failed to refresh transactions")
-                                }
-                            }
-                        },
-                        onError = { errorMsg ->
-                            showNfcScanner = false
-                            scope.launch {
-                                snackbarHostState.showSnackbar("Failed to import labels: $errorMsg")
-                            }
-                        },
-                    )
-                }
-            }
-
-            // show receive address sheet
-            if (showReceiveSheet) {
-                ReceiveAddressSheet(
-                    manager = wm,
-                    snackbarHostState = snackbarHostState,
-                    onDismiss = { showReceiveSheet = false },
-                )
-            }
+            WalletSheetsHost(
+                app = app,
+                manager = wm,
+                snackbarHostState = snackbarHostState,
+                showMoreOptions = showMoreOptions,
+                showReceiveSheet = showReceiveSheet,
+                showNfcScanner = showNfcScanner,
+                exportLaunchers = exportLaunchers,
+                onDismissMoreOptions = { showMoreOptions = false },
+                onDismissReceiveSheet = { showReceiveSheet = false },
+                onDismissNfcScanner = { showNfcScanner = false },
+                onShowNfcScanner = { showNfcScanner = true },
+                tag = tag,
+            )
         }
     }
 }
