@@ -14,7 +14,7 @@ use std::sync::{
 use cove_util::result_ext::ResultExt as _;
 
 use crate::{
-    app::{App, AppAction, FfiApp},
+    app::{App, AppAction},
     fee_client::FEE_CLIENT,
     fiat::client::PriceResponse,
     router::RouteFactory,
@@ -48,6 +48,7 @@ use state::{CoinControlMode, EnterMode, SendFlowManagerState, State};
 use tracing::{debug, error, trace, warn};
 
 use super::{
+    deferred_dispatch::DeferredDispatch,
     deferred_sender::{self, MessageSender},
     wallet_manager::{RustWalletManager, actor::WalletActor},
 };
@@ -1591,7 +1592,8 @@ impl RustSendFlowManager {
                 }
             };
 
-            FfiApp::global().dispatch(AppAction::PushRoute(next_route));
+            let mut deferred = DeferredDispatch::<AppAction>::new();
+            deferred.queue(AppAction::PushRoute(next_route));
         });
     }
 }
