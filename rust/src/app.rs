@@ -16,6 +16,7 @@ use crate::{
         client::{FIAT_CLIENT, PriceResponse},
     },
     keychain::Keychain,
+    manager::deferred_dispatch::{DeferredDispatch, Dispatchable},
     network::Network,
     node::Node,
     router::{LOAD_AND_RESET_DELAY_MS, Route, RouteFactory, Router},
@@ -261,12 +262,11 @@ impl FfiApp {
         id: WalletId,
         next_route: Option<Route>,
     ) -> Result<(), DatabaseError> {
-        // set the selected wallet
-        Database::global().global_config.select_wallet(id.clone())?;
+        let mut deferred = DeferredDispatch::<AppAction>::new();
+        deferred.queue(AppAction::UpdateFees);
+        deferred.queue(AppAction::UpdateFiatPrices);
 
-        // trigger fee and price refresh in background (30-sec throttle protects against excessive requests)
-        self.dispatch(AppAction::UpdateFees);
-        self.dispatch(AppAction::UpdateFiatPrices);
+        Database::global().global_config.select_wallet(id.clone())?;
 
         // update the router
         if let Some(next_route) = next_route {
@@ -511,7 +511,8 @@ impl FfiApp {
     }
 
     /// Frontend calls this method to send events to the rust application logic
-    pub fn dispatch(&self, action: AppAction) {
+    #[uniffi::method(name = "dispatch")]
+    fn ffi_dispatch(&self, action: AppAction) {
         self.inner().handle_action(action);
     }
 
@@ -589,6 +590,15 @@ fn set_env() {
     {
         if std::env::var("RUST_LOG").is_err() {
             unsafe { std::env::set_var("RUST_LOG", "cove=info") }
+        }
+    }
+}
+
+impl Dispatchable for AppAction {
+    fn flush(actions: Vec<Self>) {
+        let app = App::global();
+        for action in actions {
+            app.handle_action(action);
         }
     }
 }
