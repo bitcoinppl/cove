@@ -22,6 +22,7 @@ use crate::{
     transaction::FeeRate,
     wallet::{
         Address,
+        balance::Balance,
         metadata::{FiatOrBtc, WalletMetadata, WalletType},
     },
 };
@@ -156,9 +157,13 @@ pub enum SendFlowManagerAction {
 }
 
 impl RustSendFlowManager {
-    pub fn new(metadata: WalletMetadata, wallet_manager: Arc<RustWalletManager>) -> Arc<Self> {
+    pub fn new(
+        metadata: WalletMetadata,
+        balance: Arc<Balance>,
+        wallet_manager: Arc<RustWalletManager>,
+    ) -> Arc<Self> {
         let (sender, receiver) = flume::bounded(50);
-        let state = State::new(metadata);
+        let state = State::new(metadata, balance);
         let message_sender = MessageSender::new(sender);
 
         // immediately populate cached values if available
@@ -306,9 +311,9 @@ impl RustSendFlowManager {
             .state
             .lock()
             .wallet_balance
-            .clone()
+            .as_ref()
             .map(|b| b.trusted_spendable().to_sat())
-            .unwrap_or(0);
+            .unwrap_or(u64::MAX);
 
         amount > spendable
     }
