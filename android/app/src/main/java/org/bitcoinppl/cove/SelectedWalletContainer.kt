@@ -110,9 +110,10 @@ fun SelectedWalletContainer(
     }
 
     // cleanup on disappear
-    DisposableEffect(Unit) {
+    DisposableEffect(id) {
         onDispose {
             manager?.dispatch(WalletManagerAction.SelectedWalletDisappeared)
+            manager?.close()
         }
     }
 

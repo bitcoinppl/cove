@@ -38,6 +38,9 @@ class TapSignerManager(
             return nfc!!
         }
 
+        // clean up old NFC helper before replacing
+        nfc?.close()
+
         val newNfc = TapSignerNfcHelper(tapSigner)
         nfc = newNfc
         nfcFor = tapSigner
@@ -84,5 +87,11 @@ class TapSignerManager(
         initialRoute = to
         id = UUID.randomUUID()
         enteredPin = null
+    }
+
+    fun close() {
+        nfc?.close()
+        nfc = null
+        nfcFor = null
     }
 }

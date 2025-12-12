@@ -168,7 +168,9 @@ class AuthManager private constructor() : AuthManagerReconciler {
                 App.rust.dangerousWipeAllData()
 
                 // reset auth manager
+                val oldRust = rust
                 rust = RustAuthManager()
+                oldRust.close()
                 unlock()
 
                 type = AuthType.NONE

@@ -136,10 +136,12 @@ class SendFlowManager(
     /**
      * validate entire send flow
      */
-    fun validate(displayAlert: Boolean = false): Boolean =
-        validateAmount(displayAlert) &&
+    fun validate(displayAlert: Boolean = false): Boolean {
+        if (isClosed.get()) return false
+        return validateAmount(displayAlert) &&
             validateAddress(displayAlert) &&
             validateFeePercentage(displayAlert)
+    }
 
     fun validateAddress(displayAlert: Boolean = false): Boolean = rust.validateAddress(displayAlert)
 
@@ -148,6 +150,7 @@ class SendFlowManager(
     fun validateFeePercentage(displayAlert: Boolean = false): Boolean = rust.validateFeePercentage(displayAlert)
 
     fun updateAddress(address: Address) {
+        if (isClosed.get()) return
         _enteringAddress = address.string()
         this.address = address
         dispatch(SendFlowManagerAction.NotifyAddressChanged(address))
@@ -261,6 +264,7 @@ class SendFlowManager(
     }
 
     fun dispatch(action: SendFlowManagerAction) {
+        if (isClosed.get()) return
         logDebug("dispatch: $action")
         mainScope.launch(Dispatchers.IO) { rust.dispatch(action) }
     }
@@ -292,6 +296,7 @@ class SendFlowManager(
         if (!isClosed.compareAndSet(false, true)) return
         logDebug("Closing SendFlowManager for $id")
         debouncedTask?.cancel()
+        debouncedTask = null
         mainScope.cancel()
         rust.close()
     }

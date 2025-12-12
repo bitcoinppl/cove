@@ -18,6 +18,10 @@ private const val AUTO_UNLOCK_THRESHOLD_ALL_AUTH = 1L
 private const val AUTO_UNLOCK_THRESHOLD_PIN_ONLY = 2L
 
 class CoveApplication : Application() {
+    // hold references to FFI objects for proper cleanup
+    private var keychain: Keychain? = null
+    private var device: Device? = null
+
     override fun onCreate() {
         super.onCreate()
 
@@ -35,8 +39,8 @@ class CoveApplication : Application() {
 
         // initialize keychain and device before any FFI calls that might use them
         try {
-            Keychain(KeychainAccessor(this))
-            Device(DeviceAccessor())
+            keychain = Keychain(KeychainAccessor(this))
+            device = Device(DeviceAccessor())
             Log.d(TAG, "Keychain and device initialized")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize keychain and device", e)
@@ -59,6 +63,45 @@ class CoveApplication : Application() {
     override fun onLowMemory() {
         super.onLowMemory()
         Log.d(TAG, "onLowMemory called, cleaning up FFI objects")
+        cleanupFfiObjects()
+    }
+
+    private fun cleanupFfiObjects() {
+        try {
+            // close FFI objects in reverse order of creation
+            device?.close()
+            device = null
+            Log.d(TAG, "Device FFI object closed")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error closing Device FFI object", e)
+        }
+
+        try {
+            keychain?.close()
+            keychain = null
+            Log.d(TAG, "Keychain FFI object closed")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error closing Keychain FFI object", e)
+        }
+
+        // close AppManager and AuthManager FFI objects
+        try {
+            AppManager.getInstance().rust.close()
+            Log.d(TAG, "AppManager FFI object closed")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error closing AppManager FFI object", e)
+        }
+
+        try {
+            AuthManager.getInstance().rust.close()
+            Log.d(TAG, "AuthManager FFI object closed")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error closing AuthManager FFI object", e)
+        }
+    }
+
+    override fun onTerminate() {
+        super.onTerminate()
         cleanupFfiObjects()
     }
 

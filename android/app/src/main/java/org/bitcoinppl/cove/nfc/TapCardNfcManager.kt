@@ -108,6 +108,7 @@ class TapCardNfcManager private constructor() {
                 val job =
                     CoroutineScope(Dispatchers.IO).launch {
                         var isoDep: IsoDep? = null
+                        var reader: TapSignerReader? = null
                         try {
                             // wait for tag with timeout
                             val detectedTag =
@@ -134,7 +135,7 @@ class TapCardNfcManager private constructor() {
 
                             // create TapSignerReader using factory function (workaround for UniFFI async constructor limitation)
                             Log.d(tag, "Creating TapSignerReader with command using factory function")
-                            val reader = createTapSignerReader(transport, cmd)
+                            reader = createTapSignerReader(transport, cmd)
 
                             // run the reader and get response
                             Log.d(tag, "Running TapSignerReader")
@@ -178,6 +179,7 @@ class TapCardNfcManager private constructor() {
                                     }
                                 }
                             }
+                            reader?.close()
                         }
                     }
 

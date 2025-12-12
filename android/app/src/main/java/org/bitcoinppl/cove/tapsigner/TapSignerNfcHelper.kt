@@ -78,6 +78,11 @@ class TapSignerNfcHelper(
 
     fun lastResponse(): TapSignerResponse? = lastResponse
 
+    fun close() {
+        lastResponse?.destroy()
+        lastResponse = null
+    }
+
     private suspend fun <T> performTapSignerCmd(
         cmd: TapSignerCmd,
         successResult: (TapSignerResponse?) -> T?,
@@ -85,6 +90,8 @@ class TapSignerNfcHelper(
         try {
             val (result, response) = nfcManager.performTapSignerCmd(cmd, successResult)
             // store last response for retry scenarios (matches iOS behavior)
+            // clean up previous response before storing new one
+            lastResponse?.destroy()
             lastResponse = response
             return result
         } catch (e: Exception) {

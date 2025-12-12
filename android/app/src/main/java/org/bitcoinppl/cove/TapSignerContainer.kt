@@ -3,6 +3,7 @@ package org.bitcoinppl.cove
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import org.bitcoinppl.cove.tapsigner.*
@@ -20,6 +21,13 @@ fun TapSignerContainer(
 ) {
     val app = App
     val manager = remember(route) { TapSignerManager(route) }
+
+    // cleanup on disappear
+    DisposableEffect(route) {
+        onDispose {
+            manager.close()
+        }
+    }
 
     // use current route or last in path
     val currentRoute = manager.path.lastOrNull() ?: manager.initialRoute

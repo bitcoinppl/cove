@@ -336,7 +336,7 @@ class AppManager private constructor() : FfiReconcile {
 
                     // import the labels
                     try {
-                        LabelManager(id = selectedWallet).importLabels(multiFormat.v1)
+                        LabelManager(id = selectedWallet).use { it.importLabels(multiFormat.v1) }
                         alertState = TaggedItem(AppAlertState.ImportedLabelsSuccessfully)
 
                         // when labels are imported, refresh transactions with updated labels
