@@ -105,40 +105,6 @@ class CoveApplication : Application() {
         cleanupFfiObjects()
     }
 
-    private fun cleanupFfiObjects() {
-        try {
-            // close FFI objects in reverse order of creation
-            device?.close()
-            device = null
-            Log.d(TAG, "Device FFI object closed")
-        } catch (e: Exception) {
-            Log.e(TAG, "Error closing Device FFI object", e)
-        }
-
-        try {
-            keychain?.close()
-            keychain = null
-            Log.d(TAG, "Keychain FFI object closed")
-        } catch (e: Exception) {
-            Log.e(TAG, "Error closing Keychain FFI object", e)
-        }
-
-        // close AppManager and AuthManager FFI objects
-        try {
-            AppManager.getInstance().rust.close()
-            Log.d(TAG, "AppManager FFI object closed")
-        } catch (e: Exception) {
-            Log.e(TAG, "Error closing AppManager FFI object", e)
-        }
-
-        try {
-            AuthManager.getInstance().rust.close()
-            Log.d(TAG, "AuthManager FFI object closed")
-        } catch (e: Exception) {
-            Log.e(TAG, "Error closing AuthManager FFI object", e)
-        }
-    }
-
     private fun setupLifecycleObserver() {
         ProcessLifecycleOwner.get().lifecycle.addObserver(
             object : DefaultLifecycleObserver {
