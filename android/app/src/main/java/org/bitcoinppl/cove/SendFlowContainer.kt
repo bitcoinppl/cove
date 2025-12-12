@@ -219,6 +219,11 @@ private fun SendFlowRouteToScreen(
             }
 
             SendScreen(
+                app = app,
+                walletManager = walletManager,
+                sendFlowManager = sendFlowManager,
+                presenter = presenter,
+                snackbarHostState = snackbarHostState,
                 onBack = { app.popRoute() },
                 onNext = {
                     if (sendFlowManager.validate(displayAlert = true)) {
@@ -231,114 +236,6 @@ private fun SendFlowRouteToScreen(
                 onChangeSpeed = {
                     presenter.sheetState = TaggedItem(SendFlowPresenter.SheetState.Fee)
                 },
-                onClearAmount = {
-                    sendFlowManager.dispatch(SendFlowManagerAction.ClearSendAmount)
-                },
-                onMaxSelected = {
-                    sendFlowManager.dispatch(SendFlowManagerAction.SelectMaxSend)
-                },
-                onToggleBalanceVisibility = {
-                    walletManager.dispatch(WalletManagerAction.ToggleSensitiveVisibility)
-                },
-                onUnitChange = { unit ->
-                    val bitcoinUnit =
-                        when (unit.lowercase()) {
-                            "sats" -> org.bitcoinppl.cove_core.types.BitcoinUnit.SAT
-                            "btc" -> org.bitcoinppl.cove_core.types.BitcoinUnit.BTC
-                            else -> org.bitcoinppl.cove_core.types.BitcoinUnit.SAT
-                        }
-                    walletManager.dispatch(WalletManagerAction.UpdateUnit(bitcoinUnit))
-                },
-                onToggleFiatOrBtc = {
-                    walletManager.dispatch(WalletManagerAction.ToggleFiatOrBtc)
-                },
-                onSanitizeBtcAmount = { oldValue, newValue ->
-                    sendFlowManager.rust.sanitizeBtcEnteringAmount(oldValue, newValue)
-                },
-                onSanitizeFiatAmount = { oldValue, newValue ->
-                    sendFlowManager.rust.sanitizeFiatEnteringAmount(oldValue, newValue)
-                },
-                isFiatMode = walletManager.walletMetadata?.fiatOrBtc == FiatOrBtc.FIAT,
-                isBalanceHidden = !(walletManager.walletMetadata?.sensitiveVisible ?: true),
-                balanceAmount = walletManager.amountFmt(walletManager.balance.spendable()),
-                balanceDenomination = walletManager.unit,
-                amountText =
-                    when (walletManager.walletMetadata?.fiatOrBtc) {
-                        FiatOrBtc.BTC -> sendFlowManager.enteringBtcAmount
-                        FiatOrBtc.FIAT -> sendFlowManager.enteringFiatAmount
-                        else -> sendFlowManager.enteringBtcAmount
-                    },
-                amountDenomination =
-                    when (walletManager.walletMetadata?.fiatOrBtc) {
-                        FiatOrBtc.BTC -> walletManager.unit
-                        FiatOrBtc.FIAT -> "" // don't show denomination in fiat mode, it's part of the amount
-                        else -> walletManager.unit
-                    },
-                dollarEquivalentText =
-                    when (walletManager.walletMetadata?.fiatOrBtc) {
-                        FiatOrBtc.FIAT -> sendFlowManager.sendAmountBtc
-                        else -> sendFlowManager.sendAmountFiat
-                    },
-                secondaryUnit =
-                    when (walletManager.walletMetadata?.fiatOrBtc) {
-                        FiatOrBtc.FIAT -> walletManager.unit
-                        else -> ""
-                    },
-                initialAddress = sendFlowManager.enteringAddress,
-                accountShort =
-                    walletManager.walletMetadata
-                        ?.masterFingerprint
-                        ?.asUppercase()
-                        ?.take(8) ?: "",
-                feeEta =
-                    sendFlowManager.selectedFeeRate?.let {
-                        when (it.feeSpeed()) {
-                            is FeeSpeed.Slow -> "~1 hour"
-                            is FeeSpeed.Medium -> "~30 minutes"
-                            is FeeSpeed.Fast -> "~10 minutes"
-                            is FeeSpeed.Custom -> "Custom"
-                        }
-                    } ?: "~30 minutes",
-                feeAmount = sendFlowManager.totalFeeString,
-                totalSpendingCrypto = sendFlowManager.totalSpentInBtc,
-                totalSpendingFiat = sendFlowManager.totalSpentInFiat,
-                onAmountChanged = { newAmount ->
-                    when (walletManager.walletMetadata?.fiatOrBtc) {
-                        FiatOrBtc.BTC -> sendFlowManager.updateEnteringBtcAmount(newAmount)
-                        FiatOrBtc.FIAT -> sendFlowManager.updateEnteringFiatAmount(newAmount)
-                        else -> sendFlowManager.updateEnteringBtcAmount(newAmount)
-                    }
-                },
-                onAddressChanged = { newAddress ->
-                    sendFlowManager.enteringAddress = newAddress
-                },
-                onAmountFocusChanged = { focused ->
-                    presenter.focusField = if (focused) SetAmountFocusField.AMOUNT else null
-                },
-                onAddressFocusChanged = { focused ->
-                    presenter.focusField = if (focused) SetAmountFocusField.ADDRESS else null
-                },
-                onAmountDone = {
-                    // if address is invalid, focus address; otherwise dismiss
-                    presenter.focusField =
-                        if (!sendFlowManager.rust.validateAddress()) {
-                            SetAmountFocusField.ADDRESS
-                        } else {
-                            null
-                        }
-                },
-                onAddressDone = {
-                    // if amount is invalid, focus amount; otherwise dismiss
-                    presenter.focusField =
-                        if (!sendFlowManager.rust.validateAmount()) {
-                            SetAmountFocusField.AMOUNT
-                        } else {
-                            null
-                        }
-                },
-                focusField = presenter.focusField,
-                exceedsBalance = exceedsBalance,
-                snackbarHostState = snackbarHostState,
             )
 
             // handle sheets for SendScreen
@@ -506,9 +403,10 @@ private fun SendFlowRouteToScreen(
             SendConfirmationScreen(
                 app = app,
                 walletManager = walletManager,
+                sendFlowManager = sendFlowManager,
                 details = details,
-                onBack = { app.popRoute() },
                 sendState = sendState,
+                onBack = { app.popRoute() },
                 onSwipeToSend = {
                     sendState = SendState.Sending
                     scope.launch {
@@ -532,23 +430,6 @@ private fun SendFlowRouteToScreen(
                         }
                     }
                 },
-                onToggleBalanceVisibility = {
-                    walletManager.dispatch(WalletManagerAction.ToggleSensitiveVisibility)
-                },
-                isBalanceHidden = !(walletManager.walletMetadata?.sensitiveVisible ?: true),
-                balanceAmount = walletManager.amountFmt(walletManager.balance.spendable()),
-                balanceDenomination = walletManager.unit,
-                sendingAmount = walletManager.amountFmt(details.sendingAmount()),
-                sendingAmountDenomination = walletManager.unit,
-                dollarEquivalentText = sendFlowManager.sendAmountFiat,
-                accountShort =
-                    walletManager.walletMetadata
-                        ?.masterFingerprint
-                        ?.asUppercase()
-                        ?.take(8) ?: "",
-                networkFee = walletManager.amountFmtUnit(details.feeTotal()),
-                willReceive = walletManager.amountFmtUnit(details.sendingAmount()),
-                willPay = walletManager.amountFmtUnit(details.spendingAmount()),
             )
 
             // success alert dialog

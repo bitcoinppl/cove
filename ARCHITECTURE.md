@@ -122,6 +122,7 @@ This pattern is used throughout the codebase for shared resources and is safe to
 ### Android (Jetpack Compose)
 
 - Compose screens obtain managers via `remember { ImportWalletManager() }` or DI and interact with them the same way SwiftUI does. The generated bindings (`android/app/src/main/java/org/bitcoinppl/cove_core/cove.kt`) expose suspending functions and listener hooks.
+- **Manager injection**: When iOS uses `@Environment` to inject managers, Android should pass managers directly as composable parameters. Derive state from managers and dispatch actions through them—avoid wrapping in state holder data classes. This keeps Android code structurally close to iOS while remaining idiomatic Compose.
 - Each Kotlin manager implements the generated `FfiReconcile` interface and creates its own lifecycle-aware coroutine scope (`Dispatchers.Main` + `SupervisorJob`). In `init`, managers create their Rust counterpart, call `listenForUpdates(this)`, and implement `reconcile(...)` to update Compose state or emit side-effects.
 - Shared navigation mirrors the Rust router: `RouterManager` listens for `RouteUpdated` events from the core and reconciles Compose navigation stacks.
 

@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.SendFlowManager
 import org.bitcoinppl.cove.SendState
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.send.SendFlowAdvancedDetailsView
@@ -52,6 +53,7 @@ import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
 import org.bitcoinppl.cove.ui.theme.coveColors
 import org.bitcoinppl.cove.views.AutoSizeText
+import org.bitcoinppl.cove_core.WalletManagerAction
 import org.bitcoinppl.cove_core.types.ConfirmDetails
 
 private enum class SheetState {
@@ -67,31 +69,32 @@ private const val SWIPE_COMPLETE_THRESHOLD = 0.9f
 // Target text color (white) that text animates to during swipe gesture.
 private val SWIPE_BUTTON_TEXT_COLOR_TARGET = CoveColor.SwipeButtonText
 
-// Preview removed - requires app, walletManager, and details parameters
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SendConfirmationScreen(
     app: AppManager,
     walletManager: WalletManager,
+    sendFlowManager: SendFlowManager,
     details: ConfirmDetails,
+    sendState: SendState,
     onBack: () -> Unit,
     onSwipeToSend: () -> Unit,
-    sendState: SendState = SendState.Idle,
-    onToggleBalanceVisibility: () -> Unit = {},
-    isBalanceHidden: Boolean = false,
-    balanceAmount: String,
-    balanceDenomination: String,
-    sendingAmount: String,
-    sendingAmountDenomination: String,
-    dollarEquivalentText: String,
-    accountShort: String,
-    networkFee: String,
-    willReceive: String,
-    willPay: String,
 ) {
     var sheetState by remember { mutableStateOf<SheetState?>(null) }
     val address = details.sendingTo().spacedOut()
+
+    // derive state from managers (like iOS @Environment)
+    val metadata = walletManager.walletMetadata
+    val isBalanceHidden = !(metadata?.sensitiveVisible ?: true)
+    val balanceAmount = walletManager.amountFmt(walletManager.balance.spendable())
+    val balanceDenomination = walletManager.unit
+    val sendingAmount = walletManager.amountFmt(details.sendingAmount())
+    val sendingAmountDenomination = walletManager.unit
+    val dollarEquivalentText = sendFlowManager.sendAmountFiat
+    val accountShort = metadata?.masterFingerprint?.asUppercase()?.take(8) ?: ""
+    val networkFee = walletManager.amountFmtUnit(details.feeTotal())
+    val willReceive = walletManager.amountFmtUnit(details.sendingAmount())
+    val willPay = walletManager.amountFmtUnit(details.spendingAmount())
 
     // force white status bar icons for midnight blue background
     ForceLightStatusBarIcons()
@@ -137,7 +140,9 @@ fun SendConfirmationScreen(
                     amount = balanceAmount,
                     denomination = balanceDenomination,
                     isHidden = isBalanceHidden,
-                    onToggleVisibility = onToggleBalanceVisibility,
+                    onToggleVisibility = {
+                        walletManager.dispatch(WalletManagerAction.ToggleSensitiveVisibility)
+                    },
                 )
                 Column(
                     modifier =

@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,87 +50,41 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.SendFlowManager
+import org.bitcoinppl.cove.SendFlowPresenter
+import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
 import org.bitcoinppl.cove.ui.theme.coveColors
 import org.bitcoinppl.cove.views.AsyncText
 import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.AutoSizeTextField
-import org.bitcoinppl.cove.views.ImageButton
+import org.bitcoinppl.cove_core.FiatOrBtc
+import org.bitcoinppl.cove_core.SendFlowManagerAction
 import org.bitcoinppl.cove_core.SetAmountFocusField
+import org.bitcoinppl.cove_core.WalletManagerAction
+import org.bitcoinppl.cove_core.types.BitcoinUnit
+import org.bitcoinppl.cove_core.types.FeeSpeed
 import org.bitcoinppl.cove_core.types.addressStringSpacedOut
 
 private enum class SendFocusField { None, Amount, Address }
 
-@Preview()
-@Composable
-private fun SendScreenPreview() {
-    val snack = remember { SnackbarHostState() }
-    SendScreen(
-        onBack = {},
-        onNext = {},
-        onScanQr = {},
-        onChangeSpeed = {},
-        onToggleBalanceVisibility = {},
-        isBalanceHidden = false,
-        balanceAmount = "1,166,369",
-        balanceDenomination = "sats",
-        amountText = "25,555",
-        amountDenomination = "sats",
-        dollarEquivalentText = "$28.87",
-        initialAddress = "tb1qt 5alnv 8pm66 hv2zd cdzxr kyqfn wpuh8 9zrey kx",
-        accountShort = "560072A4",
-        feeEta = "30 minutes",
-        feeAmount = "451 sats",
-        totalSpendingCrypto = "26,006 sats",
-        totalSpendingFiat = "≈ $29.38",
-        onAmountChanged = {},
-        onAddressChanged = {},
-        snackbarHostState = snack,
-    )
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SendScreen(
+    app: AppManager,
+    walletManager: WalletManager,
+    sendFlowManager: SendFlowManager,
+    presenter: SendFlowPresenter,
+    snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
     onBack: () -> Unit,
     onNext: () -> Unit,
     onScanQr: () -> Unit,
     onChangeSpeed: () -> Unit,
-    onClearAmount: () -> Unit = {},
-    onMaxSelected: () -> Unit = {},
-    onToggleBalanceVisibility: () -> Unit = {},
-    onUnitChange: (String) -> Unit = {},
-    onToggleFiatOrBtc: () -> Unit = {},
-    onSanitizeBtcAmount: (oldValue: String, newValue: String) -> String? = { _, _ -> null },
-    onSanitizeFiatAmount: (oldValue: String, newValue: String) -> String? = { _, _ -> null },
-    isFiatMode: Boolean = false,
-    isBalanceHidden: Boolean = false,
-    balanceAmount: String,
-    balanceDenomination: String,
-    amountText: String,
-    amountDenomination: String,
-    dollarEquivalentText: String,
-    secondaryUnit: String = "",
-    initialAddress: String,
-    accountShort: String,
-    feeEta: String,
-    feeAmount: String?,
-    totalSpendingCrypto: String,
-    totalSpendingFiat: String,
-    onAmountChanged: (String) -> Unit,
-    onAddressChanged: (String) -> Unit,
-    onAmountFocusChanged: (Boolean) -> Unit = {},
-    onAddressFocusChanged: (Boolean) -> Unit = {},
-    onAmountDone: () -> Unit = {},
-    onAddressDone: () -> Unit = {},
-    focusField: SetAmountFocusField? = null,
-    exceedsBalance: Boolean = false,
-    snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
     var focusedField by remember { mutableStateOf(SendFocusField.None) }
     val focusManager = LocalFocusManager.current
@@ -137,11 +92,54 @@ fun SendScreen(
     val addressFocusRequester = remember { FocusRequester() }
     val amountFocusRequester = remember { FocusRequester() }
 
+    // derive state from managers (like iOS @Environment)
+    val metadata = walletManager.walletMetadata
+    val isFiatMode = metadata?.fiatOrBtc == FiatOrBtc.FIAT
+    val isBalanceHidden = !(metadata?.sensitiveVisible ?: true)
+    val balanceAmount = walletManager.amountFmt(walletManager.balance.spendable())
+    val balanceDenomination = walletManager.unit
+    val amountText =
+        when (metadata?.fiatOrBtc) {
+            FiatOrBtc.BTC -> sendFlowManager.enteringBtcAmount
+            FiatOrBtc.FIAT -> sendFlowManager.enteringFiatAmount
+            else -> sendFlowManager.enteringBtcAmount
+        }
+    val amountDenomination =
+        when (metadata?.fiatOrBtc) {
+            FiatOrBtc.BTC -> walletManager.unit
+            FiatOrBtc.FIAT -> ""
+            else -> walletManager.unit
+        }
+    val dollarEquivalentText =
+        when (metadata?.fiatOrBtc) {
+            FiatOrBtc.FIAT -> sendFlowManager.sendAmountBtc
+            else -> sendFlowManager.sendAmountFiat
+        }
+    val secondaryUnit =
+        when (metadata?.fiatOrBtc) {
+            FiatOrBtc.FIAT -> walletManager.unit
+            else -> ""
+        }
+    val initialAddress = sendFlowManager.enteringAddress
+    val accountShort = metadata?.masterFingerprint?.asUppercase()?.take(8) ?: ""
+    val feeEta =
+        sendFlowManager.selectedFeeRate?.let {
+            when (it.feeSpeed()) {
+                is FeeSpeed.Slow -> "~1 hour"
+                is FeeSpeed.Medium -> "~30 minutes"
+                is FeeSpeed.Fast -> "~10 minutes"
+                is FeeSpeed.Custom -> "Custom"
+            }
+        } ?: "~30 minutes"
+    val feeAmount = sendFlowManager.totalFeeString
+    val totalSpendingCrypto = sendFlowManager.totalSpentInBtc
+    val totalSpendingFiat = sendFlowManager.totalSpentInFiat
+    val exceedsBalance = sendFlowManager.rust.amountExceedsBalance()
+
     // bidirectional sync: observe presenter.focusField and update UI focus
-    androidx.compose.runtime.LaunchedEffect(focusField) {
-        when (focusField) {
+    LaunchedEffect(presenter.focusField) {
+        when (presenter.focusField) {
             SetAmountFocusField.AMOUNT -> {
-                // delay to allow sheet dismiss animation to complete
                 kotlinx.coroutines.delay(350)
                 amountFocusRequester.requestFocus()
                 keyboardController?.show()
@@ -204,7 +202,9 @@ fun SendScreen(
                     amount = balanceAmount,
                     denomination = balanceDenomination,
                     isHidden = isBalanceHidden,
-                    onToggleVisibility = onToggleBalanceVisibility,
+                    onToggleVisibility = {
+                        walletManager.dispatch(WalletManagerAction.ToggleSensitiveVisibility)
+                    },
                     height = headerHeight,
                 )
 
@@ -231,32 +231,70 @@ fun SendScreen(
                             denomination = amountDenomination,
                             dollarText = dollarEquivalentText,
                             secondaryUnit = secondaryUnit,
-                            onAmountChanged = onAmountChanged,
-                            onClearAmount = onClearAmount,
-                            onUnitChange = onUnitChange,
-                            onToggleFiatOrBtc = onToggleFiatOrBtc,
-                            onSanitizeBtcAmount = onSanitizeBtcAmount,
-                            onSanitizeFiatAmount = onSanitizeFiatAmount,
+                            onAmountChanged = { newAmount ->
+                                when (metadata?.fiatOrBtc) {
+                                    FiatOrBtc.BTC -> sendFlowManager.updateEnteringBtcAmount(newAmount)
+                                    FiatOrBtc.FIAT -> sendFlowManager.updateEnteringFiatAmount(newAmount)
+                                    else -> sendFlowManager.updateEnteringBtcAmount(newAmount)
+                                }
+                            },
+                            onClearAmount = {
+                                sendFlowManager.dispatch(SendFlowManagerAction.ClearSendAmount)
+                            },
+                            onUnitChange = { unit ->
+                                val bitcoinUnit =
+                                    when (unit.lowercase()) {
+                                        "sats" -> BitcoinUnit.SAT
+                                        "btc" -> BitcoinUnit.BTC
+                                        else -> BitcoinUnit.SAT
+                                    }
+                                walletManager.dispatch(WalletManagerAction.UpdateUnit(bitcoinUnit))
+                            },
+                            onToggleFiatOrBtc = {
+                                walletManager.dispatch(WalletManagerAction.ToggleFiatOrBtc)
+                            },
+                            onSanitizeBtcAmount = { oldValue, newValue ->
+                                sendFlowManager.rust.sanitizeBtcEnteringAmount(oldValue, newValue)
+                            },
+                            onSanitizeFiatAmount = { oldValue, newValue ->
+                                sendFlowManager.rust.sanitizeFiatEnteringAmount(oldValue, newValue)
+                            },
                             isFiatMode = isFiatMode,
                             exceedsBalance = exceedsBalance,
                             focusRequester = amountFocusRequester,
                             onFocusChanged = { focused ->
                                 focusedField = if (focused) SendFocusField.Amount else SendFocusField.None
-                                onAmountFocusChanged(focused)
+                                presenter.focusField = if (focused) SetAmountFocusField.AMOUNT else null
                             },
-                            onDone = onAmountDone,
+                            onDone = {
+                                presenter.focusField =
+                                    if (!sendFlowManager.rust.validateAddress()) {
+                                        SetAmountFocusField.ADDRESS
+                                    } else {
+                                        null
+                                    }
+                            },
                         )
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
                         AddressWidget(
                             onScanQr = onScanQr,
                             initialAddress = initialAddress,
-                            onAddressChanged = onAddressChanged,
+                            onAddressChanged = { newAddress ->
+                                sendFlowManager.enteringAddress = newAddress
+                            },
                             focusRequester = addressFocusRequester,
                             onFocusChanged = { focused ->
                                 focusedField = if (focused) SendFocusField.Address else SendFocusField.None
-                                onAddressFocusChanged(focused)
+                                presenter.focusField = if (focused) SetAmountFocusField.ADDRESS else null
                             },
-                            onDone = onAddressDone,
+                            onDone = {
+                                presenter.focusField =
+                                    if (!sendFlowManager.rust.validateAmount()) {
+                                        SetAmountFocusField.AMOUNT
+                                    } else {
+                                        null
+                                    }
+                            },
                         )
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
                         SpendingWidget(
@@ -286,7 +324,9 @@ fun SendScreen(
                     // Keyboard toolbar - only show for amount field
                     if (isKeyboardVisible && focusedField == SendFocusField.Amount) {
                         KeyboardToolbar(
-                            onMaxSelected = onMaxSelected,
+                            onMaxSelected = {
+                                sendFlowManager.dispatch(SendFlowManagerAction.SelectMaxSend)
+                            },
                             onNextOrDone = {
                                 if (initialAddress.isEmpty()) {
                                     addressFocusRequester.requestFocus()
@@ -294,7 +334,9 @@ fun SendScreen(
                                     focusManager.clearFocus()
                                 }
                             },
-                            onClear = onClearAmount,
+                            onClear = {
+                                sendFlowManager.dispatch(SendFlowManagerAction.ClearSendAmount)
+                            },
                             hasAddress = initialAddress.isNotEmpty(),
                             modifier =
                                 Modifier
@@ -403,7 +445,7 @@ private fun AmountWidget(
         }
 
     // bidirectional sync: update local state when parent state changes
-    androidx.compose.runtime.LaunchedEffect(initialAmount) {
+    LaunchedEffect(initialAmount) {
         if (amount != initialAmount) {
             amount = initialAmount
         }
@@ -551,7 +593,7 @@ private fun AddressWidget(
     var isFocused by remember { mutableStateOf(false) }
 
     // bidirectional sync: update local state when parent state changes
-    androidx.compose.runtime.LaunchedEffect(initialAddress) {
+    LaunchedEffect(initialAddress) {
         if (address != initialAddress) {
             address = initialAddress
         }
@@ -788,5 +830,26 @@ private fun KeyboardToolbar(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ImageButton(
+    text: String,
+    onClick: () -> Unit,
+    colors: ButtonColors,
+    modifier: Modifier = Modifier,
+) {
+    Button(
+        onClick = onClick,
+        colors = colors,
+        modifier = modifier,
+        shape = RoundedCornerShape(10.dp),
+    ) {
+        Text(
+            text = text,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(vertical = 8.dp),
+        )
     }
 }
