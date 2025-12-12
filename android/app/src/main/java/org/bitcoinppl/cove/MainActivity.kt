@@ -59,6 +59,7 @@ import org.bitcoinppl.cove.sidebar.SidebarContainer
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove.views.LockView
 import org.bitcoinppl.cove_core.AfterPinAction
+import org.bitcoinppl.cove_core.AppAction
 import org.bitcoinppl.cove_core.Database
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.RouteFactory
@@ -99,6 +100,10 @@ class MainActivity : FragmentActivity() {
         super.onResume()
         privacyCoverView?.visibility = View.GONE
         window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+
+        // refresh fees and prices in background (30-sec throttle protects against excessive requests)
+        AppManager.getInstance().dispatch(AppAction.UpdateFees)
+        AppManager.getInstance().dispatch(AppAction.UpdateFiatPrices)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

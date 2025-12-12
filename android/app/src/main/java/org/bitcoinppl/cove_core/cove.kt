@@ -3744,7 +3744,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustsendflowmanager_validate_fee_percentage() != 54512.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustsendflowmanager_wait_for_init() != 5540.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustsendflowmanager_wait_for_init() != 7495.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustsendflowmanager_wallet_id() != 47057.toShort()) {
@@ -17324,6 +17324,11 @@ public interface RustSendFlowManagerInterface {
     
     fun `validateFeePercentage`(`displayAlert`: kotlin.Boolean = false): kotlin.Boolean
     
+    /**
+     * Wait until we have base fee rates
+     * Returns immediately if we already have cached fees
+     * Only blocks if no cached fees exist (first launch, network needed)
+     */
     suspend fun `waitForInit`()
     
     fun `walletId`(): WalletId
@@ -17713,6 +17718,11 @@ open class RustSendFlowManager: Disposable, AutoCloseable, RustSendFlowManagerIn
     
 
     
+    /**
+     * Wait until we have base fee rates
+     * Returns immediately if we already have cached fees
+     * Only blocks if no cached fees exist (first launch, network needed)
+     */
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
     override suspend fun `waitForInit`() {
         return uniffiRustCallAsync(

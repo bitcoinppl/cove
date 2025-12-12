@@ -7,6 +7,7 @@ use cove_util::result_ext::ResultExt as _;
 
 use crate::{
     app::reconcile::{Update, Updater},
+    fee_client::FeeResponse,
     fiat::client::PriceResponse,
 };
 
@@ -19,14 +20,19 @@ pub const TABLE: TableDefinition<&'static str, Json<GlobalCacheData>> =
 #[derive(Debug, Clone, Copy, strum::IntoStaticStr)]
 pub enum GlobalCacheKey {
     Prices(PricesKey),
+    Fees(FeesKey),
 }
 
 #[derive(Debug, Clone, Copy)]
 pub struct PricesKey;
 
+#[derive(Debug, Clone, Copy)]
+pub struct FeesKey;
+
 #[derive(Debug, Clone, derive_more::From, serde::Serialize, serde::Deserialize)]
 pub enum GlobalCacheData {
     Prices(PriceResponse),
+    Fees(FeeResponse),
 }
 
 #[derive(Debug, Clone)]
@@ -66,6 +72,20 @@ impl GlobalCacheTable {
     pub fn set_prices(&self, prices: PriceResponse) -> Result<(), Error> {
         let key = GlobalCacheKey::Prices(PricesKey);
         self.set(key, prices.into())
+    }
+
+    pub fn get_fees(&self) -> Result<Option<FeeResponse>, Error> {
+        let key = GlobalCacheKey::Fees(FeesKey);
+        if let Some(GlobalCacheData::Fees(fees)) = self.get(key)? {
+            return Ok(Some(fees));
+        }
+
+        Ok(None)
+    }
+
+    pub fn set_fees(&self, fees: FeeResponse) -> Result<(), Error> {
+        let key = GlobalCacheKey::Fees(FeesKey);
+        self.set(key, fees.into())
     }
 }
 

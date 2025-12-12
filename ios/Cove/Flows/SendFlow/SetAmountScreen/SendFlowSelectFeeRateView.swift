@@ -112,7 +112,9 @@ private struct FeeOptionView: View {
     }
 
     var totalFee: String {
-        feeOption.totalFee().satsString()
+        // show "---" when fee hasn't been calculated yet (placeholder)
+        if feeOption.isPlaceholder() { return "---" }
+        return feeOption.totalFee().satsString()
     }
 
     var satsPerVbyte: Double {
@@ -120,6 +122,9 @@ private struct FeeOptionView: View {
     }
 
     private var fiatAmount: String {
+        // show "---" when fee hasn't been calculated yet (placeholder)
+        if feeOption.isPlaceholder() { return "---" }
+
         guard let prices = app.prices else {
             app.dispatch(action: .updateFiatPrices)
             return "---"

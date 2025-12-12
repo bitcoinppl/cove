@@ -252,8 +252,12 @@ private fun FeeOptionCard(
             Column(
                 horizontalAlignment = Alignment.End,
             ) {
+                // show "---" when fee hasn't been calculated yet (placeholder)
+                val totalFeeText =
+                    if (feeOption.isPlaceholder()) "---" else "${feeOption.totalFee().satsString()} sats"
+
                 Text(
-                    text = "${feeOption.totalFee().satsString()} sats",
+                    text = totalFeeText,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Medium,
                     color = contentColor,
@@ -261,9 +265,10 @@ private fun FeeOptionCard(
 
                 Spacer(modifier = Modifier.height(4.dp))
 
-                // fiat amount
+                // fiat amount - show "---" when fee is placeholder
                 val fiatAmount =
                     remember(feeOption, app.prices) {
+                        if (feeOption.isPlaceholder()) return@remember "---"
                         app.prices?.let {
                             "≈ ${manager.rust.convertAndDisplayFiat(feeOption.totalFee(), it)}"
                         } ?: "---"

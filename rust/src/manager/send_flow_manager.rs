@@ -45,7 +45,7 @@ use fiat_on_change::FiatOnChangeHandler;
 use flume::Receiver;
 use parking_lot::Mutex;
 use state::{CoinControlMode, EnterMode, SendFlowManagerState, State};
-use tracing::{debug, trace, warn};
+use tracing::{debug, error, trace, warn};
 
 use super::{
     deferred_sender::{self, MessageSender},
@@ -160,6 +160,30 @@ impl RustSendFlowManager {
         let state = State::new(metadata);
         let message_sender = MessageSender::new(sender);
 
+        // immediately populate cached values if available
+        let has_base_fees = if let Some(fee_response) = FEE_CLIENT.fees() {
+            let base_options = FeeRateOptions::from(fee_response);
+            let placeholder =
+                FeeRateOptionsWithTotalFee::from_base_options_placeholder(base_options);
+
+            let mut state_guard = state.lock();
+            state_guard.fee_rate_options_base = Some(Arc::new(base_options));
+            state_guard.fee_rate_options = Some(Arc::new(placeholder));
+            state_guard.has_base_fees = true;
+            true
+        } else {
+            false
+        };
+
+        // the balance will be refreshed in background_init_tasks
+        // but set a placeholder so UI can render immediately
+
+        debug!(
+            "SendFlowManager::new - has_base_fees: {}, balance: {:?}",
+            has_base_fees,
+            state.lock().wallet_balance
+        );
+
         let me: Arc<Self> = Self {
             app: App::global().clone(),
             state: state.into_inner(),
@@ -170,7 +194,7 @@ impl RustSendFlowManager {
         }
         .into();
 
-        // in background run init tasks and setup
+        // run all init tasks in background (parallel)
         me.background_init_tasks();
         me
     }
@@ -232,15 +256,18 @@ impl RustSendFlowManager {
         }
     }
 
+    /// Wait until we have base fee rates
+    /// Returns immediately if we already have cached fees
+    /// Only blocks if no cached fees exist (first launch, network needed)
     #[uniffi::method]
     pub async fn wait_for_init(&self) {
         let mut times = 0;
         loop {
-            if self.state.lock().init_complete {
+            if self.state.lock().has_base_fees {
                 break;
             }
 
-            debug!("waiting for init {times}");
+            debug!("waiting for base fees {times}");
             let wait_time = (33 + times * 10).min(200);
             tokio::time::sleep(std::time::Duration::from_millis(wait_time)).await;
             times += 1;
@@ -1619,22 +1646,39 @@ impl RustSendFlowManager {
         Some(send_amount + total_fee)
     }
 
-    // Get the first address for the wallet
-    // Get the fee rate options
+    /// Background refresh tasks that run in parallel
+    /// If no cached fees exist, fetches fees first and sets has_base_fees
     fn background_init_tasks(self: &Arc<Self>) {
         let me = self.clone();
         let state = self.state.clone();
 
         task::spawn(async move {
-            // get and save first address
-            me.get_first_address().await;
+            // if no cached fees, fetch them first so wait_for_init can unblock
+            if !state.lock().has_base_fees {
+                if let Err(e) = crate::fee_client::get_and_update_fees().await {
+                    error!("failed to fetch fees: {e:?}");
+                } else {
+                    // got fees, set has_base_fees so UI can show
+                    let fee_response = crate::fee_client::FEE_CLIENT.fees();
+                    if let Some(fee_response) = fee_response {
+                        let base_options = FeeRateOptions::from(fee_response);
+                        let placeholder =
+                            FeeRateOptionsWithTotalFee::from_base_options_placeholder(base_options);
 
-            // get fee rate options
-            me.get_or_update_fee_rate_options().await;
+                        let mut state_guard = state.lock();
+                        state_guard.fee_rate_options_base = Some(Arc::new(base_options));
+                        state_guard.fee_rate_options = Some(Arc::new(placeholder));
+                        state_guard.has_base_fees = true;
+                    }
+                }
+            }
 
-            me.get_wallet_balance().await;
-
-            state.lock().init_complete = true;
+            // run all refreshes in parallel
+            tokio::join!(
+                me.get_first_address(),
+                me.get_or_update_fee_rate_options(),
+                me.get_wallet_balance(),
+            );
         });
     }
 
