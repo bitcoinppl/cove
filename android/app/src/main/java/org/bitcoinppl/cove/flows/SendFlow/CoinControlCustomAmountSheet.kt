@@ -74,13 +74,15 @@ fun CoinControlCustomAmountSheet(
     val maxSend =
         remember(sendFlowManager.amount, unit) {
             val amount = sendFlowManager.rust.maxSendMinusFees() ?: Amount.fromSat(minSendSats.toULong() + 1000u)
-            if (isSats) amount.asSats().toDouble() else amount.asBtc()
+            val value = if (isSats) amount.asSats().toDouble() else amount.asBtc()
+            value.coerceAtLeast(minSend)
         }
 
     val softMaxSend =
         remember(sendFlowManager.amount, unit) {
             val amount = sendFlowManager.rust.maxSendMinusFeesAndSmallUtxo() ?: Amount.fromSat(minSendSats.toULong())
-            if (isSats) amount.asSats().toDouble() else amount.asBtc()
+            val value = if (isSats) amount.asSats().toDouble() else amount.asBtc()
+            value.coerceAtLeast(minSend)
         }
 
     // Initialize customAmount from manager
