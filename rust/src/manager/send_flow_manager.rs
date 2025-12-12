@@ -29,6 +29,7 @@ use crate::{
 use act_zero::{WeakAddr, call};
 use alert_state::SendFlowAlertState;
 use amount_or_max::AmountOrMax;
+use backon::{ExponentialBuilder, Retryable};
 use btc_on_change::BtcOnChangeHandler;
 use cove_common::consts::{MIN_SEND_AMOUNT, MIN_SEND_SATS};
 use cove_types::{
@@ -1677,34 +1678,39 @@ impl RustSendFlowManager {
     /// If no cached fees exist, fetches fees first and sets has_base_fees
     fn background_init_tasks(self: &Arc<Self>) {
         let me = self.clone();
-        let state = self.state.clone();
-
         task::spawn(async move {
-            // if no cached fees, fetch them first so wait_for_init can unblock
-            if !state.lock().has_base_fees {
-                match crate::fee_client::get_and_update_fees().await {
-                    Err(e) => error!("failed to fetch fees: {e:?}"),
-                    Ok(()) => {
-                        if let Some(fee_response) = crate::fee_client::FEE_CLIENT.fees() {
-                            let base_options = FeeRateOptions::from(fee_response);
-                            let fee_options =
-                                FeeRateOptionsWithTotalFee::without_totals(base_options);
-
-                            let mut state_guard = state.lock();
-                            state_guard.fee_rate_options_base = Some(Arc::new(base_options));
-                            state_guard.fee_rate_options = Some(Arc::new(fee_options));
-                            state_guard.has_base_fees = true;
-                        }
-                    }
-                }
-            }
-
             // run all refreshes concurrently
             tokio::join!(
                 me.get_first_address(),
                 me.get_or_update_fee_rate_options(),
                 me.get_wallet_balance(),
             );
+        });
+
+        let state = self.state.clone();
+        task::spawn(async move {
+            let result = (|| crate::fee_client::get_and_update_fees()).retry(
+                ExponentialBuilder::default()
+                    .with_min_delay(std::time::Duration::from_millis(100))
+                    .with_max_delay(std::time::Duration::from_secs(3))
+                    .with_total_delay(Some(std::time::Duration::from_secs(18))),
+            );
+
+            if let Err(e) = result.await {
+                return error!("failed to fetch fees: error={e:?}");
+            }
+
+            let Some(fee_response) = crate::fee_client::FEE_CLIENT.fees() else {
+                return;
+            };
+
+            let base_options = FeeRateOptions::from(fee_response);
+            let fee_options = FeeRateOptionsWithTotalFee::without_totals(base_options);
+
+            let mut state_guard = state.lock();
+            state_guard.fee_rate_options_base = Some(Arc::new(base_options));
+            state_guard.fee_rate_options = Some(Arc::new(fee_options));
+            state_guard.has_base_fees = true;
         });
     }
 
