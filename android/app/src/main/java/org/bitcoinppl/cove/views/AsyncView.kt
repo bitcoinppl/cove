@@ -72,21 +72,13 @@ fun <T> AsyncView(
     }
 
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
-        when {
-            result == null -> {
+        when (val r = result) {
+            null ->
                 CircularProgressIndicator(
                     modifier = Modifier.size(16.dp),
                     strokeWidth = 2.dp,
                 )
-            }
-
-            result!!.isSuccess -> {
-                content(result!!.getOrThrow())
-            }
-
-            result!!.isFailure -> {
-                errorView()
-            }
+            else -> if (r.isSuccess) content(r.getOrThrow()) else errorView()
         }
     }
 }
