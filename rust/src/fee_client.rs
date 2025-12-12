@@ -5,10 +5,13 @@ use std::{
 
 use arc_swap::ArcSwap;
 use backon::{ExponentialBuilder, Retryable as _};
-use eyre::Result;
+use eyre::{Context as _, Result};
 use tracing::{debug, error, warn};
 
-use crate::database::Database;
+use crate::{
+    app::reconcile::{AppStateReconcileMessage as AppMessage, Updater},
+    database::Database,
+};
 use cove_types::fees::{FeeRate, FeeRateOption, FeeRateOptions, FeeSpeed};
 
 const FEE_URL: &str = "https://mempool.space/api/v1/fees/recommended";
@@ -160,6 +163,7 @@ fn update_fees(fees: FeeResponse) {
     debug!("update_fees");
     let cached = CachedFeeResponse { fees, last_fetched: Instant::now() };
     FEES.swap(Arc::new(Some(cached)));
+    Updater::send_update(AppMessage::FeesChanged(fees));
 
     // persist to database
     let db = Database::global();
@@ -169,7 +173,7 @@ fn update_fees(fees: FeeResponse) {
 }
 
 /// Initialize fees from database cache or network
-pub async fn init_fees() {
+pub async fn init_and_update_fees() {
     debug!("init_fees");
 
     if FEES.load().as_ref().is_some() {
@@ -181,7 +185,7 @@ pub async fn init_fees() {
     if let Ok(Some(fees)) = Database::global().global_cache.get_fees() {
         debug!("loaded fees from database cache");
         FEES.swap(Arc::new(Some(CachedFeeResponse { fees, last_fetched: Instant::now() })));
-        return;
+        Updater::send_update(AppMessage::FeesChanged(fees));
     }
 
     // fetch from network
@@ -194,8 +198,9 @@ pub async fn init_fees() {
         )
         .await;
 
-    if let Err(error) = result {
-        warn!("unable to get fees: {error:?}");
+    match result {
+        Ok(fees) => update_fees(fees),
+        Err(error) => warn!("unable to get fees: {error:?}"),
     }
 }
 
@@ -209,7 +214,7 @@ pub async fn fetch_and_update_fees_if_needed() -> Result<()> {
     }
 
     debug!("fetching fees");
-    let fees = FEE_CLIENT.get_new_fees().await.map_err(|e| eyre::eyre!("{e}"))?;
+    let fees = FEE_CLIENT.get_new_fees().await.context("unable to get fees")?;
     update_fees(fees);
 
     Ok(())
