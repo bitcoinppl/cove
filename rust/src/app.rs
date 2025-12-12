@@ -55,6 +55,7 @@ pub struct App {
 pub enum AppAction {
     UpdateRoute { routes: Vec<Route> },
     PushRoute(Route),
+    PopRoute,
     ChangeNetwork { network: Network },
     ChangeColorScheme(ColorSchemeSelection),
     ChangeFiatCurrency(FiatCurrency),
@@ -211,6 +212,12 @@ impl App {
 
             AppAction::PushRoute(route) => {
                 self.state.write().router.routes.push(route);
+                let routes = self.state.read().router.routes.clone();
+                Updater::send_update(AppMessage::RouteUpdated(routes));
+            }
+
+            AppAction::PopRoute => {
+                self.state.write().router.routes.pop();
                 let routes = self.state.read().router.routes.clone();
                 Updater::send_update(AppMessage::RouteUpdated(routes));
             }

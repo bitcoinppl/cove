@@ -76,7 +76,7 @@ class SendFlowManager(
     var totalSpentInBtc by mutableStateOf("")
         private set
 
-    var totalFeeString by mutableStateOf("")
+    var totalFeeString by mutableStateOf<String?>(null)
         private set
 
     // debounce task

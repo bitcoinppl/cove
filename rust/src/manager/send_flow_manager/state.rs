@@ -29,7 +29,7 @@ pub struct SendFlowManagerState {
     pub(crate) first_address: Option<Arc<Address>>,
     pub(crate) wallet_balance: Option<Arc<Balance>>,
     /// True once we have base fee rates (either from cache or network)
-    /// UI can show immediately once this is true (with placeholder total fees)
+    /// UI can show immediately once this is true (total fees pending calculation)
     pub(crate) has_base_fees: bool,
     pub(crate) mode: EnterMode,
 

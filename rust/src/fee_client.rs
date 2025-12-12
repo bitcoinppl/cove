@@ -1,5 +1,8 @@
 use std::{
-    sync::{Arc, LazyLock},
+    sync::{
+        Arc, LazyLock,
+        atomic::{AtomicBool, Ordering},
+    },
     time::{Duration, Instant},
 };
 
@@ -7,6 +10,9 @@ use arc_swap::ArcSwap;
 use backon::{ExponentialBuilder, Retryable as _};
 use eyre::{Context as _, Result};
 use tracing::{debug, error, warn};
+
+/// Guard to prevent multiple concurrent background refresh tasks
+static REFRESH_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
 
 use crate::{
     app::reconcile::{AppStateReconcileMessage as AppMessage, Updater},
@@ -48,11 +54,28 @@ impl FeeClient {
         // check in-memory cache first
         if let Some(cached) = FEES.load().as_ref() {
             let now = Instant::now();
+
+            // cache is fresh, no refresh needed
             if now.duration_since(cached.last_fetched)
-                > Duration::from_secs(BACKGROUND_REFRESH_INTERVAL)
+                <= Duration::from_secs(BACKGROUND_REFRESH_INTERVAL)
             {
-                crate::task::spawn(async move { fetch_and_update_fees_if_needed().await });
+                return Some(cached.fees);
             }
+
+            // refresh already in flight
+            if REFRESH_IN_FLIGHT
+                .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+                .is_err()
+            {
+                return Some(cached.fees);
+            }
+
+            crate::task::spawn(async move {
+                if let Err(e) = fetch_and_update_fees_if_needed().await {
+                    warn!("background fee refresh failed: {e:?}");
+                }
+                REFRESH_IN_FLIGHT.store(false, Ordering::SeqCst);
+            });
 
             return Some(cached.fees);
         }

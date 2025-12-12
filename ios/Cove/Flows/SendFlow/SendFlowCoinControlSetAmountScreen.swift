@@ -42,7 +42,7 @@ struct SendFlowCoinControlSetAmountScreen: View {
     private var network: Network { metadata.network }
 
     private var totalSpentInFiat: String { sendFlowManager.totalSpentInFiat }
-    private var totalFeeString: String { sendFlowManager.totalFeeString }
+    private var totalFeeString: String? { sendFlowManager.totalFeeString }
     private var totalSpentBtc: String { sendFlowManager.totalSpentInBtc }
     private var totalSending: String { sendFlowManager.sendAmountBtc }
 
@@ -433,10 +433,7 @@ struct SendFlowCoinControlSetAmountScreen: View {
 
                 Spacer()
 
-                Text(totalFeeString)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .fontWeight(.medium)
+                AsyncText(text: totalFeeString, font: .footnote, color: .secondary, spinnerScale: 0.5)
             }
         }
         .onTapGesture {

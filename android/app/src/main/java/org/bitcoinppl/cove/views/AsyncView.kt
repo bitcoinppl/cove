@@ -19,8 +19,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.Log
+import kotlin.coroutines.cancellation.CancellationException
 
-// / Text that shows a loading spinner when the value is null
+// text that shows a loading spinner when the value is null
 @Composable
 fun AsyncText(
     text: String?,
@@ -48,7 +49,7 @@ fun AsyncText(
     }
 }
 
-// / View that runs an async operation and shows loading/content/error states
+// view that runs an async operation and shows loading/content/error states
 @Composable
 fun <T> AsyncView(
     operation: suspend () -> T,
@@ -62,6 +63,8 @@ fun <T> AsyncView(
         result =
             try {
                 Result.success(operation())
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e("AsyncView", "Error loading async view: ${e.message}")
                 Result.failure(e)

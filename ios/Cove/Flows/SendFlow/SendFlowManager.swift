@@ -40,7 +40,7 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
 
     var totalSpentInFiat: String = ""
     var totalSpentInBtc: String = ""
-    var totalFeeString: String = ""
+    var totalFeeString: String? = nil
 
     var enteringAddress: Binding<String> {
         Binding<String>(

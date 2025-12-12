@@ -164,20 +164,16 @@ impl RustSendFlowManager {
         // immediately populate cached values if available
         let has_base_fees = if let Some(fee_response) = FEE_CLIENT.fees() {
             let base_options = FeeRateOptions::from(fee_response);
-            let placeholder =
-                FeeRateOptionsWithTotalFee::from_base_options_placeholder(base_options);
+            let fee_options = FeeRateOptionsWithTotalFee::without_totals(base_options);
 
             let mut state_guard = state.lock();
             state_guard.fee_rate_options_base = Some(Arc::new(base_options));
-            state_guard.fee_rate_options = Some(Arc::new(placeholder));
+            state_guard.fee_rate_options = Some(Arc::new(fee_options));
             state_guard.has_base_fees = true;
             true
         } else {
             false
         };
-
-        // the balance will be refreshed in background_init_tasks
-        // but set a placeholder so UI can render immediately
 
         debug!(
             "SendFlowManager::new - has_base_fees: {}, balance: {:?}",
@@ -257,20 +253,39 @@ impl RustSendFlowManager {
         }
     }
 
-    /// Wait until we have base fee rates
+    /// Wait until we have base fee rates, returns false if timeout
     /// Returns immediately if we already have cached fees
     /// Only blocks if no cached fees exist (first launch, network needed)
+    /// On timeout: shows alert and pops route
     #[uniffi::method]
-    pub async fn wait_for_init(&self) {
+    pub async fn wait_for_init(self: &Arc<Self>) -> bool {
         let mut times = 0;
+        const MAX_WAIT_MS: u64 = 20_000;
+        let mut total_waited: u64 = 0;
+
         loop {
             if self.state.lock().has_base_fees {
-                break;
+                return true;
+            }
+
+            if total_waited >= MAX_WAIT_MS {
+                warn!("wait_for_init timed out after {MAX_WAIT_MS}ms");
+
+                self.reconciler.send(Message::SetAlert(SendFlowAlertState::General {
+                    title: "Unable to Load Fees".to_string(),
+                    message: "Cannot create a transaction without fee information. Please check your internet connection and try again.".to_string(),
+                }));
+
+                let mut deferred = DeferredDispatch::<AppAction>::new();
+                deferred.queue(AppAction::PopRoute);
+
+                return false;
             }
 
             debug!("waiting for base fees {times}");
             let wait_time = (33 + times * 10).min(200);
             tokio::time::sleep(std::time::Duration::from_millis(wait_time)).await;
+            total_waited += wait_time;
             times += 1;
         }
     }
@@ -363,19 +378,16 @@ impl RustSendFlowManager {
     }
 
     #[uniffi::method]
-    pub fn total_fee_string(&self) -> String {
-        let Some(selected_fee_rate) = &self.state.lock().selected_fee_rate.clone() else {
-            return "---".to_string();
-        };
+    pub fn total_fee_string(&self) -> Option<String> {
+        let selected_fee_rate = self.state.lock().selected_fee_rate.clone()?;
+        let total_fee = selected_fee_rate.total_fee()?;
 
-        let Some(total_fee) = selected_fee_rate.total_fee() else {
-            return "---".to_string();
-        };
-
-        match self.state.lock().metadata.selected_unit {
+        let string = match self.state.lock().metadata.selected_unit {
             BitcoinUnit::Btc => format!("{} BTC", total_fee.as_btc().thousands()),
             BitcoinUnit::Sat => format!("{} sats", total_fee.as_sats().thousands_int()),
-        }
+        };
+
+        Some(string)
     }
 
     #[uniffi::method(default(with_suffix = true))]
@@ -1665,25 +1677,24 @@ impl RustSendFlowManager {
         task::spawn(async move {
             // if no cached fees, fetch them first so wait_for_init can unblock
             if !state.lock().has_base_fees {
-                if let Err(e) = crate::fee_client::get_and_update_fees().await {
-                    error!("failed to fetch fees: {e:?}");
-                } else {
-                    // got fees, set has_base_fees so UI can show
-                    let fee_response = crate::fee_client::FEE_CLIENT.fees();
-                    if let Some(fee_response) = fee_response {
-                        let base_options = FeeRateOptions::from(fee_response);
-                        let placeholder =
-                            FeeRateOptionsWithTotalFee::from_base_options_placeholder(base_options);
+                match crate::fee_client::get_and_update_fees().await {
+                    Err(e) => error!("failed to fetch fees: {e:?}"),
+                    Ok(()) => {
+                        if let Some(fee_response) = crate::fee_client::FEE_CLIENT.fees() {
+                            let base_options = FeeRateOptions::from(fee_response);
+                            let fee_options =
+                                FeeRateOptionsWithTotalFee::without_totals(base_options);
 
-                        let mut state_guard = state.lock();
-                        state_guard.fee_rate_options_base = Some(Arc::new(base_options));
-                        state_guard.fee_rate_options = Some(Arc::new(placeholder));
-                        state_guard.has_base_fees = true;
+                            let mut state_guard = state.lock();
+                            state_guard.fee_rate_options_base = Some(Arc::new(base_options));
+                            state_guard.fee_rate_options = Some(Arc::new(fee_options));
+                            state_guard.has_base_fees = true;
+                        }
                     }
                 }
             }
 
-            // run all refreshes in parallel
+            // run all refreshes concurrently
             tokio::join!(
                 me.get_first_address(),
                 me.get_or_update_fee_rate_options(),
