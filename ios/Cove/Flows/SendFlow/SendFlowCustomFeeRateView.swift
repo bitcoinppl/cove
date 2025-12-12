@@ -91,7 +91,9 @@ struct SendFlowCustomFeeRateView: View {
                     feeRate: feeRate, feeSpeed: feeSpeed
                 )
 
-                self.totalSats = Int(feeRateOption.totalFee().asSats())
+                if let totalFee = feeRateOption.totalFee() {
+                    self.totalSats = Int(totalFee.asSats())
+                }
                 await MainActor.run {
                     let feeOptions = feeOptions.addCustomFeeRate(feeRate: feeRateOption)
                     self.feeOptions = feeOptions

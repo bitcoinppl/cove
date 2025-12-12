@@ -2198,18 +2198,13 @@ public protocol FeeRateOptionWithTotalFeeProtocol: AnyObject, Sendable {
     
     func feeSpeed()  -> FeeSpeed
     
-    /**
-     * Check if this is a placeholder (total fee not yet calculated)
-     */
-    func isPlaceholder()  -> Bool
-    
     func isCustom()  -> Bool
     
     func isEqual(rhs: FeeRateOptionWithTotalFee)  -> Bool
     
     func satPerVb()  -> Float
     
-    func totalFee()  -> Amount
+    func totalFee()  -> Amount?
     
 }
 open class FeeRateOptionWithTotalFee: FeeRateOptionWithTotalFeeProtocol, @unchecked Sendable {
@@ -2307,17 +2302,6 @@ open func feeSpeed() -> FeeSpeed  {
 })
 }
     
-    /**
-     * Check if this is a placeholder (total fee not yet calculated)
-     */
-open func isPlaceholder() -> Bool  {
-    return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_cove_types_fn_method_feerateoptionwithtotalfee_isplaceholder(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
 open func isCustom() -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
     uniffi_cove_types_fn_method_feerateoptionwithtotalfee_is_custom(
@@ -2343,8 +2327,8 @@ open func satPerVb() -> Float  {
 })
 }
     
-open func totalFee() -> Amount  {
-    return try!  FfiConverterTypeAmount_lift(try! rustCall() {
+open func totalFee() -> Amount?  {
+    return try!  FfiConverterOptionTypeAmount.lift(try! rustCall() {
     uniffi_cove_types_fn_method_feerateoptionwithtotalfee_total_fee(
             self.uniffiCloneHandle(),$0
     )
@@ -6285,9 +6269,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_fee_speed() != 51786) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_isplaceholder() != 36230) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_is_custom() != 33675) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -6297,7 +6278,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_sat_per_vb() != 61796) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_total_fee() != 47307) {
+    if (uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_total_fee() != 12787) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_feerateoptions_fast() != 36416) {

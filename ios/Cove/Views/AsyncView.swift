@@ -7,6 +7,26 @@
 
 import SwiftUI
 
+/// Text that shows a loading spinner when the value is nil
+struct AsyncText: View {
+    let text: String?
+    var font: Font = .body
+    var color: Color = .primary
+    var spinnerScale: CGFloat = 1.0
+
+    var body: some View {
+        if let text {
+            Text(text)
+                .font(font)
+                .foregroundColor(color)
+        } else {
+            ProgressView()
+                .tint(color)
+                .scaleEffect(spinnerScale)
+        }
+    }
+}
+
 struct AsyncView<Success, Content: View>: View {
     let operation: () async throws -> Success
     let content: (Success) -> Content

@@ -20,6 +20,7 @@ import org.bitcoinppl.cove.SendFlowPresenter
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.ui.theme.coveColors
 import org.bitcoinppl.cove.utils.toColor
+import org.bitcoinppl.cove.views.AsyncText
 import org.bitcoinppl.cove_core.types.FeeRateOptionWithTotalFee
 import org.bitcoinppl.cove_core.types.FeeRateOptionsWithTotalFee
 import org.bitcoinppl.cove_core.types.FeeSpeed
@@ -252,12 +253,10 @@ private fun FeeOptionCard(
             Column(
                 horizontalAlignment = Alignment.End,
             ) {
-                // show "---" when fee hasn't been calculated yet (placeholder)
-                val totalFeeText =
-                    if (feeOption.isPlaceholder()) "---" else "${feeOption.totalFee().satsString()} sats"
+                val totalFee = feeOption.totalFee()
 
-                Text(
-                    text = totalFeeText,
+                AsyncText(
+                    text = totalFee?.let { "${it.satsString()} sats" },
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Medium,
                     color = contentColor,
@@ -265,19 +264,22 @@ private fun FeeOptionCard(
 
                 Spacer(modifier = Modifier.height(4.dp))
 
-                // fiat amount - show "---" when fee is placeholder
+                // fiat amount
                 val fiatAmount =
                     remember(feeOption, app.prices) {
-                        if (feeOption.isPlaceholder()) return@remember "---"
-                        app.prices?.let {
-                            "≈ ${manager.rust.convertAndDisplayFiat(feeOption.totalFee(), it)}"
-                        } ?: "---"
+                        totalFee?.let { fee ->
+                            app.prices?.let {
+                                "≈ ${manager.rust.convertAndDisplayFiat(fee, it)}"
+                            }
+                        }
                     }
 
-                Text(
+                AsyncText(
                     text = fiatAmount,
                     style = MaterialTheme.typography.bodyMedium,
                     color = contentColor,
+                    spinnerSize = 12.dp,
+                    spinnerStrokeWidth = 1.5.dp,
                 )
             }
         }
