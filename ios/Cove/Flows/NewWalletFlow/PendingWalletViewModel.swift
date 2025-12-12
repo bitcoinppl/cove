@@ -23,15 +23,14 @@ import SwiftUI
     }
 
     func reconcile(message: PendingWalletManagerReconcileMessage) {
-        Task {
-            await MainActor.run {
-                logger.debug("Reconcile: \(message)")
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            logger.debug("Reconcile: \(message)")
 
-                switch message {
-                case let .words(numberOfBip39Words):
-                    self.numberOfWords = numberOfBip39Words
-                    self.bip39Words = self.rust.bip39Words()
-                }
+            switch message {
+            case let .words(numberOfBip39Words):
+                numberOfWords = numberOfBip39Words
+                bip39Words = rust.bip39Words()
             }
         }
     }

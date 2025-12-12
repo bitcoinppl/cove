@@ -136,20 +136,19 @@ enum UnlockMode {
     }
 
     func reconcile(message: AuthManagerReconcileMessage) {
-        logger.debug("reconcile: \(message)")
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            logger.debug("reconcile: \(message)")
 
-        Task {
-            await MainActor.run {
-                switch message {
-                case let .authTypeChanged(authType):
-                    self.type = authType
+            switch message {
+            case let .authTypeChanged(authType):
+                type = authType
 
-                case .wipeDataPinChanged:
-                    self.isWipeDataPinEnabled = self.rust.isWipeDataPinEnabled()
+            case .wipeDataPinChanged:
+                isWipeDataPinEnabled = rust.isWipeDataPinEnabled()
 
-                case .decoyPinChanged:
-                    self.isDecoyPinEnabled = self.rust.isDecoyPinEnabled()
-                }
+            case .decoyPinChanged:
+                isDecoyPinEnabled = rust.isDecoyPinEnabled()
             }
         }
     }

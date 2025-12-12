@@ -223,26 +223,18 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
     }
 
     func reconcile(message: Message) {
-        Task { @MainActor [weak self] in
-            guard let self else {
-                Log.error("WalletManager no longer available")
-                return
-            }
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
             logger.debug("reconcile: \(message)")
             apply(message)
         }
     }
 
     func reconcileMany(messages: [Message]) {
-        Task { @MainActor [weak self] in
-            guard let self else {
-                Log.error("WalletManager no longer available")
-                return
-            }
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
             logger.debug("reconcile_messages: \(messages)")
-            for message in messages {
-                apply(message)
-            }
+            messages.forEach { apply($0) }
         }
     }
 

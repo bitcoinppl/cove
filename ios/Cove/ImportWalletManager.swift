@@ -10,14 +10,13 @@ import SwiftUI
     }
 
     func reconcile(message: ImportWalletManagerReconcileMessage) {
-        Task {
-            await MainActor.run {
-                logger.debug("Reconcile: \(message)")
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            logger.debug("Reconcile: \(message)")
 
-                switch message {
-                case .noOp:
-                    break
-                }
+            switch message {
+            case .noOp:
+                break
             }
         }
     }
