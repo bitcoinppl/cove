@@ -101,7 +101,7 @@ fun CustomFeeRateSheet(
 
         // if address is not validated yet, estimate fee based on selected option's fee
         if (sendFlowManager.address == null) {
-            val selectedFee = selectedOption.totalFee().asSats().toDouble()
+            val selectedFee = selectedOption.totalFee()?.asSats()?.toDouble() ?: return
             val selectedRate = selectedOption.satPerVb().toDouble()
             if (selectedRate > 0) {
                 val estimatedFee = (feeRate.toDouble() / selectedRate) * selectedFee
@@ -134,7 +134,9 @@ fun CustomFeeRateSheet(
                             )
 
                         withContext(Dispatchers.Main) {
-                            totalSats = feeRateOption.totalFee().asSats().toLong()
+                            feeRateOption.totalFee()?.let { fee ->
+                                totalSats = fee.asSats().toLong()
+                            }
                             updatedFeeOptions = updatedFeeOptions.addCustomFeeRate(feeRateOption)
                             presenter.lastWorkingFeeRate = feeRate
                         }

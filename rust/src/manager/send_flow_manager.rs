@@ -368,7 +368,10 @@ impl RustSendFlowManager {
             return "---".to_string();
         };
 
-        let total_fee = selected_fee_rate.total_fee();
+        let Some(total_fee) = selected_fee_rate.total_fee() else {
+            return "---".to_string();
+        };
+
         match self.state.lock().metadata.selected_unit {
             BitcoinUnit::Btc => format!("{} BTC", total_fee.as_btc().thousands()),
             BitcoinUnit::Sat => format!("{} sats", total_fee.as_sats().thousands_int()),
@@ -417,8 +420,9 @@ impl RustSendFlowManager {
     pub fn validate_fee_percentage(self: &Arc<Self>, display_alert: bool) -> bool {
         let Some(amount) = self.state.lock().amount_sats else { return false };
         let Some(fee_rate) = self.state.lock().selected_fee_rate.clone() else { return false };
+        let Some(total_fee) = fee_rate.total_fee() else { return false };
 
-        let fee_sats = fee_rate.total_fee().as_sats();
+        let fee_sats = total_fee.as_sats();
         let fee_percentage = fee_sats * 100 / amount;
 
         debug!("validate_fee_percentage: {fee_sats} / {amount} = {fee_percentage} ");
@@ -564,7 +568,8 @@ impl RustSendFlowManager {
 
         let total_fee = psbt.fee().map_err_str(Error::UnableToGetFeeDetails)?;
 
-        let fee_rate_option = FeeRateOptionWithTotalFee { fee_speed, fee_rate, total_fee };
+        let fee_rate_option =
+            FeeRateOptionWithTotalFee { fee_speed, fee_rate, total_fee: Some(total_fee) };
 
         Ok(fee_rate_option.into())
     }
@@ -673,7 +678,7 @@ impl RustSendFlowManager {
             .lock()
             .selected_fee_rate
             .as_ref()
-            .map(|f| f.total_fee.as_sats())
+            .and_then(|f| f.total_fee.map(|fee| fee.as_sats()))
             .unwrap_or(1000);
 
         let max_send_without_fees = max_send.as_sats().saturating_sub(total_fee_sats);
@@ -912,10 +917,11 @@ impl RustSendFlowManager {
         let mode = self.state.lock().mode.clone();
         match mode {
             EnterMode::CoinControl(cc) if cc.is_max_selected => {
-                let max_amount = cc.max_send();
-                let total_fee = fee_rate.total_fee;
-                let amount = max_amount - total_fee;
-                self.handle_amount_changed(amount);
+                if let Some(total_fee) = fee_rate.total_fee {
+                    let max_amount = cc.max_send();
+                    let amount = max_amount - total_fee;
+                    self.handle_amount_changed(amount);
+                }
             }
             _ => {}
         };
@@ -1123,8 +1129,10 @@ impl RustSendFlowManager {
         let utxo_list = Arc::new(UtxoList::from(utxos));
         let total_minus_fees = {
             let mut state = self.state.lock();
-            let total_fee_sats =
-                state.selected_fee_rate.as_ref().map(|fee_rate| fee_rate.total_fee.as_sats());
+            let total_fee_sats = state
+                .selected_fee_rate
+                .as_ref()
+                .and_then(|fee_rate| fee_rate.total_fee.map(|f| f.as_sats()));
 
             state.mode = EnterMode::coin_control_max(utxo_list.clone());
             let total_minus_fees =
@@ -1644,7 +1652,7 @@ impl RustSendFlowManager {
 
     fn total_spent_btc_amount(self: &Arc<Self>) -> Option<Amount> {
         let send_amount = self.send_amount()?;
-        let total_fee = self.state.lock().selected_fee_rate.as_ref()?.total_fee;
+        let total_fee = self.state.lock().selected_fee_rate.as_ref()?.total_fee?;
         Some(send_amount + total_fee)
     }
 
@@ -1849,8 +1857,11 @@ impl RustSendFlowManager {
                 let max = cc.max_send();
                 let total_fee = selected_fee_rate
                     .as_ref()
-                    .map(|fee_rate| fee_rate.total_fee.as_sats())
-                    .unwrap_or(fee_rate_options_with_total_fee.medium.total_fee.as_sats());
+                    .and_then(|fee_rate| fee_rate.total_fee.map(|f| f.as_sats()))
+                    .or_else(|| {
+                        fee_rate_options_with_total_fee.medium.total_fee.map(|f| f.as_sats())
+                    })
+                    .unwrap_or(0);
 
                 let send_amount = max.as_sats() - total_fee;
                 if Some(send_amount) != amount_sats {
@@ -1894,7 +1905,7 @@ impl RustSendFlowManager {
         };
 
         let mut new_custom_with_fee = Arc::unwrap_or_clone(selected_fee_rate.clone());
-        new_custom_with_fee.total_fee = total_fee;
+        new_custom_with_fee.total_fee = Some(total_fee);
 
         let fee_rate_options = fee_rate_options.add_custom_fee_rate(new_custom_with_fee.into());
         Some(fee_rate_options)
