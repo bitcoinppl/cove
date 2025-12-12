@@ -148,32 +148,18 @@ extension WeakReconciler: CoinControlManagerReconciler where Reconciler == CoinC
     private let rustBridge = DispatchQueue(label: "cove.CoinControlManager.rustbridge", qos: .userInitiated)
 
     func reconcile(message: Message) {
-        rustBridge.async { [weak self] in
-            guard let self else {
-                Log.error("CoinControlManager no longer available")
-                return
-            }
-
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
             logger.debug("reconcile: \(message)")
-            DispatchQueue.main.async { [self] in
-                self.apply(message)
-            }
+            apply(message)
         }
     }
 
     func reconcileMany(messages: [Message]) {
-        rustBridge.async { [weak self] in
-            guard let self else {
-                Log.error("CoinControlManager no longer available")
-                return
-            }
-
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
             logger.debug("reconcile_messages: \(messages)")
-            DispatchQueue.main.async { [self] in
-                for message in messages {
-                    self.apply(message)
-                }
-            }
+            messages.forEach { apply($0) }
         }
     }
 

@@ -210,70 +210,69 @@ private let walletModeChangeDelayMs = 250
     }
 
     func reconcile(message: AppStateReconcileMessage) {
-        Task {
-            await MainActor.run {
-                logger.debug("Update: \(message)")
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            logger.debug("Update: \(message)")
 
-                switch message {
-                case let .routeUpdated(routes: routes):
-                    self.router.routes = routes
+            switch message {
+            case let .routeUpdated(routes: routes):
+                router.routes = routes
 
-                case let .pushedRoute(route):
-                    self.router.routes.append(route)
+            case let .pushedRoute(route):
+                router.routes.append(route)
 
-                case .databaseUpdated:
-                    self.database = Database()
+            case .databaseUpdated:
+                database = Database()
 
-                case let .colorSchemeChanged(colorSchemeSelection):
-                    self.colorSchemeSelection = colorSchemeSelection
+            case let .colorSchemeChanged(colorSchemeSelection):
+                self.colorSchemeSelection = colorSchemeSelection
 
-                case let .selectedNodeChanged(node):
-                    self.selectedNode = node
+            case let .selectedNodeChanged(node):
+                selectedNode = node
 
-                case let .selectedNetworkChanged(network):
-                    self.selectedNetwork = network
-                    self.loadWallets()
+            case let .selectedNetworkChanged(network):
+                selectedNetwork = network
+                loadWallets()
 
-                case let .defaultRouteChanged(route, nestedRoutes):
-                    self.router.routes = nestedRoutes
-                    self.router.default = route
-                    self.routeId = UUID()
+            case let .defaultRouteChanged(route, nestedRoutes):
+                router.routes = nestedRoutes
+                router.default = route
+                routeId = UUID()
 
-                case let .fiatPricesChanged(prices):
-                    self.prices = prices
-                    self.walletManager?.updateFiatBalance()
+            case let .fiatPricesChanged(prices):
+                self.prices = prices
+                walletManager?.updateFiatBalance()
 
-                case let .feesChanged(fees):
-                    self.fees = fees
+            case let .feesChanged(fees):
+                self.fees = fees
 
-                case let .fiatCurrencyChanged(fiatCurrency):
-                    self.selectedFiatCurrency = fiatCurrency
+            case let .fiatCurrencyChanged(fiatCurrency):
+                selectedFiatCurrency = fiatCurrency
 
-                    // refresh fiat values in the wallet manager
-                    if let walletManager {
-                        Task {
-                            await walletManager.forceWalletScan()
-                            await walletManager.updateWalletBalance()
-                        }
-                    }
-
-                case .acceptedTerms:
-                    self.isTermsAccepted = true
-
-                case .walletModeChanged:
-                    self.isLoading = true
-                    self.loadWallets()
-
+                // refresh fiat values in the wallet manager
+                if let walletManager {
                     Task {
-                        try? await Task.sleep(for: .milliseconds(walletModeChangeDelayMs))
-                        await MainActor.run {
-                            withAnimation { self.isLoading = false }
-                        }
+                        await walletManager.forceWalletScan()
+                        await walletManager.updateWalletBalance()
                     }
-
-                case .walletsChanged:
-                    self.wallets = (try? self.database.wallets().all()) ?? []
                 }
+
+            case .acceptedTerms:
+                isTermsAccepted = true
+
+            case .walletModeChanged:
+                isLoading = true
+                loadWallets()
+
+                Task {
+                    try? await Task.sleep(for: .milliseconds(walletModeChangeDelayMs))
+                    await MainActor.run {
+                        withAnimation { self.isLoading = false }
+                    }
+                }
+
+            case .walletsChanged:
+                wallets = (try? database.wallets().all()) ?? []
             }
         }
     }
