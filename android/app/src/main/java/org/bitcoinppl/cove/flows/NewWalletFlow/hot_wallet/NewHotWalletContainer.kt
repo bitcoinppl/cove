@@ -1,0 +1,155 @@
+package org.bitcoinppl.cove.flows.NewWalletFlow.hot_wallet
+
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.ImportWalletManager
+import org.bitcoinppl.cove.PendingWalletManager
+import org.bitcoinppl.cove.components.FullPageLoadingView
+import org.bitcoinppl.cove_core.HotWalletRoute
+import org.bitcoinppl.cove_core.ImportType
+import org.bitcoinppl.cove_core.NumberOfBip39Words
+
+/**
+ * New hot wallet container - routes to hot wallet flow screens
+ * Ported from iOS NewHotWalletContainer.swift
+ */
+@Composable
+fun NewHotWalletContainer(
+    app: AppManager,
+    route: HotWalletRoute,
+    modifier: Modifier = Modifier,
+) {
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    when (route) {
+        is HotWalletRoute.Select -> {
+            HotWalletSelectScreen(
+                app = app,
+                snackbarHostState = snackbarHostState,
+            )
+        }
+        is HotWalletRoute.Create -> {
+            PendingWalletContainer(
+                app = app,
+                numberOfWords = route.v1,
+                snackbarHostState = snackbarHostState,
+            )
+        }
+        is HotWalletRoute.Import -> {
+            ImportWalletContainer(
+                app = app,
+                numberOfWords = route.v1,
+                importType = route.v2,
+                snackbarHostState = snackbarHostState,
+            )
+        }
+        is HotWalletRoute.VerifyWords -> {
+            VerifyWordsContainer(
+                app = app,
+                id = route.v1,
+                snackbarHostState = snackbarHostState,
+            )
+        }
+    }
+}
+
+/**
+ * Lifecycle container for pending wallet creation flow
+ */
+@Composable
+private fun PendingWalletContainer(
+    app: AppManager,
+    numberOfWords: NumberOfBip39Words,
+    snackbarHostState: SnackbarHostState,
+) {
+    var manager by remember(numberOfWords) { mutableStateOf<PendingWalletManager?>(null) }
+    var loading by remember { mutableStateOf(true) }
+
+    LaunchedEffect(numberOfWords) {
+        try {
+            val newManager = PendingWalletManager(numberOfWords)
+            manager?.close()
+            manager = newManager
+        } catch (e: Exception) {
+            android.util.Log.e("PendingWalletContainer", "failed to init pending manager", e)
+        } finally {
+            loading = false
+        }
+    }
+
+    DisposableEffect(numberOfWords) {
+        onDispose {
+            manager?.close()
+            manager = null
+        }
+    }
+
+    when {
+        loading -> FullPageLoadingView()
+        manager != null ->
+            HotWalletCreateScreen(
+                app = app,
+                manager = manager!!,
+                snackbarHostState = snackbarHostState,
+                onBackPressed = {
+                    manager?.close()
+                    app.popRoute()
+                },
+            )
+        else -> FullPageLoadingView()
+    }
+}
+
+/**
+ * Lifecycle container for import wallet flow
+ */
+@Composable
+private fun ImportWalletContainer(
+    app: AppManager,
+    numberOfWords: NumberOfBip39Words,
+    importType: ImportType,
+    snackbarHostState: SnackbarHostState,
+) {
+    var manager by remember { mutableStateOf<ImportWalletManager?>(null) }
+    var loading by remember { mutableStateOf(true) }
+
+    LaunchedEffect(numberOfWords, importType) {
+        try {
+            val newManager = ImportWalletManager()
+            manager?.close()
+            manager = newManager
+        } catch (e: Exception) {
+            android.util.Log.e("ImportWalletContainer", "failed to init import manager", e)
+        } finally {
+            loading = false
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            manager?.close()
+            manager = null
+        }
+    }
+
+    when {
+        loading -> FullPageLoadingView()
+        manager != null ->
+            HotWalletImportScreen(
+                app = app,
+                manager = manager!!,
+                numberOfWords = numberOfWords,
+                importType = importType,
+                snackbarHostState = snackbarHostState,
+            )
+        else -> FullPageLoadingView()
+    }
+}

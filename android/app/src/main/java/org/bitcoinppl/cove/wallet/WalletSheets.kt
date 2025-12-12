@@ -12,9 +12,9 @@ import androidx.compose.runtime.setValue
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.WalletManager
+import org.bitcoinppl.cove.flows.SelectedWalletFlow.ReceiveAddressSheet
+import org.bitcoinppl.cove.flows.SelectedWalletFlow.WalletMoreOptionsSheet
 import org.bitcoinppl.cove.nfc.NfcLabelImportSheet
-import org.bitcoinppl.cove.wallet_transactions.ReceiveAddressSheet
-import org.bitcoinppl.cove.wallet_transactions.WalletMoreOptionsSheet
 import org.bitcoinppl.cove_core.LabelManager
 
 @Composable
