@@ -95,7 +95,7 @@ fun SendScreen(
     // derive state from managers (like iOS @Environment)
     val metadata = walletManager.walletMetadata
     val isFiatMode = metadata?.fiatOrBtc == FiatOrBtc.FIAT
-    val isBalanceHidden = !(metadata?.sensitiveVisible ?: true)
+    val isBalanceHidden = !(metadata?.sensitiveVisible ?: false)
     val balanceAmount = walletManager.amountFmt(walletManager.balance.spendable())
     val balanceDenomination = walletManager.unit
     val amountText =

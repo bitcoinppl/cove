@@ -63,11 +63,12 @@ fun rememberWalletExportLaunchers(
                             } ?: throw Exception("Unable to read file")
 
                         // validate import was successful before showing success message
-                        val labelManager =
+                        (
                             manager?.rust?.labelManager()
                                 ?: throw Exception("Label manager not available")
-
-                        labelManager.import(fileContents.trim())
+                        ).use { labelManager ->
+                            labelManager.import(fileContents.trim())
+                        }
 
                         // refresh transactions with updated labels
                         try {
@@ -126,7 +127,7 @@ fun rememberWalletExportLaunchers(
                                 }
                                 is ExportType.Labels -> {
                                     withContext(Dispatchers.IO) {
-                                        manager?.rust?.labelManager()?.export()
+                                        manager?.rust?.labelManager()?.use { it.export() }
                                     }
                                 }
                                 null -> null

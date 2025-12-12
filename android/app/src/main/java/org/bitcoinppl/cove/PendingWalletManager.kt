@@ -9,7 +9,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
 import java.io.Closeable
@@ -53,8 +52,7 @@ class PendingWalletManager(
             when (message) {
                 is PendingWalletManagerReconcileMessage.Words -> {
                     numberOfWords = message.v1
-                    val words = withContext(Dispatchers.IO) { rust.bip39Words() }
-                    bip39Words = words
+                    bip39Words = rust.bip39Words()
                 }
             }
         }

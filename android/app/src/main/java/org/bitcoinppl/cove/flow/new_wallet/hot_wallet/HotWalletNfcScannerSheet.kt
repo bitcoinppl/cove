@@ -40,6 +40,7 @@ import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.title3
 import org.bitcoinppl.cove_core.NumberOfBip39Words
 import org.bitcoinppl.cove_core.SeedQr
+import org.bitcoinppl.cove_core.numberOfWordsToWordCount
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -94,22 +95,39 @@ internal fun NfcScannerSheet(
                         // try string format first
                         result.text?.let { text ->
                             val words = org.bitcoinppl.cove_core.groupedPlainWordsOf(mnemonic = text, groups = GROUPS_OF.toUByte())
+                            val wordCount = words.flatten().size
+                            val expectedCount = numberOfWordsToWordCount(numberOfWords).toInt()
+                            if (wordCount != expectedCount) {
+                                errorMessage = "Invalid number of words: $wordCount, we only support 12 or 24 words"
+                                return@collect
+                            }
+                            nfcReader.reset()
                             onWordsScanned(words)
+                            onDismiss()
                             return@collect
                         }
 
                         // try binary format (SeedQR)
                         result.data?.let { data ->
-                            val seedQr = SeedQr.newFromData(data = data)
-                            val words = seedQr.groupedPlainWords(groupsOf = GROUPS_OF.toUByte())
-                            onWordsScanned(words)
+                            SeedQr.newFromData(data = data).use { seedQr ->
+                                val words = seedQr.groupedPlainWords(groupsOf = GROUPS_OF.toUByte())
+                                val wordCount = words.flatten().size
+                                val expectedCount = numberOfWordsToWordCount(numberOfWords).toInt()
+                                if (wordCount != expectedCount) {
+                                    errorMessage = "Invalid number of words: $wordCount, we only support 12 or 24 words"
+                                    return@collect
+                                }
+                                nfcReader.reset()
+                                onWordsScanned(words)
+                                onDismiss()
+                            }
                             return@collect
                         }
 
                         errorMessage = "No readable seed phrase found on NFC tag"
                     } catch (e: Exception) {
-                        Log.e("NfcScannerSheet", "Error parsing NFC data", e)
-                        errorMessage = "Unable to parse seed phrase: ${e.message}"
+                        Log.e("NfcScannerSheet", "Error parsing NFC data")
+                        errorMessage = "Unable to parse seed phrase from NFC tag"
                     }
                 }
                 is org.bitcoinppl.cove.nfc.NfcScanResult.Error -> {
