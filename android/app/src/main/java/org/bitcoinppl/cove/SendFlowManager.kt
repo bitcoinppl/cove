@@ -31,7 +31,6 @@ class SendFlowManager(
 
     // Scope for UI-bound work; reconcile and UI updates run on Main
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val isClosed = AtomicBoolean(false)
 
     val id: WalletId = rust.walletId()
@@ -253,16 +252,12 @@ class SendFlowManager(
 
     override fun reconcile(message: SendFlowManagerReconcileMessage) {
         logDebug("reconcile: $message")
-        ioScope.launch {
-            mainScope.launch { apply(message) }
-        }
+        mainScope.launch { apply(message) }
     }
 
     override fun reconcileMany(messages: List<SendFlowManagerReconcileMessage>) {
         logDebug("reconcile_messages: ${messages.size} messages")
-        ioScope.launch {
-            mainScope.launch { messages.forEach { apply(it) } }
-        }
+        mainScope.launch { messages.forEach { apply(it) } }
     }
 
     fun dispatch(action: SendFlowManagerAction) {
@@ -297,8 +292,7 @@ class SendFlowManager(
         if (!isClosed.compareAndSet(false, true)) return
         logDebug("Closing SendFlowManager for $id")
         debouncedTask?.cancel()
-        ioScope.cancel()
-        mainScope.cancel() // stop callbacks into Rust
-        rust.close() // free Rust Arc
+        mainScope.cancel()
+        rust.close()
     }
 }

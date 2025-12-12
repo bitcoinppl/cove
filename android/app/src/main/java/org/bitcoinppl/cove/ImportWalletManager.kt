@@ -18,7 +18,6 @@ class ImportWalletManager :
     private val tag = "ImportWalletManager"
     private val isClosed = AtomicBoolean(false)
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     val rust: RustImportWalletManager
 
@@ -30,12 +29,10 @@ class ImportWalletManager :
 
     override fun reconcile(message: ImportWalletManagerReconcileMessage) {
         Log.d(tag, "Reconcile: $message")
-        ioScope.launch {
-            mainScope.launch {
-                when (message) {
-                    ImportWalletManagerReconcileMessage.NO_OP -> {
-                        // no-op
-                    }
+        mainScope.launch {
+            when (message) {
+                ImportWalletManagerReconcileMessage.NO_OP -> {
+                    // no-op
                 }
             }
         }
@@ -60,7 +57,6 @@ class ImportWalletManager :
     override fun close() {
         if (!isClosed.compareAndSet(false, true)) return
         Log.d(tag, "Closing ImportWalletManager")
-        ioScope.cancel()
         mainScope.cancel()
         rust.close()
     }

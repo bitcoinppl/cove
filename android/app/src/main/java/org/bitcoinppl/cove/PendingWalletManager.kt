@@ -27,7 +27,6 @@ class PendingWalletManager(
     private val tag = "PendingWalletManager"
 
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val isClosed = AtomicBoolean(false)
 
     val rust: RustPendingWalletManager = RustPendingWalletManager(numberOfWords)
@@ -50,14 +49,12 @@ class PendingWalletManager(
 
     override fun reconcile(message: PendingWalletManagerReconcileMessage) {
         logDebug("Reconcile: $message")
-        ioScope.launch {
-            mainScope.launch {
-                when (message) {
-                    is PendingWalletManagerReconcileMessage.Words -> {
-                        numberOfWords = message.v1
-                        val words = withContext(Dispatchers.IO) { rust.bip39Words() }
-                        bip39Words = words
-                    }
+        mainScope.launch {
+            when (message) {
+                is PendingWalletManagerReconcileMessage.Words -> {
+                    numberOfWords = message.v1
+                    val words = withContext(Dispatchers.IO) { rust.bip39Words() }
+                    bip39Words = words
                 }
             }
         }
@@ -72,7 +69,6 @@ class PendingWalletManager(
         if (!isClosed.compareAndSet(false, true)) return
         logDebug("Closing PendingWalletManager")
         bip39Words = emptyList()
-        ioScope.cancel()
         mainScope.cancel()
         rust.close()
     }
