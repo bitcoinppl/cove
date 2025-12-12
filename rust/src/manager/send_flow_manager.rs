@@ -1362,7 +1362,13 @@ impl RustSendFlowManager {
     async fn get_and_update_base_fee_rate_options(self: &Arc<Self>) -> Option<Arc<FeeRateOptions>> {
         let fee_response = FEE_CLIENT.fetch_and_get_fees().await.ok()?;
         let fees = Arc::new(FeeRateOptions::from(fee_response));
-        self.state.lock().fee_rate_options_base = Some(fees.clone());
+
+        {
+            let mut state = self.state.lock();
+            state.fee_rate_options_base = Some(fees.clone());
+            state.has_base_fees = true;
+        }
+
         Some(fees)
     }
 
