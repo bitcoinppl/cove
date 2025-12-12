@@ -10,7 +10,7 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
 
     let id: WalletId
     @ObservationIgnored
-    var rust: RustWalletManager
+    let rust: RustWalletManager
 
     var walletMetadata: WalletMetadata
     var loadState: WalletLoadState = .loading
@@ -226,7 +226,7 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             logger.debug("reconcile: \(message)")
-            apply(message)
+            self.apply(message)
         }
     }
 
@@ -234,7 +234,7 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             logger.debug("reconcile_messages: \(messages)")
-            messages.forEach { apply($0) }
+            messages.forEach { self.apply($0) }
         }
     }
 
