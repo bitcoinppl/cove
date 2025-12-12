@@ -760,6 +760,8 @@ external fun uniffi_cove_types_checksum_method_confirmdetails_sending_to(
 ): Short
 external fun uniffi_cove_types_checksum_method_confirmdetails_spending_amount(
 ): Short
+external fun uniffi_cove_types_checksum_method_qrdensity_bbqr_animation_interval_ms(
+): Short
 external fun uniffi_cove_types_checksum_method_qrdensity_bbqr_max_version(
 ): Short
 external fun uniffi_cove_types_checksum_method_qrdensity_can_decrease(
@@ -1056,6 +1058,8 @@ external fun uniffi_cove_types_fn_free_qrdensity(`handle`: Long,uniffi_out_err: 
 ): Unit
 external fun uniffi_cove_types_fn_constructor_qrdensity_new(uniffi_out_err: UniffiRustCallStatus, 
 ): Long
+external fun uniffi_cove_types_fn_method_qrdensity_bbqr_animation_interval_ms(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Int
 external fun uniffi_cove_types_fn_method_qrdensity_bbqr_max_version(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
 external fun uniffi_cove_types_fn_method_qrdensity_can_decrease(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -1587,6 +1591,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_method_confirmdetails_spending_amount() != 58334.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_types_checksum_method_qrdensity_bbqr_animation_interval_ms() != 33981.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_method_qrdensity_bbqr_max_version() != 14183.toShort()) {
@@ -7255,6 +7262,12 @@ public object FfiConverterTypePsbt: FfiConverter<Psbt, Long> {
  */
 public interface QrDensityInterface {
     
+    /**
+     * Get the recommended animation interval in milliseconds for BBQR format
+     * Lower density (smaller max version) = slower animation for better scanning
+     */
+    fun `bbqrAnimationIntervalMs`(): kotlin.UInt
+    
     fun `bbqrMaxVersion`(): kotlin.UByte
     
     fun `canDecrease`(): kotlin.Boolean
@@ -7392,6 +7405,23 @@ open class QrDensity: Disposable, AutoCloseable, QrDensityInterface
             UniffiLib.uniffi_cove_types_fn_clone_qrdensity(handle, status)
         }
     }
+
+    
+    /**
+     * Get the recommended animation interval in milliseconds for BBQR format
+     * Lower density (smaller max version) = slower animation for better scanning
+     */override fun `bbqrAnimationIntervalMs`(): kotlin.UInt {
+            return FfiConverterUInt.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_types_fn_method_qrdensity_bbqr_animation_interval_ms(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
 
     override fun `bbqrMaxVersion`(): kotlin.UByte {
             return FfiConverterUByte.lift(
