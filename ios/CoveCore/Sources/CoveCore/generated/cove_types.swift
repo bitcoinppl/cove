@@ -3225,6 +3225,12 @@ public protocol QrDensityProtocol: AnyObject, Sendable {
      */
     func increase()  -> QrDensity
     
+    /**
+     * Get the recommended animation interval in milliseconds for UR format
+     * Lower density (smaller fragments) = slower animation for better scanning
+     */
+    func urAnimationIntervalMs()  -> UInt32
+    
     func urFragmentLen()  -> UInt32
     
 }
@@ -3336,6 +3342,18 @@ open func decrease() -> QrDensity  {
 open func increase() -> QrDensity  {
     return try!  FfiConverterTypeQrDensity_lift(try! rustCall() {
     uniffi_cove_types_fn_method_qrdensity_increase(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+    /**
+     * Get the recommended animation interval in milliseconds for UR format
+     * Lower density (smaller fragments) = slower animation for better scanning
+     */
+open func urAnimationIntervalMs() -> UInt32  {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+    uniffi_cove_types_fn_method_qrdensity_ur_animation_interval_ms(
             self.uniffiCloneHandle(),$0
     )
 })
@@ -6192,6 +6210,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_qrdensity_increase() != 45150) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_types_checksum_method_qrdensity_ur_animation_interval_ms() != 35006) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_qrdensity_ur_fragment_len() != 56660) {

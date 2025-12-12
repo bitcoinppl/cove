@@ -85,10 +85,11 @@ pub struct QrDensity {
 }
 
 impl QrDensity {
-    const UR_MIN: u32 = 50;
+    const UR_MIN: u32 = 25;
     const UR_MAX: u32 = 500;
     const UR_DEFAULT: u32 = 200;
     const UR_STEP: u32 = 50;
+    const UR_FINAL_STEP: u32 = 25;
 
     const BBQR_MIN: u8 = 5;
     const BBQR_MAX: u8 = 40;
@@ -119,8 +120,15 @@ impl QrDensity {
 
     /// Decrease density (smaller QRs, more animation frames)
     pub fn decrease(&self) -> Self {
+        // use smaller step for final decrease to reach 25
+        let step = if self.ur_fragment_len <= Self::UR_STEP + Self::UR_FINAL_STEP {
+            Self::UR_FINAL_STEP
+        } else {
+            Self::UR_STEP
+        };
+
         Self {
-            ur_fragment_len: self.ur_fragment_len.saturating_sub(Self::UR_STEP).max(Self::UR_MIN),
+            ur_fragment_len: self.ur_fragment_len.saturating_sub(step).max(Self::UR_MIN),
             bbqr_max_version: self
                 .bbqr_max_version
                 .saturating_sub(Self::BBQR_STEP)
@@ -142,6 +150,18 @@ impl QrDensity {
 
     pub fn bbqr_max_version(&self) -> u8 {
         self.bbqr_max_version
+    }
+
+    /// Get the recommended animation interval in milliseconds for UR format
+    /// Lower density (smaller fragments) = slower animation for better scanning
+    pub fn ur_animation_interval_ms(&self) -> u32 {
+        match self.ur_fragment_len {
+            200.. => 250,
+            150..200 => 300,
+            100..150 => 350,
+            50..100 => 400,
+            0..50 => 500,
+        }
     }
 }
 

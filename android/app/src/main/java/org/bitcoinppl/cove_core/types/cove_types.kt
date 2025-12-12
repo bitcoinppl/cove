@@ -770,6 +770,8 @@ external fun uniffi_cove_types_checksum_method_qrdensity_decrease(
 ): Short
 external fun uniffi_cove_types_checksum_method_qrdensity_increase(
 ): Short
+external fun uniffi_cove_types_checksum_method_qrdensity_ur_animation_interval_ms(
+): Short
 external fun uniffi_cove_types_checksum_method_qrdensity_ur_fragment_len(
 ): Short
 external fun uniffi_cove_types_checksum_method_feerate_sat_per_vb(
@@ -1064,6 +1066,8 @@ external fun uniffi_cove_types_fn_method_qrdensity_decrease(`ptr`: Long,uniffi_o
 ): Long
 external fun uniffi_cove_types_fn_method_qrdensity_increase(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
+external fun uniffi_cove_types_fn_method_qrdensity_ur_animation_interval_ms(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Int
 external fun uniffi_cove_types_fn_method_qrdensity_ur_fragment_len(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Int
 external fun uniffi_cove_types_fn_clone_feerate(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -1598,6 +1602,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_method_qrdensity_increase() != 45150.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_types_checksum_method_qrdensity_ur_animation_interval_ms() != 35006.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_method_qrdensity_ur_fragment_len() != 56660.toShort()) {
@@ -7264,6 +7271,12 @@ public interface QrDensityInterface {
      */
     fun `increase`(): QrDensity
     
+    /**
+     * Get the recommended animation interval in milliseconds for UR format
+     * Lower density (smaller fragments) = slower animation for better scanning
+     */
+    fun `urAnimationIntervalMs`(): kotlin.UInt
+    
     fun `urFragmentLen`(): kotlin.UInt
     
     companion object
@@ -7443,6 +7456,23 @@ open class QrDensity: Disposable, AutoCloseable, QrDensityInterface
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_types_fn_method_qrdensity_increase(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Get the recommended animation interval in milliseconds for UR format
+     * Lower density (smaller fragments) = slower animation for better scanning
+     */override fun `urAnimationIntervalMs`(): kotlin.UInt {
+            return FfiConverterUInt.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_types_fn_method_qrdensity_ur_animation_interval_ms(
         it,
         _status)
 }

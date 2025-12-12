@@ -74,11 +74,18 @@ fun QrExportView(
         generateQrCodes()
     }
 
-    // animate QR code cycling every 250ms
-    LaunchedEffect(qrStrings) {
+    // animation interval: 250ms for BBQR, dynamic for UR based on density
+    val animationDelayMs =
+        when (selectedFormat) {
+            QrExportFormat.BBQR -> 250L
+            QrExportFormat.UR -> density.urAnimationIntervalMs().toLong()
+        }
+
+    // animate QR code cycling
+    LaunchedEffect(qrStrings, animationDelayMs) {
         if (qrStrings.size > 1) {
             while (true) {
-                delay(250)
+                delay(animationDelayMs)
                 currentIndex = (currentIndex + 1) % qrStrings.size
             }
         }

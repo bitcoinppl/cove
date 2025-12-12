@@ -20,7 +20,14 @@ struct SendFlowQrExport: View {
     @State private var currentIndex = 0
 
     let startedAt: Date = .now
-    let every: TimeInterval = 0.250
+
+    /// Animation interval: 250ms for BBQR, dynamic for UR based on density
+    var animationInterval: TimeInterval {
+        switch selectedFormat {
+        case .bbqr: 0.250
+        case .ur: Double(density.urAnimationIntervalMs()) / 1000.0
+        }
+    }
 
     var body: some View {
         VStack {
@@ -76,8 +83,9 @@ struct SendFlowQrExport: View {
     @ViewBuilder
     var AnimatedQrView: some View {
         VStack {
-            TimelineView(.periodic(from: startedAt, by: every)) { context in
-                let index = abs(Int(context.date.distance(to: startedAt) / every) % qrs.count)
+            // .id() forces TimelineView recreation when interval changes
+            TimelineView(.periodic(from: startedAt, by: animationInterval)) { context in
+                let index = abs(Int(context.date.distance(to: startedAt) / animationInterval) % qrs.count)
                 qrs[index]
                     .frame(maxWidth: .infinity)
                     .fixedSize(horizontal: false, vertical: true)
@@ -86,6 +94,7 @@ struct SendFlowQrExport: View {
                         currentIndex = newIndex
                     }
             }
+            .id(animationInterval)
 
             if qrs.count > 1 {
                 HStack(alignment: .center, spacing: 8) {
@@ -176,6 +185,7 @@ struct SendFlowQrExport: View {
                 try details.psbtToUrWithDensity(density: density)
             }
             qrs = strings.map { QrCodeView(text: $0) }
+            currentIndex = 0
             error = nil
         } catch let err {
             error = err.localizedDescription
