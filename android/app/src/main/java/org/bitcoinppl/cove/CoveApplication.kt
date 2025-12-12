@@ -1,6 +1,8 @@
 package org.bitcoinppl.cove
 
 import android.app.Application
+import android.content.ComponentCallbacks2
+import android.content.res.Configuration
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
@@ -46,6 +48,52 @@ class CoveApplication : Application() {
 
         // setup app lifecycle observer for auth lock/unlock
         setupLifecycleObserver()
+
+        // register memory cleanup callbacks
+        // NOTE: Android does not guarantee process-level cleanup - the OS may kill the process
+        // without notice. Sensitive data should be managed via Android Keystore/EncryptedSharedPreferences
+        // or hardened in Rust destructors as secondary mitigation
+        setupMemoryCallbacks()
+    }
+
+    override fun onLowMemory() {
+        super.onLowMemory()
+        Log.d(TAG, "onLowMemory called, cleaning up FFI objects")
+        cleanupFfiObjects()
+    }
+
+    private fun cleanupFfiObjects() {
+        try {
+            // close FFI objects in reverse order of creation
+            device?.close()
+            device = null
+            Log.d(TAG, "Device FFI object closed")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error closing Device FFI object", e)
+        }
+
+        try {
+            keychain?.close()
+            keychain = null
+            Log.d(TAG, "Keychain FFI object closed")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error closing Keychain FFI object", e)
+        }
+
+        // close AppManager and AuthManager FFI objects
+        try {
+            AppManager.getInstance().rust.close()
+            Log.d(TAG, "AppManager FFI object closed")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error closing AppManager FFI object", e)
+        }
+
+        try {
+            AuthManager.getInstance().rust.close()
+            Log.d(TAG, "AuthManager FFI object closed")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error closing AuthManager FFI object", e)
+        }
     }
 
     private fun setupLifecycleObserver() {
@@ -59,6 +107,28 @@ class CoveApplication : Application() {
                 override fun onStop(owner: LifecycleOwner) {
                     // app going to background
                     handleBackground()
+                }
+            },
+        )
+    }
+
+    private fun setupMemoryCallbacks() {
+        registerComponentCallbacks(
+            object : ComponentCallbacks2 {
+                override fun onTrimMemory(level: Int) {
+                    if (level == ComponentCallbacks2.TRIM_MEMORY_COMPLETE) {
+                        Log.d(TAG, "onTrimMemory(TRIM_MEMORY_COMPLETE) called, cleaning up FFI objects")
+                        cleanupFfiObjects()
+                    }
+                }
+
+                override fun onConfigurationChanged(newConfig: Configuration) {
+                    // no-op
+                }
+
+                override fun onLowMemory() {
+                    Log.d(TAG, "ComponentCallbacks2.onLowMemory called, cleaning up FFI objects")
+                    cleanupFfiObjects()
                 }
             },
         )

@@ -44,7 +44,10 @@ internal fun WalletSheetsHost(
             onExportLabels = {
                 onDismissMoreOptions()
                 val metadata = manager.walletMetadata
-                val fileName = manager.rust.labelManager().exportDefaultFileName(metadata?.name ?: "wallet")
+                val fileName =
+                    manager.rust.labelManager().use { lm ->
+                        lm.exportDefaultFileName(metadata?.name ?: "wallet")
+                    }
                 exportLaunchers.exportLabels(fileName)
             },
             onExportTransactions = {

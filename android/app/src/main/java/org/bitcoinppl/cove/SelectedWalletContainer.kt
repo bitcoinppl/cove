@@ -128,13 +128,14 @@ fun SelectedWalletContainer(
     var showMoreOptions by remember { mutableStateOf(false) }
     var showReceiveSheet by remember { mutableStateOf(false) }
     var showNfcScanner by remember { mutableStateOf(false) }
-    val exportState = remember { WalletExportState() }
+    val exportState = remember(id) { WalletExportState() }
 
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
     // cleanup on dispose - clear alert state if export is in progress
-    DisposableEffect(Unit) {
+    // keyed on exportState so effect restarts when wallet changes (exportState is remember(id))
+    DisposableEffect(exportState) {
         onDispose {
             if (exportState.isExporting && app.alertState != null) {
                 app.alertState = null

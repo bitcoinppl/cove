@@ -29,9 +29,23 @@ internal fun QrScannerSheet(
             onScanned = { multiFormat ->
                 when (multiFormat) {
                     is MultiFormat.Mnemonic -> {
-                        val mnemonicString = multiFormat.v1.words().joinToString(" ")
-                        val words = groupedPlainWordsOf(mnemonic = mnemonicString, groups = GROUPS_OF.toUByte())
-                        onWordsScanned(words)
+                        multiFormat.v1.use { mnemonic ->
+                            runCatching {
+                                val mnemonicString = mnemonic.words().joinToString(" ")
+                                groupedPlainWordsOf(mnemonic = mnemonicString, groups = GROUPS_OF.toUByte())
+                            }.onSuccess { words ->
+                                onWordsScanned(words)
+                            }.onFailure {
+                                onDismiss()
+                                app.alertState =
+                                    TaggedItem(
+                                        AppAlertState.General(
+                                            title = "Invalid QR Code",
+                                            message = "Please scan a valid seed phrase QR code",
+                                        ),
+                                    )
+                            }
+                        }
                     }
                     else -> {
                         onDismiss()

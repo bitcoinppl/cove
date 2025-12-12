@@ -44,6 +44,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import kotlinx.coroutines.launch
+import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.QrCodeGenerator
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.ui.theme.CoveColor
@@ -74,7 +75,7 @@ fun ReceiveAddressSheet(
             addressInfo = manager.rust.nextAddress()
             errorMessage = null
         } catch (e: Exception) {
-            android.util.Log.e(tag, "Unable to get next address", e)
+            Log.e(tag, "Unable to get next address", e)
             errorMessage = e.message ?: "Unable to get address"
         } finally {
             isLoading = false
@@ -89,7 +90,7 @@ fun ReceiveAddressSheet(
                 addressInfo = manager.rust.nextAddress()
                 errorMessage = null
             } catch (e: Exception) {
-                android.util.Log.e(tag, "Unable to get next address", e)
+                Log.e(tag, "Unable to get next address", e)
                 errorMessage = e.message ?: "Unable to get address"
             } finally {
                 isLoading = false

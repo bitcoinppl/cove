@@ -27,7 +27,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -37,9 +36,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppAlertState
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.findActivity
 import org.bitcoinppl.cove.nfc.TapCardNfcManager
@@ -59,7 +58,6 @@ fun TapSignerConfirmPinView(
     modifier: Modifier = Modifier,
 ) {
     var confirmPin by remember { mutableStateOf("") }
-    val scope = rememberCoroutineScope()
     val offsetX = remember { Animatable(0f) }
     val context = LocalContext.current
 
@@ -72,23 +70,21 @@ fun TapSignerConfirmPinView(
     LaunchedEffect(confirmPin) {
         if (confirmPin.length == 6) {
             delay(200)
-            scope.launch {
-                val activity = context.findActivity()
-                if (activity == null) {
-                    app.alertState =
-                        TaggedItem(
-                            AppAlertState.General(
-                                title = "Error",
-                                message = "Unable to access NFC. Please try again.",
-                            ),
-                        )
-                    confirmPin = ""
-                    return@launch
-                }
+            val activity = context.findActivity()
+            if (activity == null) {
+                app.alertState =
+                    TaggedItem(
+                        AppAlertState.General(
+                            title = "Error",
+                            message = "Unable to access NFC. Please try again.",
+                        ),
+                    )
+                confirmPin = ""
+                return@LaunchedEffect
+            }
 
-                checkPin(app, manager, args, confirmPin, offsetX, activity) {
-                    confirmPin = ""
-                }
+            checkPin(app, manager, args, confirmPin, offsetX, activity) {
+                confirmPin = ""
             }
         }
     }
@@ -255,7 +251,7 @@ private suspend fun setupTapSigner(
             manager.resetRoute(TapSignerRoute.SetupRetry(args.tapSigner, setupResponse))
         } else {
             // failed completely, go back to home
-            android.util.Log.e("TapSignerConfirmPin", "Setup failed", e)
+            Log.e("TapSignerConfirmPin", "Setup failed", e)
             app.sheetState = null
             app.alertState =
                 TaggedItem(
@@ -299,7 +295,7 @@ private suspend fun changeTapSignerPin(
         manager.isScanning = false
         nfcManager.onMessageUpdate = null
 
-        android.util.Log.e("TapSignerConfirmPin", "Error changing PIN", e)
+        Log.e("TapSignerConfirmPin", "Error changing PIN", e)
 
         // check error type and show appropriate alert
         val errorMessage = e.message ?: "Unknown error"

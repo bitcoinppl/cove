@@ -58,49 +58,6 @@ internal fun TransactionDetailsWidget(
         )
         Spacer(Modifier.height(24.dp))
 
-        // show confirmations if confirmed
-        if (isConfirmed) {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    stringResource(R.string.label_confirmations),
-                    color = sub,
-                    fontSize = 12.sp,
-                )
-                Spacer(Modifier.height(8.dp))
-                if (numberOfConfirmations != null) {
-                    Text(
-                        numberOfConfirmations.toString(),
-                        color = fg,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                }
-                Spacer(Modifier.height(14.dp))
-
-                Text(
-                    stringResource(R.string.label_block_number),
-                    color = sub,
-                    fontSize = 12.sp,
-                )
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    transactionDetails.blockNumberFmt() ?: "",
-                    color = fg,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
-            Spacer(Modifier.height(24.dp))
-            Box(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .height(1.dp)
-                        .background(dividerColor),
-            )
-            Spacer(Modifier.height(24.dp))
-        }
-
         // address (sent to / received from)
         val addressLabel =
             stringResource(
