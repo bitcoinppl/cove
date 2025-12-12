@@ -3209,6 +3209,12 @@ public func FfiConverterTypePsbt_lower(_ value: Psbt) -> UInt64 {
  */
 public protocol QrDensityProtocol: AnyObject, Sendable {
     
+    /**
+     * Get the recommended animation interval in milliseconds for BBQR format
+     * Lower density (smaller max version) = slower animation for better scanning
+     */
+    func bbqrAnimationIntervalMs()  -> UInt32
+    
     func bbqrMaxVersion()  -> UInt8
     
     func canDecrease()  -> Bool
@@ -3300,6 +3306,18 @@ public convenience init() {
 
     
 
+    
+    /**
+     * Get the recommended animation interval in milliseconds for BBQR format
+     * Lower density (smaller max version) = slower animation for better scanning
+     */
+open func bbqrAnimationIntervalMs() -> UInt32  {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+    uniffi_cove_types_fn_method_qrdensity_bbqr_animation_interval_ms(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
     
 open func bbqrMaxVersion() -> UInt8  {
     return try!  FfiConverterUInt8.lift(try! rustCall() {
@@ -6195,6 +6213,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_confirmdetails_spending_amount() != 58334) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_types_checksum_method_qrdensity_bbqr_animation_interval_ms() != 33981) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_qrdensity_bbqr_max_version() != 14183) {

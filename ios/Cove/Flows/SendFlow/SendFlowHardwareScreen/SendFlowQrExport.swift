@@ -21,10 +21,10 @@ struct SendFlowQrExport: View {
 
     let startedAt: Date = .now
 
-    /// Animation interval: 250ms for BBQR, dynamic for UR based on density
+    /// Animation interval: dynamic based on density for both formats
     var animationInterval: TimeInterval {
         switch selectedFormat {
-        case .bbqr: 0.250
+        case .bbqr: Double(density.bbqrAnimationIntervalMs()) / 1000.0
         case .ur: Double(density.urAnimationIntervalMs()) / 1000.0
         }
     }

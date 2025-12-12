@@ -74,10 +74,10 @@ fun QrExportView(
         generateQrCodes()
     }
 
-    // animation interval: 250ms for BBQR, dynamic for UR based on density
+    // animation interval: dynamic based on density for both formats
     val animationDelayMs =
         when (selectedFormat) {
-            QrExportFormat.BBQR -> 250L
+            QrExportFormat.BBQR -> density.bbqrAnimationIntervalMs().toLong()
             QrExportFormat.UR -> density.urAnimationIntervalMs().toLong()
         }
 

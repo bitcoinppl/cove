@@ -163,6 +163,18 @@ impl QrDensity {
             0..50 => 500,
         }
     }
+
+    /// Get the recommended animation interval in milliseconds for BBQR format
+    /// Lower density (smaller max version) = slower animation for better scanning
+    pub fn bbqr_animation_interval_ms(&self) -> u32 {
+        match self.bbqr_max_version {
+            15.. => 250,
+            11..15 => 300,
+            9..11 => 350,
+            7..9 => 400,
+            0..7 => 500,
+        }
+    }
 }
 
 /// Check if two QrDensity values are equal (for Swift Equatable conformance)
