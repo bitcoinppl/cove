@@ -76,6 +76,9 @@ build-ios-debug-device:
 [private]
 alias bidd := build-ios-debug-device
 
+[private]
+alias gen-swift := build-ios
+
 # Compile both iOS and Android
 [group('build')]
 @compile:

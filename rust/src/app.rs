@@ -16,6 +16,7 @@ use crate::{
         client::{FIAT_CLIENT, PriceResponse},
     },
     keychain::Keychain,
+    manager::deferred_dispatch::{DeferredDispatch, Dispatchable},
     network::Network,
     node::Node,
     router::{LOAD_AND_RESET_DELAY_MS, Route, RouteFactory, Router},
@@ -54,6 +55,7 @@ pub struct App {
 pub enum AppAction {
     UpdateRoute { routes: Vec<Route> },
     PushRoute(Route),
+    PopRoute,
     ChangeNetwork { network: Network },
     ChangeColorScheme(ColorSchemeSelection),
     ChangeFiatCurrency(FiatCurrency),
@@ -214,6 +216,12 @@ impl App {
                 Updater::send_update(AppMessage::RouteUpdated(routes));
             }
 
+            AppAction::PopRoute => {
+                self.state.write().router.routes.pop();
+                let routes = self.state.read().router.routes.clone();
+                Updater::send_update(AppMessage::RouteUpdated(routes));
+            }
+
             AppAction::AcceptTerms => {
                 if let Err(error) = Database::global()
                     .global_flag
@@ -261,7 +269,10 @@ impl FfiApp {
         id: WalletId,
         next_route: Option<Route>,
     ) -> Result<(), DatabaseError> {
-        // set the selected wallet
+        let mut deferred = DeferredDispatch::<AppAction>::new();
+        deferred.queue(AppAction::UpdateFees);
+        deferred.queue(AppAction::UpdateFiatPrices);
+
         Database::global().global_config.select_wallet(id.clone())?;
 
         // update the router
@@ -507,7 +518,8 @@ impl FfiApp {
     }
 
     /// Frontend calls this method to send events to the rust application logic
-    pub fn dispatch(&self, action: AppAction) {
+    #[uniffi::method(name = "dispatch")]
+    fn ffi_dispatch(&self, action: AppAction) {
         self.inner().handle_action(action);
     }
 
@@ -542,12 +554,8 @@ impl FfiApp {
 
         // get / update fees
         crate::task::spawn(async move {
-            crate::fee_client::init_fees().await;
-
-            let fees = FEE_CLIENT.fetch_and_get_fees().await;
-            if let Ok(fees) = fees {
-                Updater::send_update(AppMessage::FeesChanged(fees));
-            }
+            // init fees from database cache or network and update the UI
+            crate::fee_client::init_and_update_fees().await;
         });
     }
 }
@@ -585,6 +593,15 @@ fn set_env() {
     {
         if std::env::var("RUST_LOG").is_err() {
             unsafe { std::env::set_var("RUST_LOG", "cove=info") }
+        }
+    }
+}
+
+impl Dispatchable for AppAction {
+    fn flush(actions: Vec<Self>) {
+        let app = App::global();
+        for action in actions {
+            app.handle_action(action);
         }
     }
 }

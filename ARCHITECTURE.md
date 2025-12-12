@@ -64,6 +64,8 @@ This pattern is used throughout the codebase for shared resources and is safe to
 
 **State reconciliation.** Each manager module owns a `flume` channel pair. Rust emits typed `…ReconcileMessage` enums through the channel, and the generated FFI surface forwards them to the platform reconcilers. Platform managers should call `listen_for_updates` immediately after instantiating their Rust counterpart (e.g. `AppManager` in `ios/Cove/AppManager.swift`) so no reconciliation messages are missed. Long-lived managers (wallet, send flow, auth) also keep shared state in `Arc<RwLock<_>>` structures so the reconciler can request snapshots.
 
+**Dispatching from Rust.** When Rust code needs to dispatch `AppAction`, use `DeferredDispatch<T>` (`rust/src/manager/deferred_dispatch.rs`) instead of calling dispatch directly. This queues actions and dispatches them when the struct drops, ensuring dispatch happens after any locks are released and avoiding potential deadlocks. The `ffi_dispatch` method on `FfiApp` is intentionally named to discourage direct Rust usage—iOS/Android see it as `dispatch` via UniFFI renaming.
+
 **Routing & application shell.** `rust/src/app.rs` defines `App`, the singleton that coordinates routing, fees/prices, network selection, and terms acceptance. Its `FfiApp` wrapper implements the UniFFI object exposed to the UI. Route updates use `AppStateReconcileMessage` callbacks to keep Kotlin/Swift state in sync.
 
 **Persistence.** Non-sensitive data is stored with [`redb`](https://crates.io/crates/redb) (`rust/src/database.rs`). Database file defaults to `$ROOT_DATA_DIR/cove.db` where `ROOT_DATA_DIR` is defined in `cove-common/src/consts.rs`.

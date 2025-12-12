@@ -577,7 +577,12 @@ struct CoveApp: App {
             auth.unlock()
         }
 
-        if newPhase == .active { showCover = false }
+        if newPhase == .active {
+            showCover = false
+            // refresh fees and prices in background (30-sec throttle protects against excessive requests)
+            app.dispatch(action: AppAction.updateFees)
+            app.dispatch(action: AppAction.updateFiatPrices)
+        }
 
         // PIN auth active, no biometrics, leaving app
         if auth.isAuthEnabled,

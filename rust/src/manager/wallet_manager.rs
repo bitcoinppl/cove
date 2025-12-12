@@ -277,11 +277,14 @@ impl RustWalletManager {
     }
 
     #[uniffi::method]
-    pub fn new_send_flow_manager(self: Arc<Self>) -> Arc<RustSendFlowManager> {
+    pub fn new_send_flow_manager(
+        self: Arc<Self>,
+        balance: Arc<Balance>,
+    ) -> Arc<RustSendFlowManager> {
         let me = self.clone();
         let metadata = self.metadata.read().clone();
 
-        RustSendFlowManager::new(metadata, me)
+        RustSendFlowManager::new(metadata, balance, me)
     }
 
     #[uniffi::method]

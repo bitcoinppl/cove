@@ -235,7 +235,7 @@ struct SendFlowSetAmountScreen: View {
         )
     }
 
-    private var totalFeeString: String {
+    private var totalFeeString: String? {
         sendFlowManager.totalFeeString
     }
 
@@ -459,10 +459,7 @@ struct SendFlowSetAmountScreen: View {
 
                 Spacer()
 
-                Text(totalFeeString)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .fontWeight(.medium)
+                AsyncText(text: totalFeeString, font: .footnote, color: .secondary, spinnerScale: 0.5)
             }
         }
         .onTapGesture {

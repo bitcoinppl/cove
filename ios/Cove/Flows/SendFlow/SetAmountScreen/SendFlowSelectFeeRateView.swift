@@ -111,22 +111,27 @@ private struct FeeOptionView: View {
         return if isSelected { Color.primary } else { Color.secondary }
     }
 
-    var totalFee: String {
-        feeOption.totalFee().satsString()
+    var isLoading: Bool {
+        feeOption.totalFee() == nil
+    }
+
+    var totalFee: String? {
+        feeOption.totalFee()?.satsString()
     }
 
     var satsPerVbyte: Double {
         Double(feeOption.satPerVb())
     }
 
-    private var fiatAmount: String {
+    private var fiatAmount: String? {
+        guard let totalFee = feeOption.totalFee() else { return nil }
+
         guard let prices = app.prices else {
             app.dispatch(action: .updateFiatPrices)
             return "---"
         }
 
-        let amount = feeOption.totalFee()
-        return "≈ \(manager.rust.convertAndDisplayFiat(amount: amount, prices: prices))"
+        return "≈ \(manager.rust.convertAndDisplayFiat(amount: totalFee, prices: prices))"
     }
 
     var body: some View {
@@ -153,13 +158,18 @@ private struct FeeOptionView: View {
             Spacer()
 
             VStack(alignment: .trailing, spacing: 4) {
-                Text("\(totalFee) sats")
-                    .font(.headline)
-                    .foregroundColor(fontColor)
+                AsyncText(
+                    text: totalFee.map { "\($0) sats" },
+                    font: .headline,
+                    color: fontColor
+                )
 
-                Text(fiatAmount)
-                    .font(.subheadline)
-                    .foregroundColor(fontColor)
+                AsyncText(
+                    text: fiatAmount,
+                    font: .subheadline,
+                    color: fontColor,
+                    spinnerScale: 0.8
+                )
             }
         }
         .padding()

@@ -95,7 +95,7 @@ impl NodeClient {
             }
 
             ApiType::Electrum => {
-                let client = electrum::ElectrumClient::new_from_node(node)?;
+                let client = electrum::ElectrumClient::new_from_node(node).await?;
                 Ok(Self::Electrum(client))
             }
 
@@ -119,7 +119,8 @@ impl NodeClient {
             }
 
             ApiType::Electrum => {
-                let client = electrum::ElectrumClient::new_from_node_and_options(node, options)?;
+                let client =
+                    electrum::ElectrumClient::new_from_node_and_options(node, options).await?;
                 Ok(Self::Electrum(client))
             }
 

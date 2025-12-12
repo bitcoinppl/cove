@@ -45,16 +45,21 @@ impl ElectrumClient {
         Self::new_with_options(client, Self::default_options())
     }
 
-    pub fn new_from_node(node: &Node) -> Result<Self, Error> {
-        Self::new_from_node_and_options(node, Self::default_options())
+    pub async fn new_from_node(node: &Node) -> Result<Self, Error> {
+        Self::new_from_node_and_options(node, Self::default_options()).await
     }
 
-    pub fn new_from_node_and_options(
+    pub async fn new_from_node_and_options(
         node: &Node,
         options: NodeClientOptions,
     ) -> Result<Self, Error> {
-        let url = node.url.strip_suffix('/').unwrap_or(&node.url);
-        let inner_client = Client::new(url).map_err(Error::CreateElectrumClient)?;
+        let url = node.url.strip_suffix('/').unwrap_or(&node.url).to_string();
+
+        // use spawn_blocking for the synchronous TCP connection to avoid blocking the async runtime
+        let inner_client = crate::unblock::run_blocking(move || Client::new(&url))
+            .await
+            .map_err(Error::CreateElectrumClient)?;
+
         let bdk_client = BdkElectrumClient::new(inner_client);
         let client = Arc::new(bdk_client);
 
@@ -295,6 +300,7 @@ mod tests {
             api_type: crate::node::ApiType::Electrum,
             network: cove_types::network::Network::Bitcoin,
         })
+        .await
         .unwrap();
 
         // Test with a known confirmed transaction

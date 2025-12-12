@@ -14,7 +14,7 @@ use std::sync::{
 use cove_util::result_ext::ResultExt as _;
 
 use crate::{
-    app::{App, AppAction, FfiApp},
+    app::{App, AppAction},
     fee_client::FEE_CLIENT,
     fiat::client::PriceResponse,
     router::RouteFactory,
@@ -22,12 +22,14 @@ use crate::{
     transaction::FeeRate,
     wallet::{
         Address,
+        balance::Balance,
         metadata::{FiatOrBtc, WalletMetadata, WalletType},
     },
 };
 use act_zero::{WeakAddr, call};
 use alert_state::SendFlowAlertState;
 use amount_or_max::AmountOrMax;
+use backon::{ExponentialBuilder, Retryable};
 use btc_on_change::BtcOnChangeHandler;
 use cove_common::consts::{MIN_SEND_AMOUNT, MIN_SEND_SATS};
 use cove_types::{
@@ -45,9 +47,10 @@ use fiat_on_change::FiatOnChangeHandler;
 use flume::Receiver;
 use parking_lot::Mutex;
 use state::{CoinControlMode, EnterMode, SendFlowManagerState, State};
-use tracing::{debug, trace, warn};
+use tracing::{debug, error, trace, warn};
 
 use super::{
+    deferred_dispatch::DeferredDispatch,
     deferred_sender::{self, MessageSender},
     wallet_manager::{RustWalletManager, actor::WalletActor},
 };
@@ -155,10 +158,34 @@ pub enum SendFlowManagerAction {
 }
 
 impl RustSendFlowManager {
-    pub fn new(metadata: WalletMetadata, wallet_manager: Arc<RustWalletManager>) -> Arc<Self> {
+    pub fn new(
+        metadata: WalletMetadata,
+        balance: Arc<Balance>,
+        wallet_manager: Arc<RustWalletManager>,
+    ) -> Arc<Self> {
         let (sender, receiver) = flume::bounded(50);
-        let state = State::new(metadata);
+        let state = State::new(metadata, balance);
         let message_sender = MessageSender::new(sender);
+
+        // immediately populate cached values if available
+        let has_base_fees = if let Some(fee_response) = FEE_CLIENT.fees() {
+            let base_options = FeeRateOptions::from(fee_response);
+            let fee_options = FeeRateOptionsWithTotalFee::without_totals(base_options);
+
+            let mut state_guard = state.lock();
+            state_guard.fee_rate_options_base = Some(Arc::new(base_options));
+            state_guard.fee_rate_options = Some(Arc::new(fee_options));
+            state_guard.has_base_fees = true;
+            true
+        } else {
+            false
+        };
+
+        debug!(
+            "SendFlowManager::new - has_base_fees: {}, balance: {:?}",
+            has_base_fees,
+            state.lock().wallet_balance
+        );
 
         let me: Arc<Self> = Self {
             app: App::global().clone(),
@@ -170,7 +197,7 @@ impl RustSendFlowManager {
         }
         .into();
 
-        // in background run init tasks and setup
+        // run all init tasks in background (parallel)
         me.background_init_tasks();
         me
     }
@@ -232,17 +259,39 @@ impl RustSendFlowManager {
         }
     }
 
+    /// Wait until we have base fee rates, returns false if timeout
+    /// Returns immediately if we already have cached fees
+    /// Only blocks if no cached fees exist (first launch, network needed)
+    /// On timeout: shows alert and pops route
     #[uniffi::method]
-    pub async fn wait_for_init(&self) {
+    pub async fn wait_for_init(self: &Arc<Self>) -> bool {
         let mut times = 0;
+        const MAX_WAIT_MS: u64 = 20_000;
+        let mut total_waited: u64 = 0;
+
         loop {
-            if self.state.lock().init_complete {
-                break;
+            if self.state.lock().has_base_fees {
+                return true;
             }
 
-            debug!("waiting for init {times}");
+            if total_waited >= MAX_WAIT_MS {
+                warn!("wait_for_init timed out after {MAX_WAIT_MS}ms");
+
+                self.reconciler.send(Message::SetAlert(SendFlowAlertState::General {
+                    title: "Unable to Load Fees".to_string(),
+                    message: "Cannot create a transaction without fee information. Please check your internet connection and try again.".to_string(),
+                }));
+
+                let mut deferred = DeferredDispatch::<AppAction>::new();
+                deferred.queue(AppAction::PopRoute);
+
+                return false;
+            }
+
+            debug!("waiting for base fees {times}");
             let wait_time = (33 + times * 10).min(200);
             tokio::time::sleep(std::time::Duration::from_millis(wait_time)).await;
+            total_waited += wait_time;
             times += 1;
         }
     }
@@ -263,9 +312,9 @@ impl RustSendFlowManager {
             .state
             .lock()
             .wallet_balance
-            .clone()
+            .as_ref()
             .map(|b| b.trusted_spendable().to_sat())
-            .unwrap_or(0);
+            .unwrap_or(u64::MAX);
 
         amount > spendable
     }
@@ -335,16 +384,16 @@ impl RustSendFlowManager {
     }
 
     #[uniffi::method]
-    pub fn total_fee_string(&self) -> String {
-        let Some(selected_fee_rate) = &self.state.lock().selected_fee_rate.clone() else {
-            return "---".to_string();
-        };
+    pub fn total_fee_string(&self) -> Option<String> {
+        let selected_fee_rate = self.state.lock().selected_fee_rate.clone()?;
+        let total_fee = selected_fee_rate.total_fee()?;
 
-        let total_fee = selected_fee_rate.total_fee();
-        match self.state.lock().metadata.selected_unit {
+        let string = match self.state.lock().metadata.selected_unit {
             BitcoinUnit::Btc => format!("{} BTC", total_fee.as_btc().thousands()),
             BitcoinUnit::Sat => format!("{} sats", total_fee.as_sats().thousands_int()),
-        }
+        };
+
+        Some(string)
     }
 
     #[uniffi::method(default(with_suffix = true))]
@@ -389,8 +438,9 @@ impl RustSendFlowManager {
     pub fn validate_fee_percentage(self: &Arc<Self>, display_alert: bool) -> bool {
         let Some(amount) = self.state.lock().amount_sats else { return false };
         let Some(fee_rate) = self.state.lock().selected_fee_rate.clone() else { return false };
+        let Some(total_fee) = fee_rate.total_fee() else { return false };
 
-        let fee_sats = fee_rate.total_fee().as_sats();
+        let fee_sats = total_fee.as_sats();
         let fee_percentage = fee_sats * 100 / amount;
 
         debug!("validate_fee_percentage: {fee_sats} / {amount} = {fee_percentage} ");
@@ -536,7 +586,8 @@ impl RustSendFlowManager {
 
         let total_fee = psbt.fee().map_err_str(Error::UnableToGetFeeDetails)?;
 
-        let fee_rate_option = FeeRateOptionWithTotalFee { fee_speed, fee_rate, total_fee };
+        let fee_rate_option =
+            FeeRateOptionWithTotalFee { fee_speed, fee_rate, total_fee: Some(total_fee) };
 
         Ok(fee_rate_option.into())
     }
@@ -645,7 +696,7 @@ impl RustSendFlowManager {
             .lock()
             .selected_fee_rate
             .as_ref()
-            .map(|f| f.total_fee.as_sats())
+            .and_then(|f| f.total_fee.map(|fee| fee.as_sats()))
             .unwrap_or(1000);
 
         let max_send_without_fees = max_send.as_sats().saturating_sub(total_fee_sats);
@@ -884,10 +935,11 @@ impl RustSendFlowManager {
         let mode = self.state.lock().mode.clone();
         match mode {
             EnterMode::CoinControl(cc) if cc.is_max_selected => {
-                let max_amount = cc.max_send();
-                let total_fee = fee_rate.total_fee;
-                let amount = max_amount - total_fee;
-                self.handle_amount_changed(amount);
+                if let Some(total_fee) = fee_rate.total_fee {
+                    let max_amount = cc.max_send();
+                    let amount = max_amount - total_fee;
+                    self.handle_amount_changed(amount);
+                }
             }
             _ => {}
         };
@@ -1095,8 +1147,10 @@ impl RustSendFlowManager {
         let utxo_list = Arc::new(UtxoList::from(utxos));
         let total_minus_fees = {
             let mut state = self.state.lock();
-            let total_fee_sats =
-                state.selected_fee_rate.as_ref().map(|fee_rate| fee_rate.total_fee.as_sats());
+            let total_fee_sats = state
+                .selected_fee_rate
+                .as_ref()
+                .and_then(|fee_rate| fee_rate.total_fee.map(|f| f.as_sats()));
 
             state.mode = EnterMode::coin_control_max(utxo_list.clone());
             let total_minus_fees =
@@ -1308,7 +1362,13 @@ impl RustSendFlowManager {
     async fn get_and_update_base_fee_rate_options(self: &Arc<Self>) -> Option<Arc<FeeRateOptions>> {
         let fee_response = FEE_CLIENT.fetch_and_get_fees().await.ok()?;
         let fees = Arc::new(FeeRateOptions::from(fee_response));
-        self.state.lock().fee_rate_options_base = Some(fees.clone());
+
+        {
+            let mut state = self.state.lock();
+            state.fee_rate_options_base = Some(fees.clone());
+            state.has_base_fees = true;
+        }
+
         Some(fees)
     }
 
@@ -1564,7 +1624,8 @@ impl RustSendFlowManager {
                 }
             };
 
-            FfiApp::global().dispatch(AppAction::PushRoute(next_route));
+            let mut deferred = DeferredDispatch::<AppAction>::new();
+            deferred.queue(AppAction::PushRoute(next_route));
         });
     }
 }
@@ -1615,26 +1676,47 @@ impl RustSendFlowManager {
 
     fn total_spent_btc_amount(self: &Arc<Self>) -> Option<Amount> {
         let send_amount = self.send_amount()?;
-        let total_fee = self.state.lock().selected_fee_rate.as_ref()?.total_fee;
+        let total_fee = self.state.lock().selected_fee_rate.as_ref()?.total_fee?;
         Some(send_amount + total_fee)
     }
 
-    // Get the first address for the wallet
-    // Get the fee rate options
+    /// Background refresh tasks that run in parallel
+    /// If no cached fees exist, fetches fees first and sets has_base_fees
     fn background_init_tasks(self: &Arc<Self>) {
         let me = self.clone();
-        let state = self.state.clone();
-
         task::spawn(async move {
-            // get and save first address
-            me.get_first_address().await;
+            // run all refreshes concurrently
+            tokio::join!(
+                me.get_first_address(),
+                me.get_or_update_fee_rate_options(),
+                me.get_wallet_balance(),
+            );
+        });
 
-            // get fee rate options
-            me.get_or_update_fee_rate_options().await;
+        let state = self.state.clone();
+        task::spawn(async move {
+            let result = (|| crate::fee_client::get_and_update_fees()).retry(
+                ExponentialBuilder::default()
+                    .with_min_delay(std::time::Duration::from_millis(100))
+                    .with_max_delay(std::time::Duration::from_secs(3))
+                    .with_total_delay(Some(std::time::Duration::from_secs(18))),
+            );
 
-            me.get_wallet_balance().await;
+            if let Err(e) = result.await {
+                return error!("failed to fetch fees: error={e:?}");
+            }
 
-            state.lock().init_complete = true;
+            let Some(fee_response) = crate::fee_client::FEE_CLIENT.fees() else {
+                return;
+            };
+
+            let base_options = FeeRateOptions::from(fee_response);
+            let fee_options = FeeRateOptionsWithTotalFee::without_totals(base_options);
+
+            let mut state_guard = state.lock();
+            state_guard.fee_rate_options_base = Some(Arc::new(base_options));
+            state_guard.fee_rate_options = Some(Arc::new(fee_options));
+            state_guard.has_base_fees = true;
         });
     }
 
@@ -1803,8 +1885,11 @@ impl RustSendFlowManager {
                 let max = cc.max_send();
                 let total_fee = selected_fee_rate
                     .as_ref()
-                    .map(|fee_rate| fee_rate.total_fee.as_sats())
-                    .unwrap_or(fee_rate_options_with_total_fee.medium.total_fee.as_sats());
+                    .and_then(|fee_rate| fee_rate.total_fee.map(|f| f.as_sats()))
+                    .or_else(|| {
+                        fee_rate_options_with_total_fee.medium.total_fee.map(|f| f.as_sats())
+                    })
+                    .unwrap_or(0);
 
                 let send_amount = max.as_sats() - total_fee;
                 if Some(send_amount) != amount_sats {
@@ -1848,7 +1933,7 @@ impl RustSendFlowManager {
         };
 
         let mut new_custom_with_fee = Arc::unwrap_or_clone(selected_fee_rate.clone());
-        new_custom_with_fee.total_fee = total_fee;
+        new_custom_with_fee.total_fee = Some(total_fee);
 
         let fee_rate_options = fee_rate_options.add_custom_fee_rate(new_custom_with_fee.into());
         Some(fee_rate_options)

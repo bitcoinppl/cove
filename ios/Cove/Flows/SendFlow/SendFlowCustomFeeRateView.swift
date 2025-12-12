@@ -52,14 +52,6 @@ struct SendFlowCustomFeeRateView: View {
         )
     }
 
-    var totalSatsString: String {
-        if let totalSats {
-            return "\(totalSats) sats"
-        }
-
-        return ""
-    }
-
     var feeInFiat: String {
         guard let prices = app.prices else {
             app.dispatch(action: .updateFiatPrices)
@@ -91,7 +83,9 @@ struct SendFlowCustomFeeRateView: View {
                     feeRate: feeRate, feeSpeed: feeSpeed
                 )
 
-                self.totalSats = Int(feeRateOption.totalFee().asSats())
+                if let totalFee = feeRateOption.totalFee() {
+                    self.totalSats = Int(totalFee.asSats())
+                }
                 await MainActor.run {
                     let feeOptions = feeOptions.addCustomFeeRate(feeRate: feeRateOption)
                     self.feeOptions = feeOptions
@@ -190,15 +184,14 @@ struct SendFlowCustomFeeRateView: View {
                 }
 
                 HStack {
-                    if totalSats == nil {
-                        ProgressView()
-                            .controlSize(.mini)
-                            .tint(.primary)
-                    } else {
-                        Text(totalSatsString)
-                            .font(.caption)
-                            .fontWeight(.semibold)
+                    AsyncText(
+                        text: totalSats.map { "\($0) sats" },
+                        font: .caption,
+                        spinnerScale: 0.7
+                    )
+                    .fontWeight(.semibold)
 
+                    if totalSats != nil {
                         Text(feeInFiat)
                             .font(.caption2)
                             .foregroundStyle(.secondary)

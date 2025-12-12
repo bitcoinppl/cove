@@ -200,16 +200,39 @@ pub struct FeeRateOptionsWithTotalFee {
     pub custom: Option<FeeRateOptionWithTotalFee>,
 }
 
+impl FeeRateOptionsWithTotalFee {
+    /// Create from base options without total fees
+    /// Used when we have fee rates but haven't built PSBTs to calculate actual fees yet
+    pub fn without_totals(base: FeeRateOptions) -> Self {
+        let from = |opt: FeeRateOption| FeeRateOptionWithTotalFee {
+            fee_speed: opt.fee_speed,
+            fee_rate: opt.fee_rate,
+            total_fee: None,
+        };
+
+        Self {
+            fast: from(base.fast),
+            medium: from(base.medium),
+            slow: from(base.slow),
+            custom: None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, uniffi::Object)]
 pub struct FeeRateOptionWithTotalFee {
     pub fee_speed: FeeSpeed,
     pub fee_rate: FeeRate,
-    pub total_fee: Amount,
+    pub total_fee: Option<Amount>,
 }
 
 impl FeeRateOptionWithTotalFee {
     pub fn new(option: FeeRateOption, total_fee: impl Into<Amount>) -> Self {
-        Self { fee_speed: option.fee_speed, fee_rate: option.fee_rate, total_fee: total_fee.into() }
+        Self {
+            fee_speed: option.fee_speed,
+            fee_rate: option.fee_rate,
+            total_fee: Some(total_fee.into()),
+        }
     }
 }
 
@@ -265,13 +288,16 @@ impl FeeRateOptionsWithTotalFee {
 
     #[uniffi::method]
     pub fn transaction_size(&self) -> u64 {
-        let fast_total_fee_in_kwu = self.fast.total_fee.as_sats() * 250;
+        let fast_total_fee = self.fast.total_fee.map(|f| f.as_sats()).unwrap_or(0);
+        let fast_total_fee_in_kwu = fast_total_fee * 250;
         let fast_size = fast_total_fee_in_kwu / self.fast.fee_rate.to_sat_per_kwu();
 
-        let medium_total_fee_in_kwu = self.medium.total_fee.as_sats() * 250;
+        let medium_total_fee = self.medium.total_fee.map(|f| f.as_sats()).unwrap_or(0);
+        let medium_total_fee_in_kwu = medium_total_fee * 250;
         let medium_size = medium_total_fee_in_kwu / self.medium.fee_rate.to_sat_per_kwu();
 
-        let slow_total_fee_in_kwu = self.slow.total_fee.as_sats() * 250;
+        let slow_total_fee = self.slow.total_fee.map(|f| f.as_sats()).unwrap_or(0);
+        let slow_total_fee_in_kwu = slow_total_fee * 250;
         let slow_size = slow_total_fee_in_kwu / self.slow.fee_rate.to_sat_per_kwu();
 
         (fast_size + medium_size + slow_size) / 3
@@ -321,7 +347,7 @@ impl FeeRateOptionWithTotalFee {
         let fee_rate = Arc::unwrap_or_clone(fee_rate);
         let total_fee = Arc::unwrap_or_clone(total_fee);
 
-        Self { fee_speed, fee_rate, total_fee }
+        Self { fee_speed, fee_rate, total_fee: Some(total_fee) }
     }
 
     pub fn fee_speed(&self) -> FeeSpeed {
@@ -332,8 +358,8 @@ impl FeeRateOptionWithTotalFee {
         self.fee_rate
     }
 
-    pub fn total_fee(&self) -> Amount {
-        self.total_fee
+    pub fn total_fee(&self) -> Option<Arc<Amount>> {
+        self.total_fee.map(Arc::new)
     }
 
     pub fn sat_per_vb(&self) -> f32 {
@@ -349,9 +375,7 @@ impl FeeRateOptionWithTotalFee {
     }
 
     pub fn is_equal(&self, rhs: Arc<FeeRateOptionWithTotalFee>) -> bool {
-        self.fee_speed == rhs.fee_speed
-            && self.fee_rate == rhs.fee_rate
-            && self.total_fee == rhs.total_fee
+        self == rhs.as_ref()
     }
 }
 

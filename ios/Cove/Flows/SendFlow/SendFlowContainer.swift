@@ -49,8 +49,11 @@ public struct SendFlowContainer: View {
 
     func waitForInit() {
         Task {
-            await sendFlowManager?.rust.waitForInit()
-            await MainActor.run { initCompleted = true }
+            let success = await sendFlowManager?.rust.waitForInit() ?? false
+            await MainActor.run {
+                // rust handles alert + popRoute on failure
+                if success { initCompleted = true }
+            }
         }
     }
 
