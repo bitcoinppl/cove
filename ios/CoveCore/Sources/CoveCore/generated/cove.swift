@@ -7197,6 +7197,11 @@ public protocol RustSendFlowManagerProtocol: AnyObject, Sendable {
     
     func validateFeePercentage(displayAlert: Bool)  -> Bool
     
+    /**
+     * Wait until we have base fee rates
+     * Returns immediately if we already have cached fees
+     * Only blocks if no cached fees exist (first launch, network needed)
+     */
     func waitForInit() async 
     
     func walletId()  -> WalletId
@@ -7447,6 +7452,11 @@ open func validateFeePercentage(displayAlert: Bool = false) -> Bool  {
 })
 }
     
+    /**
+     * Wait until we have base fee rates
+     * Returns immediately if we already have cached fees
+     * Only blocks if no cached fees exist (first launch, network needed)
+     */
 open func waitForInit()async   {
     return
         try!  await uniffiRustCallAsync(
@@ -28673,7 +28683,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustsendflowmanager_validate_fee_percentage() != 54512) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustsendflowmanager_wait_for_init() != 5540) {
+    if (uniffi_cove_checksum_method_rustsendflowmanager_wait_for_init() != 7495) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustsendflowmanager_wallet_id() != 47057) {

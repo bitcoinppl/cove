@@ -2198,6 +2198,11 @@ public protocol FeeRateOptionWithTotalFeeProtocol: AnyObject, Sendable {
     
     func feeSpeed()  -> FeeSpeed
     
+    /**
+     * Check if this is a placeholder (total fee not yet calculated)
+     */
+    func isPlaceholder()  -> Bool
+    
     func isCustom()  -> Bool
     
     func isEqual(rhs: FeeRateOptionWithTotalFee)  -> Bool
@@ -2297,6 +2302,17 @@ open func feeRateOptions() -> FeeRateOption  {
 open func feeSpeed() -> FeeSpeed  {
     return try!  FfiConverterTypeFeeSpeed_lift(try! rustCall() {
     uniffi_cove_types_fn_method_feerateoptionwithtotalfee_fee_speed(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+    /**
+     * Check if this is a placeholder (total fee not yet calculated)
+     */
+open func isPlaceholder() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_types_fn_method_feerateoptionwithtotalfee_isplaceholder(
             self.uniffiCloneHandle(),$0
     )
 })
@@ -6267,6 +6283,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_fee_speed() != 51786) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_isplaceholder() != 36230) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_is_custom() != 33675) {

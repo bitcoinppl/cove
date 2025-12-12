@@ -796,6 +796,8 @@ external fun uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_fee_rat
 ): Short
 external fun uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_fee_speed(
 ): Short
+external fun uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_isplaceholder(
+): Short
 external fun uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_is_custom(
 ): Short
 external fun uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_is_equal(
@@ -1112,6 +1114,8 @@ external fun uniffi_cove_types_fn_method_feerateoptionwithtotalfee_fee_rate_opti
 ): Long
 external fun uniffi_cove_types_fn_method_feerateoptionwithtotalfee_fee_speed(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
+external fun uniffi_cove_types_fn_method_feerateoptionwithtotalfee_isplaceholder(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Byte
 external fun uniffi_cove_types_fn_method_feerateoptionwithtotalfee_is_custom(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
 external fun uniffi_cove_types_fn_method_feerateoptionwithtotalfee_is_equal(`ptr`: Long,`rhs`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -1645,6 +1649,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_fee_speed() != 51786.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_isplaceholder() != 36230.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_is_custom() != 33675.toShort()) {
@@ -5324,6 +5331,11 @@ public interface FeeRateOptionWithTotalFeeInterface {
     
     fun `feeSpeed`(): FeeSpeed
     
+    /**
+     * Check if this is a placeholder (total fee not yet calculated)
+     */
+    fun `isPlaceholder`(): kotlin.Boolean
+    
     fun `isCustom`(): kotlin.Boolean
     
     fun `isEqual`(`rhs`: FeeRateOptionWithTotalFee): kotlin.Boolean
@@ -5483,6 +5495,22 @@ open class FeeRateOptionWithTotalFee: Disposable, AutoCloseable, FeeRateOptionWi
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_types_fn_method_feerateoptionwithtotalfee_fee_speed(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Check if this is a placeholder (total fee not yet calculated)
+     */override fun `isPlaceholder`(): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_types_fn_method_feerateoptionwithtotalfee_isplaceholder(
         it,
         _status)
 }

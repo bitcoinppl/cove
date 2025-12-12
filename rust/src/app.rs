@@ -264,6 +264,10 @@ impl FfiApp {
         // set the selected wallet
         Database::global().global_config.select_wallet(id.clone())?;
 
+        // trigger fee and price refresh in background (30-sec throttle protects against excessive requests)
+        self.dispatch(AppAction::UpdateFees);
+        self.dispatch(AppAction::UpdateFiatPrices);
+
         // update the router
         if let Some(next_route) = next_route {
             let wallet_route = Route::SelectedWallet(id.clone());

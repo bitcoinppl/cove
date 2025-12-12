@@ -28,7 +28,9 @@ pub struct SendFlowManagerState {
     pub(crate) selected_fiat_currency: FiatCurrency,
     pub(crate) first_address: Option<Arc<Address>>,
     pub(crate) wallet_balance: Option<Arc<Balance>>,
-    pub(crate) init_complete: bool,
+    /// True once we have base fee rates (either from cache or network)
+    /// UI can show immediately once this is true (with placeholder total fees)
+    pub(crate) has_base_fees: bool,
     pub(crate) mode: EnterMode,
 
     // public
@@ -138,7 +140,7 @@ impl SendFlowManagerState {
             fee_rate_options: None,
             btc_price_in_fiat,
             selected_fiat_currency,
-            init_complete: false,
+            has_base_fees: false,
         }
     }
 }

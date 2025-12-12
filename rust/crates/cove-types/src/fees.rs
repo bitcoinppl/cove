@@ -200,6 +200,19 @@ pub struct FeeRateOptionsWithTotalFee {
     pub custom: Option<FeeRateOptionWithTotalFee>,
 }
 
+impl FeeRateOptionsWithTotalFee {
+    /// Create from base options with placeholder (zero) total fees
+    /// Used when we have fee rates but haven't built PSBTs to calculate actual fees yet
+    pub fn from_base_options_placeholder(base: FeeRateOptions) -> Self {
+        Self {
+            fast: FeeRateOptionWithTotalFee::placeholder(base.fast),
+            medium: FeeRateOptionWithTotalFee::placeholder(base.medium),
+            slow: FeeRateOptionWithTotalFee::placeholder(base.slow),
+            custom: None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, uniffi::Object)]
 pub struct FeeRateOptionWithTotalFee {
     pub fee_speed: FeeSpeed,
@@ -211,6 +224,17 @@ impl FeeRateOptionWithTotalFee {
     pub fn new(option: FeeRateOption, total_fee: impl Into<Amount>) -> Self {
         Self { fee_speed: option.fee_speed, fee_rate: option.fee_rate, total_fee: total_fee.into() }
     }
+
+    /// Create a placeholder fee option with zero total fee
+    /// Used when we have fee rates but haven't calculated actual transaction fees yet
+    pub fn placeholder(option: FeeRateOption) -> Self {
+        Self { fee_speed: option.fee_speed, fee_rate: option.fee_rate, total_fee: Amount::ZERO }
+    }
+
+    /// Check if this is a placeholder (total fee not yet calculated)
+    pub fn is_placeholder(&self) -> bool {
+        self.total_fee == Amount::ZERO
+    }
 }
 
 #[uniffi::export]
@@ -218,6 +242,12 @@ impl FeeRateOptionWithTotalFee {
     #[uniffi::method]
     pub fn is_custom(&self) -> bool {
         self.fee_speed.is_custom()
+    }
+
+    /// Check if this is a placeholder (total fee not yet calculated)
+    #[uniffi::method(name = "isPlaceholder")]
+    pub fn ffi_is_placeholder(&self) -> bool {
+        self.is_placeholder()
     }
 }
 
