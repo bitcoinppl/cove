@@ -56,6 +56,7 @@ import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
 import org.bitcoinppl.cove.ui.theme.coveColors
+import org.bitcoinppl.cove.views.AsyncText
 import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.AutoSizeTextField
 import org.bitcoinppl.cove.views.ImageButton
@@ -117,7 +118,7 @@ fun SendScreen(
     initialAddress: String,
     accountShort: String,
     feeEta: String,
-    feeAmount: String,
+    feeAmount: String?,
     totalSpendingCrypto: String,
     totalSpendingFiat: String,
     onAmountChanged: (String) -> Unit,
@@ -657,7 +658,7 @@ private fun AddressWidget(
 private fun SpendingWidget(
     accountShort: String,
     feeEta: String,
-    feeAmount: String,
+    feeAmount: String?,
     totalSpendingCrypto: String,
     totalSpendingFiat: String,
     onChangeSpeed: () -> Unit,
@@ -714,7 +715,7 @@ private fun SpendingWidget(
                     )
                 }
             }
-            Text(feeAmount, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
+            AsyncText(text = feeAmount, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
         }
         Spacer(Modifier.height(24.dp))
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {

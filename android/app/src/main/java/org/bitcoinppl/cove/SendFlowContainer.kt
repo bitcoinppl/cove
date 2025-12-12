@@ -83,12 +83,13 @@ fun SendFlowContainer(
                 else -> {}
             }
 
-            // wait for initialization
-            sfm.rust.waitForInit()
-
-            walletManager = wm
-            sendFlowManager = sfm
-            initCompleted = true
+            // wait for initialization, rust handles alert + popRoute on failure
+            val initSuccess = sfm.rust.waitForInit()
+            if (initSuccess) {
+                walletManager = wm
+                sendFlowManager = sfm
+                initCompleted = true
+            }
         } catch (e: Exception) {
             android.util.Log.e(tag, "something went very wrong", e)
             app.popRoute()

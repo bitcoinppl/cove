@@ -3723,7 +3723,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustsendflowmanager_send_amount_fiat() != 59936.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustsendflowmanager_total_fee_string() != 55258.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustsendflowmanager_total_fee_string() != 32322.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustsendflowmanager_total_spent_in_btc() != 56090.toShort()) {
@@ -3744,7 +3744,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustsendflowmanager_validate_fee_percentage() != 54512.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustsendflowmanager_wait_for_init() != 7495.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustsendflowmanager_wait_for_init() != 6400.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustsendflowmanager_wallet_id() != 47057.toShort()) {
@@ -17310,7 +17310,7 @@ public interface RustSendFlowManagerInterface {
     
     fun `sendAmountFiat`(): kotlin.String
     
-    fun `totalFeeString`(): kotlin.String
+    fun `totalFeeString`(): kotlin.String?
     
     fun `totalSpentInBtc`(): kotlin.String
     
@@ -17325,11 +17325,12 @@ public interface RustSendFlowManagerInterface {
     fun `validateFeePercentage`(`displayAlert`: kotlin.Boolean = false): kotlin.Boolean
     
     /**
-     * Wait until we have base fee rates
+     * Wait until we have base fee rates, returns false if timeout
      * Returns immediately if we already have cached fees
      * Only blocks if no cached fees exist (first launch, network needed)
+     * On timeout: shows alert and pops route
      */
-    suspend fun `waitForInit`()
+    suspend fun `waitForInit`(): kotlin.Boolean
     
     fun `walletId`(): WalletId
     
@@ -17626,8 +17627,8 @@ open class RustSendFlowManager: Disposable, AutoCloseable, RustSendFlowManagerIn
     }
     
 
-    override fun `totalFeeString`(): kotlin.String {
-            return FfiConverterString.lift(
+    override fun `totalFeeString`(): kotlin.String? {
+            return FfiConverterOptionalString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustsendflowmanager_total_fee_string(
@@ -17719,12 +17720,13 @@ open class RustSendFlowManager: Disposable, AutoCloseable, RustSendFlowManagerIn
 
     
     /**
-     * Wait until we have base fee rates
+     * Wait until we have base fee rates, returns false if timeout
      * Returns immediately if we already have cached fees
      * Only blocks if no cached fees exist (first launch, network needed)
+     * On timeout: shows alert and pops route
      */
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
-    override suspend fun `waitForInit`() {
+    override suspend fun `waitForInit`() : kotlin.Boolean {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
             UniffiLib.uniffi_cove_fn_method_rustsendflowmanager_wait_for_init(
@@ -17732,12 +17734,11 @@ open class RustSendFlowManager: Disposable, AutoCloseable, RustSendFlowManagerIn
                 
             )
         },
-        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
-        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_void(future, continuation) },
-        { future -> UniffiLib.ffi_cove_rust_future_free_void(future) },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_i8(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_i8(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_i8(future) },
         // lift function
-        { Unit },
-        
+        { FfiConverterBoolean.lift(it) },
         // Error FFI converter
         UniffiNullRustCallStatusErrorHandler,
     )
@@ -25736,6 +25737,9 @@ sealed class AppAction: Disposable  {
         companion object
     }
     
+    object PopRoute : AppAction()
+    
+    
     data class ChangeNetwork(
         val `network`: org.bitcoinppl.cove_core.types.Network) : AppAction()
         
@@ -25800,6 +25804,8 @@ sealed class AppAction: Disposable  {
     )
                 
             }
+            is AppAction.PopRoute -> {// Nothing to destroy
+            }
             is AppAction.ChangeNetwork -> {
                 
     Disposable.destroy(
@@ -25857,21 +25863,22 @@ public object FfiConverterTypeAppAction : FfiConverterRustBuffer<AppAction>{
             2 -> AppAction.PushRoute(
                 FfiConverterTypeRoute.read(buf),
                 )
-            3 -> AppAction.ChangeNetwork(
+            3 -> AppAction.PopRoute
+            4 -> AppAction.ChangeNetwork(
                 FfiConverterTypeNetwork.read(buf),
                 )
-            4 -> AppAction.ChangeColorScheme(
+            5 -> AppAction.ChangeColorScheme(
                 FfiConverterTypeColorSchemeSelection.read(buf),
                 )
-            5 -> AppAction.ChangeFiatCurrency(
+            6 -> AppAction.ChangeFiatCurrency(
                 FfiConverterTypeFiatCurrency.read(buf),
                 )
-            6 -> AppAction.SetSelectedNode(
+            7 -> AppAction.SetSelectedNode(
                 FfiConverterTypeNode.read(buf),
                 )
-            7 -> AppAction.UpdateFiatPrices
-            8 -> AppAction.UpdateFees
-            9 -> AppAction.AcceptTerms
+            8 -> AppAction.UpdateFiatPrices
+            9 -> AppAction.UpdateFees
+            10 -> AppAction.AcceptTerms
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -25889,6 +25896,12 @@ public object FfiConverterTypeAppAction : FfiConverterRustBuffer<AppAction>{
             (
                 4UL
                 + FfiConverterTypeRoute.allocationSize(value.v1)
+            )
+        }
+        is AppAction.PopRoute -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
             )
         }
         is AppAction.ChangeNetwork -> {
@@ -25951,36 +25964,40 @@ public object FfiConverterTypeAppAction : FfiConverterRustBuffer<AppAction>{
                 FfiConverterTypeRoute.write(value.v1, buf)
                 Unit
             }
-            is AppAction.ChangeNetwork -> {
+            is AppAction.PopRoute -> {
                 buf.putInt(3)
+                Unit
+            }
+            is AppAction.ChangeNetwork -> {
+                buf.putInt(4)
                 FfiConverterTypeNetwork.write(value.`network`, buf)
                 Unit
             }
             is AppAction.ChangeColorScheme -> {
-                buf.putInt(4)
+                buf.putInt(5)
                 FfiConverterTypeColorSchemeSelection.write(value.v1, buf)
                 Unit
             }
             is AppAction.ChangeFiatCurrency -> {
-                buf.putInt(5)
+                buf.putInt(6)
                 FfiConverterTypeFiatCurrency.write(value.v1, buf)
                 Unit
             }
             is AppAction.SetSelectedNode -> {
-                buf.putInt(6)
+                buf.putInt(7)
                 FfiConverterTypeNode.write(value.v1, buf)
                 Unit
             }
             is AppAction.UpdateFiatPrices -> {
-                buf.putInt(7)
-                Unit
-            }
-            is AppAction.UpdateFees -> {
                 buf.putInt(8)
                 Unit
             }
-            is AppAction.AcceptTerms -> {
+            is AppAction.UpdateFees -> {
                 buf.putInt(9)
+                Unit
+            }
+            is AppAction.AcceptTerms -> {
+                buf.putInt(10)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }

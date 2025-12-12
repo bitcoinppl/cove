@@ -67,7 +67,7 @@ impl<T: Dispatchable> Default for DeferredDispatch<T> {
 impl<T: Dispatchable> Drop for DeferredDispatch<T> {
     fn drop(&mut self) {
         let actions = std::mem::take(&mut self.actions);
-        if !actions.is_empty() {
+        if !actions.is_empty() && !std::thread::panicking() {
             T::flush(actions);
         }
     }

@@ -201,13 +201,19 @@ pub struct FeeRateOptionsWithTotalFee {
 }
 
 impl FeeRateOptionsWithTotalFee {
-    /// Create from base options with placeholder (zero) total fees
+    /// Create from base options without total fees
     /// Used when we have fee rates but haven't built PSBTs to calculate actual fees yet
-    pub fn from_base_options_placeholder(base: FeeRateOptions) -> Self {
+    pub fn without_totals(base: FeeRateOptions) -> Self {
+        let from = |opt: FeeRateOption| FeeRateOptionWithTotalFee {
+            fee_speed: opt.fee_speed,
+            fee_rate: opt.fee_rate,
+            total_fee: None,
+        };
+
         Self {
-            fast: FeeRateOptionWithTotalFee::placeholder(base.fast),
-            medium: FeeRateOptionWithTotalFee::placeholder(base.medium),
-            slow: FeeRateOptionWithTotalFee::placeholder(base.slow),
+            fast: from(base.fast),
+            medium: from(base.medium),
+            slow: from(base.slow),
             custom: None,
         }
     }
@@ -227,12 +233,6 @@ impl FeeRateOptionWithTotalFee {
             fee_rate: option.fee_rate,
             total_fee: Some(total_fee.into()),
         }
-    }
-
-    /// Create a placeholder fee option without total fee
-    /// Used when we have fee rates but haven't calculated actual transaction fees yet
-    pub fn placeholder(option: FeeRateOption) -> Self {
-        Self { fee_speed: option.fee_speed, fee_rate: option.fee_rate, total_fee: None }
     }
 }
 
