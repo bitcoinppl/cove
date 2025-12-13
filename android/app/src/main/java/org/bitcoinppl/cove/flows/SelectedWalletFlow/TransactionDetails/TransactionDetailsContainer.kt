@@ -2,7 +2,6 @@ package org.bitcoinppl.cove.flows.SelectedWalletFlow.TransactionDetails
 
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,12 +40,6 @@ fun TransactionDetailsContainer(
         } catch (e: Exception) {
             error = e.message ?: "failed to load wallet"
             loading = false
-        }
-    }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            manager?.close()
         }
     }
 

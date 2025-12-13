@@ -116,7 +116,6 @@ fun SelectedWalletContainer(
     DisposableEffect(id) {
         onDispose {
             manager?.dispatch(WalletManagerAction.SelectedWalletDisappeared)
-            manager?.close()
         }
     }
 

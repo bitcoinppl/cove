@@ -22,6 +22,7 @@ import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -71,6 +72,13 @@ fun TransactionLabelView(
 
     val labelManager = remember(manager.id) { manager.rust.labelManager() }
     val txId: TxId = transactionDetails.txId()
+
+    // cleanup labelManager when composable leaves composition
+    DisposableEffect(manager.id) {
+        onDispose {
+            labelManager.close()
+        }
+    }
 
     // update current label when transaction details change
     // guard against race condition by not updating when editing

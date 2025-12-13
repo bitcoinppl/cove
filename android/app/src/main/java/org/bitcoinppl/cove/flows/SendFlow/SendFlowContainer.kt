@@ -103,7 +103,6 @@ fun SendFlowContainer(
     DisposableEffect(walletId) {
         onDispose {
             sendFlowManager?.presenter?.setDisappearing()
-            sendFlowManager?.close()
         }
     }
 

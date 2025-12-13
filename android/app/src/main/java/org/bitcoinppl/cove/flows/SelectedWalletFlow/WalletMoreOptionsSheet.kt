@@ -57,7 +57,7 @@ fun WalletMoreOptionsSheet(
         manager.walletMetadata ?: run {
             return
         }
-    val hasLabels = manager.rust.labelManager().hasLabels()
+    val hasLabels = manager.rust.labelManager().use { it.hasLabels() }
     val hasTransactions = manager.hasTransactions
     val hardwareMetadata = metadata.hardwareMetadata
 

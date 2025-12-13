@@ -151,6 +151,8 @@ This pattern is used throughout the codebase for shared resources and is safe to
   }
   ```
 
+**Manager ownership and cleanup:** Managers obtained via `app.getWalletManager()` or `app.getSendFlowManager()` are owned by `AppManager`—components should NOT call `.close()` on them. Only close managers created locally (e.g., `CoinControlManager`, `ImportWalletManager`, `TapSignerManager`). For short-lived managers like `LabelManager`, use `.use { }` for single operations or `DisposableEffect` with `.close()` if stored in state. `Database()` returns an Arc clone of a global singleton and doesn't need closing.
+
 **iOS ↔ Android parity patterns:** For detailed guidance on matching behavior across platforms (opacity, text colors, button centering, NFC scanning UI, etc.), see [docs/IOS_ANDROID_PARITY.md](docs/IOS_ANDROID_PARITY.md).
 
 ### Manager Pattern (cross-platform)
