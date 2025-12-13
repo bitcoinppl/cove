@@ -70,6 +70,8 @@ fun SelectedWalletContainer(
                 delay(BALANCE_UPDATE_DELAY_MS)
                 wm.updateWalletBalance()
             } else {
+                // close stale manager to prevent leak
+                wm.close()
                 android.util.Log.d(tag, "discarding stale wallet load for $requestedId, now loading $id")
             }
         } catch (e: Exception) {

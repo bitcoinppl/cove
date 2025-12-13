@@ -57,6 +57,7 @@ fun VerifyWordsContainer(
         onDispose {
             stateMachine?.destroy()
             stateMachine = null
+            manager?.close()
             manager = null
         }
     }

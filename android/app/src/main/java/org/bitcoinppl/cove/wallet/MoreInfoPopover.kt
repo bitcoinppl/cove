@@ -10,6 +10,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -53,6 +54,13 @@ fun rememberWalletExportLaunchers(
         rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             uri?.let {
                 scope.launch {
+                    // capture manager at coroutine start to avoid null during suspension
+                    val currentManager =
+                        manager ?: run {
+                            snackbarHostState.showSnackbar("Manager not available")
+                            return@launch
+                        }
+
                     exportState.isImporting = true
                     try {
                         val fileContents =
@@ -63,16 +71,13 @@ fun rememberWalletExportLaunchers(
                             } ?: throw Exception("Unable to read file")
 
                         // validate import was successful before showing success message
-                        (
-                            manager?.rust?.labelManager()
-                                ?: throw Exception("Label manager not available")
-                        ).use { labelManager ->
+                        currentManager.rust.labelManager().use { labelManager ->
                             labelManager.import(fileContents.trim())
                         }
 
                         // refresh transactions with updated labels
                         try {
-                            manager.rust.getTransactions()
+                            currentManager.rust.getTransactions()
                         } catch (refreshError: Exception) {
                             android.util.Log.e(tag, "failed to refresh transactions after label import", refreshError)
                             snackbarHostState.showSnackbar("Labels imported successfully, but transaction list may need manual refresh")
@@ -97,9 +102,13 @@ fun rememberWalletExportLaunchers(
         ) { uri ->
             uri?.let {
                 scope.launch {
+                    // capture manager at coroutine start to avoid null during suspension
+                    val currentManager = manager
                     exportState.isExporting = true
                     val currentExportType = exportState.exportType
-                    var showedLoadingAlert = false
+
+                    // track the alert by identity to avoid race conditions
+                    var loadingAlertItem: TaggedItem<AppAlertState>? = null
 
                     try {
                         // show loading alert for transaction exports after a delay
@@ -107,14 +116,15 @@ fun rememberWalletExportLaunchers(
                             scope.launch {
                                 delay(EXPORT_LOADING_ALERT_DELAY_MS)
                                 if (exportState.isExporting && currentExportType is ExportType.Transactions) {
-                                    app.alertState =
+                                    val alert: TaggedItem<AppAlertState> =
                                         TaggedItem(
                                             AppAlertState.General(
                                                 title = "Exporting, please wait...",
                                                 message = "Creating a transaction export file. If this is the first time it might take a while",
                                             ),
                                         )
-                                    showedLoadingAlert = true
+                                    loadingAlertItem = alert
+                                    app.alertState = alert
                                 }
                             }
 
@@ -122,22 +132,26 @@ fun rememberWalletExportLaunchers(
                             when (currentExportType) {
                                 is ExportType.Transactions -> {
                                     withContext(Dispatchers.IO) {
-                                        manager?.rust?.createTransactionsWithFiatExport()
+                                        currentManager?.rust?.createTransactionsWithFiatExport()
                                     }
                                 }
                                 is ExportType.Labels -> {
                                     withContext(Dispatchers.IO) {
-                                        manager?.rust?.labelManager()?.use { it.export() }
+                                        currentManager?.rust?.labelManager()?.use { it.export() }
                                     }
                                 }
                                 null -> null
                             }
 
-                        // cancel and clear loading alert if shown
-                        alertJob.cancel()
-                        if (showedLoadingAlert) {
-                            app.alertState = null
-                            delay(ALERT_DISMISS_DELAY_MS)
+                        // cancel alert job and wait for it to complete to avoid race
+                        alertJob.cancelAndJoin()
+
+                        // clear alert only if it's still the one we set (identity check)
+                        loadingAlertItem?.let { alert ->
+                            if (app.alertState?.id == alert.id) {
+                                app.alertState = null
+                                delay(ALERT_DISMISS_DELAY_MS)
+                            }
                         }
 
                         content?.let { data ->
@@ -165,9 +179,11 @@ fun rememberWalletExportLaunchers(
                         }
                     } catch (e: Exception) {
                         android.util.Log.e(tag, "error exporting file", e)
-                        // clear any loading alert on error
-                        if (showedLoadingAlert) {
-                            app.alertState = null
+                        // clear loading alert on error only if it's still ours
+                        loadingAlertItem?.let { alert ->
+                            if (app.alertState?.id == alert.id) {
+                                app.alertState = null
+                            }
                         }
 
                         val errorType =

@@ -69,7 +69,7 @@ internal fun WalletSheetsHost(
     // show NFC label import sheet
     var nfcLabelManager by remember { mutableStateOf<LabelManager?>(null) }
 
-    LaunchedEffect(showNfcScanner) {
+    LaunchedEffect(showNfcScanner, manager) {
         if (showNfcScanner) {
             try {
                 nfcLabelManager = manager.rust.labelManager()

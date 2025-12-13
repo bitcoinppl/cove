@@ -318,14 +318,15 @@ fun SelectedWalletScreen(
                         if (manager != null && manager.loadState is WalletLoadState.LOADED) {
                             scope.launch {
                                 isRefreshing = true
-
-                                manager.setScanning()
-                                manager.forceWalletScan()
-                                manager.rust.forceUpdateHeight()
-                                manager.updateWalletBalance()
-                                manager.rust.getTransactions()
-
-                                isRefreshing = false
+                                try {
+                                    manager.setScanning()
+                                    manager.forceWalletScan()
+                                    manager.rust.forceUpdateHeight()
+                                    manager.updateWalletBalance()
+                                    manager.rust.getTransactions()
+                                } finally {
+                                    isRefreshing = false
+                                }
                             }
                         }
                     },
@@ -337,7 +338,7 @@ fun SelectedWalletScreen(
                 ) {
                     Column(modifier = Modifier.fillMaxSize()) {
                         VerifyReminder(
-                            walletId = manager?.walletMetadata?.id ?: "",
+                            walletId = manager?.walletMetadata?.id,
                             isVerified = manager?.isVerified ?: true,
                             app = app,
                         )
@@ -369,11 +370,11 @@ fun SelectedWalletScreen(
 
 @Composable
 private fun VerifyReminder(
-    walletId: WalletId,
+    walletId: WalletId?,
     isVerified: Boolean,
     app: AppManager?,
 ) {
-    if (!isVerified) {
+    if (!isVerified && walletId != null) {
         Box(
             modifier =
                 Modifier
@@ -395,7 +396,7 @@ private fun VerifyReminder(
                                         Color(0xFFFFEB3B).copy(alpha = 0.96f),
                                     ),
                                 start = Offset.Zero,
-                                end = Offset.Infinite,
+                                end = Offset(1000f, 1000f),
                             ),
                     ).padding(vertical = 10.dp),
             contentAlignment = Alignment.Center,
@@ -410,7 +411,7 @@ private fun VerifyReminder(
                     tint = Color.Red.copy(alpha = 0.85f),
                 )
                 Text(
-                    text = "backup your wallet",
+                    text = stringResource(R.string.title_wallet_backup),
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 12.sp,
                     color = Color.Black.copy(alpha = 0.66f),

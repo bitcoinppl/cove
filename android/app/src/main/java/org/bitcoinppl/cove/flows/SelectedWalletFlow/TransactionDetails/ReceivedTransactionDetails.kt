@@ -112,12 +112,15 @@ internal fun ReceivedTransactionDetails(
         if (transactionDetails.isConfirmed() && numberOfConfirmations != null) {
             Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    transactionDetails.blockNumberFmt() ?: "",
-                    color = sub,
-                    fontSize = 14.sp,
-                )
-                Text(" | ", color = sub, fontSize = 14.sp)
+                val blockNumber = transactionDetails.blockNumberFmt()
+                if (blockNumber != null) {
+                    Text(
+                        blockNumber,
+                        color = sub,
+                        fontSize = 14.sp,
+                    )
+                    Text(" | ", color = sub, fontSize = 14.sp)
+                }
                 Text(
                     numberOfConfirmations.toString(),
                     color = sub,

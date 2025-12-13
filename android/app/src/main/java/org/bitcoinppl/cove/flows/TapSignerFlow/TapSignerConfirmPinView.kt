@@ -251,7 +251,7 @@ private suspend fun setupTapSigner(
             manager.resetRoute(TapSignerRoute.SetupRetry(args.tapSigner, setupResponse))
         } else {
             // failed completely, go back to home
-            Log.e("TapSignerConfirmPin", "Setup failed", e)
+            Log.e("TapSignerConfirmPin", "Setup failed")
             app.sheetState = null
             app.alertState =
                 TaggedItem(
@@ -295,7 +295,7 @@ private suspend fun changeTapSignerPin(
         manager.isScanning = false
         nfcManager.onMessageUpdate = null
 
-        Log.e("TapSignerConfirmPin", "Error changing PIN", e)
+        Log.e("TapSignerConfirmPin", "Error changing PIN")
 
         // check error type and show appropriate alert
         val errorMessage = e.message ?: "Unknown error"

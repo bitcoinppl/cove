@@ -52,8 +52,9 @@ fun TapSignerSetupSuccessView(
     // save wallet on appear
     LaunchedEffect(Unit) {
         try {
-            val walletManager = WalletManager.fromTapSigner(tapSigner, setup.deriveInfo, setup.backup)
-            walletId = walletManager.id
+            WalletManager.fromTapSigner(tapSigner, setup.deriveInfo, setup.backup).use { walletManager ->
+                walletId = walletManager.id
+            }
         } catch (e: Exception) {
             android.util.Log.e("TapSignerSetupSuccess", "Failed to save wallet", e)
         }

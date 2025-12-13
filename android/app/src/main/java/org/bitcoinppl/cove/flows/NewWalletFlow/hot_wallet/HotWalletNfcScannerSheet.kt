@@ -93,7 +93,7 @@ internal fun NfcScannerSheet(
                     // try to parse the NFC data as seed words
                     try {
                         // try string format first
-                        result.text?.let { text ->
+                        result.text?.trim()?.let { text ->
                             val words = org.bitcoinppl.cove_core.groupedPlainWordsOf(mnemonic = text, groups = GROUPS_OF.toUByte())
                             val wordCount = words.flatten().size
                             val expectedCount = numberOfWordsToWordCount(numberOfWords).toInt()

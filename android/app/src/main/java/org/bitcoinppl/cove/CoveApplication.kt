@@ -60,12 +60,16 @@ class CoveApplication : Application() {
         setupMemoryCallbacks()
     }
 
-    override fun onLowMemory() {
-        super.onLowMemory()
-        Log.d(TAG, "onLowMemory called, cleaning up FFI objects")
-        cleanupFfiObjects()
-    }
-
+    /**
+     * Cleanup FFI objects by calling close() on UniFFI-generated wrappers
+     *
+     * WARNING: This should ONLY be called during process termination or TRIM_MEMORY_COMPLETE.
+     * After cleanup, FFI objects are null and the app cannot function properly.
+     * Do NOT call while the app is actively running - subsequent FFI calls will crash.
+     *
+     * The Rust core uses singletons that are initialized once per process. Once closed,
+     * these objects cannot be reinitialized within the same process.
+     */
     private fun cleanupFfiObjects() {
         try {
             // close FFI objects in reverse order of creation
@@ -135,10 +139,10 @@ class CoveApplication : Application() {
                     // no-op
                 }
 
-                override fun onLowMemory() {
-                    Log.d(TAG, "ComponentCallbacks2.onLowMemory called, cleaning up FFI objects")
-                    cleanupFfiObjects()
-                }
+                // NOTE: onLowMemory() is intentionally not overridden here. Unlike TRIM_MEMORY_COMPLETE,
+                // onLowMemory can be called while the app is still running in the foreground. Cleaning up
+                // FFI objects at that point would crash the app on subsequent FFI calls
+                override fun onLowMemory() = Unit
             },
         )
     }

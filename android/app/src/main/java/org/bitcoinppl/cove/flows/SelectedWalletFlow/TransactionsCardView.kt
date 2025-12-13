@@ -354,6 +354,7 @@ internal fun ConfirmedTransactionWidget(
         modifier =
             Modifier
                 .fillMaxWidth()
+                .padding(vertical = 6.dp)
                 .clickable {
                     if (app != null && manager != null) {
                         scope.launch {
@@ -368,7 +369,7 @@ internal fun ConfirmedTransactionWidget(
                             }
                         }
                     }
-                }.padding(vertical = 6.dp),
+                },
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
@@ -454,6 +455,7 @@ internal fun UnconfirmedTransactionWidget(
         modifier =
             Modifier
                 .fillMaxWidth()
+                .padding(vertical = 6.dp)
                 .clickable {
                     if (app != null && manager != null) {
                         scope.launch {
@@ -468,7 +470,7 @@ internal fun UnconfirmedTransactionWidget(
                             }
                         }
                     }
-                }.padding(vertical = 6.dp),
+                },
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(modifier = Modifier.graphicsLayer { alpha = 0.6f }) {
@@ -541,6 +543,7 @@ internal fun UnsignedTransactionWidget(
             try {
                 manager?.rust?.amountInFiat(txn.spendingAmount())
             } catch (e: Exception) {
+                android.util.Log.d("UnsignedTxWidget", "Fiat fetch failed", e)
                 null
             }
     }

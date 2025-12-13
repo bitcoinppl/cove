@@ -134,11 +134,13 @@ fun HotWalletImportScreen(
     }
 
     fun setWords(words: List<List<String>>) {
-        // validate word count (must be 12 or 24)
-        val totalWords = words.flatten().size
-        if (totalWords != 12 && totalWords != 24) {
-            Log.w("HotWalletImport", "Invalid word count: $totalWords")
-            genericErrorMessage = "Invalid number of words. Expected 12 or 24 words, got $totalWords"
+        val flatWords = words.flatten()
+        val totalWords = flatWords.size
+
+        // validate word count matches expected from route
+        if (totalWords != wordCount) {
+            Log.w("HotWalletImport", "Word count mismatch: got $totalWords, expected $wordCount")
+            genericErrorMessage = "Invalid number of words. Expected $wordCount words, got $totalWords"
             alertState = AlertState.GenericError
             return
         }
