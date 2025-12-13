@@ -87,6 +87,7 @@ import org.bitcoinppl.cove_core.types.FfiConverterTypeFfiColorScheme
 import org.bitcoinppl.cove_core.types.FfiConverterTypeNetwork
 import org.bitcoinppl.cove_core.types.FfiConverterTypeOutPoint
 import org.bitcoinppl.cove_core.types.FfiConverterTypePsbt
+import org.bitcoinppl.cove_core.types.FfiConverterTypeQrDensity
 import org.bitcoinppl.cove_core.types.FfiConverterTypeSentAndReceived
 import org.bitcoinppl.cove_core.types.FfiConverterTypeSplitOutput
 import org.bitcoinppl.cove_core.types.FfiConverterTypeTransactionDirection
@@ -98,6 +99,7 @@ import org.bitcoinppl.cove_core.types.FfiConverterTypeWalletId
 import org.bitcoinppl.cove_core.types.Network
 import org.bitcoinppl.cove_core.types.OutPoint
 import org.bitcoinppl.cove_core.types.Psbt
+import org.bitcoinppl.cove_core.types.QrDensity
 import org.bitcoinppl.cove_core.types.SentAndReceived
 import org.bitcoinppl.cove_core.types.SplitOutput
 import org.bitcoinppl.cove_core.types.TransactionDirection
@@ -134,6 +136,7 @@ import org.bitcoinppl.cove_core.types.RustBuffer as RustBufferFfiColorScheme
 import org.bitcoinppl.cove_core.types.RustBuffer as RustBufferNetwork
 import org.bitcoinppl.cove_core.types.RustBuffer as RustBufferOutPoint
 import org.bitcoinppl.cove_core.types.RustBuffer as RustBufferPsbt
+import org.bitcoinppl.cove_core.types.RustBuffer as RustBufferQrDensity
 import org.bitcoinppl.cove_core.types.RustBuffer as RustBufferSentAndReceived
 import org.bitcoinppl.cove_core.types.RustBuffer as RustBufferSplitOutput
 import org.bitcoinppl.cove_core.types.RustBuffer as RustBufferTransactionDirection
@@ -1260,6 +1263,8 @@ external fun uniffi_cove_checksum_method_labelmanager_export(
 ): Short
 external fun uniffi_cove_checksum_method_labelmanager_export_default_file_name(
 ): Short
+external fun uniffi_cove_checksum_method_labelmanager_export_to_bbqr_with_density(
+): Short
 external fun uniffi_cove_checksum_method_labelmanager_has_labels(
 ): Short
 external fun uniffi_cove_checksum_method_labelmanager_import(
@@ -2141,6 +2146,8 @@ external fun uniffi_cove_fn_method_labelmanager_delete_labels_for_txn(`ptr`: Lon
 external fun uniffi_cove_fn_method_labelmanager_export(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_labelmanager_export_default_file_name(`ptr`: Long,`name`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_labelmanager_export_to_bbqr_with_density(`ptr`: Long,`density`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_labelmanager_has_labels(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
@@ -3544,6 +3551,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_labelmanager_export_default_file_name() != 28880.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_labelmanager_export_to_bbqr_with_density() != 31085.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_labelmanager_has_labels() != 29517.toShort()) {
@@ -12758,6 +12768,11 @@ public interface LabelManagerInterface {
     
     fun `exportDefaultFileName`(`name`: kotlin.String): kotlin.String
     
+    /**
+     * Export labels as BBQr-encoded QR strings for animated display
+     */
+    fun `exportToBbqrWithDensity`(`density`: QrDensity): List<kotlin.String>
+    
     fun `hasLabels`(): kotlin.Boolean
     
     fun `import`(`jsonl`: kotlin.String)
@@ -12909,6 +12924,23 @@ open class LabelManager: Disposable, AutoCloseable, LabelManagerInterface
     UniffiLib.uniffi_cove_fn_method_labelmanager_export_default_file_name(
         it,
         FfiConverterString.lower(`name`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Export labels as BBQr-encoded QR strings for animated display
+     */
+    @Throws(LabelManagerException::class)override fun `exportToBbqrWithDensity`(`density`: QrDensity): List<kotlin.String> {
+            return FfiConverterSequenceString.lift(
+    callWithHandle {
+    uniffiRustCallWithError(LabelManagerException) { _status ->
+    UniffiLib.uniffi_cove_fn_method_labelmanager_export_to_bbqr_with_density(
+        it,
+        FfiConverterTypeQrDensity.lower(`density`),_status)
 }
     }
     )
@@ -43936,6 +43968,8 @@ public object FfiConverterSequenceTypeWalletId: FfiConverterRustBuffer<List<Wall
  */
 public typealias Timestamp = kotlin.ULong
 public typealias FfiConverterTypeTimestamp = FfiConverterULong
+
+
 
 
 

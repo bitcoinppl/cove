@@ -88,6 +88,7 @@ import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
 import org.bitcoinppl.cove.ui.theme.coveColors
 import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.BitcoinShieldIcon
+import org.bitcoinppl.cove.views.QrExportView
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
 import java.io.File
@@ -456,7 +457,7 @@ fun SendFlowHardwareScreen(
                 onDismissRequest = { sheetState = null },
                 sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
             ) {
-                SendFlowQrExport(
+                QrExportView(
                     details = details,
                     modifier = Modifier.padding(16.dp),
                 )

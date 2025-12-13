@@ -503,7 +503,7 @@ struct SendFlowHardwareScreen: View {
                     selection: $inputOutputDetailsPresentationSize
                 )
         case .exportQr:
-            SendFlowQrExport(details: details)
+            QrExportView(details: details)
                 .presentationDetents([.height(550), .height(650), .large])
                 .padding()
                 .padding(.top, 10)

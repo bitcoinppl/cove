@@ -1,4 +1,4 @@
-package org.bitcoinppl.cove.flows.SendFlow
+package org.bitcoinppl.cove.views
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -44,9 +44,16 @@ import org.bitcoinppl.cove_core.types.ConfirmDetails
 import org.bitcoinppl.cove_core.types.QrDensity
 import org.bitcoinppl.cove_core.types.QrExportFormat
 
+/**
+ * Generic QR export view that can display animated BBQr or UR QR codes.
+ * If `generateUrStrings` is null, the format picker is hidden and only BBQr is used.
+ */
 @Composable
-fun SendFlowQrExport(
-    details: ConfirmDetails,
+fun QrExportView(
+    title: String,
+    subtitle: String,
+    generateBbqrStrings: (QrDensity) -> List<String>,
+    generateUrStrings: ((QrDensity) -> List<String>)? = null,
     modifier: Modifier = Modifier,
 ) {
     var selectedFormat by remember { mutableStateOf(QrExportFormat.BBQR) }
@@ -55,12 +62,15 @@ fun SendFlowQrExport(
     var currentIndex by remember { mutableIntStateOf(0) }
     var error by remember { mutableStateOf<String?>(null) }
 
+    // whether to show the format picker (only if UR is available)
+    val showFormatPicker = generateUrStrings != null
+
     fun generateQrCodes() {
         try {
             qrStrings =
                 when (selectedFormat) {
-                    QrExportFormat.BBQR -> details.psbtToBbqrWithDensity(density)
-                    QrExportFormat.UR -> details.psbtToUrWithDensity(density)
+                    QrExportFormat.BBQR -> generateBbqrStrings(density)
+                    QrExportFormat.UR -> generateUrStrings?.invoke(density) ?: generateBbqrStrings(density)
                 }
             error = null
             currentIndex = 0
@@ -97,38 +107,40 @@ fun SendFlowQrExport(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
-            text = "Scan this QR",
+            text = title,
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(top = 12.dp),
         )
 
         Text(
-            text = "Scan with your hardware wallet\nto sign your transaction",
+            text = subtitle,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = 4.dp, start = 40.dp, end = 40.dp),
         )
 
-        // format picker (BBQR / UR)
-        SingleChoiceSegmentedButtonRow(
-            modifier =
-                Modifier
-                    .padding(vertical = 8.dp)
-                    .width(200.dp),
-        ) {
-            QrExportFormat.entries.forEachIndexed { index, format ->
-                SegmentedButton(
-                    shape =
-                        SegmentedButtonDefaults.itemShape(
-                            index = index,
-                            count = QrExportFormat.entries.size,
-                        ),
-                    onClick = { selectedFormat = format },
-                    selected = selectedFormat == format,
-                    label = { Text(format.toString()) },
-                )
+        // format picker (BBQR / UR) - only show if UR is available
+        if (showFormatPicker) {
+            SingleChoiceSegmentedButtonRow(
+                modifier =
+                    Modifier
+                        .padding(vertical = 8.dp)
+                        .width(200.dp),
+            ) {
+                QrExportFormat.entries.forEachIndexed { index, format ->
+                    SegmentedButton(
+                        shape =
+                            SegmentedButtonDefaults.itemShape(
+                                index = index,
+                                count = QrExportFormat.entries.size,
+                            ),
+                        onClick = { selectedFormat = format },
+                        selected = selectedFormat == format,
+                        label = { Text(format.toString()) },
+                    )
+                }
             }
         }
 
@@ -340,4 +352,21 @@ private fun DensityButtons(
             )
         }
     }
+}
+
+// MARK: - Convenience overload for PSBT export (backwards compatibility)
+
+/** Convenience overload for PSBT export with ConfirmDetails */
+@Composable
+fun QrExportView(
+    details: ConfirmDetails,
+    modifier: Modifier = Modifier,
+) {
+    QrExportView(
+        title = "Scan this QR",
+        subtitle = "Scan with your hardware wallet\nto sign your transaction",
+        generateBbqrStrings = { density -> details.psbtToBbqrWithDensity(density) },
+        generateUrStrings = { density -> details.psbtToUrWithDensity(density) },
+        modifier = modifier,
+    )
 }

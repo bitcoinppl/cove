@@ -9,7 +9,7 @@ use crate::{
 
 use ahash::AHashMap as HashMap;
 use bip329::{AddressRecord, InputRecord, Label, Labels, OutputRecord, TransactionRecord};
-use cove_types::TxId;
+use cove_types::{TxId, confirm::QrDensity};
 
 #[derive(Debug, Clone, uniffi::Object)]
 pub struct LabelManager {
@@ -246,6 +246,39 @@ impl LabelManager {
         let labels = labels.export().map_err(|e| LabelManagerError::Export(e.to_string()))?;
 
         Ok(labels)
+    }
+
+    /// Export labels as BBQr-encoded QR strings for animated display
+    pub fn export_to_bbqr_with_density(
+        &self,
+        density: &QrDensity,
+    ) -> Result<Vec<String>, LabelManagerError> {
+        use bbqr::{
+            encode::Encoding,
+            file_type::FileType,
+            qr::Version,
+            split::{Split, SplitOptions},
+        };
+
+        let labels_jsonl = self.export()?;
+        let data = labels_jsonl.as_bytes();
+
+        let version = Version::try_from(density.bbqr_max_version()).unwrap_or(Version::V15);
+
+        let split = Split::try_from_data(
+            data,
+            FileType::Json,
+            SplitOptions {
+                encoding: Encoding::Zlib,
+                min_split_number: 1,
+                max_split_number: 100,
+                min_version: Version::V01,
+                max_version: version,
+            },
+        )
+        .map_err(|e| LabelManagerError::Export(format!("BBQr encoding failed: {e}")))?;
+
+        Ok(split.parts)
     }
 }
 
