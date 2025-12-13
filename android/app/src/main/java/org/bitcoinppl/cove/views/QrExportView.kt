@@ -1,10 +1,4 @@
-<<<<<<<< HEAD:android/app/src/main/java/org/bitcoinppl/cove/views/QrExportView.kt
 package org.bitcoinppl.cove.views
-|||||||| 7223a75d:android/app/src/main/java/org/bitcoinppl/cove/BbqrExportView.kt
-package org.bitcoinppl.cove
-========
-package org.bitcoinppl.cove.flows.SendFlow
->>>>>>>> master:android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SendFlowQrExport.kt
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -55,19 +49,11 @@ import org.bitcoinppl.cove_core.types.QrExportFormat
  * If `generateUrStrings` is null, the format picker is hidden and only BBQr is used.
  */
 @Composable
-<<<<<<<< HEAD:android/app/src/main/java/org/bitcoinppl/cove/views/QrExportView.kt
 fun QrExportView(
     title: String,
     subtitle: String,
     generateBbqrStrings: (QrDensity) -> List<String>,
     generateUrStrings: ((QrDensity) -> List<String>)? = null,
-|||||||| 7223a75d:android/app/src/main/java/org/bitcoinppl/cove/BbqrExportView.kt
-fun QrExportView(
-    details: ConfirmDetails,
-========
-fun SendFlowQrExport(
-    details: ConfirmDetails,
->>>>>>>> master:android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SendFlowQrExport.kt
     modifier: Modifier = Modifier,
 ) {
     var selectedFormat by remember { mutableStateOf(QrExportFormat.BBQR) }
