@@ -579,7 +579,7 @@ struct CoveApp: App {
 
         if newPhase == .active {
             showCover = false
-            // refresh fees and prices in background (30-sec throttle protects against excessive requests)
+            guard app.asyncRuntimeReady else { return }
             app.dispatch(action: AppAction.updateFees)
             app.dispatch(action: AppAction.updateFiatPrices)
         }
@@ -690,6 +690,8 @@ struct CoveApp: App {
                 .task {
                     await app.rust.initOnStart()
                     await MainActor.run { app.asyncRuntimeReady = true }
+                    app.dispatch(action: AppAction.updateFees)
+                    app.dispatch(action: AppAction.updateFiatPrices)
                 }
                 .onOpenURL(perform: handleFileOpen)
                 .onChange(of: phase, initial: true, handleScenePhaseChange)
