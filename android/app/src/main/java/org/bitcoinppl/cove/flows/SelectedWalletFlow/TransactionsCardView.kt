@@ -266,7 +266,7 @@ private fun TransactionItem(
                 label = txLabel,
                 date = txn.v1.confirmedAtFmt(),
                 amount = formattedAmount,
-                balanceAfter = txn.v1.blockHeightFmt(),
+                blockHeight = txn.v1.blockHeightFmt(),
                 primaryText = primaryText,
                 secondaryText = secondaryText,
                 transaction = txn,
@@ -333,7 +333,7 @@ internal fun ConfirmedTransactionWidget(
     label: String,
     date: String,
     amount: String,
-    balanceAfter: String,
+    blockHeight: String,
     primaryText: Color,
     secondaryText: Color,
     transaction: Transaction.Confirmed,
@@ -423,7 +423,7 @@ internal fun ConfirmedTransactionWidget(
                 fontWeight = FontWeight.Normal,
             )
             Text(
-                text = privateShow(balanceAfter),
+                text = privateShow(blockHeight),
                 color = secondaryText,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Normal,
@@ -539,6 +539,7 @@ internal fun UnsignedTransactionWidget(
 
     // fetch fiat amount asynchronously (matches iOS .task behavior)
     LaunchedEffect(txn.id()) {
+        fiatAmount = null
         fiatAmount =
             try {
                 manager?.rust?.amountInFiat(txn.spendingAmount())

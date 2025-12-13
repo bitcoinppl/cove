@@ -20,6 +20,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -165,12 +166,17 @@ private fun WordInputField(
 ) {
     val focusManager = LocalFocusManager.current
     val autocomplete =
-        remember(number) {
+        remember(number, numberOfWords) {
             Bip39WordSpecificAutocomplete(
                 wordNumber = number.toUShort(),
                 numberOfWords = numberOfWords,
             )
         }
+
+    // clean up FFI resource when autocomplete instance changes or composable is disposed
+    DisposableEffect(autocomplete) {
+        onDispose { autocomplete.close() }
+    }
 
     var suggestions by remember { mutableStateOf<List<String>>(emptyList()) }
     var previousWord by remember { mutableStateOf("") }

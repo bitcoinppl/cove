@@ -63,16 +63,18 @@ class CoveApplication : Application() {
     /**
      * Cleanup FFI objects by calling close() on UniFFI-generated wrappers
      *
-     * WARNING: This should ONLY be called during process termination or TRIM_MEMORY_COMPLETE.
+     * WARNING: This should ONLY be called during process termination (onTerminate).
      * After cleanup, FFI objects are null and the app cannot function properly.
      * Do NOT call while the app is actively running - subsequent FFI calls will crash.
      *
      * The Rust core uses singletons that are initialized once per process. Once closed,
      * these objects cannot be reinitialized within the same process.
+     *
+     * NOTE: Do NOT call on TRIM_MEMORY_COMPLETE - that event is delivered while the process
+     * is still alive, and the app can return to foreground without being recreated.
      */
     private fun cleanupFfiObjects() {
         try {
-            // close FFI objects in reverse order of creation
             device?.close()
             device = null
             Log.d(TAG, "Device FFI object closed")
@@ -128,20 +130,18 @@ class CoveApplication : Application() {
     private fun setupMemoryCallbacks() {
         registerComponentCallbacks(
             object : ComponentCallbacks2 {
+                // NOTE: Do NOT cleanup FFI objects on any trim memory level.
+                // TRIM_MEMORY_COMPLETE is delivered while the process is still alive in background.
+                // Rust singletons cannot be reinitialized once closed, so cleanup would break
+                // the app when the user returns. Let Android kill the process if it needs memory.
                 override fun onTrimMemory(level: Int) {
-                    if (level == ComponentCallbacks2.TRIM_MEMORY_COMPLETE) {
-                        Log.d(TAG, "onTrimMemory(TRIM_MEMORY_COMPLETE) called, cleaning up FFI objects")
-                        cleanupFfiObjects()
-                    }
+                    Log.d(TAG, "onTrimMemory called with level: $level (no cleanup performed)")
                 }
 
                 override fun onConfigurationChanged(newConfig: Configuration) {
                     // no-op
                 }
 
-                // NOTE: onLowMemory() is intentionally not overridden here. Unlike TRIM_MEMORY_COMPLETE,
-                // onLowMemory can be called while the app is still running in the foreground. Cleaning up
-                // FFI objects at that point would crash the app on subsequent FFI calls
                 override fun onLowMemory() = Unit
             },
         )

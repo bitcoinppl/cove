@@ -165,7 +165,7 @@ fun HotWalletImportScreen(
                     Bip39WordSpecificAutocomplete(
                         wordNumber = (idx + 1).toUShort(),
                         numberOfWords = numberOfWords,
-                    ).isValidWord(word, enteredWords)
+                    ).use { it.isValidWord(word, enteredWords) }
             }
 
     val focusManager = LocalFocusManager.current
