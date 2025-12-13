@@ -4664,6 +4664,11 @@ public protocol LabelManagerProtocol: AnyObject, Sendable {
     
     func exportDefaultFileName(name: String)  -> String
     
+    /**
+     * Export labels as BBQr-encoded QR strings for animated display
+     */
+    func exportToBbqrWithDensity(density: QrDensity) throws  -> [String]
+    
     func hasLabels()  -> Bool
     
     func `import`(jsonl: String) throws 
@@ -4757,6 +4762,18 @@ open func exportDefaultFileName(name: String) -> String  {
     uniffi_cove_fn_method_labelmanager_export_default_file_name(
             self.uniffiCloneHandle(),
         FfiConverterString.lower(name),$0
+    )
+})
+}
+    
+    /**
+     * Export labels as BBQr-encoded QR strings for animated display
+     */
+open func exportToBbqrWithDensity(density: QrDensity)throws  -> [String]  {
+    return try  FfiConverterSequenceString.lift(try rustCallWithError(FfiConverterTypeLabelManagerError_lift) {
+    uniffi_cove_fn_method_labelmanager_export_to_bbqr_with_density(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeQrDensity_lower(density),$0
     )
 })
 }
@@ -28493,6 +28510,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_labelmanager_export_default_file_name() != 28880) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_labelmanager_export_to_bbqr_with_density() != 31085) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_labelmanager_has_labels() != 29517) {

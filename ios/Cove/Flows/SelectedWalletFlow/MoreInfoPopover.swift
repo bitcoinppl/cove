@@ -26,6 +26,8 @@ struct MoreInfoPopover: View {
     // state
     @State private var showLoadingTask: Task<Void, Never>?
     @State private var exportTask: Task<Void, Never>?
+    @State private var showExportLabelsConfirmation = false
+    @State private var showLabelsQrExport = false
 
     private var hasLabels: Bool {
         labelManager.hasLabels()
@@ -44,6 +46,10 @@ struct MoreInfoPopover: View {
     }
 
     func exportLabels() {
+        showExportLabelsConfirmation = true
+    }
+
+    func shareLabelsFile() {
         performExport(
             operation: {
                 let content = try labelManager.export()
@@ -214,6 +220,33 @@ struct MoreInfoPopover: View {
         .onDisappear {
             showLoadingTask?.cancel()
             exportTask?.cancel()
+        }
+        .confirmationDialog(
+            "Export Labels",
+            isPresented: $showExportLabelsConfirmation
+        ) {
+            Button("QR Code") {
+                showLabelsQrExport = true
+            }
+
+            Button("Share...") {
+                shareLabelsFile()
+            }
+
+            Button("Cancel", role: .cancel) {}
+        }
+        .sheet(isPresented: $showLabelsQrExport) {
+            QrExportView(
+                title: "Export Labels",
+                subtitle: "Scan to import labels\ninto another wallet",
+                generateBbqrStrings: { density in
+                    try labelManager.exportToBbqrWithDensity(density: density)
+                },
+                generateUrStrings: nil
+            )
+            .presentationDetents([.height(500), .height(600), .large])
+            .padding()
+            .padding(.top, 10)
         }
     }
 }

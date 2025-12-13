@@ -1,5 +1,5 @@
 //
-//  SendFlowQrExport.swift
+//  QrExportView.swift
 //  Cove
 //
 //  Created by Praveen Perera on 11/24/24.
@@ -10,16 +10,23 @@ extension QrExportFormat: CaseIterable {
     public static var allCases: [QrExportFormat] { [.bbqr, .ur] }
 }
 
-struct SendFlowQrExport: View {
-    let details: ConfirmDetails
+/// Generic QR export view that can display animated BBQr or UR QR codes
+/// If `generateUrStrings` is nil, the format picker is hidden and only BBQr is used
+struct QrExportView: View {
+    let title: String
+    let subtitle: String
+    let generateBbqrStrings: (QrDensity) throws -> [String]
+    let generateUrStrings: ((QrDensity) throws -> [String])?
 
     @State private var selectedFormat: QrExportFormat = .bbqr
     @State private var density: QrDensity = .init()
     @State private var qrs: [QrCodeView] = []
     @State private var error: String? = nil
     @State private var currentIndex = 0
+    @State private var startedAt = Date()
 
-    let startedAt: Date = .now
+    /// Whether to show the format picker (only if UR is available)
+    var showFormatPicker: Bool { generateUrStrings != nil }
 
     /// Animation interval: dynamic based on density for both formats
     var animationInterval: TimeInterval {
@@ -31,26 +38,28 @@ struct SendFlowQrExport: View {
 
     var body: some View {
         VStack {
-            Text("Scan this QR")
+            Text(title)
                 .font(.title3)
                 .padding(.top, 12)
                 .fontWeight(.semibold)
 
-            Text("Scan with your hardware wallet\nto sign your transaction")
+            Text(subtitle)
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.top, 1)
                 .padding(.horizontal, 40)
 
-            Picker("Format", selection: $selectedFormat) {
-                ForEach(QrExportFormat.allCases, id: \.self) { format in
-                    Text(String(describing: format)).tag(format)
+            if showFormatPicker {
+                Picker("Format", selection: $selectedFormat) {
+                    ForEach(QrExportFormat.allCases, id: \.self) { format in
+                        Text(String(describing: format)).tag(format)
+                    }
                 }
+                .pickerStyle(.segmented)
+                .padding(.vertical, 8)
+                .frame(maxWidth: 200)
             }
-            .pickerStyle(.segmented)
-            .padding(.vertical, 8)
-            .frame(maxWidth: 200)
 
             QrContent
         }
@@ -180,9 +189,14 @@ struct SendFlowQrExport: View {
         do {
             let strings: [String] = switch selectedFormat {
             case .bbqr:
-                try details.psbtToBbqrWithDensity(density: density)
+                try generateBbqrStrings(density)
             case .ur:
-                try details.psbtToUrWithDensity(density: density)
+                if let generateUrStrings {
+                    try generateUrStrings(density)
+                } else {
+                    // fallback to BBQr if UR not available
+                    try generateBbqrStrings(density)
+                }
             }
             qrs = strings.map { QrCodeView(text: $0) }
             currentIndex = 0
@@ -194,9 +208,23 @@ struct SendFlowQrExport: View {
     }
 }
 
+// MARK: - Convenience initializer for PSBT export (backwards compatibility)
+
+extension QrExportView {
+    /// Convenience initializer for PSBT export with ConfirmDetails
+    init(details: ConfirmDetails) {
+        self.init(
+            title: "Scan this QR",
+            subtitle: "Scan with your hardware wallet\nto sign your transaction",
+            generateBbqrStrings: { density in try details.psbtToBbqrWithDensity(density: density) },
+            generateUrStrings: { density in try details.psbtToUrWithDensity(density: density) }
+        )
+    }
+}
+
 #Preview {
     AsyncPreview {
-        SendFlowQrExport(details: confirmDetailsPreviewNew())
+        QrExportView(details: confirmDetailsPreviewNew())
             .padding()
     }
 }
@@ -214,7 +242,7 @@ struct SendFlowQrExport: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color.midnightBlue.edgesIgnoringSafeArea(.all))
             .sheet(isPresented: $isPresented) {
-                SendFlowQrExport(details: confirmDetailsPreviewNew())
+                QrExportView(details: confirmDetailsPreviewNew())
                     .presentationDetents([.height(550), .height(650), .large])
                     .padding()
                     .padding(.top, 10)

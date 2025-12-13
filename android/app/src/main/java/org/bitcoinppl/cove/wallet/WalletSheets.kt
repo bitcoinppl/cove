@@ -1,6 +1,22 @@
 package org.bitcoinppl.cove.wallet
 
+import android.content.Context
+import android.content.Intent
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.QrCode
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -9,14 +25,23 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.flows.SelectedWalletFlow.ReceiveAddressSheet
 import org.bitcoinppl.cove.flows.SelectedWalletFlow.WalletMoreOptionsSheet
 import org.bitcoinppl.cove.nfc.NfcLabelImportSheet
+import org.bitcoinppl.cove.views.QrExportView
 import org.bitcoinppl.cove_core.LabelManager
+import java.io.File
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun WalletSheetsHost(
     app: AppManager,
@@ -32,7 +57,13 @@ internal fun WalletSheetsHost(
     onShowNfcScanner: () -> Unit,
     tag: String = "WalletSheets",
 ) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
+
+    // export labels confirmation dialog and QR sheet state
+    var showExportLabelsDialog by remember { mutableStateOf(false) }
+    var showLabelsQrExport by remember { mutableStateOf(false) }
+    var exportLabelManager by remember { mutableStateOf<LabelManager?>(null) }
 
     // show more options bottom sheet
     if (showMoreOptions) {
@@ -50,12 +81,9 @@ internal fun WalletSheetsHost(
             },
             onExportLabels = {
                 onDismissMoreOptions()
-                val metadata = manager.walletMetadata
-                val fileName =
-                    manager.rust.labelManager().use { lm ->
-                        lm.exportDefaultFileName(metadata?.name ?: "wallet")
-                    }
-                exportLaunchers.exportLabels(fileName)
+                // show confirmation dialog instead of direct export
+                exportLabelManager = manager.rust.labelManager()
+                showExportLabelsDialog = true
             },
             onExportTransactions = {
                 onDismissMoreOptions()
@@ -64,6 +92,84 @@ internal fun WalletSheetsHost(
                 exportLaunchers.exportTransactions(fileName)
             },
         )
+    }
+
+    // export labels confirmation dialog
+    if (showExportLabelsDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showExportLabelsDialog = false
+                exportLabelManager?.close()
+                exportLabelManager = null
+            },
+            title = { Text("Export Labels") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(
+                        onClick = {
+                            showExportLabelsDialog = false
+                            showLabelsQrExport = true
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(Icons.Default.QrCode, contentDescription = null)
+                        Text("QR Code", modifier = Modifier.padding(start = 8.dp))
+                    }
+
+                    TextButton(
+                        onClick = {
+                            showExportLabelsDialog = false
+                            scope.launch {
+                                try {
+                                    shareLabelsFile(context, manager)
+                                } catch (e: Exception) {
+                                    android.util.Log.e(tag, "Failed to share labels", e)
+                                    snackbarHostState.showSnackbar("Unable to share labels: ${e.localizedMessage ?: e.message}")
+                                } finally {
+                                    exportLabelManager?.close()
+                                    exportLabelManager = null
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(Icons.Default.Share, contentDescription = null)
+                        Text("Share...", modifier = Modifier.padding(start = 8.dp))
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showExportLabelsDialog = false
+                    exportLabelManager?.close()
+                    exportLabelManager = null
+                }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
+    // export labels QR sheet
+    if (showLabelsQrExport) {
+        exportLabelManager?.let { labelManager ->
+            ModalBottomSheet(
+                onDismissRequest = {
+                    showLabelsQrExport = false
+                    exportLabelManager?.close()
+                    exportLabelManager = null
+                },
+                sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            ) {
+                QrExportView(
+                    title = "Export Labels",
+                    subtitle = "Scan to import labels\ninto another wallet",
+                    generateBbqrStrings = { density -> labelManager.exportToBbqrWithDensity(density) },
+                    generateUrStrings = null,
+                    modifier = Modifier.padding(16.dp),
+                )
+            }
+        }
     }
 
     // show NFC label import sheet
@@ -126,5 +232,38 @@ internal fun WalletSheetsHost(
             snackbarHostState = snackbarHostState,
             onDismiss = onDismissReceiveSheet,
         )
+    }
+}
+
+private suspend fun shareLabelsFile(
+    context: Context,
+    manager: WalletManager,
+) {
+    withContext(Dispatchers.IO) {
+        val metadata = manager.walletMetadata
+        val labelsContent = manager.rust.labelManager().use { it.export() }
+        val fileName =
+            manager.rust.labelManager().use { lm ->
+                "${lm.exportDefaultFileName(metadata?.name ?: "wallet")}.jsonl"
+            }
+
+        val file = File(context.cacheDir, fileName)
+        file.writeText(labelsContent)
+
+        val uri =
+            FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                file,
+            )
+
+        val intent =
+            Intent(Intent.ACTION_SEND).apply {
+                type = "application/x-jsonlines"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+
+        context.startActivity(Intent.createChooser(intent, "Share Labels"))
     }
 }
