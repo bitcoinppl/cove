@@ -22,18 +22,18 @@ import org.bitcoinppl.cove.R
 
 @Composable
 fun RoundRectImage(
-    size: Dp? = 40.dp,
-    backgroundColor: Color? = MaterialTheme.colorScheme.onSurfaceVariant,
+    size: Dp = 40.dp,
+    backgroundColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
     painter: Painter,
     contentDescription: String? = null,
-    cornerRadius: Dp? = 4.dp,
-    imageTint: Color? = Color.White,
+    cornerRadius: Dp = 4.dp,
+    imageTint: Color = Color.White,
 ) {
     Box(
         modifier =
             Modifier
-                .size(size!!)
-                .background(color = backgroundColor!!, shape = RoundedCornerShape(cornerRadius!!)),
+                .size(size)
+                .background(color = backgroundColor, shape = RoundedCornerShape(cornerRadius)),
         contentAlignment = Alignment.Center,
     ) {
         Image(
@@ -41,7 +41,7 @@ fun RoundRectImage(
             contentDescription = contentDescription,
             modifier = Modifier.fillMaxSize(fraction = 0.5f),
             contentScale = ContentScale.Fit,
-            colorFilter = ColorFilter.tint(imageTint!!),
+            colorFilter = ColorFilter.tint(imageTint),
         )
     }
 }

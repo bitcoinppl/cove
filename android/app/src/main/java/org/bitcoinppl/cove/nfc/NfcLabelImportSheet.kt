@@ -116,6 +116,13 @@ fun NfcLabelImportSheet(
         }
     }
 
+    // cleanup labelManager when sheet dismisses
+    DisposableEffect(labelManager) {
+        onDispose {
+            labelManager.close()
+        }
+    }
+
     ModalBottomSheet(
         onDismissRequest = {
             nfcReader.reset()

@@ -52,6 +52,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.fragment.app.FragmentActivity
+import org.bitcoinppl.cove.flows.TapSignerFlow.TapSignerContainer
 import org.bitcoinppl.cove.navigation.CoveNavDisplay
 import org.bitcoinppl.cove.nfc.NfcScanSheet
 import org.bitcoinppl.cove.nfc.TapCardNfcManager
@@ -102,8 +103,12 @@ class MainActivity : FragmentActivity() {
         window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
 
         // refresh fees and prices in background (30-sec throttle protects against excessive requests)
-        AppManager.getInstance().dispatch(AppAction.UpdateFees)
-        AppManager.getInstance().dispatch(AppAction.UpdateFiatPrices)
+        // only dispatch if async runtime is ready (initialized in LaunchedEffect)
+        val app = AppManager.getInstance()
+        if (app.asyncRuntimeReady) {
+            app.dispatch(AppAction.UpdateFees)
+            app.dispatch(AppAction.UpdateFiatPrices)
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -145,6 +150,9 @@ class MainActivity : FragmentActivity() {
                         app.rust.initOnStart()
                         app.asyncRuntimeReady = true
                         Log.d(TAG, "Async runtime initialized successfully")
+                        // dispatch initial updates now that runtime is ready
+                        app.dispatch(AppAction.UpdateFees)
+                        app.dispatch(AppAction.UpdateFiatPrices)
                     } catch (e: Exception) {
                         val errorMsg = "Failed to initialize async runtime: ${e.message}"
                         Log.e(TAG, errorMsg, e)

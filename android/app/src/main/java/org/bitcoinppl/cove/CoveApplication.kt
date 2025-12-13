@@ -1,6 +1,8 @@
 package org.bitcoinppl.cove
 
 import android.app.Application
+import android.content.ComponentCallbacks2
+import android.content.res.Configuration
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
@@ -16,6 +18,10 @@ private const val AUTO_UNLOCK_THRESHOLD_ALL_AUTH = 1L
 private const val AUTO_UNLOCK_THRESHOLD_PIN_ONLY = 2L
 
 class CoveApplication : Application() {
+    // hold references to FFI objects for proper cleanup
+    private var keychain: Keychain? = null
+    private var device: Device? = null
+
     override fun onCreate() {
         super.onCreate()
 
@@ -33,8 +39,8 @@ class CoveApplication : Application() {
 
         // initialize keychain and device before any FFI calls that might use them
         try {
-            Keychain(KeychainAccessor(this))
-            Device(DeviceAccessor())
+            keychain = Keychain(KeychainAccessor(this))
+            device = Device(DeviceAccessor())
             Log.d(TAG, "Keychain and device initialized")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize keychain and device", e)
@@ -46,6 +52,63 @@ class CoveApplication : Application() {
 
         // setup app lifecycle observer for auth lock/unlock
         setupLifecycleObserver()
+
+        // register memory cleanup callbacks
+        // NOTE: Android does not guarantee process-level cleanup - the OS may kill the process
+        // without notice. Sensitive data should be managed via Android Keystore/EncryptedSharedPreferences
+        // or hardened in Rust destructors as secondary mitigation
+        setupMemoryCallbacks()
+    }
+
+    /**
+     * Cleanup FFI objects by calling close() on UniFFI-generated wrappers
+     *
+     * WARNING: This should ONLY be called during process termination (onTerminate).
+     * After cleanup, FFI objects are null and the app cannot function properly.
+     * Do NOT call while the app is actively running - subsequent FFI calls will crash.
+     *
+     * The Rust core uses singletons that are initialized once per process. Once closed,
+     * these objects cannot be reinitialized within the same process.
+     *
+     * NOTE: Do NOT call on TRIM_MEMORY_COMPLETE - that event is delivered while the process
+     * is still alive, and the app can return to foreground without being recreated.
+     */
+    private fun cleanupFfiObjects() {
+        try {
+            device?.close()
+            device = null
+            Log.d(TAG, "Device FFI object closed")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error closing Device FFI object", e)
+        }
+
+        try {
+            keychain?.close()
+            keychain = null
+            Log.d(TAG, "Keychain FFI object closed")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error closing Keychain FFI object", e)
+        }
+
+        // close AppManager and AuthManager FFI objects
+        try {
+            AppManager.getInstance().rust.close()
+            Log.d(TAG, "AppManager FFI object closed")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error closing AppManager FFI object", e)
+        }
+
+        try {
+            AuthManager.getInstance().rust.close()
+            Log.d(TAG, "AuthManager FFI object closed")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error closing AuthManager FFI object", e)
+        }
+    }
+
+    override fun onTerminate() {
+        super.onTerminate()
+        cleanupFfiObjects()
     }
 
     private fun setupLifecycleObserver() {
@@ -60,6 +123,26 @@ class CoveApplication : Application() {
                     // app going to background
                     handleBackground()
                 }
+            },
+        )
+    }
+
+    private fun setupMemoryCallbacks() {
+        registerComponentCallbacks(
+            object : ComponentCallbacks2 {
+                // NOTE: Do NOT cleanup FFI objects on any trim memory level.
+                // TRIM_MEMORY_COMPLETE is delivered while the process is still alive in background.
+                // Rust singletons cannot be reinitialized once closed, so cleanup would break
+                // the app when the user returns. Let Android kill the process if it needs memory.
+                override fun onTrimMemory(level: Int) {
+                    Log.d(TAG, "onTrimMemory called with level: $level (no cleanup performed)")
+                }
+
+                override fun onConfigurationChanged(newConfig: Configuration) {
+                    // no-op
+                }
+
+                override fun onLowMemory() = Unit
             },
         )
     }

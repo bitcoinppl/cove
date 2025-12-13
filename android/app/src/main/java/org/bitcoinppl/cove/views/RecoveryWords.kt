@@ -71,7 +71,7 @@ private fun RecoveryWordsPager(
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            DotsIndicator(
+            DotMenuViewCircle(
                 count = maxOf(pageCount, 1),
                 currentIndex = pagerState.currentPage,
             )

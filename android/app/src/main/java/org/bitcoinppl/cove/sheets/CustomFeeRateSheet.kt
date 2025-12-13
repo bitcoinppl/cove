@@ -23,10 +23,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.AppManager
-import org.bitcoinppl.cove.SendFlowManager
-import org.bitcoinppl.cove.SendFlowPresenter
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.WalletManager
+import org.bitcoinppl.cove.flows.SendFlow.SendFlowManager
+import org.bitcoinppl.cove.flows.SendFlow.SendFlowPresenter
 import org.bitcoinppl.cove.ui.theme.coveColors
 import org.bitcoinppl.cove.utils.toColor
 import org.bitcoinppl.cove_core.SendFlowAlertState

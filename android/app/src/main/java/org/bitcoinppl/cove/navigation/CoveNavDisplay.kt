@@ -20,11 +20,12 @@ import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.ui.NavDisplay
 import kotlinx.coroutines.delay
 import org.bitcoinppl.cove.AppManager
-import org.bitcoinppl.cove.CoinControlContainer
-import org.bitcoinppl.cove.NewWalletContainer
-import org.bitcoinppl.cove.SelectedWalletContainer
-import org.bitcoinppl.cove.SendFlowContainer
-import org.bitcoinppl.cove.SettingsContainer
+import org.bitcoinppl.cove.flows.CoinControlFlow.CoinControlContainer
+import org.bitcoinppl.cove.flows.NewWalletFlow.NewWalletContainer
+import org.bitcoinppl.cove.flows.SelectedWalletFlow.SelectedWalletContainer
+import org.bitcoinppl.cove.flows.SelectedWalletFlow.TransactionDetails.TransactionDetailsContainer
+import org.bitcoinppl.cove.flows.SendFlow.SendFlowContainer
+import org.bitcoinppl.cove.flows.SettingsFlow.SettingsContainer
 import org.bitcoinppl.cove.secret_words.SecretWordsScreen
 import org.bitcoinppl.cove.ui.theme.MaterialMotion
 import org.bitcoinppl.cove_core.Route
@@ -152,7 +153,7 @@ private fun RouteContent(app: AppManager, route: Route) {
         }
 
         is Route.TransactionDetails -> {
-            org.bitcoinppl.cove.transaction_details.TransactionDetailsContainer(
+            TransactionDetailsContainer(
                 app = app,
                 walletId = route.id,
                 details = route.details,
