@@ -1,5 +1,5 @@
 //
-//  SendFlowQrExport.swift
+//  QrExportView.swift
 //  Cove
 //
 //  Created by Praveen Perera on 11/24/24.
@@ -23,8 +23,7 @@ struct QrExportView: View {
     @State private var qrs: [QrCodeView] = []
     @State private var error: String? = nil
     @State private var currentIndex = 0
-
-    let startedAt: Date = .now
+    @State private var startedAt = Date()
 
     /// Whether to show the format picker (only if UR is available)
     var showFormatPicker: Bool { generateUrStrings != nil }

@@ -457,7 +457,7 @@ fun SendFlowHardwareScreen(
                 onDismissRequest = { sheetState = null },
                 sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
             ) {
-                SendFlowQrExport(
+                QrExportView(
                     details = details,
                     modifier = Modifier.padding(16.dp),
                 )
