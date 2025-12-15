@@ -31,6 +31,8 @@ pub enum AppStateReconcileMessage {
     PushedRoute(Route),
     AcceptedTerms,
     WalletsChanged,
+    ShowLoadingPopup,
+    HideLoadingPopup,
 }
 
 // alias for easier imports on the rust side

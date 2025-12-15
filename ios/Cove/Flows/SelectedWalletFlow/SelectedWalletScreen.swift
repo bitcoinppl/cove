@@ -5,6 +5,7 @@
 //  Created by Praveen Perera on 11/28/24.
 //
 
+import MijickPopups
 import SwiftUI
 
 struct ExportingBackup: Equatable {
@@ -154,12 +155,15 @@ struct SelectedWalletScreen: View {
         sheetState = TaggedItem(.receive)
     }
 
+    func showQrExport() {
+        showLabelsQrExport = true
+    }
+
     func shareLabelsFile() {
         Task {
             do {
-                let content = try labelManager.export()
-                let filename = "\(labelManager.exportDefaultFileName(name: metadata.name)).jsonl"
-                ShareSheet.present(data: content, filename: filename) { success in
+                let result = try await manager.rust.exportLabelsForShare()
+                ShareSheet.present(data: result.content, filename: result.filename) { success in
                     if !success {
                         Log.warn("Label Export Failed: cancelled or failed")
                     }
@@ -226,7 +230,7 @@ struct SelectedWalletScreen: View {
                     isPresented: $showExportLabelsConfirmation
                 ) {
                     Button("QR Code") {
-                        showLabelsQrExport = true
+                        showQrExport()
                     }
 
                     Button("Share...") {

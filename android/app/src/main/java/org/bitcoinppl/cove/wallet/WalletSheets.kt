@@ -119,15 +119,14 @@ internal fun WalletSheetsHost(
                     TextButton(
                         onClick = {
                             showExportLabelsDialog = false
+                            exportLabelManager?.close()
+                            exportLabelManager = null
                             scope.launch {
                                 try {
                                     shareLabelsFile(context, manager)
                                 } catch (e: Exception) {
                                     android.util.Log.e(tag, "Failed to share labels", e)
                                     snackbarHostState.showSnackbar("Unable to share labels: ${e.localizedMessage ?: e.message}")
-                                } finally {
-                                    exportLabelManager?.close()
-                                    exportLabelManager = null
                                 }
                             }
                         },
@@ -239,16 +238,11 @@ private suspend fun shareLabelsFile(
     context: Context,
     manager: WalletManager,
 ) {
-    withContext(Dispatchers.IO) {
-        val metadata = manager.walletMetadata
-        val labelsContent = manager.rust.labelManager().use { it.export() }
-        val fileName =
-            manager.rust.labelManager().use { lm ->
-                "${lm.exportDefaultFileName(metadata?.name ?: "wallet")}.jsonl"
-            }
+    val result = manager.rust.exportLabelsForShare()
 
-        val file = File(context.cacheDir, fileName)
-        file.writeText(labelsContent)
+    withContext(Dispatchers.IO) {
+        val file = File(context.cacheDir, result.filename)
+        file.writeText(result.content)
 
         val uri =
             FileProvider.getUriForFile(

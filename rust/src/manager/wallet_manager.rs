@@ -24,7 +24,8 @@ use crate::{
         client::{FIAT_CLIENT, PriceResponse},
     },
     keychain::{Keychain, KeychainError},
-    label_manager::LabelManager,
+    label_manager::{LabelManager, LabelManagerError},
+    loading_popup::with_loading_popup,
     psbt::Psbt,
     reporting::HistoricalFiatPriceReport,
     router::Route,
@@ -46,7 +47,7 @@ use crate::{
 
 use cove_types::{
     address::AddressInfoWithDerivation,
-    confirm::{ConfirmDetails, SplitOutput},
+    confirm::{ConfirmDetails, QrDensity, SplitOutput},
 };
 use cove_types::{confirm::AddressAndAmount, fees::FeeRateOptions};
 
@@ -117,6 +118,18 @@ pub enum WalletErrorAlert {
 pub enum SendFlowErrorAlert {
     SignAndBroadcast(String),
     ConfirmDetails(String),
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct LabelExportResult {
+    pub content: String,
+    pub filename: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct TransactionExportResult {
+    pub content: String,
+    pub filename: String,
 }
 
 #[uniffi::export(callback_interface)]
@@ -384,6 +397,49 @@ impl RustWalletManager {
         let csv = report.create_csv().map_err_str(Error::CsvCreationError)?;
 
         Ok(csv.into_string())
+    }
+
+    /// Export labels for share with conditional loading popup
+    #[uniffi::method]
+    pub async fn export_labels_for_share(&self) -> Result<LabelExportResult, LabelManagerError> {
+        let lm = self.label_manager.clone();
+        let name = self.metadata.read().name.clone();
+
+        with_loading_popup(async move {
+            let content = lm.export()?;
+            let filename = format!("{}.jsonl", lm.export_default_file_name(name));
+            Ok(LabelExportResult { content, filename })
+        })
+        .await
+    }
+
+    /// Export labels as QR codes with conditional loading popup
+    #[uniffi::method]
+    pub async fn export_labels_for_qr(
+        &self,
+        density: Arc<QrDensity>,
+    ) -> Result<Vec<String>, LabelManagerError> {
+        let lm = self.label_manager.clone();
+
+        with_loading_popup(async move { lm.export_to_bbqr_with_density(&density) }).await
+    }
+
+    /// Export transactions as CSV with conditional loading popup
+    #[uniffi::method]
+    pub async fn export_transactions_csv(&self) -> Result<TransactionExportResult, Error> {
+        let name = self.metadata.read().name.clone();
+        let actor = self.actor.clone();
+
+        with_loading_popup(async move {
+            let txns_with_prices = call!(actor.txns_with_prices()).await.unwrap().unwrap();
+            let fiat_currency =
+                Database::global().global_config.fiat_currency().unwrap_or_default();
+            let report = HistoricalFiatPriceReport::new(fiat_currency, txns_with_prices);
+            let csv = report.create_csv().map_err_str(Error::CsvCreationError)?;
+            let filename = format!("{}_transactions.csv", name.to_lowercase());
+            Ok(TransactionExportResult { content: csv.into_string(), filename })
+        })
+        .await
     }
 
     #[uniffi::method]

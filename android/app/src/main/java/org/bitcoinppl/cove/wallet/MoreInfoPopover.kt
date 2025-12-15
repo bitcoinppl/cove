@@ -10,20 +10,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.cancelAndJoin
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.bitcoinppl.cove.AppAlertState
 import org.bitcoinppl.cove.AppManager
-import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.WalletManager
-
-// delay before showing export loading alert
-private const val EXPORT_LOADING_ALERT_DELAY_MS = 500L
-
-// delay before showing file picker after dismissing alert
-private const val ALERT_DISMISS_DELAY_MS = 500L
 
 // export type for tracking what is being exported
 sealed class ExportType {
@@ -102,57 +92,22 @@ fun rememberWalletExportLaunchers(
         ) { uri ->
             uri?.let {
                 scope.launch {
-                    // capture manager at coroutine start to avoid null during suspension
                     val currentManager = manager
                     exportState.isExporting = true
                     val currentExportType = exportState.exportType
 
-                    // track the alert by identity to avoid race conditions
-                    var loadingAlertItem: TaggedItem<AppAlertState>? = null
-
                     try {
-                        // show loading alert for transaction exports after a delay
-                        val alertJob =
-                            scope.launch {
-                                delay(EXPORT_LOADING_ALERT_DELAY_MS)
-                                if (exportState.isExporting && currentExportType is ExportType.Transactions) {
-                                    val alert: TaggedItem<AppAlertState> =
-                                        TaggedItem(
-                                            AppAlertState.General(
-                                                title = "Exporting, please wait...",
-                                                message = "Creating a transaction export file. If this is the first time it might take a while",
-                                            ),
-                                        )
-                                    loadingAlertItem = alert
-                                    app.alertState = alert
-                                }
-                            }
-
+                        // fetch content using new async methods that handle loading popup
                         val content =
                             when (currentExportType) {
                                 is ExportType.Transactions -> {
-                                    withContext(Dispatchers.IO) {
-                                        currentManager?.rust?.createTransactionsWithFiatExport()
-                                    }
+                                    currentManager?.rust?.exportTransactionsCsv()?.content
                                 }
                                 is ExportType.Labels -> {
-                                    withContext(Dispatchers.IO) {
-                                        currentManager?.rust?.labelManager()?.use { it.export() }
-                                    }
+                                    currentManager?.rust?.exportLabelsForShare()?.content
                                 }
                                 null -> null
                             }
-
-                        // cancel alert job and wait for it to complete to avoid race
-                        alertJob.cancelAndJoin()
-
-                        // clear alert only if it's still the one we set (identity check)
-                        loadingAlertItem?.let { alert ->
-                            if (app.alertState?.id == alert.id) {
-                                app.alertState = null
-                                delay(ALERT_DISMISS_DELAY_MS)
-                            }
-                        }
 
                         content?.let { data ->
                             withContext(Dispatchers.IO) {
@@ -179,13 +134,6 @@ fun rememberWalletExportLaunchers(
                         }
                     } catch (e: Exception) {
                         android.util.Log.e(tag, "error exporting file", e)
-                        // clear loading alert on error only if it's still ours
-                        loadingAlertItem?.let { alert ->
-                            if (app.alertState?.id == alert.id) {
-                                app.alertState = null
-                            }
-                        }
-
                         val errorType =
                             when (currentExportType) {
                                 is ExportType.Transactions -> "transactions"

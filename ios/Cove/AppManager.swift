@@ -1,3 +1,4 @@
+import MijickPopups
 import Observation
 import SwiftUI
 
@@ -273,6 +274,12 @@ private let walletModeChangeDelayMs = 250
 
             case .walletsChanged:
                 wallets = (try? database.wallets().all()) ?? []
+
+            case .showLoadingPopup:
+                Task { await MiddlePopup(state: .loading).present() }
+
+            case .hideLoadingPopup:
+                Task { await dismissAllPopups() }
             }
         }
     }
