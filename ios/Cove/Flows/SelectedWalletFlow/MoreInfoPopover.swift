@@ -23,11 +23,12 @@ struct MoreInfoPopover: View {
     let manager: WalletManager
     @Binding var isImportingLabels: Bool
 
+    // bindings
+    @Binding var showExportLabelsConfirmation: Bool
+
     // state
     @State private var showLoadingTask: Task<Void, Never>?
     @State private var exportTask: Task<Void, Never>?
-    @State private var showExportLabelsConfirmation = false
-    @State private var showLabelsQrExport = false
 
     private var hasLabels: Bool {
         labelManager.hasLabels()
@@ -47,18 +48,6 @@ struct MoreInfoPopover: View {
 
     func exportLabels() {
         showExportLabelsConfirmation = true
-    }
-
-    func shareLabelsFile() {
-        performExport(
-            operation: {
-                let content = try labelManager.export()
-                let filename = "\(labelManager.exportDefaultFileName(name: metadata.name)).jsonl"
-                return (content, filename)
-            },
-            errorTitle: "Label Export Failed",
-            errorPrefix: "Unable to export labels"
-        )
     }
 
     func exportTransactions() {
@@ -221,33 +210,6 @@ struct MoreInfoPopover: View {
             showLoadingTask?.cancel()
             exportTask?.cancel()
         }
-        .confirmationDialog(
-            "Export Labels",
-            isPresented: $showExportLabelsConfirmation
-        ) {
-            Button("QR Code") {
-                showLabelsQrExport = true
-            }
-
-            Button("Share...") {
-                shareLabelsFile()
-            }
-
-            Button("Cancel", role: .cancel) {}
-        }
-        .sheet(isPresented: $showLabelsQrExport) {
-            QrExportView(
-                title: "Export Labels",
-                subtitle: "Scan to import labels\ninto another wallet",
-                generateBbqrStrings: { density in
-                    try labelManager.exportToBbqrWithDensity(density: density)
-                },
-                generateUrStrings: nil
-            )
-            .presentationDetents([.height(500), .height(600), .large])
-            .padding()
-            .padding(.top, 10)
-        }
     }
 }
 
@@ -255,7 +217,8 @@ struct MoreInfoPopover: View {
     AsyncPreview {
         MoreInfoPopover(
             manager: WalletManager(preview: "preview_only"),
-            isImportingLabels: Binding.constant(false)
+            isImportingLabels: Binding.constant(false),
+            showExportLabelsConfirmation: Binding.constant(false)
         )
         .environment(AppManager.shared)
     }

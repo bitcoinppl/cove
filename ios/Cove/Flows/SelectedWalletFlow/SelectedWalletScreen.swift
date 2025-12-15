@@ -41,6 +41,8 @@ struct SelectedWalletScreen: View {
 
     @State private var scannedLabels: TaggedItem<MultiFormat>? = nil
     @State private var isImportingLabels = false
+    @State private var showExportLabelsConfirmation = false
+    @State private var showLabelsQrExport = false
 
     // private
     @State private var runPostRefresh = false
@@ -152,6 +154,25 @@ struct SelectedWalletScreen: View {
         sheetState = TaggedItem(.receive)
     }
 
+    func shareLabelsFile() {
+        Task {
+            do {
+                let content = try labelManager.export()
+                let filename = "\(labelManager.exportDefaultFileName(name: metadata.name)).jsonl"
+                ShareSheet.present(data: content, filename: filename) { success in
+                    if !success {
+                        Log.warn("Label Export Failed: cancelled or failed")
+                    }
+                }
+            } catch {
+                app.alertState = .init(.general(
+                    title: "Label Export Failed",
+                    message: "Unable to export labels: \(error.localizedDescription)"
+                ))
+            }
+        }
+    }
+
     @ToolbarContentBuilder
     var MainToolBar: some ToolbarContent {
         ToolbarItem(placement: .principal) {
@@ -192,12 +213,27 @@ struct SelectedWalletScreen: View {
                 Menu {
                     MoreInfoPopover(
                         manager: manager,
-                        isImportingLabels: $isImportingLabels
+                        isImportingLabels: $isImportingLabels,
+                        showExportLabelsConfirmation: $showExportLabelsConfirmation
                     )
                 } label: {
                     Image(systemName: "ellipsis.circle")
                         .adaptiveToolbarItemStyle(isPastHeader: shouldShowNavBar)
                         .font(.callout)
+                }
+                .confirmationDialog(
+                    "Export Labels",
+                    isPresented: $showExportLabelsConfirmation
+                ) {
+                    Button("QR Code") {
+                        showLabelsQrExport = true
+                    }
+
+                    Button("Share...") {
+                        shareLabelsFile()
+                    }
+
+                    Button("Cancel", role: .cancel) {}
                 }
             }
         }
@@ -250,6 +286,19 @@ struct SelectedWalletScreen: View {
                         message: "Unable to import labels \(error.localizedDescription)"
                     ))
             }
+        }
+        .sheet(isPresented: $showLabelsQrExport) {
+            QrExportView(
+                title: "Export Labels",
+                subtitle: "Scan to import labels\ninto another wallet",
+                generateBbqrStrings: { density in
+                    try labelManager.exportToBbqrWithDensity(density: density)
+                },
+                generateUrStrings: nil
+            )
+            .presentationDetents([.height(500), .height(600), .large])
+            .padding()
+            .padding(.top, 10)
         }
         .onChange(of: scannedLabels, initial: false, onChangeOfScannedLabels)
     }
