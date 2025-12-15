@@ -307,6 +307,15 @@ run-android profile="debug":
 [private]
 alias ra := run-android
 
+# Build and clean install Android (rebuilds native libs, clears Gradle cache)
+[group('util')]
+[working-directory: 'android']
+install-android-clean:
+    just ba && ./gradlew --stop && ./gradlew clean installDebug
+
+[private]
+alias iac := install-android-clean
+
 # Run iOS app
 [group('util')]
 [working-directory: 'rust']
