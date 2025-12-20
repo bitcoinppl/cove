@@ -47,6 +47,14 @@ where
     handle.block_on(task)
 }
 
+pub fn spawn_blocking<F, R>(f: F) -> JoinHandle<R>
+where
+    F: FnOnce() -> R + Send + 'static,
+    R: Send + 'static,
+{
+    TOKIO.get().expect("tokio runtime not initalized").spawn_blocking(f)
+}
+
 /// Provides an infallible way to spawn an actor onto the Tokio runtime,
 /// equivalent to `Addr::new`.
 pub fn spawn_actor<T: Actor>(actor: T) -> Addr<T> {

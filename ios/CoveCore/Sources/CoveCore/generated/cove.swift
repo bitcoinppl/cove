@@ -4660,14 +4660,14 @@ public protocol LabelManagerProtocol: AnyObject, Sendable {
     
     func deleteLabelsForTxn(txId: TxId) throws 
     
-    func export() throws  -> String
+    func export() async throws  -> String
     
     func exportDefaultFileName(name: String)  -> String
     
     /**
      * Export labels as BBQr-encoded QR strings for animated display
      */
-    func exportToBbqrWithDensity(density: QrDensity) throws  -> [String]
+    func exportToBbqrWithDensity(density: QrDensity) async throws  -> [String]
     
     func hasLabels()  -> Bool
     
@@ -4749,12 +4749,21 @@ open func deleteLabelsForTxn(txId: TxId)throws   {try rustCallWithError(FfiConve
 }
 }
     
-open func export()throws  -> String  {
-    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeLabelManagerError_lift) {
-    uniffi_cove_fn_method_labelmanager_export(
-            self.uniffiCloneHandle(),$0
-    )
-})
+open func export()async throws  -> String  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_labelmanager_export(
+                    self.uniffiCloneHandle()
+                    
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_rust_buffer,
+            completeFunc: ffi_cove_rust_future_complete_rust_buffer,
+            freeFunc: ffi_cove_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterString.lift,
+            errorHandler: FfiConverterTypeLabelManagerError_lift
+        )
 }
     
 open func exportDefaultFileName(name: String) -> String  {
@@ -4769,13 +4778,21 @@ open func exportDefaultFileName(name: String) -> String  {
     /**
      * Export labels as BBQr-encoded QR strings for animated display
      */
-open func exportToBbqrWithDensity(density: QrDensity)throws  -> [String]  {
-    return try  FfiConverterSequenceString.lift(try rustCallWithError(FfiConverterTypeLabelManagerError_lift) {
-    uniffi_cove_fn_method_labelmanager_export_to_bbqr_with_density(
-            self.uniffiCloneHandle(),
-        FfiConverterTypeQrDensity_lower(density),$0
-    )
-})
+open func exportToBbqrWithDensity(density: QrDensity)async throws  -> [String]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_labelmanager_export_to_bbqr_with_density(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeQrDensity_lower(density)
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_rust_buffer,
+            completeFunc: ffi_cove_rust_future_complete_rust_buffer,
+            freeFunc: ffi_cove_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceString.lift,
+            errorHandler: FfiConverterTypeLabelManagerError_lift
+        )
 }
     
 open func hasLabels() -> Bool  {
@@ -28703,13 +28720,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_labelmanager_delete_labels_for_txn() != 50691) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_labelmanager_export() != 42115) {
+    if (uniffi_cove_checksum_method_labelmanager_export() != 24203) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_labelmanager_export_default_file_name() != 28880) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_labelmanager_export_to_bbqr_with_density() != 31085) {
+    if (uniffi_cove_checksum_method_labelmanager_export_to_bbqr_with_density() != 50284) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_labelmanager_has_labels() != 29517) {

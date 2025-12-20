@@ -295,7 +295,7 @@ struct SelectedWalletScreen: View {
                 title: "Export Labels",
                 subtitle: "Scan to import labels\ninto another wallet",
                 generateBbqrStrings: { density in
-                    try labelManager.exportToBbqrWithDensity(density: density)
+                    try await labelManager.exportToBbqrWithDensity(density: density)
                 },
                 generateUrStrings: nil
             )

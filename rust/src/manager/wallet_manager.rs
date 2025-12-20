@@ -406,7 +406,7 @@ impl RustWalletManager {
         let name = self.metadata.read().name.clone();
 
         with_loading_popup(async move {
-            let content = lm.export()?;
+            let content = lm.export().await?;
             let filename = format!("{}.jsonl", lm.export_default_file_name(name));
             Ok(LabelExportResult { content, filename })
         })
@@ -421,7 +421,7 @@ impl RustWalletManager {
     ) -> Result<Vec<String>, LabelManagerError> {
         let lm = self.label_manager.clone();
 
-        with_loading_popup(async move { lm.export_to_bbqr_with_density(&density) }).await
+        with_loading_popup(async move { lm.export_to_bbqr_with_density(&density).await }).await
     }
 
     /// Export transactions as CSV with conditional loading popup
@@ -436,21 +436,25 @@ impl RustWalletManager {
                 .map_err(|e| Error::TransactionsRetrievalError(e.to_string()))?
                 .map_err(|e| Error::GetHistoricalPricesError(e.to_string()))?;
 
-            let fiat_currency =
-                Database::global().global_config.fiat_currency().unwrap_or_default();
-            let report = HistoricalFiatPriceReport::new(fiat_currency, txns_with_prices);
-            let csv = report.create_csv().map_err_str(Error::CsvCreationError)?;
+            crate::task::spawn_blocking(move || {
+                let fiat_currency =
+                    Database::global().global_config.fiat_currency().unwrap_or_default();
+                let report = HistoricalFiatPriceReport::new(fiat_currency, txns_with_prices);
+                let csv = report.create_csv().map_err_str(Error::CsvCreationError)?;
 
-            let sanitized_name = name
-                .replace(' ', "_")
-                .replace(|c: char| !c.is_alphanumeric() && c != '_', "")
-                .to_ascii_lowercase();
+                let sanitized_name = name
+                    .replace(' ', "_")
+                    .replace(|c: char| !c.is_alphanumeric() && c != '_', "")
+                    .to_ascii_lowercase();
 
-            let sanitized_name =
-                if sanitized_name.is_empty() { "wallet".to_string() } else { sanitized_name };
+                let sanitized_name =
+                    if sanitized_name.is_empty() { "wallet".to_string() } else { sanitized_name };
 
-            let filename = format!("{sanitized_name}_transactions.csv");
-            Ok(TransactionExportResult { content: csv.into_string(), filename })
+                let filename = format!("{sanitized_name}_transactions.csv");
+                Ok(TransactionExportResult { content: csv.into_string(), filename })
+            })
+            .await
+            .map_err(|e| Error::CsvCreationError(e.to_string()))?
         })
         .await
     }

@@ -52,8 +52,8 @@ import org.bitcoinppl.cove_core.types.QrExportFormat
 fun QrExportView(
     title: String,
     subtitle: String,
-    generateBbqrStrings: (QrDensity) -> List<String>,
-    generateUrStrings: ((QrDensity) -> List<String>)? = null,
+    generateBbqrStrings: suspend (QrDensity) -> List<String>,
+    generateUrStrings: (suspend (QrDensity) -> List<String>)? = null,
     modifier: Modifier = Modifier,
 ) {
     var selectedFormat by remember { mutableStateOf(QrExportFormat.BBQR) }
@@ -65,7 +65,8 @@ fun QrExportView(
     // whether to show the format picker (only if UR is available)
     val showFormatPicker = generateUrStrings != null
 
-    fun generateQrCodes() {
+    // generate QR codes on initial load and when format/density changes
+    LaunchedEffect(selectedFormat, density) {
         try {
             qrStrings =
                 when (selectedFormat) {
@@ -78,11 +79,6 @@ fun QrExportView(
             error = e.message ?: "Unknown error"
             qrStrings = emptyList()
         }
-    }
-
-    // generate QR codes on initial load and when format/density changes
-    LaunchedEffect(selectedFormat, density) {
-        generateQrCodes()
     }
 
     // animation interval: dynamic based on density for both formats
