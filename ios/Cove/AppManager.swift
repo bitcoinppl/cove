@@ -279,7 +279,7 @@ private let walletModeChangeDelayMs = 250
                 Task { await MiddlePopup(state: .loading).present() }
 
             case .hideLoadingPopup:
-                Task { await dismissAllPopups() }
+                Task { await PopupStack.dismissAllPopups() }
             }
         }
     }

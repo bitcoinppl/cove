@@ -6,11 +6,11 @@ use tokio::time::{Duration, Instant, sleep};
 
 use crate::app::reconcile::{Update, Updater};
 
-const LOADING_POPUP_DELAY_MS: u64 = 250;
-const MINIMUM_POPUP_DISPLAY_MS: u64 = 500;
+const LOADING_POPUP_DELAY_MS: u64 = 125;
+const MINIMUM_POPUP_DISPLAY_MS: u64 = 400;
 
 /// Runs an async operation with conditional loading popup
-/// Shows popup only if operation takes >250ms, keeps visible for min 500ms
+/// Shows popup only if operation takes >125ms, keeps visible for min 400ms
 pub async fn with_loading_popup<F, T, E>(operation: F) -> Result<T, E>
 where
     F: Future<Output = Result<T, E>>,
