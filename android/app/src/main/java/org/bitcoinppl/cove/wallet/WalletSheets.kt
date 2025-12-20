@@ -163,7 +163,7 @@ internal fun WalletSheetsHost(
                 QrExportView(
                     title = "Export Labels",
                     subtitle = "Scan to import labels\ninto another wallet",
-                    generateBbqrStrings = { density -> labelManager.exportToBbqrWithDensity(density) },
+                    generateBbqrStrings = { density -> manager.rust.exportLabelsForQr(density) },
                     generateUrStrings = null,
                     modifier = Modifier.padding(16.dp),
                 )
