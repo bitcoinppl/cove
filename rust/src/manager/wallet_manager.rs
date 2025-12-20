@@ -431,12 +431,25 @@ impl RustWalletManager {
         let actor = self.actor.clone();
 
         with_loading_popup(async move {
-            let txns_with_prices = call!(actor.txns_with_prices()).await.unwrap().unwrap();
+            let txns_with_prices = call!(actor.txns_with_prices())
+                .await
+                .map_err(|e| Error::TransactionsRetrievalError(e.to_string()))?
+                .map_err(|e| Error::GetHistoricalPricesError(e.to_string()))?;
+
             let fiat_currency =
                 Database::global().global_config.fiat_currency().unwrap_or_default();
             let report = HistoricalFiatPriceReport::new(fiat_currency, txns_with_prices);
             let csv = report.create_csv().map_err_str(Error::CsvCreationError)?;
-            let filename = format!("{}_transactions.csv", name.to_lowercase());
+
+            let sanitized_name = name
+                .replace(' ', "_")
+                .replace(|c: char| !c.is_alphanumeric() && c != '_', "")
+                .to_ascii_lowercase();
+
+            let sanitized_name =
+                if sanitized_name.is_empty() { "wallet".to_string() } else { sanitized_name };
+
+            let filename = format!("{sanitized_name}_transactions.csv");
             Ok(TransactionExportResult { content: csv.into_string(), filename })
         })
         .await

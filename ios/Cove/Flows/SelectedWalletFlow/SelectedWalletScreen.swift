@@ -5,7 +5,6 @@
 //  Created by Praveen Perera on 11/28/24.
 //
 
-import MijickPopups
 import SwiftUI
 
 struct ExportingBackup: Equatable {

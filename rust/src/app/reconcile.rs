@@ -59,7 +59,9 @@ impl Updater {
     }
 
     pub fn send_update(message: AppStateReconcileMessage) {
-        Self::global().0.send(message).expect("failed to send update");
+        if let Err(e) = Self::global().0.send(message) {
+            tracing::error!("Failed to send update, frontend may be disconnected: {e}");
+        }
     }
 }
 
