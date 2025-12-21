@@ -576,6 +576,20 @@ class AppManager private constructor() : FfiReconcile {
                 is AppStateReconcileMessage.WalletsChanged -> {
                     wallets = runCatching { database.wallets().all() }.getOrElse { emptyList() }
                 }
+
+                is AppStateReconcileMessage.ShowLoadingPopup -> {
+                    alertState =
+                        TaggedItem(
+                            AppAlertState.General(
+                                title = "Working on it...",
+                                message = "",
+                            ),
+                        )
+                }
+
+                is AppStateReconcileMessage.HideLoadingPopup -> {
+                    alertState = null
+                }
             }
         }
     }

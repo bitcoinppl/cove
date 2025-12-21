@@ -5,16 +5,7 @@
 //  Created by Praveen Perera on 2/11/25.
 //
 
-import MijickPopups
 import SwiftUI
-
-private class LoadingState {
-    var popupWasShown = false
-    var popupShownAt: Date?
-}
-
-private let loadingPopupDelay: Duration = .milliseconds(250)
-private let minimumPopupDisplayTime: TimeInterval = 0.4
 
 struct MoreInfoPopover: View {
     @Environment(AppManager.self) private var app
@@ -25,10 +16,6 @@ struct MoreInfoPopover: View {
 
     // bindings
     @Binding var showExportLabelsConfirmation: Bool
-
-    // state
-    @State private var showLoadingTask: Task<Void, Never>?
-    @State private var exportTask: Task<Void, Never>?
 
     private var hasLabels: Bool {
         labelManager.hasLabels()
@@ -51,84 +38,19 @@ struct MoreInfoPopover: View {
     }
 
     func exportTransactions() {
-        performExport(
-            operation: {
-                let csv = try await manager.rust.createTransactionsWithFiatExport()
-                let filename = "\(metadata.name.lowercased())_transactions.csv"
-                return (csv, filename)
-            },
-            errorTitle: "Transaction Export Failed",
-            errorPrefix: "Unable to export transactions"
-        )
-    }
-
-    private func performExport(
-        operation: @escaping () async throws -> (data: String, filename: String),
-        errorTitle: String,
-        errorPrefix: String
-    ) {
-        let loadingState = LoadingState()
-
-        // start delayed loading task
-        showLoadingTask = Task { @MainActor in
-            try? await Task.sleep(for: loadingPopupDelay)
-            if Task.isCancelled { return }
-
-            loadingState.popupWasShown = true
-            loadingState.popupShownAt = Date.now
-            await MiddlePopup(state: .loading).present()
-        }
-
-        // start export operation
-        exportTask = Task {
+        Task {
             do {
-                let (data, filename) = try await operation()
-
-                // cancel loading if not shown yet
-                showLoadingTask?.cancel()
-
-                // check if cancelled before continuing
-                if Task.isCancelled { return }
-
-                // if popup was shown, ensure minimum display time
-                if loadingState.popupWasShown, let shownAt = loadingState.popupShownAt {
-                    let elapsed = Date.now.timeIntervalSince(shownAt)
-                    let remaining = max(0, minimumPopupDisplayTime - elapsed)
-
-                    if remaining > 0 {
-                        try? await Task.sleep(for: .seconds(remaining))
-                    }
-
-                    await dismissAllPopups()
-                }
-
-                // check if cancelled before showing share sheet
-                if Task.isCancelled { return }
-
-                // show ShareSheet
-                await MainActor.run {
-                    ShareSheet.present(data: data, filename: filename) { success in
-                        if !success {
-                            Log.warn("\(errorTitle): cancelled or failed")
-                        }
+                let result = try await manager.rust.exportTransactionsCsv()
+                ShareSheet.present(data: result.content, filename: result.filename) { success in
+                    if !success {
+                        Log.warn("Transaction Export Failed: cancelled or failed")
                     }
                 }
             } catch {
-                showLoadingTask?.cancel()
-
-                // don't show error if cancelled
-                if Task.isCancelled { return }
-
-                await MainActor.run {
-                    if loadingState.popupWasShown {
-                        Task { await dismissAllPopups() }
-                    }
-
-                    app.alertState = .init(.general(
-                        title: errorTitle,
-                        message: "\(errorPrefix): \(error.localizedDescription)"
-                    ))
-                }
+                app.alertState = .init(.general(
+                    title: "Transaction Export Failed",
+                    message: "Unable to export transactions: \(error.localizedDescription)"
+                ))
             }
         }
     }
@@ -206,10 +128,6 @@ struct MoreInfoPopover: View {
             }
         }
         .tint(.primary)
-        .onDisappear {
-            showLoadingTask?.cancel()
-            exportTask?.cancel()
-        }
     }
 }
 

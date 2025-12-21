@@ -239,17 +239,23 @@ impl LabelManager {
         self.import_labels(labels)
     }
 
-    pub fn export(&self) -> Result<String, LabelManagerError> {
-        let labels =
-            self.db.labels.all_labels().map_err(|e| LabelManagerError::Get(e.to_string()))?;
+    pub async fn export(&self) -> Result<String, LabelManagerError> {
+        let db = self.db.clone();
 
-        let labels = labels.export().map_err(|e| LabelManagerError::Export(e.to_string()))?;
+        crate::task::spawn_blocking(move || {
+            let labels =
+                db.labels.all_labels().map_err(|e| LabelManagerError::Get(e.to_string()))?;
 
-        Ok(labels)
+            let labels = labels.export().map_err(|e| LabelManagerError::Export(e.to_string()))?;
+
+            Ok(labels)
+        })
+        .await
+        .map_err(|e| LabelManagerError::Export(e.to_string()))?
     }
 
     /// Export labels as BBQr-encoded QR strings for animated display
-    pub fn export_to_bbqr_with_density(
+    pub async fn export_to_bbqr_with_density(
         &self,
         density: &QrDensity,
     ) -> Result<Vec<String>, LabelManagerError> {
@@ -260,25 +266,30 @@ impl LabelManager {
             split::{Split, SplitOptions},
         };
 
-        let labels_jsonl = self.export()?;
-        let data = labels_jsonl.as_bytes();
+        let labels_jsonl = self.export().await?;
+        let max_version = density.bbqr_max_version();
 
-        let version = Version::try_from(density.bbqr_max_version()).unwrap_or(Version::V15);
+        crate::task::spawn_blocking(move || {
+            let data = labels_jsonl.as_bytes();
+            let version = Version::try_from(max_version).unwrap_or(Version::V15);
 
-        let split = Split::try_from_data(
-            data,
-            FileType::Json,
-            SplitOptions {
-                encoding: Encoding::Zlib,
-                min_split_number: 1,
-                max_split_number: 100,
-                min_version: Version::V01,
-                max_version: version,
-            },
-        )
-        .map_err(|e| LabelManagerError::Export(format!("BBQr encoding failed: {e}")))?;
+            let split = Split::try_from_data(
+                data,
+                FileType::Json,
+                SplitOptions {
+                    encoding: Encoding::Zlib,
+                    min_split_number: 1,
+                    max_split_number: 100,
+                    min_version: Version::V01,
+                    max_version: version,
+                },
+            )
+            .map_err(|e| LabelManagerError::Export(format!("BBQr encoding failed: {e}")))?;
 
-        Ok(split.parts)
+            Ok(split.parts)
+        })
+        .await
+        .map_err(|e| LabelManagerError::Export(e.to_string()))?
     }
 }
 

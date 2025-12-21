@@ -4660,14 +4660,14 @@ public protocol LabelManagerProtocol: AnyObject, Sendable {
     
     func deleteLabelsForTxn(txId: TxId) throws 
     
-    func export() throws  -> String
+    func export() async throws  -> String
     
     func exportDefaultFileName(name: String)  -> String
     
     /**
      * Export labels as BBQr-encoded QR strings for animated display
      */
-    func exportToBbqrWithDensity(density: QrDensity) throws  -> [String]
+    func exportToBbqrWithDensity(density: QrDensity) async throws  -> [String]
     
     func hasLabels()  -> Bool
     
@@ -4749,12 +4749,21 @@ open func deleteLabelsForTxn(txId: TxId)throws   {try rustCallWithError(FfiConve
 }
 }
     
-open func export()throws  -> String  {
-    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeLabelManagerError_lift) {
-    uniffi_cove_fn_method_labelmanager_export(
-            self.uniffiCloneHandle(),$0
-    )
-})
+open func export()async throws  -> String  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_labelmanager_export(
+                    self.uniffiCloneHandle()
+                    
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_rust_buffer,
+            completeFunc: ffi_cove_rust_future_complete_rust_buffer,
+            freeFunc: ffi_cove_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterString.lift,
+            errorHandler: FfiConverterTypeLabelManagerError_lift
+        )
 }
     
 open func exportDefaultFileName(name: String) -> String  {
@@ -4769,13 +4778,21 @@ open func exportDefaultFileName(name: String) -> String  {
     /**
      * Export labels as BBQr-encoded QR strings for animated display
      */
-open func exportToBbqrWithDensity(density: QrDensity)throws  -> [String]  {
-    return try  FfiConverterSequenceString.lift(try rustCallWithError(FfiConverterTypeLabelManagerError_lift) {
-    uniffi_cove_fn_method_labelmanager_export_to_bbqr_with_density(
-            self.uniffiCloneHandle(),
-        FfiConverterTypeQrDensity_lower(density),$0
-    )
-})
+open func exportToBbqrWithDensity(density: QrDensity)async throws  -> [String]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_labelmanager_export_to_bbqr_with_density(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeQrDensity_lower(density)
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_rust_buffer,
+            completeFunc: ffi_cove_rust_future_complete_rust_buffer,
+            freeFunc: ffi_cove_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceString.lift,
+            errorHandler: FfiConverterTypeLabelManagerError_lift
+        )
 }
     
 open func hasLabels() -> Bool  {
@@ -7593,6 +7610,21 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
     
     func displaySentAndReceivedAmount(sentAndReceived: SentAndReceived)  -> String
     
+    /**
+     * Export labels as QR codes with conditional loading popup
+     */
+    func exportLabelsForQr(density: QrDensity) async throws  -> [String]
+    
+    /**
+     * Export labels for share with conditional loading popup
+     */
+    func exportLabelsForShare() async throws  -> LabelExportResult
+    
+    /**
+     * Export transactions as CSV with conditional loading popup
+     */
+    func exportTransactionsCsv() async throws  -> TransactionExportResult
+    
     func feeRateOptions() async throws  -> FeeRateOptions
     
     func fees()  -> FeeResponse?
@@ -7942,6 +7974,66 @@ open func displaySentAndReceivedAmount(sentAndReceived: SentAndReceived) -> Stri
         FfiConverterTypeSentAndReceived_lower(sentAndReceived),$0
     )
 })
+}
+    
+    /**
+     * Export labels as QR codes with conditional loading popup
+     */
+open func exportLabelsForQr(density: QrDensity)async throws  -> [String]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_rustwalletmanager_export_labels_for_qr(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeQrDensity_lower(density)
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_rust_buffer,
+            completeFunc: ffi_cove_rust_future_complete_rust_buffer,
+            freeFunc: ffi_cove_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceString.lift,
+            errorHandler: FfiConverterTypeLabelManagerError_lift
+        )
+}
+    
+    /**
+     * Export labels for share with conditional loading popup
+     */
+open func exportLabelsForShare()async throws  -> LabelExportResult  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_rustwalletmanager_export_labels_for_share(
+                    self.uniffiCloneHandle()
+                    
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_rust_buffer,
+            completeFunc: ffi_cove_rust_future_complete_rust_buffer,
+            freeFunc: ffi_cove_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeLabelExportResult_lift,
+            errorHandler: FfiConverterTypeLabelManagerError_lift
+        )
+}
+    
+    /**
+     * Export transactions as CSV with conditional loading popup
+     */
+open func exportTransactionsCsv()async throws  -> TransactionExportResult  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_rustwalletmanager_export_transactions_csv(
+                    self.uniffiCloneHandle()
+                    
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_rust_buffer,
+            completeFunc: ffi_cove_rust_future_complete_rust_buffer,
+            freeFunc: ffi_cove_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeTransactionExportResult_lift,
+            errorHandler: FfiConverterTypeWalletManagerError_lift
+        )
 }
     
 open func feeRateOptions()async throws  -> FeeRateOptions  {
@@ -11908,6 +12000,60 @@ public func FfiConverterTypeInternalOnlyMetadata_lower(_ value: InternalOnlyMeta
 }
 
 
+public struct LabelExportResult: Equatable, Hashable {
+    public var content: String
+    public var filename: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(content: String, filename: String) {
+        self.content = content
+        self.filename = filename
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension LabelExportResult: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLabelExportResult: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LabelExportResult {
+        return
+            try LabelExportResult(
+                content: FfiConverterString.read(from: &buf), 
+                filename: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: LabelExportResult, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.content, into: &buf)
+        FfiConverterString.write(value.filename, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLabelExportResult_lift(_ buf: RustBuffer) throws -> LabelExportResult {
+    return try FfiConverterTypeLabelExportResult.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLabelExportResult_lower(_ value: LabelExportResult) -> RustBuffer {
+    return FfiConverterTypeLabelExportResult.lower(value)
+}
+
+
 public struct Node: Equatable, Hashable {
     public var name: String
     public var network: Network
@@ -12560,6 +12706,60 @@ public func FfiConverterTypeTapSignerSetupComplete_lift(_ buf: RustBuffer) throw
 #endif
 public func FfiConverterTypeTapSignerSetupComplete_lower(_ value: TapSignerSetupComplete) -> RustBuffer {
     return FfiConverterTypeTapSignerSetupComplete.lower(value)
+}
+
+
+public struct TransactionExportResult: Equatable, Hashable {
+    public var content: String
+    public var filename: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(content: String, filename: String) {
+        self.content = content
+        self.filename = filename
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension TransactionExportResult: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTransactionExportResult: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TransactionExportResult {
+        return
+            try TransactionExportResult(
+                content: FfiConverterString.read(from: &buf), 
+                filename: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: TransactionExportResult, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.content, into: &buf)
+        FfiConverterString.write(value.filename, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTransactionExportResult_lift(_ buf: RustBuffer) throws -> TransactionExportResult {
+    return try FfiConverterTypeTransactionExportResult.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTransactionExportResult_lower(_ value: TransactionExportResult) -> RustBuffer {
+    return FfiConverterTypeTransactionExportResult.lower(value)
 }
 
 
@@ -13296,6 +13496,8 @@ public enum AppStateReconcileMessage {
     )
     case acceptedTerms
     case walletsChanged
+    case showLoadingPopup
+    case hideLoadingPopup
 
 
 
@@ -13352,6 +13554,10 @@ public struct FfiConverterTypeAppStateReconcileMessage: FfiConverterRustBuffer {
         case 12: return .acceptedTerms
         
         case 13: return .walletsChanged
+        
+        case 14: return .showLoadingPopup
+        
+        case 15: return .hideLoadingPopup
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -13422,6 +13628,14 @@ public struct FfiConverterTypeAppStateReconcileMessage: FfiConverterRustBuffer {
         
         case .walletsChanged:
             writeInt(&buf, Int32(13))
+        
+        
+        case .showLoadingPopup:
+            writeInt(&buf, Int32(14))
+        
+        
+        case .hideLoadingPopup:
+            writeInt(&buf, Int32(15))
         
         }
     }
@@ -28506,13 +28720,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_labelmanager_delete_labels_for_txn() != 50691) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_labelmanager_export() != 42115) {
+    if (uniffi_cove_checksum_method_labelmanager_export() != 24203) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_labelmanager_export_default_file_name() != 28880) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_labelmanager_export_to_bbqr_with_density() != 31085) {
+    if (uniffi_cove_checksum_method_labelmanager_export_to_bbqr_with_density() != 50284) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_labelmanager_has_labels() != 29517) {
@@ -28762,6 +28976,15 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_display_sent_and_received_amount() != 41756) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustwalletmanager_export_labels_for_qr() != 32503) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustwalletmanager_export_labels_for_share() != 38081) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustwalletmanager_export_transactions_csv() != 27705) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_fee_rate_options() != 36497) {

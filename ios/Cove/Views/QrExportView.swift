@@ -15,8 +15,8 @@ extension QrExportFormat: CaseIterable {
 struct QrExportView: View {
     let title: String
     let subtitle: String
-    let generateBbqrStrings: (QrDensity) throws -> [String]
-    let generateUrStrings: ((QrDensity) throws -> [String])?
+    let generateBbqrStrings: (QrDensity) async throws -> [String]
+    let generateUrStrings: ((QrDensity) async throws -> [String])?
 
     @State private var selectedFormat: QrExportFormat = .bbqr
     @State private var density: QrDensity = .init()
@@ -64,13 +64,13 @@ struct QrExportView: View {
             QrContent
         }
         .onChange(of: selectedFormat) { _, _ in
-            generateQrCodes()
+            Task { await generateQrCodes() }
         }
         .onChange(of: density) { _, _ in
-            generateQrCodes()
+            Task { await generateQrCodes() }
         }
-        .onAppear {
-            generateQrCodes()
+        .task {
+            await generateQrCodes()
         }
     }
 
@@ -185,17 +185,17 @@ struct QrExportView: View {
         .cornerRadius(50)
     }
 
-    func generateQrCodes() {
+    func generateQrCodes() async {
         do {
             let strings: [String] = switch selectedFormat {
             case .bbqr:
-                try generateBbqrStrings(density)
+                try await generateBbqrStrings(density)
             case .ur:
                 if let generateUrStrings {
-                    try generateUrStrings(density)
+                    try await generateUrStrings(density)
                 } else {
                     // fallback to BBQr if UR not available
-                    try generateBbqrStrings(density)
+                    try await generateBbqrStrings(density)
                 }
             }
             qrs = strings.map { QrCodeView(text: $0) }

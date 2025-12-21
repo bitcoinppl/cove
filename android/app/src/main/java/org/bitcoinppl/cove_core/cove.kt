@@ -1431,6 +1431,12 @@ external fun uniffi_cove_checksum_method_rustwalletmanager_display_fiat_amount(
 ): Short
 external fun uniffi_cove_checksum_method_rustwalletmanager_display_sent_and_received_amount(
 ): Short
+external fun uniffi_cove_checksum_method_rustwalletmanager_export_labels_for_qr(
+): Short
+external fun uniffi_cove_checksum_method_rustwalletmanager_export_labels_for_share(
+): Short
+external fun uniffi_cove_checksum_method_rustwalletmanager_export_transactions_csv(
+): Short
 external fun uniffi_cove_checksum_method_rustwalletmanager_fee_rate_options(
 ): Short
 external fun uniffi_cove_checksum_method_rustwalletmanager_fees(
@@ -2371,6 +2377,12 @@ external fun uniffi_cove_fn_method_rustwalletmanager_display_fiat_amount(`ptr`: 
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_rustwalletmanager_display_sent_and_received_amount(`ptr`: Long,`sentAndReceived`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_rustwalletmanager_export_labels_for_qr(`ptr`: Long,`density`: Long,
+): Long
+external fun uniffi_cove_fn_method_rustwalletmanager_export_labels_for_share(`ptr`: Long,
+): Long
+external fun uniffi_cove_fn_method_rustwalletmanager_export_transactions_csv(`ptr`: Long,
+): Long
 external fun uniffi_cove_fn_method_rustwalletmanager_fee_rate_options(`ptr`: Long,
 ): Long
 external fun uniffi_cove_fn_method_rustwalletmanager_fees(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -3803,6 +3815,15 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_display_sent_and_received_amount() != 41756.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_export_labels_for_qr() != 32503.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_export_labels_for_share() != 38081.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_export_transactions_csv() != 27705.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_fee_rate_options() != 36497.toShort()) {
@@ -17964,6 +17985,21 @@ public interface RustWalletManagerInterface {
     
     fun `displaySentAndReceivedAmount`(`sentAndReceived`: SentAndReceived): kotlin.String
     
+    /**
+     * Export labels as QR codes with conditional loading popup
+     */
+    suspend fun `exportLabelsForQr`(`density`: QrDensity): List<kotlin.String>
+    
+    /**
+     * Export labels for share with conditional loading popup
+     */
+    suspend fun `exportLabelsForShare`(): LabelExportResult
+    
+    /**
+     * Export transactions as CSV with conditional loading popup
+     */
+    suspend fun `exportTransactionsCsv`(): TransactionExportResult
+    
     suspend fun `feeRateOptions`(): FeeRateOptions
     
     fun `fees`(): FeeResponse?
@@ -18382,6 +18418,78 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     )
     }
     
+
+    
+    /**
+     * Export labels as QR codes with conditional loading popup
+     */
+    @Throws(LabelManagerException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `exportLabelsForQr`(`density`: QrDensity) : List<kotlin.String> {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_export_labels_for_qr(
+                uniffiHandle,
+                FfiConverterTypeQrDensity.lower(`density`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterSequenceString.lift(it) },
+        // Error FFI converter
+        LabelManagerException.ErrorHandler,
+    )
+    }
+
+    
+    /**
+     * Export labels for share with conditional loading popup
+     */
+    @Throws(LabelManagerException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `exportLabelsForShare`() : LabelExportResult {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_export_labels_for_share(
+                uniffiHandle,
+                
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeLabelExportResult.lift(it) },
+        // Error FFI converter
+        LabelManagerException.ErrorHandler,
+    )
+    }
+
+    
+    /**
+     * Export transactions as CSV with conditional loading popup
+     */
+    @Throws(WalletManagerException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `exportTransactionsCsv`() : TransactionExportResult {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_export_transactions_csv(
+                uniffiHandle,
+                
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeTransactionExportResult.lift(it) },
+        // Error FFI converter
+        WalletManagerException.ErrorHandler,
+    )
+    }
 
     
     @Throws(WalletManagerException::class)
@@ -24732,6 +24840,44 @@ public object FfiConverterTypeInternalOnlyMetadata: FfiConverterRustBuffer<Inter
 
 
 
+data class LabelExportResult (
+    var `content`: kotlin.String
+    , 
+    var `filename`: kotlin.String
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeLabelExportResult: FfiConverterRustBuffer<LabelExportResult> {
+    override fun read(buf: ByteBuffer): LabelExportResult {
+        return LabelExportResult(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: LabelExportResult) = (
+            FfiConverterString.allocationSize(value.`content`) +
+            FfiConverterString.allocationSize(value.`filename`)
+    )
+
+    override fun write(value: LabelExportResult, buf: ByteBuffer) {
+            FfiConverterString.write(value.`content`, buf)
+            FfiConverterString.write(value.`filename`, buf)
+    }
+}
+
+
+
 data class Node (
     var `name`: kotlin.String
     , 
@@ -25269,6 +25415,44 @@ public object FfiConverterTypeTapSignerSetupComplete: FfiConverterRustBuffer<Tap
     override fun write(value: TapSignerSetupComplete, buf: ByteBuffer) {
             FfiConverterByteArray.write(value.`backup`, buf)
             FfiConverterTypeDeriveInfo.write(value.`deriveInfo`, buf)
+    }
+}
+
+
+
+data class TransactionExportResult (
+    var `content`: kotlin.String
+    , 
+    var `filename`: kotlin.String
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeTransactionExportResult: FfiConverterRustBuffer<TransactionExportResult> {
+    override fun read(buf: ByteBuffer): TransactionExportResult {
+        return TransactionExportResult(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: TransactionExportResult) = (
+            FfiConverterString.allocationSize(value.`content`) +
+            FfiConverterString.allocationSize(value.`filename`)
+    )
+
+    override fun write(value: TransactionExportResult, buf: ByteBuffer) {
+            FfiConverterString.write(value.`content`, buf)
+            FfiConverterString.write(value.`filename`, buf)
     }
 }
 
@@ -26234,6 +26418,12 @@ sealed class AppStateReconcileMessage: Disposable  {
     object WalletsChanged : AppStateReconcileMessage()
     
     
+    object ShowLoadingPopup : AppStateReconcileMessage()
+    
+    
+    object HideLoadingPopup : AppStateReconcileMessage()
+    
+    
 
     
     @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
@@ -26316,6 +26506,10 @@ sealed class AppStateReconcileMessage: Disposable  {
             }
             is AppStateReconcileMessage.WalletsChanged -> {// Nothing to destroy
             }
+            is AppStateReconcileMessage.ShowLoadingPopup -> {// Nothing to destroy
+            }
+            is AppStateReconcileMessage.HideLoadingPopup -> {// Nothing to destroy
+            }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
     
@@ -26367,6 +26561,8 @@ public object FfiConverterTypeAppStateReconcileMessage : FfiConverterRustBuffer<
                 )
             12 -> AppStateReconcileMessage.AcceptedTerms
             13 -> AppStateReconcileMessage.WalletsChanged
+            14 -> AppStateReconcileMessage.ShowLoadingPopup
+            15 -> AppStateReconcileMessage.HideLoadingPopup
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -26461,6 +26657,18 @@ public object FfiConverterTypeAppStateReconcileMessage : FfiConverterRustBuffer<
                 4UL
             )
         }
+        is AppStateReconcileMessage.ShowLoadingPopup -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is AppStateReconcileMessage.HideLoadingPopup -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
     }
 
     override fun write(value: AppStateReconcileMessage, buf: ByteBuffer) {
@@ -26526,6 +26734,14 @@ public object FfiConverterTypeAppStateReconcileMessage : FfiConverterRustBuffer<
             }
             is AppStateReconcileMessage.WalletsChanged -> {
                 buf.putInt(13)
+                Unit
+            }
+            is AppStateReconcileMessage.ShowLoadingPopup -> {
+                buf.putInt(14)
+                Unit
+            }
+            is AppStateReconcileMessage.HideLoadingPopup -> {
+                buf.putInt(15)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }

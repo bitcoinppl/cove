@@ -15,6 +15,7 @@ mod hardware_export;
 mod historical_price_service;
 mod keys;
 mod label_manager;
+mod loading_popup;
 mod manager;
 mod mnemonic;
 mod multi_format;
