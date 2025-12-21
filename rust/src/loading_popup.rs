@@ -6,7 +6,7 @@ use tokio::time::{Duration, Instant, sleep};
 
 use crate::app::reconcile::{Update, Updater};
 
-const LOADING_POPUP_DELAY_MS: u64 = 125;
+const LOADING_POPUP_DELAY_MS: u64 = 50;
 const MINIMUM_POPUP_DISPLAY_MS: u64 = 350;
 
 /// Runs an async operation with conditional loading popup
