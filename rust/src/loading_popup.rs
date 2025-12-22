@@ -1,10 +1,8 @@
 //! Conditional loading popup helper for async operations
 
-use std::future::Future;
-
-use tokio::time::{Duration, Instant, sleep};
-
 use crate::app::reconcile::{Update, Updater};
+use std::future::Future;
+use tokio::time::{Duration, Instant, sleep};
 
 const LOADING_POPUP_DELAY_MS: u64 = 50;
 const MINIMUM_POPUP_DISPLAY_MS: u64 = 350;
@@ -14,8 +12,7 @@ pub async fn with_loading_popup<F, T, E>(operation: F) -> Result<T, E>
 where
     F: Future<Output = Result<T, E>>,
 {
-    use tokio::pin;
-    pin!(operation);
+    tokio::pin!(operation);
 
     let mut popup_shown_at: Option<Instant> = None;
 
@@ -24,7 +21,6 @@ where
         biased;
 
         result = &mut operation => result,
-
         _ = sleep(Duration::from_millis(LOADING_POPUP_DELAY_MS)) => {
             Updater::send_update(Update::ShowLoadingPopup);
             popup_shown_at = Some(Instant::now());
@@ -39,6 +35,7 @@ where
         if elapsed < min_display {
             sleep(min_display - elapsed).await;
         }
+
         Updater::send_update(Update::HideLoadingPopup);
     }
 
