@@ -70,36 +70,9 @@ fun QrCodeImportScreen(app: AppManager, modifier: Modifier = Modifier) {
                                 Log.d("QrCodeImportScreen", "Imported Wallet: $id")
 
                                 app.rust.selectWallet(id = id)
-                                app.alertState =
-                                    TaggedItem(
-                                        AppAlertState.General(
-                                            title = "Success",
-                                            message = "Imported Wallet Successfully",
-                                        ),
-                                    )
+                                app.alertState = TaggedItem(AppAlertState.ImportedSuccessfully)
                             } catch (e: WalletException.WalletAlreadyExists) {
-                                try {
-                                    app.rust.selectWallet(id = e.v1)
-                                    app.alertState =
-                                        TaggedItem(
-                                            AppAlertState.General(
-                                                title = "Success",
-                                                message = "Wallet already exists: ${e.v1}",
-                                            ),
-                                        )
-                                } catch (selectError: Exception) {
-                                    Log.w(
-                                        "QrCodeImportScreen",
-                                        "Unable to select existing wallet",
-                                        selectError,
-                                    )
-                                    app.alertState =
-                                        TaggedItem(
-                                            AppAlertState.ErrorImportingHardwareWallet(
-                                                message = selectError.message ?: "Unable to select wallet",
-                                            ),
-                                        )
-                                }
+                                app.alertState = TaggedItem(AppAlertState.DuplicateWallet(e.v1))
                             } catch (e: Exception) {
                                 Log.w("QrCodeImportScreen", "Error importing hardware wallet: $e")
                                 app.alertState =

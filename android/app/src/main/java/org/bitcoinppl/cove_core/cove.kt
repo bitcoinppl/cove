@@ -2149,12 +2149,12 @@ external fun uniffi_cove_fn_constructor_labelmanager_new(`id`: RustBufferWalletI
 ): Long
 external fun uniffi_cove_fn_method_labelmanager_delete_labels_for_txn(`ptr`: Long,`txId`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-external fun uniffi_cove_fn_method_labelmanager_export(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_labelmanager_export(`ptr`: Long,
+): Long
 external fun uniffi_cove_fn_method_labelmanager_export_default_file_name(`ptr`: Long,`name`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-external fun uniffi_cove_fn_method_labelmanager_export_to_bbqr_with_density(`ptr`: Long,`density`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_labelmanager_export_to_bbqr_with_density(`ptr`: Long,`density`: Long,
+): Long
 external fun uniffi_cove_fn_method_labelmanager_has_labels(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
 external fun uniffi_cove_fn_method_labelmanager_import(`ptr`: Long,`jsonl`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -3559,13 +3559,13 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_labelmanager_delete_labels_for_txn() != 50691.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_labelmanager_export() != 42115.toShort()) {
+    if (lib.uniffi_cove_checksum_method_labelmanager_export() != 24203.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_labelmanager_export_default_file_name() != 28880.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_labelmanager_export_to_bbqr_with_density() != 31085.toShort()) {
+    if (lib.uniffi_cove_checksum_method_labelmanager_export_to_bbqr_with_density() != 50284.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_labelmanager_has_labels() != 29517.toShort()) {
@@ -12785,14 +12785,14 @@ public interface LabelManagerInterface {
     
     fun `deleteLabelsForTxn`(`txId`: TxId)
     
-    fun `export`(): kotlin.String
+    suspend fun `export`(): kotlin.String
     
     fun `exportDefaultFileName`(`name`: kotlin.String): kotlin.String
     
     /**
      * Export labels as BBQr-encoded QR strings for animated display
      */
-    fun `exportToBbqrWithDensity`(`density`: QrDensity): List<kotlin.String>
+    suspend fun `exportToBbqrWithDensity`(`density`: QrDensity): List<kotlin.String>
     
     fun `hasLabels`(): kotlin.Boolean
     
@@ -12925,18 +12925,25 @@ open class LabelManager: Disposable, AutoCloseable, LabelManagerInterface
     
 
     
-    @Throws(LabelManagerException::class)override fun `export`(): kotlin.String {
-            return FfiConverterString.lift(
-    callWithHandle {
-    uniffiRustCallWithError(LabelManagerException) { _status ->
-    UniffiLib.uniffi_cove_fn_method_labelmanager_export(
-        it,
-        _status)
-}
-    }
+    @Throws(LabelManagerException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `export`() : kotlin.String {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_labelmanager_export(
+                uniffiHandle,
+                
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterString.lift(it) },
+        // Error FFI converter
+        LabelManagerException.ErrorHandler,
     )
     }
-    
 
     override fun `exportDefaultFileName`(`name`: kotlin.String): kotlin.String {
             return FfiConverterString.lift(
@@ -12955,18 +12962,25 @@ open class LabelManager: Disposable, AutoCloseable, LabelManagerInterface
     /**
      * Export labels as BBQr-encoded QR strings for animated display
      */
-    @Throws(LabelManagerException::class)override fun `exportToBbqrWithDensity`(`density`: QrDensity): List<kotlin.String> {
-            return FfiConverterSequenceString.lift(
-    callWithHandle {
-    uniffiRustCallWithError(LabelManagerException) { _status ->
-    UniffiLib.uniffi_cove_fn_method_labelmanager_export_to_bbqr_with_density(
-        it,
-        FfiConverterTypeQrDensity.lower(`density`),_status)
-}
-    }
+    @Throws(LabelManagerException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `exportToBbqrWithDensity`(`density`: QrDensity) : List<kotlin.String> {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_labelmanager_export_to_bbqr_with_density(
+                uniffiHandle,
+                FfiConverterTypeQrDensity.lower(`density`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterSequenceString.lift(it) },
+        // Error FFI converter
+        LabelManagerException.ErrorHandler,
     )
     }
-    
 
     override fun `hasLabels`(): kotlin.Boolean {
             return FfiConverterBoolean.lift(

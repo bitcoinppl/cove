@@ -583,7 +583,12 @@ private fun GlobalAlertDialog(
                 title = { Text(state.title()) },
                 text = { Text(state.message()) },
                 confirmButton = {
-                    TextButton(onClick = onDismiss) { Text("OK") }
+                    TextButton(onClick = {
+                        onDismiss()
+                        Database().globalConfig().selectedWallet()?.let { walletId ->
+                            app.resetRoute(Route.SelectedWallet(walletId))
+                        }
+                    }) { Text("OK") }
                 },
             )
         }
