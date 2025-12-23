@@ -1,6 +1,8 @@
 package org.bitcoinppl.cove.flows.NewWalletFlow.hot_wallet
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,6 +13,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Nfc
@@ -38,6 +42,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
@@ -110,6 +115,15 @@ fun HotWalletImportScreen(
     var duplicateWalletId by remember { mutableStateOf<WalletId?>(null) }
     var genericErrorMessage by remember { mutableStateOf("") }
     var focusedField by remember(numberOfWords) { mutableIntStateOf(0) }
+    var tabIndex by remember(numberOfWords) { mutableIntStateOf(0) }
+
+    // auto-switch page when focus changes to a word on a different page
+    LaunchedEffect(focusedField) {
+        val newTab = focusedField / GROUPS_OF
+        if (newTab != tabIndex && newTab < numberOfGroups) {
+            tabIndex = newTab
+        }
+    }
 
     // QR and NFC state
     var showQrScanner by remember { mutableStateOf(false) }
@@ -287,9 +301,37 @@ fun HotWalletImportScreen(
                         enteredWords = enteredWords,
                         numberOfWords = numberOfWords,
                         focusedField = focusedField,
+                        tabIndex = tabIndex,
                         onWordsChanged = { newWords -> enteredWords = newWords },
                         onFocusChanged = { field -> focusedField = field },
                     )
+
+                    // page indicator dots for 24-word import
+                    if (numberOfWords == NumberOfBip39Words.TWENTY_FOUR) {
+                        Spacer(Modifier.height(16.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center,
+                        ) {
+                            repeat(numberOfGroups) { i ->
+                                val isSelected = i == tabIndex
+                                Box(
+                                    modifier =
+                                        Modifier
+                                            .padding(horizontal = 4.dp)
+                                            .size(8.dp)
+                                            .clip(RoundedCornerShape(50))
+                                            .background(
+                                                if (isSelected) {
+                                                    Color.White
+                                                } else {
+                                                    Color.White.copy(alpha = 0.33f)
+                                                },
+                                            ).clickable { tabIndex = i },
+                                )
+                            }
+                        }
+                    }
                 }
 
                 Spacer(Modifier.weight(1f))

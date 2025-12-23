@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -158,7 +157,9 @@ fun TransactionsCardView(
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Icon(
-                        painter = androidx.compose.ui.res.painterResource(R.drawable.icon_currency_bitcoin),
+                        painter =
+                            androidx.compose.ui.res
+                                .painterResource(R.drawable.icon_currency_bitcoin),
                         contentDescription = null,
                         modifier = Modifier.size(48.dp),
                         tint = secondaryText,

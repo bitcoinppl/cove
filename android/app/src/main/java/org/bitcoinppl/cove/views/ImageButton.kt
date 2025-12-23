@@ -69,7 +69,7 @@ fun ImageButton(
             BasicText(
                 text = text,
                 maxLines = 1,
-                autoSize = TextAutoSize.StepBased(minFontSize = 7.sp, maxFontSize = fontSize, stepSize = 0.5.sp),
+                autoSize = TextAutoSize.StepBased(minFontSize = 12.sp, maxFontSize = fontSize, stepSize = 0.5.sp),
                 style =
                     TextStyle(
                         fontSize = fontSize,
