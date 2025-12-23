@@ -91,6 +91,9 @@ sealed class AppAlertState {
         val message: String,
     ) : AppAlertState()
 
+    // loading popup with progress indicator
+    data object Loading : AppAlertState()
+
     // action
     data class UninitializedTapSigner(
         val tapSigner: TapSigner,
@@ -130,6 +133,7 @@ sealed class AppAlertState {
             is InitializedTapSigner -> "Import TAPSIGNER?"
             is TapSignerNoBackup -> "No Backup Found"
             is General -> title
+            is Loading -> "Working on it..."
         }
 
     fun message(): String =
@@ -159,6 +163,7 @@ sealed class AppAlertState {
             is InitializedTapSigner -> "Would you like to import this TAPSIGNER?"
             is TapSignerNoBackup -> "No backup found for this TAPSIGNER"
             is General -> message
+            is Loading -> ""
         }
 
     fun isSnackbar(): Boolean =

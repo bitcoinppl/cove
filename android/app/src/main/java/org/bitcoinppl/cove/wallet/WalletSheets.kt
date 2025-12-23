@@ -87,9 +87,14 @@ internal fun WalletSheetsHost(
             },
             onExportTransactions = {
                 onDismissMoreOptions()
-                val metadata = manager.walletMetadata
-                val fileName = "${metadata?.name?.lowercase() ?: "wallet"}_transactions.csv"
-                exportLaunchers.exportTransactions(fileName)
+                scope.launch {
+                    try {
+                        shareTransactionsFile(context, manager)
+                    } catch (e: Exception) {
+                        android.util.Log.e(tag, "Failed to share transactions", e)
+                        snackbarHostState.showSnackbar("Unable to share transactions: ${e.localizedMessage ?: e.message}")
+                    }
+                }
             },
         )
     }
@@ -165,7 +170,7 @@ internal fun WalletSheetsHost(
                     subtitle = "Scan to import labels\ninto another wallet",
                     generateBbqrStrings = { density -> manager.rust.exportLabelsForQr(density) },
                     generateUrStrings = null,
-                    modifier = Modifier.padding(16.dp),
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 16.dp),
                 )
             }
         }
@@ -240,24 +245,52 @@ private suspend fun shareLabelsFile(
 ) {
     val result = manager.rust.exportLabelsForShare()
 
-    withContext(Dispatchers.IO) {
-        val file = File(context.cacheDir, result.filename)
-        file.writeText(result.content)
+    val uri =
+        withContext(Dispatchers.IO) {
+            val file = File(context.cacheDir, result.filename)
+            file.writeText(result.content)
 
-        val uri =
             FileProvider.getUriForFile(
                 context,
                 "${context.packageName}.fileprovider",
                 file,
             )
+        }
 
-        val intent =
-            Intent(Intent.ACTION_SEND).apply {
-                type = "application/x-jsonlines"
-                putExtra(Intent.EXTRA_STREAM, uri)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
+    val intent =
+        Intent(Intent.ACTION_SEND).apply {
+            type = "application/x-jsonlines"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
 
-        context.startActivity(Intent.createChooser(intent, "Share Labels"))
-    }
+    context.startActivity(Intent.createChooser(intent, "Share Labels"))
+}
+
+private suspend fun shareTransactionsFile(
+    context: Context,
+    manager: WalletManager,
+) {
+    val result = manager.rust.exportTransactionsCsv()
+
+    val uri =
+        withContext(Dispatchers.IO) {
+            val file = File(context.cacheDir, result.filename)
+            file.writeText(result.content)
+
+            FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                file,
+            )
+        }
+
+    val intent =
+        Intent(Intent.ACTION_SEND).apply {
+            type = "text/csv"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+
+    context.startActivity(Intent.createChooser(intent, "Share Transactions"))
 }

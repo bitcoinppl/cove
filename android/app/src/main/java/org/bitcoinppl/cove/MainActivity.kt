@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -36,6 +37,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -51,6 +53,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.fragment.app.FragmentActivity
 import org.bitcoinppl.cove.flows.TapSignerFlow.TapSignerContainer
 import org.bitcoinppl.cove.navigation.CoveNavDisplay
@@ -62,6 +65,7 @@ import org.bitcoinppl.cove.views.LockView
 import org.bitcoinppl.cove_core.AfterPinAction
 import org.bitcoinppl.cove_core.AppAction
 import org.bitcoinppl.cove_core.Database
+import org.bitcoinppl.cove_core.NewWalletRoute
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.RouteFactory
 import org.bitcoinppl.cove_core.TapSignerRoute
@@ -371,6 +375,7 @@ private fun GlobalAlertDialog(
                             app.resetRoute(Route.SelectedWallet(state.walletId))
                         } catch (e: Exception) {
                             Log.e("GlobalAlert", "Failed to select wallet", e)
+                            app.alertState = TaggedItem(AppAlertState.UnableToSelectWallet)
                         }
                     }) { Text("OK") }
                 },
@@ -556,13 +561,39 @@ private fun GlobalAlertDialog(
             )
         }
 
+        is AppAlertState.Loading -> {
+            Dialog(onDismissRequest = {}) {
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                ) {
+                    Column(
+                        modifier = Modifier.padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        CircularProgressIndicator()
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(state.title())
+                    }
+                }
+            }
+        }
+
         is AppAlertState.ImportedSuccessfully -> {
             AlertDialog(
                 onDismissRequest = onDismiss,
                 title = { Text(state.title()) },
                 text = { Text(state.message()) },
                 confirmButton = {
-                    TextButton(onClick = onDismiss) { Text("OK") }
+                    TextButton(onClick = {
+                        onDismiss()
+                        val walletId = Database().globalConfig().selectedWallet()
+                        if (walletId != null) {
+                            app.resetRoute(Route.SelectedWallet(walletId))
+                        } else {
+                            app.resetRoute(Route.NewWallet(NewWalletRoute.Select))
+                        }
+                    }) { Text("OK") }
                 },
             )
         }

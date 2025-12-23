@@ -578,13 +578,7 @@ class AppManager private constructor() : FfiReconcile {
                 }
 
                 is AppStateReconcileMessage.ShowLoadingPopup -> {
-                    alertState =
-                        TaggedItem(
-                            AppAlertState.General(
-                                title = "Working on it...",
-                                message = "",
-                            ),
-                        )
+                    alertState = TaggedItem(AppAlertState.Loading)
                 }
 
                 is AppStateReconcileMessage.HideLoadingPopup -> {

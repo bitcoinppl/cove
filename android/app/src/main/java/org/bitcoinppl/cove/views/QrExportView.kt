@@ -5,11 +5,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -35,6 +37,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -98,23 +102,26 @@ fun QrExportView(
         }
     }
 
+    val configuration = LocalConfiguration.current
+    val screenHeightDp = configuration.screenHeightDp.dp
+    val minHeight = screenHeightDp * 0.6f
+
     Column(
-        modifier = modifier,
+        modifier = Modifier.fillMaxWidth().heightIn(min = minHeight).then(modifier),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
             text = title,
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(top = 12.dp),
         )
 
         Text(
             text = subtitle,
-            style = MaterialTheme.typography.bodySmall,
+            style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = 4.dp, start = 40.dp, end = 40.dp),
+            modifier = Modifier.padding(top = 4.dp, bottom = 24.dp, start = 40.dp, end = 40.dp),
         )
 
         // format picker (BBQR / UR) - only show if UR is available
@@ -153,23 +160,22 @@ fun QrExportView(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .aspectRatio(1f)
-                        .padding(horizontal = 11.dp),
+                        .aspectRatio(1f),
                 contentAlignment = Alignment.Center,
             ) {
                 Text("Loading...")
             }
         } else {
             // animated QR view
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .aspectRatio(1f)
-                            .padding(horizontal = 11.dp),
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                BoxWithConstraints(
+                    modifier = Modifier.fillMaxWidth(),
                     contentAlignment = Alignment.Center,
                 ) {
+                    val qrSize = maxWidth
                     val safeIndex = currentIndex.coerceIn(0, qrStrings.lastIndex.coerceAtLeast(0))
                     val qrString = qrStrings.getOrNull(safeIndex) ?: qrStrings.firstOrNull() ?: ""
                     val bitmap =
@@ -180,7 +186,8 @@ fun QrExportView(
                     Image(
                         bitmap = bitmap.asImageBitmap(),
                         contentDescription = "QR code for transaction signing",
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.size(qrSize),
+                        contentScale = ContentScale.FillBounds,
                     )
                 }
 
