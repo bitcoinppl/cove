@@ -53,6 +53,7 @@ internal fun WordInputGrid(
     enteredWords: List<List<String>>,
     numberOfWords: NumberOfBip39Words,
     focusedField: Int,
+    tabIndex: Int,
     onWordsChanged: (List<List<String>>) -> Unit,
     onFocusChanged: (Int) -> Unit,
 ) {
@@ -64,9 +65,12 @@ internal fun WordInputGrid(
 
     val flatWords = enteredWords.flatten()
 
-    val numRows = wordCount / 2
-    val leftIndices = (0 until numRows)
-    val rightIndices = (numRows until wordCount)
+    // always show 12 words per page (6 per column) to match iOS pagination
+    val pageSize = 12
+    val wordsPerColumn = 6
+    val pageStart = tabIndex * pageSize
+    val leftIndices = (pageStart until pageStart + wordsPerColumn)
+    val rightIndices = (pageStart + wordsPerColumn until (pageStart + pageSize).coerceAtMost(wordCount))
 
     Card(
         modifier = Modifier.fillMaxWidth(),

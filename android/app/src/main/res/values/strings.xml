@@ -46,6 +46,7 @@
     <string name="label_transaction_receiving">Receiving</string>
     <string name="title_transactions">Transactions</string>
     <string name="no_transactions_yet">No transactions yet</string>
+    <string name="go_buy_some_bitcoin">Go buy some bitcoin!</string>
     <string name="pending">Pending</string>
     <string name="pending_signature">Pending Signature</string>
     <string name="unconfirmed">Unconfirmed</string>
