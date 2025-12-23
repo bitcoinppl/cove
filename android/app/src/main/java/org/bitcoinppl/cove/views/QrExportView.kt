@@ -38,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -101,8 +102,12 @@ fun QrExportView(
         }
     }
 
+    val configuration = LocalConfiguration.current
+    val screenHeightDp = configuration.screenHeightDp.dp
+    val minHeight = screenHeightDp * 0.6f
+
     Column(
-        modifier = Modifier.fillMaxWidth().heightIn(min = 500.dp).then(modifier),
+        modifier = Modifier.fillMaxWidth().heightIn(min = minHeight).then(modifier),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
