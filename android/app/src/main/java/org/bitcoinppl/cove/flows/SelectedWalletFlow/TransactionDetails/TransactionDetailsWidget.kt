@@ -58,74 +58,68 @@ internal fun TransactionDetailsWidget(
         )
         Spacer(Modifier.height(24.dp))
 
-        // address (sent to / received from)
-        val addressLabel =
-            stringResource(
-                if (isSent) R.string.label_sent_to else R.string.label_received_from,
-            )
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Text(
-                addressLabel,
-                color = sub,
-                fontSize = 12.sp,
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                transactionDetails.addressSpacedOut(),
-                color = fg,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold,
-                lineHeight = 18.sp,
-            )
-
-            // show block number and confirmations for confirmed sent transactions
-            if (isSent && isConfirmed) {
+        if (isSent) {
+            // "Sent to" section - only for sent transactions
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    stringResource(R.string.label_sent_to),
+                    color = sub,
+                    fontSize = 12.sp,
+                )
                 Spacer(Modifier.height(8.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        transactionDetails.blockNumberFmt() ?: "",
-                        color = sub,
-                        fontSize = 14.sp,
-                    )
-                    Text(" | ", color = sub, fontSize = 14.sp)
-                    if (numberOfConfirmations != null) {
+                Text(
+                    transactionDetails.addressSpacedOut(),
+                    color = fg,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    lineHeight = 18.sp,
+                )
+
+                // show block number and confirmations for confirmed sent transactions
+                if (isConfirmed) {
+                    Spacer(Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            numberOfConfirmations.toString(),
+                            transactionDetails.blockNumberFmt() ?: "",
                             color = sub,
                             fontSize = 14.sp,
                         )
-                        Spacer(Modifier.size(4.dp))
-                        Box(
-                            modifier =
-                                Modifier
-                                    .size(14.dp)
-                                    .clip(CircleShape)
-                                    .background(CoveColor.SuccessGreen),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Check,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(10.dp),
+                        Text(" | ", color = sub, fontSize = 14.sp)
+                        if (numberOfConfirmations != null) {
+                            Text(
+                                numberOfConfirmations.toString(),
+                                color = sub,
+                                fontSize = 14.sp,
                             )
+                            Spacer(Modifier.size(4.dp))
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .size(14.dp)
+                                        .clip(CircleShape)
+                                        .background(CoveColor.SuccessGreen),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(10.dp),
+                                )
+                            }
                         }
                     }
                 }
             }
-        }
-        Spacer(Modifier.height(24.dp))
-        Box(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .height(1.dp)
-                    .background(dividerColor),
-        )
-        Spacer(Modifier.height(24.dp))
-
-        // network fee (for sent transactions)
-        if (isSent) {
+            Spacer(Modifier.height(24.dp))
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .background(dividerColor),
+            )
+            Spacer(Modifier.height(24.dp))
             DetailsWidget(
                 label = stringResource(R.string.label_network_fee),
                 primary = transactionDetails.feeFmt(unit = metadata.selectedUnit),
