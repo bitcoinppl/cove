@@ -224,8 +224,21 @@ class WalletManager :
             }
 
             is WalletManagerReconcileMessage.AvailableTransactions -> {
-                if (loadState is WalletLoadState.LOADING) {
-                    loadState = WalletLoadState.SCANNING(message.v1)
+                val txns = message.v1
+                when (val current = loadState) {
+                    is WalletLoadState.LOADING -> {
+                        loadState = WalletLoadState.SCANNING(txns)
+                    }
+                    is WalletLoadState.SCANNING -> {
+                        if (txns.size >= current.txns.size) {
+                            loadState = WalletLoadState.SCANNING(txns)
+                        }
+                    }
+                    is WalletLoadState.LOADED -> {
+                        if (txns.size >= current.txns.size) {
+                            loadState = WalletLoadState.SCANNING(txns)
+                        }
+                    }
                 }
             }
 

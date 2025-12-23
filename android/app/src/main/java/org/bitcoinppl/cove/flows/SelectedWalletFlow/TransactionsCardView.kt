@@ -52,8 +52,10 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
+import org.bitcoinppl.cove.AppAlertState
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.isLight
@@ -113,8 +115,8 @@ fun TransactionsCardView(
             fontWeight = FontWeight.Bold,
         )
 
-        // small inline spinner when scanning with existing transactions
-        if (isScanning && hasTransactions) {
+        // show inline spinner when scanning, except during initial loading (first scan with no txns yet)
+        if (isScanning && !(isFirstScan && !hasTransactions)) {
             Box(
                 modifier =
                     Modifier
@@ -148,16 +150,28 @@ fun TransactionsCardView(
                 }
             } else {
                 // scan complete but no transactions
-                Box(
+                Column(
                     modifier =
                         Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 32.dp),
-                    contentAlignment = Alignment.Center,
+                            .padding(top = 20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
+                    Icon(
+                        painter = androidx.compose.ui.res.painterResource(R.drawable.icon_currency_bitcoin),
+                        contentDescription = null,
+                        modifier = Modifier.size(48.dp),
+                        tint = secondaryText,
+                    )
+                    Spacer(Modifier.height(8.dp))
                     Text(
                         text = stringResource(R.string.no_transactions_yet),
                         color = secondaryText,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    Text(
+                        text = stringResource(R.string.go_buy_some_bitcoin),
+                        color = secondaryText.copy(alpha = 0.7f),
                         fontSize = 14.sp,
                     )
                 }
@@ -185,7 +199,15 @@ fun TransactionsCardView(
                     HorizontalDivider(color = dividerColor, thickness = 0.5.dp)
                 }
 
-                itemsIndexed(transactions) { index, txn ->
+                items(
+                    items = transactions,
+                    key = {
+                        when (it) {
+                            is Transaction.Confirmed -> it.v1.id().toString()
+                            is Transaction.Unconfirmed -> it.v1.id().toString()
+                        }
+                    },
+                ) { txn ->
                     TransactionItem(
                         txn = txn,
                         manager = manager,
@@ -197,10 +219,7 @@ fun TransactionsCardView(
                         secondaryText = secondaryText,
                     )
 
-                    // add divider between transactions (but not after the last one)
-                    if (index < transactions.size - 1) {
-                        HorizontalDivider(color = dividerColor, thickness = 0.5.dp)
-                    }
+                    HorizontalDivider(color = dividerColor, thickness = 0.5.dp)
                 }
 
                 // add bottom spacing
@@ -359,12 +378,15 @@ internal fun ConfirmedTransactionWidget(
                     if (app != null && manager != null) {
                         scope.launch {
                             try {
+                                app.alertState = TaggedItem(AppAlertState.Loading)
                                 val details = manager.transactionDetails(transaction.v1.id())
                                 val walletId = manager.walletMetadata?.id
+                                app.alertState = null
                                 if (walletId != null) {
                                     app.pushRoute(Route.TransactionDetails(walletId, details))
                                 }
                             } catch (e: Exception) {
+                                app.alertState = null
                                 android.util.Log.e("ConfirmedTxWidget", "Failed to load transaction details", e)
                             }
                         }
@@ -460,12 +482,15 @@ internal fun UnconfirmedTransactionWidget(
                     if (app != null && manager != null) {
                         scope.launch {
                             try {
+                                app.alertState = TaggedItem(AppAlertState.Loading)
                                 val details = manager.transactionDetails(transaction.v1.id())
                                 val walletId = manager.walletMetadata?.id
+                                app.alertState = null
                                 if (walletId != null) {
                                     app.pushRoute(Route.TransactionDetails(walletId, details))
                                 }
                             } catch (e: Exception) {
+                                app.alertState = null
                                 android.util.Log.e("UnconfirmedTxWidget", "Failed to load transaction details", e)
                             }
                         }
@@ -639,7 +664,7 @@ internal fun UnsignedTransactionWidget(
                 )
                 Text(
                     text = stringResource(R.string.pending_signature),
-                    color = Color(0xFFFF9800),
+                    color = Color(0xFFFF9800).copy(alpha = 0.8f),
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Normal,
                 )
@@ -648,7 +673,7 @@ internal fun UnsignedTransactionWidget(
             Column(horizontalAlignment = Alignment.End) {
                 Text(
                     text = privateShow(formattedAmount),
-                    color = primaryText.copy(alpha = 0.6f),
+                    color = primaryText,
                     fontSize = 17.sp,
                     fontWeight = FontWeight.Normal,
                 )
