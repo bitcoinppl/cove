@@ -167,7 +167,7 @@ fun SendFlowConfirmScreen(
                         text = stringResource(R.string.action_swipe_to_send),
                         sendState = sendState,
                         onComplete = onSwipeToSend,
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        containerColor = MaterialTheme.coveColors.swipeTrackBg,
                         targetContainerColor = MaterialTheme.coveColors.midnightBtn,
                         knobColor = MaterialTheme.coveColors.midnightBtn,
                         textColor = MaterialTheme.colorScheme.onSurface,

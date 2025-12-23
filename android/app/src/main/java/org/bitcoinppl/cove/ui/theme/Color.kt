@@ -33,6 +33,10 @@ object CoveColor {
     val coveBgDark = ComposeColor(0xFF191919)
     val midnightBtnDark = ComposeColor(0xFF4A4A4D)
 
+    // Swipe track background (matches iOS systemGray5)
+    val swipeTrackBgLight = ComposeColor(0xFFE5E5EA)
+    val swipeTrackBgDark = ComposeColor(0xFF2C2C2E)
+
     // Wallet colors - pastel palette (preferred)
     val beige = ComposeColor(0xFFFFB36E)
     val lightMint = ComposeColor(0xFFC5E5CD)
@@ -80,18 +84,21 @@ object CoveColor {
 data class CoveColorScheme(
     val midnightBtn: ComposeColor,
     val systemGreen: ComposeColor,
+    val swipeTrackBg: ComposeColor,
 )
 
 val LightCoveColors =
     CoveColorScheme(
         midnightBtn = CoveColor.midnightBlue, // #1C2536
         systemGreen = CoveColor.SystemGreenLight, // #34C759
+        swipeTrackBg = CoveColor.swipeTrackBgLight, // #E5E5EA (iOS systemGray5)
     )
 
 val DarkCoveColors =
     CoveColorScheme(
         midnightBtn = CoveColor.midnightBtnDark, // #4A4A4D
         systemGreen = CoveColor.SystemGreenDark, // #30D158
+        swipeTrackBg = CoveColor.swipeTrackBgDark, // #2C2C2E (iOS systemGray5)
     )
 
 val LocalCoveColors = staticCompositionLocalOf { LightCoveColors }

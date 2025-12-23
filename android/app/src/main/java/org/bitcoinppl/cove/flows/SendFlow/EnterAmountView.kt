@@ -121,7 +121,7 @@ fun EnterAmountView(
                     color = if (exceedsBalance) CoveColor.WarningOrange else MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth().offset(x = amountOffset),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 30.dp).offset(x = amountOffset),
                     onTextWidthChanged = { width -> textWidth = width },
                     onFocusChanged = { focused ->
                         isFocused = focused
