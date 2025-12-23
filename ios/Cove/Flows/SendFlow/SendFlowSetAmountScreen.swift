@@ -65,27 +65,29 @@ struct SendFlowSetAmountScreen: View {
     // MARK: Actions
 
     private func next() {
-        guard performValidation() else { return }
-        sendFlowManager.dispatch(action: .finalizeAndGoToNextScreen)
+        Task {
+            guard await performValidation() else { return }
+            sendFlowManager.dispatch(action: .finalizeAndGoToNextScreen)
+        }
     }
 
     private func dismissIfValid() {
-        guard performValidation() else { return }
-        presenter.focusField = .none
+        Task {
+            guard await performValidation() else { return }
+            presenter.focusField = .none
+        }
     }
 
-    private func performValidation() -> Bool {
+    private func performValidation() async -> Bool {
         if !validateAddress() {
             if !address.wrappedValue.isEmpty {
-                Task {
-                    await FloaterPopup(
-                        text: "Address not valid. Please try again.",
-                        backgroundColor: .orange,
-                        textColor: .white,
-                        iconColor: .white,
-                        icon: "exclamationmark.triangle"
-                    ).dismissAfter(1).present()
-                }
+                await FloaterPopup(
+                    text: "Address not valid. Please try again.",
+                    backgroundColor: .orange,
+                    textColor: .white,
+                    iconColor: .white,
+                    icon: "exclamationmark.triangle"
+                ).dismissAfter(1).present()
             }
             presenter.focusField = .address
             return false
@@ -93,15 +95,13 @@ struct SendFlowSetAmountScreen: View {
         if !validateAmount() {
             let hasAmount = sendFlowManager.amount != nil && sendFlowManager.amount?.asSats() != 0
             if hasAmount {
-                Task {
-                    await FloaterPopup(
-                        text: "Amount not valid. Please try again.",
-                        backgroundColor: .orange,
-                        textColor: .white,
-                        iconColor: .white,
-                        icon: "exclamationmark.triangle"
-                    ).dismissAfter(1).present()
-                }
+                await FloaterPopup(
+                    text: "Amount not valid. Please try again.",
+                    backgroundColor: .orange,
+                    textColor: .white,
+                    iconColor: .white,
+                    icon: "exclamationmark.triangle"
+                ).dismissAfter(1).present()
             }
             presenter.focusField = .amount
             return false
