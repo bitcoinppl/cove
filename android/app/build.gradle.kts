@@ -14,7 +14,7 @@ android {
         minSdk = 33
         targetSdk = 36
         versionCode = 1
-        versionName = "1.0"
+        versionName = "1.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -26,12 +26,19 @@ android {
         getByName("debug") {
             // uses default debug keystore
         }
+        create("release") {
+            storeFile = file(System.getenv("COVE_KEYSTORE_PATH") ?: "${System.getProperty("user.home")}/cove-release.keystore")
+            storePassword = System.getenv("COVE_KEYSTORE_PASSWORD") ?: ""
+            keyAlias = System.getenv("COVE_KEY_ALIAS") ?: "cove"
+            keyPassword = System.getenv("COVE_KEY_PASSWORD") ?: ""
+        }
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debug")
+            isMinifyEnabled = true
+            isShrinkResources = true
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
