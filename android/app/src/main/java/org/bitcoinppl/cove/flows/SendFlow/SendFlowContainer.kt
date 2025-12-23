@@ -210,6 +210,7 @@ private fun SendFlowRouteToScreen(
             val exceedsBalance = sendFlowManager.rust.amountExceedsBalance()
             var previouslyExceeded by remember { mutableStateOf(false) }
             val snackbarHostState = remember { SnackbarHostState() }
+            val validationScope = rememberCoroutineScope()
 
             LaunchedEffect(exceedsBalance) {
                 if (exceedsBalance && !previouslyExceeded) {
@@ -229,8 +230,39 @@ private fun SendFlowRouteToScreen(
                 snackbarHostState = snackbarHostState,
                 onBack = { app.popRoute() },
                 onNext = {
-                    if (sendFlowManager.validate(displayAlert = true)) {
-                        sendFlowManager.dispatch(SendFlowManagerAction.FinalizeAndGoToNextScreen)
+                    val addressValid = sendFlowManager.rust.validateAddress()
+                    val amountValid = sendFlowManager.rust.validateAmount()
+                    val hasAddress = sendFlowManager.enteringAddress.isNotEmpty()
+                    val hasAmount = sendFlowManager.rust.amount().asSats() > 0uL
+
+                    when {
+                        !addressValid -> {
+                            // only show snackbar if address has content (not just empty)
+                            if (hasAddress) {
+                                validationScope.launch {
+                                    snackbarHostState.showSnackbar(
+                                        message = "Address not valid. Please try again.",
+                                        duration = SnackbarDuration.Short,
+                                    )
+                                }
+                            }
+                            presenter.focusField = SetAmountFocusField.ADDRESS
+                        }
+                        !amountValid -> {
+                            // only show snackbar if amount has content (not just empty/zero)
+                            if (hasAmount) {
+                                validationScope.launch {
+                                    snackbarHostState.showSnackbar(
+                                        message = "Amount not valid. Please try again.",
+                                        duration = SnackbarDuration.Short,
+                                    )
+                                }
+                            }
+                            presenter.focusField = SetAmountFocusField.AMOUNT
+                        }
+                        else -> {
+                            sendFlowManager.dispatch(SendFlowManagerAction.FinalizeAndGoToNextScreen)
+                        }
                     }
                 },
                 onScanQr = {
