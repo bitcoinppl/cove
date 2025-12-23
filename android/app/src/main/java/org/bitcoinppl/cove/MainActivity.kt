@@ -65,6 +65,7 @@ import org.bitcoinppl.cove.views.LockView
 import org.bitcoinppl.cove_core.AfterPinAction
 import org.bitcoinppl.cove_core.AppAction
 import org.bitcoinppl.cove_core.Database
+import org.bitcoinppl.cove_core.NewWalletRoute
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.RouteFactory
 import org.bitcoinppl.cove_core.TapSignerRoute
@@ -374,6 +375,7 @@ private fun GlobalAlertDialog(
                             app.resetRoute(Route.SelectedWallet(state.walletId))
                         } catch (e: Exception) {
                             Log.e("GlobalAlert", "Failed to select wallet", e)
+                            app.alertState = TaggedItem(AppAlertState.UnableToSelectWallet)
                         }
                     }) { Text("OK") }
                 },
@@ -571,7 +573,7 @@ private fun GlobalAlertDialog(
                     ) {
                         CircularProgressIndicator()
                         Spacer(modifier = Modifier.height(12.dp))
-                        Text("Working on it...")
+                        Text(state.title())
                     }
                 }
             }
@@ -585,8 +587,11 @@ private fun GlobalAlertDialog(
                 confirmButton = {
                     TextButton(onClick = {
                         onDismiss()
-                        Database().globalConfig().selectedWallet()?.let { walletId ->
+                        val walletId = Database().globalConfig().selectedWallet()
+                        if (walletId != null) {
                             app.resetRoute(Route.SelectedWallet(walletId))
+                        } else {
+                            app.resetRoute(Route.NewWallet(NewWalletRoute.Select))
                         }
                     }) { Text("OK") }
                 },

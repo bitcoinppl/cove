@@ -245,26 +245,54 @@ private suspend fun shareLabelsFile(
 ) {
     val result = manager.rust.exportLabelsForShare()
 
-    withContext(Dispatchers.IO) {
-        val file = File(context.cacheDir, result.filename)
-        file.writeText(result.content)
+    val uri =
+        withContext(Dispatchers.IO) {
+            val file = File(context.cacheDir, result.filename)
+            file.writeText(result.content)
 
-        val uri =
             FileProvider.getUriForFile(
                 context,
                 "${context.packageName}.fileprovider",
                 file,
             )
+        }
 
-        val intent =
-            Intent(Intent.ACTION_SEND).apply {
-                type = "application/x-jsonlines"
-                putExtra(Intent.EXTRA_STREAM, uri)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
+    val intent =
+        Intent(Intent.ACTION_SEND).apply {
+            type = "application/x-jsonlines"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
 
-        context.startActivity(Intent.createChooser(intent, "Share Labels"))
-    }
+    context.startActivity(Intent.createChooser(intent, "Share Labels"))
+}
+
+private suspend fun shareTransactionsFile(
+    context: Context,
+    manager: WalletManager,
+) {
+    val result = manager.rust.exportTransactionsCsv()
+
+    val uri =
+        withContext(Dispatchers.IO) {
+            val file = File(context.cacheDir, result.filename)
+            file.writeText(result.content)
+
+            FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                file,
+            )
+        }
+
+    val intent =
+        Intent(Intent.ACTION_SEND).apply {
+            type = "text/csv"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+
+    context.startActivity(Intent.createChooser(intent, "Share Transactions"))
 }
 
 private suspend fun shareTransactionsFile(
