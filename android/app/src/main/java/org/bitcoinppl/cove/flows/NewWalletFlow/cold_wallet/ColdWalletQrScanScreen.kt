@@ -80,8 +80,8 @@ fun ColdWalletQrScanScreen(app: AppManager, modifier: Modifier = Modifier) {
                                 wallet.close()
                                 Log.d("ColdWalletQrScanScreen", "Imported Wallet: $id")
 
-                                app.rust.selectWallet(id = id)
                                 app.popRoute()
+                                app.rust.selectWallet(id = id)
                                 app.alertState = TaggedItem(AppAlertState.ImportedSuccessfully)
                             } catch (e: WalletException.WalletAlreadyExists) {
                                 app.popRoute()

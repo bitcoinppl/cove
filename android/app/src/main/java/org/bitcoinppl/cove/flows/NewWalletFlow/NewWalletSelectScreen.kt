@@ -115,6 +115,7 @@ fun NewWalletSelectScreen(
             val id = wallet.id()
             android.util.Log.d("NewWalletSelectScreen", "Imported Wallet: $id")
 
+            app.popRoute()
             app.rust.selectWallet(id = id)
             app.alertState = TaggedItem(AppAlertState.ImportedSuccessfully)
         } catch (e: WalletException.MultiFormat) {
@@ -126,6 +127,7 @@ fun NewWalletSelectScreen(
                     ),
                 )
         } catch (e: WalletException.WalletAlreadyExists) {
+            app.popRoute()
             app.alertState = TaggedItem(AppAlertState.DuplicateWallet(e.v1))
         } catch (e: Exception) {
             android.util.Log.w("NewWalletSelectScreen", "Error importing hardware wallet: $e")
