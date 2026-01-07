@@ -72,7 +72,7 @@ import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.coveColors
 import org.bitcoinppl.cove.ui.theme.isLight
 import org.bitcoinppl.cove.utils.toColor
-import org.bitcoinppl.cove.views.AutoSizeText
+import org.bitcoinppl.cove.views.AsyncText
 import org.bitcoinppl.cove.views.BalanceAutoSizeText
 import org.bitcoinppl.cove.views.ImageButton
 import org.bitcoinppl.cove_core.HeaderIconPresenter
@@ -110,9 +110,11 @@ fun TransactionDetailsScreen(
     // state for confirmation polling and pull-to-refresh
     var numberOfConfirmations by remember { mutableStateOf<Int?>(null) }
     var isRefreshing by remember { mutableStateOf(false) }
-    var feeFiatFmt by remember { mutableStateOf("---") }
-    var sentSansFeeFiatFmt by remember { mutableStateOf("---") }
-    var totalSpentFiatFmt by remember { mutableStateOf("---") }
+
+    // use cached fiat values for immediate display, null shows spinner
+    var feeFiatFmt by remember { mutableStateOf(transactionDetails.feeFiatFmtCached()) }
+    var sentSansFeeFiatFmt by remember { mutableStateOf(transactionDetails.sentSansFeeFiatFmtCached()) }
+    var totalSpentFiatFmt by remember { mutableStateOf(transactionDetails.amountFiatFmtCached()) }
 
     // get current color scheme (respects in-app theme toggle)
     val isDark = !MaterialTheme.colorScheme.isLight
@@ -127,25 +129,28 @@ fun TransactionDetailsScreen(
         }
     }
 
-    // load fiat amounts
+    // load fiat amounts (update cached values with fresh async values)
     LaunchedEffect(transactionDetails) {
         feeFiatFmt =
             try {
                 transactionDetails.feeFiatFmt()
             } catch (e: Exception) {
-                "---"
+                android.util.Log.e("TransactionDetails", "Failed to fetch fiat fee amount", e)
+                feeFiatFmt // keep cached value on error
             }
         sentSansFeeFiatFmt =
             try {
                 transactionDetails.sentSansFeeFiatFmt()
             } catch (e: Exception) {
-                "---"
+                android.util.Log.e("TransactionDetails", "Failed to fetch sent sans fee fiat amount", e)
+                sentSansFeeFiatFmt // keep cached value on error
             }
         totalSpentFiatFmt =
             try {
                 transactionDetails.amountFiatFmt()
             } catch (e: Exception) {
-                "---"
+                android.util.Log.e("TransactionDetails", "Failed to fetch total fiat amount", e)
+                totalSpentFiatFmt // keep cached value on error
             }
     }
 
@@ -268,14 +273,6 @@ fun TransactionDetailsScreen(
 
     // format amounts
     val txAmountPrimary = manager.rust.displayAmount(amount = transactionDetails.amount())
-    val txAmountSecondary by androidx.compose.runtime.produceState(initialValue = "---") {
-        value =
-            try {
-                transactionDetails.amountFiatFmt()
-            } catch (e: Exception) {
-                "---"
-            }
-    }
 
     // details expanded from metadata
     val isExpanded = metadata.detailsExpanded
@@ -483,11 +480,10 @@ fun TransactionDetailsScreen(
 
                     Spacer(Modifier.height(4.dp))
 
-                    AutoSizeText(
-                        txAmountSecondary,
+                    AsyncText(
+                        text = totalSpentFiatFmt,
                         color = fg.copy(alpha = 0.8f),
-                        maxFontSize = 18.sp,
-                        minimumScaleFactor = 0.90f,
+                        style = MaterialTheme.typography.bodyLarge.copy(fontSize = 18.sp),
                     )
 
                     Spacer(Modifier.height(32.dp))

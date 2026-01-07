@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.views.AsyncText
 import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove_core.TransactionDetails
 import org.bitcoinppl.cove_core.WalletMetadata
@@ -36,9 +37,9 @@ import org.bitcoinppl.cove_core.WalletMetadata
 internal fun TransactionDetailsWidget(
     transactionDetails: TransactionDetails,
     numberOfConfirmations: Int?,
-    feeFiatFmt: String,
-    sentSansFeeFiatFmt: String,
-    totalSpentFiatFmt: String,
+    feeFiatFmt: String?,
+    sentSansFeeFiatFmt: String?,
+    totalSpentFiatFmt: String?,
     metadata: WalletMetadata,
 ) {
     val dividerColor = MaterialTheme.colorScheme.outlineVariant
@@ -207,10 +208,8 @@ internal fun DetailsWidget(
         }
         Column(horizontalAlignment = Alignment.End) {
             AutoSizeText(primary, color = primaryColor, maxFontSize = 14.sp, minimumScaleFactor = 0.90f, fontWeight = FontWeight.SemiBold)
-            if (!secondary.isNullOrEmpty()) {
-                Spacer(Modifier.height(6.dp))
-                Text(secondary, color = sub, fontSize = 12.sp)
-            }
+            Spacer(Modifier.height(6.dp))
+            AsyncText(text = secondary, color = sub, style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp))
         }
     }
 }
