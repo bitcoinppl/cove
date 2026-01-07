@@ -231,6 +231,13 @@ impl TransactionDetails {
     }
 
     #[uniffi::method]
+    pub fn amount_fiat_fmt_cached(&self) -> Option<String> {
+        let amount = self.amount();
+        let fiat = FIAT_CLIENT.value_in_currency_cached(amount, currency())?;
+        Some(fiat_amount_fmt(fiat))
+    }
+
+    #[uniffi::method]
     pub fn fee_fmt(&self, unit: Unit) -> Option<String> {
         let fee = self.fee?;
         Some(fee.fmt_string_with_unit(unit))
@@ -249,6 +256,13 @@ impl TransactionDetails {
         .unwrap()?;
 
         Ok(fiat_amount_fmt(fiat))
+    }
+
+    #[uniffi::method]
+    pub fn fee_fiat_fmt_cached(&self) -> Option<String> {
+        let fee = self.fee?;
+        let fiat = FIAT_CLIENT.value_in_currency_cached(fee, currency())?;
+        Some(fiat_amount_fmt(fiat))
     }
 
     #[uniffi::method]
@@ -286,6 +300,13 @@ impl TransactionDetails {
         .unwrap()?;
 
         Ok(fiat_amount_fmt(fiat))
+    }
+
+    #[uniffi::method]
+    pub fn sent_sans_fee_fiat_fmt_cached(&self) -> Option<String> {
+        let amount = self.sent_sans_fee()?;
+        let fiat = FIAT_CLIENT.value_in_currency_cached(amount, currency())?;
+        Some(fiat_amount_fmt(fiat))
     }
 
     #[uniffi::method]

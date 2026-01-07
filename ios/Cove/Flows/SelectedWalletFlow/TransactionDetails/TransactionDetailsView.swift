@@ -104,7 +104,10 @@ struct TransactionDetailsView: View {
                 .fontWeight(.bold)
                 .padding(.top, 12)
 
-            AsyncView(operation: transactionDetails.amountFiatFmt) { amount in
+            AsyncView(
+                cachedValue: transactionDetails.amountFiatFmtCached(),
+                operation: transactionDetails.amountFiatFmt
+            ) { amount in
                 Text(amount).foregroundStyle(.primary.opacity(0.8))
             }
         }
@@ -188,7 +191,10 @@ struct TransactionDetailsView: View {
                 .fontWeight(.bold)
                 .padding(.top, 12)
 
-            AsyncView(operation: transactionDetails.amountFiatFmt) { amount in
+            AsyncView(
+                cachedValue: transactionDetails.amountFiatFmtCached(),
+                operation: transactionDetails.amountFiatFmt
+            ) { amount in
                 Text(amount).foregroundStyle(.primary.opacity(0.8))
             }
         }

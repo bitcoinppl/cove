@@ -50,8 +50,10 @@ fun AsyncText(
 }
 
 // view that runs an async operation and shows loading/content/error states
+// if cachedValue is provided, show it immediately while async operation runs
 @Composable
 fun <T> AsyncView(
+    cachedValue: T? = null,
     operation: suspend () -> T,
     modifier: Modifier = Modifier,
     errorView: @Composable () -> Unit = {},
@@ -66,19 +68,32 @@ fun <T> AsyncView(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Log.e("AsyncView", "Error loading async view: ${e.message}")
+                Log.e("AsyncView", "Error loading async view: ${e.message}", e)
                 Result.failure(e)
             }
     }
 
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
         when (val r = result) {
-            null ->
-                CircularProgressIndicator(
-                    modifier = Modifier.size(16.dp),
-                    strokeWidth = 2.dp,
-                )
-            else -> if (r.isSuccess) content(r.getOrThrow()) else errorView()
+            null -> {
+                if (cachedValue != null) {
+                    content(cachedValue)
+                } else {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                    )
+                }
+            }
+            else -> {
+                if (r.isSuccess) {
+                    content(r.getOrThrow())
+                } else if (cachedValue != null) {
+                    content(cachedValue)
+                } else {
+                    errorView()
+                }
+            }
         }
     }
 }

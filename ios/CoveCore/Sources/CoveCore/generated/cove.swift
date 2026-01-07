@@ -9093,6 +9093,8 @@ public protocol TransactionDetailsProtocol: AnyObject, Sendable {
     
     func amountFiatFmt() async throws  -> String
     
+    func amountFiatFmtCached()  -> String?
+    
     func amountFmt(unit: BitcoinUnit)  -> String
     
     func blockNumber()  -> UInt32?
@@ -9103,6 +9105,8 @@ public protocol TransactionDetailsProtocol: AnyObject, Sendable {
     
     func feeFiatFmt() async throws  -> String
     
+    func feeFiatFmtCached()  -> String?
+    
     func feeFmt(unit: BitcoinUnit)  -> String?
     
     func isConfirmed()  -> Bool
@@ -9112,6 +9116,8 @@ public protocol TransactionDetailsProtocol: AnyObject, Sendable {
     func isSent()  -> Bool
     
     func sentSansFeeFiatFmt() async throws  -> String
+    
+    func sentSansFeeFiatFmtCached()  -> String?
     
     func sentSansFeeFmt(unit: BitcoinUnit)  -> String?
     
@@ -9276,6 +9282,14 @@ open func amountFiatFmt()async throws  -> String  {
         )
 }
     
+open func amountFiatFmtCached() -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+    uniffi_cove_fn_method_transactiondetails_amount_fiat_fmt_cached(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
 open func amountFmt(unit: BitcoinUnit) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_cove_fn_method_transactiondetails_amount_fmt(
@@ -9326,6 +9340,14 @@ open func feeFiatFmt()async throws  -> String  {
         )
 }
     
+open func feeFiatFmtCached() -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+    uniffi_cove_fn_method_transactiondetails_fee_fiat_fmt_cached(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
 open func feeFmt(unit: BitcoinUnit) -> String?  {
     return try!  FfiConverterOptionString.lift(try! rustCall() {
     uniffi_cove_fn_method_transactiondetails_fee_fmt(
@@ -9374,6 +9396,14 @@ open func sentSansFeeFiatFmt()async throws  -> String  {
             liftFunc: FfiConverterString.lift,
             errorHandler: FfiConverterTypeTransactionDetailError_lift
         )
+}
+    
+open func sentSansFeeFiatFmtCached() -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+    uniffi_cove_fn_method_transactiondetails_sent_sans_fee_fiat_fmt_cached(
+            self.uniffiCloneHandle(),$0
+    )
+})
 }
     
 open func sentSansFeeFmt(unit: BitcoinUnit) -> String?  {
@@ -29269,6 +29299,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_transactiondetails_amount_fiat_fmt() != 17226) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_transactiondetails_amount_fiat_fmt_cached() != 11182) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_transactiondetails_amount_fmt() != 13996) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -29284,6 +29317,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_transactiondetails_fee_fiat_fmt() != 57101) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_transactiondetails_fee_fiat_fmt_cached() != 1845) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_transactiondetails_fee_fmt() != 37631) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -29297,6 +29333,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_transactiondetails_sent_sans_fee_fiat_fmt() != 61624) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_transactiondetails_sent_sans_fee_fiat_fmt_cached() != 42399) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_transactiondetails_sent_sans_fee_fmt() != 64427) {

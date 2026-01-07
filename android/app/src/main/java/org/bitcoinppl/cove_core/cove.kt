@@ -1625,6 +1625,8 @@ external fun uniffi_cove_checksum_method_transactiondetails_amount_fiat(
 ): Short
 external fun uniffi_cove_checksum_method_transactiondetails_amount_fiat_fmt(
 ): Short
+external fun uniffi_cove_checksum_method_transactiondetails_amount_fiat_fmt_cached(
+): Short
 external fun uniffi_cove_checksum_method_transactiondetails_amount_fmt(
 ): Short
 external fun uniffi_cove_checksum_method_transactiondetails_block_number(
@@ -1635,6 +1637,8 @@ external fun uniffi_cove_checksum_method_transactiondetails_confirmation_date_ti
 ): Short
 external fun uniffi_cove_checksum_method_transactiondetails_fee_fiat_fmt(
 ): Short
+external fun uniffi_cove_checksum_method_transactiondetails_fee_fiat_fmt_cached(
+): Short
 external fun uniffi_cove_checksum_method_transactiondetails_fee_fmt(
 ): Short
 external fun uniffi_cove_checksum_method_transactiondetails_is_confirmed(
@@ -1644,6 +1648,8 @@ external fun uniffi_cove_checksum_method_transactiondetails_is_received(
 external fun uniffi_cove_checksum_method_transactiondetails_is_sent(
 ): Short
 external fun uniffi_cove_checksum_method_transactiondetails_sent_sans_fee_fiat_fmt(
+): Short
+external fun uniffi_cove_checksum_method_transactiondetails_sent_sans_fee_fiat_fmt_cached(
 ): Short
 external fun uniffi_cove_checksum_method_transactiondetails_sent_sans_fee_fmt(
 ): Short
@@ -2677,6 +2683,8 @@ external fun uniffi_cove_fn_method_transactiondetails_amount_fiat(`ptr`: Long,
 ): Long
 external fun uniffi_cove_fn_method_transactiondetails_amount_fiat_fmt(`ptr`: Long,
 ): Long
+external fun uniffi_cove_fn_method_transactiondetails_amount_fiat_fmt_cached(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_transactiondetails_amount_fmt(`ptr`: Long,`unit`: RustBufferBitcoinUnit.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_transactiondetails_block_number(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -2687,6 +2695,8 @@ external fun uniffi_cove_fn_method_transactiondetails_confirmation_date_time(`pt
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_transactiondetails_fee_fiat_fmt(`ptr`: Long,
 ): Long
+external fun uniffi_cove_fn_method_transactiondetails_fee_fiat_fmt_cached(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_transactiondetails_fee_fmt(`ptr`: Long,`unit`: RustBufferBitcoinUnit.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_transactiondetails_is_confirmed(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -2697,6 +2707,8 @@ external fun uniffi_cove_fn_method_transactiondetails_is_sent(`ptr`: Long,uniffi
 ): Byte
 external fun uniffi_cove_fn_method_transactiondetails_sent_sans_fee_fiat_fmt(`ptr`: Long,
 ): Long
+external fun uniffi_cove_fn_method_transactiondetails_sent_sans_fee_fiat_fmt_cached(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_transactiondetails_sent_sans_fee_fmt(`ptr`: Long,`unit`: RustBufferBitcoinUnit.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_transactiondetails_transaction_label(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -4108,6 +4120,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_transactiondetails_amount_fiat_fmt() != 17226.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_method_transactiondetails_amount_fiat_fmt_cached() != 11182.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_method_transactiondetails_amount_fmt() != 13996.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -4123,6 +4138,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_transactiondetails_fee_fiat_fmt() != 57101.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_method_transactiondetails_fee_fiat_fmt_cached() != 1845.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_method_transactiondetails_fee_fmt() != 37631.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -4136,6 +4154,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_transactiondetails_sent_sans_fee_fiat_fmt() != 61624.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_transactiondetails_sent_sans_fee_fiat_fmt_cached() != 42399.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_transactiondetails_sent_sans_fee_fmt() != 64427.toShort()) {
@@ -20359,6 +20380,8 @@ public interface TransactionDetailsInterface {
     
     suspend fun `amountFiatFmt`(): kotlin.String
     
+    fun `amountFiatFmtCached`(): kotlin.String?
+    
     fun `amountFmt`(`unit`: BitcoinUnit): kotlin.String
     
     fun `blockNumber`(): kotlin.UInt?
@@ -20369,6 +20392,8 @@ public interface TransactionDetailsInterface {
     
     suspend fun `feeFiatFmt`(): kotlin.String
     
+    fun `feeFiatFmtCached`(): kotlin.String?
+    
     fun `feeFmt`(`unit`: BitcoinUnit): kotlin.String?
     
     fun `isConfirmed`(): kotlin.Boolean
@@ -20378,6 +20403,8 @@ public interface TransactionDetailsInterface {
     fun `isSent`(): kotlin.Boolean
     
     suspend fun `sentSansFeeFiatFmt`(): kotlin.String
+    
+    fun `sentSansFeeFiatFmtCached`(): kotlin.String?
     
     fun `sentSansFeeFmt`(`unit`: BitcoinUnit): kotlin.String?
     
@@ -20567,6 +20594,19 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
     )
     }
 
+    override fun `amountFiatFmtCached`(): kotlin.String? {
+            return FfiConverterOptionalString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_transactiondetails_amount_fiat_fmt_cached(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
     override fun `amountFmt`(`unit`: BitcoinUnit): kotlin.String {
             return FfiConverterString.lift(
     callWithHandle {
@@ -20640,6 +20680,19 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
     )
     }
 
+    override fun `feeFiatFmtCached`(): kotlin.String? {
+            return FfiConverterOptionalString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_transactiondetails_fee_fiat_fmt_cached(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
     override fun `feeFmt`(`unit`: BitcoinUnit): kotlin.String? {
             return FfiConverterOptionalString.lift(
     callWithHandle {
@@ -20712,6 +20765,19 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
         TransactionDetailException.ErrorHandler,
     )
     }
+
+    override fun `sentSansFeeFiatFmtCached`(): kotlin.String? {
+            return FfiConverterOptionalString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_transactiondetails_sent_sans_fee_fiat_fmt_cached(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
 
     override fun `sentSansFeeFmt`(`unit`: BitcoinUnit): kotlin.String? {
             return FfiConverterOptionalString.lift(
