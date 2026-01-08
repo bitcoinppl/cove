@@ -335,4 +335,5 @@ xtask *args:
 # text-to-speech helper
 [private]
 say *args:
-    @say {{args}} || @echo {{args}} || echo {{args}} || true
+    @say {{args}} 2>/dev/null || @echo {{args}} || echo {{args}} || true
+    @command -v cmd >/dev/null && cmd tmux notify bell,macos -t "Cove" -m "{{args}}" || true
