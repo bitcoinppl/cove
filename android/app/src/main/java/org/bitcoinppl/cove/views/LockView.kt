@@ -46,6 +46,11 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.Auth
 import org.bitcoinppl.cove.UnlockMode
 import org.bitcoinppl.cove.findFragmentActivity
@@ -82,12 +87,27 @@ fun LockView(
                 .build()
         }
 
+    // track timeout job to cancel if biometric completes normally
+    var biometricTimeoutJob by remember { mutableStateOf<Job?>(null) }
+    val mainScope = remember { CoroutineScope(Dispatchers.Main) }
+
     // trigger function creates FRESH BiometricPrompt each time (like iOS creates fresh LAContext)
     fun triggerBiometric() {
         val act = activity ?: return
         if (auth.isUsingBiometrics) return
 
         auth.isUsingBiometrics = true
+
+        // cancel any existing timeout
+        biometricTimeoutJob?.cancel()
+
+        // set timeout to reset flag if biometric prompt hangs without callback
+        biometricTimeoutJob = mainScope.launch {
+            delay(30_000) // 30 second timeout
+            if (auth.isUsingBiometrics) {
+                auth.isUsingBiometrics = false
+            }
+        }
 
         val biometricPrompt =
             BiometricPrompt(
@@ -96,11 +116,13 @@ fun LockView(
                 object : BiometricPrompt.AuthenticationCallback() {
                     override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
                         super.onAuthenticationError(errorCode, errString)
+                        biometricTimeoutJob?.cancel()
                         auth.isUsingBiometrics = false
                     }
 
                     override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                         super.onAuthenticationSucceeded(result)
+                        biometricTimeoutJob?.cancel()
                         auth.isUsingBiometrics = false
 
                         // if in decoy mode, switch back to main mode (biometric = trusted user = main mode)
@@ -159,6 +181,10 @@ fun LockView(
                             showBoth = auth.type == AuthType.BOTH,
                             onBiometricTap = { triggerBiometric() },
                             onEnterPinTap = { screen = Screen.PIN },
+                            onResetBiometricFlag = {
+                                biometricTimeoutJob?.cancel()
+                                auth.isUsingBiometrics = false
+                            },
                         )
                     }
                     // show PIN screen
@@ -222,6 +248,7 @@ private fun BiometricView(
     showBoth: Boolean,
     onBiometricTap: () -> Unit,
     onEnterPinTap: () -> Unit,
+    onResetBiometricFlag: () -> Unit,
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
 
@@ -230,8 +257,17 @@ private fun BiometricView(
     DisposableEffect(lifecycleOwner) {
         val observer =
             LifecycleEventObserver { _, event ->
-                if (event == Lifecycle.Event.ON_RESUME) {
-                    onBiometricTap()
+                when (event) {
+                    Lifecycle.Event.ON_RESUME -> {
+                        // reset stuck flag before triggering (in case previous attempt hung)
+                        onResetBiometricFlag()
+                        onBiometricTap()
+                    }
+                    Lifecycle.Event.ON_PAUSE -> {
+                        // reset flag when leaving the biometric screen
+                        onResetBiometricFlag()
+                    }
+                    else -> {}
                 }
             }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -239,11 +275,13 @@ private fun BiometricView(
         // also trigger immediately if already resumed (fixes race condition where
         // composable enters composition after ON_RESUME event already fired)
         if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+            onResetBiometricFlag()
             onBiometricTap()
         }
 
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
+            onResetBiometricFlag()
         }
     }
 
