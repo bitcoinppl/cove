@@ -15,6 +15,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.TapcardTransportProtocol
+import org.bitcoinppl.cove_core.TransportException
 import org.bitcoinppl.cove_core.createTapSignerReader
 import java.lang.ref.WeakReference
 import kotlin.coroutines.resume
@@ -246,7 +247,7 @@ private class TapCardTransport(
             response
         } catch (e: Exception) {
             Log.e(tag, "APDU error", e)
-            throw Exception("Tag connection lost, please hold your phone still")
+            throw TransportException.UnknownException("Tag connection lost, please hold your phone still")
         }
     }
 }
