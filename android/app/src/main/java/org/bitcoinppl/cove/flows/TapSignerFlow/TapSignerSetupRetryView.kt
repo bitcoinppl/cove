@@ -130,14 +130,18 @@ fun TapSignerSetupRetryView(
                     nfcManager.onMessageUpdate = { message ->
                         manager.scanMessage = message
                     }
+                    nfcManager.onTagDetected = { manager.isTagDetected = true }
 
                     manager.scanMessage = "Hold your phone near the TapSigner to continue setup"
+                    manager.isTagDetected = false
                     manager.isScanning = true
 
                     try {
                         val result = nfc.continueSetup(response)
                         manager.isScanning = false
+                        manager.isTagDetected = false
                         nfcManager.onMessageUpdate = null
+                        nfcManager.onTagDetected = null
 
                         when (result) {
                             is SetupCmdResponse.Complete -> {
@@ -149,7 +153,9 @@ fun TapSignerSetupRetryView(
                         }
                     } catch (e: Exception) {
                         manager.isScanning = false
+                        manager.isTagDetected = false
                         nfcManager.onMessageUpdate = null
+                        nfcManager.onTagDetected = null
 
                         app.sheetState = null
                         app.alertState =

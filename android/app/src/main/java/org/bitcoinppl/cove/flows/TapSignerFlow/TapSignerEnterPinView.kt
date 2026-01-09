@@ -215,13 +215,17 @@ private suspend fun deriveAction(
     nfcManager.onMessageUpdate = { message ->
         manager.scanMessage = message
     }
+    nfcManager.onTagDetected = { manager.isTagDetected = true }
 
     manager.scanMessage = "Hold your phone near the TapSigner to import wallet"
+    manager.isTagDetected = false
     manager.isScanning = true
     try {
         val deriveInfo = nfc.derive(pin)
         manager.isScanning = false
+        manager.isTagDetected = false
         nfcManager.onMessageUpdate = null
+        nfcManager.onTagDetected = null
 
         manager.resetRoute(
             org.bitcoinppl.cove_core.TapSignerRoute.ImportSuccess(
@@ -231,7 +235,9 @@ private suspend fun deriveAction(
         )
     } catch (e: Exception) {
         manager.isScanning = false
+        manager.isTagDetected = false
         nfcManager.onMessageUpdate = null
+        nfcManager.onTagDetected = null
 
         // handle auth errors silently, show alert for other errors
         if (!isAuthError(e)) {
@@ -276,13 +282,17 @@ private suspend fun backupAction(
     nfcManager.onMessageUpdate = { message ->
         manager.scanMessage = message
     }
+    nfcManager.onTagDetected = { manager.isTagDetected = true }
 
     manager.scanMessage = "Hold your phone near the TapSigner to backup"
+    manager.isTagDetected = false
     manager.isScanning = true
     try {
         val backup = nfc.backup(pin)
         manager.isScanning = false
+        manager.isTagDetected = false
         nfcManager.onMessageUpdate = null
+        nfcManager.onTagDetected = null
 
         // save backup and show export dialog
         app.saveTapSignerBackup(tapSigner, backup)
@@ -292,7 +302,9 @@ private suspend fun backupAction(
         createBackupLauncher.launch(fileName)
     } catch (e: Exception) {
         manager.isScanning = false
+        manager.isTagDetected = false
         nfcManager.onMessageUpdate = null
+        nfcManager.onTagDetected = null
 
         if (!isAuthError(e)) {
             app.alertState =
@@ -319,13 +331,17 @@ private suspend fun signAction(
     nfcManager.onMessageUpdate = { message ->
         manager.scanMessage = message
     }
+    nfcManager.onTagDetected = { manager.isTagDetected = true }
 
     manager.scanMessage = "Hold your phone near the TapSigner to sign"
+    manager.isTagDetected = false
     manager.isScanning = true
     try {
         val signedPsbt = nfc.sign(psbt, pin)
         manager.isScanning = false
+        manager.isTagDetected = false
         nfcManager.onMessageUpdate = null
+        nfcManager.onTagDetected = null
 
         val db =
             org.bitcoinppl.cove_core
@@ -344,7 +360,9 @@ private suspend fun signAction(
         app.pushRoute(route)
     } catch (e: Exception) {
         manager.isScanning = false
+        manager.isTagDetected = false
         nfcManager.onMessageUpdate = null
+        nfcManager.onTagDetected = null
 
         if (!isAuthError(e)) {
             app.alertState =

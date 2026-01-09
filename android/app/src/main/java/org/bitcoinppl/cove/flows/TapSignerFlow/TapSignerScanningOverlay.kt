@@ -37,6 +37,7 @@ import kotlinx.coroutines.delay
 @Composable
 fun TapSignerScanningOverlay(
     message: String,
+    isTagDetected: Boolean,
     modifier: Modifier = Modifier,
 ) {
     var dotCount by remember { mutableIntStateOf(1) }
@@ -76,7 +77,7 @@ fun TapSignerScanningOverlay(
                 Spacer(modifier = Modifier.height(24.dp))
 
                 Text(
-                    text = "Scanning" + ".".repeat(dotCount),
+                    text = if (isTagDetected) "Scanning please hold still" + ".".repeat(dotCount) else "Ready to scan",
                     style = MaterialTheme.typography.titleLarge,
                 )
 
