@@ -33,9 +33,6 @@ import org.bitcoinppl.cove_core.types.WalletId
 // delay to allow UI to settle before updating balance
 private const val BALANCE_UPDATE_DELAY_MS = 500L
 
-// delay before starting wallet scan to allow initial load to complete
-private const val WALLET_SCAN_DELAY_MS = 400L
-
 /**
  * Selected wallet container - manages WalletManager lifecycle
  * Ported from iOS SelectedWalletContainer.swift
@@ -95,18 +92,12 @@ fun SelectedWalletContainer(
         }
     }
 
-    // start wallet scan after loading
+    // start wallet scan after loading (matches iOS .task)
     LaunchedEffect(manager) {
         manager?.let { wm ->
             try {
-                // small delay and then start scanning wallet
-                delay(WALLET_SCAN_DELAY_MS)
-                if (!isActive) return@LaunchedEffect
-                wm.rust.getTransactions()
-                wm.updateWalletBalance()
                 wm.rust.startWalletScan()
             } catch (e: CancellationException) {
-                // composable left composition, this is expected
                 throw e
             } catch (e: Exception) {
                 android.util.Log.e(tag, "wallet scan failed: ${e.message}", e)
