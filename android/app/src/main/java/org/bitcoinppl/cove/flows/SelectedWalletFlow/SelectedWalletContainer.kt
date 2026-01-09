@@ -22,6 +22,8 @@ import org.bitcoinppl.cove.wallet.WalletExportState
 import org.bitcoinppl.cove.wallet.WalletSheetsHost
 import org.bitcoinppl.cove.wallet.rememberWalletExportLaunchers
 import org.bitcoinppl.cove_core.Database
+import org.bitcoinppl.cove_core.DiscoveryState
+import org.bitcoinppl.cove_core.FoundAddress
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.RouteFactory
 import org.bitcoinppl.cove_core.SendRoute
@@ -131,6 +133,8 @@ fun SelectedWalletContainer(
     var showMoreOptions by remember { mutableStateOf(false) }
     var showReceiveSheet by remember { mutableStateOf(false) }
     var showNfcScanner by remember { mutableStateOf(false) }
+    var showAddressTypeSheet by remember { mutableStateOf(false) }
+    var foundAddressesForSheet by remember { mutableStateOf<List<FoundAddress>>(emptyList()) }
     val exportState = remember(id) { WalletExportState() }
 
     val scope = rememberCoroutineScope()
@@ -155,6 +159,22 @@ fun SelectedWalletContainer(
             exportState = exportState,
             tag = tag,
         )
+
+    // monitor discovery state changes for address type selection (matches iOS onChange)
+    val discoveryState = manager?.walletMetadata?.discoveryState
+    LaunchedEffect(discoveryState) {
+        when (val state = discoveryState) {
+            is DiscoveryState.FoundAddressesFromMnemonic -> {
+                foundAddressesForSheet = state.v1
+                showAddressTypeSheet = true
+            }
+            is DiscoveryState.FoundAddressesFromJson -> {
+                foundAddressesForSheet = state.v1
+                showAddressTypeSheet = true
+            }
+            else -> {}
+        }
+    }
 
     // render
     when (val wm = manager) {
@@ -206,11 +226,14 @@ fun SelectedWalletContainer(
                 showMoreOptions = showMoreOptions,
                 showReceiveSheet = showReceiveSheet,
                 showNfcScanner = showNfcScanner,
+                showAddressTypeSheet = showAddressTypeSheet,
+                foundAddresses = foundAddressesForSheet,
                 exportLaunchers = exportLaunchers,
                 onDismissMoreOptions = { showMoreOptions = false },
                 onDismissReceiveSheet = { showReceiveSheet = false },
                 onDismissNfcScanner = { showNfcScanner = false },
                 onShowNfcScanner = { showNfcScanner = true },
+                onDismissAddressTypeSheet = { showAddressTypeSheet = false },
                 tag = tag,
             )
         }

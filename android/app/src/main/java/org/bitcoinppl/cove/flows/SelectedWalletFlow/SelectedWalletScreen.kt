@@ -144,13 +144,6 @@ fun SelectedWalletScreen(
         manager?.validateMetadata()
     }
 
-    // monitor discoveryState changes to trigger address type selection sheet (matches iOS onChange)
-    val discoveryState = manager?.walletMetadata?.discoveryState
-    LaunchedEffect(discoveryState) {
-        // this would trigger the address type selection sheet if implemented
-        // currently a no-op placeholder to maintain parity with iOS
-    }
-
     // use Material Design system colors for native Android feel
     val listBg = MaterialTheme.colorScheme.background
     val listCard = MaterialTheme.colorScheme.surface
