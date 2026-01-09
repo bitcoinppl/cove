@@ -132,7 +132,10 @@ fun TapSignerContainer(
 
         // show scanning overlay when NFC is active
         if (manager.isScanning) {
-            TapSignerScanningOverlay(message = manager.scanMessage)
+            TapSignerScanningOverlay(
+                message = manager.scanMessage,
+                isTagDetected = manager.isTagDetected,
+            )
         }
     }
 }

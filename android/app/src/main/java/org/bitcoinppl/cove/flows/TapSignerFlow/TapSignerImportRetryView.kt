@@ -120,19 +120,25 @@ fun TapSignerImportRetryView(
                     nfcManager.onMessageUpdate = { message ->
                         manager.scanMessage = message
                     }
+                    nfcManager.onTagDetected = { manager.isTagDetected = true }
 
                     manager.scanMessage = "Hold your phone near the TapSigner to import wallet"
+                    manager.isTagDetected = false
                     manager.isScanning = true
 
                     try {
                         val deriveInfo = nfc.derive(pin)
                         manager.isScanning = false
+                        manager.isTagDetected = false
                         nfcManager.onMessageUpdate = null
+                        nfcManager.onTagDetected = null
 
                         manager.resetRoute(TapSignerRoute.ImportSuccess(tapSigner, deriveInfo))
                     } catch (e: Exception) {
                         manager.isScanning = false
+                        manager.isTagDetected = false
                         nfcManager.onMessageUpdate = null
+                        nfcManager.onTagDetected = null
 
                         app.alertState =
                             TaggedItem(
