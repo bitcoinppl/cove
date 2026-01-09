@@ -32,7 +32,7 @@ struct NumberPadPinView: View {
         title: String = "Enter Pin",
         lockState: Binding<LockState> = .constant(.unlocked),
         isPinCorrect: @escaping (String) -> Bool,
-        showPin: Bool = true,
+        showPin: Bool = false,
         pinLength: Int = 6,
         backAction: (() -> Void)? = nil,
         onUnlock: @escaping (String) -> Void = { _ in },
