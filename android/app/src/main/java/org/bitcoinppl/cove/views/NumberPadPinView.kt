@@ -50,7 +50,7 @@ import kotlin.math.roundToInt
 fun NumberPadPinView(
     title: String = "Enter Pin",
     isPinCorrect: (String) -> Boolean,
-    showPin: Boolean = true,
+    showPin: Boolean = false,
     pinLength: Int = 6,
     backAction: (() -> Unit)? = null,
     onUnlock: (String) -> Unit = {},

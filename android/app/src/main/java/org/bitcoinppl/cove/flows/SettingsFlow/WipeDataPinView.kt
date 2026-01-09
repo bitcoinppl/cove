@@ -27,7 +27,6 @@ fun WipeDataPinView(
             NumberPadPinView(
                 title = "Enter Wipe Data PIN",
                 isPinCorrect = { true },
-                showPin = false,
                 backAction = backAction,
                 onUnlock = { enteredPin ->
                     pinState = WipeDataPinState.Confirm(enteredPin)
@@ -39,7 +38,6 @@ fun WipeDataPinView(
             NumberPadPinView(
                 title = "Confirm Wipe Data PIN",
                 isPinCorrect = { it == state.pinToConfirm },
-                showPin = false,
                 backAction = backAction,
                 onUnlock = onComplete,
             )

@@ -846,7 +846,6 @@ private fun SecuritySheetDialog(
                         isPinCorrect = { pin ->
                             if (auth.isInDecoyMode()) auth.checkDecoyPin(pin) else auth.checkPin(pin)
                         },
-                        showPin = false,
                         backAction = onDismiss,
                         onUnlock = {
                             if (auth.isInDecoyMode()) {
@@ -889,7 +888,6 @@ private fun SecuritySheetDialog(
                     NumberPadPinView(
                         title = "Enter Current PIN",
                         isPinCorrect = { pin -> auth.checkPin(pin) },
-                        showPin = false,
                         backAction = onDismiss,
                         onUnlock = {
                             auth.dispatch(AuthManagerAction.DisableBiometric)
@@ -902,7 +900,6 @@ private fun SecuritySheetDialog(
                     NumberPadPinView(
                         title = "Enter Current PIN",
                         isPinCorrect = { pin -> auth.checkPin(pin) },
-                        showPin = false,
                         backAction = onDismiss,
                         onUnlock = {
                             if (auth.isInDecoyMode()) {
@@ -919,7 +916,6 @@ private fun SecuritySheetDialog(
                     NumberPadPinView(
                         title = "Enter Current PIN",
                         isPinCorrect = { pin -> auth.checkPin(pin) },
-                        showPin = false,
                         backAction = onDismiss,
                         onUnlock = {
                             auth.dispatch(AuthManagerAction.DisableWipeDataPin)
@@ -932,7 +928,6 @@ private fun SecuritySheetDialog(
                     NumberPadPinView(
                         title = "Enter Current PIN",
                         isPinCorrect = { pin -> auth.checkPin(pin) },
-                        showPin = false,
                         backAction = onDismiss,
                         onUnlock = {
                             auth.dispatch(AuthManagerAction.DisableDecoyPin)
@@ -945,7 +940,6 @@ private fun SecuritySheetDialog(
                     NumberPadPinView(
                         title = "Enter Current PIN",
                         isPinCorrect = { pin -> auth.checkPin(pin) },
-                        showPin = false,
                         backAction = onDismiss,
                         onUnlock = {
                             auth.dispatch(AuthManagerAction.DisableDecoyPin)
@@ -958,7 +952,6 @@ private fun SecuritySheetDialog(
                     NumberPadPinView(
                         title = "Enter Current PIN",
                         isPinCorrect = { pin -> auth.checkPin(pin) },
-                        showPin = false,
                         backAction = onDismiss,
                         onUnlock = {
                             auth.dispatch(AuthManagerAction.DisableDecoyPin)

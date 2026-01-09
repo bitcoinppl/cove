@@ -102,12 +102,13 @@ fun LockView(
         biometricTimeoutJob?.cancel()
 
         // set timeout to reset flag if biometric prompt hangs without callback
-        biometricTimeoutJob = mainScope.launch {
-            delay(30_000) // 30 second timeout
-            if (auth.isUsingBiometrics) {
-                auth.isUsingBiometrics = false
+        biometricTimeoutJob =
+            mainScope.launch {
+                delay(30_000) // 30 second timeout
+                if (auth.isUsingBiometrics) {
+                    auth.isUsingBiometrics = false
+                }
             }
-        }
 
         val biometricPrompt =
             BiometricPrompt(
@@ -190,7 +191,6 @@ fun LockView(
                     // show PIN screen
                     else -> {
                         NumberPadPinView(
-                            showPin = false,
                             isPinCorrect = { pin ->
                                 when (auth.handleAndReturnUnlockMode(pin)) {
                                     UnlockMode.MAIN, UnlockMode.DECOY, UnlockMode.WIPE -> true

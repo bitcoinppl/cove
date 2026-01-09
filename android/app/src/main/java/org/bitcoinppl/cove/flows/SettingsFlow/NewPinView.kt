@@ -27,7 +27,6 @@ fun NewPinView(
             NumberPadPinView(
                 title = "Enter New PIN",
                 isPinCorrect = { true },
-                showPin = true,
                 backAction = backAction,
                 onUnlock = { enteredPin ->
                     pinState = NewPinState.Confirm(enteredPin)
@@ -39,7 +38,6 @@ fun NewPinView(
             NumberPadPinView(
                 title = "Confirm New PIN",
                 isPinCorrect = { it == state.pinToConfirm },
-                showPin = false,
                 backAction = backAction,
                 onUnlock = onComplete,
             )

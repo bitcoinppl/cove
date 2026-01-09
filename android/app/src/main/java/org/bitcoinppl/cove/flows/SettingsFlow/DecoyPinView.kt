@@ -27,7 +27,6 @@ fun DecoyPinView(
             NumberPadPinView(
                 title = "Enter Decoy PIN",
                 isPinCorrect = { true },
-                showPin = false,
                 backAction = backAction,
                 onUnlock = { enteredPin ->
                     pinState = DecoyPinState.Confirm(enteredPin)
@@ -39,7 +38,6 @@ fun DecoyPinView(
             NumberPadPinView(
                 title = "Confirm Decoy PIN",
                 isPinCorrect = { it == state.pinToConfirm },
-                showPin = false,
                 backAction = backAction,
                 onUnlock = onComplete,
             )
