@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -130,12 +131,6 @@ fun SelectedWalletScreen(
         manager?.fiatBalance?.let {
             manager.rust.displayFiatAmount(it)
         } ?: usdAmount
-    val transactions =
-        when (val state = manager?.loadState) {
-            is WalletLoadState.LOADED -> state.txns
-            is WalletLoadState.SCANNING -> state.txns
-            else -> emptyList()
-        }
     val unsignedTransactions = manager?.unsignedTransactions ?: emptyList()
 
     // clear SendFlowManager when returning to wallet screen (matches iOS SelectedWalletScreen)
@@ -336,24 +331,55 @@ fun SelectedWalletScreen(
                             app = app,
                         )
 
-                        val isScanning =
-                            manager?.loadState is WalletLoadState.SCANNING ||
-                                manager?.loadState is WalletLoadState.LOADING
-                        val isFirstScan = manager?.walletMetadata?.internal?.lastScanFinished == null
-
-                        TransactionsCardView(
-                            transactions = transactions,
-                            unsignedTransactions = unsignedTransactions,
-                            isScanning = isScanning,
-                            isFirstScan = isFirstScan,
-                            fiatOrBtc = fiatOrBtc,
-                            sensitiveVisible = sensitiveVisible,
-                            showLabels = manager?.walletMetadata?.showLabels ?: false,
-                            manager = manager,
-                            app = app,
-                            listState = listState,
-                            modifier = Modifier.weight(1f),
-                        )
+                        when (val loadState = manager?.loadState) {
+                            is WalletLoadState.LOADING, null -> {
+                                TransactionsLoadingView(
+                                    secondaryText = secondaryText,
+                                    primaryText = primaryText,
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
+                            is WalletLoadState.SCANNING -> {
+                                val txns = loadState.txns
+                                val isFirstScan = manager.walletMetadata?.internal?.lastScanFinished == null
+                                if (isFirstScan && txns.isEmpty() && unsignedTransactions.isEmpty()) {
+                                    TransactionsLoadingView(
+                                        secondaryText = secondaryText,
+                                        primaryText = primaryText,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                } else {
+                                    TransactionsCardView(
+                                        transactions = txns,
+                                        unsignedTransactions = unsignedTransactions,
+                                        isScanning = true,
+                                        isFirstScan = isFirstScan,
+                                        fiatOrBtc = fiatOrBtc,
+                                        sensitiveVisible = sensitiveVisible,
+                                        showLabels = manager.walletMetadata?.showLabels ?: false,
+                                        manager = manager,
+                                        app = app,
+                                        listState = listState,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                }
+                            }
+                            is WalletLoadState.LOADED -> {
+                                TransactionsCardView(
+                                    transactions = loadState.txns,
+                                    unsignedTransactions = unsignedTransactions,
+                                    isScanning = false,
+                                    isFirstScan = false,
+                                    fiatOrBtc = fiatOrBtc,
+                                    sensitiveVisible = sensitiveVisible,
+                                    showLabels = manager.walletMetadata?.showLabels ?: false,
+                                    manager = manager,
+                                    app = app,
+                                    listState = listState,
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -415,6 +441,41 @@ private fun VerifyReminder(
                     tint = Color.Red.copy(alpha = 0.85f),
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun TransactionsLoadingView(
+    secondaryText: Color,
+    primaryText: Color,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.title_transactions),
+            color = secondaryText,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold,
+        )
+
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+            contentAlignment = Alignment.TopCenter,
+        ) {
+            CircularProgressIndicator(
+                modifier = Modifier.padding(top = 80.dp),
+                color = primaryText,
+            )
         }
     }
 }
