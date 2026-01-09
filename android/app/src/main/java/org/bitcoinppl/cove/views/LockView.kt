@@ -33,6 +33,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,12 +47,11 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.Auth
+import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.UnlockMode
 import org.bitcoinppl.cove.findFragmentActivity
 import org.bitcoinppl.cove_core.AuthType
@@ -89,7 +89,7 @@ fun LockView(
 
     // track timeout job to cancel if biometric completes normally
     var biometricTimeoutJob by remember { mutableStateOf<Job?>(null) }
-    val mainScope = remember { CoroutineScope(Dispatchers.Main) }
+    val mainScope = rememberCoroutineScope()
 
     // trigger function creates FRESH BiometricPrompt each time (like iOS creates fresh LAContext)
     fun triggerBiometric() {
@@ -106,6 +106,7 @@ fun LockView(
             mainScope.launch {
                 delay(30_000) // 30 second timeout
                 if (auth.isUsingBiometrics) {
+                    Log.w("LockView", "Biometric prompt timed out after 30s without callback")
                     auth.isUsingBiometrics = false
                 }
             }
@@ -136,7 +137,7 @@ fun LockView(
 
                     override fun onAuthenticationFailed() {
                         super.onAuthenticationFailed()
-                        // user can retry, don't clear flag yet
+                        Log.w("LockView", "Biometric authentication failed - user can retry")
                     }
                 },
             )

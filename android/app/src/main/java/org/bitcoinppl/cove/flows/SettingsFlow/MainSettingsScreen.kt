@@ -51,6 +51,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import org.bitcoinppl.cove.Auth
+import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.findFragmentActivity
 import org.bitcoinppl.cove.views.MaterialDivider
@@ -406,6 +407,7 @@ private fun SecuritySection(app: org.bitcoinppl.cove.AppManager) {
 
                 override fun onAuthenticationFailed() {
                     super.onAuthenticationFailed()
+                    Log.w("SecuritySection", "Biometric authentication failed - user can retry")
                 }
             },
         ).authenticate(enableBiometricPromptInfo)
@@ -431,6 +433,7 @@ private fun SecuritySection(app: org.bitcoinppl.cove.AppManager) {
 
                 override fun onAuthenticationFailed() {
                     super.onAuthenticationFailed()
+                    Log.w("SecuritySection", "Biometric authentication failed - user can retry")
                 }
             },
         ).authenticate(disableBiometricPromptInfo)
@@ -580,7 +583,8 @@ private fun SecurityAlertDialog(
                         onClick = {
                             try {
                                 app.rust.selectWallet(state.walletId)
-                            } catch (_: Exception) {
+                            } catch (e: Exception) {
+                                Log.e("SecuritySection", "Failed to select wallet ${state.walletId}", e)
                             }
                             onDismiss()
                         },

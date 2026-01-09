@@ -28,7 +28,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import org.bitcoinppl.cove.AppAlertState
+import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.Log
+import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.ui.theme.coveColors
 import org.bitcoinppl.cove_core.FoundAddress
@@ -40,6 +43,7 @@ import org.bitcoinppl.cove_core.previewNewWrappedFoundAddress
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChooseWalletTypeSheet(
+    app: AppManager,
     manager: WalletManager,
     foundAddresses: List<FoundAddress>,
     onDismiss: () -> Unit,
@@ -56,7 +60,7 @@ fun ChooseWalletTypeSheet(
             currentAddress = manager.firstAddress().addressUnformatted()
         } catch (e: Exception) {
             Log.e(tag, "Unable to get first address", e)
-            currentAddress = "bc1q..."
+            currentAddress = null
         }
     }
 
@@ -96,7 +100,13 @@ fun ChooseWalletTypeSheet(
                         onDismiss()
                     } catch (e: Exception) {
                         Log.e(tag, "Failed to switch wallet address type", e)
-                        onDismiss()
+                        app.alertState =
+                            TaggedItem(
+                                AppAlertState.General(
+                                    title = "Switch Failed",
+                                    message = e.message ?: "Could not switch wallet address type",
+                                ),
+                            )
                     } finally {
                         isProcessing = false
                     }

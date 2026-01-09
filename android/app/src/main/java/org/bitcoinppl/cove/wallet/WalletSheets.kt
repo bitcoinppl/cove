@@ -246,6 +246,7 @@ internal fun WalletSheetsHost(
     // show address type selection sheet
     if (showAddressTypeSheet && foundAddresses.isNotEmpty()) {
         ChooseWalletTypeSheet(
+            app = app,
             manager = manager,
             foundAddresses = foundAddresses,
             onDismiss = onDismissAddressTypeSheet,
