@@ -65,6 +65,7 @@ import org.bitcoinppl.cove.nfc.TapCardNfcManager
 import org.bitcoinppl.cove.sidebar.SidebarContainer
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove.views.LockView
+import org.bitcoinppl.cove.views.TermsAndConditionsSheet
 import org.bitcoinppl.cove_core.AfterPinAction
 import org.bitcoinppl.cove_core.AppAction
 import org.bitcoinppl.cove_core.Database
@@ -229,6 +230,11 @@ class MainActivity : FragmentActivity() {
                                     app = app,
                                     snackbarHostState = snackbarHostState,
                                 )
+
+                                // terms and conditions sheet (first launch)
+                                if (!app.isTermsAccepted) {
+                                    TermsSheet(app = app)
+                                }
                             }
                         }
                     }
@@ -622,5 +628,22 @@ private fun GlobalAlertDialog(
                 },
             )
         }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TermsSheet(app: AppManager) {
+    ModalBottomSheet(
+        onDismissRequest = { },
+        sheetState =
+            rememberModalBottomSheetState(
+                skipPartiallyExpanded = true,
+                confirmValueChange = { false },
+            ),
+        dragHandle = null,
+        shape = RectangleShape,
+    ) {
+        TermsAndConditionsSheet(app = app)
     }
 }
