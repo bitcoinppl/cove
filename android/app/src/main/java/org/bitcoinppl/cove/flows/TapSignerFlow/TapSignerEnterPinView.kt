@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppAlertState
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.findActivity
 import org.bitcoinppl.cove.nfc.TapCardNfcManager
@@ -171,6 +172,7 @@ fun TapSignerEnterPinView(
                             )
                         } finally {
                             isActionPending = false
+                            pin = ""
                         }
                     }
                 }
@@ -253,6 +255,8 @@ private suspend fun deriveAction(
                         "Failed to derive wallet: ${e.message ?: "Unknown error occurred"}",
                     ),
                 )
+        } else {
+            Log.w("TapSignerEnterPin", "TapSigner auth failed - likely wrong PIN")
         }
     }
 }
@@ -320,6 +324,8 @@ private suspend fun backupAction(
                         message = "Failed to create backup: ${e.message ?: "Unknown error occurred"}",
                     ),
                 )
+        } else {
+            Log.w("TapSignerEnterPin", "TapSigner auth failed - likely wrong PIN")
         }
     }
 }
@@ -379,6 +385,8 @@ private suspend fun signAction(
                     ),
                 )
             app.sheetState = null
+        } else {
+            Log.w("TapSignerEnterPin", "TapSigner auth failed - likely wrong PIN")
         }
     }
 }

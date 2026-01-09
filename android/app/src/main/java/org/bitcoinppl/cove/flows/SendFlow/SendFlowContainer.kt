@@ -451,6 +451,7 @@ private fun SendFlowRouteToScreen(
                                     message = e.message ?: "Unknown error",
                                 ),
                             )
+                        app.popRoute()
                     } catch (e: Exception) {
                         app.alertState =
                             TaggedItem(
@@ -459,6 +460,7 @@ private fun SendFlowRouteToScreen(
                                     message = e.message ?: "Unknown error",
                                 ),
                             )
+                        app.popRoute()
                     }
                 }
             }
