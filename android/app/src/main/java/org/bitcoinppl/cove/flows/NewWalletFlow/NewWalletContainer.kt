@@ -11,7 +11,6 @@ import org.bitcoinppl.cove.utils.intoRoute
 import org.bitcoinppl.cove_core.ColdWalletRoute
 import org.bitcoinppl.cove_core.HotWalletRoute
 import org.bitcoinppl.cove_core.NewWalletRoute
-import org.bitcoinppl.cove_core.RouteFactory
 
 /**
  * New wallet container - simple router for new wallet flows
@@ -43,7 +42,7 @@ fun NewWalletContainer(
                     app.pushRoute(HotWalletRoute.Select.intoRoute())
                 },
                 onOpenQrScan = {
-                    app.pushRoute(RouteFactory().qrImport())
+                    app.scanQr()
                 },
                 onOpenNfcScan = {
                     app.scanNfc()
