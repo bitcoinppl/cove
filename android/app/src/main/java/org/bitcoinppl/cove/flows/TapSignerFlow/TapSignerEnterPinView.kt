@@ -54,6 +54,7 @@ fun TapSignerEnterPinView(
     modifier: Modifier = Modifier,
 ) {
     var pin by remember { mutableStateOf("") }
+    var isActionPending by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
@@ -142,30 +143,35 @@ fun TapSignerEnterPinView(
             value = pin,
             onValueChange = { newPin ->
                 pin = newPin
-                if (newPin.length == 6) {
+                if (newPin.length == 6 && !isActionPending) {
+                    isActionPending = true
                     manager.enteredPin = newPin
                     scope.launch {
-                        val activity = context.findActivity()
-                        if (activity == null) {
-                            app.alertState =
-                                TaggedItem(
-                                    AppAlertState.General(
-                                        title = "Error",
-                                        message = "Unable to access NFC. Please try again.",
-                                    ),
-                                )
-                            return@launch
-                        }
+                        try {
+                            val activity = context.findActivity()
+                            if (activity == null) {
+                                app.alertState =
+                                    TaggedItem(
+                                        AppAlertState.General(
+                                            title = "Error",
+                                            message = "Unable to access NFC. Please try again.",
+                                        ),
+                                    )
+                                return@launch
+                            }
 
-                        runAction(
-                            app,
-                            manager,
-                            tapSigner,
-                            action,
-                            newPin,
-                            createBackupLauncher,
-                            activity,
-                        )
+                            runAction(
+                                app,
+                                manager,
+                                tapSigner,
+                                action,
+                                newPin,
+                                createBackupLauncher,
+                                activity,
+                            )
+                        } finally {
+                            isActionPending = false
+                        }
                     }
                 }
             },
