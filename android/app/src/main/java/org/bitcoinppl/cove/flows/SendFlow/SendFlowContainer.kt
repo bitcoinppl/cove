@@ -476,8 +476,16 @@ private fun SendFlowRouteToScreen(
                     sendState = SendState.Sending
                     scope.launch {
                         try {
-                            // check if we have a pre-signed transaction (hardware wallet or finalized PSBT)
-                            val txnToBroadcast = finalizedTransaction ?: signedTransaction
+                            // prefer pre-signed transaction; if we only have signed PSBT, finalize it here
+                            val txnToBroadcast =
+                                finalizedTransaction
+                                    ?: signedTransaction
+                                    ?: signedPsbt?.let { psbt ->
+                                        walletManager.rust.finalizePsbt(psbt).also { finalized ->
+                                            finalizedTransaction = finalized
+                                        }
+                                    }
+
                             if (txnToBroadcast != null) {
                                 walletManager.rust.broadcastTransaction(txnToBroadcast)
                             } else {
