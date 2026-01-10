@@ -221,14 +221,18 @@ private suspend fun setupTapSigner(
     nfcManager.onMessageUpdate = { message ->
         manager.scanMessage = message
     }
+    nfcManager.onTagDetected = { manager.isTagDetected = true }
 
     manager.scanMessage = "Hold your phone near the TapSigner to set up"
+    manager.isTagDetected = false
     manager.isScanning = true
 
     try {
         val response = nfc.setupTapSigner(args.startingPin, args.newPin, chainCodeBytes)
         manager.isScanning = false
+        manager.isTagDetected = false
         nfcManager.onMessageUpdate = null
+        nfcManager.onTagDetected = null
 
         when (response) {
             is org.bitcoinppl.cove_core.SetupCmdResponse.Complete -> {
@@ -240,7 +244,9 @@ private suspend fun setupTapSigner(
         }
     } catch (e: Exception) {
         manager.isScanning = false
+        manager.isTagDetected = false
         nfcManager.onMessageUpdate = null
+        nfcManager.onTagDetected = null
 
         // check if we can continue from last response
         val lastResponse = nfc.lastResponse()
@@ -274,14 +280,18 @@ private suspend fun changeTapSignerPin(
     nfcManager.onMessageUpdate = { message ->
         manager.scanMessage = message
     }
+    nfcManager.onTagDetected = { manager.isTagDetected = true }
 
     manager.scanMessage = "Hold your phone near the TapSigner to change PIN"
+    manager.isTagDetected = false
     manager.isScanning = true
 
     try {
         nfc.changePin(args.startingPin, args.newPin)
         manager.isScanning = false
+        manager.isTagDetected = false
         nfcManager.onMessageUpdate = null
+        nfcManager.onTagDetected = null
 
         app.sheetState = null
         app.alertState =
@@ -293,7 +303,9 @@ private suspend fun changeTapSignerPin(
             )
     } catch (e: Exception) {
         manager.isScanning = false
+        manager.isTagDetected = false
         nfcManager.onMessageUpdate = null
+        nfcManager.onTagDetected = null
 
         Log.e("TapSignerConfirmPin", "Error changing PIN")
 
