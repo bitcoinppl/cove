@@ -57,7 +57,9 @@ fun ChooseWalletTypeSheet(
 
     LaunchedEffect(Unit) {
         try {
-            currentAddress = manager.firstAddress().addressUnformatted()
+            manager.firstAddress().use { addressInfo ->
+                currentAddress = addressInfo.addressUnformatted()
+            }
         } catch (e: Exception) {
             Log.e(tag, "Unable to get first address", e)
             currentAddress = null
