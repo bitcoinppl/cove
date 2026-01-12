@@ -148,19 +148,20 @@ fun TapSignerEnterPinView(
                     isActionPending = true
                     manager.enteredPin = newPin
                     scope.launch {
-                        try {
-                            val activity = context.findActivity()
-                            if (activity == null) {
-                                app.alertState =
-                                    TaggedItem(
-                                        AppAlertState.General(
-                                            title = "Error",
-                                            message = "Unable to access NFC. Please try again.",
-                                        ),
-                                    )
-                                return@launch
-                            }
+                        val activity = context.findActivity()
+                        if (activity == null) {
+                            app.alertState =
+                                TaggedItem(
+                                    AppAlertState.General(
+                                        title = "Error",
+                                        message = "Unable to access NFC. Please try again.",
+                                    ),
+                                )
+                            isActionPending = false
+                            return@launch
+                        }
 
+                        try {
                             runAction(
                                 app,
                                 manager,
@@ -170,9 +171,9 @@ fun TapSignerEnterPinView(
                                 createBackupLauncher,
                                 activity,
                             )
+                            pin = ""
                         } finally {
                             isActionPending = false
-                            pin = ""
                         }
                     }
                 }
