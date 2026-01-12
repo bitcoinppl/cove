@@ -100,6 +100,33 @@ fun TransactionsCardView(
         }
     }
 
+    // scroll to saved transaction when returning from details
+    LaunchedEffect(manager?.scrolledTransactionId, hasTransactions) {
+        val targetId = manager?.scrolledTransactionId ?: return@LaunchedEffect
+        if (!hasTransactions) return@LaunchedEffect
+
+        // find the index of the transaction with the matching ID
+        val unsignedIndex = unsignedTransactions.indexOfFirst { it.id().toString() == targetId }
+        if (unsignedIndex >= 0) {
+            listState.animateScrollToItem(unsignedIndex)
+            manager.scrolledTransactionId = null
+            return@LaunchedEffect
+        }
+
+        val txIndex =
+            transactions.indexOfFirst {
+                when (it) {
+                    is Transaction.Confirmed -> it.v1.id().toString() == targetId
+                    is Transaction.Unconfirmed -> it.v1.id().toString() == targetId
+                }
+            }
+        if (txIndex >= 0) {
+            // offset by the number of unsigned transactions
+            listState.animateScrollToItem(unsignedTransactions.size + txIndex)
+            manager.scrolledTransactionId = null
+        }
+    }
+
     Column(
         modifier =
             modifier
