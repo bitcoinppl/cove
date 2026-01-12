@@ -247,7 +247,7 @@ private suspend fun deriveAction(
         nfcManager.onMessageUpdate = null
         nfcManager.onTagDetected = null
 
-        // handle auth errors silently, show alert for other errors
+        // handle auth errors with overlay message, show alert for other errors
         if (!isAuthError(e)) {
             app.alertState =
                 org.bitcoinppl.cove.TaggedItem(
@@ -257,6 +257,7 @@ private suspend fun deriveAction(
                 )
         } else {
             Log.w("TapSignerEnterPin", "TapSigner auth failed - likely wrong PIN")
+            manager.authErrorMessage = "Wrong PIN, please try again"
         }
     }
 }
@@ -326,6 +327,7 @@ private suspend fun backupAction(
                 )
         } else {
             Log.w("TapSignerEnterPin", "TapSigner auth failed - likely wrong PIN")
+            manager.authErrorMessage = "Wrong PIN, please try again"
         }
     }
 }
@@ -387,6 +389,7 @@ private suspend fun signAction(
             app.sheetState = null
         } else {
             Log.w("TapSignerEnterPin", "TapSigner auth failed - likely wrong PIN")
+            manager.authErrorMessage = "Wrong PIN, please try again"
         }
     }
 }

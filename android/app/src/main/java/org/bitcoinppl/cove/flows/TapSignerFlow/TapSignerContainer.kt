@@ -4,8 +4,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import kotlinx.coroutines.delay
 import org.bitcoinppl.cove.App
 import org.bitcoinppl.cove_core.TapSignerRoute
 
@@ -130,11 +132,20 @@ fun TapSignerContainer(
             }
         }
 
-        // show scanning overlay when NFC is active
-        if (manager.isScanning) {
+        // auto-dismiss error message after 2 seconds
+        LaunchedEffect(manager.authErrorMessage) {
+            if (manager.authErrorMessage != null) {
+                delay(2000)
+                manager.authErrorMessage = null
+            }
+        }
+
+        // show scanning overlay when NFC is active or error message is displayed
+        if (manager.isScanning || manager.authErrorMessage != null) {
             TapSignerScanningOverlay(
                 message = manager.scanMessage,
                 isTagDetected = manager.isTagDetected,
+                errorMessage = manager.authErrorMessage,
             )
         }
     }
