@@ -30,7 +30,7 @@ public enum AppAlertState: Equatable {
     case cantSendOnWatchOnlyWallet
     case tapSignerSetupFailed(String)
     case tapSignerDeriveFailed(String)
-    case tapSignerInvalidAuth
+    case tapSignerInvalidAuth(TapSigner, AfterPinAction)
     case tapSignerNoBackup(TapSigner)
 
     // genericMessage or error
@@ -90,6 +90,18 @@ public enum AppAlertState: Equatable {
             "No Backup Found"
         case let .general(title: title, message: _):
             title
+        }
+    }
+}
+
+extension AfterPinAction: Equatable {
+    public static func == (lhs: AfterPinAction, rhs: AfterPinAction) -> Bool {
+        switch (lhs, rhs) {
+        case (.derive, .derive): true
+        case (.change, .change): true
+        case (.backup, .backup): true
+        case let (.sign(lhsPsbt), .sign(rhsPsbt)): lhsPsbt.txId() == rhsPsbt.txId()
+        default: false
         }
     }
 }

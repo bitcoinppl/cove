@@ -79,7 +79,7 @@ struct TapSignerConfirmPinView: View {
                     )
                 )
             case let .failure(error):
-                if error.isAuthError { return app.alertState = .init(.tapSignerInvalidAuth) }
+                if error.isAuthError { return app.alertState = .init(.tapSignerInvalidAuth(args.tapSigner, .change)) }
                 if error.isNoBackupError { return app.alertState = .init(.tapSignerNoBackup(args.tapSigner)) }
                 app.alertState = .init(.general(title: "Error", message: error.description))
             }

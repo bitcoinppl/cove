@@ -200,6 +200,11 @@ struct CoveApp: App {
                 // TODO: go to backup screen
             }
             Button("Cancel", role: .cancel) { app.alertState = .none }
+        case let .tapSignerInvalidAuth(tapSigner, action):
+            Button("Try Again") {
+                app.sheetState = .init(.tapSigner(.enterPin(tapSigner: tapSigner, action: action)))
+            }
+            Button("Cancel", role: .cancel) { app.alertState = .none }
         case .invalidWordGroup,
              .errorImportingHotWallet,
              .importedSuccessfully,
@@ -212,7 +217,6 @@ struct CoveApp: App {
              .noUnsignedTransactionFound,
              .cantSendOnWatchOnlyWallet,
              .tapSignerSetupFailed,
-             .tapSignerInvalidAuth,
              .tapSignerDeriveFailed,
              .general,
              .invalidFormat:
