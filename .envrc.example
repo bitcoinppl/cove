@@ -8,8 +8,8 @@ export PATH="$ANDROID_HOME/emulator:$ANDROID_HOME/platform-tools:$PATH"
 export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 export PATH="$JAVA_HOME/bin:$PATH"
 
-# signing
-export COVE_KEYSTORE_PATH="$HOME/.secrets/cove-release.keystore"
+# upload signing (used to sign AAB before uploading to Google Play)
+export COVE_KEYSTORE_PATH="$HOME/.secrets/cove-upload.keystore"
 export COVE_KEYSTORE_PASSWORD="your-keystore-password-here"
-export COVE_KEY_ALIAS="cove"
+export COVE_KEY_ALIAS="upload"
 export COVE_KEY_PASSWORD="your-key-password-here"

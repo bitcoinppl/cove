@@ -49,6 +49,22 @@ build-android-release:
 [private]
 alias bar := build-android-release
 
+# Build signed AAB for Google Play
+[group('build')]
+bundle-android:
+    cd android && ./gradlew bundleRelease && just say "done android bundle" && just oar
+
+[private]
+alias bua := bundle-android
+
+# Open Android release output folder
+[group('build')]
+open-android-release:
+    open android/app/build/outputs/bundle/release/
+
+[private]
+alias oar := open-android-release
+
 # Build iOS debug for simulator
 [group('build')]
 [working-directory: 'rust']
