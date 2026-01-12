@@ -251,7 +251,6 @@ struct SelectedWalletScreen: View {
                 updater: updater,
                 showReceiveSheet: showReceiveSheet
             )
-            .clipped()
             .ignoresSafeArea(.all)
 
             VerifyReminder(

@@ -172,6 +172,7 @@ struct WalletBalanceHeaderView: View {
                 .frame(height: 300, alignment: .topTrailing)
                 .frame(maxWidth: .infinity)
                 .brightness(0.1)
+                .clipped()
         )
         .background(.midnightBlue)
         .onChange(of: manager.fiatBalance, initial: false) {
