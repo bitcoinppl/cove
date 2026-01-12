@@ -54,7 +54,7 @@ enum Commands {
         profile: String,
     },
 
-    /// Build Android App Bundle (AAB) and copy to Downloads
+    /// Build Android App Bundle (AAB) and APK for Play Store, copy to Downloads
     #[command(name = "bundle-android")]
     BundleAndroid,
 
