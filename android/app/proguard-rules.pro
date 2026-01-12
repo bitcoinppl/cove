@@ -1,3 +1,9 @@
+# JNA AWT classes - not available on Android, suppress warnings
+-dontwarn java.awt.Component
+-dontwarn java.awt.GraphicsEnvironment
+-dontwarn java.awt.HeadlessException
+-dontwarn java.awt.Window
+
 # JNA - required for UniFFI native library loading
 -keep class com.sun.jna.** { *; }
 -keep class * implements com.sun.jna.Callback { *; }
