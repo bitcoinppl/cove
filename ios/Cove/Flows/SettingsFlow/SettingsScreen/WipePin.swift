@@ -41,7 +41,6 @@ struct WipePin: View {
                 NumberPadPinView(
                     title: "Enter Wipe Me PIN",
                     isPinCorrect: { _ in true },
-                    showPin: true,
                     backAction: backAction,
                     onUnlock: { enteredPin in
                         withAnimation {
@@ -53,7 +52,6 @@ struct WipePin: View {
                 NumberPadPinView(
                     title: "Confirm Wipe Me PIN",
                     isPinCorrect: { $0 == pinToConfirm },
-                    showPin: true,
                     backAction: backAction,
                     onUnlock: onComplete
                 )

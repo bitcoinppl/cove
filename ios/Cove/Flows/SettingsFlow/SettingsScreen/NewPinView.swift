@@ -26,7 +26,6 @@ struct NewPinView: View {
                 NumberPadPinView(
                     title: "Enter New PIN",
                     isPinCorrect: { _ in true },
-                    showPin: true,
                     backAction: backAction,
                     onUnlock: { enteredPin in
                         withAnimation {

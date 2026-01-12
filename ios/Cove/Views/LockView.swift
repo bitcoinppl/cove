@@ -62,7 +62,7 @@ struct LockView<Content: View>: View {
     init(
         lockType: AuthType,
         isPinCorrect: @escaping (String) -> Bool,
-        showPin: Bool = true,
+        showPin: Bool = false,
         lockState: Binding<LockState>? = nil,
         bioMetricUnlockMessage: String = "Unlock your wallet",
         onUnlock: @escaping (String) -> Void = { _ in },
