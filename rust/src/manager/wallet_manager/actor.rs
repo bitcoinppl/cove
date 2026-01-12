@@ -14,7 +14,7 @@ use crate::{
         Address, AddressInfo, Wallet, WalletAddressType, balance::Balance, metadata::BlockSizeLast,
     },
 };
-use act_zero::{runtimes::tokio::spawn_actor, *};
+use act_zero::{runtimes::tokio::Timer, runtimes::tokio::spawn_actor, timer::Tick, *};
 use act_zero_ext::into_actor_result;
 use ahash::HashMap;
 use bdk_wallet::{
@@ -75,6 +75,10 @@ pub struct WalletActor {
     // cached values, source of truth is the redb database saved with wallet metadata
     last_scan_finished: Option<Duration>,
     last_height_fetched: Option<(Duration, usize)>,
+
+    // timer for delayed scan after transaction found
+    scan_timer: Timer,
+    pending_scan_tx_id: Option<Txid>,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -156,6 +160,23 @@ impl Actor for WalletActor {
     }
 }
 
+#[async_trait::async_trait]
+impl Tick for WalletActor {
+    async fn tick(&mut self) -> ActorResult<()> {
+        if !self.scan_timer.tick() {
+            return Produces::ok(());
+        }
+
+        if let Some(tx_id) = self.pending_scan_tx_id.take() {
+            debug!("performing delayed scan for tx: {tx_id}");
+            self.perform_scan_for_single_tx_id(tx_id).await?;
+            self.remove_watcher_for_txn(tx_id).await;
+        }
+
+        Produces::ok(())
+    }
+}
+
 impl WalletActor {
     pub fn new(wallet: Wallet, reconciler: Sender<SingleOrMany>) -> Self {
         let db = WalletDataDb::new_or_existing(wallet.id.clone());
@@ -172,6 +193,8 @@ impl WalletActor {
             state: ActorState::Initial,
             transaction_watchers: HashMap::default(),
             db,
+            scan_timer: Default::default(),
+            pending_scan_tx_id: None,
         }
     }
 
@@ -865,7 +888,7 @@ impl WalletActor {
         Produces::ok(())
     }
 
-    /// will remove the transaction watcher if it exists and
+    /// Will remove the transaction watcher if it exists and
     /// perform a sync scan and send the transactions to the frontend
     pub async fn mark_transaction_found(&mut self, tx_id: Txid) -> ActorResult<()> {
         info!("marking transaction found: {tx_id}");
@@ -876,15 +899,10 @@ impl WalletActor {
         // update the height and perform sync scan which will update the transactions
         self.perform_scan_for_single_tx_id(tx_id).await?;
 
-        // wait 30 seconds run the scan again and then remove the watcher
-        // sanity check to make sure the transaction was picked up by the wallet
-        // and no extra watchers were created in the meantime
-        let addr = self.addr.clone();
-        self.addr.send_fut(async move {
-            tokio::time::sleep(Duration::from_secs(30)).await;
-            send!(addr.perform_scan_for_single_tx_id(tx_id));
-            send!(addr.remove_watcher_for_txn(tx_id));
-        });
+        // schedule a delayed scan after 30 seconds as a sanity check to make sure
+        // the transaction was picked up by the wallet
+        self.pending_scan_tx_id = Some(tx_id);
+        self.scan_timer.set_timeout_for_weak(self.addr.clone(), Duration::from_secs(30));
 
         Produces::ok(())
     }
