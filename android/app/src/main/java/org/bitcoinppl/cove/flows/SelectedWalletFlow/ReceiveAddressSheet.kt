@@ -69,7 +69,7 @@ fun ReceiveAddressSheet(
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     // load initial address on mount
-    LaunchedEffect(Unit) {
+    LaunchedEffect(manager) {
         try {
             isLoading = true
             addressInfo = manager.rust.nextAddress()

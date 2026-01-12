@@ -1,6 +1,7 @@
 package org.bitcoinppl.cove.views
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -25,7 +26,6 @@ import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
@@ -52,6 +52,7 @@ fun ImageButton(
         contentColor = colors.contentColor,
     ) {
         Row(
+            horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
             modifier =
                 Modifier
@@ -75,9 +76,7 @@ fun ImageButton(
                         fontSize = fontSize,
                         fontWeight = FontWeight.Medium,
                         color = LocalContentColor.current,
-                        textAlign = TextAlign.Center,
                     ),
-                modifier = Modifier.weight(1f),
             )
         }
     }

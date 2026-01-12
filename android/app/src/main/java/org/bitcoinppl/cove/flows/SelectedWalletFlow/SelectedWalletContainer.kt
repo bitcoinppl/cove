@@ -22,6 +22,8 @@ import org.bitcoinppl.cove.wallet.WalletExportState
 import org.bitcoinppl.cove.wallet.WalletSheetsHost
 import org.bitcoinppl.cove.wallet.rememberWalletExportLaunchers
 import org.bitcoinppl.cove_core.Database
+import org.bitcoinppl.cove_core.DiscoveryState
+import org.bitcoinppl.cove_core.FoundAddress
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.RouteFactory
 import org.bitcoinppl.cove_core.SendRoute
@@ -30,9 +32,6 @@ import org.bitcoinppl.cove_core.types.WalletId
 
 // delay to allow UI to settle before updating balance
 private const val BALANCE_UPDATE_DELAY_MS = 500L
-
-// delay before starting wallet scan to allow initial load to complete
-private const val WALLET_SCAN_DELAY_MS = 400L
 
 /**
  * Selected wallet container - manages WalletManager lifecycle
@@ -93,18 +92,12 @@ fun SelectedWalletContainer(
         }
     }
 
-    // start wallet scan after loading
+    // start wallet scan after loading (matches iOS .task)
     LaunchedEffect(manager) {
         manager?.let { wm ->
             try {
-                // small delay and then start scanning wallet
-                delay(WALLET_SCAN_DELAY_MS)
-                if (!isActive) return@LaunchedEffect
-                wm.rust.getTransactions()
-                wm.updateWalletBalance()
                 wm.rust.startWalletScan()
             } catch (e: CancellationException) {
-                // composable left composition, this is expected
                 throw e
             } catch (e: Exception) {
                 android.util.Log.e(tag, "wallet scan failed: ${e.message}", e)
@@ -131,6 +124,8 @@ fun SelectedWalletContainer(
     var showMoreOptions by remember { mutableStateOf(false) }
     var showReceiveSheet by remember { mutableStateOf(false) }
     var showNfcScanner by remember { mutableStateOf(false) }
+    var showAddressTypeSheet by remember { mutableStateOf(false) }
+    var foundAddressesForSheet by remember { mutableStateOf<List<FoundAddress>>(emptyList()) }
     val exportState = remember(id) { WalletExportState() }
 
     val scope = rememberCoroutineScope()
@@ -155,6 +150,22 @@ fun SelectedWalletContainer(
             exportState = exportState,
             tag = tag,
         )
+
+    // monitor discovery state changes for address type selection (matches iOS onChange)
+    val discoveryState = manager?.walletMetadata?.discoveryState
+    LaunchedEffect(discoveryState) {
+        when (val state = discoveryState) {
+            is DiscoveryState.FoundAddressesFromMnemonic -> {
+                foundAddressesForSheet = state.v1
+                showAddressTypeSheet = true
+            }
+            is DiscoveryState.FoundAddressesFromJson -> {
+                foundAddressesForSheet = state.v1
+                showAddressTypeSheet = true
+            }
+            else -> {}
+        }
+    }
 
     // render
     when (val wm = manager) {
@@ -206,11 +217,14 @@ fun SelectedWalletContainer(
                 showMoreOptions = showMoreOptions,
                 showReceiveSheet = showReceiveSheet,
                 showNfcScanner = showNfcScanner,
+                showAddressTypeSheet = showAddressTypeSheet,
+                foundAddresses = foundAddressesForSheet,
                 exportLaunchers = exportLaunchers,
                 onDismissMoreOptions = { showMoreOptions = false },
                 onDismissReceiveSheet = { showReceiveSheet = false },
                 onDismissNfcScanner = { showNfcScanner = false },
                 onShowNfcScanner = { showNfcScanner = true },
+                onDismissAddressTypeSheet = { showAddressTypeSheet = false },
                 tag = tag,
             )
         }

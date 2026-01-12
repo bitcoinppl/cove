@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Nfc
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -37,9 +38,12 @@ import kotlinx.coroutines.delay
 @Composable
 fun TapSignerScanningOverlay(
     message: String,
+    isTagDetected: Boolean,
+    errorMessage: String? = null,
     modifier: Modifier = Modifier,
 ) {
     var dotCount by remember { mutableIntStateOf(1) }
+    val hasError = errorMessage != null
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -67,33 +71,43 @@ fun TapSignerScanningOverlay(
                 verticalArrangement = Arrangement.Center,
             ) {
                 Icon(
-                    imageVector = Icons.Default.Nfc,
-                    contentDescription = "NFC",
+                    imageVector = if (hasError) Icons.Default.Error else Icons.Default.Nfc,
+                    contentDescription = if (hasError) "Error" else "NFC",
                     modifier = Modifier.size(64.dp),
-                    tint = MaterialTheme.colorScheme.primary,
+                    tint = if (hasError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                 )
 
                 Spacer(modifier = Modifier.height(24.dp))
 
                 Text(
-                    text = "Scanning" + ".".repeat(dotCount),
+                    text =
+                        if (hasError) {
+                            errorMessage!!
+                        } else if (isTagDetected) {
+                            "Scanning please hold still" + ".".repeat(dotCount)
+                        } else {
+                            "Ready to scan"
+                        },
                     style = MaterialTheme.typography.titleLarge,
+                    color = if (hasError) MaterialTheme.colorScheme.error else Color.Unspecified,
                 )
 
-                Spacer(modifier = Modifier.height(12.dp))
+                if (!hasError) {
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                Text(
-                    text = message,
-                    style = MaterialTheme.typography.bodyMedium,
-                    textAlign = TextAlign.Center,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                    Text(
+                        text = message,
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
 
-                Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(24.dp))
 
-                CircularProgressIndicator(
-                    modifier = Modifier.size(32.dp),
-                )
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(32.dp),
+                    )
+                }
             }
         }
     }

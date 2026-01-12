@@ -51,6 +51,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import org.bitcoinppl.cove.Auth
+import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.findFragmentActivity
 import org.bitcoinppl.cove.views.MaterialDivider
@@ -366,34 +367,7 @@ private fun SecuritySection(app: org.bitcoinppl.cove.AppManager) {
         }
     }
 
-    // biometric prompt for enabling biometric
-    val biometricPrompt =
-        remember(activity) {
-            if (activity == null) return@remember null
-
-            BiometricPrompt(
-                activity,
-                ContextCompat.getMainExecutor(context),
-                object : BiometricPrompt.AuthenticationCallback() {
-                    override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-                        super.onAuthenticationError(errorCode, errString)
-                        sheetState = SecuritySheetState.NONE
-                    }
-
-                    override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-                        super.onAuthenticationSucceeded(result)
-                        auth.dispatch(AuthManagerAction.EnableBiometric)
-                        sheetState = SecuritySheetState.NONE
-                    }
-
-                    override fun onAuthenticationFailed() {
-                        super.onAuthenticationFailed()
-                    }
-                },
-            )
-        }
-
-    val promptInfo =
+    val enableBiometricPromptInfo =
         remember {
             BiometricPrompt.PromptInfo
                 .Builder()
@@ -403,10 +377,81 @@ private fun SecuritySection(app: org.bitcoinppl.cove.AppManager) {
                 .build()
         }
 
-    // trigger biometric prompt when entering EnableBiometric state
+    val disableBiometricPromptInfo =
+        remember {
+            BiometricPrompt.PromptInfo
+                .Builder()
+                .setTitle("Disable Biometric")
+                .setSubtitle("Authenticate to disable biometric unlock")
+                .setNegativeButtonText("Cancel")
+                .build()
+        }
+
+    // create fresh BiometricPrompt for enabling biometric (avoids stale closure issues)
+    fun triggerEnableBiometric() {
+        val act = activity ?: return
+        BiometricPrompt(
+            act,
+            ContextCompat.getMainExecutor(context),
+            object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                    super.onAuthenticationError(errorCode, errString)
+                    sheetState = SecuritySheetState.NONE
+                }
+
+                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                    super.onAuthenticationSucceeded(result)
+                    auth.dispatch(AuthManagerAction.EnableBiometric)
+                    sheetState = SecuritySheetState.NONE
+                }
+
+                override fun onAuthenticationFailed() {
+                    super.onAuthenticationFailed()
+                    Log.w("SecuritySection", "Biometric authentication failed - user can retry")
+                }
+            },
+        ).authenticate(enableBiometricPromptInfo)
+    }
+
+    // create fresh BiometricPrompt for disabling biometric (when no PIN is set)
+    fun triggerDisableBiometric() {
+        val act = activity ?: return
+        BiometricPrompt(
+            act,
+            ContextCompat.getMainExecutor(context),
+            object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                    super.onAuthenticationError(errorCode, errString)
+                    sheetState = SecuritySheetState.NONE
+                }
+
+                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                    super.onAuthenticationSucceeded(result)
+                    auth.dispatch(AuthManagerAction.DisableBiometric)
+                    sheetState = SecuritySheetState.NONE
+                }
+
+                override fun onAuthenticationFailed() {
+                    super.onAuthenticationFailed()
+                    Log.w("SecuritySection", "Biometric authentication failed - user can retry")
+                }
+            },
+        ).authenticate(disableBiometricPromptInfo)
+    }
+
+    // trigger biometric prompt when entering biometric states
     LaunchedEffect(sheetState) {
-        if (sheetState == SecuritySheetState.ENABLE_BIOMETRIC) {
-            biometricPrompt?.authenticate(promptInfo)
+        when (sheetState) {
+            SecuritySheetState.ENABLE_BIOMETRIC -> {
+                triggerEnableBiometric()
+            }
+            SecuritySheetState.DISABLE_BIOMETRIC -> {
+                // only use biometric prompt if no PIN is set (biometric-only auth)
+                if (auth.type == AuthType.BIOMETRIC) {
+                    triggerDisableBiometric()
+                }
+            }
+            else -> {}
         }
     }
 
@@ -491,7 +536,14 @@ private fun SecuritySection(app: org.bitcoinppl.cove.AppManager) {
     }
 
     // full-screen sheet dialogs
-    if (sheetState != SecuritySheetState.NONE && sheetState != SecuritySheetState.ENABLE_BIOMETRIC) {
+    // exclude ENABLE_BIOMETRIC (handled by biometric prompt)
+    // exclude DISABLE_BIOMETRIC when auth type is BIOMETRIC only (also handled by biometric prompt)
+    val showSheetDialog =
+        sheetState != SecuritySheetState.NONE &&
+            sheetState != SecuritySheetState.ENABLE_BIOMETRIC &&
+            !(sheetState == SecuritySheetState.DISABLE_BIOMETRIC && auth.type == AuthType.BIOMETRIC)
+
+    if (showSheetDialog) {
         SecuritySheetDialog(
             state = sheetState,
             onDismiss = { sheetState = SecuritySheetState.NONE },
@@ -531,7 +583,8 @@ private fun SecurityAlertDialog(
                         onClick = {
                             try {
                                 app.rust.selectWallet(state.walletId)
-                            } catch (_: Exception) {
+                            } catch (e: Exception) {
+                                Log.e("SecuritySection", "Failed to select wallet ${state.walletId}", e)
                             }
                             onDismiss()
                         },
@@ -797,7 +850,6 @@ private fun SecuritySheetDialog(
                         isPinCorrect = { pin ->
                             if (auth.isInDecoyMode()) auth.checkDecoyPin(pin) else auth.checkPin(pin)
                         },
-                        showPin = false,
                         backAction = onDismiss,
                         onUnlock = {
                             if (auth.isInDecoyMode()) {
@@ -840,7 +892,6 @@ private fun SecuritySheetDialog(
                     NumberPadPinView(
                         title = "Enter Current PIN",
                         isPinCorrect = { pin -> auth.checkPin(pin) },
-                        showPin = false,
                         backAction = onDismiss,
                         onUnlock = {
                             auth.dispatch(AuthManagerAction.DisableBiometric)
@@ -853,7 +904,6 @@ private fun SecuritySheetDialog(
                     NumberPadPinView(
                         title = "Enter Current PIN",
                         isPinCorrect = { pin -> auth.checkPin(pin) },
-                        showPin = false,
                         backAction = onDismiss,
                         onUnlock = {
                             if (auth.isInDecoyMode()) {
@@ -870,7 +920,6 @@ private fun SecuritySheetDialog(
                     NumberPadPinView(
                         title = "Enter Current PIN",
                         isPinCorrect = { pin -> auth.checkPin(pin) },
-                        showPin = false,
                         backAction = onDismiss,
                         onUnlock = {
                             auth.dispatch(AuthManagerAction.DisableWipeDataPin)
@@ -883,7 +932,6 @@ private fun SecuritySheetDialog(
                     NumberPadPinView(
                         title = "Enter Current PIN",
                         isPinCorrect = { pin -> auth.checkPin(pin) },
-                        showPin = false,
                         backAction = onDismiss,
                         onUnlock = {
                             auth.dispatch(AuthManagerAction.DisableDecoyPin)
@@ -896,7 +944,6 @@ private fun SecuritySheetDialog(
                     NumberPadPinView(
                         title = "Enter Current PIN",
                         isPinCorrect = { pin -> auth.checkPin(pin) },
-                        showPin = false,
                         backAction = onDismiss,
                         onUnlock = {
                             auth.dispatch(AuthManagerAction.DisableDecoyPin)
@@ -909,7 +956,6 @@ private fun SecuritySheetDialog(
                     NumberPadPinView(
                         title = "Enter Current PIN",
                         isPinCorrect = { pin -> auth.checkPin(pin) },
-                        showPin = false,
                         backAction = onDismiss,
                         onUnlock = {
                             auth.dispatch(AuthManagerAction.DisableDecoyPin)

@@ -81,7 +81,7 @@ fun WalletSettingsScreen(
     var deleteError by remember { mutableStateOf<String?>(null) }
 
     // validate metadata on appear and disappear
-    LaunchedEffect(Unit) {
+    LaunchedEffect(manager) {
         manager.validateMetadata()
     }
 

@@ -88,13 +88,13 @@ alias gen-swift := build-ios
 [group('build')]
 [working-directory: 'ios']
 compile-ios:
-    xcodebuild -scheme Cove -sdk iphonesimulator -arch arm64 build
+    xcodebuild -scheme Cove -sdk iphonesimulator -arch arm64 build && just notf "done compile ios"
 
 # Compile Android debug
 [group('build')]
 [working-directory: 'android']
 compile-android:
-    ./gradlew assembleDebug
+    ./gradlew assembleDebug && just notf "done compile android"
 
 # ------------------------------------------------------------------------------
 # test
@@ -302,7 +302,7 @@ update pkg="":
 [group('util')]
 [working-directory: 'rust']
 run-android profile="debug":
-    cargo xtask run-android {{profile}}
+    cargo xtask run-android {{profile}} && just notf "done run android"
 
 [private]
 alias ra := run-android
@@ -311,7 +311,7 @@ alias ra := run-android
 [group('util')]
 [working-directory: 'android']
 install-android-clean:
-    just ba && ./gradlew --stop && ./gradlew clean installDebug
+    just ba && ./gradlew --stop && ./gradlew clean installDebug && just notf "done install android clean"
 
 [private]
 alias iac := install-android-clean
@@ -320,7 +320,7 @@ alias iac := install-android-clean
 [group('util')]
 [working-directory: 'rust']
 run-ios:
-    cargo xtask run-ios
+    cargo xtask run-ios && just notf "done run ios"
 
 # Run xtask commands
 [group('util')]
@@ -335,5 +335,9 @@ xtask *args:
 # text-to-speech helper
 [private]
 say *args:
-    @say {{args}} 2>/dev/null || @echo {{args}} || echo {{args}} || true
-    @command -v cmd >/dev/null && cmd tmux notify bell,macos -t "Cove" -m "{{args}}" || true
+    @say {{args}} 2>/dev/null || echo {{args}} || true
+    @just notf {{args}} || true
+
+[private]
+notf *args:
+    @command -v notf >/dev/null && notf "{{args}}" -t "Cove" -T bell,macos || true

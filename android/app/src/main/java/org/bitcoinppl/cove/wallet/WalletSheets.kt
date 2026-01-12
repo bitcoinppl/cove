@@ -34,10 +34,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.WalletManager
+import org.bitcoinppl.cove.flows.SelectedWalletFlow.ChooseWalletTypeSheet
 import org.bitcoinppl.cove.flows.SelectedWalletFlow.ReceiveAddressSheet
 import org.bitcoinppl.cove.flows.SelectedWalletFlow.WalletMoreOptionsSheet
 import org.bitcoinppl.cove.nfc.NfcLabelImportSheet
 import org.bitcoinppl.cove.views.QrExportView
+import org.bitcoinppl.cove_core.FoundAddress
 import org.bitcoinppl.cove_core.LabelManager
 import java.io.File
 
@@ -50,11 +52,14 @@ internal fun WalletSheetsHost(
     showMoreOptions: Boolean,
     showReceiveSheet: Boolean,
     showNfcScanner: Boolean,
+    showAddressTypeSheet: Boolean,
+    foundAddresses: List<FoundAddress>,
     exportLaunchers: WalletExportLaunchers,
     onDismissMoreOptions: () -> Unit,
     onDismissReceiveSheet: () -> Unit,
     onDismissNfcScanner: () -> Unit,
     onShowNfcScanner: () -> Unit,
+    onDismissAddressTypeSheet: () -> Unit,
     tag: String = "WalletSheets",
 ) {
     val context = LocalContext.current
@@ -235,6 +240,16 @@ internal fun WalletSheetsHost(
             manager = manager,
             snackbarHostState = snackbarHostState,
             onDismiss = onDismissReceiveSheet,
+        )
+    }
+
+    // show address type selection sheet
+    if (showAddressTypeSheet && foundAddresses.isNotEmpty()) {
+        ChooseWalletTypeSheet(
+            app = app,
+            manager = manager,
+            foundAddresses = foundAddresses,
+            onDismiss = onDismissAddressTypeSheet,
         )
     }
 }

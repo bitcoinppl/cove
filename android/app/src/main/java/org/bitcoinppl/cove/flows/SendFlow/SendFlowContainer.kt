@@ -22,6 +22,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import kotlinx.coroutines.launch
+import org.bitcoinppl.cove.AppAlertState
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.Auth
 import org.bitcoinppl.cove.QrCodeScanView
@@ -407,14 +408,16 @@ private fun SendFlowRouteToScreen(
         is SendRoute.Confirm -> {
             val details = sendRoute.v1.details
             val signedTransaction = sendRoute.v1.signedTransaction
+            val signedPsbt = sendRoute.v1.signedPsbt
 
             var sendState by remember { mutableStateOf<SendState>(SendState.Idle) }
+            var finalizedTransaction by remember { mutableStateOf(signedTransaction) }
             var showSuccessAlert by remember { mutableStateOf(false) }
             var showErrorAlert by remember { mutableStateOf(false) }
             val scope = rememberCoroutineScope()
 
             // lock on appear for hot wallets
-            LaunchedEffect(Unit) {
+            LaunchedEffect(walletManager) {
                 kotlinx.coroutines.delay(50)
                 if (walletManager.walletMetadata?.walletType == WalletType.HOT) {
                     Auth.lock()
@@ -435,6 +438,46 @@ private fun SendFlowRouteToScreen(
                 }
             }
 
+            // finalize signed PSBT from TapSigner
+            LaunchedEffect(signedPsbt) {
+                if (signedPsbt != null && signedTransaction == null && finalizedTransaction == null) {
+                    try {
+                        finalizedTransaction = walletManager.rust.finalizePsbt(signedPsbt)
+                    } catch (e: WalletManagerException) {
+                        app.alertState =
+                            TaggedItem(
+                                AppAlertState.General(
+                                    title = "Unable to finalize transaction",
+                                    message = e.message ?: "Unknown error",
+                                ),
+                            )
+                        app.popRoute()
+                    } catch (e: Exception) {
+                        app.alertState =
+                            TaggedItem(
+                                AppAlertState.General(
+                                    title = "Unknown error",
+                                    message = e.message ?: "Unknown error",
+                                ),
+                            )
+                        app.popRoute()
+                    }
+                }
+            }
+
+            // show loading while PSBT is being finalized (matches iOS pattern)
+            // this prevents user from swiping before finalization completes
+            val needsFinalization = signedPsbt != null && signedTransaction == null && finalizedTransaction == null
+            if (needsFinalization) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator()
+                }
+                return@SendFlowRouteToScreen
+            }
+
             SendFlowConfirmScreen(
                 app = app,
                 walletManager = walletManager,
@@ -446,9 +489,11 @@ private fun SendFlowRouteToScreen(
                     sendState = SendState.Sending
                     scope.launch {
                         try {
-                            // check if we have a pre-signed transaction (hardware wallet)
-                            if (signedTransaction != null) {
-                                walletManager.rust.broadcastTransaction(signedTransaction)
+                            // finalization is guaranteed complete by loading screen above
+                            val txnToBroadcast = finalizedTransaction ?: signedTransaction
+
+                            if (txnToBroadcast != null) {
+                                walletManager.rust.broadcastTransaction(txnToBroadcast)
                             } else {
                                 // sign and broadcast (hot wallet)
                                 walletManager.rust.signAndBroadcastTransaction(details.psbt())

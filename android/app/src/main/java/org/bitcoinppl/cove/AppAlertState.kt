@@ -85,6 +85,11 @@ sealed class AppAlertState {
         val tapSigner: TapSigner,
     ) : AppAlertState()
 
+    data class TapSignerWrongPin(
+        val tapSigner: TapSigner,
+        val action: AfterPinAction,
+    ) : AppAlertState()
+
     // generic message or error
     data class General(
         val title: String,
@@ -132,6 +137,7 @@ sealed class AppAlertState {
             is TapSignerWalletFound -> "Wallet Found"
             is InitializedTapSigner -> "Import TAPSIGNER?"
             is TapSignerNoBackup -> "No Backup Found"
+            is TapSignerWrongPin -> "Wrong PIN"
             is General -> title
             is Loading -> "Working on it..."
         }
@@ -162,6 +168,7 @@ sealed class AppAlertState {
             is TapSignerWalletFound -> "A wallet for this TAPSIGNER was found"
             is InitializedTapSigner -> "Would you like to import this TAPSIGNER?"
             is TapSignerNoBackup -> "No backup found for this TAPSIGNER"
+            is TapSignerWrongPin -> "The PIN you entered is incorrect. Please try again."
             is General -> message
             is Loading -> ""
         }
