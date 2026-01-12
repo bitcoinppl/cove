@@ -336,4 +336,4 @@ xtask *args:
 [private]
 say *args:
     @say {{args}} 2>/dev/null || @echo {{args}} || echo {{args}} || true
-    @command -v cmd >/dev/null && notf "{{args}}" -t "Cove" -T bell,macos || true
+    @command -v notf >/dev/null && notf "{{args}}" -t "Cove" -T bell,macos || true

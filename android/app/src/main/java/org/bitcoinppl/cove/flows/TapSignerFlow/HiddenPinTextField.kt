@@ -27,10 +27,9 @@ fun HiddenPinTextField(
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
     maxLength: Int = 6,
+    focusRequester: FocusRequester = remember { FocusRequester() },
     onPinComplete: ((String) -> Unit)? = null,
 ) {
-    val focusRequester = remember { FocusRequester() }
-
     // request focus after short delay to ensure layout is complete
     LaunchedEffect(Unit) {
         delay(200)

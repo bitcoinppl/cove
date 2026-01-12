@@ -27,10 +27,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppAlertState
 import org.bitcoinppl.cove.AppManager
@@ -58,6 +60,7 @@ fun TapSignerEnterPinView(
     var isActionPending by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val pinFocusRequester = remember { FocusRequester() }
 
     val message =
         when (action) {
@@ -74,6 +77,14 @@ fun TapSignerEnterPinView(
     // reset pin when screen appears
     LaunchedEffect(Unit) {
         pin = ""
+    }
+
+    // auto-refocus keyboard after auth error clears
+    LaunchedEffect(manager.authErrorMessage) {
+        if (manager.authErrorMessage == null) {
+            delay(100)
+            pinFocusRequester.requestFocus()
+        }
     }
 
     // launcher for creating backup file
@@ -142,6 +153,7 @@ fun TapSignerEnterPinView(
         // hidden text field
         HiddenPinTextField(
             value = pin,
+            focusRequester = pinFocusRequester,
             onValueChange = { newPin ->
                 pin = newPin
                 if (newPin.length == 6 && !isActionPending) {
@@ -171,8 +183,8 @@ fun TapSignerEnterPinView(
                                 createBackupLauncher,
                                 activity,
                             )
-                            pin = ""
                         } finally {
+                            pin = ""
                             isActionPending = false
                         }
                     }

@@ -465,6 +465,19 @@ private fun SendFlowRouteToScreen(
                 }
             }
 
+            // show loading while PSBT is being finalized (matches iOS pattern)
+            // this prevents user from swiping before finalization completes
+            val needsFinalization = signedPsbt != null && signedTransaction == null && finalizedTransaction == null
+            if (needsFinalization) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator()
+                }
+                return@SendFlowRouteToScreen
+            }
+
             SendFlowConfirmScreen(
                 app = app,
                 walletManager = walletManager,
@@ -476,15 +489,8 @@ private fun SendFlowRouteToScreen(
                     sendState = SendState.Sending
                     scope.launch {
                         try {
-                            // prefer pre-signed transaction; if we only have signed PSBT, finalize it here
-                            val txnToBroadcast =
-                                finalizedTransaction
-                                    ?: signedTransaction
-                                    ?: signedPsbt?.let { psbt ->
-                                        walletManager.rust.finalizePsbt(psbt).also { finalized ->
-                                            finalizedTransaction = finalized
-                                        }
-                                    }
+                            // finalization is guaranteed complete by loading screen above
+                            val txnToBroadcast = finalizedTransaction ?: signedTransaction
 
                             if (txnToBroadcast != null) {
                                 walletManager.rust.broadcastTransaction(txnToBroadcast)
