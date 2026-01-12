@@ -1473,6 +1473,8 @@ external fun uniffi_cove_checksum_method_rustwalletmanager_number_of_confirmatio
 ): Short
 external fun uniffi_cove_checksum_method_rustwalletmanager_number_of_confirmations_fmt(
 ): Short
+external fun uniffi_cove_checksum_method_rustwalletmanager_required_deletion_confirmations(
+): Short
 external fun uniffi_cove_checksum_method_rustwalletmanager_save_unsigned_transaction(
 ): Short
 external fun uniffi_cove_checksum_method_rustwalletmanager_selected_fiat_currency(
@@ -2424,6 +2426,8 @@ external fun uniffi_cove_fn_method_rustwalletmanager_next_address(`ptr`: Long,
 external fun uniffi_cove_fn_method_rustwalletmanager_number_of_confirmations(`ptr`: Long,`blockHeight`: Int,
 ): Long
 external fun uniffi_cove_fn_method_rustwalletmanager_number_of_confirmations_fmt(`ptr`: Long,`blockHeight`: Int,
+): Long
+external fun uniffi_cove_fn_method_rustwalletmanager_required_deletion_confirmations(`ptr`: Long,
 ): Long
 external fun uniffi_cove_fn_method_rustwalletmanager_save_unsigned_transaction(`ptr`: Long,`details`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
@@ -3890,6 +3894,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_number_of_confirmations_fmt() != 32886.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_required_deletion_confirmations() != 10948.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_save_unsigned_transaction() != 43358.toShort()) {
@@ -18080,6 +18087,14 @@ public interface RustWalletManagerInterface {
     
     suspend fun `numberOfConfirmationsFmt`(`blockHeight`: kotlin.UInt): kotlin.String
     
+    /**
+     * Returns the number of confirmation steps required to delete this wallet
+     * - 1: Cold wallets, xpub-only wallets (low risk)
+     * - 2: Hot wallets that are verified OR have no funds
+     * - 3: Hot wallets that are NOT verified AND have funds (highest risk)
+     */
+    suspend fun `requiredDeletionConfirmations`(): kotlin.UByte
+    
     fun `saveUnsignedTransaction`(`details`: ConfirmDetails)
     
     fun `selectedFiatCurrency`(): FiatCurrency
@@ -18853,6 +18868,32 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
         { FfiConverterString.lift(it) },
         // Error FFI converter
         WalletManagerException.ErrorHandler,
+    )
+    }
+
+    
+    /**
+     * Returns the number of confirmation steps required to delete this wallet
+     * - 1: Cold wallets, xpub-only wallets (low risk)
+     * - 2: Hot wallets that are verified OR have no funds
+     * - 3: Hot wallets that are NOT verified AND have funds (highest risk)
+     */
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `requiredDeletionConfirmations`() : kotlin.UByte {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_required_deletion_confirmations(
+                uniffiHandle,
+                
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_u8(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_u8(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_u8(future) },
+        // lift function
+        { FfiConverterUByte.lift(it) },
+        // Error FFI converter
+        UniffiNullRustCallStatusErrorHandler,
     )
     }
 
