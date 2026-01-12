@@ -185,7 +185,7 @@ fun TermsAndConditionsSheet(
                     checked = checks[4],
                     onCheckedChange = { checks[4] = it },
                 ) {
-                    PrivacyAndTermsText()
+                    PrivacyAndTermsText(onToggle = { checks[4] = !checks[4] })
                 }
             }
 
@@ -229,7 +229,7 @@ fun TermsAndConditionsSheet(
 }
 
 @Composable
-private fun PrivacyAndTermsText() {
+private fun PrivacyAndTermsText(onToggle: () -> Unit) {
     val uriHandler = LocalUriHandler.current
     val linkColor = CoveColor.LinkBlue
 
@@ -275,12 +275,18 @@ private fun PrivacyAndTermsText() {
                 color = MaterialTheme.colorScheme.onSurface,
             ),
         onClick = { offset ->
-            annotatedString
-                .getStringAnnotations(tag = "URL", start = offset, end = offset)
-                .firstOrNull()
-                ?.let { annotation ->
-                    uriHandler.openUri(annotation.item)
-                }
+            val annotation =
+                annotatedString
+                    .getStringAnnotations(tag = "URL", start = offset, end = offset)
+                    .firstOrNull()
+
+            if (annotation != null) {
+                // clicked on a link, open it
+                uriHandler.openUri(annotation.item)
+            } else {
+                // clicked on non-link text, toggle checkbox
+                onToggle()
+            }
         },
     )
 }
