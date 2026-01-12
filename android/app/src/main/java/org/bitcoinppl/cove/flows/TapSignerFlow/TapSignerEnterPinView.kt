@@ -27,12 +27,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppAlertState
 import org.bitcoinppl.cove.AppManager
@@ -60,7 +58,6 @@ fun TapSignerEnterPinView(
     var isActionPending by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    val pinFocusRequester = remember { FocusRequester() }
 
     val message =
         when (action) {
@@ -77,14 +74,6 @@ fun TapSignerEnterPinView(
     // reset pin when screen appears
     LaunchedEffect(Unit) {
         pin = ""
-    }
-
-    // auto-refocus keyboard after auth error clears
-    LaunchedEffect(manager.authErrorMessage) {
-        if (manager.authErrorMessage == null) {
-            delay(100)
-            pinFocusRequester.requestFocus()
-        }
     }
 
     // launcher for creating backup file
@@ -153,7 +142,6 @@ fun TapSignerEnterPinView(
         // hidden text field
         HiddenPinTextField(
             value = pin,
-            focusRequester = pinFocusRequester,
             onValueChange = { newPin ->
                 pin = newPin
                 if (newPin.length == 6 && !isActionPending) {
@@ -218,7 +206,7 @@ private suspend fun runAction(
             backupAction(app, manager, nfc, tapSigner, pin, createBackupLauncher, activity)
         }
         is AfterPinAction.Sign -> {
-            signAction(app, manager, nfc, action.v1, pin, activity)
+            signAction(app, manager, nfc, tapSigner, action.v1, pin, activity)
         }
     }
 }
@@ -270,7 +258,14 @@ private suspend fun deriveAction(
                 )
         } else {
             Log.w("TapSignerEnterPin", "TapSigner auth failed - likely wrong PIN")
-            manager.authErrorMessage = "Wrong PIN, please try again"
+            app.sheetState = null
+            app.alertState =
+                org.bitcoinppl.cove.TaggedItem(
+                    org.bitcoinppl.cove.AppAlertState.TapSignerWrongPin(
+                        tapSigner,
+                        AfterPinAction.Derive,
+                    ),
+                )
         }
     }
 }
@@ -340,7 +335,14 @@ private suspend fun backupAction(
                 )
         } else {
             Log.w("TapSignerEnterPin", "TapSigner auth failed - likely wrong PIN")
-            manager.authErrorMessage = "Wrong PIN, please try again"
+            app.sheetState = null
+            app.alertState =
+                org.bitcoinppl.cove.TaggedItem(
+                    org.bitcoinppl.cove.AppAlertState.TapSignerWrongPin(
+                        tapSigner,
+                        AfterPinAction.Backup,
+                    ),
+                )
         }
     }
 }
@@ -349,6 +351,7 @@ private suspend fun signAction(
     app: AppManager,
     manager: TapSignerManager,
     nfc: TapSignerNfcHelper,
+    tapSigner: org.bitcoinppl.cove_core.tapcard.TapSigner,
     psbt: Psbt,
     pin: String,
     activity: android.app.Activity,
@@ -402,7 +405,14 @@ private suspend fun signAction(
             app.sheetState = null
         } else {
             Log.w("TapSignerEnterPin", "TapSigner auth failed - likely wrong PIN")
-            manager.authErrorMessage = "Wrong PIN, please try again"
+            app.sheetState = null
+            app.alertState =
+                org.bitcoinppl.cove.TaggedItem(
+                    org.bitcoinppl.cove.AppAlertState.TapSignerWrongPin(
+                        tapSigner,
+                        AfterPinAction.Sign(psbt),
+                    ),
+                )
         }
     }
 }

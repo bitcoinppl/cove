@@ -577,6 +577,28 @@ private fun GlobalAlertDialog(
             )
         }
 
+        is AppAlertState.TapSignerWrongPin -> {
+            AlertDialog(
+                onDismissRequest = onDismiss,
+                title = { Text(state.title()) },
+                text = { Text(state.message()) },
+                confirmButton = {
+                    TextButton(onClick = {
+                        onDismiss()
+                        app.sheetState =
+                            TaggedItem(
+                                AppSheetState.TapSigner(
+                                    TapSignerRoute.EnterPin(state.tapSigner, state.action),
+                                ),
+                            )
+                    }) { Text("Try Again") }
+                },
+                dismissButton = {
+                    TextButton(onClick = onDismiss) { Text("Cancel") }
+                },
+            )
+        }
+
         is AppAlertState.General -> {
             AlertDialog(
                 onDismissRequest = onDismiss,
