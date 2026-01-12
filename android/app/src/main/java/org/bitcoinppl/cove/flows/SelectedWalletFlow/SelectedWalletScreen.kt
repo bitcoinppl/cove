@@ -134,7 +134,7 @@ fun SelectedWalletScreen(
     val unsignedTransactions = manager?.unsignedTransactions ?: emptyList()
 
     // clear SendFlowManager when returning to wallet screen (matches iOS SelectedWalletScreen)
-    LaunchedEffect(Unit) {
+    LaunchedEffect(manager) {
         app?.clearSendFlowManager()
         manager?.validateMetadata()
     }

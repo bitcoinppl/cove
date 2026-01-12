@@ -417,7 +417,7 @@ private fun SendFlowRouteToScreen(
             val scope = rememberCoroutineScope()
 
             // lock on appear for hot wallets
-            LaunchedEffect(Unit) {
+            LaunchedEffect(walletManager) {
                 kotlinx.coroutines.delay(50)
                 if (walletManager.walletMetadata?.walletType == WalletType.HOT) {
                     Auth.lock()

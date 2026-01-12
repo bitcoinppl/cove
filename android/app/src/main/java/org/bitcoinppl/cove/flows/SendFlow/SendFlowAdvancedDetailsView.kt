@@ -72,7 +72,7 @@ fun SendFlowAdvancedDetailsView(
 
     var splitOutput by remember { mutableStateOf<SplitOutput?>(null) }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(walletManager) {
         splitOutput =
             try {
                 walletManager.rust.splitTransactionOutputs(details.outputs())

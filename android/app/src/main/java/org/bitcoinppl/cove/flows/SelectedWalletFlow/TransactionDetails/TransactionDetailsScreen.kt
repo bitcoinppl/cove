@@ -120,7 +120,7 @@ fun TransactionDetailsScreen(
     val isDark = !MaterialTheme.colorScheme.isLight
 
     // immediately fetch fresh transaction details on screen load
-    LaunchedEffect(Unit) {
+    LaunchedEffect(manager, txId) {
         try {
             val freshDetails = manager.rust.transactionDetails(txId = txId)
             manager.updateTransactionDetailsCache(txId, freshDetails)

@@ -146,7 +146,7 @@ fun SendFlowSetAmountScreen(
     val exceedsBalance = sendFlowManager.rust.amountExceedsBalance()
 
     // initial focus logic: set focus based on validation state (matches iOS behavior)
-    LaunchedEffect(Unit) {
+    LaunchedEffect(sendFlowManager) {
         val amount = sendFlowManager.rust.amount()
         val isAmountInvalid = amount.asSats() == 0uL
         val isAddressEmpty = initialAddress.isEmpty()

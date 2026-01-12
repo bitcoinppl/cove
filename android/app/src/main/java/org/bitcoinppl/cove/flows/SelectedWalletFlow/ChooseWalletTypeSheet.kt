@@ -55,7 +55,7 @@ fun ChooseWalletTypeSheet(
     var currentAddress by remember { mutableStateOf<String?>(null) }
     var isProcessing by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(manager) {
         try {
             manager.firstAddress().use { addressInfo ->
                 currentAddress = addressInfo.addressUnformatted()

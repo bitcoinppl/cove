@@ -96,7 +96,7 @@ fun UtxoListScreen(
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
     // reload labels on appear to match iOS behavior
-    LaunchedEffect(Unit) {
+    LaunchedEffect(manager) {
         manager.rust.reloadLabels()
     }
 
