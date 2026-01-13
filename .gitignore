@@ -15,3 +15,6 @@ log.txt
 *.lck
 *.salive
 android/.kotlin/
+.envrc
+cove-signing-key.zip
+upload_certificate.pem

@@ -54,6 +54,10 @@ enum Commands {
         profile: String,
     },
 
+    /// Build Android App Bundle (AAB) and copy to Downloads
+    #[command(name = "bundle-android")]
+    BundleAndroid,
+
     /// Build iOS library and generate Swift bindings
     #[command(name = "build-ios")]
     BuildIos {
@@ -98,6 +102,8 @@ fn main() -> Result<()> {
             let build_profile = android::BuildProfile::from_str(&profile);
             android::run_android(build_profile, cli.verbose)
         }
+
+        Commands::BundleAndroid => android::bundle_android(cli.verbose),
 
         Commands::BuildIos { build_type, device, sign } => {
             let ios_build_type = ios::IosBuildType::from_str(&build_type);

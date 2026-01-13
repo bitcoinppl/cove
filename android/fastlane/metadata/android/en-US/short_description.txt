@@ -1,0 +1,1 @@
+Simple, feature-packed Bitcoin wallet. Your keys, your coins, 100% on-device.
