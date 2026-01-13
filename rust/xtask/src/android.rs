@@ -1,5 +1,8 @@
 use crate::common::{command_exists, print_error, print_info, print_success};
-use color_eyre::{eyre::Context, Result};
+use color_eyre::{
+    eyre::{Context, ContextCompat},
+    Result,
+};
 use colored::Colorize;
 use std::collections::HashMap;
 use xshell::{cmd, Shell};
@@ -19,6 +22,10 @@ const ANDROID_PACKAGE_NAME: &str = "org.bitcoinppl.cove";
 const ANDROID_ACTIVITY_NAME: &str = ".MainActivity";
 const APK_PATH_DEBUG: &str = "app/build/outputs/apk/debug/app-debug.apk";
 const APK_PATH_RELEASE: &str = "app/build/outputs/apk/release/app-release.apk";
+
+// Android bundle constants
+const AAB_OUTPUT_PATH: &str = "app/build/outputs/bundle/release/app-release.aab";
+const ANDROID_GRADLE_PATH: &str = "app/build.gradle.kts";
 
 #[derive(Debug, Clone, Copy)]
 pub enum BuildProfile {
@@ -232,4 +239,85 @@ pub fn run_android(profile: BuildProfile, verbose: bool) -> Result<()> {
     print_success("App launched successfully");
 
     Ok(())
+}
+
+pub fn bundle_android(verbose: bool) -> Result<()> {
+    let sh = Shell::new()?;
+
+    // change to android directory
+    sh.change_dir("../android");
+
+    // build the AAB
+    print_info("Building release AAB...");
+    if verbose {
+        cmd!(sh, "./gradlew bundleRelease").run().wrap_err("Failed to build AAB")?;
+    } else {
+        cmd!(sh, "./gradlew bundleRelease").quiet().run().wrap_err("Failed to build AAB")?;
+    }
+    print_success("AAB build successful");
+
+    // verify AAB exists
+    if !sh.path_exists(AAB_OUTPUT_PATH) {
+        print_error(&format!("AAB not found at {}", AAB_OUTPUT_PATH));
+        color_eyre::eyre::bail!("Build succeeded but AAB not found at {}", AAB_OUTPUT_PATH);
+    }
+
+    // read version info from build.gradle.kts
+    let gradle_content =
+        sh.read_file(ANDROID_GRADLE_PATH).wrap_err("Failed to read build.gradle.kts")?;
+
+    let version_name = extract_version_name(&gradle_content)
+        .context("Could not extract versionName from build.gradle.kts")?;
+    let version_code = extract_version_code(&gradle_content)
+        .context("Could not extract versionCode from build.gradle.kts")?;
+
+    // construct destination path
+    let home_dir = std::env::var("HOME").wrap_err("HOME environment variable not set")?;
+    let dest_filename = format!("cove-{}-{}.aab", version_name, version_code);
+    let dest_path = format!("{}/Downloads/{}", home_dir, dest_filename);
+
+    // copy AAB to Downloads
+    print_info(&format!("Copying AAB to {}...", dest_path));
+    sh.copy_file(AAB_OUTPUT_PATH, &dest_path)
+        .wrap_err_with(|| format!("Failed to copy AAB to {}", dest_path))?;
+    print_success(&format!("AAB saved to {}", dest_path));
+
+    // create native debug symbols zip (only valid ABIs for minSdk 33+)
+    let symbols_filename = format!("cove-{}-{}-symbols.zip", version_name, version_code);
+    let symbols_path = format!("{}/Downloads/{}", home_dir, symbols_filename);
+    let native_libs_path =
+        "app/build/intermediates/merged_native_libs/release/mergeReleaseNativeLibs/out/lib";
+
+    if sh.path_exists(native_libs_path) {
+        print_info("Creating native debug symbols zip...");
+        let current_dir = sh.current_dir();
+        sh.change_dir(native_libs_path);
+        // only include valid ABIs (arm64-v8a and x86_64 for minSdk 33+)
+        cmd!(sh, "zip -r {symbols_path} arm64-v8a x86_64")
+            .quiet()
+            .run()
+            .wrap_err("Failed to create debug symbols zip")?;
+        sh.change_dir(current_dir);
+        print_success(&format!("Debug symbols saved to {}", symbols_path));
+    } else {
+        print_info("Native libs not found, skipping debug symbols zip");
+    }
+
+    Ok(())
+}
+
+fn extract_version_name(content: &str) -> Option<String> {
+    let key = "versionName = \"";
+    let start = content.find(key)?;
+    let after_key = &content[start + key.len()..];
+    let end = after_key.find('"')?;
+    Some(after_key[..end].to_string())
+}
+
+fn extract_version_code(content: &str) -> Option<u32> {
+    let key = "versionCode = ";
+    let start = content.find(key)?;
+    let after_key = &content[start + key.len()..];
+    let end = after_key.find('\n').unwrap_or(after_key.len());
+    after_key[..end].trim().parse().ok()
 }

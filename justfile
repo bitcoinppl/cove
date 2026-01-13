@@ -4,6 +4,15 @@ list:
     @just --list
 
 # ------------------------------------------------------------------------------
+# utilities
+# ------------------------------------------------------------------------------
+
+# Run an xtask command
+[group('utils')]
+xtask *args:
+    cd rust && cargo xtask {{args}}
+
+# ------------------------------------------------------------------------------
 # ci
 # ------------------------------------------------------------------------------
 
@@ -33,61 +42,48 @@ ci:
 
 # Build Android debug APK
 [group('build')]
-[working-directory: 'rust']
 build-android:
-    cargo xtask build-android debug && just say "done android"
+    just xtask build-android debug && just say "done android"
 
 [private]
 alias ba := build-android
 
 # Build Android release APK
 [group('build')]
-[working-directory: 'rust']
 build-android-release:
-    cargo xtask build-android release-speed && just say "done android release"
+    just xtask build-android release-speed && just say "done android release"
 
 [private]
 alias bar := build-android-release
 
-# Build signed AAB for Google Play
+# Build signed AAB for Google Play, copy to Downloads
 [group('build')]
 bundle-android:
-    cd android && ./gradlew bundleRelease && just say "done android bundle" && just oar
+    just xtask bundle-android && just say "done android bundle"
 
 [private]
 alias bua := bundle-android
 
-# Open Android release output folder
-[group('build')]
-open-android-release:
-    open android/app/build/outputs/bundle/release/
-
-[private]
-alias oar := open-android-release
-
 # Build iOS debug for simulator
 [group('build')]
-[working-directory: 'rust']
 build-ios profile="debug" *flags="":
-    cargo xtask build-ios {{profile}} {{flags}} && just say "done ios"
+    just xtask build-ios {{profile}} {{flags}} && just say "done ios"
 
 [private]
 alias bi := build-ios
 
 # Build iOS release for device
 [group('build')]
-[working-directory: 'rust']
 build-ios-release:
-    cargo xtask build-ios release-speed --device && just say "done ios release"
+    just xtask build-ios release-speed --device && just say "done ios release"
 
 [private]
 alias bir := build-ios-release
 
 # Build iOS debug for device
 [group('build')]
-[working-directory: 'rust']
 build-ios-debug-device:
-    cargo xtask build-ios debug --device && just say "done ios device"
+    just xtask build-ios debug --device && just say "done ios device"
 
 [private]
 alias bidd := build-ios-debug-device
@@ -248,15 +244,13 @@ fix *flags="":
 
 # Bump version (type: major, minor, patch)
 [group('release')]
-[working-directory: 'rust']
 bump type targets="rust,ios,android":
-    cargo xtask bump-version {{type}} --targets {{targets}}
+    just xtask bump-version {{type}} --targets {{targets}}
 
 # Bump build numbers only
 [group('release')]
-[working-directory: 'rust']
 build-bump targets="ios,android":
-    cargo xtask build-bump {{targets}}
+    just xtask build-bump {{targets}}
 
 [private]
 alias bb := build-bump
@@ -316,9 +310,8 @@ update pkg="":
 
 # Run Android app
 [group('util')]
-[working-directory: 'rust']
 run-android profile="debug":
-    cargo xtask run-android {{profile}} && just notf "done run android"
+    just xtask run-android {{profile}} && just notf "done run android"
 
 [private]
 alias ra := run-android
@@ -334,15 +327,8 @@ alias iac := install-android-clean
 
 # Run iOS app
 [group('util')]
-[working-directory: 'rust']
 run-ios:
-    cargo xtask run-ios && just notf "done run ios"
-
-# Run xtask commands
-[group('util')]
-[working-directory: 'rust']
-xtask *args:
-    cargo xtask {{args}}
+    just xtask run-ios && just notf "done run ios"
 
 # ------------------------------------------------------------------------------
 # helpers
