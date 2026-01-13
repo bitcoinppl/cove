@@ -27,9 +27,9 @@ android {
             // uses default debug keystore
         }
         create("release") {
-            storeFile = file(System.getenv("COVE_KEYSTORE_PATH") ?: "${System.getProperty("user.home")}/cove-release.keystore")
+            storeFile = file(System.getenv("COVE_KEYSTORE_PATH") ?: "${System.getProperty("user.home")}/cove-upload.keystore")
             storePassword = System.getenv("COVE_KEYSTORE_PASSWORD") ?: ""
-            keyAlias = System.getenv("COVE_KEY_ALIAS") ?: "cove"
+            keyAlias = System.getenv("COVE_KEY_ALIAS") ?: "upload"
             keyPassword = System.getenv("COVE_KEY_PASSWORD") ?: ""
         }
     }
