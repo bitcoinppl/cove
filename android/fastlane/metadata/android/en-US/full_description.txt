@@ -1,0 +1,45 @@
+Simple, but feature-packed. Cove is a Bitcoin wallet that grows with you—from beginner to advanced coin management—while keeping your private keys under your control.
+
+HOT WALLET
+• Create a wallet in seconds
+• Private keys encrypted locally on your device
+• Biometric and PIN security
+
+HARDWARE WALLET SUPPORT
+• Bring your Coldcard, TAPSIGNER, Krux, Jade, SeedSigner, or Foundation Passport
+• PSBT support with QR (BBQr) and NFC signing
+• Watch-only wallet support
+
+FULL COIN CONTROL
+• Select, label, and track your UTXOs
+• Advanced search, filtering, and sorting
+• BIP329 label sync with desktop wallets
+• Exportable transaction history
+
+SECURITY FIRST
+• Decoy & Wipe PINs for emergency situations
+• BIP39 recovery phrase verification
+• 100% on-device operations
+• No data ever leaves your phone
+
+YOUR WALLET, YOUR WAY
+• Beautiful light & dark modes
+• Custom fiat currency selection
+• Connect to your own Electrum or Esplora node
+• Custom fee selection
+• Transaction notes with BIP329 labels
+
+OPEN SOURCE
+Cove is 100% open source and auditable. Verify the code yourself at github.com/bitcoinppl/cove
+
+Your keys. Your coins. Your privacy.
+
+―――
+
+Bitcoin, on your terms—simple, secure, and feature-packed. That's Cove.
+
+―――
+
+Support: support@covebitcoinwallet.com
+Privacy Policy: covebitcoinwallet.com/privacy
+Terms & Conditions: covebitcoinwallet.com/terms
