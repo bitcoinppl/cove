@@ -9,6 +9,9 @@ struct WalletSettingsView: View {
 
     @State private var showingDeleteConfirmation = false
     @State private var showingSecretWordsConfirmation = false
+    @State private var showingSecondDeleteConfirmation = false
+    @State private var showingFinalDeleteConfirmation = false
+    @State private var requiredConfirmations: UInt8 = 1
 
     init(manager: WalletManager) {
         self.manager = manager
@@ -18,7 +21,23 @@ struct WalletSettingsView: View {
         manager.walletMetadata
     }
 
+    var deleteConfirmationMessage: String {
+        if metadata.walletType == .hot, !metadata.verified {
+            return "This wallet is not backed up. Make sure you have your secret words saved before deleting."
+        }
+        return "This action cannot be undone."
+    }
+
     let colorColumns = Array(repeating: GridItem(.flexible(), spacing: 0), count: 5)
+
+    private func deleteWallet() {
+        do {
+            try manager.rust.deleteWallet()
+            dismiss()
+        } catch {
+            Log.error("Unable to delete wallet: \(error)")
+        }
+    }
 
     var body: some View {
         List {
@@ -150,6 +169,7 @@ struct WalletSettingsView: View {
                 }
 
                 Button {
+                    requiredConfirmations = manager.rust.requiredDeletionConfirmations()
                     showingDeleteConfirmation = true
                 } label: {
                     Text("Delete Wallet").foregroundStyle(.red)
@@ -157,16 +177,35 @@ struct WalletSettingsView: View {
                 }
                 .confirmationDialog("Are you sure?", isPresented: $showingDeleteConfirmation) {
                     Button("Delete", role: .destructive) {
-                        do {
-                            try manager.rust.deleteWallet()
-                            dismiss()
-                        } catch {
-                            Log.error("Unable to delete wallet: \(error)")
+                        if requiredConfirmations >= 2 {
+                            showingSecondDeleteConfirmation = true
+                        } else {
+                            deleteWallet()
                         }
                     }
                     Button("Cancel", role: .cancel) {}
                 } message: {
-                    Text("This action cannot be undone.")
+                    Text(deleteConfirmationMessage)
+                }
+                .alert("Confirm Deletion", isPresented: $showingSecondDeleteConfirmation) {
+                    Button("Delete", role: .destructive) {
+                        if requiredConfirmations >= 3 {
+                            showingFinalDeleteConfirmation = true
+                        } else {
+                            deleteWallet()
+                        }
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("Are you sure you want to delete '\(metadata.name)'?")
+                }
+                .alert("Final Warning", isPresented: $showingFinalDeleteConfirmation) {
+                    Button("Delete Forever", role: .destructive) {
+                        deleteWallet()
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("This wallet is not backed up and contains funds. You will lose access to these funds forever.")
                 }
             }
         }
