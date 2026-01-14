@@ -369,6 +369,7 @@ struct HotWalletImportScreen: View {
     var Card: some View {
         HotWalletImportCard(
             numberOfWords: numberOfWords,
+            onPasteMnemonic: handlePasteMnemonic,
             tabIndex: $tabIndex,
             enteredWords: $enteredWords,
             filteredSuggestions: $filteredSuggestions,
@@ -593,6 +594,16 @@ struct HotWalletImportScreen: View {
         enteredWords = words
         sheetState = .none
         tabIndex = lastIndex
+    }
+
+    func handlePasteMnemonic(_ mnemonicString: String) {
+        do {
+            let words = try groupedPlainWordsOf(mnemonic: mnemonicString, groups: UInt8(groupsOf))
+            setWords(words)
+        } catch {
+            Log.debug("Invalid pasted mnemonic: \(error)")
+            alertState = .init(.invalidWords)
+        }
     }
 }
 

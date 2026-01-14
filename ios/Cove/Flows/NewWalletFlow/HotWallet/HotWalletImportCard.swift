@@ -13,10 +13,12 @@ private let rowHeight = 30.0
 /// Handles return key press without dismissing keyboard, forwarding other calls to original delegate
 private final class TextFieldReturnHandler: NSObject, UITextFieldDelegate {
     var onReturn: () -> Void
+    var onPasteMnemonic: ((String) -> Void)?
     weak var originalDelegate: UITextFieldDelegate?
 
-    init(onReturn: @escaping () -> Void, originalDelegate: UITextFieldDelegate?) {
+    init(onReturn: @escaping () -> Void, onPasteMnemonic: ((String) -> Void)?, originalDelegate: UITextFieldDelegate?) {
         self.onReturn = onReturn
+        self.onPasteMnemonic = onPasteMnemonic
         self.originalDelegate = originalDelegate
     }
 
@@ -39,7 +41,14 @@ private final class TextFieldReturnHandler: NSObject, UITextFieldDelegate {
     }
 
     func textField(_ textField: UITextField, shouldChangeCharactersIn range: NSRange, replacementString string: String) -> Bool {
-        originalDelegate?.textField?(textField, shouldChangeCharactersIn: range, replacementString: string) ?? true
+        // detect paste of full mnemonic (12+ words)
+        let words = string.components(separatedBy: .whitespaces).filter { !$0.isEmpty }
+        if words.count >= 12, let onPasteMnemonic {
+            onPasteMnemonic(string)
+            return false
+        }
+
+        return originalDelegate?.textField?(textField, shouldChangeCharactersIn: range, replacementString: string) ?? true
     }
 
     func textFieldShouldBeginEditing(_ textField: UITextField) -> Bool {
@@ -62,6 +71,7 @@ private let groupsOf = HotWalletImportScreen.GROUPS_OF
 
 struct HotWalletImportCard: View {
     var numberOfWords: NumberOfBip39Words
+    var onPasteMnemonic: ((String) -> Void)?
 
     @Binding var tabIndex: Int
     @Binding var enteredWords: [[String]]
@@ -81,7 +91,8 @@ struct HotWalletImportCard: View {
                         filteredSuggestions: $filteredSuggestions,
                         focusField: $focusField,
                         allEnteredWords: enteredWords,
-                        numberOfWords: numberOfWords
+                        numberOfWords: numberOfWords,
+                        onPasteMnemonic: onPasteMnemonic
                     )
                     .tag(index)
                 }
@@ -111,6 +122,7 @@ private struct CardTab: View {
 
     let allEnteredWords: [[String]]
     let numberOfWords: NumberOfBip39Words
+    var onPasteMnemonic: ((String) -> Void)?
 
     let cardSpacing: CGFloat = 20
 
@@ -131,6 +143,7 @@ private struct CardTab: View {
                         ),
                         allEnteredWords: allEnteredWords,
                         numberOfWords: numberOfWords,
+                        onPasteMnemonic: onPasteMnemonic,
                         tabIndex: $tabIndex,
                         text: $fields[index],
                         filteredSuggestions: $filteredSuggestions,
@@ -151,6 +164,7 @@ private struct AutocompleteField: View {
     let autocomplete: Bip39WordSpecificAutocomplete
     let allEnteredWords: [[String]]
     let numberOfWords: NumberOfBip39Words
+    var onPasteMnemonic: ((String) -> Void)?
 
     @Binding var tabIndex: Int
     @Binding var text: String
@@ -321,6 +335,7 @@ private struct AutocompleteField: View {
                 if returnHandler == nil {
                     let handler = TextFieldReturnHandler(
                         onReturn: { [self] in submitFocusField() },
+                        onPasteMnemonic: onPasteMnemonic,
                         originalDelegate: textField.delegate
                     )
                     returnHandler = handler
