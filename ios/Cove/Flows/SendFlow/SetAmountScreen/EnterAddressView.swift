@@ -51,6 +51,10 @@ struct EnterAddressView: View {
                     .keyboardType(.asciiCapable)
             }
         }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            presenter.focusField = .address
+        }
         .onChange(of: presenter.focusField, initial: true) { _, new in focusField = new }
         .onChange(of: focusField, initial: false) { _, new in
             guard let new else { return }
