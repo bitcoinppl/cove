@@ -4,14 +4,12 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -209,26 +207,37 @@ fun SecretWordsScreen(
 
 /**
  * recovery words grid for viewing only (non-selectable)
+ * uses column-major ordering (words flow down columns first)
  */
 @Composable
 private fun RecoveryWordsGrid(
     words: List<String>,
     modifier: Modifier = Modifier,
 ) {
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(3),
+    val numColumns = 3
+    val wordsPerColumn = words.size / numColumns
+
+    Row(
+        modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp),
-        modifier = modifier,
     ) {
-        itemsIndexed(words) { idx, word ->
-            RecoveryWordChip(
-                index = idx + 1,
-                word = word,
-                selected = false,
-                // non-clickable
-                onClick = null,
-            )
+        repeat(numColumns) { col ->
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(18.dp),
+            ) {
+                repeat(wordsPerColumn) { row ->
+                    val index = col * wordsPerColumn + row
+                    if (index < words.size) {
+                        RecoveryWordChip(
+                            index = index + 1,
+                            word = words[index],
+                            selected = false,
+                            onClick = null,
+                        )
+                    }
+                }
+            }
         }
     }
 }

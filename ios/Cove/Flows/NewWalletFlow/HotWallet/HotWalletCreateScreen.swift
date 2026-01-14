@@ -210,8 +210,18 @@ struct WordCardView: View {
     @Environment(\.sizeCategory) var sizeCategory
     let words: [GroupedWord]
 
+    private let numberOfColumns = 3
+
+    var numberOfRows: Int {
+        words.count / numberOfColumns
+    }
+
+    var rows: [GridItem] {
+        Array(repeating: .init(.flexible()), count: numberOfRows)
+    }
+
     var body: some View {
-        LazyVGrid(columns: columns, spacing: 20) {
+        LazyHGrid(rows: rows, spacing: 12) {
             ForEach(words, id: \.self) { group in
                 HStack(spacing: 0) {
                     Text("\(String(format: "%d", group.number)). ")

@@ -55,7 +55,8 @@ private final class TextFieldReturnHandler: NSObject, UITextFieldDelegate {
     }
 }
 
-private let numberOfRows = 6
+private let numberOfColumns = 2
+private let numberOfRows = HotWalletImportScreen.GROUPS_OF / numberOfColumns
 
 private let groupsOf = HotWalletImportScreen.GROUPS_OF
 
@@ -114,11 +115,12 @@ private struct CardTab: View {
     let cardSpacing: CGFloat = 20
 
     var rows: [GridItem] {
-        Array(repeating: .init(.fixed(rowHeight)), count: numberOfRows)
+        Array(repeating: GridItem(.flexible()), count: numberOfRows)
     }
 
     var body: some View {
-        GeometryReader { proxy in
+        GeometryReader { geometry in
+            let columnWidth = (geometry.size.width - cardSpacing) / CGFloat(numberOfColumns)
             LazyHGrid(rows: rows, spacing: cardSpacing) {
                 ForEach(Array(fields.enumerated()), id: \.offset) { index, _ in
                     AutocompleteField(
@@ -134,8 +136,8 @@ private struct CardTab: View {
                         filteredSuggestions: $filteredSuggestions,
                         focusField: $focusField
                     )
+                    .frame(width: columnWidth)
                 }
-                .frame(width: (proxy.size.width / 2) - (cardSpacing / 2))
             }
             .frame(maxWidth: .infinity)
         }
