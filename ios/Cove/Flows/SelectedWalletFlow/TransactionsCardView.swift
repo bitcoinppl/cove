@@ -62,6 +62,7 @@ struct TransactionsCardView: View {
                         TransactionRow(txn: txn, metadata: metadata)
                     }
                 }
+                .scrollTargetLayout()
 
                 if transactions.isEmpty {
                     VStack {

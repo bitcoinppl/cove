@@ -39,7 +39,7 @@ use crate::{
         Address, AddressInfo, Wallet, WalletAddressType, WalletError,
         balance::Balance,
         fingerprint::Fingerprint,
-        metadata::{DiscoveryState, FiatOrBtc, WalletColor, WalletId, WalletMetadata},
+        metadata::{DiscoveryState, FiatOrBtc, WalletColor, WalletId, WalletMetadata, WalletType},
     },
     wallet_scanner::{ScannerResponse, WalletScanner},
     word_validator::WordValidator,
@@ -854,6 +854,31 @@ impl RustWalletManager {
     #[uniffi::method]
     pub fn wallet_metadata(&self) -> WalletMetadata {
         self.metadata.read().clone()
+    }
+
+    /// Returns the number of confirmation steps required to delete this wallet
+    /// - 1: Cold wallets, xpub-only wallets (low risk)
+    /// - 2: Hot wallets that are verified OR have no funds
+    /// - 3: Hot wallets that are NOT verified AND have funds (highest risk)
+    #[uniffi::method]
+    pub async fn required_deletion_confirmations(&self) -> u8 {
+        let (wallet_type, verified) = {
+            let metadata = self.metadata.read();
+            (metadata.wallet_type, metadata.verified)
+        };
+
+        if wallet_type != WalletType::Hot {
+            return 1;
+        }
+
+        if !verified {
+            let balance = self.balance().await;
+            if balance.spendable().as_sats() > 0 {
+                return 3;
+            }
+        }
+
+        2
     }
 
     // only called from the frontend, to make sure all metadata places are up to date,

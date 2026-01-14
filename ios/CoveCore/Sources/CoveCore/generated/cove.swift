@@ -7670,6 +7670,14 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
     
     func numberOfConfirmationsFmt(blockHeight: UInt32) async throws  -> String
     
+    /**
+     * Returns the number of confirmation steps required to delete this wallet
+     * - 1: Cold wallets, xpub-only wallets (low risk)
+     * - 2: Hot wallets that are verified OR have no funds
+     * - 3: Hot wallets that are NOT verified AND have funds (highest risk)
+     */
+    func requiredDeletionConfirmations() async  -> UInt8
+    
     func saveUnsignedTransaction(details: ConfirmDetails) throws 
     
     func selectedFiatCurrency()  -> FiatCurrency
@@ -8288,6 +8296,30 @@ open func numberOfConfirmationsFmt(blockHeight: UInt32)async throws  -> String  
             freeFunc: ffi_cove_rust_future_free_rust_buffer,
             liftFunc: FfiConverterString.lift,
             errorHandler: FfiConverterTypeWalletManagerError_lift
+        )
+}
+    
+    /**
+     * Returns the number of confirmation steps required to delete this wallet
+     * - 1: Cold wallets, xpub-only wallets (low risk)
+     * - 2: Hot wallets that are verified OR have no funds
+     * - 3: Hot wallets that are NOT verified AND have funds (highest risk)
+     */
+open func requiredDeletionConfirmations()async  -> UInt8  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_rustwalletmanager_required_deletion_confirmations(
+                    self.uniffiCloneHandle()
+                    
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_u8,
+            completeFunc: ffi_cove_rust_future_complete_u8,
+            freeFunc: ffi_cove_rust_future_free_u8,
+            liftFunc: FfiConverterUInt8.lift,
+            errorHandler: nil
+            
         )
 }
     
@@ -29069,6 +29101,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_number_of_confirmations_fmt() != 32886) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustwalletmanager_required_deletion_confirmations() != 10948) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_save_unsigned_transaction() != 43358) {
