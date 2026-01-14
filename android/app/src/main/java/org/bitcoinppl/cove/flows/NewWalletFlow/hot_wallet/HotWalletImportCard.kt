@@ -56,6 +56,7 @@ internal fun WordInputGrid(
     tabIndex: Int,
     onWordsChanged: (List<List<String>>) -> Unit,
     onFocusChanged: (Int) -> Unit,
+    onPasteMnemonic: ((String) -> Unit)? = null,
 ) {
     val wordCount =
         when (numberOfWords) {
@@ -116,6 +117,7 @@ internal fun WordInputGrid(
                                 onFocusChanged(index + 1)
                             }
                         },
+                        onPasteMnemonic = onPasteMnemonic,
                     )
                 }
             }
@@ -149,6 +151,7 @@ internal fun WordInputGrid(
                                 onFocusChanged(index + 1)
                             }
                         },
+                        onPasteMnemonic = onPasteMnemonic,
                     )
                 }
             }
@@ -167,6 +170,7 @@ private fun WordInputField(
     onWordChanged: (String) -> Unit,
     onFocusChanged: (Boolean) -> Unit,
     onNext: () -> Unit,
+    onPasteMnemonic: ((String) -> Unit)? = null,
 ) {
     val focusManager = LocalFocusManager.current
     val autocomplete =
@@ -255,6 +259,13 @@ private fun WordInputField(
                 BasicTextField(
                     value = word,
                     onValueChange = { newValue ->
+                        // detect paste of full mnemonic (12+ words)
+                        val pastedWords = newValue.split(Regex("\\s+")).filter { it.isNotEmpty() }
+                        if (pastedWords.size >= 12 && onPasteMnemonic != null) {
+                            onPasteMnemonic(newValue)
+                            return@BasicTextField
+                        }
+
                         val trimmed = newValue.trim().lowercase()
                         val oldWord = previousWord
                         previousWord = trimmed

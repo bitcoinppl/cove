@@ -67,6 +67,7 @@ import org.bitcoinppl.cove_core.ImportType
 import org.bitcoinppl.cove_core.ImportWalletException
 import org.bitcoinppl.cove_core.NumberOfBip39Words
 import org.bitcoinppl.cove_core.Route
+import org.bitcoinppl.cove_core.groupedPlainWordsOf
 import org.bitcoinppl.cove_core.types.WalletId
 
 private enum class AlertState {
@@ -100,27 +101,30 @@ fun HotWalletImportScreen(
     importType: ImportType,
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
+    // use local state so we can update when paste changes word count
+    var currentNumberOfWords by remember { mutableStateOf(numberOfWords) }
+
     val wordCount =
-        when (numberOfWords) {
+        when (currentNumberOfWords) {
             NumberOfBip39Words.TWELVE -> 12
             NumberOfBip39Words.TWENTY_FOUR -> 24
         }
 
     val numberOfGroups = wordCount / GROUPS_OF
-    var enteredWords by remember(numberOfWords) {
+    var enteredWords by remember(currentNumberOfWords) {
         mutableStateOf(List(numberOfGroups) { List(GROUPS_OF) { "" } })
     }
 
     var alertState by remember { mutableStateOf(AlertState.None) }
     var duplicateWalletId by remember { mutableStateOf<WalletId?>(null) }
     var genericErrorMessage by remember { mutableStateOf("") }
-    var focusedField by remember(numberOfWords) { mutableIntStateOf(0) }
-    var tabIndex by remember(numberOfWords) { mutableIntStateOf(0) }
+    var focusedField by remember(currentNumberOfWords) { mutableIntStateOf(0) }
+    var tabIndex by remember(currentNumberOfWords) { mutableIntStateOf(0) }
 
     // auto-switch page when focus changes to a word on a different page
-    LaunchedEffect(focusedField) {
+    LaunchedEffect(focusedField, enteredWords) {
         val newTab = focusedField / GROUPS_OF
-        if (newTab != tabIndex && newTab < numberOfGroups) {
+        if (newTab != tabIndex && newTab < enteredWords.size) {
             tabIndex = newTab
         }
     }
@@ -151,13 +155,18 @@ fun HotWalletImportScreen(
         val flatWords = words.flatten()
         val totalWords = flatWords.size
 
-        // validate word count matches expected from route
-        if (totalWords != wordCount) {
-            Log.w("HotWalletImport", "Word count mismatch: got $totalWords, expected $wordCount")
-            genericErrorMessage = "Invalid number of words. Expected $wordCount words, got $totalWords"
-            alertState = AlertState.GenericError
-            return
-        }
+        // update word count based on actual pasted words (matching iOS behavior)
+        currentNumberOfWords =
+            when (totalWords) {
+                12 -> NumberOfBip39Words.TWELVE
+                24 -> NumberOfBip39Words.TWENTY_FOUR
+                else -> {
+                    Log.w("HotWalletImport", "Invalid word count: $totalWords")
+                    genericErrorMessage = "Invalid number of words: $totalWords. We only support 12 or 24 words."
+                    alertState = AlertState.GenericError
+                    return
+                }
+            }
 
         // reset scanners
         showQrScanner = false
@@ -166,7 +175,8 @@ fun HotWalletImportScreen(
         // update words
         enteredWords = words
 
-        // move to last field
+        // move to last page and last field
+        tabIndex = words.size - 1
         focusedField = totalWords - 1
     }
 
@@ -178,9 +188,36 @@ fun HotWalletImportScreen(
                 word.isNotEmpty() &&
                     Bip39WordSpecificAutocomplete(
                         wordNumber = (idx + 1).toUShort(),
-                        numberOfWords = numberOfWords,
+                        numberOfWords = currentNumberOfWords,
                     ).use { it.isValidWord(word, enteredWords) }
             }
+
+    fun handlePasteMnemonic(mnemonicString: String) {
+        // extract word-like tokens, stripping numbers and punctuation
+        val words =
+            mnemonicString
+                .split(Regex("\\s+"))
+                .map { it.lowercase() }
+                .filter { word -> word.all { it.isLetter() } }
+
+        // need 12 or 24 words
+        if (words.size != 12 && words.size != 24) {
+            alertState = AlertState.InvalidWords
+            return
+        }
+
+        // group words into chunks of GROUPS_OF (12)
+        val grouped = words.chunked(GROUPS_OF)
+        setWords(grouped)
+
+        // validate - show alert if invalid
+        try {
+            groupedPlainWordsOf(words.joinToString(" "), GROUPS_OF.toUByte())
+        } catch (e: Exception) {
+            Log.d("HotWalletImport", "Invalid pasted mnemonic: ${e.message}")
+            alertState = AlertState.InvalidWords
+        }
+    }
 
     val focusManager = LocalFocusManager.current
 
@@ -299,21 +336,22 @@ fun HotWalletImportScreen(
 
                     WordInputGrid(
                         enteredWords = enteredWords,
-                        numberOfWords = numberOfWords,
+                        numberOfWords = currentNumberOfWords,
                         focusedField = focusedField,
                         tabIndex = tabIndex,
                         onWordsChanged = { newWords -> enteredWords = newWords },
                         onFocusChanged = { field -> focusedField = field },
+                        onPasteMnemonic = ::handlePasteMnemonic,
                     )
 
-                    // page indicator dots for 24-word import
-                    if (numberOfWords == NumberOfBip39Words.TWENTY_FOUR) {
+                    // page indicator dots for multi-page import
+                    if (enteredWords.size > 1) {
                         Spacer(Modifier.height(16.dp))
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.Center,
                         ) {
-                            repeat(numberOfGroups) { i ->
+                            repeat(enteredWords.size) { i ->
                                 val isSelected = i == tabIndex
                                 Box(
                                     modifier =
@@ -462,7 +500,7 @@ fun HotWalletImportScreen(
         // NFC Scanner Bottom Sheet
         if (showNfcScanner) {
             NfcScannerSheet(
-                numberOfWords = numberOfWords,
+                numberOfWords = currentNumberOfWords,
                 onDismiss = {
                     showNfcScanner = false
                 },
