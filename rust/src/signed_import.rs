@@ -47,9 +47,6 @@ pub enum SignedImportError {
     #[error("Failed to parse PSBT: {0}")]
     PsbtParseError(String),
 
-    #[error("Failed to parse transaction: {0}")]
-    TransactionParseError(String),
-
     #[error("Unrecognized format: input is neither a valid PSBT nor transaction")]
     UnrecognizedFormat,
 }
@@ -169,27 +166,32 @@ impl SignedTransactionOrPsbt {
     }
 }
 
-// UniFFI exports
+// UniFFI standalone functions for fallible constructors
+// (UniFFI only supports fallible constructors for Objects, not Enums)
+
+/// Parse from string input (base64 or hex encoded)
+#[uniffi::export(name = "signedTransactionOrPsbtTryParse")]
+pub fn signed_transaction_or_psbt_try_parse(input: String) -> Result<SignedTransactionOrPsbt> {
+    SignedTransactionOrPsbt::try_parse(&input)
+}
+
+/// Parse from raw bytes
+#[uniffi::export(name = "signedTransactionOrPsbtTryFromBytes")]
+pub fn signed_transaction_or_psbt_try_from_bytes(data: Vec<u8>) -> Result<SignedTransactionOrPsbt> {
+    SignedTransactionOrPsbt::try_from_bytes(&data)
+}
+
+/// Parse from an NFC message
+#[uniffi::export(name = "signedTransactionOrPsbtTryFromNfcMessage")]
+pub fn signed_transaction_or_psbt_try_from_nfc_message(
+    nfc_message: Arc<NfcMessage>,
+) -> Result<SignedTransactionOrPsbt> {
+    SignedTransactionOrPsbt::try_from_nfc_message(&nfc_message)
+}
+
+// UniFFI methods for the enum
 #[uniffi::export]
 impl SignedTransactionOrPsbt {
-    /// Parse from string input (base64 or hex encoded)
-    #[uniffi::constructor(name = "tryParse")]
-    pub fn ffi_try_parse(input: String) -> Result<Self> {
-        Self::try_parse(&input)
-    }
-
-    /// Parse from raw bytes
-    #[uniffi::constructor(name = "tryFromBytes")]
-    pub fn ffi_try_from_bytes(data: Vec<u8>) -> Result<Self> {
-        Self::try_from_bytes(&data)
-    }
-
-    /// Parse from an NFC message
-    #[uniffi::constructor(name = "tryFromNfcMessage")]
-    pub fn ffi_try_from_nfc_message(nfc_message: Arc<NfcMessage>) -> Result<Self> {
-        Self::try_from_nfc_message(&nfc_message)
-    }
-
     /// Get the transaction ID
     #[uniffi::method(name = "txId")]
     pub fn ffi_tx_id(&self) -> TxId {

@@ -170,7 +170,7 @@ fun SelectedWalletScreen(
     ForceLightStatusBarIcons()
 
     Scaffold(
-        containerColor = CoveColor.midnightBlue,
+        containerColor = listBg,
         topBar = {
             CenterAlignedTopAppBar(
                 colors =
