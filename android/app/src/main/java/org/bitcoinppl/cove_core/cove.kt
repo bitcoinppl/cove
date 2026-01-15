@@ -1035,6 +1035,12 @@ external fun uniffi_cove_checksum_func_is_tap_signer_route_equal(
 ): Short
 external fun uniffi_cove_checksum_func_tap_signer_confirm_pin_args_new_from_new_pin(
 ): Short
+external fun uniffi_cove_checksum_func_signedtransactionorpsbttryfrombytes(
+): Short
+external fun uniffi_cove_checksum_func_signedtransactionorpsbttryfromnfcmessage(
+): Short
+external fun uniffi_cove_checksum_func_signedtransactionorpsbttryparse(
+): Short
 external fun uniffi_cove_checksum_func_create_transport_error_from_code(
 ): Short
 external fun uniffi_cove_checksum_func_is_valid_chain_code(
@@ -1474,6 +1480,8 @@ external fun uniffi_cove_checksum_method_rustwalletmanager_next_address(
 external fun uniffi_cove_checksum_method_rustwalletmanager_number_of_confirmations(
 ): Short
 external fun uniffi_cove_checksum_method_rustwalletmanager_number_of_confirmations_fmt(
+): Short
+external fun uniffi_cove_checksum_method_rustwalletmanager_required_deletion_confirmations(
 ): Short
 external fun uniffi_cove_checksum_method_rustwalletmanager_save_unsigned_transaction(
 ): Short
@@ -2431,6 +2439,8 @@ external fun uniffi_cove_fn_method_rustwalletmanager_number_of_confirmations(`pt
 ): Long
 external fun uniffi_cove_fn_method_rustwalletmanager_number_of_confirmations_fmt(`ptr`: Long,`blockHeight`: Int,
 ): Long
+external fun uniffi_cove_fn_method_rustwalletmanager_required_deletion_confirmations(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Byte
 external fun uniffi_cove_fn_method_rustwalletmanager_save_unsigned_transaction(`ptr`: Long,`details`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
 external fun uniffi_cove_fn_method_rustwalletmanager_selected_fiat_currency(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -2919,6 +2929,16 @@ external fun uniffi_cove_fn_method_bip39error_uniffi_trait_display(`ptr`: RustBu
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_seedqrerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_signedtransactionorpsbt_ispsbt(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Byte
+external fun uniffi_cove_fn_method_signedtransactionorpsbt_istransaction(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Byte
+external fun uniffi_cove_fn_method_signedtransactionorpsbt_psbt(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_signedtransactionorpsbt_transaction(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_signedtransactionorpsbt_txid(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Long
 external fun uniffi_cove_fn_method_transporterror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_tapsignerreadererror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -3002,6 +3022,12 @@ external fun uniffi_cove_fn_func_is_route_equal(`route`: RustBuffer.ByValue,`rou
 external fun uniffi_cove_fn_func_is_tap_signer_route_equal(`lhs`: RustBuffer.ByValue,`rhs`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
 external fun uniffi_cove_fn_func_tap_signer_confirm_pin_args_new_from_new_pin(`args`: RustBuffer.ByValue,`newPin`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_func_signedtransactionorpsbttryfrombytes(`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_func_signedtransactionorpsbttryfromnfcmessage(`nfcMessage`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_func_signedtransactionorpsbttryparse(`input`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_func_create_transport_error_from_code(`code`: Short,`message`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
@@ -3245,6 +3271,15 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_tap_signer_confirm_pin_args_new_from_new_pin() != 4888.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_func_signedtransactionorpsbttryfrombytes() != 36882.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_func_signedtransactionorpsbttryfromnfcmessage() != 49359.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_func_signedtransactionorpsbttryparse() != 7350.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_create_transport_error_from_code() != 12205.toShort()) {
@@ -3905,6 +3940,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_number_of_confirmations_fmt() != 32886.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_required_deletion_confirmations() != 30427.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_save_unsigned_transaction() != 43358.toShort()) {
@@ -18139,6 +18177,13 @@ public interface RustWalletManagerInterface {
     
     suspend fun `numberOfConfirmationsFmt`(`blockHeight`: kotlin.UInt): kotlin.String
     
+    /**
+     * Returns the number of confirmation steps required to delete this wallet
+     * - 2: Cold wallets, xpub-only wallets, or verified hot wallets
+     * - 3: Hot wallets that are NOT verified (highest risk)
+     */
+    fun `requiredDeletionConfirmations`(): kotlin.UByte
+    
     fun `saveUnsignedTransaction`(`details`: ConfirmDetails)
     
     fun `selectedFiatCurrency`(): FiatCurrency
@@ -18930,6 +18975,24 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
         WalletManagerException.ErrorHandler,
     )
     }
+
+    
+    /**
+     * Returns the number of confirmation steps required to delete this wallet
+     * - 2: Cold wallets, xpub-only wallets, or verified hot wallets
+     * - 3: Hot wallets that are NOT verified (highest risk)
+     */override fun `requiredDeletionConfirmations`(): kotlin.UByte {
+            return FfiConverterUByte.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_required_deletion_confirmations(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
 
     
     @Throws(WalletManagerException::class)override fun `saveUnsignedTransaction`(`details`: ConfirmDetails)
@@ -36992,6 +37055,249 @@ public object FfiConverterTypeSetupCmdResponse : FfiConverterRustBuffer<SetupCmd
 
 
 
+
+sealed class SignedImportException(message: String): kotlin.Exception(message) {
+        
+        class HexDecodeException(message: String) : SignedImportException(message)
+        
+        class Base64DecodeException(message: String) : SignedImportException(message)
+        
+        class PsbtParseException(message: String) : SignedImportException(message)
+        
+        class UnrecognizedFormat(message: String) : SignedImportException(message)
+        
+
+    companion object ErrorHandler : UniffiRustCallStatusErrorHandler<SignedImportException> {
+        override fun lift(error_buf: RustBuffer.ByValue): SignedImportException = FfiConverterTypeSignedImportError.lift(error_buf)
+    }
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeSignedImportError : FfiConverterRustBuffer<SignedImportException> {
+    override fun read(buf: ByteBuffer): SignedImportException {
+        
+            return when(buf.getInt()) {
+            1 -> SignedImportException.HexDecodeException(FfiConverterString.read(buf))
+            2 -> SignedImportException.Base64DecodeException(FfiConverterString.read(buf))
+            3 -> SignedImportException.PsbtParseException(FfiConverterString.read(buf))
+            4 -> SignedImportException.UnrecognizedFormat(FfiConverterString.read(buf))
+            else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
+        }
+        
+    }
+
+    override fun allocationSize(value: SignedImportException): ULong {
+        return 4UL
+    }
+
+    override fun write(value: SignedImportException, buf: ByteBuffer) {
+        when(value) {
+            is SignedImportException.HexDecodeException -> {
+                buf.putInt(1)
+                Unit
+            }
+            is SignedImportException.Base64DecodeException -> {
+                buf.putInt(2)
+                Unit
+            }
+            is SignedImportException.PsbtParseException -> {
+                buf.putInt(3)
+                Unit
+            }
+            is SignedImportException.UnrecognizedFormat -> {
+                buf.putInt(4)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+
+}
+
+
+
+/**
+ * Result of parsing a signed transaction import
+ *
+ * Hardware wallets may return either a signed PSBT or a finalized transaction.
+ * This enum allows callers to handle both cases appropriately.
+ */
+sealed class SignedTransactionOrPsbt: Disposable  {
+    
+    /**
+     * A finalized raw Bitcoin transaction
+     */
+    data class Transaction(
+        val v1: org.bitcoinppl.cove_core.BitcoinTransaction) : SignedTransactionOrPsbt()
+        
+    {
+        
+
+        companion object
+    }
+    
+    /**
+     * A signed but un-finalized PSBT (requires finalization before broadcast)
+     */
+    data class Psbt(
+        val v1: org.bitcoinppl.cove_core.types.Psbt) : SignedTransactionOrPsbt()
+        
+    {
+        
+
+        companion object
+    }
+    
+
+    
+    @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
+    override fun destroy() {
+        when(this) {
+            is SignedTransactionOrPsbt.Transaction -> {
+                
+    Disposable.destroy(
+        this.v1
+    )
+                
+            }
+            is SignedTransactionOrPsbt.Psbt -> {
+                
+    Disposable.destroy(
+        this.v1
+    )
+                
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+    
+
+    
+    
+    /**
+     * Returns true if this is a signed PSBT
+     */ fun `isPsbt`(): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_signedtransactionorpsbt_ispsbt(FfiConverterTypeSignedTransactionOrPsbt.lower(this),
+        _status)
+}
+    )
+    }
+    
+
+    
+    /**
+     * Returns true if this is a finalized transaction
+     */ fun `isTransaction`(): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_signedtransactionorpsbt_istransaction(FfiConverterTypeSignedTransactionOrPsbt.lower(this),
+        _status)
+}
+    )
+    }
+    
+
+    
+    /**
+     * Get the inner PSBT (returns None if Transaction)
+     */ fun `psbt`(): Psbt? {
+            return FfiConverterOptionalTypePsbt.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_signedtransactionorpsbt_psbt(FfiConverterTypeSignedTransactionOrPsbt.lower(this),
+        _status)
+}
+    )
+    }
+    
+
+    
+    /**
+     * Get the inner transaction (returns None if PSBT)
+     */ fun `transaction`(): BitcoinTransaction? {
+            return FfiConverterOptionalTypeBitcoinTransaction.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_signedtransactionorpsbt_transaction(FfiConverterTypeSignedTransactionOrPsbt.lower(this),
+        _status)
+}
+    )
+    }
+    
+
+    
+    /**
+     * Get the transaction ID
+     */ fun `txId`(): TxId {
+            return FfiConverterTypeTxId.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_signedtransactionorpsbt_txid(FfiConverterTypeSignedTransactionOrPsbt.lower(this),
+        _status)
+}
+    )
+    }
+    
+
+    
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeSignedTransactionOrPsbt : FfiConverterRustBuffer<SignedTransactionOrPsbt>{
+    override fun read(buf: ByteBuffer): SignedTransactionOrPsbt {
+        return when(buf.getInt()) {
+            1 -> SignedTransactionOrPsbt.Transaction(
+                FfiConverterTypeBitcoinTransaction.read(buf),
+                )
+            2 -> SignedTransactionOrPsbt.Psbt(
+                FfiConverterTypePsbt.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: SignedTransactionOrPsbt) = when(value) {
+        is SignedTransactionOrPsbt.Transaction -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeBitcoinTransaction.allocationSize(value.v1)
+            )
+        }
+        is SignedTransactionOrPsbt.Psbt -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypePsbt.allocationSize(value.v1)
+            )
+        }
+    }
+
+    override fun write(value: SignedTransactionOrPsbt, buf: ByteBuffer) {
+        when(value) {
+            is SignedTransactionOrPsbt.Transaction -> {
+                buf.putInt(1)
+                FfiConverterTypeBitcoinTransaction.write(value.v1, buf)
+                Unit
+            }
+            is SignedTransactionOrPsbt.Psbt -> {
+                buf.putInt(2)
+                FfiConverterTypePsbt.write(value.v1, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+
 enum class StoreType {
     
     SQLITE,
@@ -44720,6 +45026,48 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
     UniffiLib.uniffi_cove_fn_func_tap_signer_confirm_pin_args_new_from_new_pin(
     
         FfiConverterTypeTapSignerNewPinArgs.lower(`args`),FfiConverterString.lower(`newPin`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * Parse from raw bytes
+         */
+    @Throws(SignedImportException::class) fun `signedTransactionOrPsbtTryFromBytes`(`data`: kotlin.ByteArray): SignedTransactionOrPsbt {
+            return FfiConverterTypeSignedTransactionOrPsbt.lift(
+    uniffiRustCallWithError(SignedImportException) { _status ->
+    UniffiLib.uniffi_cove_fn_func_signedtransactionorpsbttryfrombytes(
+    
+        FfiConverterByteArray.lower(`data`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * Parse from an NFC message
+         */
+    @Throws(SignedImportException::class) fun `signedTransactionOrPsbtTryFromNfcMessage`(`nfcMessage`: NfcMessage): SignedTransactionOrPsbt {
+            return FfiConverterTypeSignedTransactionOrPsbt.lift(
+    uniffiRustCallWithError(SignedImportException) { _status ->
+    UniffiLib.uniffi_cove_fn_func_signedtransactionorpsbttryfromnfcmessage(
+    
+        FfiConverterTypeNfcMessage.lower(`nfcMessage`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * Parse from string input (base64 or hex encoded)
+         */
+    @Throws(SignedImportException::class) fun `signedTransactionOrPsbtTryParse`(`input`: kotlin.String): SignedTransactionOrPsbt {
+            return FfiConverterTypeSignedTransactionOrPsbt.lift(
+    uniffiRustCallWithError(SignedImportException) { _status ->
+    UniffiLib.uniffi_cove_fn_func_signedtransactionorpsbttryparse(
+    
+        FfiConverterString.lower(`input`),_status)
 }
     )
     }

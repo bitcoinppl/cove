@@ -120,14 +120,14 @@ private enum class AlertState {
 }
 
 /**
- * Parse signed transaction and retrieve original unsigned transaction record
- * Returns pair of (UnsignedTransactionRecord, BitcoinTransaction)
+ * Parse signed import (PSBT or finalized transaction) and retrieve original unsigned transaction record
+ * Returns pair of (UnsignedTransactionRecord, SignedTransactionOrPsbt)
  * Throws exception if parsing fails or transaction not found
  */
-internal fun txnRecordAndSignedTxn(hex: String): Pair<UnsignedTransactionRecord, BitcoinTransaction> {
-    val bitcoinTransaction =
+internal fun parseSignedImport(input: String): Pair<UnsignedTransactionRecord, SignedTransactionOrPsbt> {
+    val parsed =
         try {
-            BitcoinTransaction(txHex = hex)
+            SignedTransactionOrPsbt.tryParse(input = input)
         } catch (e: Exception) {
             throw IllegalArgumentException(TransactionImportErrors.INVALID_HEX_FORMAT, e)
         }
@@ -135,22 +135,12 @@ internal fun txnRecordAndSignedTxn(hex: String): Pair<UnsignedTransactionRecord,
     val db = Database().unsignedTransactions()
     val record =
         try {
-            db.getTxThrow(txId = bitcoinTransaction.txId())
+            db.getTxThrow(txId = parsed.txId())
         } catch (e: Exception) {
             throw IllegalArgumentException(TransactionImportErrors.TRANSACTION_NOT_FOUND, e)
         }
 
-    return Pair(record, bitcoinTransaction)
-}
-
-/**
- * Overload that takes a BitcoinTransaction directly
- * Throws exception if transaction not found in database
- */
-internal fun txnRecordAndSignedTxn(transaction: BitcoinTransaction): Pair<UnsignedTransactionRecord, BitcoinTransaction> {
-    val db = Database().unsignedTransactions()
-    val record = db.getTxThrow(txId = transaction.txId())
-    return Pair(record, transaction)
+    return Pair(record, parsed)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -197,13 +187,14 @@ fun SendFlowHardwareScreen(
                                 }
                             } ?: throw Exception(TransactionImportErrors.FILE_READ_ERROR)
 
-                        val (txnRecord, signedTransaction) = txnRecordAndSignedTxn(fileContents.trim())
+                        val (txnRecord, parsed) = parseSignedImport(fileContents.trim())
 
                         val route =
                             RouteFactory().sendConfirm(
                                 id = txnRecord.walletId(),
                                 details = txnRecord.confirmDetails(),
-                                signedTransaction = signedTransaction,
+                                signedTransaction = parsed.transaction(),
+                                signedPsbt = parsed.psbt(),
                             )
 
                         app.pushRoute(route)
@@ -567,13 +558,14 @@ fun SendFlowHardwareScreen(
                                     // only wrap blocking FFI operations in coroutine
                                     scope.launch {
                                         try {
-                                            val (txnRecord, signedTransaction) = txnRecordAndSignedTxn(code.trim())
+                                            val (txnRecord, parsed) = parseSignedImport(code.trim())
 
                                             val route =
                                                 RouteFactory().sendConfirm(
                                                     id = txnRecord.walletId(),
                                                     details = txnRecord.confirmDetails(),
-                                                    signedTransaction = signedTransaction,
+                                                    signedTransaction = parsed.transaction(),
+                                                    signedPsbt = parsed.psbt(),
                                                 )
 
                                             app.pushRoute(route)
