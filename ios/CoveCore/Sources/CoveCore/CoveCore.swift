@@ -161,6 +161,18 @@ public extension AfterPinAction {
     }
 }
 
+extension AfterPinAction: @retroactive Equatable {
+    public static func == (lhs: AfterPinAction, rhs: AfterPinAction) -> Bool {
+        switch (lhs, rhs) {
+        case (.derive, .derive): true
+        case (.change, .change): true
+        case (.backup, .backup): true
+        case let (.sign(lhsPsbt), .sign(rhsPsbt)): lhsPsbt.txId() == rhsPsbt.txId()
+        default: false
+        }
+    }
+}
+
 public extension TapSignerConfirmPinArgs {
     init(from: TapSignerNewPinArgs, newPin: String) {
         self = tapSignerConfirmPinArgsNewFromNewPin(args: from, newPin: newPin)
