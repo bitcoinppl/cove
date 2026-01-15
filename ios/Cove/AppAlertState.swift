@@ -32,6 +32,7 @@ public enum AppAlertState: Equatable {
     case tapSignerDeriveFailed(String)
     case tapSignerInvalidAuth
     case tapSignerNoBackup(TapSigner)
+    case tapSignerWrongPin(TapSigner, AfterPinAction)
 
     // genericMessage or error
     case general(title: String, message: String)
@@ -88,6 +89,8 @@ public enum AppAlertState: Equatable {
             "Import TAPSIGNER?"
         case .tapSignerNoBackup:
             "No Backup Found"
+        case .tapSignerWrongPin:
+            "Wrong PIN"
         case let .general(title: title, message: _):
             title
         }

@@ -27,6 +27,7 @@ mod qr_scanner;
 mod reporting;
 mod seed_qr;
 mod send_flow;
+mod signed_import;
 mod tap_card;
 mod task;
 mod transaction;
