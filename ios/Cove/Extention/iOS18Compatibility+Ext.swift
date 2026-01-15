@@ -42,14 +42,11 @@ extension View {
     @ViewBuilder
     func adaptiveToolbarStyle(showNavBar: Bool) -> some View {
         if #available(iOS 26.0, *) {
-            // iOS 26+: let Liquid Glass system handle styling when visible
-            // only apply .hidden when navbar should be hidden
-            if showNavBar {
-                self
-            } else {
-                self
-                    .toolbarBackground(.hidden, for: .navigationBar)
-            }
+            // iOS 26+: always keep toolbar visible to avoid scroll glitches from inset changes
+            // use clear background to keep it invisible
+            self
+                .toolbarBackgroundVisibility(.visible, for: .navigationBar)
+                .toolbarBackground(Color.clear, for: .navigationBar)
         } else {
             // iOS 18 and earlier: keep existing midnight blue style
             self
@@ -74,6 +71,19 @@ extension View {
         } else {
             // iOS 18 and earlier: always white for visibility on midnight blue
             self.foregroundStyle(.white)
+        }
+    }
+}
+
+// MARK: - iOS 26 Scroll Edge Effect
+
+/// applies soft scroll edge effect on iOS 26+ for smooth Liquid Glass transitions
+struct ScrollEdgeEffectModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content.scrollEdgeEffectStyle(.soft, for: .top)
+        } else {
+            content
         }
     }
 }
