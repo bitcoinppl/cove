@@ -20,6 +20,7 @@ class KeychainAccessor(
             MasterKey
                 .Builder(context)
                 .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                .setRequestStrongBoxBacked(true)
                 .build()
 
         // create encrypted shared preferences
