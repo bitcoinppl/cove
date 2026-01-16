@@ -58,7 +58,12 @@ fun EnterAddressView(
         }
     }
 
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable { focusRequester.requestFocus() },
+    ) {
         Spacer(Modifier.height(20.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
