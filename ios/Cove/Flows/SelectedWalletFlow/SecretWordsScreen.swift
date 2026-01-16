@@ -24,10 +24,6 @@ struct SecretWordsScreen: View {
         (words?.words().count ?? 24) / numberOfColumns
     }
 
-    var rows: [GridItem] {
-        Array(repeating: GridItem(.flexible()), count: numberOfRows)
-    }
-
     var body: some View {
         VStack {
             Spacer()
@@ -35,26 +31,24 @@ struct SecretWordsScreen: View {
             Group {
                 if let words {
                     GroupBox {
-                        LazyHGrid(rows: rows, spacing: 12) {
-                            ForEach(words.allWords(), id: \.number) { word in
-                                HStack {
-                                    Text("\(word.number).")
-                                        .fontWeight(.medium)
-                                        .foregroundStyle(.secondary)
-                                        .fontDesign(.monospaced)
-                                        .multilineTextAlignment(.leading)
-                                        .minimumScaleFactor(0.5)
+                        ColumnMajorGrid(items: words.allWords()) { _, word in
+                            HStack {
+                                Text("\(word.number).")
+                                    .fontWeight(.medium)
+                                    .foregroundStyle(.secondary)
+                                    .fontDesign(.monospaced)
+                                    .multilineTextAlignment(.leading)
+                                    .minimumScaleFactor(0.5)
 
-                                    Text(word.word)
-                                        .fontWeight(.bold)
-                                        .fontDesign(.monospaced)
-                                        .multilineTextAlignment(.leading)
-                                        .minimumScaleFactor(0.75)
-                                        .lineLimit(1)
-                                        .fixedSize()
+                                Text(word.word)
+                                    .fontWeight(.bold)
+                                    .fontDesign(.monospaced)
+                                    .multilineTextAlignment(.leading)
+                                    .minimumScaleFactor(0.75)
+                                    .lineLimit(1)
+                                    .fixedSize()
 
-                                    Spacer()
-                                }
+                                Spacer()
                             }
                         }
                     }

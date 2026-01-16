@@ -4,7 +4,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -41,6 +40,7 @@ import org.bitcoinppl.cove.Auth
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
+import org.bitcoinppl.cove.views.ColumnMajorGrid
 import org.bitcoinppl.cove.views.RecoveryWordChip
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
@@ -206,38 +206,23 @@ fun SecretWordsScreen(
 }
 
 /**
- * recovery words grid for viewing only (non-selectable)
- * uses column-major ordering (words flow down columns first)
+ * Recovery words grid for viewing only (non-selectable)
+ * Uses column-major ordering (words flow down columns first)
  */
 @Composable
 private fun RecoveryWordsGrid(
     words: List<String>,
     modifier: Modifier = Modifier,
 ) {
-    val numColumns = 3
-    val wordsPerColumn = words.size / numColumns
-
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        repeat(numColumns) { col ->
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(18.dp),
-            ) {
-                repeat(wordsPerColumn) { row ->
-                    val index = col * wordsPerColumn + row
-                    if (index < words.size) {
-                        RecoveryWordChip(
-                            index = index + 1,
-                            word = words[index],
-                            selected = false,
-                            onClick = null,
-                        )
-                    }
-                }
-            }
-        }
+    ColumnMajorGrid(
+        items = words,
+        modifier = modifier,
+    ) { index, word ->
+        RecoveryWordChip(
+            index = index + 1,
+            word = word,
+            selected = false,
+            onClick = null,
+        )
     }
 }
