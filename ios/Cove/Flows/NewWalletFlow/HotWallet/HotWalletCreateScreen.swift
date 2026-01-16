@@ -213,7 +213,11 @@ struct WordCardView: View {
     private let numberOfColumns = 3
 
     var numberOfRows: Int {
-        words.count / numberOfColumns
+        precondition(
+            words.count % numberOfColumns == 0,
+            "Word count (\(words.count)) must be divisible by \(numberOfColumns)"
+        )
+        return words.count / numberOfColumns
     }
 
     var rows: [GridItem] {

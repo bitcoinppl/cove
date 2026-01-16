@@ -21,7 +21,12 @@ struct SecretWordsScreen: View {
     private let numberOfColumns = 3
 
     var numberOfRows: Int {
-        (words?.words().count ?? 24) / numberOfColumns
+        let wordCount = words?.words().count ?? 24
+        precondition(
+            wordCount % numberOfColumns == 0,
+            "Word count (\(wordCount)) must be divisible by \(numberOfColumns)"
+        )
+        return wordCount / numberOfColumns
     }
 
     var rows: [GridItem] {

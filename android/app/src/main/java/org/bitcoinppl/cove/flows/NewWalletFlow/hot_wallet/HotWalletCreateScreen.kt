@@ -344,6 +344,9 @@ private fun WordCardView(
     modifier: Modifier = Modifier,
 ) {
     val numColumns = 3
+    require(words.size % numColumns == 0) {
+        "Word count (${words.size}) must be divisible by $numColumns"
+    }
     val wordsPerColumn = words.size / numColumns
 
     Row(
