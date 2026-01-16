@@ -84,32 +84,17 @@ private fun RecoveryWordsGrid(
     selected: Set<Int> = emptySet(),
     onToggleIndex: ((Int) -> Unit)? = null,
 ) {
-    val numColumns = 3
-    val wordsPerColumn = words.size / numColumns
-
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        repeat(numColumns) { col ->
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(18.dp),
-            ) {
-                repeat(wordsPerColumn) { row ->
-                    val index = col * wordsPerColumn + row
-                    if (index < words.size) {
-                        val globalIndex = startIndexOffset + index + 1
-                        RecoveryWordChip(
-                            index = globalIndex,
-                            word = words[index],
-                            selected = selected.contains(globalIndex),
-                            onClick = { onToggleIndex?.invoke(globalIndex) },
-                        )
-                    }
-                }
-            }
-        }
+    ColumnMajorGrid(
+        items = words,
+        modifier = modifier,
+    ) { index, word ->
+        val globalIndex = startIndexOffset + index + 1
+        RecoveryWordChip(
+            index = globalIndex,
+            word = word,
+            selected = selected.contains(globalIndex),
+            onClick = { onToggleIndex?.invoke(globalIndex) },
+        )
     }
 }
 
