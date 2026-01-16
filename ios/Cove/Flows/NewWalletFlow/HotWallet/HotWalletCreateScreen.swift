@@ -210,53 +210,41 @@ struct WordCardView: View {
     @Environment(\.sizeCategory) var sizeCategory
     let words: [GroupedWord]
 
-    private let numberOfColumns = 3
-
-    var numberOfRows: Int {
-        words.count / numberOfColumns
-    }
-
-    var rows: [GridItem] {
-        Array(repeating: .init(.flexible()), count: numberOfRows)
-    }
-
     var body: some View {
-        LazyHGrid(rows: rows, spacing: 12) {
-            ForEach(words, id: \.self) { group in
-                HStack(spacing: 0) {
-                    Text("\(String(format: "%d", group.number)). ")
-                        .fontWeight(.medium)
-                        .foregroundColor(.black.opacity(0.5))
-                        .multilineTextAlignment(.leading)
-                        .frame(alignment: .leading)
-                        .minimumScaleFactor(0.8)
-                        .lineLimit(sizeCategory >= .extraExtraLarge ? 3 : 1)
-                        .font(isMiniDeviceOrLargeText(sizeCategory) ? .caption2 : .caption)
+        ColumnMajorGrid(items: words) { _, group in
+            HStack(spacing: 0) {
+                Text("\(String(format: "%d", group.number)). ")
+                    .fontWeight(.medium)
+                    .foregroundColor(.black.opacity(0.5))
+                    .multilineTextAlignment(.leading)
+                    .frame(alignment: .leading)
+                    .minimumScaleFactor(0.8)
+                    .lineLimit(sizeCategory >= .extraExtraLarge ? 3 : 1)
+                    .font(isMiniDeviceOrLargeText(sizeCategory) ? .caption2 : .caption)
 
-                    Spacer()
+                Spacer()
 
-                    Text(group.word)
-                        .fontWeight(.medium)
-                        .foregroundStyle(.midnightBlue)
-                        .multilineTextAlignment(.center)
-                        .frame(alignment: .leading)
-                        .minimumScaleFactor(0.2)
-                        .lineLimit(sizeCategory >= .extraExtraLarge ? 5 : 1)
-                        .font(isMiniDeviceOrLargeText(sizeCategory) ? .caption2 : .footnote)
+                Text(group.word)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.midnightBlue)
+                    .multilineTextAlignment(.center)
+                    .frame(alignment: .leading)
+                    .minimumScaleFactor(0.2)
+                    .lineLimit(sizeCategory >= .extraExtraLarge ? 5 : 1)
+                    .font(isMiniDeviceOrLargeText(sizeCategory) ? .caption2 : .footnote)
 
-                    Spacer()
-                }
-                .padding(.horizontal)
-                .padding(.vertical, 12)
-                .frame(width: (screenWidth * 0.33) - 20)
-                .background(Color.btnPrimary)
-                .cornerRadius(10)
-                .contextMenu {
-                    isMiniDeviceOrLargeText(sizeCategory)
-                        ? Button(action: {}) {
-                            Text("\(String(format: "%d", group.number)). \(group.word)")
-                        } : nil
-                }
+                Spacer()
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 12)
+            .frame(width: (screenWidth * 0.33) - 20)
+            .background(Color.btnPrimary)
+            .cornerRadius(10)
+            .contextMenu {
+                isMiniDeviceOrLargeText(sizeCategory)
+                    ? Button(action: {}) {
+                        Text("\(String(format: "%d", group.number)). \(group.word)")
+                    } : nil
             }
         }
     }
