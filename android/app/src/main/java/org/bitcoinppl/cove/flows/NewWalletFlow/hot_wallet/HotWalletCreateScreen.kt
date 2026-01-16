@@ -343,54 +343,57 @@ private fun WordCardView(
     words: List<GroupedWord>,
     modifier: Modifier = Modifier,
 ) {
-    androidx.compose.foundation.layout.Column(
-        modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(18.dp),
+    val numColumns = 3
+    val wordsPerColumn = words.size / numColumns
+
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        words.chunked(3).forEach { rowWords ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+        repeat(numColumns) { col ->
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(18.dp),
             ) {
-                rowWords.forEach { groupedWord ->
-                    androidx.compose.foundation.layout.Box(
-                        modifier =
-                            Modifier
-                                .weight(1f)
-                                .background(
-                                    color = CoveColor.btnPrimary,
-                                    shape =
-                                        androidx.compose.foundation.shape
-                                            .RoundedCornerShape(10.dp),
-                                ).padding(horizontal = 12.dp, vertical = 12.dp),
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
+                repeat(wordsPerColumn) { row ->
+                    val index = col * wordsPerColumn + row
+                    if (index < words.size) {
+                        val groupedWord = words[index]
+                        Box(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .background(
+                                        color = CoveColor.btnPrimary,
+                                        shape =
+                                            androidx.compose.foundation.shape
+                                                .RoundedCornerShape(10.dp),
+                                    ).padding(horizontal = 12.dp, vertical = 12.dp),
                         ) {
-                            AutoSizeText(
-                                text = "${groupedWord.number}.",
-                                color = Color.Black.copy(alpha = 0.5f),
-                                fontWeight = FontWeight.Medium,
-                                maxFontSize = 12.sp,
-                                minimumScaleFactor = 0.8f,
-                            )
-                            Spacer(Modifier.weight(1f))
-                            AutoSizeText(
-                                text = groupedWord.word,
-                                color = CoveColor.midnightBlue,
-                                fontWeight = FontWeight.Medium,
-                                maxFontSize = 14.sp,
-                                minimumScaleFactor = 0.2f,
-                            )
-                            Spacer(Modifier.weight(1f))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                AutoSizeText(
+                                    text = "${groupedWord.number}.",
+                                    color = Color.Black.copy(alpha = 0.5f),
+                                    fontWeight = FontWeight.Medium,
+                                    maxFontSize = 12.sp,
+                                    minimumScaleFactor = 0.8f,
+                                )
+                                Spacer(Modifier.weight(1f))
+                                AutoSizeText(
+                                    text = groupedWord.word,
+                                    color = CoveColor.midnightBlue,
+                                    fontWeight = FontWeight.Medium,
+                                    maxFontSize = 14.sp,
+                                    minimumScaleFactor = 0.2f,
+                                )
+                                Spacer(Modifier.weight(1f))
+                            }
                         }
                     }
-                }
-                // fill empty slots if row has less than 3 words
-                repeat(3 - rowWords.size) {
-                    Spacer(Modifier.weight(1f))
                 }
             }
         }

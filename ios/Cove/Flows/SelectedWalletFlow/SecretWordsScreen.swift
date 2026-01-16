@@ -17,17 +17,15 @@ struct SecretWordsScreen: View {
     @State var words: Mnemonic?
     @State var errorMessage: String?
 
-    var verticalSpacing: CGFloat {
-        15
-    }
-
     let rowHeight = 30.0
+    private let numberOfColumns = 3
+
     var numberOfRows: Int {
-        (words?.words().count ?? 24) / 3
+        (words?.words().count ?? 24) / numberOfColumns
     }
 
     var rows: [GridItem] {
-        Array(repeating: .init(.fixed(rowHeight)), count: numberOfRows)
+        Array(repeating: GridItem(.flexible()), count: numberOfRows)
     }
 
     var body: some View {
