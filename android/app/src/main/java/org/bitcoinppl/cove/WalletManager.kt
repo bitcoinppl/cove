@@ -47,9 +47,6 @@ class WalletManager :
     var balance by mutableStateOf(Balance.zero())
         private set
 
-    var fiatBalance by mutableStateOf<Double?>(null)
-        private set
-
     var foundAddresses by mutableStateOf<List<FoundAddress>>(emptyList())
         private set
 
@@ -96,9 +93,6 @@ class WalletManager :
         this.rust = rustManager
         this.walletMetadata = metadata
         this.unsignedTransactions = runCatching { rustManager.getUnsignedTransactions() }.getOrElse { emptyList() }
-
-        // start fiat balance update
-        mainScope.launch(Dispatchers.IO) { updateFiatBalance() }
 
         rustManager.listenForUpdates(this)
     }
@@ -191,26 +185,11 @@ class WalletManager :
         transactionDetailsCache[txId] = details
     }
 
-    private suspend fun updateFiatBalance() {
-        try {
-            val fiatBal = rust.amountInFiat(balance.spendable())
-            withContext(Dispatchers.Main) {
-                fiatBalance = fiatBal
-            }
-        } catch (e: Exception) {
-            logError("error getting fiat balance", e)
-            withContext(Dispatchers.Main) {
-                fiatBalance = 0.0
-            }
-        }
-    }
-
     suspend fun updateWalletBalance() {
         val bal = rust.balance()
         withContext(Dispatchers.Main) {
             balance = bal
         }
-        updateFiatBalance()
     }
 
     private fun apply(message: WalletManagerReconcileMessage) {
@@ -258,8 +237,6 @@ class WalletManager :
 
             is WalletManagerReconcileMessage.WalletBalanceChanged -> {
                 balance = message.v1
-                // update fiat balance in background
-                mainScope.launch(Dispatchers.IO) { updateFiatBalance() }
             }
 
             is WalletManagerReconcileMessage.UnsignedTransactionsChanged -> {

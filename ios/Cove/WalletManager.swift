@@ -15,7 +15,6 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
     var walletMetadata: WalletMetadata
     var loadState: WalletLoadState = .loading
     var balance: Balance = .zero()
-    var fiatBalance: Double?
     var foundAddresses: [FoundAddress] = []
     var unsignedTransactions: [UnsignedTransaction] = []
 
@@ -37,7 +36,6 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
         walletMetadata = rust.walletMetadata()
         unsignedTransactions = (try? rust.getUnsignedTransactions()) ?? []
 
-        updateFiatBalance()
         rust.listenForUpdates(reconciler: WeakReconciler(self))
     }
 
@@ -49,7 +47,6 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
         walletMetadata = metadata
         id = metadata.id
 
-        updateFiatBalance()
         rust.listenForUpdates(reconciler: WeakReconciler(self))
     }
 
@@ -137,15 +134,10 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
         transactionDetails[txId] = details
     }
 
-    func updateFiatBalance() {
-        fiatBalance = rust.amountInFiat(amount: balance.spendable())
-    }
-
     func updateWalletBalance() async {
         let balance = await rust.balance()
         await MainActor.run {
             self.balance = balance
-            self.updateFiatBalance()
         }
     }
 
@@ -184,7 +176,6 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
 
         case let .walletBalanceChanged(balance):
             withAnimation { self.balance = balance }
-            updateFiatBalance()
 
         case .unsignedTransactionsChanged:
             self.unsignedTransactions = (try? rust.getUnsignedTransactions()) ?? []

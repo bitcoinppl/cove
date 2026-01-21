@@ -90,8 +90,14 @@ impl FiatClient {
 
     /// Sync method using cached prices only, returns None if no cache
     pub fn value_in_currency_cached(&self, amount: Amount, currency: FiatCurrency) -> Option<f64> {
-        let prices = self.prices()?;
         let btc = amount.as_btc();
+
+        // 0 BTC is always $0.00, no price lookup needed
+        if btc == 0.0 {
+            return Some(0.0);
+        }
+
+        let prices = self.prices()?;
         let price = prices.get_for_currency(currency);
         Some(btc * price as f64)
     }

@@ -242,7 +242,6 @@ private let walletModeChangeDelayMs = 250
 
             case let .fiatPricesChanged(prices):
                 self.prices = prices
-                walletManager?.updateFiatBalance()
 
             case let .feesChanged(fees):
                 self.fees = fees
