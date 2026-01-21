@@ -164,6 +164,7 @@ class AuthManager private constructor() : AuthManagerReconciler {
         // check if the entered pin is a wipeDataPin
         // if so wipe the data
         if (checkWipeDataPin(pin)) {
+            App.isLoading = true
             try {
                 App.rust.dangerousWipeAllData()
 
