@@ -121,17 +121,13 @@ fun WalletSettingsScreen(
         topBar = @Composable {
             TopAppBar(
                 title = {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        AutoSizeText(
-                            text = metadata.name,
-                            maxFontSize = 16.sp,
-                            minimumScaleFactor = 0.75f,
-                            textAlign = TextAlign.Center,
-                        )
-                    }
+                    AutoSizeText(
+                        text = metadata.name,
+                        maxFontSize = 16.sp,
+                        minimumScaleFactor = 0.75f,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                 },
                 navigationIcon = {
                     IconButton(onClick = {
@@ -141,7 +137,6 @@ fun WalletSettingsScreen(
                     }
                 },
                 actions = { },
-                modifier = Modifier.height(56.dp),
             )
         },
         content = { paddingValues ->

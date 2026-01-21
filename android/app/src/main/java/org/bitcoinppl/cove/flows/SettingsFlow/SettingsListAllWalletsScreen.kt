@@ -86,16 +86,12 @@ fun SettingsListAllWalletsScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            style = MaterialTheme.typography.bodyLarge,
-                            text = "All Wallets",
-                            textAlign = TextAlign.Center,
-                        )
-                    }
+                    Text(
+                        style = MaterialTheme.typography.bodyLarge,
+                        text = "All Wallets",
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                 },
                 navigationIcon = {
                     IconButton(onClick = { app.popRoute() }) {

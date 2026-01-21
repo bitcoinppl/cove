@@ -223,16 +223,12 @@ fun NodeSettingsScreen(
         topBar = @Composable {
             TopAppBar(
                 title = {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            style = MaterialTheme.typography.bodyLarge,
-                            text = stringResource(R.string.title_settings_node),
-                            textAlign = TextAlign.Center,
-                        )
-                    }
+                    Text(
+                        style = MaterialTheme.typography.bodyLarge,
+                        text = stringResource(R.string.title_settings_node),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                 },
                 navigationIcon = {
                     IconButton(onClick = { app.popRoute() }) {

@@ -57,16 +57,12 @@ fun AppearanceSettingsScreen(
         topBar = @Composable {
             TopAppBar(
                 title = {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            style = MaterialTheme.typography.bodyLarge,
-                            text = stringResource(R.string.title_settings_appearance),
-                            textAlign = TextAlign.Center,
-                        )
-                    }
+                    Text(
+                        style = MaterialTheme.typography.bodyLarge,
+                        text = stringResource(R.string.title_settings_appearance),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                 },
                 navigationIcon = {
                     IconButton(onClick = { app.popRoute() }) {
@@ -74,7 +70,6 @@ fun AppearanceSettingsScreen(
                     }
                 },
                 actions = { },
-                modifier = Modifier.height(56.dp),
             )
         },
         content = { paddingValues ->
