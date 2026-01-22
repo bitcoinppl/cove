@@ -49,6 +49,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -151,9 +153,20 @@ fun SelectedWalletScreen(
     val secondaryText = MaterialTheme.colorScheme.onSurfaceVariant
     val dividerColor = MaterialTheme.colorScheme.outlineVariant
 
-    // track scroll state to show wallet name in toolbar when scrolled
+    // track scroll state with gradual fade over 1/6 of screen height
     val listState = rememberLazyListState()
-    val isScrolled = listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0
+    val configuration = LocalConfiguration.current
+    val screenHeightPx = with(LocalDensity.current) { configuration.screenHeightDp.dp.toPx() }
+    val fadeThreshold = screenHeightPx / 6f
+
+    // calculate scroll progress (0.0 to 1.0) for gradual TopAppBar fade
+    val scrollProgress =
+        if (listState.firstVisibleItemIndex > 0) {
+            1f
+        } else {
+            (listState.firstVisibleItemScrollOffset / fadeThreshold).coerceIn(0f, 1f)
+        }
+    val isScrolled = scrollProgress > 0f
 
     // pull-to-refresh state
     var isRefreshing by remember { mutableStateOf(false) }
@@ -173,7 +186,8 @@ fun SelectedWalletScreen(
             CenterAlignedTopAppBar(
                 colors =
                     TopAppBarDefaults.centerAlignedTopAppBarColors(
-                        containerColor = if (isScrolled) CoveColor.midnightBlue else Color.Transparent,
+                        // gradual fade from transparent to midnight blue based on scroll progress
+                        containerColor = CoveColor.midnightBlue.copy(alpha = scrollProgress),
                         titleContentColor = Color.White,
                         actionIconContentColor = Color.White,
                         navigationIconContentColor = Color.White,
