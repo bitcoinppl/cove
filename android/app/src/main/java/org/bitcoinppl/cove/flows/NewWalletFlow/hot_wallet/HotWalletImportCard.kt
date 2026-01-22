@@ -57,6 +57,7 @@ internal fun WordInputGrid(
     onWordsChanged: (List<List<String>>) -> Unit,
     onFocusChanged: (Int) -> Unit,
     onPasteMnemonic: ((String) -> Unit)? = null,
+    modifier: Modifier = Modifier,
 ) {
     val wordCount =
         when (numberOfWords) {
@@ -74,7 +75,7 @@ internal fun WordInputGrid(
     val rightIndices = (pageStart + wordsPerColumn until (pageStart + pageSize).coerceAtMost(wordCount))
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         colors =
             CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceContainer,

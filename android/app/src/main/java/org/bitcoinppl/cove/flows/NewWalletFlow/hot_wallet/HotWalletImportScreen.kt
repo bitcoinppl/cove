@@ -1,5 +1,6 @@
 package org.bitcoinppl.cove.flows.NewWalletFlow.hot_wallet
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -14,6 +15,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -39,6 +42,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,6 +58,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.ImportWalletManager
 import org.bitcoinppl.cove.Log
@@ -92,7 +97,7 @@ private fun HotWalletImportScreenPreview() {
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun HotWalletImportScreen(
     app: AppManager,
@@ -120,6 +125,20 @@ fun HotWalletImportScreen(
     var genericErrorMessage by remember { mutableStateOf("") }
     var focusedField by remember(currentNumberOfWords) { mutableIntStateOf(0) }
     var tabIndex by remember(currentNumberOfWords) { mutableIntStateOf(0) }
+    val pagerState = rememberPagerState(pageCount = { enteredWords.size })
+    val scope = rememberCoroutineScope()
+
+    // sync tabIndex from pager swipes
+    LaunchedEffect(pagerState.currentPage) {
+        tabIndex = pagerState.currentPage
+    }
+
+    // scroll pager when tabIndex changes from focus
+    LaunchedEffect(tabIndex) {
+        if (pagerState.currentPage != tabIndex) {
+            pagerState.animateScrollToPage(tabIndex)
+        }
+    }
 
     // auto-switch page when focus changes to a word on a different page
     LaunchedEffect(focusedField, enteredWords) {
@@ -328,21 +347,26 @@ fun HotWalletImportScreen(
                 Column(
                     modifier =
                         Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 20.dp),
+                            .fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
                     Spacer(Modifier.height(24.dp))
 
-                    WordInputGrid(
-                        enteredWords = enteredWords,
-                        numberOfWords = currentNumberOfWords,
-                        focusedField = focusedField,
-                        tabIndex = tabIndex,
-                        onWordsChanged = { newWords -> enteredWords = newWords },
-                        onFocusChanged = { field -> focusedField = field },
-                        onPasteMnemonic = ::handlePasteMnemonic,
-                    )
+                    HorizontalPager(
+                        state = pagerState,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { page ->
+                        WordInputGrid(
+                            enteredWords = enteredWords,
+                            numberOfWords = currentNumberOfWords,
+                            focusedField = focusedField,
+                            tabIndex = page,
+                            onWordsChanged = { newWords -> enteredWords = newWords },
+                            onFocusChanged = { field -> focusedField = field },
+                            onPasteMnemonic = ::handlePasteMnemonic,
+                            modifier = Modifier.padding(horizontal = 20.dp),
+                        )
+                    }
 
                     // page indicator dots for multi-page import
                     if (enteredWords.size > 1) {
@@ -365,7 +389,9 @@ fun HotWalletImportScreen(
                                                 } else {
                                                     Color.White.copy(alpha = 0.33f)
                                                 },
-                                            ).clickable { tabIndex = i },
+                                            ).clickable {
+                                                scope.launch { pagerState.animateScrollToPage(i) }
+                                            },
                                 )
                             }
                         }
