@@ -116,15 +116,15 @@ fun HotWalletImportScreen(
         }
 
     val numberOfGroups = wordCount / GROUPS_OF
-    var enteredWords by remember(currentNumberOfWords) {
+    var enteredWords by remember {
         mutableStateOf(List(numberOfGroups) { List(GROUPS_OF) { "" } })
     }
 
     var alertState by remember { mutableStateOf(AlertState.None) }
     var duplicateWalletId by remember { mutableStateOf<WalletId?>(null) }
     var genericErrorMessage by remember { mutableStateOf("") }
-    var focusedField by remember(currentNumberOfWords) { mutableIntStateOf(0) }
-    var tabIndex by remember(currentNumberOfWords) { mutableIntStateOf(0) }
+    var focusedField by remember { mutableIntStateOf(0) }
+    var tabIndex by remember { mutableIntStateOf(0) }
     val pagerState = rememberPagerState(pageCount = { enteredWords.size })
     val scope = rememberCoroutineScope()
 
