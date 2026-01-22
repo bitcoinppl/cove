@@ -104,6 +104,7 @@ fun SendFlowContainer(
     DisposableEffect(walletId) {
         onDispose {
             sendFlowManager?.presenter?.setDisappearing()
+            app.clearSendFlowManager()
         }
     }
 
