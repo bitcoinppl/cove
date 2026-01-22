@@ -157,9 +157,9 @@ struct HotWalletImportScreen: View {
     var lastIndex: Int {
         switch numberOfWords {
         case .twelve:
-            1
+            0
         case .twentyFour:
-            3
+            1
         }
     }
 
@@ -369,6 +369,7 @@ struct HotWalletImportScreen: View {
     var Card: some View {
         HotWalletImportCard(
             numberOfWords: numberOfWords,
+            onPasteMnemonic: handlePasteMnemonic,
             tabIndex: $tabIndex,
             enteredWords: $enteredWords,
             filteredSuggestions: $filteredSuggestions,
@@ -527,12 +528,13 @@ struct HotWalletImportScreen: View {
 
     // MARK: OnChange Functions
 
-    func onChangeFocusField(_ old: ImportFieldNumber?, _ new: ImportFieldNumber?) {
-        // clear suggestions when focus changes
+    func onChangeFocusField(_: ImportFieldNumber?, _ new: ImportFieldNumber?) {
         filteredSuggestions = []
 
-        // check if we should move to next page
-        let focusFieldNumber = new?.fieldNumber ?? old?.fieldNumber ?? 1
+        // don't change tab when focus is cleared (e.g., after paste)
+        guard let new else { return }
+
+        let focusFieldNumber = new.fieldNumber
         if (focusFieldNumber % groupsOf) == 1 {
             withAnimation {
                 tabIndex = Int(focusFieldNumber / groupsOf)
@@ -592,7 +594,38 @@ struct HotWalletImportScreen: View {
 
         enteredWords = words
         sheetState = .none
-        tabIndex = lastIndex
+        tabIndex = words.count - 1
+    }
+
+    func handlePasteMnemonic(_ mnemonicString: String) {
+        // extract word-like tokens, stripping numbers and punctuation
+        let words = mnemonicString
+            .split(whereSeparator: { $0.isWhitespace })
+            .map { String($0).lowercased() }
+            .filter { word in
+                // keep only alphabetic strings (filters out "1.", "2)", etc.)
+                word.allSatisfy(\.isLetter)
+            }
+
+        // need 12 or 24 words
+        guard words.count == 12 || words.count == 24 else {
+            alertState = .init(.invalidWords)
+            return
+        }
+
+        // group words into chunks of groupsOf (12)
+        let grouped = stride(from: 0, to: words.count, by: groupsOf).map {
+            Array(words[$0 ..< min($0 + groupsOf, words.count)])
+        }
+        setWords(grouped)
+
+        // validate - show alert if invalid
+        do {
+            _ = try groupedPlainWordsOf(mnemonic: words.joined(separator: " "), groups: UInt8(groupsOf))
+        } catch {
+            Log.debug("Invalid pasted mnemonic: \(error)")
+            alertState = .init(.invalidWords)
+        }
     }
 }
 
