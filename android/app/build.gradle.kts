@@ -48,6 +48,17 @@ android {
             }
         }
     }
+
+    flavorDimensions += "distribution"
+    productFlavors {
+        create("dev") {
+            dimension = "distribution"
+            applicationIdSuffix = ".dev"
+        }
+        create("store") {
+            dimension = "distribution"
+        }
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

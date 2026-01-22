@@ -17,14 +17,15 @@ const LIB_NAME: &str = "libcove.so";
 const OUTPUT_LIB_NAME: &str = "libcoveffi.so";
 const COVE_CORE_PACKAGE_PATH: &str = "org/bitcoinppl/cove_core";
 
-// Android run constants
-const ANDROID_PACKAGE_NAME: &str = "org.bitcoinppl.cove";
+// Android run constants (dev flavor for local development)
+const ANDROID_PACKAGE_NAME: &str = "org.bitcoinppl.cove.dev";
 const ANDROID_ACTIVITY_NAME: &str = ".MainActivity";
-const APK_PATH_DEBUG: &str = "app/build/outputs/apk/debug/app-debug.apk";
-const APK_PATH_RELEASE: &str = "app/build/outputs/apk/release/app-release.apk";
+const APK_PATH_DEBUG: &str = "app/build/outputs/apk/dev/debug/app-dev-debug.apk";
+const APK_PATH_RELEASE: &str = "app/build/outputs/apk/dev/release/app-dev-release.apk";
 
-// Android bundle constants
-const AAB_OUTPUT_PATH: &str = "app/build/outputs/bundle/release/app-release.aab";
+// Android bundle constants (store flavor for Play Store)
+const AAB_OUTPUT_PATH: &str = "app/build/outputs/bundle/storeRelease/app-store-release.aab";
+const APK_STORE_RELEASE_PATH: &str = "app/build/outputs/apk/store/release/app-store-release.apk";
 const ANDROID_GRADLE_PATH: &str = "app/build.gradle.kts";
 
 #[derive(Debug, Clone, Copy)]
@@ -214,8 +215,8 @@ pub fn run_android(profile: BuildProfile, verbose: bool) -> Result<()> {
     sh.change_dir("../android");
 
     let (gradle_task, apk_path) = match profile {
-        BuildProfile::Release => ("assembleRelease", APK_PATH_RELEASE),
-        _ => ("assembleDebug", APK_PATH_DEBUG),
+        BuildProfile::Release => ("assembleDevRelease", APK_PATH_RELEASE),
+        _ => ("assembleDevDebug", APK_PATH_DEBUG),
     };
 
     // build the APK
@@ -247,14 +248,19 @@ pub fn bundle_android(verbose: bool) -> Result<()> {
     // change to android directory
     sh.change_dir("../android");
 
-    // build the AAB
-    print_info("Building release AAB...");
+    // build the AAB and APK for store release
+    print_info("Building store release AAB and APK...");
     if verbose {
-        cmd!(sh, "./gradlew bundleRelease").run().wrap_err("Failed to build AAB")?;
+        cmd!(sh, "./gradlew bundleStoreRelease assembleStoreRelease")
+            .run()
+            .wrap_err("Failed to build store release")?;
     } else {
-        cmd!(sh, "./gradlew bundleRelease").quiet().run().wrap_err("Failed to build AAB")?;
+        cmd!(sh, "./gradlew bundleStoreRelease assembleStoreRelease")
+            .quiet()
+            .run()
+            .wrap_err("Failed to build store release")?;
     }
-    print_success("AAB build successful");
+    print_success("Store release build successful");
 
     // verify AAB exists
     if !sh.path_exists(AAB_OUTPUT_PATH) {
@@ -271,22 +277,32 @@ pub fn bundle_android(verbose: bool) -> Result<()> {
     let version_code = extract_version_code(&gradle_content)
         .context("Could not extract versionCode from build.gradle.kts")?;
 
-    // construct destination path
+    // construct destination paths
     let home_dir = std::env::var("HOME").wrap_err("HOME environment variable not set")?;
-    let dest_filename = format!("cove-{}-{}.aab", version_name, version_code);
-    let dest_path = format!("{}/Downloads/{}", home_dir, dest_filename);
+    let aab_filename = format!("cove-{}-{}.aab", version_name, version_code);
+    let aab_dest = format!("{}/Downloads/{}", home_dir, aab_filename);
+    let apk_filename = format!("cove-{}-{}.apk", version_name, version_code);
+    let apk_dest = format!("{}/Downloads/{}", home_dir, apk_filename);
 
     // copy AAB to Downloads
-    print_info(&format!("Copying AAB to {}...", dest_path));
-    sh.copy_file(AAB_OUTPUT_PATH, &dest_path)
-        .wrap_err_with(|| format!("Failed to copy AAB to {}", dest_path))?;
-    print_success(&format!("AAB saved to {}", dest_path));
+    print_info(&format!("Copying AAB to {}...", aab_dest));
+    sh.copy_file(AAB_OUTPUT_PATH, &aab_dest)
+        .wrap_err_with(|| format!("Failed to copy AAB to {}", aab_dest))?;
+    print_success(&format!("AAB saved to {}", aab_dest));
+
+    // copy APK to Downloads
+    if sh.path_exists(APK_STORE_RELEASE_PATH) {
+        print_info(&format!("Copying APK to {}...", apk_dest));
+        sh.copy_file(APK_STORE_RELEASE_PATH, &apk_dest)
+            .wrap_err_with(|| format!("Failed to copy APK to {}", apk_dest))?;
+        print_success(&format!("APK saved to {}", apk_dest));
+    }
 
     // create native debug symbols zip (only valid ABIs for minSdk 33+)
     let symbols_filename = format!("cove-{}-{}-symbols.zip", version_name, version_code);
     let symbols_path = format!("{}/Downloads/{}", home_dir, symbols_filename);
     let native_libs_path =
-        "app/build/intermediates/merged_native_libs/release/mergeReleaseNativeLibs/out/lib";
+        "app/build/intermediates/merged_native_libs/storeRelease/mergeStoreReleaseNativeLibs/out/lib";
 
     if sh.path_exists(native_libs_path) {
         print_info("Creating native debug symbols zip...");
