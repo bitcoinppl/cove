@@ -196,7 +196,7 @@ open class RustBuffer : Structure() {
 
     @Suppress("TooGenericExceptionThrown")
     fun asByteBuffer() =
-        this.data?.getByteBuffer(0, this.len.toLong())?.also {
+        this.data?.getByteBuffer(0, this.len)?.also {
             it.order(ByteOrder.BIG_ENDIAN)
         }
 }
@@ -37140,7 +37140,7 @@ sealed class SignedTransactionOrPsbt: Disposable  {
     /**
      * A signed but un-finalized PSBT (requires finalization before broadcast)
      */
-    data class Psbt(
+    data class SignedPsbt(
         val v1: org.bitcoinppl.cove_core.types.Psbt) : SignedTransactionOrPsbt()
         
     {
@@ -37161,7 +37161,7 @@ sealed class SignedTransactionOrPsbt: Disposable  {
     )
                 
             }
-            is SignedTransactionOrPsbt.Psbt -> {
+            is SignedTransactionOrPsbt.SignedPsbt -> {
                 
     Disposable.destroy(
         this.v1
@@ -37253,7 +37253,7 @@ public object FfiConverterTypeSignedTransactionOrPsbt : FfiConverterRustBuffer<S
             1 -> SignedTransactionOrPsbt.Transaction(
                 FfiConverterTypeBitcoinTransaction.read(buf),
                 )
-            2 -> SignedTransactionOrPsbt.Psbt(
+            2 -> SignedTransactionOrPsbt.SignedPsbt(
                 FfiConverterTypePsbt.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -37268,7 +37268,7 @@ public object FfiConverterTypeSignedTransactionOrPsbt : FfiConverterRustBuffer<S
                 + FfiConverterTypeBitcoinTransaction.allocationSize(value.v1)
             )
         }
-        is SignedTransactionOrPsbt.Psbt -> {
+        is SignedTransactionOrPsbt.SignedPsbt -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
@@ -37284,7 +37284,7 @@ public object FfiConverterTypeSignedTransactionOrPsbt : FfiConverterRustBuffer<S
                 FfiConverterTypeBitcoinTransaction.write(value.v1, buf)
                 Unit
             }
-            is SignedTransactionOrPsbt.Psbt -> {
+            is SignedTransactionOrPsbt.SignedPsbt -> {
                 buf.putInt(2)
                 FfiConverterTypePsbt.write(value.v1, buf)
                 Unit

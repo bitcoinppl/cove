@@ -32,7 +32,7 @@ pub enum SignedTransactionOrPsbt {
     /// A finalized raw Bitcoin transaction
     Transaction(Arc<BitcoinTransaction>),
     /// A signed but un-finalized PSBT (requires finalization before broadcast)
-    Psbt(Arc<Psbt>),
+    SignedPsbt(Arc<Psbt>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error, uniffi::Error)]
@@ -78,7 +78,7 @@ impl SignedTransactionOrPsbt {
         if data.len() >= PSBT_MAGIC.len() && &data[..PSBT_MAGIC.len()] == PSBT_MAGIC {
             let psbt =
                 Psbt::try_new(data.to_vec()).map_err(|e| Error::PsbtParseError(e.to_string()))?;
-            return Ok(Self::Psbt(Arc::new(psbt)));
+            return Ok(Self::SignedPsbt(Arc::new(psbt)));
         }
 
         // try parsing as raw transaction
@@ -115,7 +115,7 @@ impl SignedTransactionOrPsbt {
 
             let psbt = Psbt::try_new(bytes).map_err(|e| Error::PsbtParseError(e.to_string()))?;
 
-            return Ok(Self::Psbt(Arc::new(psbt)));
+            return Ok(Self::SignedPsbt(Arc::new(psbt)));
         }
 
         // hex-encoded PSBT detection (case-insensitive)
@@ -125,7 +125,7 @@ impl SignedTransactionOrPsbt {
 
             let psbt = Psbt::try_new(bytes).map_err(|e| Error::PsbtParseError(e.to_string()))?;
 
-            return Ok(Self::Psbt(Arc::new(psbt)));
+            return Ok(Self::SignedPsbt(Arc::new(psbt)));
         }
 
         Err(Error::UnrecognizedFormat)
@@ -135,13 +135,13 @@ impl SignedTransactionOrPsbt {
     pub fn tx_id(&self) -> TxId {
         match self {
             Self::Transaction(txn) => txn.tx_id(),
-            Self::Psbt(psbt) => psbt.tx_id(),
+            Self::SignedPsbt(psbt) => psbt.tx_id(),
         }
     }
 
     /// Returns true if this is a signed PSBT
     pub fn is_psbt(&self) -> bool {
-        matches!(self, Self::Psbt(_))
+        matches!(self, Self::SignedPsbt(_))
     }
 
     /// Returns true if this is a finalized transaction
@@ -153,14 +153,14 @@ impl SignedTransactionOrPsbt {
     pub fn transaction(&self) -> Option<Arc<BitcoinTransaction>> {
         match self {
             Self::Transaction(txn) => Some(txn.clone()),
-            Self::Psbt(_) => None,
+            Self::SignedPsbt(_) => None,
         }
     }
 
     /// Get the inner PSBT if this is a Psbt variant
     pub fn psbt(&self) -> Option<Arc<Psbt>> {
         match self {
-            Self::Psbt(psbt) => Some(psbt.clone()),
+            Self::SignedPsbt(psbt) => Some(psbt.clone()),
             Self::Transaction(_) => None,
         }
     }
