@@ -127,7 +127,7 @@ private enum class AlertState {
 internal fun parseSignedImport(input: String): Pair<UnsignedTransactionRecord, SignedTransactionOrPsbt> {
     val parsed =
         try {
-            SignedTransactionOrPsbt.tryParse(input = input)
+            signedTransactionOrPsbtTryParse(input)
         } catch (e: Exception) {
             throw IllegalArgumentException(TransactionImportErrors.INVALID_HEX_FORMAT, e)
         }
