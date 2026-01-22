@@ -1,7 +1,6 @@
 package org.bitcoinppl.cove.flows.SelectedWalletFlow
 
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.LocalOverscrollFactory
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -15,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -49,8 +49,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -270,22 +268,13 @@ fun SelectedWalletScreen(
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
+        // only apply bottom padding from scaffold - header handles top (status bar) internally
         Box(
             modifier =
                 Modifier
                     .fillMaxSize()
-                    .padding(padding),
+                    .padding(bottom = padding.calculateBottomPadding()),
         ) {
-            Image(
-                painter = painterResource(id = R.drawable.image_chain_code_pattern_horizontal),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .align(Alignment.TopCenter),
-            )
-
             val fiatOrBtc = manager?.walletMetadata?.fiatOrBtc ?: FiatOrBtc.BTC
             val sensitiveVisible = manager?.walletMetadata?.sensitiveVisible ?: true
 
@@ -298,120 +287,162 @@ fun SelectedWalletScreen(
                         FiatOrBtc.BTC -> actualSatsAmount to fiatBalance
                     }
 
-                WalletBalanceHeaderView(
-                    sensitiveVisible = sensitiveVisible,
-                    primaryAmount = primaryAmount,
-                    secondaryAmount = secondaryAmount,
-                    onToggleUnit = { manager?.dispatch(WalletManagerAction.ToggleFiatBtcPrimarySecondary) },
-                    onToggleSensitive = { manager?.dispatch(WalletManagerAction.ToggleSensitiveVisibility) },
-                    onSend = onSend,
-                    onReceive = onReceive,
-                )
+                val hasTransactions =
+                    when (val loadState = manager?.loadState) {
+                        is WalletLoadState.SCANNING -> loadState.txns.isNotEmpty() || unsignedTransactions.isNotEmpty()
+                        is WalletLoadState.LOADED -> loadState.txns.isNotEmpty() || unsignedTransactions.isNotEmpty()
+                        else -> false
+                    }
 
-                PullToRefreshBox(
-                    isRefreshing = isRefreshing,
-                    onRefresh = {
-                        if (manager != null &&
-                            manager.loadState is WalletLoadState.LOADED &&
-                            isRefreshInProgress.compareAndSet(false, true)
-                        ) {
-                            scope.launch {
-                                isRefreshing = true
-                                try {
-                                    val minDelay = async { delay(1750) }
-                                    manager.setScanning()
-                                    manager.forceWalletScan()
-                                    manager.rust.forceUpdateHeight()
-                                    manager.updateWalletBalance()
-                                    manager.rust.getTransactions()
-                                    minDelay.await()
-                                } finally {
-                                    isRefreshing = false
-                                    isRefreshInProgress.set(false)
-                                }
+                val isVerified = manager?.isVerified ?: true
+                val walletId = manager?.walletMetadata?.id
+                val showLabels = manager?.walletMetadata?.showLabels ?: false
+                val loadState = manager?.loadState
+
+                // determine transaction data based on load state
+                val (transactions, isScanning, isFirstScan) =
+                    when (loadState) {
+                        is WalletLoadState.SCANNING -> {
+                            val txns = loadState.txns
+                            val firstScan = manager?.walletMetadata?.internal?.lastScanFinished == null
+                            Triple(txns, true, firstScan)
+                        }
+                        is WalletLoadState.LOADED -> Triple(loadState.txns, false, false)
+                        else -> Triple(emptyList(), false, false)
+                    }
+
+                // scroll to saved transaction when returning from details
+                LaunchedEffect(manager?.scrolledTransactionId, hasTransactions) {
+                    val targetId = manager?.scrolledTransactionId ?: return@LaunchedEffect
+                    if (!hasTransactions) return@LaunchedEffect
+
+                    // account for header items:
+                    // index 0 = header
+                    // index 1 = verify reminder (even if empty)
+                    // index 2 = txn-title
+                    // index 3 = scanning indicator (if scanning and hasTransactions)
+                    val baseOffset = 2 + 1 + (if (isScanning && hasTransactions) 1 else 0)
+
+                    // find the index of the transaction with the matching ID
+                    val unsignedIndex = unsignedTransactions.indexOfFirst { it.id().toString() == targetId }
+                    if (unsignedIndex >= 0) {
+                        listState.animateScrollToItem(baseOffset + unsignedIndex)
+                        manager?.scrolledTransactionId = null
+                        return@LaunchedEffect
+                    }
+
+                    val txIndex =
+                        transactions.indexOfFirst {
+                            when (it) {
+                                is org.bitcoinppl.cove_core.Transaction.Confirmed -> it.v1.id().toString() == targetId
+                                is org.bitcoinppl.cove_core.Transaction.Unconfirmed -> it.v1.id().toString() == targetId
                             }
                         }
-                    },
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                            .background(listBg),
-                ) {
-                    val loadState = manager?.loadState
-                    val transactions =
-                        when (loadState) {
-                            is WalletLoadState.SCANNING -> loadState.txns
-                            is WalletLoadState.LOADED -> loadState.txns
-                            else -> emptyList()
-                        }
-                    val hasTransactions = transactions.isNotEmpty() || unsignedTransactions.isNotEmpty()
+                    if (txIndex >= 0) {
+                        listState.animateScrollToItem(baseOffset + unsignedTransactions.size + txIndex)
+                        manager?.scrolledTransactionId = null
+                    }
+                }
 
-                    val content: @Composable () -> Unit = {
-                        Column(modifier = Modifier.fillMaxSize()) {
-                            VerifyReminder(
-                                walletId = manager?.walletMetadata?.id,
-                                isVerified = manager?.isVerified ?: true,
-                                app = app,
-                            )
-
-                            when (loadState) {
-                                is WalletLoadState.LOADING, null -> {
-                                    TransactionsLoadingView(
-                                        secondaryText = secondaryText,
-                                        primaryText = primaryText,
-                                        modifier = Modifier.weight(1f),
-                                    )
+                val content: @Composable () -> Unit = {
+                    PullToRefreshBox(
+                        isRefreshing = isRefreshing,
+                        onRefresh = {
+                            if (manager != null &&
+                                manager.loadState is WalletLoadState.LOADED &&
+                                isRefreshInProgress.compareAndSet(false, true)
+                            ) {
+                                scope.launch {
+                                    isRefreshing = true
+                                    try {
+                                        val minDelay = async { delay(1750) }
+                                        manager.setScanning()
+                                        manager.forceWalletScan()
+                                        manager.rust.forceUpdateHeight()
+                                        manager.updateWalletBalance()
+                                        manager.rust.getTransactions()
+                                        minDelay.await()
+                                    } finally {
+                                        isRefreshing = false
+                                        isRefreshInProgress.set(false)
+                                    }
                                 }
-                                is WalletLoadState.SCANNING -> {
-                                    val isFirstScan = manager.walletMetadata?.internal?.lastScanFinished == null
-                                    if (isFirstScan && transactions.isEmpty() && unsignedTransactions.isEmpty()) {
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                    ) {
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier.fillMaxSize(),
+                        ) {
+                            // header as first item
+                            item(key = "header") {
+                                WalletBalanceHeaderView(
+                                    sensitiveVisible = sensitiveVisible,
+                                    primaryAmount = primaryAmount,
+                                    secondaryAmount = secondaryAmount,
+                                    onToggleUnit = { manager?.dispatch(WalletManagerAction.ToggleFiatBtcPrimarySecondary) },
+                                    onToggleSensitive = { manager?.dispatch(WalletManagerAction.ToggleSensitiveVisibility) },
+                                    onSend = onSend,
+                                    onReceive = onReceive,
+                                )
+                            }
+
+                            // verify reminder as second item
+                            item(key = "verify-reminder") {
+                                VerifyReminder(
+                                    walletId = walletId,
+                                    isVerified = isVerified,
+                                    app = app,
+                                )
+                            }
+
+                            // transaction items
+                            when {
+                                loadState is WalletLoadState.LOADING || loadState == null -> {
+                                    item(key = "loading") {
                                         TransactionsLoadingView(
                                             secondaryText = secondaryText,
                                             primaryText = primaryText,
-                                            modifier = Modifier.weight(1f),
-                                        )
-                                    } else {
-                                        TransactionsCardView(
-                                            transactions = transactions,
-                                            unsignedTransactions = unsignedTransactions,
-                                            isScanning = true,
-                                            isFirstScan = isFirstScan,
-                                            fiatOrBtc = fiatOrBtc,
-                                            sensitiveVisible = sensitiveVisible,
-                                            showLabels = manager.walletMetadata?.showLabels ?: false,
-                                            manager = manager,
-                                            app = app,
-                                            listState = listState,
-                                            modifier = Modifier.weight(1f),
+                                            modifier = Modifier.fillParentMaxHeight(0.5f),
                                         )
                                     }
                                 }
-                                is WalletLoadState.LOADED -> {
-                                    TransactionsCardView(
+                                isFirstScan && transactions.isEmpty() && unsignedTransactions.isEmpty() -> {
+                                    item(key = "first-scan-loading") {
+                                        TransactionsLoadingView(
+                                            secondaryText = secondaryText,
+                                            primaryText = primaryText,
+                                            modifier = Modifier.fillParentMaxHeight(0.5f),
+                                        )
+                                    }
+                                }
+                                else -> {
+                                    transactionItems(
                                         transactions = transactions,
                                         unsignedTransactions = unsignedTransactions,
-                                        isScanning = false,
-                                        isFirstScan = false,
+                                        isScanning = isScanning,
+                                        isFirstScan = isFirstScan,
                                         fiatOrBtc = fiatOrBtc,
                                         sensitiveVisible = sensitiveVisible,
-                                        showLabels = manager.walletMetadata?.showLabels ?: false,
+                                        showLabels = showLabels,
                                         manager = manager,
                                         app = app,
-                                        listState = listState,
-                                        modifier = Modifier.weight(1f),
+                                        primaryText = primaryText,
+                                        secondaryText = secondaryText,
+                                        dividerColor = dividerColor,
                                     )
                                 }
                             }
                         }
                     }
+                }
 
-                    if (hasTransactions) {
+                if (hasTransactions) {
+                    content()
+                } else {
+                    CompositionLocalProvider(LocalOverscrollFactory provides null) {
                         content()
-                    } else {
-                        CompositionLocalProvider(LocalOverscrollFactory provides null) {
-                            content()
-                        }
                     }
                 }
             }
