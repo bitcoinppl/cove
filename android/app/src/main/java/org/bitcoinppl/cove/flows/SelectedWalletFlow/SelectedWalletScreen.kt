@@ -56,7 +56,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicBoolean
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletLoadState
@@ -155,6 +158,7 @@ fun SelectedWalletScreen(
 
     // pull-to-refresh state
     var isRefreshing by remember { mutableStateOf(false) }
+    val isRefreshInProgress = remember { AtomicBoolean(false) }
     val scope = rememberCoroutineScope()
 
     // state for wallet name rename dropdown
@@ -306,17 +310,23 @@ fun SelectedWalletScreen(
                 PullToRefreshBox(
                     isRefreshing = isRefreshing,
                     onRefresh = {
-                        if (manager != null && manager.loadState is WalletLoadState.LOADED) {
+                        if (manager != null &&
+                            manager.loadState is WalletLoadState.LOADED &&
+                            isRefreshInProgress.compareAndSet(false, true)
+                        ) {
                             scope.launch {
                                 isRefreshing = true
                                 try {
+                                    val minDelay = async { delay(1750) }
                                     manager.setScanning()
                                     manager.forceWalletScan()
                                     manager.rust.forceUpdateHeight()
                                     manager.updateWalletBalance()
                                     manager.rust.getTransactions()
+                                    minDelay.await()
                                 } finally {
                                     isRefreshing = false
+                                    isRefreshInProgress.set(false)
                                 }
                             }
                         }
