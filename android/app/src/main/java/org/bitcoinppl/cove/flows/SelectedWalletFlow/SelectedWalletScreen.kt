@@ -59,7 +59,6 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.util.concurrent.atomic.AtomicBoolean
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletLoadState
@@ -77,6 +76,7 @@ import org.bitcoinppl.cove_core.WalletManagerAction
 import org.bitcoinppl.cove_core.WalletSettingsRoute
 import org.bitcoinppl.cove_core.WalletType
 import org.bitcoinppl.cove_core.types.WalletId
+import java.util.concurrent.atomic.AtomicBoolean
 
 @Preview(showBackground = true, backgroundColor = 0xFF0D1B2A)
 @Composable
@@ -132,13 +132,14 @@ fun SelectedWalletScreen(
             it.displayAmount(spendable, showUnit = true)
         } ?: satsAmount
 
-    val fiatBalance = remember(manager?.balance, app?.prices) {
-        manager?.let {
-            it.rust.amountInFiat(it.balance.spendable())?.let { fiat ->
-                it.rust.displayFiatAmount(fiat)
+    val fiatBalance =
+        remember(manager?.balance, app?.prices) {
+            manager?.let {
+                it.rust.amountInFiat(it.balance.spendable())?.let { fiat ->
+                    it.rust.displayFiatAmount(fiat)
+                }
             }
         }
-    }
     val unsignedTransactions = manager?.unsignedTransactions ?: emptyList()
 
     LaunchedEffect(manager) {
