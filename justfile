@@ -242,18 +242,10 @@ fix *flags="":
 # release
 # ------------------------------------------------------------------------------
 
-# Bump version (type: major, minor, patch)
+# Bump version (type: major, minor, patch, build)
 [group('release')]
-bump type targets="rust,ios,android":
-    just xtask bump-version {{type}} --targets {{targets}}
-
-# Bump build numbers only
-[group('release')]
-build-bump targets="ios,android":
-    just xtask build-bump {{targets}}
-
-[private]
-alias bb := build-bump
+bump type targets="":
+    just xtask bump-version {{type}} {{ if targets != "" { "--targets " + targets } else { "" } }}
 
 # ------------------------------------------------------------------------------
 # xcode

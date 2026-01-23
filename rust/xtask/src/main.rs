@@ -23,18 +23,11 @@ enum Commands {
     /// Bump version for specified targets
     #[command(name = "bump-version")]
     BumpVersion {
-        /// Version component to bump: 'major', 'minor', or 'patch'
+        /// Version component to bump: 'major', 'minor', 'patch', or 'build'
         bump_type: String,
 
-        /// Targets to bump (comma separated): 'rust', 'ios', 'android'. Defaults to all.
+        /// Targets to bump (comma separated): 'rust', 'ios', 'android'. Defaults based on bump type.
         #[arg(long)]
-        targets: Option<String>,
-    },
-
-    /// Bump build numbers for iOS and/or Android
-    #[command(name = "build-bump")]
-    BuildBump {
-        /// Targets to bump build numbers (comma separated): 'ios', 'android'. Defaults to both.
         targets: Option<String>,
     },
 
@@ -90,8 +83,6 @@ fn main() -> Result<()> {
 
     match cli.command {
         Commands::BumpVersion { bump_type, targets } => version::bump_version(bump_type, targets),
-
-        Commands::BuildBump { targets } => version::build_bump(targets),
 
         Commands::BuildAndroid { profile } => {
             let build_profile = android::BuildProfile::from_str(&profile);

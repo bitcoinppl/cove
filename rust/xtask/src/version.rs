@@ -13,18 +13,56 @@ pub fn bump_version(bump_type: String, targets_opt: Option<String>) -> Result<()
 
     ensure_rust_directory(&sh)?;
 
-    // parse targets
-    let targets_str = targets_opt.as_deref().unwrap_or("rust,ios,android");
+    let is_build_bump = bump_type == "build";
+
+    // smart defaults based on bump type
+    let targets_str = targets_opt
+        .as_ref()
+        .filter(|s| !s.is_empty())
+        .map(|s| s.as_str())
+        .unwrap_or_else(|| {
+            if is_build_bump {
+                "ios,android"
+            } else {
+                "rust,ios,android"
+            }
+        });
     let targets: Vec<&str> = targets_str.split(',').map(|s| s.trim()).collect();
 
     // validate targets
+    let valid_targets = if is_build_bump {
+        vec!["ios", "android"]
+    } else {
+        vec!["rust", "ios", "android"]
+    };
+
     for t in &targets {
-        if !["rust", "ios", "android"].contains(t) {
+        if !valid_targets.contains(t) {
+            if is_build_bump && *t == "rust" {
+                color_eyre::eyre::bail!("'rust' target not supported for build bump");
+            }
             color_eyre::eyre::bail!(
-                "Unknown target: '{}'. Valid targets are: rust, ios, android",
-                t
+                "Unknown target: '{}'. Valid targets are: {}",
+                t,
+                valid_targets.join(", ")
             );
         }
+    }
+
+    // for build bump, just increment build numbers
+    if is_build_bump {
+        println!("{} {:?}", "Bumping build numbers for:".blue().bold(), targets);
+
+        if targets.contains(&"ios") {
+            bump_ios_build_number(&sh)?;
+        }
+
+        if targets.contains(&"android") {
+            bump_android_build_number(&sh)?;
+        }
+
+        println!("{} Build numbers bumped", "SUCCESS:".green().bold());
+        return Ok(());
     }
 
     // read current version (always read from Rust as source of truth)
@@ -62,7 +100,7 @@ pub fn bump_version(bump_type: String, targets_opt: Option<String>) -> Result<()
         "patch" => {
             patch += 1;
         }
-        _ => color_eyre::eyre::bail!("Bump type must be 'major', 'minor', or 'patch'"),
+        _ => color_eyre::eyre::bail!("Bump type must be 'major', 'minor', 'patch', or 'build'"),
     }
     let new_version = format!("{major}.{minor}.{patch}");
     println!("{} {new_version}", "Bumping to:".green().bold());
@@ -202,38 +240,6 @@ fn update_android(sh: &Shell, bump_type: &str) -> Result<()> {
     // increment build number
     bump_android_build_number(sh)?;
 
-    Ok(())
-}
-
-pub fn build_bump(targets_opt: Option<String>) -> Result<()> {
-    let sh = Shell::new()?;
-
-    ensure_rust_directory(&sh)?;
-
-    // parse targets
-    let targets_str = targets_opt.as_deref().unwrap_or("ios,android");
-    let targets: Vec<&str> = targets_str.split(',').map(|s| s.trim()).collect();
-
-    // validate targets
-    for t in &targets {
-        if !["ios", "android"].contains(t) {
-            color_eyre::eyre::bail!("Unknown target: '{}'. Valid targets are: ios, android", t);
-        }
-    }
-
-    println!("{} {:?}", "Bumping build numbers for:".blue().bold(), targets);
-
-    // bump iOS build number
-    if targets.contains(&"ios") {
-        bump_ios_build_number(&sh)?;
-    }
-
-    // bump Android build number
-    if targets.contains(&"android") {
-        bump_android_build_number(&sh)?;
-    }
-
-    println!("{} Build numbers bumped", "SUCCESS:".green().bold());
     Ok(())
 }
 
