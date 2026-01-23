@@ -2769,6 +2769,10 @@ external fun uniffi_cove_fn_constructor_balance_zero(uniffi_out_err: UniffiRustC
 ): Long
 external fun uniffi_cove_fn_method_balance_spendable(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
+external fun uniffi_cove_fn_method_balance_uniffi_trait_eq_eq(`ptr`: Long,`other`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Byte
+external fun uniffi_cove_fn_method_balance_uniffi_trait_eq_ne(`ptr`: Long,`other`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Byte
 external fun uniffi_cove_fn_clone_fingerprint(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
 external fun uniffi_cove_fn_free_fingerprint(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -6107,6 +6111,19 @@ open class Balance: Disposable, AutoCloseable, BalanceInterface
 
     
 
+    // The local Rust `Eq` implementation - only `eq` is used.
+    override fun equals(other: Any?): Boolean {
+        if (other !is Balance) return false
+        return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_balance_uniffi_trait_eq_eq(
+        it,
+        FfiConverterTypeBalance.lower(`other`),_status)
+}
+    }
+    )
+    }
 
     
     companion object {
