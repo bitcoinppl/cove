@@ -338,12 +338,14 @@ fun SelectedWalletScreen(
                             .weight(1f)
                             .background(listBg),
                 ) {
-                    val hasTransactions =
-                        when (val loadState = manager?.loadState) {
-                            is WalletLoadState.SCANNING -> loadState.txns.isNotEmpty() || unsignedTransactions.isNotEmpty()
-                            is WalletLoadState.LOADED -> loadState.txns.isNotEmpty() || unsignedTransactions.isNotEmpty()
-                            else -> false
+                    val loadState = manager?.loadState
+                    val transactions =
+                        when (loadState) {
+                            is WalletLoadState.SCANNING -> loadState.txns
+                            is WalletLoadState.LOADED -> loadState.txns
+                            else -> emptyList()
                         }
+                    val hasTransactions = transactions.isNotEmpty() || unsignedTransactions.isNotEmpty()
 
                     val content: @Composable () -> Unit = {
                         Column(modifier = Modifier.fillMaxSize()) {
@@ -353,7 +355,7 @@ fun SelectedWalletScreen(
                                 app = app,
                             )
 
-                            when (val loadState = manager?.loadState) {
+                            when (loadState) {
                                 is WalletLoadState.LOADING, null -> {
                                     TransactionsLoadingView(
                                         secondaryText = secondaryText,
@@ -362,9 +364,8 @@ fun SelectedWalletScreen(
                                     )
                                 }
                                 is WalletLoadState.SCANNING -> {
-                                    val txns = loadState.txns
                                     val isFirstScan = manager.walletMetadata?.internal?.lastScanFinished == null
-                                    if (isFirstScan && txns.isEmpty() && unsignedTransactions.isEmpty()) {
+                                    if (isFirstScan && transactions.isEmpty() && unsignedTransactions.isEmpty()) {
                                         TransactionsLoadingView(
                                             secondaryText = secondaryText,
                                             primaryText = primaryText,
@@ -372,7 +373,7 @@ fun SelectedWalletScreen(
                                         )
                                     } else {
                                         TransactionsCardView(
-                                            transactions = txns,
+                                            transactions = transactions,
                                             unsignedTransactions = unsignedTransactions,
                                             isScanning = true,
                                             isFirstScan = isFirstScan,
@@ -388,7 +389,7 @@ fun SelectedWalletScreen(
                                 }
                                 is WalletLoadState.LOADED -> {
                                     TransactionsCardView(
-                                        transactions = loadState.txns,
+                                        transactions = transactions,
                                         unsignedTransactions = unsignedTransactions,
                                         isScanning = false,
                                         isFirstScan = false,

@@ -83,56 +83,51 @@ internal fun BalanceWidget(
         modifier = Modifier.clickable { onToggleUnit() },
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        if (isHidden) {
-            Text(
-                text = "••••••",
-                color = Color.White.copy(alpha = 0.7f),
-                fontSize = 13.sp,
-            )
-        } else if (secondaryAmount != null) {
-            Text(
-                text = secondaryAmount,
-                color = Color.White.copy(alpha = 0.7f),
-                fontSize = 13.sp,
-            )
-        } else {
-            CircularProgressIndicator(
-                modifier = Modifier.size(12.dp),
-                color = Color.White.copy(alpha = 0.7f),
-                strokeWidth = 1.5.dp,
-            )
-        }
+        AmountDisplay(
+            amount = secondaryAmount,
+            isHidden = isHidden,
+            textContent = { text ->
+                Text(
+                    text = text,
+                    color = Color.White.copy(alpha = 0.7f),
+                    fontSize = 13.sp,
+                )
+            },
+            loadingContent = {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(12.dp),
+                    color = Color.White.copy(alpha = 0.7f),
+                    strokeWidth = 1.5.dp,
+                )
+            },
+        )
 
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(modifier = Modifier.weight(1f)) {
-                if (isHidden) {
-                    BalanceAutoSizeText(
-                        text = "••••••",
-                        modifier = Modifier.padding(end = 12.dp),
-                        color = Color.White,
-                        baseFontSize = 34.sp,
-                        minimumScaleFactor = 0.5f,
-                        fontWeight = FontWeight.Bold,
-                    )
-                } else if (primaryAmount != null) {
-                    BalanceAutoSizeText(
-                        text = primaryAmount,
-                        modifier = Modifier.padding(end = 12.dp),
-                        color = Color.White,
-                        baseFontSize = 34.sp,
-                        minimumScaleFactor = 0.5f,
-                        fontWeight = FontWeight.Bold,
-                    )
-                } else {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(28.dp),
-                        color = Color.White,
-                        strokeWidth = 2.dp,
-                    )
-                }
+                AmountDisplay(
+                    amount = primaryAmount,
+                    isHidden = isHidden,
+                    textContent = { text ->
+                        BalanceAutoSizeText(
+                            text = text,
+                            modifier = Modifier.padding(end = 12.dp),
+                            color = Color.White,
+                            baseFontSize = 34.sp,
+                            minimumScaleFactor = 0.5f,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    },
+                    loadingContent = {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(28.dp),
+                            color = Color.White,
+                            strokeWidth = 2.dp,
+                        )
+                    },
+                )
             }
             Icon(
                 imageVector = if (isHidden) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
@@ -144,6 +139,21 @@ internal fun BalanceWidget(
                         .clickable { onToggleSensitive() },
             )
         }
+    }
+}
+
+@Composable
+private fun AmountDisplay(
+    amount: String?,
+    isHidden: Boolean,
+    hiddenText: String = "••••••",
+    textContent: @Composable (String) -> Unit,
+    loadingContent: @Composable () -> Unit,
+) {
+    when {
+        isHidden -> textContent(hiddenText)
+        amount != null -> textContent(amount)
+        else -> loadingContent()
     }
 }
 
