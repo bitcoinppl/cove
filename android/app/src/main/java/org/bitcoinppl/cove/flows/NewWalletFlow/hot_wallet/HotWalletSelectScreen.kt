@@ -220,7 +220,7 @@ fun HotWalletSelectScreen(
             ModalBottomSheet(
                 onDismissRequest = { showSheet = false },
                 sheetState = sheetState,
-                containerColor = Color.White,
+                containerColor = MaterialTheme.colorScheme.surface,
             ) {
                 Column(
                     modifier =
@@ -233,6 +233,7 @@ fun HotWalletSelectScreen(
                         text = stringResource(R.string.label_select_number_of_words),
                         style = MaterialTheme.typography.title3,
                         fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.padding(bottom = 8.dp),
                     )
 
@@ -245,6 +246,10 @@ fun HotWalletSelectScreen(
                                 app.scanQr()
                             },
                             modifier = Modifier.fillMaxWidth(),
+                            colors =
+                                ButtonDefaults.textButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.onSurface,
+                                ),
                         ) {
                             Text(stringResource(R.string.btn_scan_qr), modifier = Modifier.fillMaxWidth())
                         }
@@ -255,6 +260,10 @@ fun HotWalletSelectScreen(
                                 app.scanNfc()
                             },
                             modifier = Modifier.fillMaxWidth(),
+                            colors =
+                                ButtonDefaults.textButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.onSurface,
+                                ),
                         ) {
                             Text(stringResource(R.string.btn_nfc), modifier = Modifier.fillMaxWidth())
                         }
@@ -267,6 +276,10 @@ fun HotWalletSelectScreen(
                             showSheet = false
                         },
                         modifier = Modifier.fillMaxWidth(),
+                        colors =
+                            ButtonDefaults.textButtonColors(
+                                contentColor = MaterialTheme.colorScheme.onSurface,
+                            ),
                     ) {
                         Text(stringResource(R.string.btn_12_words), modifier = Modifier.fillMaxWidth())
                     }
@@ -278,6 +291,10 @@ fun HotWalletSelectScreen(
                             showSheet = false
                         },
                         modifier = Modifier.fillMaxWidth(),
+                        colors =
+                            ButtonDefaults.textButtonColors(
+                                contentColor = MaterialTheme.colorScheme.onSurface,
+                            ),
                     ) {
                         Text(stringResource(R.string.btn_24_words), modifier = Modifier.fillMaxWidth())
                     }
