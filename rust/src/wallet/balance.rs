@@ -12,6 +12,7 @@ use crate::transaction::Amount;
     derive_more::Deref,
     derive_more::AsRef,
 )]
+#[uniffi::export(Eq)]
 pub struct Balance(pub bdk_wallet::Balance);
 
 #[uniffi::export]

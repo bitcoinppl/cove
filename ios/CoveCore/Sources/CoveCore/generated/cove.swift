@@ -1115,7 +1115,7 @@ public protocol BalanceProtocol: AnyObject, Sendable {
     func spendable()  -> Amount
     
 }
-open class Balance: BalanceProtocol, @unchecked Sendable {
+open class Balance: BalanceProtocol, @unchecked Sendable, Equatable {
     fileprivate let handle: UInt64
 
     /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
@@ -1185,6 +1185,17 @@ open func spendable() -> Amount  {
     
 
     
+// The local Rust `Eq` implementation - only `eq` is used.
+public static func == (self: Balance, other: Balance) -> Bool {
+    return try!  FfiConverterBool.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_balance_uniffi_trait_eq_eq(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeBalance_lower(other),$0
+    )
+}
+    )
+}
 }
 
 
