@@ -174,19 +174,17 @@ struct WalletBalanceHeaderView: View {
                 .brightness(0.1)
         )
         .background(.midnightBlue)
-        .onChange(of: manager.fiatBalance, initial: false) {
-            // if fiatBalance was pased in explicitly, don't update it, only for previews
-            if fiatBalance ?? 0.0 > 0.0, manager.fiatBalance ?? 0.0 == 0.0 { return }
-            fiatBalance = manager.fiatBalance
-        }
         .onAppear {
             if fiatBalance != nil { return }
-            fiatBalance = manager.fiatBalance
+            fiatBalance = manager.rust.amountInFiat(amount: balance)
         }
-        .task {
-            if balance.asSats() != 0, fiatBalance == 0.00 || fiatBalance == nil {
-                await manager.updateWalletBalance()
-            }
+        .onChange(of: manager.balance, initial: false) { _, newBalance in
+            // recalculate fiat when balance changes
+            fiatBalance = manager.rust.amountInFiat(amount: newBalance.spendable())
+        }
+        .onChange(of: app.prices, initial: false) { _, _ in
+            // recalculate fiat when prices are loaded/updated
+            fiatBalance = manager.rust.amountInFiat(amount: balance)
         }
     }
 }

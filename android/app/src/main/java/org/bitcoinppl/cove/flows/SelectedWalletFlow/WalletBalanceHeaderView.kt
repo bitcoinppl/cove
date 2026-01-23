@@ -13,6 +13,7 @@ import androidx.compose.material.icons.filled.NorthEast
 import androidx.compose.material.icons.filled.SouthWest
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -38,8 +39,8 @@ import org.bitcoinppl.cove.views.ImageButton
 @Composable
 fun WalletBalanceHeaderView(
     sensitiveVisible: Boolean,
-    primaryAmount: String,
-    secondaryAmount: String,
+    primaryAmount: String?,
+    secondaryAmount: String?,
     onToggleUnit: () -> Unit,
     onToggleSensitive: () -> Unit,
     onSend: () -> Unit,
@@ -71,8 +72,8 @@ fun WalletBalanceHeaderView(
 @Composable
 internal fun BalanceWidget(
     sensitiveVisible: Boolean,
-    primaryAmount: String,
-    secondaryAmount: String,
+    primaryAmount: String?,
+    secondaryAmount: String?,
     onToggleUnit: () -> Unit,
     onToggleSensitive: () -> Unit,
 ) {
@@ -82,25 +83,56 @@ internal fun BalanceWidget(
         modifier = Modifier.clickable { onToggleUnit() },
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Text(
-            text = if (isHidden) "••••••" else secondaryAmount,
-            color = Color.White.copy(alpha = 0.7f),
-            fontSize = 13.sp,
-        )
+        if (isHidden) {
+            Text(
+                text = "••••••",
+                color = Color.White.copy(alpha = 0.7f),
+                fontSize = 13.sp,
+            )
+        } else if (secondaryAmount != null) {
+            Text(
+                text = secondaryAmount,
+                color = Color.White.copy(alpha = 0.7f),
+                fontSize = 13.sp,
+            )
+        } else {
+            CircularProgressIndicator(
+                modifier = Modifier.size(12.dp),
+                color = Color.White.copy(alpha = 0.7f),
+                strokeWidth = 1.5.dp,
+            )
+        }
 
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(modifier = Modifier.weight(1f)) {
-                BalanceAutoSizeText(
-                    text = if (isHidden) "••••••" else primaryAmount,
-                    modifier = Modifier.padding(end = 12.dp),
-                    color = Color.White,
-                    baseFontSize = 34.sp,
-                    minimumScaleFactor = 0.5f,
-                    fontWeight = FontWeight.Bold,
-                )
+                if (isHidden) {
+                    BalanceAutoSizeText(
+                        text = "••••••",
+                        modifier = Modifier.padding(end = 12.dp),
+                        color = Color.White,
+                        baseFontSize = 34.sp,
+                        minimumScaleFactor = 0.5f,
+                        fontWeight = FontWeight.Bold,
+                    )
+                } else if (primaryAmount != null) {
+                    BalanceAutoSizeText(
+                        text = primaryAmount,
+                        modifier = Modifier.padding(end = 12.dp),
+                        color = Color.White,
+                        baseFontSize = 34.sp,
+                        minimumScaleFactor = 0.5f,
+                        fontWeight = FontWeight.Bold,
+                    )
+                } else {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(28.dp),
+                        color = Color.White,
+                        strokeWidth = 2.dp,
+                    )
+                }
             }
             Icon(
                 imageVector = if (isHidden) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,

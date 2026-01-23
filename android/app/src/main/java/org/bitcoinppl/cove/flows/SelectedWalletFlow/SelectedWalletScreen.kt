@@ -117,7 +117,6 @@ fun SelectedWalletScreen(
     isDarkList: Boolean,
     manager: WalletManager? = null,
     app: AppManager? = null,
-    usdAmount: String = "$1,351.93",
     satsAmount: String = "1,166,369 SATS",
     walletName: String = "Main",
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
@@ -129,10 +128,19 @@ fun SelectedWalletScreen(
             val spendable = it.balance.spendable()
             it.displayAmount(spendable, showUnit = true)
         } ?: satsAmount
+
+    // observe app.prices to trigger recomposition when prices are loaded
+    val prices = app?.prices
     val actualFiatAmount =
-        manager?.fiatBalance?.let {
-            manager.rust.displayFiatAmount(it)
-        } ?: usdAmount
+        manager?.let {
+            val amount = it.balance.spendable()
+            // prices is read to establish Compose dependency, actual calculation uses rust cache
+            @Suppress("UNUSED_EXPRESSION")
+            prices
+            it.rust.amountInFiat(amount)?.let { fiat ->
+                it.rust.displayFiatAmount(fiat)
+            }
+        }
     val unsignedTransactions = manager?.unsignedTransactions ?: emptyList()
 
     LaunchedEffect(manager) {
