@@ -244,8 +244,8 @@ private struct AutocompleteField: View {
             }
         }
         .onAppear {
-            if !text.isEmpty, autocomplete.isBip39Word(word: text) {
-                state = .valid
+            if !text.isEmpty {
+                state = autocomplete.isValidWord(word: text, allWords: allEnteredWords) ? .valid : .invalid
             }
         }
         .frame(maxWidth: .infinity)
@@ -342,8 +342,16 @@ private struct AutocompleteField: View {
                     textField.delegate = handler
                 }
             }
-            .onChange(of: text, initial: false) { oldText, newText in
+            .onChange(of: text, initial: true) { oldText, newText in
                 text = newText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                // handle programmatic text changes (e.g., paste)
+                if oldText == newText {
+                    if !newText.isEmpty {
+                        state = autocomplete.isValidWord(word: newText, allWords: allEnteredWords) ? .valid : .invalid
+                    }
+                    return
+                }
 
                 filteredSuggestions = autocomplete.autocomplete(
                     word: newText, allWords: allEnteredWords
