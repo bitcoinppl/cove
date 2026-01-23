@@ -129,18 +129,13 @@ fun SelectedWalletScreen(
             it.displayAmount(spendable, showUnit = true)
         } ?: satsAmount
 
-    // observe app.prices to trigger recomposition when prices are loaded
-    val prices = app?.prices
-    val actualFiatAmount =
+    val fiatBalance = remember(manager?.balance, app?.prices) {
         manager?.let {
-            val amount = it.balance.spendable()
-            // prices is read to establish Compose dependency, actual calculation uses rust cache
-            @Suppress("UNUSED_EXPRESSION")
-            prices
-            it.rust.amountInFiat(amount)?.let { fiat ->
+            it.rust.amountInFiat(it.balance.spendable())?.let { fiat ->
                 it.rust.displayFiatAmount(fiat)
             }
         }
+    }
     val unsignedTransactions = manager?.unsignedTransactions ?: emptyList()
 
     LaunchedEffect(manager) {
@@ -294,8 +289,8 @@ fun SelectedWalletScreen(
             ) {
                 val (primaryAmount, secondaryAmount) =
                     when (fiatOrBtc) {
-                        FiatOrBtc.FIAT -> actualFiatAmount to actualSatsAmount
-                        FiatOrBtc.BTC -> actualSatsAmount to actualFiatAmount
+                        FiatOrBtc.FIAT -> fiatBalance to actualSatsAmount
+                        FiatOrBtc.BTC -> actualSatsAmount to fiatBalance
                     }
 
                 WalletBalanceHeaderView(
