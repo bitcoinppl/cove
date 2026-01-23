@@ -20,21 +20,12 @@ pub fn bump_version(bump_type: String, targets_opt: Option<String>) -> Result<()
         .as_ref()
         .filter(|s| !s.is_empty())
         .map(|s| s.as_str())
-        .unwrap_or_else(|| {
-            if is_build_bump {
-                "ios,android"
-            } else {
-                "rust,ios,android"
-            }
-        });
+        .unwrap_or_else(|| if is_build_bump { "ios,android" } else { "rust,ios,android" });
     let targets: Vec<&str> = targets_str.split(',').map(|s| s.trim()).collect();
 
     // validate targets
-    let valid_targets = if is_build_bump {
-        vec!["ios", "android"]
-    } else {
-        vec!["rust", "ios", "android"]
-    };
+    let valid_targets =
+        if is_build_bump { vec!["ios", "android"] } else { vec!["rust", "ios", "android"] };
 
     for t in &targets {
         if !valid_targets.contains(t) {
