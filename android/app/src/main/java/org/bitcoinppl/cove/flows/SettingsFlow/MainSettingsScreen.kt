@@ -87,16 +87,12 @@ fun MainSettingsScreen(
         topBar = @Composable {
             TopAppBar(
                 title = {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            style = MaterialTheme.typography.bodyLarge,
-                            text = stringResource(R.string.title_settings),
-                            textAlign = TextAlign.Center,
-                        )
-                    }
+                    Text(
+                        style = MaterialTheme.typography.bodyLarge,
+                        text = stringResource(R.string.title_settings),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                 },
                 navigationIcon = {
                     IconButton(onClick = { app.popRoute() }) {
@@ -104,7 +100,6 @@ fun MainSettingsScreen(
                     }
                 },
                 actions = { },
-                modifier = Modifier.height(56.dp),
             )
         },
         content = { paddingValues ->
