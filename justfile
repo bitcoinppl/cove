@@ -58,7 +58,7 @@ alias bar := build-android-release
 
 # Build signed AAB for Google Play, copy to Downloads
 [group('build')]
-bundle-android:
+bundle-android: build-android-release
     just xtask bundle-android && just say "done android bundle"
 
 [private]
