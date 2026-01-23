@@ -88,6 +88,24 @@ fun NumberPadPinView(
                 .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        // cancel button header (matches iOS CancelView pattern)
+        if (backAction != null) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                Text(
+                    text = "Cancel",
+                    color = Color.White,
+                    fontSize = 16.sp,
+                    modifier =
+                        Modifier
+                            .clickable { backAction() }
+                            .padding(8.dp),
+                )
+            }
+        }
+
         // title
         Text(
             text = title,
