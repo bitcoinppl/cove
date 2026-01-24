@@ -22,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -349,11 +350,17 @@ private fun QrScannerContent(
                 }
             }
 
-            // viewfinder overlay - centered
+            // viewfinder overlay - centered (65% of smaller screen dimension, capped 200-320dp)
+            val configuration = LocalConfiguration.current
+            val screenWidth = configuration.screenWidthDp.dp
+            val screenHeight = configuration.screenHeightDp.dp
+            val smallerDimension = minOf(screenWidth, screenHeight)
+            val viewfinderSize = (smallerDimension * 0.65f).coerceIn(200.dp, 320.dp)
+
             Canvas(
                 modifier =
                     Modifier
-                        .size(200.dp)
+                        .size(viewfinderSize)
                         .align(Alignment.Center),
             ) {
                 val strokeWidth = 4.dp.toPx()

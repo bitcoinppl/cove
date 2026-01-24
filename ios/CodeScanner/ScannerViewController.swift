@@ -299,11 +299,16 @@
 
                     view.addSubview(imageView)
 
+                    // 65% of smaller view dimension, capped between 200-320pt
+                    let viewBounds = view.bounds
+                    let smallerDimension = min(viewBounds.width, viewBounds.height)
+                    let viewfinderSize = min(max(smallerDimension * 0.65, 200), 320)
+
                     NSLayoutConstraint.activate([
                         imageView.centerYAnchor.constraint(equalTo: view.centerYAnchor),
                         imageView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-                        imageView.widthAnchor.constraint(equalToConstant: 200),
-                        imageView.heightAnchor.constraint(equalToConstant: 200),
+                        imageView.widthAnchor.constraint(equalToConstant: viewfinderSize),
+                        imageView.heightAnchor.constraint(equalToConstant: viewfinderSize),
                     ])
                 }
 
