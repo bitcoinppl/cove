@@ -29,11 +29,13 @@ class TapCardNfcManager private constructor() {
     private val tag = "TapCardNfcManager"
     private var activityRef: WeakReference<Activity>? = null
     private var nfcAdapter: NfcAdapter? = null
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
     // current operation state
     private var currentCmd: TapSignerCmd? = null
     private var tagDetected = CompletableDeferred<Tag>()
     private var isScanning = false
+    private var pendingDisableRunnable: Runnable? = null
 
     // message callback for UI updates (setMessage/appendMessage from transport)
     var onMessageUpdate: ((String) -> Unit)? = null
@@ -43,20 +45,6 @@ class TapCardNfcManager private constructor() {
 
     // prevents concurrent NFC operations
     private val operationMutex = Mutex()
-
-    companion object {
-        @Volatile
-        private var instance: TapCardNfcManager? = null
-
-        // timeout for NFC tag detection - long enough for user to position phone
-        // but not so long that they wonder if something is wrong
-        private const val NFC_SCAN_TIMEOUT_MS = 60_000L
-
-        fun getInstance(): TapCardNfcManager =
-            instance ?: synchronized(this) {
-                instance ?: TapCardNfcManager().also { instance = it }
-            }
-    }
 
     fun initialize(activity: Activity) {
         this.activityRef = WeakReference(activity)
@@ -83,6 +71,10 @@ class TapCardNfcManager private constructor() {
             Log.d(tag, "Starting NFC scan for command: $cmd")
 
             return@withLock suspendCancellableCoroutine { continuation ->
+                // cancel any pending disable from previous operation
+                pendingDisableRunnable?.let { mainHandler.removeCallbacks(it) }
+                pendingDisableRunnable = null
+
                 // reset state for new operation
                 currentCmd = cmd
                 tagDetected = CompletableDeferred()
@@ -202,12 +194,33 @@ class TapCardNfcManager private constructor() {
             isScanning = false
             val activity = activityRef?.get()
             if (activity != null) {
-                activity.runOnUiThread {
-                    nfcAdapter?.disableReaderMode(activity)
-                    Log.d(tag, "Stopped NFC scanning")
-                }
+                // delay disabling reader mode to prevent system from picking up
+                // the TapSigner's NDEF URL and opening browser
+                pendingDisableRunnable =
+                    Runnable {
+                        nfcAdapter?.disableReaderMode(activity)
+                        Log.d(tag, "Stopped NFC scanning")
+                        pendingDisableRunnable = null
+                    }
+                mainHandler.postDelayed(pendingDisableRunnable!!, READER_MODE_DISABLE_DELAY_MS)
             }
         }
+    }
+
+    companion object {
+        @Volatile
+        private var instance: TapCardNfcManager? = null
+
+        // timeout for NFC tag detection
+        private const val NFC_SCAN_TIMEOUT_MS = 60_000L
+
+        // delay before disabling reader mode to give user time to move card away
+        private const val READER_MODE_DISABLE_DELAY_MS = 5000L
+
+        fun getInstance(): TapCardNfcManager =
+            instance ?: synchronized(this) {
+                instance ?: TapCardNfcManager().also { instance = it }
+            }
     }
 }
 
