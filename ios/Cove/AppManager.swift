@@ -109,7 +109,8 @@ private let walletModeChangeDelayMs = 250
 
     public var fullVersionId: String {
         let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
-        return "v\(appVersion) (\(rust.gitShortHash()))"
+        let buildNumber = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? ""
+        return "v\(appVersion) (\(rust.gitShortHash())-\(buildNumber))"
     }
 
     public func updateWalletVm(_ vm: WalletManager) {
