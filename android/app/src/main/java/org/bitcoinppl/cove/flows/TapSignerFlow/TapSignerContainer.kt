@@ -133,19 +133,19 @@ fun TapSignerContainer(
         }
 
         // auto-dismiss error message after 2 seconds
-        LaunchedEffect(manager.authErrorMessage) {
-            if (manager.authErrorMessage != null) {
+        LaunchedEffect(manager.errorMessage) {
+            if (manager.errorMessage != null) {
                 delay(2000)
-                manager.authErrorMessage = null
+                manager.errorMessage = null
             }
         }
 
         // show scanning overlay when NFC is active or error message is displayed
-        if (manager.isScanning || manager.authErrorMessage != null) {
+        if (manager.isScanning || manager.errorMessage != null) {
             TapSignerScanningOverlay(
                 message = manager.scanMessage,
                 isTagDetected = manager.isTagDetected,
-                errorMessage = manager.authErrorMessage,
+                errorMessage = manager.errorMessage,
             )
         }
     }

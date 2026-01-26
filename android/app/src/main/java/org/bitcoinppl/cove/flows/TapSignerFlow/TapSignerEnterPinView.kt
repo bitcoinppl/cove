@@ -248,24 +248,12 @@ private suspend fun deriveAction(
         nfcManager.onMessageUpdate = null
         nfcManager.onTagDetected = null
 
-        // handle auth errors with overlay message, show alert for other errors
-        if (!isAuthError(e)) {
-            app.alertState =
-                org.bitcoinppl.cove.TaggedItem(
-                    org.bitcoinppl.cove.AppAlertState.TapSignerDeriveFailed(
-                        "Failed to derive wallet: ${e.message ?: "Unknown error occurred"}",
-                    ),
-                )
-        } else {
+        // show error in overlay - sheet stays open for retry
+        if (isAuthError(e)) {
             Log.w("TapSignerEnterPin", "TapSigner auth failed - likely wrong PIN")
-            app.sheetState = null
-            app.alertState =
-                org.bitcoinppl.cove.TaggedItem(
-                    org.bitcoinppl.cove.AppAlertState.TapSignerWrongPin(
-                        tapSigner,
-                        AfterPinAction.Derive,
-                    ),
-                )
+            manager.errorMessage = "Wrong PIN, please try again"
+        } else {
+            manager.errorMessage = "Connection failed, please try again"
         }
     }
 }
@@ -325,24 +313,12 @@ private suspend fun backupAction(
         nfcManager.onMessageUpdate = null
         nfcManager.onTagDetected = null
 
-        if (!isAuthError(e)) {
-            app.alertState =
-                org.bitcoinppl.cove.TaggedItem(
-                    org.bitcoinppl.cove.AppAlertState.General(
-                        title = "Backup Failed!",
-                        message = "Failed to create backup: ${e.message ?: "Unknown error occurred"}",
-                    ),
-                )
-        } else {
+        // show error in overlay - sheet stays open for retry
+        if (isAuthError(e)) {
             Log.w("TapSignerEnterPin", "TapSigner auth failed - likely wrong PIN")
-            app.sheetState = null
-            app.alertState =
-                org.bitcoinppl.cove.TaggedItem(
-                    org.bitcoinppl.cove.AppAlertState.TapSignerWrongPin(
-                        tapSigner,
-                        AfterPinAction.Backup,
-                    ),
-                )
+            manager.errorMessage = "Wrong PIN, please try again"
+        } else {
+            manager.errorMessage = "Connection failed, please try again"
         }
     }
 }
@@ -394,25 +370,12 @@ private suspend fun signAction(
         nfcManager.onMessageUpdate = null
         nfcManager.onTagDetected = null
 
-        if (!isAuthError(e)) {
-            app.alertState =
-                org.bitcoinppl.cove.TaggedItem(
-                    org.bitcoinppl.cove.AppAlertState.General(
-                        title = "Signing Failed!",
-                        message = "Failed to sign transaction: ${e.message ?: "Unknown error occurred"}",
-                    ),
-                )
-            app.sheetState = null
-        } else {
+        // show error in overlay - sheet stays open for retry
+        if (isAuthError(e)) {
             Log.w("TapSignerEnterPin", "TapSigner auth failed - likely wrong PIN")
-            app.sheetState = null
-            app.alertState =
-                org.bitcoinppl.cove.TaggedItem(
-                    org.bitcoinppl.cove.AppAlertState.TapSignerWrongPin(
-                        tapSigner,
-                        AfterPinAction.Sign(psbt),
-                    ),
-                )
+            manager.errorMessage = "Wrong PIN, please try again"
+        } else {
+            manager.errorMessage = "Connection failed, please try again"
         }
     }
 }

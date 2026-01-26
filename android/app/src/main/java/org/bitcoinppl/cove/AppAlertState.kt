@@ -187,7 +187,6 @@ sealed class AppAlertState {
             is FailedToScanQr,
             is CantSendOnWatchOnlyWallet,
             is TapSignerSetupFailed,
-            is TapSignerDeriveFailed,
             is TapSignerInvalidAuth,
             -> true
             else -> false

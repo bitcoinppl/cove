@@ -32,7 +32,7 @@ class TapSignerManager(
     var isScanning by mutableStateOf(false)
     var isTagDetected by mutableStateOf(false)
     var scanMessage by mutableStateOf("Hold your phone near the TapSigner")
-    var authErrorMessage by mutableStateOf<String?>(null)
+    var errorMessage by mutableStateOf<String?>(null)
 
     fun getOrCreateNfc(tapSigner: org.bitcoinppl.cove_core.tapcard.TapSigner): TapSignerNfcHelper {
         // recreate NFC helper if TapSigner has changed
