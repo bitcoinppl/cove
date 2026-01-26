@@ -174,7 +174,7 @@ class AppManager private constructor() : FfiReconcile {
             if (appVersion != rust.version()) {
                 return "MISMATCH ${rust.version()} || $appVersion (${rust.gitShortHash()})"
             }
-            return "v$appVersion (${rust.gitShortHash()})"
+            return "v$appVersion (${rust.gitShortHash()}-${BuildConfig.VERSION_CODE})"
         }
 
     fun findTapSignerWallet(ts: TapSigner): WalletMetadata? = rust.findTapSignerWallet(ts)
