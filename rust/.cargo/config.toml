@@ -1,2 +1,10 @@
 [alias]
 xtask = "run --package xtask --"
+
+# 16 KB page size alignment for Android (required by Play Store for SDK 35+)
+# backwards compatible with 4 KB devices
+[target.aarch64-linux-android]
+rustflags = ["-C", "link-arg=-Wl,-z,max-page-size=16384"]
+
+[target.x86_64-linux-android]
+rustflags = ["-C", "link-arg=-Wl,-z,max-page-size=16384"]
