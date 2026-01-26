@@ -106,19 +106,20 @@ fun NumberPadPinView(
             }
         }
 
+        Spacer(modifier = Modifier.weight(1f))
+
         // title
         Text(
             text = title,
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
             color = Color.White,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 16.dp),
+                    .padding(bottom = 16.dp),
         )
-
-        Spacer(modifier = Modifier.weight(1f))
 
         // PIN boxes with shake animation
         Row(
