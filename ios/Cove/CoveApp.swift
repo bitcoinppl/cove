@@ -102,13 +102,13 @@ struct CoveApp: App {
                 "Please try again.\(error)"
             case let .tapSignerDeriveFailed(error):
                 "Please try again.\nError: \(error)"
-            case .tapSignerInvalidAuth:
+            case .tapSignerInvalidAuth, .tapSignerWrongPin:
                 "The PIN you entered was incorrect. Please try again."
             case .intializedTapSigner:
                 "Would you like to start using this TAPSIGNER with Cove?"
             case .tapSignerWalletFound:
                 "Would you like to go to this wallet?"
-            case let .tapSignerNoBackup(tapSigner):
+            case .tapSignerNoBackup:
                 "Can't change the PIN without taking a backup of the wallet. Would you like to take a backup now?"
             case .general(title: _, let message):
                 message
@@ -198,6 +198,11 @@ struct CoveApp: App {
             Button("Yes") {
                 print("TODO: go to backup screen \(tapSigner)}")
                 // TODO: go to backup screen
+            }
+            Button("Cancel", role: .cancel) { app.alertState = .none }
+        case let .tapSignerWrongPin(tapSigner, action):
+            Button("Try Again") {
+                app.sheetState = .init(.tapSigner(.enterPin(tapSigner: tapSigner, action: action)))
             }
             Button("Cancel", role: .cancel) { app.alertState = .none }
         case .invalidWordGroup,
