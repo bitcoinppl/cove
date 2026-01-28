@@ -429,10 +429,8 @@ struct SelectedWalletScreen: View {
                     runPostRefresh = true // mark for later
                 }
                 .task(id: runPostRefresh) {
-                    // runs when the flag flips
+                    defer { runPostRefresh = false }
                     guard case let .loaded(txns) = manager.loadState else { return }
-                    guard runPostRefresh else { return }
-                    runPostRefresh = false
 
                     self.manager.loadState = .scanning(txns)
                     await manager.rust.forceWalletScan()

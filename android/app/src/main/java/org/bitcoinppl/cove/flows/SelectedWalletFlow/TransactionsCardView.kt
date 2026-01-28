@@ -102,7 +102,7 @@ fun TransactionsCardView(
     }
 
     // scroll to saved transaction when returning from details
-    LaunchedEffect(manager?.scrolledTransactionId, hasTransactions) {
+    LaunchedEffect(manager?.scrolledTransactionId, hasTransactions, transactions, unsignedTransactions) {
         val targetId = manager?.scrolledTransactionId ?: return@LaunchedEffect
         if (!hasTransactions) return@LaunchedEffect
 
