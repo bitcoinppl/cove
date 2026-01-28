@@ -27,6 +27,9 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
     // cached transaction details
     var transactionDetails: [TxId: TransactionDetails] = [:]
 
+    // scroll position for transaction list (persists across navigation)
+    var scrolledTransactionId: String?
+
     init(id: WalletId) throws {
         self.id = id
         let rust = try RustWalletManager(id: id)

@@ -56,13 +56,14 @@ struct TransactionsCardView: View {
 
                             Divider().opacity(0.7)
                         }
+                        .id(txn.id().description)
                     }
 
                     ForEach(transactions) { txn in
                         TransactionRow(txn: txn, metadata: metadata)
+                            .id(txn.id.description)
                     }
                 }
-                .scrollTargetLayout()
 
                 if transactions.isEmpty {
                     VStack {
@@ -151,6 +152,8 @@ struct ConfirmedTransactionView: View {
 
     private func goToTransactionDetails() {
         let txId = txn.id()
+        manager.scrolledTransactionId = txId.description
+
         if let details = manager.transactionDetails[txId] {
             return navigate(Route.transactionDetails(id: metadata.id, details: details))
         }
@@ -260,6 +263,8 @@ struct UnconfirmedTransactionView: View {
                     .foregroundStyle(amountColor(txn.sentAndReceived().direction()).opacity(0.65))
             }
         }.onTapGesture {
+            manager.scrolledTransactionId = txn.id().description
+
             Task {
                 await MiddlePopup(state: .loading).present()
                 do {
@@ -345,6 +350,8 @@ struct UnsignedTransactionView: View {
                 try? await manager.rust.amountInFiat(amount: txn.spendingAmount())
         }
         .onTapGesture {
+            manager.scrolledTransactionId = txn.id().description
+
             let hardwareExportRoute =
                 RouteFactory().sendHardwareExport(
                     id: metadata.id,

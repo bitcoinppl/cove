@@ -60,6 +60,9 @@ class WalletManager :
     // cached transaction details (observable for Compose)
     val transactionDetailsCache: SnapshotStateMap<TxId, TransactionDetails> = mutableStateMapOf()
 
+    // scroll position for transaction list (persists across navigation)
+    var scrolledTransactionId: String? by mutableStateOf(null)
+
     // computed properties
     val unit: String
         get() =

@@ -337,47 +337,76 @@ struct SelectedWalletScreen: View {
 
     var body: some View {
         VStack {
-            // set background colors below the scrollview
-            ScrollView {
-                MainContent
-                    .background(
-                        VStack {
-                            Color.midnightBlue.frame(height: screenHeight * 0.40)
-                            Color.coveBg
+            ScrollViewReader { proxy in
+                ScrollView {
+                    MainContent
+                        .background(
+                            VStack {
+                                Color.midnightBlue.frame(height: screenHeight * 0.40)
+                                Color.coveBg
+                            }
+                        )
+                }
+                .refreshable {
+                    // nothing to do – let the indicator disappear right away
+                    guard case .loaded = manager.loadState else { return }
+                    let task = Task.detached { try? await Task.sleep(for: .seconds(1.75)) }
+
+                    // wait for the task to complete
+                    let _ = await task.result
+                    runPostRefresh = true // mark for later
+                }
+                .task(id: runPostRefresh) {
+                    // runs when the flag flips
+                    guard case let .loaded(txns) = manager.loadState else { return }
+                    guard runPostRefresh else { return }
+                    runPostRefresh = false
+
+                    self.manager.loadState = .scanning(txns)
+                    await manager.rust.forceWalletScan()
+                    let _ = try? await manager.rust.forceUpdateHeight()
+                    await manager.updateWalletBalance()
+                }
+                .onAppear {
+                    // Reset SendFlowManager so new send flow is fresh
+                    app.sendFlowManager = nil
+                    UIRefreshControl.appearance().tintColor = UIColor.white
+                }
+                .onChange(of: manager.loadState, initial: true) { _, newState in
+                    Log.debug("[SCROLL] onChange fired, loadState: \(newState), scrolledTransactionId: \(String(describing: manager.scrolledTransactionId))")
+
+                    guard let targetId = manager.scrolledTransactionId else {
+                        Log.debug("[SCROLL] No targetId, skipping")
+                        return
+                    }
+
+                    let hasTransactions: Bool = switch newState {
+                    case .loading: false
+                    case let .scanning(txns): !txns.isEmpty
+                    case let .loaded(txns): !txns.isEmpty
+                    }
+
+                    guard hasTransactions else {
+                        Log.debug("[SCROLL] No transactions yet, waiting...")
+                        return
+                    }
+
+                    Log.debug("[SCROLL] Will scroll to: \(targetId) in 0.1s")
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        Log.debug("[SCROLL] Executing scrollTo: \(targetId), scrolledTransactionId is now: \(String(describing: manager.scrolledTransactionId))")
+                        withAnimation {
+                            proxy.scrollTo(targetId, anchor: .center)
                         }
-                    )
-            }
-            .refreshable {
-                // nothing to do – let the indicator disappear right away
-                guard case .loaded = manager.loadState else { return }
-                let task = Task.detached { try? await Task.sleep(for: .seconds(1.75)) }
-
-                // wait for the task to complete
-                let _ = await task.result
-                runPostRefresh = true // mark for later
-            }
-            .task(id: runPostRefresh) {
-                // runs when the flag flips
-                guard case let .loaded(txns) = manager.loadState else { return }
-                guard runPostRefresh else { return }
-                runPostRefresh = false
-
-                self.manager.loadState = .scanning(txns)
-                await manager.rust.forceWalletScan()
-                let _ = try? await manager.rust.forceUpdateHeight()
-                await manager.updateWalletBalance()
-            }
-            .onAppear {
-                // Reset SendFlowManager so new send flow is fresh
-                app.sendFlowManager = nil
-                UIRefreshControl.appearance().tintColor = UIColor.white
-            }
-            .scrollIndicators(.hidden)
-            .onScrollGeometryChange(for: Bool.self) { geometry in
-                geometry.contentOffset.y > (geometry.contentInsets.top + safeAreaInsets.top - 5)
-            } action: { _, pastTop in
-                shouldShowNavBar = pastTop
-                app.isPastHeader = pastTop
+                        manager.scrolledTransactionId = nil
+                    }
+                }
+                .scrollIndicators(.hidden)
+                .onScrollGeometryChange(for: Bool.self) { geometry in
+                    geometry.contentOffset.y > (geometry.contentInsets.top + safeAreaInsets.top - 5)
+                } action: { _, pastTop in
+                    shouldShowNavBar = pastTop
+                    app.isPastHeader = pastTop
+                }
             }
         }
         .ignoresSafeArea(edges: .top)
