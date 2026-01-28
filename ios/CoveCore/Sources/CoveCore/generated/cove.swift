@@ -18291,6 +18291,11 @@ public enum MultiFormat: Equatable {
      */
     case tapSignerUnused(TapSigner
     )
+    /**
+     * A signed but un-finalized PSBT
+     */
+    case signedPsbt(Psbt
+    )
 
 
 
@@ -18344,6 +18349,9 @@ public struct FfiConverterTypeMultiFormat: FfiConverterRustBuffer {
         case 7: return .tapSignerUnused(try FfiConverterTypeTapSigner.read(from: &buf)
         )
         
+        case 8: return .signedPsbt(try FfiConverterTypePsbt.read(from: &buf)
+        )
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -18385,6 +18393,11 @@ public struct FfiConverterTypeMultiFormat: FfiConverterRustBuffer {
         case let .tapSignerUnused(v1):
             writeInt(&buf, Int32(7))
             FfiConverterTypeTapSigner.write(v1, into: &buf)
+            
+        
+        case let .signedPsbt(v1):
+            writeInt(&buf, Int32(8))
+            FfiConverterTypePsbt.write(v1, into: &buf)
             
         }
     }

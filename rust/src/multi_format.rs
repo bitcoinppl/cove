@@ -10,6 +10,7 @@
 use std::sync::Arc;
 
 use cove_nfc::message::NfcMessage;
+use cove_types::psbt::Psbt;
 use tracing::{debug, warn};
 
 use crate::{
@@ -38,6 +39,8 @@ pub enum MultiFormat {
     TapSignerReady(Arc<cove_tap_card::TapSigner>),
     /// TAPSIGNER has not been initialized yet
     TapSignerUnused(Arc<cove_tap_card::TapSigner>),
+    /// A signed but un-finalized PSBT
+    SignedPsbt(Arc<Psbt>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Error, thiserror::Error)]
@@ -50,7 +53,7 @@ pub enum MultiFormatError {
     UnsupportedNetworkAddress,
 
     #[error(
-        "Not a valid format, we only support addresses, SeedQr, mnemonic, descriptors and XPUBs"
+        "Not a valid format, we only support addresses, SeedQr, mnemonic, descriptors, XPUBs and PSBTs"
     )]
     UnrecognizedFormat,
 
@@ -155,6 +158,16 @@ impl MultiFormat {
             }
         }
 
+        // try to parse as PSBT (base64 or hex)
+        if let Ok(parsed) = crate::signed_import::SignedTransactionOrPsbt::try_parse(string) {
+            if let Some(psbt) = parsed.psbt() {
+                return Ok(Self::SignedPsbt(psbt));
+            }
+            if let Some(txn) = parsed.transaction() {
+                return Ok(Self::Transaction(txn));
+            }
+        }
+
         warn!("could not parse string as MultiFormat: {string}");
         Err(MultiFormatError::UnrecognizedFormat)
     }
@@ -179,17 +192,9 @@ impl MultiFormat {
                 let crypto_psbt = cove_ur::CryptoPsbt::decode(data.to_vec())
                     .map_err(|_| MultiFormatError::UnrecognizedFormat)?;
 
-                // extract the unsigned transaction from the PSBT
-                let psbt = crypto_psbt.psbt();
-                let unsigned_tx = &psbt.unsigned_tx;
-
-                // serialize the unsigned transaction
-                let tx_bytes = bitcoin::consensus::serialize(unsigned_tx);
-
-                // parse as BitcoinTransaction
-                let txn = BitcoinTransaction::try_from_data(&tx_bytes)
-                    .map_err(|_| MultiFormatError::UnrecognizedFormat)?;
-                Ok(Self::Transaction(Arc::new(txn)))
+                // return as SignedPsbt to preserve signature data
+                let psbt = Psbt::from(crypto_psbt.psbt().clone());
+                Ok(Self::SignedPsbt(Arc::new(psbt)))
             }
 
             UrType::CryptoSeed => {
@@ -439,8 +444,8 @@ mod tests {
         let result = MultiFormat::try_from_ur_string(&ur_string).unwrap();
 
         match result {
-            MultiFormat::Transaction(_) => {} // success
-            _ => panic!("Expected Transaction variant"),
+            MultiFormat::SignedPsbt(_) => {} // success - returns full PSBT
+            _ => panic!("Expected SignedPsbt variant"),
         }
     }
 
@@ -535,5 +540,36 @@ mod tests {
         let result = MultiFormat::try_from_string(&ur_string);
         assert!(result.is_ok(), "Failed to parse crypto-account UR: {:?}", result);
         assert!(matches!(result.unwrap(), MultiFormat::HardwareExport(_)));
+    }
+
+    // same test PSBT from signed_import tests
+    const TEST_PSBT_HEX: &str = "70736274ff01009a020000000258e87a21b56daf0c23be8e7070456c336f7cbaa5c8757924f545887bb2abdd750000000000ffffffff838d0427d0ec650a68aa46bb0b098aea4422c071b2ca78352a077959d07cea1d0100000000ffffffff0270aaf00800000000160014d85c2b71d0060b09c9886aeb815e50991dda124d00e1f5050000000016001400aea9a2e5f0f876a588df5546e8742d1d87008f000000000000000000";
+
+    #[test]
+    fn test_multi_format_hex_psbt() {
+        let result = MultiFormat::try_from_string(TEST_PSBT_HEX);
+        assert!(result.is_ok(), "Failed to parse hex PSBT: {:?}", result);
+        assert!(matches!(result.unwrap(), MultiFormat::SignedPsbt(_)));
+    }
+
+    #[test]
+    fn test_multi_format_base64_psbt() {
+        use base64::{Engine as _, prelude::BASE64_STANDARD};
+
+        let bytes = hex::decode(TEST_PSBT_HEX).unwrap();
+        let base64 = BASE64_STANDARD.encode(&bytes);
+
+        let result = MultiFormat::try_from_string(&base64);
+        assert!(result.is_ok(), "Failed to parse base64 PSBT: {:?}", result);
+        assert!(matches!(result.unwrap(), MultiFormat::SignedPsbt(_)));
+    }
+
+    #[test]
+    fn test_multi_format_psbt_with_whitespace() {
+        // QR scanners may add leading/trailing whitespace
+        let psbt_with_whitespace = format!("  {}  \n", TEST_PSBT_HEX);
+        let result = MultiFormat::try_from_string(&psbt_with_whitespace);
+        assert!(result.is_ok(), "Should handle whitespace: {:?}", result);
+        assert!(matches!(result.unwrap(), MultiFormat::SignedPsbt(_)));
     }
 }

@@ -313,6 +313,9 @@ class AppManager private constructor() : FfiReconcile {
                 is MultiFormat.Transaction -> {
                     handleTransaction(multiFormat.v1)
                 }
+                is MultiFormat.SignedPsbt -> {
+                    handleSignedPsbt(multiFormat.v1)
+                }
                 is MultiFormat.TapSignerUnused -> {
                     alertState = TaggedItem(AppAlertState.UninitializedTapSigner(multiFormat.v1))
                 }
@@ -477,6 +480,31 @@ class AppManager private constructor() : FfiReconcile {
                 id = txnRecord.walletId(),
                 details = txnRecord.confirmDetails(),
                 signedTransaction = transaction,
+            )
+
+        pushRoute(route)
+    }
+
+    /**
+     * Handle scanned signed PSBT
+     */
+    private fun handleSignedPsbt(psbt: Psbt) {
+        Log.d(tag, "Received signed PSBT: ${psbt.txId()}")
+
+        val db = database.unsignedTransactions()
+        val txnRecord = db.getTx(psbt.txId())
+
+        if (txnRecord == null) {
+            Log.e(tag, "No unsigned transaction found for PSBT ${psbt.txId()}")
+            alertState = TaggedItem(AppAlertState.NoUnsignedTransactionFound(psbt.txId()))
+            return
+        }
+
+        val route =
+            RouteFactory().sendConfirm(
+                id = txnRecord.walletId(),
+                details = txnRecord.confirmDetails(),
+                signedPsbt = psbt,
             )
 
         pushRoute(route)
