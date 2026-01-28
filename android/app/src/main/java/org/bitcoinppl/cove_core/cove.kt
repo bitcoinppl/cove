@@ -1423,6 +1423,8 @@ external fun uniffi_cove_checksum_method_rustwalletmanager_delete_unsigned_trans
 ): Short
 external fun uniffi_cove_checksum_method_rustwalletmanager_delete_wallet(
 ): Short
+external fun uniffi_cove_checksum_method_rustwalletmanager_deletion_warning_message(
+): Short
 external fun uniffi_cove_checksum_method_rustwalletmanager_dispatch(
 ): Short
 external fun uniffi_cove_checksum_method_rustwalletmanager_display_amount(
@@ -1498,6 +1500,8 @@ external fun uniffi_cove_checksum_method_rustwalletmanager_wallet_metadata(
 external fun uniffi_cove_checksum_method_rustwalletmanager_word_validator(
 ): Short
 external fun uniffi_cove_checksum_method_mnemonic_all_words(
+): Short
+external fun uniffi_cove_checksum_method_mnemonic_to_seed_qr_string(
 ): Short
 external fun uniffi_cove_checksum_method_mnemonic_words(
 ): Short
@@ -2375,6 +2379,8 @@ external fun uniffi_cove_fn_method_rustwalletmanager_delete_unsigned_transaction
 ): Unit
 external fun uniffi_cove_fn_method_rustwalletmanager_delete_wallet(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
+external fun uniffi_cove_fn_method_rustwalletmanager_deletion_warning_message(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_rustwalletmanager_dispatch(`ptr`: Long,`action`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
 external fun uniffi_cove_fn_method_rustwalletmanager_display_amount(`ptr`: Long,`amount`: Long,`showUnit`: Byte,uniffi_out_err: UniffiRustCallStatus, 
@@ -2458,6 +2464,8 @@ external fun uniffi_cove_fn_constructor_mnemonic_new(`id`: RustBufferWalletId.By
 external fun uniffi_cove_fn_constructor_mnemonic_preview(`numberOfBip39Words`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
 external fun uniffi_cove_fn_method_mnemonic_all_words(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_mnemonic_to_seed_qr_string(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_mnemonic_words(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
@@ -3821,6 +3829,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_delete_wallet() != 58138.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_deletion_warning_message() != 57956.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_dispatch() != 14781.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -3933,6 +3944,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_mnemonic_all_words() != 24108.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_mnemonic_to_seed_qr_string() != 52169.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_mnemonic_words() != 8009.toShort()) {
@@ -13458,6 +13472,12 @@ public interface MnemonicInterface {
     
     fun `allWords`(): List<GroupedWord>
     
+    /**
+     * Converts mnemonic to SeedQR standard format string
+     * Each word is converted to its 4-digit BIP39 index (0000-2047)
+     */
+    fun `toSeedQrString`(): kotlin.String
+    
     fun `words`(): List<kotlin.String>
     
     companion object
@@ -13572,6 +13592,23 @@ open class Mnemonic: Disposable, AutoCloseable, MnemonicInterface
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_mnemonic_all_words(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Converts mnemonic to SeedQR standard format string
+     * Each word is converted to its 4-digit BIP39 index (0000-2047)
+     */override fun `toSeedQrString`(): kotlin.String {
+            return FfiConverterString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_mnemonic_to_seed_qr_string(
         it,
         _status)
 }
@@ -18027,6 +18064,11 @@ public interface RustWalletManagerInterface {
     fun `deleteWallet`()
     
     /**
+     * Returns the warning message for the first delete confirmation dialog
+     */
+    fun `deletionWarningMessage`(): kotlin.String
+    
+    /**
      * Action from the frontend to change the state of the view model
      */
     fun `dispatch`(`action`: WalletManagerAction)
@@ -18415,6 +18457,22 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
 }
     }
     
+    
+
+    
+    /**
+     * Returns the warning message for the first delete confirmation dialog
+     */override fun `deletionWarningMessage`(): kotlin.String {
+            return FfiConverterString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_deletion_warning_message(
+        it,
+        _status)
+}
+    }
+    )
+    }
     
 
     

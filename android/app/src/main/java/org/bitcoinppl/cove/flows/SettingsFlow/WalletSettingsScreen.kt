@@ -77,8 +77,23 @@ fun WalletSettingsScreen(
     modifier: Modifier = Modifier,
 ) {
     val metadata = manager.walletMetadata
-    var showDeleteConfirmation by remember { mutableStateOf(false) }
+    var showFirstDeleteConfirmation by remember { mutableStateOf(false) }
+    var showSecondDeleteConfirmation by remember { mutableStateOf(false) }
+    var showFinalDeleteConfirmation by remember { mutableStateOf(false) }
+    var requiredConfirmations by remember { mutableStateOf(1.toUByte()) }
     var deleteError by remember { mutableStateOf<String?>(null) }
+
+    fun deleteWallet() {
+        try {
+            manager.rust.deleteWallet()
+            app.popRoute()
+        } catch (e: Exception) {
+            deleteError = e.message ?: "Failed to delete wallet"
+            Log.e("WalletSettingsScreen", "failed to delete wallet", e)
+        }
+    }
+
+    fun firstDeleteConfirmationMessage(): String = manager.rust.deletionWarningMessage()
 
     // validate metadata on appear and disappear
     LaunchedEffect(manager) {
@@ -259,7 +274,8 @@ fun WalletSettingsScreen(
                                 )
                             },
                             onClick = {
-                                showDeleteConfirmation = true
+                                requiredConfirmations = manager.rust.requiredDeletionConfirmations()
+                                showFirstDeleteConfirmation = true
                             },
                         )
                     }
@@ -268,23 +284,20 @@ fun WalletSettingsScreen(
         },
     )
 
-    // confirmation dialog for wallet deletion
-    if (showDeleteConfirmation) {
+    // first confirmation dialog for wallet deletion
+    if (showFirstDeleteConfirmation) {
         AlertDialog(
-            onDismissRequest = { showDeleteConfirmation = false },
+            onDismissRequest = { showFirstDeleteConfirmation = false },
             title = { Text("Are you sure?") },
-            text = { Text("This action cannot be undone.") },
+            text = { Text(firstDeleteConfirmationMessage()) },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        try {
-                            manager.rust.deleteWallet()
-                            showDeleteConfirmation = false
-                            app.popRoute()
-                        } catch (e: Exception) {
-                            showDeleteConfirmation = false
-                            deleteError = e.message ?: "Failed to delete wallet"
-                            Log.e("WalletSettingsScreen", "failed to delete wallet", e)
+                        showFirstDeleteConfirmation = false
+                        if (requiredConfirmations >= 2u) {
+                            showSecondDeleteConfirmation = true
+                        } else {
+                            deleteWallet()
                         }
                     },
                 ) {
@@ -292,7 +305,59 @@ fun WalletSettingsScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteConfirmation = false }) {
+                TextButton(onClick = { showFirstDeleteConfirmation = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
+    // second confirmation dialog
+    if (showSecondDeleteConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showSecondDeleteConfirmation = false },
+            title = { Text("Confirm Deletion") },
+            text = { Text("Are you sure you want to delete '${metadata.name}'?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showSecondDeleteConfirmation = false
+                        if (requiredConfirmations >= 3u) {
+                            showFinalDeleteConfirmation = true
+                        } else {
+                            deleteWallet()
+                        }
+                    },
+                ) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSecondDeleteConfirmation = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
+    // final confirmation dialog (for unverified hot wallets)
+    if (showFinalDeleteConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showFinalDeleteConfirmation = false },
+            title = { Text("Final Warning") },
+            text = { Text("This wallet is not backed up and contains funds. You will lose access to these funds forever.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showFinalDeleteConfirmation = false
+                        deleteWallet()
+                    },
+                ) {
+                    Text("Delete Forever", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showFinalDeleteConfirmation = false }) {
                     Text("Cancel")
                 }
             },

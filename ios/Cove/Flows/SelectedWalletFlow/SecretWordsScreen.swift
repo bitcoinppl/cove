@@ -16,6 +16,8 @@ struct SecretWordsScreen: View {
     // private
     @State var words: Mnemonic?
     @State var errorMessage: String?
+    @State private var showSeedQrAlert = false
+    @State private var showSeedQrSheet = false
 
     let rowHeight = 30.0
     private let numberOfColumns = 3
@@ -112,6 +114,24 @@ struct SecretWordsScreen: View {
                     .font(.callout)
                     .fontWeight(.semibold)
             }
+
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button(action: { showSeedQrAlert = true }) {
+                    Image(systemName: "qrcode")
+                        .foregroundStyle(.white)
+                }
+            }
+        }
+        .alert("Show Seed QR?", isPresented: $showSeedQrAlert) {
+            Button("Cancel", role: .cancel) {}
+            Button("Show QR Code") { showSeedQrSheet = true }
+        } message: {
+            Text("Your seed words are sensitive and control access to your Bitcoin. QR codes are machine-readable, so be careful who or what device you show this to.")
+        }
+        .sheet(isPresented: $showSeedQrSheet) {
+            if let words {
+                SeedQrSheetView(words: words)
+            }
         }
         .background(
             Image(.newWalletPattern)
@@ -123,6 +143,32 @@ struct SecretWordsScreen: View {
         )
         .background(Color.midnightBlue)
         .tint(.white)
+    }
+}
+
+private struct SeedQrSheetView: View {
+    let words: Mnemonic
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Text("Seed QR")
+                .font(.title3)
+                .fontWeight(.semibold)
+                .padding(.top, 20)
+
+            Text("Scan with a SeedQR-compatible device")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 40)
+
+            QrCodeView(text: words.toSeedQrString())
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
+
+            Spacer()
+        }
+        .presentationDetents([.medium, .large])
     }
 }
 

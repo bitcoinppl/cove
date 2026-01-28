@@ -39,7 +39,7 @@ use crate::{
         Address, AddressInfo, Wallet, WalletAddressType, WalletError,
         balance::Balance,
         fingerprint::Fingerprint,
-        metadata::{DiscoveryState, FiatOrBtc, WalletColor, WalletId, WalletMetadata},
+        metadata::{DiscoveryState, FiatOrBtc, WalletColor, WalletId, WalletMetadata, WalletType},
     },
     wallet_scanner::{ScannerResponse, WalletScanner},
     word_validator::WordValidator,
@@ -854,6 +854,41 @@ impl RustWalletManager {
     #[uniffi::method]
     pub fn wallet_metadata(&self) -> WalletMetadata {
         self.metadata.read().clone()
+    }
+
+    /// Returns the number of confirmation steps required to delete this wallet
+    /// - 2: Cold wallets, xpub-only wallets, or verified hot wallets
+    /// - 3: Hot wallets that are NOT verified (highest risk)
+    #[uniffi::method]
+    pub fn required_deletion_confirmations(&self) -> u8 {
+        let (wallet_type, verified) = {
+            let metadata = self.metadata.read();
+            (metadata.wallet_type, metadata.verified)
+        };
+
+        // cold wallets and xpub-only don't need backup, treat as "verified"
+        if wallet_type != WalletType::Hot {
+            return 2;
+        }
+
+        // hot wallets: verified → 2, not verified → 3
+        if verified { 2 } else { 3 }
+    }
+
+    /// Returns the warning message for the first delete confirmation dialog
+    #[uniffi::method]
+    pub fn deletion_warning_message(&self) -> String {
+        let (wallet_type, verified) = {
+            let metadata = self.metadata.read();
+            (metadata.wallet_type, metadata.verified)
+        };
+
+        match (wallet_type, verified) {
+            (WalletType::Hot, false) => {
+                "This wallet is not backed up. Make sure you have your secret words saved before deleting.".to_string()
+            }
+            _ => "This action cannot be undone.".to_string(),
+        }
     }
 
     // only called from the frontend, to make sure all metadata places are up to date,

@@ -5009,6 +5009,12 @@ public protocol MnemonicProtocol: AnyObject, Sendable {
     
     func allWords()  -> [GroupedWord]
     
+    /**
+     * Converts mnemonic to SeedQR standard format string
+     * Each word is converted to its 4-digit BIP39 index (0000-2047)
+     */
+    func toSeedQrString()  -> String
+    
     func words()  -> [String]
     
 }
@@ -5084,6 +5090,18 @@ public static func preview(numberOfBip39Words: NumberOfBip39Words) -> Mnemonic  
 open func allWords() -> [GroupedWord]  {
     return try!  FfiConverterSequenceTypeGroupedWord.lift(try! rustCall() {
     uniffi_cove_fn_method_mnemonic_all_words(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+    /**
+     * Converts mnemonic to SeedQR standard format string
+     * Each word is converted to its 4-digit BIP39 index (0000-2047)
+     */
+open func toSeedQrString() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_method_mnemonic_to_seed_qr_string(
             self.uniffiCloneHandle(),$0
     )
 })
@@ -7611,6 +7629,11 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
     func deleteWallet() throws 
     
     /**
+     * Returns the warning message for the first delete confirmation dialog
+     */
+    func deletionWarningMessage()  -> String
+    
+    /**
      * Action from the frontend to change the state of the view model
      */
     func dispatch(action: WalletManagerAction) 
@@ -7680,6 +7703,13 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
     func numberOfConfirmations(blockHeight: UInt32) async throws  -> UInt32
     
     func numberOfConfirmationsFmt(blockHeight: UInt32) async throws  -> String
+    
+    /**
+     * Returns the number of confirmation steps required to delete this wallet
+     * - 2: Cold wallets, xpub-only wallets, or verified hot wallets
+     * - 3: Hot wallets that are NOT verified (highest risk)
+     */
+    func requiredDeletionConfirmations()  -> UInt8
     
     func saveUnsignedTransaction(details: ConfirmDetails) throws 
     
@@ -7945,6 +7975,17 @@ open func deleteWallet()throws   {try rustCallWithError(FfiConverterTypeWalletMa
             self.uniffiCloneHandle(),$0
     )
 }
+}
+    
+    /**
+     * Returns the warning message for the first delete confirmation dialog
+     */
+open func deletionWarningMessage() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_method_rustwalletmanager_deletion_warning_message(
+            self.uniffiCloneHandle(),$0
+    )
+})
 }
     
     /**
@@ -8300,6 +8341,19 @@ open func numberOfConfirmationsFmt(blockHeight: UInt32)async throws  -> String  
             liftFunc: FfiConverterString.lift,
             errorHandler: FfiConverterTypeWalletManagerError_lift
         )
+}
+    
+    /**
+     * Returns the number of confirmation steps required to delete this wallet
+     * - 2: Cold wallets, xpub-only wallets, or verified hot wallets
+     * - 3: Hot wallets that are NOT verified (highest risk)
+     */
+open func requiredDeletionConfirmations() -> UInt8  {
+    return try!  FfiConverterUInt8.lift(try! rustCall() {
+    uniffi_cove_fn_method_rustwalletmanager_required_deletion_confirmations(
+            self.uniffiCloneHandle(),$0
+    )
+})
 }
     
 open func saveUnsignedTransaction(details: ConfirmDetails)throws   {try rustCallWithError(FfiConverterTypeWalletManagerError_lift) {
@@ -29007,6 +29061,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustwalletmanager_delete_wallet() != 58138) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_rustwalletmanager_deletion_warning_message() != 57956) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_rustwalletmanager_dispatch() != 14781) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -29082,6 +29139,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustwalletmanager_number_of_confirmations_fmt() != 32886) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_rustwalletmanager_required_deletion_confirmations() != 30427) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_rustwalletmanager_save_unsigned_transaction() != 43358) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -29119,6 +29179,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_mnemonic_all_words() != 24108) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_mnemonic_to_seed_qr_string() != 52169) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_mnemonic_words() != 8009) {
