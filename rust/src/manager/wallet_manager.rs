@@ -875,6 +875,22 @@ impl RustWalletManager {
         if verified { 2 } else { 3 }
     }
 
+    /// Returns the warning message for the first delete confirmation dialog
+    #[uniffi::method]
+    pub fn deletion_warning_message(&self) -> String {
+        let (wallet_type, verified) = {
+            let metadata = self.metadata.read();
+            (metadata.wallet_type, metadata.verified)
+        };
+
+        match (wallet_type, verified) {
+            (WalletType::Hot, false) => {
+                "This wallet is not backed up. Make sure you have your secret words saved before deleting.".to_string()
+            }
+            _ => "This action cannot be undone.".to_string(),
+        }
+    }
+
     // only called from the frontend, to make sure all metadata places are up to date,
     // this would not be needed if we didn't keep a metadata cache in the view model
     #[uniffi::method]

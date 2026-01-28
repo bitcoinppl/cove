@@ -22,10 +22,7 @@ struct WalletSettingsView: View {
     }
 
     var deleteConfirmationMessage: String {
-        if metadata.walletType == .hot, !metadata.verified {
-            return "This wallet is not backed up. Make sure you have your secret words saved before deleting."
-        }
-        return "This action cannot be undone."
+        manager.rust.deletionWarningMessage()
     }
 
     let colorColumns = Array(repeating: GridItem(.flexible(), spacing: 0), count: 5)
