@@ -1,9 +1,10 @@
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use color_eyre::Result;
 
 mod android;
 mod common;
 mod ios;
+mod util;
 mod version;
 
 #[derive(Parser)]
@@ -74,6 +75,65 @@ enum Commands {
     /// Install required build dependencies (cargo-ndk, etc.)
     #[command(name = "install-deps")]
     InstallDeps,
+
+    /// Utility commands for development and testing
+    #[command(subcommand)]
+    Util(UtilCommands),
+}
+
+/// Output format for signed PSBT
+#[derive(Debug, Clone, Copy, Default, ValueEnum)]
+enum OutputFormat {
+    /// Base64-encoded PSBT (default)
+    #[default]
+    Base64,
+    /// Hex-encoded PSBT
+    Hex,
+    /// Raw binary PSBT file
+    Binary,
+    /// Animated GIF with BBQr-encoded QR codes
+    BbqrGif,
+    /// Animated GIF with UR-encoded QR codes (crypto-psbt)
+    UrGif,
+}
+
+impl From<OutputFormat> for util::OutputFormat {
+    fn from(format: OutputFormat) -> Self {
+        match format {
+            OutputFormat::Base64 => util::OutputFormat::Base64,
+            OutputFormat::Hex => util::OutputFormat::Hex,
+            OutputFormat::Binary => util::OutputFormat::Binary,
+            OutputFormat::BbqrGif => util::OutputFormat::BbqrGif,
+            OutputFormat::UrGif => util::OutputFormat::UrGif,
+        }
+    }
+}
+
+#[derive(Subcommand)]
+enum UtilCommands {
+    /// Sign a PSBT without finalizing (for testing hardware wallet flows)
+    #[command(name = "sign-psbt")]
+    SignPsbt {
+        /// Mnemonic words (space-separated, in quotes). Can also be set via MNEMONIC env var
+        #[arg(short, long, env = "MNEMONIC")]
+        mnemonic: String,
+
+        /// PSBT to sign (base64 string or file path)
+        #[arg(short, long)]
+        psbt: String,
+
+        /// Network: bitcoin, testnet, signet, regtest
+        #[arg(short, long, default_value = "testnet")]
+        network: String,
+
+        /// Output format for the signed PSBT
+        #[arg(short, long, value_enum, default_value_t = OutputFormat::Base64)]
+        format: OutputFormat,
+
+        /// Output file path (required for binary, bbqr-gif, ur-gif formats)
+        #[arg(short = 'O', long)]
+        output: Option<String>,
+    },
 }
 
 fn main() -> Result<()> {
@@ -104,6 +164,12 @@ fn main() -> Result<()> {
         Commands::RunIos => ios::run_ios(cli.verbose),
 
         Commands::InstallDeps => install_deps(cli.verbose),
+
+        Commands::Util(util_cmd) => match util_cmd {
+            UtilCommands::SignPsbt { mnemonic, psbt, network, format, output } => {
+                util::sign_psbt(&mnemonic, &psbt, &network, format.into(), output.as_deref())
+            }
+        },
     }
 }
 
