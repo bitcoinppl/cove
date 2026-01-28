@@ -27,6 +27,10 @@ struct SelectedWalletScreen: View {
 
     private let screenHeight = UIScreen.main.bounds.height
 
+    // nav bar height (~50) + scroll view system insets (~50)
+    // safeAreaInsets.top handles device-specific differences (notch, Dynamic Island)
+    private let navBarAndScrollInsets: CGFloat = 100
+
     // public
     var manager: WalletManager
 
@@ -252,7 +256,6 @@ struct SelectedWalletScreen: View {
                 showReceiveSheet: showReceiveSheet
             )
             .clipped()
-            .ignoresSafeArea(.all)
 
             VerifyReminder(
                 walletId: manager.walletMetadata.id, isVerified: manager.walletMetadata.verified
@@ -341,12 +344,16 @@ struct SelectedWalletScreen: View {
                 ScrollView {
                     MainContent
                         .background(
-                            VStack {
-                                Color.midnightBlue.frame(height: screenHeight * 0.40)
+                            VStack(spacing: 0) {
+                                Color.midnightBlue.frame(height: screenHeight * 0.40 + 500)
                                 Color.coveBg
                             }
+                            .offset(y: -500)
                         )
                 }
+                .contentMargins(.top, -(safeAreaInsets.top + navBarAndScrollInsets), for: .scrollContent)
+                .background(Color.coveBg.ignoresSafeArea(edges: .bottom))
+                .background(Color.midnightBlue.ignoresSafeArea(edges: .top))
                 .refreshable {
                     // nothing to do – let the indicator disappear right away
                     guard case .loaded = manager.loadState else { return }
@@ -373,7 +380,7 @@ struct SelectedWalletScreen: View {
                     UIRefreshControl.appearance().tintColor = UIColor.white
                 }
                 .onChange(of: manager.loadState, initial: true) { _, newState in
-                    Log.debug("[SCROLL] onChange fired, loadState: \(newState), scrolledTransactionId: \(String(describing: manager.scrolledTransactionId))")
+                    Log.debug("[SCROLL] onChange fired, scrolledTransactionId: \(String(describing: manager.scrolledTransactionId))")
 
                     guard let targetId = manager.scrolledTransactionId else {
                         Log.debug("[SCROLL] No targetId, skipping")
@@ -409,7 +416,7 @@ struct SelectedWalletScreen: View {
                 }
             }
         }
-        .ignoresSafeArea(edges: .top)
+        .background(Color.midnightBlue.ignoresSafeArea())
         .onChange(of: manager.walletMetadata.discoveryState) { _, newValue in
             setSheetState(newValue)
         }
