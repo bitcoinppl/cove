@@ -404,6 +404,7 @@ internal fun ConfirmedTransactionWidget(
                 .padding(vertical = 6.dp)
                 .clickable {
                     if (app != null && manager != null) {
+                        manager.scrolledTransactionId = transaction.v1.id().toString()
                         scope.launch {
                             try {
                                 app.alertState = TaggedItem(AppAlertState.Loading)
@@ -508,6 +509,7 @@ internal fun UnconfirmedTransactionWidget(
                 .padding(vertical = 6.dp)
                 .clickable {
                     if (app != null && manager != null) {
+                        manager.scrolledTransactionId = transaction.v1.id().toString()
                         scope.launch {
                             try {
                                 app.alertState = TaggedItem(AppAlertState.Loading)
@@ -636,7 +638,7 @@ internal fun UnsignedTransactionWidget(
                     .fillMaxWidth()
                     .combinedClickable(
                         onClick = {
-                            // navigate to hardware export screen
+                            manager?.scrolledTransactionId = txn.id().toString()
                             val walletId = manager?.walletMetadata?.id
                             if (app != null && walletId != null) {
                                 val route = RouteFactory().sendHardwareExport(walletId, txn.details())
