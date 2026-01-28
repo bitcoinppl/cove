@@ -175,6 +175,7 @@ internal fun WalletSheetsHost(
                     subtitle = "Scan to import labels\ninto another wallet",
                     generateBbqrStrings = { density -> manager.rust.exportLabelsForQr(density) },
                     generateUrStrings = null,
+                    onCopy = { manager.rust.exportLabelsForShare().content },
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 16.dp),
                 )
             }

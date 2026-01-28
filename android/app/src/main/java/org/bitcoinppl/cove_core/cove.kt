@@ -3984,7 +3984,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_mnemonic_all_words() != 24108.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_mnemonic_to_seed_qr_string() != 52169.toShort()) {
+    if (lib.uniffi_cove_checksum_method_mnemonic_to_seed_qr_string() != 24678.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_mnemonic_words() != 8009.toShort()) {
@@ -13642,10 +13642,11 @@ open class Mnemonic: Disposable, AutoCloseable, MnemonicInterface
     /**
      * Converts mnemonic to SeedQR standard format string
      * Each word is converted to its 4-digit BIP39 index (0000-2047)
-     */override fun `toSeedQrString`(): kotlin.String {
+     */
+    @Throws(MnemonicException::class)override fun `toSeedQrString`(): kotlin.String {
             return FfiConverterString.lift(
     callWithHandle {
-    uniffiRustCall() { _status ->
+    uniffiRustCallWithError(MnemonicException) { _status ->
     UniffiLib.uniffi_cove_fn_method_mnemonic_to_seed_qr_string(
         it,
         _status)
@@ -31890,6 +31891,14 @@ sealed class MnemonicException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
+    class UnknownWord(
+        
+        val v1: kotlin.String
+        ) : MnemonicException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+    
 
     
 
@@ -31924,6 +31933,9 @@ public object FfiConverterTypeMnemonicError : FfiConverterRustBuffer<MnemonicExc
             2 -> MnemonicException.NotAvailable(
                 FfiConverterTypeWalletId.read(buf),
                 )
+            3 -> MnemonicException.UnknownWord(
+                FfiConverterString.read(buf),
+                )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
@@ -31940,6 +31952,11 @@ public object FfiConverterTypeMnemonicError : FfiConverterRustBuffer<MnemonicExc
                 4UL
                 + FfiConverterTypeWalletId.allocationSize(value.v1)
             )
+            is MnemonicException.UnknownWord -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
         }
     }
 
@@ -31953,6 +31970,11 @@ public object FfiConverterTypeMnemonicError : FfiConverterRustBuffer<MnemonicExc
             is MnemonicException.NotAvailable -> {
                 buf.putInt(2)
                 FfiConverterTypeWalletId.write(value.v1, buf)
+                Unit
+            }
+            is MnemonicException.UnknownWord -> {
+                buf.putInt(3)
+                FfiConverterString.write(value.v1, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }

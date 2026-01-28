@@ -1,5 +1,9 @@
 package org.bitcoinppl.cove.views
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -18,8 +22,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -32,6 +38,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,10 +46,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.QrCodeGenerator
 import org.bitcoinppl.cove_core.types.ConfirmDetails
 import org.bitcoinppl.cove_core.types.QrDensity
@@ -58,8 +67,11 @@ fun QrExportView(
     subtitle: String,
     generateBbqrStrings: suspend (QrDensity) -> List<String>,
     generateUrStrings: (suspend (QrDensity) -> List<String>)? = null,
+    onCopy: (suspend () -> String)? = null,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var selectedFormat by remember { mutableStateOf(QrExportFormat.BBQR) }
     var density by remember { mutableStateOf(QrDensity()) }
     var qrStrings by remember { mutableStateOf<List<String>>(emptyList()) }
@@ -110,11 +122,39 @@ fun QrExportView(
         modifier = Modifier.fillMaxWidth().heightIn(min = minHeight).then(modifier),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.SemiBold,
-        )
+        Box(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+            )
+            if (onCopy != null) {
+                IconButton(
+                    onClick = {
+                        scope.launch {
+                            try {
+                                val data = onCopy()
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                clipboard.setPrimaryClip(ClipData.newPlainText("QR Data", data))
+                                Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
+                            } catch (e: Exception) {
+                                android.util.Log.e("QrExportView", "Failed to copy data", e)
+                            }
+                        }
+                    },
+                    modifier = Modifier.align(Alignment.CenterEnd),
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ContentCopy,
+                        contentDescription = "Copy",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
 
         Text(
             text = subtitle,
@@ -370,6 +410,7 @@ fun QrExportView(
         subtitle = "Scan with your hardware wallet\nto sign your transaction",
         generateBbqrStrings = { density -> details.psbtToBbqrWithDensity(density) },
         generateUrStrings = { density -> details.psbtToUrWithDensity(density) },
+        onCopy = { details.psbtToHex() },
         modifier = modifier,
     )
 }

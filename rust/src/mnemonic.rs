@@ -30,6 +30,9 @@ pub enum MnemonicError {
 
     #[error("mnemonic is not available available for wallet id: {0}")]
     NotAvailable(WalletId),
+
+    #[error("unknown word in mnemonic: {0}")]
+    UnknownWord(String),
 }
 
 impl Mnemonic {
@@ -125,5 +128,24 @@ impl Mnemonic {
     #[uniffi::method]
     pub fn words(&self) -> Vec<String> {
         self.0.words().map(|word| word.to_string()).collect()
+    }
+
+    /// Converts mnemonic to SeedQR standard format string
+    /// Each word is converted to its 4-digit BIP39 index (0000-2047)
+    #[uniffi::method]
+    pub fn to_seed_qr_string(&self) -> Result<String, MnemonicError> {
+        use bip39::Language;
+        let word_list = Language::English.word_list();
+
+        self.0
+            .words()
+            .map(|word| {
+                word_list
+                    .iter()
+                    .position(|&w| w == word)
+                    .map(|index| format!("{:04}", index))
+                    .ok_or_else(|| MnemonicError::UnknownWord(word.to_string()))
+            })
+            .collect()
     }
 }

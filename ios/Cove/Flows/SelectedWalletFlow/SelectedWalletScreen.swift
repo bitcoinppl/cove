@@ -300,7 +300,8 @@ struct SelectedWalletScreen: View {
                 generateBbqrStrings: { density in
                     try await manager.rust.exportLabelsForQr(density: density)
                 },
-                generateUrStrings: nil
+                generateUrStrings: nil,
+                copyData: { try await manager.rust.exportLabelsForShare().content }
             )
             .presentationDetents([.height(500), .height(600), .large])
             .padding()

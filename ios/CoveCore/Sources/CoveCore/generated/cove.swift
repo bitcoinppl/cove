@@ -5013,7 +5013,7 @@ public protocol MnemonicProtocol: AnyObject, Sendable {
      * Converts mnemonic to SeedQR standard format string
      * Each word is converted to its 4-digit BIP39 index (0000-2047)
      */
-    func toSeedQrString()  -> String
+    func toSeedQrString() throws  -> String
     
     func words()  -> [String]
     
@@ -5099,8 +5099,8 @@ open func allWords() -> [GroupedWord]  {
      * Converts mnemonic to SeedQR standard format string
      * Each word is converted to its 4-digit BIP39 index (0000-2047)
      */
-open func toSeedQrString() -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
+open func toSeedQrString()throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeMnemonicError_lift) {
     uniffi_cove_fn_method_mnemonic_to_seed_qr_string(
             self.uniffiCloneHandle(),$0
     )
@@ -18095,6 +18095,8 @@ public enum MnemonicError: Swift.Error, Equatable, Hashable, Foundation.Localize
     )
     case NotAvailable(WalletId
     )
+    case UnknownWord(String
+    )
 
     
 
@@ -18140,6 +18142,9 @@ public struct FfiConverterTypeMnemonicError: FfiConverterRustBuffer {
         case 2: return .NotAvailable(
             try FfiConverterTypeWalletId.read(from: &buf)
             )
+        case 3: return .UnknownWord(
+            try FfiConverterString.read(from: &buf)
+            )
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -18160,6 +18165,11 @@ public struct FfiConverterTypeMnemonicError: FfiConverterRustBuffer {
         case let .NotAvailable(v1):
             writeInt(&buf, Int32(2))
             FfiConverterTypeWalletId.write(v1, into: &buf)
+            
+        
+        case let .UnknownWord(v1):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(v1, into: &buf)
             
         }
     }
@@ -29471,7 +29481,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_mnemonic_all_words() != 24108) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_mnemonic_to_seed_qr_string() != 52169) {
+    if (uniffi_cove_checksum_method_mnemonic_to_seed_qr_string() != 24678) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_mnemonic_words() != 8009) {

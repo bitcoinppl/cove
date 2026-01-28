@@ -17,6 +17,7 @@ struct QrExportView: View {
     let subtitle: String
     let generateBbqrStrings: (QrDensity) async throws -> [String]
     let generateUrStrings: ((QrDensity) async throws -> [String])?
+    let copyData: (() async throws -> String)?
 
     @State private var selectedFormat: QrExportFormat = .bbqr
     @State private var density: QrDensity = .init()
@@ -38,10 +39,27 @@ struct QrExportView: View {
 
     var body: some View {
         VStack {
-            Text(title)
-                .font(.title3)
-                .padding(.top, 12)
-                .fontWeight(.semibold)
+            HStack {
+                Spacer()
+                Text(title)
+                    .font(.title3)
+                    .fontWeight(.semibold)
+                Spacer()
+            }
+            .overlay(alignment: .trailing) {
+                if copyData != nil {
+                    Button {
+                        Task { await copyToClipboard() }
+                    } label: {
+                        Image(systemName: "doc.on.doc")
+                            .font(.body)
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.trailing, 4)
+                }
+            }
+            .padding(.top, 12)
 
             Text(subtitle)
                 .font(.callout)
@@ -206,6 +224,17 @@ struct QrExportView: View {
             qrs = []
         }
     }
+
+    func copyToClipboard() async {
+        guard let copyData else { return }
+        do {
+            let data = try await copyData()
+            UIPasteboard.general.string = data
+            await FloaterPopup(text: "Copied").dismissAfter(2).present()
+        } catch {
+            Log.error("Failed to copy data: \(error)")
+        }
+    }
 }
 
 // MARK: - Convenience initializer for PSBT export (backwards compatibility)
@@ -217,7 +246,8 @@ extension QrExportView {
             title: "Scan this QR",
             subtitle: "Scan with your hardware wallet\nto sign your transaction",
             generateBbqrStrings: { density in try details.psbtToBbqrWithDensity(density: density) },
-            generateUrStrings: { density in try details.psbtToUrWithDensity(density: density) }
+            generateUrStrings: { density in try details.psbtToUrWithDensity(density: density) },
+            copyData: { details.psbtToHex() }
         )
     }
 }

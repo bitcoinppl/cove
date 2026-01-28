@@ -162,9 +162,17 @@ private struct SeedQrSheetView: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
 
-            QrCodeView(text: words.toSeedQrString())
-                .padding(.horizontal, 20)
-                .padding(.top, 8)
+            if let seedQR = try? words.toSeedQrString() {
+                QrCodeView(text: seedQR)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 8)
+            } else {
+                Text("Failed to generate Seed QR")
+                    .font(.callout)
+                    .foregroundStyle(.red)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 8)
+            }
 
             Spacer()
         }
