@@ -210,6 +210,7 @@ struct ConfirmedTransactionView: View {
                     .foregroundColor(.secondary)
             }
         }
+        .contentShape(Rectangle())
         .onTapGesture {
             goToTransactionDetails()
         }
@@ -262,7 +263,9 @@ struct UnconfirmedTransactionView: View {
                 Text(amount)
                     .foregroundStyle(amountColor(txn.sentAndReceived().direction()).opacity(0.65))
             }
-        }.onTapGesture {
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
             manager.scrolledTransactionId = txn.id().description
 
             Task {
@@ -349,6 +352,7 @@ struct UnsignedTransactionView: View {
             fiatAmount =
                 try? await manager.rust.amountInFiat(amount: txn.spendingAmount())
         }
+        .contentShape(Rectangle())
         .onTapGesture {
             manager.scrolledTransactionId = txn.id().description
 
