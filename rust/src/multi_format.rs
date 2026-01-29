@@ -572,4 +572,76 @@ mod tests {
         assert!(result.is_ok(), "Should handle whitespace: {:?}", result);
         assert!(matches!(result.unwrap(), MultiFormat::SignedPsbt(_)));
     }
+
+    /// Test that all three PSBT parsing paths produce identical PSBT bytes:
+    /// 1. Base64/hex text path (via MultiFormat::try_from_string)
+    /// 2. BBQR path (via QrScanner)
+    /// 3. UR path (via QrScanner)
+    #[test]
+    fn test_all_psbt_paths_produce_identical_bytes() {
+        use crate::multi_format::StringOrData;
+        use crate::qr_scanner::{QrScannerFFI, ScanResult};
+        use base64::{Engine as _, prelude::BASE64_STANDARD};
+        use bbqr::{
+            encode::Encoding,
+            file_type::FileType,
+            qr::Version,
+            split::{Split, SplitOptions},
+        };
+
+        let original_bytes = hex::decode(TEST_PSBT_HEX).unwrap();
+
+        // PATH 1: Base64 text parsing
+        let base64_input = BASE64_STANDARD.encode(&original_bytes);
+        let path1_result = MultiFormat::try_from_string(&base64_input).expect("base64 path failed");
+        let path1_bytes = match path1_result {
+            MultiFormat::SignedPsbt(psbt) => psbt.0.serialize(),
+            _ => panic!("Expected SignedPsbt from base64 path"),
+        };
+
+        // PATH 2: BBQR parsing
+        let bbqr_split = Split::try_from_data(
+            &original_bytes,
+            FileType::Psbt,
+            SplitOptions {
+                encoding: Encoding::Zlib,
+                min_split_number: 1,
+                max_split_number: 1,
+                min_version: Version::V01,
+                max_version: Version::V40,
+            },
+        )
+        .expect("BBQR encoding failed");
+
+        let scanner = QrScannerFFI::new();
+        let path2_result = scanner
+            .scan(StringOrData::String(bbqr_split.parts[0].clone()))
+            .expect("BBQR scan failed");
+        let path2_bytes = match path2_result {
+            ScanResult::Complete { data: MultiFormat::SignedPsbt(psbt), .. } => psbt.0.serialize(),
+            _ => panic!("Expected Complete with SignedPsbt from BBQR path"),
+        };
+
+        // PATH 3: UR parsing
+        let crypto_psbt = cove_ur::CryptoPsbt::from_psbt_bytes(original_bytes.clone()).unwrap();
+        let ur_string = crypto_psbt.to_ur().unwrap();
+
+        let scanner = QrScannerFFI::new();
+        let path3_result = scanner.scan(StringOrData::String(ur_string)).expect("UR scan failed");
+        let path3_bytes = match path3_result {
+            ScanResult::Complete { data: MultiFormat::SignedPsbt(psbt), .. } => psbt.0.serialize(),
+            _ => panic!("Expected Complete with SignedPsbt from UR path"),
+        };
+
+        // Verify all paths produce identical bytes
+        assert_eq!(
+            path1_bytes, path2_bytes,
+            "Base64 path and BBQR path produce different PSBT bytes"
+        );
+        assert_eq!(
+            path1_bytes, path3_bytes,
+            "Base64 path and UR path produce different PSBT bytes"
+        );
+        assert_eq!(original_bytes, path1_bytes, "Parsed PSBT differs from original bytes");
+    }
 }

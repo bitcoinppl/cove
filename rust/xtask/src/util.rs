@@ -234,7 +234,7 @@ fn generate_bbqr_gif(psbt_bytes: &[u8], output_path: &str) -> Result<()> {
     println!("  Split into {} QR codes", split.parts.len());
 
     // Generate QR code images for each part
-    let qr_images: Vec<_> = split
+    let mut qr_images: Vec<GrayImage> = split
         .parts
         .iter()
         .map(|part| {
@@ -243,6 +243,21 @@ fn generate_bbqr_gif(psbt_bytes: &[u8], output_path: &str) -> Result<()> {
             Ok(qr.render::<Luma<u8>>().quiet_zone(true).min_dimensions(400, 400).build())
         })
         .collect::<Result<Vec<_>>>()?;
+
+    // Ensure all images have the same dimensions (use the first image's dimensions)
+    if !qr_images.is_empty() {
+        let (target_width, target_height) = qr_images[0].dimensions();
+        for img in qr_images.iter_mut().skip(1) {
+            if img.dimensions() != (target_width, target_height) {
+                *img = image::imageops::resize(
+                    img,
+                    target_width,
+                    target_height,
+                    image::imageops::FilterType::Nearest,
+                );
+            }
+        }
+    }
 
     create_animated_gif(&qr_images, output_path, 300)?;
 
@@ -303,18 +318,26 @@ fn create_animated_gif(images: &[GrayImage], output_path: &str, delay_ms: u16) -
     let width = images[0].width() as u16;
     let height = images[0].height() as u16;
 
+    // Create a grayscale palette (256 shades from black to white)
+    let mut palette = Vec::with_capacity(256 * 3);
+    for i in 0..=255u8 {
+        palette.push(i); // R
+        palette.push(i); // G
+        palette.push(i); // B
+    }
+
     let file = std::fs::File::create(output_path)?;
-    let mut encoder = GifEncoder::new(file, width, height, &[])?;
+    let mut encoder = GifEncoder::new(file, width, height, &palette)?;
     encoder.set_repeat(Repeat::Infinite)?;
 
     // GIF delay is in centiseconds (1/100th of a second)
     let delay_centisec = delay_ms / 10;
 
     for image in images {
-        // Convert grayscale to indexed color (gif requires indexed)
+        // Grayscale pixels are already indexed (0-255 maps to palette)
         let pixels: Vec<u8> = image.as_raw().clone();
 
-        // Create frame with the raw pixels
+        // Create frame with the raw pixels (uses global palette)
         let mut frame = Frame::from_indexed_pixels(width, height, pixels, None);
         frame.delay = delay_centisec;
 

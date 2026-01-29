@@ -12,6 +12,33 @@ list:
 xtask *args:
     cd rust && cargo xtask {{args}}
 
+# Sign a PSBT and output all formats (base64, hex, binary, bbqr-gif, ur-gif)
+# Requires MNEMONIC env var (set in .envrc or pass directly)
+[group('utils')]
+[script('bash')]
+sign-psbt psbt:
+    set -e
+    if [ -z "$MNEMONIC" ]; then
+        echo "Error: MNEMONIC env var not set. Set it in .envrc or export it."
+        exit 1
+    fi
+    OUTPUT_DIR="$HOME/Downloads/signed-psbt-$(date +%Y%m%d-%H%M%S)"
+    mkdir -p "$OUTPUT_DIR"
+    echo "Signing PSBT and outputting to: $OUTPUT_DIR"
+    cd rust
+    cargo xtask util sign-psbt --psbt "{{psbt}}" -f base64 -O "$OUTPUT_DIR/signed.base64.txt"
+    cargo xtask util sign-psbt --psbt "{{psbt}}" -f hex -O "$OUTPUT_DIR/signed.hex.txt"
+    cargo xtask util sign-psbt --psbt "{{psbt}}" -f binary -O "$OUTPUT_DIR/signed.psbt"
+    cargo xtask util sign-psbt --psbt "{{psbt}}" -f bbqr-gif -O "$OUTPUT_DIR/signed-bbqr.gif"
+    cargo xtask util sign-psbt --psbt "{{psbt}}" -f ur-gif -O "$OUTPUT_DIR/signed-ur.gif"
+    echo ""
+    echo "All formats saved to: $OUTPUT_DIR"
+    ls -la "$OUTPUT_DIR"
+    open "$OUTPUT_DIR"
+
+[private]
+alias sp := sign-psbt
+
 # ------------------------------------------------------------------------------
 # ci
 # ------------------------------------------------------------------------------
