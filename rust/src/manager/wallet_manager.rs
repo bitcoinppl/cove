@@ -5,6 +5,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+use cove_tokio_ext::DebouncedTask;
+
 use act_zero::{Addr, call, send};
 use actor::WalletActor;
 use flume::Receiver;
@@ -157,6 +159,7 @@ pub struct RustWalletManager {
     pub reconcile_receiver: Arc<Receiver<SingleOrMany>>,
 
     label_manager: Arc<LabelManager>,
+    unsigned_tx_notifier: DebouncedTask<()>,
 
     #[allow(dead_code)]
     scanner: Option<Addr<WalletScanner>>,
@@ -286,6 +289,10 @@ impl RustWalletManager {
             reconciler,
             reconcile_receiver: Arc::new(receiver),
             label_manager,
+            unsigned_tx_notifier: DebouncedTask::new(
+                "unsigned_tx_notifier",
+                Duration::from_millis(100),
+            ),
             scanner,
         })
     }
@@ -349,6 +356,10 @@ impl RustWalletManager {
             reconciler: MessageSender::new(sender),
             reconcile_receiver: Arc::new(receiver),
             label_manager,
+            unsigned_tx_notifier: DebouncedTask::new(
+                "unsigned_tx_notifier",
+                Duration::from_millis(100),
+            ),
             scanner,
         })
     }
@@ -376,6 +387,10 @@ impl RustWalletManager {
             reconciler: MessageSender::new(sender),
             reconcile_receiver: Arc::new(receiver),
             label_manager,
+            unsigned_tx_notifier: DebouncedTask::new(
+                "unsigned_tx_notifier",
+                Duration::from_millis(100),
+            ),
             scanner: None,
         })
     }
@@ -566,7 +581,10 @@ impl RustWalletManager {
             .into(),
         )?;
 
-        self.reconciler.send(Message::UnsignedTransactionsChanged);
+        let reconciler = self.reconciler.clone();
+        self.unsigned_tx_notifier.replace(async move {
+            reconciler.send(Message::UnsignedTransactionsChanged);
+        });
 
         Ok(())
     }
@@ -598,6 +616,29 @@ impl RustWalletManager {
         Ok(txns)
     }
 
+    /// Check if a transaction is below the fold and needs scrolling
+    /// Returns true if the transaction is at position > 5 in the combined list
+    #[uniffi::method]
+    pub async fn transaction_needs_scroll(&self, tx_id: String) -> bool {
+        // check unsigned transactions first
+        let unsigned = self.get_unsigned_transactions().unwrap_or_default();
+        if let Some(pos) = unsigned.iter().position(|t| t.id().to_string() == tx_id) {
+            return pos > 5;
+        }
+
+        // then check regular transactions
+        let Ok(transactions) = call!(self.actor.transactions()).await else {
+            return false;
+        };
+
+        let unsigned_count = unsigned.len();
+        if let Some(pos) = transactions.iter().position(|t| t.id().to_string() == tx_id) {
+            return (unsigned_count + pos) > 5;
+        }
+
+        false
+    }
+
     /// gets the transactions for the wallet that are currently available
     #[uniffi::method]
     pub async fn get_transactions(&self) {
@@ -614,7 +655,10 @@ impl RustWalletManager {
         let txn = db.unsigned_transactions().delete_tx(tx_id.as_ref())?;
         send!(self.actor.cancel_txn(txn.confirm_details.psbt.0.unsigned_tx));
 
-        self.reconciler.send(Message::UnsignedTransactionsChanged);
+        let reconciler = self.reconciler.clone();
+        self.unsigned_tx_notifier.replace(async move {
+            reconciler.send(Message::UnsignedTransactionsChanged);
+        });
 
         Ok(())
     }
@@ -1273,8 +1317,12 @@ impl RustWalletManager {
             metadata: Arc::new(RwLock::new(metadata)),
             reconciler: MessageSender::new(sender),
             reconcile_receiver: Arc::new(receiver),
-            scanner: None,
             label_manager,
+            unsigned_tx_notifier: DebouncedTask::new(
+                "unsigned_tx_notifier",
+                Duration::from_millis(100),
+            ),
+            scanner: None,
         }
     }
 }

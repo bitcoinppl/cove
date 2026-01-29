@@ -7739,6 +7739,12 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
     
     func transactionDetails(txId: TxId) async throws  -> TransactionDetails
     
+    /**
+     * Check if a transaction is below the fold and needs scrolling
+     * Returns true if the transaction is at position > 5 in the combined list
+     */
+    func transactionNeedsScroll(txId: String) async  -> Bool
+    
     func validateMetadata() 
     
     func walletMetadata()  -> WalletMetadata
@@ -8529,6 +8535,28 @@ open func transactionDetails(txId: TxId)async throws  -> TransactionDetails  {
             freeFunc: ffi_cove_rust_future_free_u64,
             liftFunc: FfiConverterTypeTransactionDetails_lift,
             errorHandler: FfiConverterTypeWalletManagerError_lift
+        )
+}
+    
+    /**
+     * Check if a transaction is below the fold and needs scrolling
+     * Returns true if the transaction is at position > 5 in the combined list
+     */
+open func transactionNeedsScroll(txId: String)async  -> Bool  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_rustwalletmanager_transaction_needs_scroll(
+                    self.uniffiCloneHandle(),
+                    FfiConverterString.lower(txId)
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_i8,
+            completeFunc: ffi_cove_rust_future_complete_i8,
+            freeFunc: ffi_cove_rust_future_free_i8,
+            liftFunc: FfiConverterBool.lift,
+            errorHandler: nil
+            
         )
 }
     
@@ -29577,6 +29605,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_transaction_details() != 35364) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustwalletmanager_transaction_needs_scroll() != 17030) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_validate_metadata() != 36684) {

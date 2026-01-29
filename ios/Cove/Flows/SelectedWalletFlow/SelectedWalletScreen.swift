@@ -182,10 +182,13 @@ struct SelectedWalletScreen: View {
                     }
                 }
             } catch {
-                app.alertState = .init(.general(
-                    title: "Xpub Export Failed",
-                    message: "Unable to export public descriptors: \(error.localizedDescription)"
-                ))
+                app.alertState = .init(
+                    .general(
+                        title: "Xpub Export Failed",
+                        message:
+                        "Unable to export public descriptors: \(error.localizedDescription)"
+                    )
+                )
             }
         }
     }
@@ -200,10 +203,12 @@ struct SelectedWalletScreen: View {
                     }
                 }
             } catch {
-                app.alertState = .init(.general(
-                    title: "Label Export Failed",
-                    message: "Unable to export labels: \(error.localizedDescription)"
-                ))
+                app.alertState = .init(
+                    .general(
+                        title: "Label Export Failed",
+                        message: "Unable to export labels: \(error.localizedDescription)"
+                    )
+                )
             }
         }
     }
@@ -368,6 +373,28 @@ struct SelectedWalletScreen: View {
         .onChange(of: scannedLabels, initial: false, onChangeOfScannedLabels)
     }
 
+    func handleScrollToTransaction(proxy: ScrollViewProxy) {
+        guard let targetId = manager.scrolledTransactionId else { return }
+        if case .loading = manager.loadState { return }
+
+        Task {
+            let needsScroll = await manager.rust.transactionNeedsScroll(txId: targetId)
+            guard needsScroll else { return }
+
+            // small delay to let the view settle before scrolling
+            try? await Task.sleep(for: .milliseconds(250))
+            if Task.isCancelled { return }
+
+            await MainActor.run {
+                withAnimation {
+                    proxy.scrollTo(targetId, anchor: .center)
+                } completion: {
+                    manager.scrolledTransactionId = nil
+                }
+            }
+        }
+    }
+
     func onChangeOfScannedLabels(_: TaggedItem<MultiFormat>?, _ scanned: TaggedItem<MultiFormat>?) {
         guard let scanned else { return }
 
@@ -416,7 +443,9 @@ struct SelectedWalletScreen: View {
                             .animation(.easeOut(duration: 0.15), value: shouldShowNavBar)
                         )
                 }
-                .contentMargins(.top, -(safeAreaInsets.top + navBarAndScrollInsets), for: .scrollContent)
+                .contentMargins(
+                    .top, -(safeAreaInsets.top + navBarAndScrollInsets), for: .scrollContent
+                )
                 .background(Color.coveBg.ignoresSafeArea(edges: .bottom))
                 .background(Color.midnightBlue.ignoresSafeArea(edges: iOS26OrLater ? [] : .top))
                 .refreshable {
@@ -441,23 +470,10 @@ struct SelectedWalletScreen: View {
                     // Reset SendFlowManager so new send flow is fresh
                     app.sendFlowManager = nil
                     UIRefreshControl.appearance().tintColor = UIColor.white
+                    handleScrollToTransaction(proxy: proxy)
                 }
-                .onChange(of: manager.loadState, initial: true) { _, newState in
-                    guard let targetId = manager.scrolledTransactionId else { return }
-
-                    let hasTransactions: Bool = switch newState {
-                    case .loading: false
-                    case let .scanning(txns): !txns.isEmpty
-                    case let .loaded(txns): !txns.isEmpty
-                    }
-
-                    guard hasTransactions else { return }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        withAnimation {
-                            proxy.scrollTo(targetId, anchor: .center)
-                        }
-                        manager.scrolledTransactionId = nil
-                    }
+                .onChange(of: manager.loadState, initial: true) {
+                    handleScrollToTransaction(proxy: proxy)
                 }
                 .scrollIndicators(.hidden)
                 .onScrollGeometryChange(for: Bool.self) { geometry in

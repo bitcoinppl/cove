@@ -77,8 +77,8 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
     var hasTransactions: Bool {
         switch loadState {
         case .loading: false
-        case let .scanning(txns): !txns.isEmpty
-        case let .loaded(txns): !txns.isEmpty
+        case .scanning(let txns): !txns.isEmpty
+        case .loaded(let txns): !txns.isEmpty
         }
     }
 
@@ -144,29 +144,47 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
         }
     }
 
+    private var messageCount = 0
+    private var lastMessageTime = Date()
+
     func apply(_ message: Message) {
+        messageCount += 1
+        let now = Date()
+        let elapsed = now.timeIntervalSince(lastMessageTime)
+
+        // warn if receiving messages too rapidly (more than 10 in 1 second)
+        if elapsed < 1.0, messageCount > 10 {
+            logger.warn(
+                "RAPID MESSAGES: \(messageCount) messages in \(elapsed)s, latest: \(message)")
+        }
+
+        if elapsed >= 1.0 {
+            messageCount = 1
+            lastMessageTime = now
+        }
+
         switch message {
         case .startedInitialFullScan:
             self.loadState = .loading
 
-        case let .startedExpandedFullScan(txns):
+        case .startedExpandedFullScan(let txns):
             self.loadState = .scanning(txns)
 
-        case let .availableTransactions(txns):
+        case .availableTransactions(let txns):
             switch self.loadState {
             case .loading:
                 self.loadState = .scanning(txns)
-            case let .scanning(current) where txns.count >= current.count:
+            case .scanning(let current) where txns.count >= current.count:
                 self.loadState = .scanning(txns)
             case .scanning:
                 break
-            case let .loaded(current) where txns.count >= current.count:
+            case .loaded(let current) where txns.count >= current.count:
                 self.loadState = .scanning(txns)
             case .loaded:
                 break
             }
 
-        case let .updatedTransactions(txns):
+        case .updatedTransactions(let txns):
             switch self.loadState {
             case .scanning, .loading:
                 self.loadState = .scanning(txns)
@@ -174,38 +192,38 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
                 self.loadState = .loaded(txns)
             }
 
-        case let .scanComplete(txns):
+        case .scanComplete(let txns):
             self.loadState = .loaded(txns)
 
-        case let .walletBalanceChanged(balance):
+        case .walletBalanceChanged(let balance):
             withAnimation { self.balance = balance }
 
         case .unsignedTransactionsChanged:
             self.unsignedTransactions = (try? rust.getUnsignedTransactions()) ?? []
 
-        case let .walletMetadataChanged(metadata):
+        case .walletMetadataChanged(let metadata):
             withAnimation { self.walletMetadata = metadata }
             setWalletMetadata(metadata)
 
-        case let .walletScannerResponse(scannerResponse):
+        case .walletScannerResponse(let scannerResponse):
             self.logger.debug("walletScannerResponse: \(scannerResponse)")
-            if case let .foundAddresses(addressTypes) = scannerResponse {
+            if case .foundAddresses(let addressTypes) = scannerResponse {
                 self.foundAddresses = addressTypes
             }
 
-        case let .nodeConnectionFailed(error):
+        case .nodeConnectionFailed(let error):
             self.errorAlert = WalletErrorAlert.nodeConnectionFailed(error)
             self.logger.error(error)
             self.logger.error("set errorAlert")
 
-        case let .walletError(error):
+        case .walletError(let error):
             self.logger.error("WalletError \(error)")
 
-        case let .unknownError(error):
+        case .unknownError(let error):
             // TODO: show to user
             self.logger.error("Unknown error \(error)")
 
-        case let .sendFlowError(error):
+        case .sendFlowError(let error):
             self.sendFlowErrorAlert = TaggedItem(error)
         }
     }
@@ -223,7 +241,7 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
     func reconcile(message: Message) {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            logger.debug("reconcile: \(message)")
+            logger.debug("reconcile \(message)")
             self.apply(message)
         }
     }
