@@ -80,6 +80,17 @@ fun SendFlowConfirmScreen(
     var sheetState by remember { mutableStateOf<SheetState?>(null) }
     val address = details.sendingTo().spacedOut()
 
+    // fiat amount calculation
+    var fiatAmount by remember { mutableStateOf("---") }
+    LaunchedEffect(app.prices) {
+        app.prices?.let { prices ->
+            val amount = details.sendingAmount()
+            fiatAmount = walletManager.rust.convertAndDisplayFiat(amount, prices)
+        } ?: run {
+            app.dispatch(org.bitcoinppl.cove_core.AppAction.UpdateFiatPrices)
+        }
+    }
+
     // derive state from managers (like iOS @Environment)
     val metadata = walletManager.walletMetadata
     val isBalanceHidden = !(metadata?.sensitiveVisible ?: false)
@@ -87,7 +98,7 @@ fun SendFlowConfirmScreen(
     val balanceDenomination = walletManager.unit
     val sendingAmount = walletManager.amountFmt(details.sendingAmount())
     val sendingAmountDenomination = walletManager.unit
-    val dollarEquivalentText = sendFlowManager.sendAmountFiat
+    val dollarEquivalentText = fiatAmount
     val accountShort = metadata?.masterFingerprint?.asUppercase()?.take(8) ?: ""
     val networkFee = walletManager.amountFmtUnit(details.feeTotal())
     val willReceive = walletManager.amountFmtUnit(details.sendingAmount())
