@@ -254,13 +254,14 @@ struct SendFlowHardwareScreen: View {
             let file = try result.get()
             let fileContents = try FileReader(for: file).read()
 
-            let (txnRecord, signedTransaction) = try txnRecordAndSignedTxn(fileContents)
+            let (txnRecord, parsed) = try parseSignedImport(fileContents)
 
             let route = RouteFactory()
                 .sendConfirm(
                     id: txnRecord.walletId(),
                     details: txnRecord.confirmDetails(),
-                    signedTransaction: signedTransaction
+                    signedTransaction: parsed.transaction(),
+                    signedPsbt: parsed.psbt()
                 )
 
             app.pushRoute(route)
@@ -274,15 +275,16 @@ struct SendFlowHardwareScreen: View {
         guard let txn else { return }
 
         do {
-            let bitcoinTransaction = try BitcoinTransaction.tryFromNfcMessage(nfcMessage: txn)
+            let parsed = try SignedTransactionOrPsbt.tryFromNfcMessage(nfcMessage: txn)
             let db = Database().unsignedTransactions()
-            let txnRecord = try db.getTxThrow(txId: bitcoinTransaction.txId())
+            let txnRecord = try db.getTxThrow(txId: parsed.txId())
 
             let route = RouteFactory()
                 .sendConfirm(
                     id: txnRecord.walletId(),
                     details: txnRecord.confirmDetails(),
-                    signedTransaction: bitcoinTransaction
+                    signedTransaction: parsed.transaction(),
+                    signedPsbt: parsed.psbt()
                 )
 
             app.pushRoute(route)
@@ -292,14 +294,13 @@ struct SendFlowHardwareScreen: View {
         }
     }
 
-    func txnRecordAndSignedTxn(_ hex: String) throws -> (
-        UnsignedTransactionRecord, BitcoinTransaction
-    ) {
-        Log.info("txnRecordAndSignedTxn")
-        let bitcoinTransaction = try BitcoinTransaction(txHex: hex)
+    /// Parse signed import (PSBT or finalized transaction) and retrieve original unsigned transaction record
+    func parseSignedImport(_ input: String) throws -> (UnsignedTransactionRecord, SignedTransactionOrPsbt) {
+        Log.info("parseSignedImport")
+        let parsed = try SignedTransactionOrPsbt.tryParse(input: input)
         let db = Database().unsignedTransactions()
-        let record = try db.getTxThrow(txId: bitcoinTransaction.txId())
-        return (record, bitcoinTransaction)
+        let record = try db.getTxThrow(txId: parsed.txId())
+        return (record, parsed)
     }
 
     @ViewBuilder
@@ -470,11 +471,13 @@ struct SendFlowHardwareScreen: View {
             }
 
             do {
-                let (txnRecord, signedTransaction) = try txnRecordAndSignedTxn(code)
+                let (txnRecord, parsed) = try parseSignedImport(code)
                 let route = RouteFactory()
                     .sendConfirm(
-                        id: txnRecord.walletId(), details: txnRecord.confirmDetails(),
-                        signedTransaction: signedTransaction
+                        id: txnRecord.walletId(),
+                        details: txnRecord.confirmDetails(),
+                        signedTransaction: parsed.transaction(),
+                        signedPsbt: parsed.psbt()
                     )
                 app.pushRoute(route)
             } catch {

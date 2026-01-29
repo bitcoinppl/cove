@@ -81,7 +81,7 @@ open class RustBuffer : Structure() {
 
     @Suppress("TooGenericExceptionThrown")
     fun asByteBuffer() =
-        this.data?.getByteBuffer(0, this.len.toLong())?.also {
+        this.data?.getByteBuffer(0, this.len)?.also {
             it.order(ByteOrder.BIG_ENDIAN)
         }
 }
@@ -646,7 +646,7 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun ffi_cove_tap_card_uniffi_contract_version(
     ): Int
-    
+
         
 }
 
@@ -778,7 +778,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_tap_card_rust_future_complete_void(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
-    
+
         
 }
 

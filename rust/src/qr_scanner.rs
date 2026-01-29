@@ -253,7 +253,6 @@ fn parse_bbqr_data(
     file_type: bbqr::file_type::FileType,
 ) -> Result<crate::multi_format::MultiFormat, MultiQrError> {
     use crate::multi_format::MultiFormat;
-    use crate::transaction::ffi::BitcoinTransaction;
     use bbqr::file_type::FileType;
 
     match file_type {
@@ -262,18 +261,11 @@ fn parse_bbqr_data(
         }
 
         FileType::Psbt => {
-            // parse raw PSBT bytes and extract the unsigned transaction
-            let crypto_psbt = cove_ur::CryptoPsbt::from_psbt_bytes(data)
+            // parse raw PSBT bytes and return as SignedPsbt
+            let psbt = cove_types::psbt::Psbt::try_new(data)
                 .map_err(|e| MultiQrError::ParseError(e.to_string()))?;
 
-            let psbt = crypto_psbt.psbt();
-            let unsigned_tx = &psbt.unsigned_tx;
-            let tx_bytes = bitcoin::consensus::serialize(unsigned_tx);
-
-            let txn = BitcoinTransaction::try_from_data(&tx_bytes)
-                .map_err(|e| MultiQrError::ParseError(e.to_string()))?;
-
-            Ok(MultiFormat::Transaction(Arc::new(txn)))
+            Ok(MultiFormat::SignedPsbt(Arc::new(psbt)))
         }
 
         FileType::Cbor => Err(MultiQrError::BbqrCborNotSupported),
@@ -840,8 +832,8 @@ mod tests {
         match result.unwrap() {
             ScanResult::Complete { data, .. } => {
                 assert!(
-                    matches!(data, crate::multi_format::MultiFormat::Transaction(_)),
-                    "PSBT should parse as Transaction (unsigned tx extracted), got: {:?}",
+                    matches!(data, crate::multi_format::MultiFormat::SignedPsbt(_)),
+                    "PSBT should parse as SignedPsbt, got: {:?}",
                     data
                 );
             }
@@ -947,8 +939,8 @@ mod tests {
                 ScanResult::Complete { data, .. } => {
                     assert_eq!(i, split.parts.len() - 1, "Should only complete on last part");
                     assert!(
-                        matches!(data, crate::multi_format::MultiFormat::Transaction(_)),
-                        "Multi-part PSBT BBQr should parse as Transaction, got: {:?}",
+                        matches!(data, crate::multi_format::MultiFormat::SignedPsbt(_)),
+                        "Multi-part PSBT BBQr should parse as SignedPsbt, got: {:?}",
                         data
                     );
                 }

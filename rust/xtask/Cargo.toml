@@ -5,7 +5,20 @@ edition = "2021"
 publish = false
 
 [dependencies]
-clap = { version = "4.5", features = ["derive"] }
+clap = { version = "4.5", features = ["derive", "env"] }
 color-eyre = "0.6"
 xshell = "0.2"
 colored = "2.0"
+
+# for util sign-psbt
+bdk_wallet = { version = "2.0", features = ["keys-bip39"] }
+bitcoin = "0.32"
+bip39 = "2.2"
+base64 = "0.22"
+qrcode = "0.14"
+image = { version = "0.25", features = ["gif"] }
+gif = "0.14"
+bbqr = { version = "0.3", default-features = false }
+foundation-ur = { version = "0.4", default-features = false, features = ["std"] }
+minicbor = { version = "2.1", features = ["derive", "std"] }
+hex = "0.4"

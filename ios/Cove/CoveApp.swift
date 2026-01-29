@@ -279,12 +279,14 @@ struct CoveApp: App {
             default:
                 Log.error("Unable to import wallet: \(error)")
                 app.alertState = TaggedItem(
-                    .errorImportingHotWallet(error.localizedDescription))
+                    .errorImportingHotWallet(error.localizedDescription)
+                )
             }
         } catch {
             Log.error("Unknown error \(error)")
             app.alertState = TaggedItem(
-                .errorImportingHotWallet(error.localizedDescription))
+                .errorImportingHotWallet(error.localizedDescription)
+            )
         }
     }
 
@@ -303,7 +305,8 @@ struct CoveApp: App {
             }
         } catch {
             app.alertState = TaggedItem(
-                .errorImportingHardwareWallet(error.localizedDescription))
+                .errorImportingHardwareWallet(error.localizedDescription)
+            )
         }
     }
 
@@ -322,7 +325,8 @@ struct CoveApp: App {
             app.alertState = TaggedItem(
                 AppAlertState.addressWrongNetwork(
                     address: address, network: network, currentNetwork: currentNetwork
-                ))
+                )
+            )
             return
         }
 
@@ -347,6 +351,26 @@ struct CoveApp: App {
         let route = RouteFactory().sendConfirm(
             id: txnRecord.walletId(), details: txnRecord.confirmDetails(),
             signedTransaction: transaction
+        )
+
+        app.pushRoute(route)
+    }
+
+    func handleSignedPsbt(_ psbt: Psbt) {
+        Log.debug("Received signed PSBT: \(psbt.txId())")
+
+        let db = Database().unsignedTransactions()
+        let txnRecord = db.getTx(txId: psbt.txId())
+
+        guard let txnRecord else {
+            Log.error("No unsigned transaction found for PSBT \(psbt.txId())")
+            app.alertState = .init(.noUnsignedTransactionFound(psbt.txId()))
+            return
+        }
+
+        let route = RouteFactory().sendConfirm(
+            id: txnRecord.walletId(), details: txnRecord.confirmDetails(),
+            signedPsbt: psbt
         )
 
         app.pushRoute(route)
@@ -379,14 +403,19 @@ struct CoveApp: App {
 
                 app.alertState = TaggedItem(
                     .invalidFileFormat(
-                        "Currently BIP329 labels must be imported through the wallet actions"))
+                        "Currently BIP329 labels must be imported through the wallet actions"
+                    )
+                )
+            case let .signedPsbt(psbt):
+                handleSignedPsbt(psbt)
             }
         } catch {
             switch error {
             case let FileHandlerError.NotRecognizedFormat(multiFormatError):
                 Log.error("Unrecognized format mulit format error: \(multiFormatError)")
                 app.alertState = TaggedItem(
-                    .invalidFileFormat(multiFormatError.localizedDescription))
+                    .invalidFileFormat(multiFormatError.localizedDescription)
+                )
 
             case let FileHandlerError.OpenFile(error):
                 Log.error("File handler error: \(error)")
@@ -406,7 +435,9 @@ struct CoveApp: App {
     func setInvalidlabels() {
         app.alertState = TaggedItem(
             .invalidFileFormat(
-                "Currently BIP329 labels must be imported through the wallet actions"))
+                "Currently BIP329 labels must be imported through the wallet actions"
+            )
+        )
     }
 
     @MainActor
@@ -421,6 +452,8 @@ struct CoveApp: App {
                 handleAddress(addressWithNetwork)
             case let .transaction(transaction):
                 handleTransaction(transaction)
+            case let .signedPsbt(psbt):
+                handleSignedPsbt(psbt)
             case let .tapSignerUnused(tapSigner):
                 app.alertState = .init(.uninitializedTapSigner(tapSigner))
             case let .tapSignerReady(tapSigner):
@@ -468,7 +501,6 @@ struct CoveApp: App {
         }
     }
 
-    @ViewBuilder
     var BodyView: some View {
         Group {
             if !app.isTermsAccepted {
@@ -511,7 +543,8 @@ struct CoveApp: App {
                                                     NavBarColorModifier(
                                                         route: app.currentRoute,
                                                         isPastHeader: app.isPastHeader
-                                                    ))
+                                                    )
+                                                )
                                         }
                                         .contentShape(Rectangle())
                                     }

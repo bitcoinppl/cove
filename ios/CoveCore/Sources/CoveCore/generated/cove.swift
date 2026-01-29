@@ -18291,6 +18291,11 @@ public enum MultiFormat: Equatable {
      */
     case tapSignerUnused(TapSigner
     )
+    /**
+     * A signed but un-finalized PSBT
+     */
+    case signedPsbt(Psbt
+    )
 
 
 
@@ -18344,6 +18349,9 @@ public struct FfiConverterTypeMultiFormat: FfiConverterRustBuffer {
         case 7: return .tapSignerUnused(try FfiConverterTypeTapSigner.read(from: &buf)
         )
         
+        case 8: return .signedPsbt(try FfiConverterTypePsbt.read(from: &buf)
+        )
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -18385,6 +18393,11 @@ public struct FfiConverterTypeMultiFormat: FfiConverterRustBuffer {
         case let .tapSignerUnused(v1):
             writeInt(&buf, Int32(7))
             FfiConverterTypeTapSigner.write(v1, into: &buf)
+            
+        
+        case let .signedPsbt(v1):
+            writeInt(&buf, Int32(8))
+            FfiConverterTypePsbt.write(v1, into: &buf)
             
         }
     }
@@ -21734,6 +21747,244 @@ public func FfiConverterTypeSetupCmdResponse_lift(_ buf: RustBuffer) throws -> S
 #endif
 public func FfiConverterTypeSetupCmdResponse_lower(_ value: SetupCmdResponse) -> RustBuffer {
     return FfiConverterTypeSetupCmdResponse.lower(value)
+}
+
+
+
+public enum SignedImportError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
+
+    
+    
+    case HexDecodeError(message: String)
+    
+    case Base64DecodeError(message: String)
+    
+    case PsbtParseError(message: String)
+    
+    case UnrecognizedFormat(message: String)
+    
+
+    
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
+}
+
+#if compiler(>=6)
+extension SignedImportError: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSignedImportError: FfiConverterRustBuffer {
+    typealias SwiftType = SignedImportError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SignedImportError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        
+
+        
+        case 1: return .HexDecodeError(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 2: return .Base64DecodeError(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 3: return .PsbtParseError(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 4: return .UnrecognizedFormat(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: SignedImportError, into buf: inout [UInt8]) {
+        switch value {
+
+        
+
+        
+        case .HexDecodeError(_ /* message is ignored*/):
+            writeInt(&buf, Int32(1))
+        case .Base64DecodeError(_ /* message is ignored*/):
+            writeInt(&buf, Int32(2))
+        case .PsbtParseError(_ /* message is ignored*/):
+            writeInt(&buf, Int32(3))
+        case .UnrecognizedFormat(_ /* message is ignored*/):
+            writeInt(&buf, Int32(4))
+
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSignedImportError_lift(_ buf: RustBuffer) throws -> SignedImportError {
+    return try FfiConverterTypeSignedImportError.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSignedImportError_lower(_ value: SignedImportError) -> RustBuffer {
+    return FfiConverterTypeSignedImportError.lower(value)
+}
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Result of parsing a signed transaction import
+ *
+ * Hardware wallets may return either a signed PSBT or a finalized transaction.
+ * This enum allows callers to handle both cases appropriately.
+ */
+
+public enum SignedTransactionOrPsbt {
+    
+    /**
+     * A finalized raw Bitcoin transaction
+     */
+    case transaction(BitcoinTransaction
+    )
+    /**
+     * A signed but un-finalized PSBT (requires finalization before broadcast)
+     */
+    case signedPsbt(Psbt
+    )
+
+
+
+    /**
+     * Returns true if this is a signed PSBT
+     */
+public func isPsbt() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_method_signedtransactionorpsbt_ispsbt(
+            FfiConverterTypeSignedTransactionOrPsbt_lower(self),$0
+    )
+})
+}
+
+    /**
+     * Returns true if this is a finalized transaction
+     */
+public func isTransaction() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_method_signedtransactionorpsbt_istransaction(
+            FfiConverterTypeSignedTransactionOrPsbt_lower(self),$0
+    )
+})
+}
+
+    /**
+     * Get the inner PSBT (returns None if Transaction)
+     */
+public func psbt() -> Psbt?  {
+    return try!  FfiConverterOptionTypePsbt.lift(try! rustCall() {
+    uniffi_cove_fn_method_signedtransactionorpsbt_psbt(
+            FfiConverterTypeSignedTransactionOrPsbt_lower(self),$0
+    )
+})
+}
+
+    /**
+     * Get the inner transaction (returns None if PSBT)
+     */
+public func transaction() -> BitcoinTransaction?  {
+    return try!  FfiConverterOptionTypeBitcoinTransaction.lift(try! rustCall() {
+    uniffi_cove_fn_method_signedtransactionorpsbt_transaction(
+            FfiConverterTypeSignedTransactionOrPsbt_lower(self),$0
+    )
+})
+}
+
+    /**
+     * Get the transaction ID
+     */
+public func txId() -> TxId  {
+    return try!  FfiConverterTypeTxId_lift(try! rustCall() {
+    uniffi_cove_fn_method_signedtransactionorpsbt_txid(
+            FfiConverterTypeSignedTransactionOrPsbt_lower(self),$0
+    )
+})
+}
+
+
+
+}
+
+#if compiler(>=6)
+extension SignedTransactionOrPsbt: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSignedTransactionOrPsbt: FfiConverterRustBuffer {
+    typealias SwiftType = SignedTransactionOrPsbt
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SignedTransactionOrPsbt {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .transaction(try FfiConverterTypeBitcoinTransaction.read(from: &buf)
+        )
+        
+        case 2: return .signedPsbt(try FfiConverterTypePsbt.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: SignedTransactionOrPsbt, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .transaction(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeBitcoinTransaction.write(v1, into: &buf)
+            
+        
+        case let .signedPsbt(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypePsbt.write(v1, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSignedTransactionOrPsbt_lift(_ buf: RustBuffer) throws -> SignedTransactionOrPsbt {
+    return try FfiConverterTypeSignedTransactionOrPsbt.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSignedTransactionOrPsbt_lower(_ value: SignedTransactionOrPsbt) -> RustBuffer {
+    return FfiConverterTypeSignedTransactionOrPsbt.lower(value)
 }
 
 
@@ -28206,6 +28457,36 @@ public func tapSignerConfirmPinArgsNewFromNewPin(args: TapSignerNewPinArgs, newP
     )
 })
 }
+/**
+ * Parse from raw bytes
+ */
+public func signedTransactionOrPsbtTryFromBytes(data: Data)throws  -> SignedTransactionOrPsbt  {
+    return try  FfiConverterTypeSignedTransactionOrPsbt_lift(try rustCallWithError(FfiConverterTypeSignedImportError_lift) {
+    uniffi_cove_fn_func_signedtransactionorpsbttryfrombytes(
+        FfiConverterData.lower(data),$0
+    )
+})
+}
+/**
+ * Parse from an NFC message
+ */
+public func signedTransactionOrPsbtTryFromNfcMessage(nfcMessage: NfcMessage)throws  -> SignedTransactionOrPsbt  {
+    return try  FfiConverterTypeSignedTransactionOrPsbt_lift(try rustCallWithError(FfiConverterTypeSignedImportError_lift) {
+    uniffi_cove_fn_func_signedtransactionorpsbttryfromnfcmessage(
+        FfiConverterTypeNfcMessage_lower(nfcMessage),$0
+    )
+})
+}
+/**
+ * Parse from string input (base64 or hex encoded)
+ */
+public func signedTransactionOrPsbtTryParse(input: String)throws  -> SignedTransactionOrPsbt  {
+    return try  FfiConverterTypeSignedTransactionOrPsbt_lift(try rustCallWithError(FfiConverterTypeSignedImportError_lift) {
+    uniffi_cove_fn_func_signedtransactionorpsbttryparse(
+        FfiConverterString.lower(input),$0
+    )
+})
+}
 public func createTransportErrorFromCode(code: UInt16, message: String) -> TransportError  {
     return try!  FfiConverterTypeTransportError_lift(try! rustCall() {
     uniffi_cove_fn_func_create_transport_error_from_code(
@@ -28477,6 +28758,15 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_tap_signer_confirm_pin_args_new_from_new_pin() != 4888) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_signedtransactionorpsbttryfrombytes() != 36882) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_signedtransactionorpsbttryfromnfcmessage() != 49359) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_signedtransactionorpsbttryparse() != 7350) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_create_transport_error_from_code() != 12205) {

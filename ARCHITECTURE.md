@@ -99,6 +99,7 @@ This pattern is used throughout the codebase for shared resources and is safe to
 
 - UniFFI automatically transforms Rust error types ending in `Error` to `Exception` when generating Kotlin bindings (e.g., `SendFlowError` becomes `SendFlowException`). This is standard Kotlin convention where exceptions extend `kotlin.Exception`.
 - Rust enum variants use **tuple-style** (unnamed fields), which UniFFI translates to generic `v1`, `v2`, `v3` field names in Kotlin (e.g., `RouteUpdated(Vec<Route>)` becomes `data class RouteUpdated(val v1: List<Route>)`). In contrast, struct-style variants with named fields preserve those names (e.g., `WrongNetwork { address: String, validFor: Network, current: Network }` becomes `data class WrongNetwork(val address: String, val validFor: Network, val current: Network)`).
+- **Kotlin enum variant name collisions:** Avoid naming an enum variant the same as a type that a method returns. In Kotlin, UniFFI generates enums as sealed classes where variants become nested data classes. If an enum has both a variant named `Foo` and a method `fn foo() -> Option<Foo>` (returning a different `Foo` type), Kotlin resolves `Foo` within the sealed class scope to the variant, not the external type, causing a compile error. Solution: use distinct variant names (e.g., `SignedPsbt` instead of `Psbt` when there's also a `Psbt` type).
 - When you change any exported API (new method, enum, record), rebuild bindings through the `just` recipes described below so the mobile projects pick up the new code.
 
 ---
