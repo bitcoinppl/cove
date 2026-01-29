@@ -277,7 +277,7 @@ fun QrExportView(
                         canIncrease = density.canIncrease(),
                         onDecrease = { density = density.decrease() },
                         onIncrease = { density = density.increase() },
-                        modifier = Modifier.padding(horizontal = 9.dp),
+                        modifier = Modifier.padding(top = 12.dp, start = 9.dp, end = 9.dp),
                     )
                 }
             }
