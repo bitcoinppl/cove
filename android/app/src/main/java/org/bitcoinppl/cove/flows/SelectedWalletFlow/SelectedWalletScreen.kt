@@ -184,6 +184,12 @@ fun SelectedWalletScreen(
         containerColor = listBg,
         topBar = {
             CenterAlignedTopAppBar(
+                modifier =
+                    Modifier.clickable {
+                        scope.launch {
+                            listState.animateScrollToItem(0)
+                        }
+                    },
                 colors =
                     TopAppBarDefaults.centerAlignedTopAppBarColors(
                         // gradual fade from transparent to midnight blue based on scroll progress
@@ -198,7 +204,11 @@ fun SelectedWalletScreen(
                             modifier =
                                 Modifier
                                     .combinedClickable(
-                                        onClick = {},
+                                        onClick = {
+                                            scope.launch {
+                                                listState.animateScrollToItem(0)
+                                            }
+                                        },
                                         onLongClick = { showRenameMenu = true },
                                     ).padding(vertical = 8.dp, horizontal = 16.dp),
                             horizontalArrangement = Arrangement.Center,
