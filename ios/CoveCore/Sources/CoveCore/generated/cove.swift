@@ -7659,6 +7659,16 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
      */
     func exportTransactionsCsv() async throws  -> TransactionExportResult
     
+    /**
+     * Export public descriptors (xpub) as QR codes
+     */
+    func exportXpubForQr(density: QrDensity) async throws  -> [String]
+    
+    /**
+     * Export public descriptors (xpub) for share
+     */
+    func exportXpubForShare() async throws  -> XpubExportResult
+    
     func feeRateOptions() async throws  -> FeeRateOptions
     
     func fees()  -> FeeResponse?
@@ -8084,6 +8094,46 @@ open func exportTransactionsCsv()async throws  -> TransactionExportResult  {
             completeFunc: ffi_cove_rust_future_complete_rust_buffer,
             freeFunc: ffi_cove_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeTransactionExportResult_lift,
+            errorHandler: FfiConverterTypeWalletManagerError_lift
+        )
+}
+    
+    /**
+     * Export public descriptors (xpub) as QR codes
+     */
+open func exportXpubForQr(density: QrDensity)async throws  -> [String]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_rustwalletmanager_export_xpub_for_qr(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeQrDensity_lower(density)
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_rust_buffer,
+            completeFunc: ffi_cove_rust_future_complete_rust_buffer,
+            freeFunc: ffi_cove_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceString.lift,
+            errorHandler: FfiConverterTypeWalletManagerError_lift
+        )
+}
+    
+    /**
+     * Export public descriptors (xpub) for share
+     */
+open func exportXpubForShare()async throws  -> XpubExportResult  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_rustwalletmanager_export_xpub_for_share(
+                    self.uniffiCloneHandle()
+                    
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_rust_buffer,
+            completeFunc: ffi_cove_rust_future_complete_rust_buffer,
+            freeFunc: ffi_cove_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeXpubExportResult_lift,
             errorHandler: FfiConverterTypeWalletManagerError_lift
         )
 }
@@ -13098,6 +13148,60 @@ public func FfiConverterTypeWordVerifyAnimationConfig_lift(_ buf: RustBuffer) th
 #endif
 public func FfiConverterTypeWordVerifyAnimationConfig_lower(_ value: WordVerifyAnimationConfig) -> RustBuffer {
     return FfiConverterTypeWordVerifyAnimationConfig.lower(value)
+}
+
+
+public struct XpubExportResult: Equatable, Hashable {
+    public var content: String
+    public var filename: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(content: String, filename: String) {
+        self.content = content
+        self.filename = filename
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension XpubExportResult: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeXpubExportResult: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> XpubExportResult {
+        return
+            try XpubExportResult(
+                content: FfiConverterString.read(from: &buf), 
+                filename: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: XpubExportResult, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.content, into: &buf)
+        FfiConverterString.write(value.filename, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeXpubExportResult_lift(_ buf: RustBuffer) throws -> XpubExportResult {
+    return try FfiConverterTypeXpubExportResult.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeXpubExportResult_lower(_ value: XpubExportResult) -> RustBuffer {
+    return FfiConverterTypeXpubExportResult.lower(value)
 }
 
 // Note that we don't yet support `indirect` for enums.
@@ -29383,6 +29487,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_export_transactions_csv() != 27705) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustwalletmanager_export_xpub_for_qr() != 3466) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustwalletmanager_export_xpub_for_share() != 18121) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_fee_rate_options() != 36497) {

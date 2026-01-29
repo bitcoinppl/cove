@@ -52,6 +52,7 @@ fun WalletMoreOptionsSheet(
     onImportLabels: () -> Unit,
     onExportLabels: () -> Unit,
     onExportTransactions: () -> Unit,
+    onExportXpub: () -> Unit,
 ) {
     val metadata =
         manager.walletMetadata ?: run {
@@ -147,6 +148,18 @@ fun WalletMoreOptionsSheet(
 
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
             }
+
+            // export xpub (always visible)
+            MenuOption(
+                icon = { Icon(Icons.Default.Key, contentDescription = null) },
+                label = "Export Xpub",
+                onClick = {
+                    onExportXpub()
+                    onDismiss()
+                },
+            )
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
 
             // TapSigner options
             if (hardwareMetadata is HardwareWalletMetadata.TapSigner) {

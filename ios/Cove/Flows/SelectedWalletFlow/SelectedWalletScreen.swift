@@ -17,6 +17,7 @@ private enum SheetState: Equatable {
     case chooseAddressType([FoundAddress])
     case qrLabelsExport
     case qrLabelsImport
+    case qrXpubExport
 }
 
 struct SelectedWalletScreen: View {
@@ -47,6 +48,8 @@ struct SelectedWalletScreen: View {
     @State private var isImportingLabels = false
     @State private var showExportLabelsConfirmation = false
     @State private var showLabelsQrExport = false
+    @State private var showExportXpubConfirmation = false
+    @State private var showXpubQrExport = false
 
     // private
     @State private var runPostRefresh = false
@@ -138,6 +141,8 @@ struct SelectedWalletScreen: View {
             EmptyView()
         case .qrLabelsImport:
             QrCodeLabelImportView(scannedCode: $scannedLabels)
+        case .qrXpubExport:
+            EmptyView()
         }
     }
 
@@ -159,6 +164,28 @@ struct SelectedWalletScreen: View {
 
     func showQrExport() {
         showLabelsQrExport = true
+    }
+
+    func showXpubQrExport() {
+        showXpubQrExport = true
+    }
+
+    func shareXpubFile() {
+        Task {
+            do {
+                let result = try await manager.rust.exportXpubForShare()
+                ShareSheet.present(data: result.content, filename: result.filename) { success in
+                    if !success {
+                        Log.warn("Xpub Export Failed: cancelled or failed")
+                    }
+                }
+            } catch {
+                app.alertState = .init(.general(
+                    title: "Xpub Export Failed",
+                    message: "Unable to export public descriptors: \(error.localizedDescription)"
+                ))
+            }
+        }
     }
 
     func shareLabelsFile() {
@@ -220,7 +247,8 @@ struct SelectedWalletScreen: View {
                     MoreInfoPopover(
                         manager: manager,
                         isImportingLabels: $isImportingLabels,
-                        showExportLabelsConfirmation: $showExportLabelsConfirmation
+                        showExportLabelsConfirmation: $showExportLabelsConfirmation,
+                        showExportXpubConfirmation: $showExportXpubConfirmation
                     )
                 } label: {
                     Image(systemName: "ellipsis.circle")
@@ -237,6 +265,20 @@ struct SelectedWalletScreen: View {
 
                     Button("Share...") {
                         shareLabelsFile()
+                    }
+
+                    Button("Cancel", role: .cancel) {}
+                }
+                .confirmationDialog(
+                    "Export Xpub",
+                    isPresented: $showExportXpubConfirmation
+                ) {
+                    Button("QR Code") {
+                        showXpubQrExport()
+                    }
+
+                    Button("Share...") {
+                        shareXpubFile()
                     }
 
                     Button("Cancel", role: .cancel) {}
@@ -302,6 +344,20 @@ struct SelectedWalletScreen: View {
                 },
                 generateUrStrings: nil,
                 copyData: { try await manager.rust.exportLabelsForShare().content }
+            )
+            .presentationDetents([.height(500), .height(600), .large])
+            .padding()
+            .padding(.top, 10)
+        }
+        .sheet(isPresented: $showXpubQrExport) {
+            QrExportView(
+                title: "Export Xpub",
+                subtitle: "Public descriptor for\nwatch-only wallet",
+                generateBbqrStrings: { density in
+                    try await manager.rust.exportXpubForQr(density: density)
+                },
+                generateUrStrings: nil,
+                copyData: { try await manager.rust.exportXpubForShare().content }
             )
             .presentationDetents([.height(500), .height(600), .large])
             .padding()
