@@ -610,7 +610,10 @@ impl WalletActor {
             .tap_err(|error| error!("failed to extract transaction: {error}"))
             .map_err(|_| err("failed to extract transaction"))?;
 
-        self.do_broadcast_transaction(transaction).await?;
+        self.do_broadcast_transaction(transaction.clone()).await?;
+
+        // insert into local wallet and update UI immediately
+        self.insert_broadcast_transaction(transaction).await;
 
         Ok(())
     }
@@ -634,12 +637,15 @@ impl WalletActor {
                         .to_string(),
                 )
             })?
-            .broadcast_transaction(transaction)
+            .broadcast_transaction(transaction.clone())
             .await
             .map_err(|error| {
                 let error_string = format!("failed to broadcast transaction, try again: {error:?}");
                 Error::SignAndBroadcastError(error_string)
             })?;
+
+        // insert into local wallet and update UI immediately
+        self.insert_broadcast_transaction(transaction).await;
 
         Ok(())
     }
@@ -665,6 +671,38 @@ impl WalletActor {
         })?;
 
         Ok(tx)
+    }
+
+    /// Insert a broadcast transaction into the local wallet and update the UI
+    async fn insert_broadcast_transaction(&mut self, transaction: BdkTransaction) {
+        use WalletManagerReconcileMessage as Msg;
+        use std::time::SystemTime;
+
+        let now =
+            SystemTime::now().duration_since(UNIX_EPOCH).expect("time went backwards").as_secs();
+        let txid = transaction.compute_txid();
+
+        // insert the unconfirmed transaction into the local wallet
+        self.wallet.bdk.apply_unconfirmed_txs([(transaction, now)]);
+
+        // persist the wallet to save the new transaction
+        if let Err(error) = self.wallet.persist() {
+            error!("Failed to persist wallet after inserting broadcast tx: {error}");
+        }
+
+        // send updated balance to UI
+        let balance = self.wallet.balance();
+        self.send(Msg::WalletBalanceChanged(balance.into()));
+
+        // send updated transactions to UI
+        if let Ok(transactions) = self.transactions().await
+            && let Ok(transactions) = transactions.await
+        {
+            self.send(Msg::UpdatedTransactions(transactions));
+        }
+
+        // start a transaction watcher to track confirmations
+        send!(self.addr.start_transaction_watcher(txid));
     }
 
     pub async fn address_at(&mut self, index: u32) -> ActorResult<AddressInfo> {

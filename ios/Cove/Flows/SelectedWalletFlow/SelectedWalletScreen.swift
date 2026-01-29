@@ -168,7 +168,7 @@ struct SelectedWalletScreen: View {
         showLabelsQrExport = true
     }
 
-    func showXpubQrExport() {
+    func presentXpubQrExport() {
         showXpubQrExport = true
     }
 
@@ -276,7 +276,7 @@ struct SelectedWalletScreen: View {
                     isPresented: $showExportXpubConfirmation
                 ) {
                     Button("QR Code") {
-                        showXpubQrExport()
+                        presentXpubQrExport()
                     }
 
                     Button("Share...") {
