@@ -13,7 +13,7 @@ android {
         applicationId = "org.bitcoinppl.cove"
         minSdk = 33
         targetSdk = 36
-        versionCode = 12
+        versionCode = 13
         versionName = "1.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
