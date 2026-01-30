@@ -77,8 +77,8 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
     var hasTransactions: Bool {
         switch loadState {
         case .loading: false
-        case .scanning(let txns): !txns.isEmpty
-        case .loaded(let txns): !txns.isEmpty
+        case let .scanning(txns): !txns.isEmpty
+        case let .loaded(txns): !txns.isEmpty
         }
     }
 
@@ -167,24 +167,24 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
         case .startedInitialFullScan:
             self.loadState = .loading
 
-        case .startedExpandedFullScan(let txns):
+        case let .startedExpandedFullScan(txns):
             self.loadState = .scanning(txns)
 
-        case .availableTransactions(let txns):
+        case let .availableTransactions(txns):
             switch self.loadState {
             case .loading:
                 self.loadState = .scanning(txns)
-            case .scanning(let current) where txns.count >= current.count:
+            case let .scanning(current) where txns.count >= current.count:
                 self.loadState = .scanning(txns)
             case .scanning:
                 break
-            case .loaded(let current) where txns.count >= current.count:
+            case let .loaded(current) where txns.count >= current.count:
                 self.loadState = .scanning(txns)
             case .loaded:
                 break
             }
 
-        case .updatedTransactions(let txns):
+        case let .updatedTransactions(txns):
             switch self.loadState {
             case .scanning, .loading:
                 self.loadState = .scanning(txns)
@@ -192,38 +192,38 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
                 self.loadState = .loaded(txns)
             }
 
-        case .scanComplete(let txns):
+        case let .scanComplete(txns):
             self.loadState = .loaded(txns)
 
-        case .walletBalanceChanged(let balance):
+        case let .walletBalanceChanged(balance):
             withAnimation { self.balance = balance }
 
         case .unsignedTransactionsChanged:
             self.unsignedTransactions = (try? rust.getUnsignedTransactions()) ?? []
 
-        case .walletMetadataChanged(let metadata):
+        case let .walletMetadataChanged(metadata):
             withAnimation { self.walletMetadata = metadata }
             setWalletMetadata(metadata)
 
-        case .walletScannerResponse(let scannerResponse):
+        case let .walletScannerResponse(scannerResponse):
             self.logger.debug("walletScannerResponse: \(scannerResponse)")
-            if case .foundAddresses(let addressTypes) = scannerResponse {
+            if case let .foundAddresses(addressTypes) = scannerResponse {
                 self.foundAddresses = addressTypes
             }
 
-        case .nodeConnectionFailed(let error):
+        case let .nodeConnectionFailed(error):
             self.errorAlert = WalletErrorAlert.nodeConnectionFailed(error)
             self.logger.error(error)
             self.logger.error("set errorAlert")
 
-        case .walletError(let error):
+        case let .walletError(error):
             self.logger.error("WalletError \(error)")
 
-        case .unknownError(let error):
+        case let .unknownError(error):
             // TODO: show to user
             self.logger.error("Unknown error \(error)")
 
-        case .sendFlowError(let error):
+        case let .sendFlowError(error):
             self.sendFlowErrorAlert = TaggedItem(error)
         }
     }
