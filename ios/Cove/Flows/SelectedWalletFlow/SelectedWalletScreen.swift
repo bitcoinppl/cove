@@ -63,7 +63,6 @@ struct SelectedWalletScreen: View {
         manager.rust.labelManager()
     }
 
-    @ViewBuilder
     func transactionsCard(transactions: [CoveCore.Transaction], scanComplete: Bool) -> some View {
         TransactionsCardView(
             transactions: transactions,
@@ -246,7 +245,6 @@ struct SelectedWalletScreen: View {
         }
     }
 
-    @ViewBuilder
     var MainContent: some View {
         VStack(spacing: 0) {
             WalletBalanceHeaderView(
@@ -281,7 +279,8 @@ struct SelectedWalletScreen: View {
                     .general(
                         title: "Success!",
                         message: "Labels have been imported successfully."
-                    ))
+                    )
+                )
 
                 // when labels are imported, we need to get the transactions again with the updated labels
                 Task { await manager.rust.getTransactions() }
@@ -290,7 +289,8 @@ struct SelectedWalletScreen: View {
                     .general(
                         title: "Oops something went wrong!",
                         message: "Unable to import labels \(error.localizedDescription)"
-                    ))
+                    )
+                )
             }
         }
         .sheet(isPresented: $showLabelsQrExport) {
@@ -317,7 +317,8 @@ struct SelectedWalletScreen: View {
                 .general(
                     title: "Invalid QR Code",
                     message: "The scanned QR code does not contain BIP329 labels."
-                ))
+                )
+            )
             return
         }
 
@@ -327,14 +328,16 @@ struct SelectedWalletScreen: View {
                 .general(
                     title: "Success!",
                     message: "Labels have been imported successfully."
-                ))
+                )
+            )
 
         } catch {
             app.alertState = .init(
                 .general(
                     title: "Oops something went wrong!",
                     message: "Unable to import labels: \(error.localizedDescription)"
-                ))
+                )
+            )
         }
     }
 
@@ -380,12 +383,7 @@ struct SelectedWalletScreen: View {
                     UIRefreshControl.appearance().tintColor = UIColor.white
                 }
                 .onChange(of: manager.loadState, initial: true) { _, newState in
-                    Log.debug("[SCROLL] onChange fired, scrolledTransactionId: \(String(describing: manager.scrolledTransactionId))")
-
-                    guard let targetId = manager.scrolledTransactionId else {
-                        Log.debug("[SCROLL] No targetId, skipping")
-                        return
-                    }
+                    guard let targetId = manager.scrolledTransactionId else { return }
 
                     let hasTransactions: Bool = switch newState {
                     case .loading: false
@@ -393,14 +391,8 @@ struct SelectedWalletScreen: View {
                     case let .loaded(txns): !txns.isEmpty
                     }
 
-                    guard hasTransactions else {
-                        Log.debug("[SCROLL] No transactions yet, waiting...")
-                        return
-                    }
-
-                    Log.debug("[SCROLL] Will scroll to: \(targetId) in 0.1s")
+                    guard hasTransactions else { return }
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        Log.debug("[SCROLL] Executing scrollTo: \(targetId), scrolledTransactionId is now: \(String(describing: manager.scrolledTransactionId))")
                         withAnimation {
                             proxy.scrollTo(targetId, anchor: .center)
                         }
@@ -453,8 +445,7 @@ struct VerifyReminder: View {
             if !isVerified {
                 Button(action: {
                     navigate(Route.newWallet(.hotWallet(.verifyWords(walletId))))
-                }
-                ) {
+                }) {
                     HStack(spacing: 20) {
                         Image(systemName: "exclamationmark.triangle")
                             .foregroundStyle(.red.opacity(0.85))
