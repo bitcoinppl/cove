@@ -771,7 +771,7 @@ fun LazyListScope.transactionItems(
     }
 
     // show inline spinner when scanning, except during initial loading (first scan with no txns yet)
-    if (isScanning && hasTransactions) {
+    if (isScanning && (hasTransactions || !isFirstScan)) {
         item(key = "scanning") {
             Box(
                 modifier =
