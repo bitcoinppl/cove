@@ -454,6 +454,7 @@ struct SelectedWalletScreen: View {
                 runPostRefresh = true // mark for later
             }
             .task(id: runPostRefresh) {
+                guard runPostRefresh else { return }
                 defer { runPostRefresh = false }
                 guard case let .loaded(txns) = manager.loadState else { return }
 
