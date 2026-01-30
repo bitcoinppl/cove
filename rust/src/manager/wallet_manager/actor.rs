@@ -679,7 +679,10 @@ impl WalletActor {
         use std::time::SystemTime;
 
         let now =
-            SystemTime::now().duration_since(UNIX_EPOCH).expect("time went backwards").as_secs();
+            SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or_else(|e| {
+                warn!("System clock skew detected: {e}");
+                0
+            });
         let txid = transaction.compute_txid();
 
         // insert the unconfirmed transaction into the local wallet
@@ -1348,7 +1351,7 @@ impl WalletActor {
     }
 
     fn save_last_scan_finished(&mut self) -> Option<()> {
-        let now = UNIX_EPOCH.elapsed().unwrap();
+        let now = UNIX_EPOCH.elapsed().unwrap_or_default();
         self.last_scan_finished = Some(now);
 
         let wallets = Database::global().wallets();
@@ -1384,7 +1387,7 @@ impl WalletActor {
 
     fn save_last_height_fetched(&mut self, block_height: usize) -> Option<()> {
         debug!("actor save_last_height_fetched");
-        let now = UNIX_EPOCH.elapsed().unwrap();
+        let now = UNIX_EPOCH.elapsed().unwrap_or_default();
         self.last_height_fetched = Some((now, block_height));
 
         let wallets = Database::global().wallets();
@@ -1417,8 +1420,8 @@ impl WalletActor {
 }
 
 fn elapsed_secs_since(earlier: Duration) -> u64 {
-    let now = UNIX_EPOCH.elapsed().expect("time went backwards");
-    (now - earlier).as_secs()
+    let now = UNIX_EPOCH.elapsed().unwrap_or(earlier);
+    now.saturating_sub(earlier).as_secs()
 }
 
 impl WalletActor {

@@ -582,9 +582,13 @@ impl RustWalletManager {
         )?;
 
         let reconciler = self.reconciler.clone();
-        self.unsigned_tx_notifier.replace(async move {
+        if tokio::runtime::Handle::try_current().is_ok() {
+            self.unsigned_tx_notifier.replace(async move {
+                reconciler.send(Message::UnsignedTransactionsChanged);
+            });
+        } else {
             reconciler.send(Message::UnsignedTransactionsChanged);
-        });
+        }
 
         Ok(())
     }
@@ -633,9 +637,13 @@ impl RustWalletManager {
         send!(self.actor.cancel_txn(txn.confirm_details.psbt.0.unsigned_tx));
 
         let reconciler = self.reconciler.clone();
-        self.unsigned_tx_notifier.replace(async move {
+        if tokio::runtime::Handle::try_current().is_ok() {
+            self.unsigned_tx_notifier.replace(async move {
+                reconciler.send(Message::UnsignedTransactionsChanged);
+            });
+        } else {
             reconciler.send(Message::UnsignedTransactionsChanged);
-        });
+        }
 
         Ok(())
     }
@@ -793,7 +801,7 @@ impl RustWalletManager {
                     .map_err_str(Error::TransactionDetailsError)
             })
             .await
-            .unwrap()?;
+            .map_err(|e| Error::TransactionDetailsError(e.to_string()))??;
 
             // for unconfirmed transactions, trigger a background sync to update status
             // this uses SyncRequest with just this txid so it's fast
