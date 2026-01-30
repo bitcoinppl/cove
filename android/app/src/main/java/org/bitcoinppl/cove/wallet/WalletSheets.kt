@@ -70,6 +70,10 @@ internal fun WalletSheetsHost(
     var showLabelsQrExport by remember { mutableStateOf(false) }
     var exportLabelManager by remember { mutableStateOf<LabelManager?>(null) }
 
+    // export xpub confirmation dialog and QR sheet state
+    var showExportXpubDialog by remember { mutableStateOf(false) }
+    var showXpubQrExport by remember { mutableStateOf(false) }
+
     // show more options bottom sheet
     if (showMoreOptions) {
         WalletMoreOptionsSheet(
@@ -100,6 +104,10 @@ internal fun WalletSheetsHost(
                         snackbarHostState.showSnackbar("Unable to share transactions: ${e.localizedMessage ?: e.message}")
                     }
                 }
+            },
+            onExportXpub = {
+                onDismissMoreOptions()
+                showExportXpubDialog = true
             },
         )
     }
@@ -175,9 +183,72 @@ internal fun WalletSheetsHost(
                     subtitle = "Scan to import labels\ninto another wallet",
                     generateBbqrStrings = { density -> manager.rust.exportLabelsForQr(density) },
                     generateUrStrings = null,
+                    onCopy = { manager.rust.exportLabelsForShare().content },
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 16.dp),
                 )
             }
+        }
+    }
+
+    // export xpub confirmation dialog
+    if (showExportXpubDialog) {
+        AlertDialog(
+            onDismissRequest = { showExportXpubDialog = false },
+            title = { Text("Export Xpub") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(
+                        onClick = {
+                            showExportXpubDialog = false
+                            showXpubQrExport = true
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(Icons.Default.QrCode, contentDescription = null)
+                        Text("QR Code", modifier = Modifier.padding(start = 8.dp))
+                    }
+
+                    TextButton(
+                        onClick = {
+                            showExportXpubDialog = false
+                            scope.launch {
+                                try {
+                                    shareXpubFile(context, manager)
+                                } catch (e: Exception) {
+                                    android.util.Log.e(tag, "Failed to share xpub", e)
+                                    snackbarHostState.showSnackbar("Unable to share xpub: ${e.localizedMessage ?: e.message}")
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(Icons.Default.Share, contentDescription = null)
+                        Text("Share...", modifier = Modifier.padding(start = 8.dp))
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showExportXpubDialog = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
+    // export xpub QR sheet
+    if (showXpubQrExport) {
+        ModalBottomSheet(
+            onDismissRequest = { showXpubQrExport = false },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        ) {
+            QrExportView(
+                title = "Export Xpub",
+                subtitle = "Public descriptor for\nwatch-only wallet",
+                generateBbqrStrings = { density -> manager.rust.exportXpubForQr(density) },
+                generateUrStrings = null,
+                onCopy = { manager.rust.exportXpubForShare().content },
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 16.dp),
+            )
         }
     }
 
@@ -308,4 +379,32 @@ private suspend fun shareTransactionsFile(
         }
 
     context.startActivity(Intent.createChooser(intent, "Share Transactions"))
+}
+
+private suspend fun shareXpubFile(
+    context: Context,
+    manager: WalletManager,
+) {
+    val result = manager.rust.exportXpubForShare()
+
+    val uri =
+        withContext(Dispatchers.IO) {
+            val file = File(context.cacheDir, result.filename)
+            file.writeText(result.content)
+
+            FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                file,
+            )
+        }
+
+    val intent =
+        Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+
+    context.startActivity(Intent.createChooser(intent, "Share Xpub"))
 }

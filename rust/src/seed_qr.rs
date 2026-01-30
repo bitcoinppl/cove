@@ -335,4 +335,43 @@ pub mod tests {
         let seed_qr = SeedQr::try_from_data(&bytes).unwrap();
         assert_eq!(seed_qr.get_words(), words);
     }
+
+    #[test]
+    fn test_mnemonic_to_seed_qr_string_roundtrip() {
+        use crate::mnemonic::Mnemonic as CoveMnemonic;
+        use bip39::Language;
+
+        // test with known 12-word mnemonic and its expected standard format
+        let words = "forum undo fragile fade shy sign arrest garment culture tube off merit";
+        let expected_standard = "073318950739065415961602009907670428187212261116";
+
+        let mnemonic = Mnemonic::parse_in(Language::English, words).unwrap();
+        let cove_mnemonic = CoveMnemonic::from(mnemonic);
+
+        // convert mnemonic to seed qr string
+        let seed_qr_string = cove_mnemonic.to_seed_qr_string().unwrap();
+        assert_eq!(seed_qr_string, expected_standard);
+
+        // parse it back and verify we get the same words
+        let parsed_seed_qr = SeedQr::try_from_str(&seed_qr_string).unwrap();
+        assert_eq!(parsed_seed_qr.get_words(), words.split_whitespace().collect::<Vec<&str>>());
+    }
+
+    #[test]
+    fn test_mnemonic_to_seed_qr_string_24_words() {
+        use crate::mnemonic::Mnemonic as CoveMnemonic;
+        use bip39::Language;
+
+        let words = "attack pizza motion avocado network gather crop fresh patrol unusual wild holiday candy pony ranch winter theme error hybrid van cereal salon goddess expire";
+        let expected_standard = "011513251154012711900771041507421289190620080870026613431420201617920614089619290300152408010643";
+
+        let mnemonic = Mnemonic::parse_in(Language::English, words).unwrap();
+        let cove_mnemonic = CoveMnemonic::from(mnemonic);
+
+        let seed_qr_string = cove_mnemonic.to_seed_qr_string().unwrap();
+        assert_eq!(seed_qr_string, expected_standard);
+
+        let parsed_seed_qr = SeedQr::try_from_str(&seed_qr_string).unwrap();
+        assert_eq!(parsed_seed_qr.get_words(), words.split_whitespace().collect::<Vec<&str>>());
+    }
 }

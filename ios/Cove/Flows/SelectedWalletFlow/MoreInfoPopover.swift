@@ -16,6 +16,7 @@ struct MoreInfoPopover: View {
 
     // bindings
     @Binding var showExportLabelsConfirmation: Bool
+    @Binding var showExportXpubConfirmation: Bool
 
     private var hasLabels: Bool {
         labelManager.hasLabels()
@@ -35,6 +36,10 @@ struct MoreInfoPopover: View {
 
     func exportLabels() {
         showExportLabelsConfirmation = true
+    }
+
+    func exportXpub() {
+        showExportXpubConfirmation = true
     }
 
     func exportTransactions() {
@@ -109,6 +114,10 @@ struct MoreInfoPopover: View {
                 }
             }
 
+            Button(action: exportXpub) {
+                Label("Export Xpub", systemImage: "key.horizontal")
+            }
+
             if case let .tapSigner(t) = metadata.hardwareMetadata {
                 ChangePinButton(t)
                 DownloadBackupButton(t)
@@ -136,7 +145,8 @@ struct MoreInfoPopover: View {
         MoreInfoPopover(
             manager: WalletManager(preview: "preview_only"),
             isImportingLabels: Binding.constant(false),
-            showExportLabelsConfirmation: Binding.constant(false)
+            showExportLabelsConfirmation: Binding.constant(false),
+            showExportXpubConfirmation: Binding.constant(false)
         )
         .environment(AppManager.shared)
     }

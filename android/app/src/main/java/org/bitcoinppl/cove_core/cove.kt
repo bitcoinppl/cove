@@ -1445,6 +1445,10 @@ external fun uniffi_cove_checksum_method_rustwalletmanager_export_labels_for_sha
 ): Short
 external fun uniffi_cove_checksum_method_rustwalletmanager_export_transactions_csv(
 ): Short
+external fun uniffi_cove_checksum_method_rustwalletmanager_export_xpub_for_qr(
+): Short
+external fun uniffi_cove_checksum_method_rustwalletmanager_export_xpub_for_share(
+): Short
 external fun uniffi_cove_checksum_method_rustwalletmanager_fee_rate_options(
 ): Short
 external fun uniffi_cove_checksum_method_rustwalletmanager_fees(
@@ -2402,6 +2406,10 @@ external fun uniffi_cove_fn_method_rustwalletmanager_export_labels_for_qr(`ptr`:
 external fun uniffi_cove_fn_method_rustwalletmanager_export_labels_for_share(`ptr`: Long,
 ): Long
 external fun uniffi_cove_fn_method_rustwalletmanager_export_transactions_csv(`ptr`: Long,
+): Long
+external fun uniffi_cove_fn_method_rustwalletmanager_export_xpub_for_qr(`ptr`: Long,`density`: Long,
+): Long
+external fun uniffi_cove_fn_method_rustwalletmanager_export_xpub_for_share(`ptr`: Long,
 ): Long
 external fun uniffi_cove_fn_method_rustwalletmanager_fee_rate_options(`ptr`: Long,
 ): Long
@@ -3888,6 +3896,12 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_export_transactions_csv() != 27705.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_export_xpub_for_qr() != 3466.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_export_xpub_for_share() != 18121.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_fee_rate_options() != 36497.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -3984,7 +3998,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_mnemonic_all_words() != 24108.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_mnemonic_to_seed_qr_string() != 52169.toShort()) {
+    if (lib.uniffi_cove_checksum_method_mnemonic_to_seed_qr_string() != 24678.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_mnemonic_words() != 8009.toShort()) {
@@ -13642,10 +13656,11 @@ open class Mnemonic: Disposable, AutoCloseable, MnemonicInterface
     /**
      * Converts mnemonic to SeedQR standard format string
      * Each word is converted to its 4-digit BIP39 index (0000-2047)
-     */override fun `toSeedQrString`(): kotlin.String {
+     */
+    @Throws(MnemonicException::class)override fun `toSeedQrString`(): kotlin.String {
             return FfiConverterString.lift(
     callWithHandle {
-    uniffiRustCall() { _status ->
+    uniffiRustCallWithError(MnemonicException) { _status ->
     UniffiLib.uniffi_cove_fn_method_mnemonic_to_seed_qr_string(
         it,
         _status)
@@ -18132,6 +18147,16 @@ public interface RustWalletManagerInterface {
      */
     suspend fun `exportTransactionsCsv`(): TransactionExportResult
     
+    /**
+     * Export public descriptors (xpub) as QR codes
+     */
+    suspend fun `exportXpubForQr`(`density`: QrDensity): List<kotlin.String>
+    
+    /**
+     * Export public descriptors (xpub) for share
+     */
+    suspend fun `exportXpubForShare`(): XpubExportResult
+    
     suspend fun `feeRateOptions`(): FeeRateOptions
     
     fun `fees`(): FeeResponse?
@@ -18641,6 +18666,54 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
         { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
         // lift function
         { FfiConverterTypeTransactionExportResult.lift(it) },
+        // Error FFI converter
+        WalletManagerException.ErrorHandler,
+    )
+    }
+
+    
+    /**
+     * Export public descriptors (xpub) as QR codes
+     */
+    @Throws(WalletManagerException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `exportXpubForQr`(`density`: QrDensity) : List<kotlin.String> {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_export_xpub_for_qr(
+                uniffiHandle,
+                FfiConverterTypeQrDensity.lower(`density`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterSequenceString.lift(it) },
+        // Error FFI converter
+        WalletManagerException.ErrorHandler,
+    )
+    }
+
+    
+    /**
+     * Export public descriptors (xpub) for share
+     */
+    @Throws(WalletManagerException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `exportXpubForShare`() : XpubExportResult {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_export_xpub_for_share(
+                uniffiHandle,
+                
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeXpubExportResult.lift(it) },
         // Error FFI converter
         WalletManagerException.ErrorHandler,
     )
@@ -25908,6 +25981,44 @@ public object FfiConverterTypeWordVerifyAnimationConfig: FfiConverterRustBuffer<
 
 
 
+data class XpubExportResult (
+    var `content`: kotlin.String
+    , 
+    var `filename`: kotlin.String
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeXpubExportResult: FfiConverterRustBuffer<XpubExportResult> {
+    override fun read(buf: ByteBuffer): XpubExportResult {
+        return XpubExportResult(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: XpubExportResult) = (
+            FfiConverterString.allocationSize(value.`content`) +
+            FfiConverterString.allocationSize(value.`filename`)
+    )
+
+    override fun write(value: XpubExportResult, buf: ByteBuffer) {
+            FfiConverterString.write(value.`content`, buf)
+            FfiConverterString.write(value.`filename`, buf)
+    }
+}
+
+
+
 sealed class AfterPinAction: Disposable  {
     
     object Derive : AfterPinAction()
@@ -31890,6 +32001,14 @@ sealed class MnemonicException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
+    class UnknownWord(
+        
+        val v1: kotlin.String
+        ) : MnemonicException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+    
 
     
 
@@ -31924,6 +32043,9 @@ public object FfiConverterTypeMnemonicError : FfiConverterRustBuffer<MnemonicExc
             2 -> MnemonicException.NotAvailable(
                 FfiConverterTypeWalletId.read(buf),
                 )
+            3 -> MnemonicException.UnknownWord(
+                FfiConverterString.read(buf),
+                )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
@@ -31940,6 +32062,11 @@ public object FfiConverterTypeMnemonicError : FfiConverterRustBuffer<MnemonicExc
                 4UL
                 + FfiConverterTypeWalletId.allocationSize(value.v1)
             )
+            is MnemonicException.UnknownWord -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
         }
     }
 
@@ -31953,6 +32080,11 @@ public object FfiConverterTypeMnemonicError : FfiConverterRustBuffer<MnemonicExc
             is MnemonicException.NotAvailable -> {
                 buf.putInt(2)
                 FfiConverterTypeWalletId.write(value.v1, buf)
+                Unit
+            }
+            is MnemonicException.UnknownWord -> {
+                buf.putInt(3)
+                FfiConverterString.write(value.v1, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -32179,6 +32311,28 @@ sealed class MultiFormat: Disposable  {
         companion object
     }
     
+    /**
+     * A signed but un-finalized PSBT
+     */
+    data class SignedPsbt(
+        val v1: org.bitcoinppl.cove_core.types.Psbt) : MultiFormat()
+        
+    {
+        
+
+    // The local Rust `Eq` implementation - only `eq` is used.
+    override fun equals(other: Any?): Boolean {
+        if (other !is MultiFormat) return false
+        return FfiConverterBoolean.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_multiformat_uniffi_trait_eq_eq(FfiConverterTypeMultiFormat.lower(this),
+        FfiConverterTypeMultiFormat.lower(`other`),_status)
+}
+    )
+    }
+        companion object
+    }
+    
 
     
     @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
@@ -32233,6 +32387,13 @@ sealed class MultiFormat: Disposable  {
     )
                 
             }
+            is MultiFormat.SignedPsbt -> {
+                
+    Disposable.destroy(
+        this.v1
+    )
+                
+            }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
     
@@ -32280,6 +32441,9 @@ public object FfiConverterTypeMultiFormat : FfiConverterRustBuffer<MultiFormat>{
                 )
             7 -> MultiFormat.TapSignerUnused(
                 FfiConverterTypeTapSigner.read(buf),
+                )
+            8 -> MultiFormat.SignedPsbt(
+                FfiConverterTypePsbt.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
@@ -32335,6 +32499,13 @@ public object FfiConverterTypeMultiFormat : FfiConverterRustBuffer<MultiFormat>{
                 + FfiConverterTypeTapSigner.allocationSize(value.v1)
             )
         }
+        is MultiFormat.SignedPsbt -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypePsbt.allocationSize(value.v1)
+            )
+        }
     }
 
     override fun write(value: MultiFormat, buf: ByteBuffer) {
@@ -32372,6 +32543,11 @@ public object FfiConverterTypeMultiFormat : FfiConverterRustBuffer<MultiFormat>{
             is MultiFormat.TapSignerUnused -> {
                 buf.putInt(7)
                 FfiConverterTypeTapSigner.write(value.v1, buf)
+                Unit
+            }
+            is MultiFormat.SignedPsbt -> {
+                buf.putInt(8)
+                FfiConverterTypePsbt.write(value.v1, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }

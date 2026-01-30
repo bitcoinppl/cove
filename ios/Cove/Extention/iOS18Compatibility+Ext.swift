@@ -42,11 +42,9 @@ extension View {
     @ViewBuilder
     func adaptiveToolbarStyle(showNavBar: Bool) -> some View {
         if #available(iOS 26.0, *) {
-            // iOS 26+: always keep toolbar visible to avoid scroll glitches from inset changes
-            // use clear background to keep it invisible
+            // iOS 26+: let system handle liquid glass automatically
+            // don't override with clear background
             self
-                .toolbarBackgroundVisibility(.visible, for: .navigationBar)
-                .toolbarBackground(Color.clear, for: .navigationBar)
         } else {
             // iOS 18 and earlier: keep existing midnight blue style
             self

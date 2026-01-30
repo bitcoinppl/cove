@@ -132,6 +132,12 @@ pub struct TransactionExportResult {
     pub filename: String,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct XpubExportResult {
+    pub content: String,
+    pub filename: String,
+}
+
 #[uniffi::export(callback_interface)]
 pub trait WalletManagerReconciler: Send + Sync + std::fmt::Debug + 'static {
     fn reconcile(&self, message: Message);
@@ -422,6 +428,71 @@ impl RustWalletManager {
         let lm = self.label_manager.clone();
 
         with_loading_popup(async move { lm.export_to_bbqr_with_density(&density).await }).await
+    }
+
+    /// Export public descriptors (xpub) for share
+    #[uniffi::method]
+    pub async fn export_xpub_for_share(&self) -> Result<XpubExportResult, Error> {
+        let id = self.id.clone();
+        let name = self.metadata.read().name.clone();
+
+        with_loading_popup(async move {
+            let content = get_public_descriptor_content(&id)?;
+
+            let sanitized_name = name
+                .replace(' ', "_")
+                .replace(|c: char| !c.is_alphanumeric() && c != '_', "")
+                .to_ascii_lowercase();
+
+            let sanitized_name =
+                if sanitized_name.is_empty() { "wallet".to_string() } else { sanitized_name };
+
+            let filename = format!("{sanitized_name}_descriptors.txt");
+
+            Ok(XpubExportResult { content, filename })
+        })
+        .await
+    }
+
+    /// Export public descriptors (xpub) as QR codes
+    #[uniffi::method]
+    pub async fn export_xpub_for_qr(&self, density: Arc<QrDensity>) -> Result<Vec<String>, Error> {
+        use bbqr::{
+            encode::Encoding,
+            file_type::FileType,
+            qr::Version,
+            split::{Split, SplitOptions},
+        };
+
+        let id = self.id.clone();
+
+        with_loading_popup(async move {
+            let content = get_public_descriptor_content(&id)?;
+            let max_version = density.bbqr_max_version();
+
+            crate::task::spawn_blocking(move || {
+                let data = content.as_bytes();
+                let version = Version::try_from(max_version).unwrap_or(Version::V15);
+
+                let split = Split::try_from_data(
+                    data,
+                    FileType::UnicodeText,
+                    SplitOptions {
+                        encoding: Encoding::Zlib,
+                        min_split_number: 1,
+                        max_split_number: 100,
+                        min_version: Version::V01,
+                        max_version: version,
+                    },
+                )
+                .map_err(|e| Error::UnknownError(format!("BBQr encoding failed: {e}")))?;
+
+                Ok(split.parts)
+            })
+            .await
+            .map_err(|e| Error::UnknownError(e.to_string()))?
+        })
+        .await
     }
 
     /// Export transactions as CSV with conditional loading popup
@@ -1212,6 +1283,24 @@ impl Drop for RustWalletManager {
     fn drop(&mut self) {
         debug!("[DROP] Wallet View manager: {}", self.id);
     }
+}
+
+/// Get the public descriptor content for export
+fn get_public_descriptor_content(id: &WalletId) -> Result<String, Error> {
+    // try keychain first
+    if let Ok(Some(descriptors)) = Keychain::global().get_public_descriptor(id) {
+        let (external, internal) = descriptors;
+        return Ok(format!("{external}\n{internal}"));
+    }
+
+    // fallback to loading from BDK wallet
+    let wallet = Wallet::try_load_persisted(id.clone())
+        .map_err(|e| Error::UnknownError(format!("failed to load wallet: {e}")))?;
+
+    let external = wallet.bdk.public_descriptor(bdk_wallet::KeychainKind::External);
+    let internal = wallet.bdk.public_descriptor(bdk_wallet::KeychainKind::Internal);
+
+    Ok(format!("{external}\n{internal}"))
 }
 
 #[uniffi::export]

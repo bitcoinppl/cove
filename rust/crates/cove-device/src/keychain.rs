@@ -161,6 +161,33 @@ impl Keychain {
         self.0.save(key, value)
     }
 
+    pub fn get_public_descriptor(
+        &self,
+        id: &WalletId,
+    ) -> Result<Option<(ExtendedDescriptor, ExtendedDescriptor)>, KeychainError> {
+        let key = wallet_public_descriptor_key_name(id);
+        let Some(value) = self.0.get(key) else {
+            return Ok(None);
+        };
+
+        let mut lines = value.lines();
+        let external = lines.next().ok_or_else(|| {
+            KeychainError::ParseSavedValue("missing external descriptor".to_string())
+        })?;
+        let internal = lines.next().ok_or_else(|| {
+            KeychainError::ParseSavedValue("missing internal descriptor".to_string())
+        })?;
+
+        let external = ExtendedDescriptor::from_str(external).map_err(|e| {
+            KeychainError::ParseSavedValue(format!("invalid external descriptor: {e}"))
+        })?;
+        let internal = ExtendedDescriptor::from_str(internal).map_err(|e| {
+            KeychainError::ParseSavedValue(format!("invalid internal descriptor: {e}"))
+        })?;
+
+        Ok(Some((external, internal)))
+    }
+
     fn delete_public_descriptor(&self, id: &WalletId) -> bool {
         let key = wallet_public_descriptor_key_name(id);
         self.0.delete(key)

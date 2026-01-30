@@ -47,12 +47,19 @@ struct SelectedWalletScreen: View {
     @State private var isImportingLabels = false
     @State private var showExportLabelsConfirmation = false
     @State private var showLabelsQrExport = false
+    @State private var showExportXpubConfirmation = false
+    @State private var showXpubQrExport = false
 
     // private
     @State private var runPostRefresh = false
 
     var metadata: WalletMetadata {
         manager.walletMetadata
+    }
+
+    private var iOS26OrLater: Bool {
+        if #available(iOS 26.0, *) { return true }
+        return false
     }
 
     func updater(_ action: WalletManagerAction) {
@@ -161,6 +168,28 @@ struct SelectedWalletScreen: View {
         showLabelsQrExport = true
     }
 
+    func showXpubQrExport() {
+        showXpubQrExport = true
+    }
+
+    func shareXpubFile() {
+        Task {
+            do {
+                let result = try await manager.rust.exportXpubForShare()
+                ShareSheet.present(data: result.content, filename: result.filename) { success in
+                    if !success {
+                        Log.warn("Xpub Export Failed: cancelled or failed")
+                    }
+                }
+            } catch {
+                app.alertState = .init(.general(
+                    title: "Xpub Export Failed",
+                    message: "Unable to export public descriptors: \(error.localizedDescription)"
+                ))
+            }
+        }
+    }
+
     func shareLabelsFile() {
         Task {
             do {
@@ -220,7 +249,8 @@ struct SelectedWalletScreen: View {
                     MoreInfoPopover(
                         manager: manager,
                         isImportingLabels: $isImportingLabels,
-                        showExportLabelsConfirmation: $showExportLabelsConfirmation
+                        showExportLabelsConfirmation: $showExportLabelsConfirmation,
+                        showExportXpubConfirmation: $showExportXpubConfirmation
                     )
                 } label: {
                     Image(systemName: "ellipsis.circle")
@@ -237,6 +267,20 @@ struct SelectedWalletScreen: View {
 
                     Button("Share...") {
                         shareLabelsFile()
+                    }
+
+                    Button("Cancel", role: .cancel) {}
+                }
+                .confirmationDialog(
+                    "Export Xpub",
+                    isPresented: $showExportXpubConfirmation
+                ) {
+                    Button("QR Code") {
+                        showXpubQrExport()
+                    }
+
+                    Button("Share...") {
+                        shareXpubFile()
                     }
 
                     Button("Cancel", role: .cancel) {}
@@ -300,7 +344,22 @@ struct SelectedWalletScreen: View {
                 generateBbqrStrings: { density in
                     try await manager.rust.exportLabelsForQr(density: density)
                 },
-                generateUrStrings: nil
+                generateUrStrings: nil,
+                copyData: { try await manager.rust.exportLabelsForShare().content }
+            )
+            .presentationDetents([.height(500), .height(600), .large])
+            .padding()
+            .padding(.top, 10)
+        }
+        .sheet(isPresented: $showXpubQrExport) {
+            QrExportView(
+                title: "Export Xpub",
+                subtitle: "Public descriptor for\nwatch-only wallet",
+                generateBbqrStrings: { density in
+                    try await manager.rust.exportXpubForQr(density: density)
+                },
+                generateUrStrings: nil,
+                copyData: { try await manager.rust.exportXpubForShare().content }
             )
             .presentationDetents([.height(500), .height(600), .large])
             .padding()
@@ -348,15 +407,18 @@ struct SelectedWalletScreen: View {
                     MainContent
                         .background(
                             VStack(spacing: 0) {
-                                Color.midnightBlue.frame(height: screenHeight * 0.40 + 500)
+                                Color.midnightBlue
+                                    .opacity(iOS26OrLater && shouldShowNavBar ? 0 : 1)
+                                    .frame(height: screenHeight * 0.40 + 500)
                                 Color.coveBg
                             }
                             .offset(y: -500)
+                            .animation(.easeOut(duration: 0.15), value: shouldShowNavBar)
                         )
                 }
                 .contentMargins(.top, -(safeAreaInsets.top + navBarAndScrollInsets), for: .scrollContent)
                 .background(Color.coveBg.ignoresSafeArea(edges: .bottom))
-                .background(Color.midnightBlue.ignoresSafeArea(edges: .top))
+                .background(Color.midnightBlue.ignoresSafeArea(edges: iOS26OrLater ? [] : .top))
                 .refreshable {
                     // nothing to do – let the indicator disappear right away
                     guard case .loaded = manager.loadState else { return }
@@ -408,7 +470,7 @@ struct SelectedWalletScreen: View {
                 }
             }
         }
-        .background(Color.midnightBlue.ignoresSafeArea())
+        .background(Color.midnightBlue.ignoresSafeArea(edges: iOS26OrLater ? .bottom : [.top, .bottom]))
         .onChange(of: manager.walletMetadata.discoveryState) { _, newValue in
             setSheetState(newValue)
         }
