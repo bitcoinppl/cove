@@ -1287,14 +1287,19 @@ impl Drop for RustWalletManager {
 
 /// Get the public descriptor content for export
 fn get_public_descriptor_content(id: &WalletId) -> Result<String, Error> {
-    let descriptors = Keychain::global()
-        .get_public_descriptor(id)
-        .map_err(Error::SecretRetrievalError)?
-        .ok_or_else(|| {
-            Error::UnknownError("public descriptor not found in keychain".to_string())
-        })?;
+    // try keychain first
+    if let Ok(Some(descriptors)) = Keychain::global().get_public_descriptor(id) {
+        let (external, internal) = descriptors;
+        return Ok(format!("{external}\n{internal}"));
+    }
 
-    let (external, internal) = descriptors;
+    // fallback to loading from BDK wallet
+    let wallet = Wallet::try_load_persisted(id.clone())
+        .map_err(|e| Error::UnknownError(format!("failed to load wallet: {e}")))?;
+
+    let external = wallet.bdk.public_descriptor(bdk_wallet::KeychainKind::External);
+    let internal = wallet.bdk.public_descriptor(bdk_wallet::KeychainKind::Internal);
+
     Ok(format!("{external}\n{internal}"))
 }
 
