@@ -9224,6 +9224,16 @@ public protocol TransactionDetailsProtocol: AnyObject, Sendable {
     
     func feeFmt(unit: BitcoinUnit)  -> String?
     
+    /**
+     * Historical fiat value at time of transaction - async version (fetches from API if not cached)
+     */
+    func historicalFiatFmt() async throws  -> String
+    
+    /**
+     * Historical fiat value at time of transaction - cached version (no network calls)
+     */
+    func historicalFiatFmtCached()  -> String?
+    
     func isConfirmed()  -> Bool
     
     func isReceived()  -> Bool
@@ -9468,6 +9478,37 @@ open func feeFmt(unit: BitcoinUnit) -> String?  {
     uniffi_cove_fn_method_transactiondetails_fee_fmt(
             self.uniffiCloneHandle(),
         FfiConverterTypeBitcoinUnit_lower(unit),$0
+    )
+})
+}
+    
+    /**
+     * Historical fiat value at time of transaction - async version (fetches from API if not cached)
+     */
+open func historicalFiatFmt()async throws  -> String  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_transactiondetails_historical_fiat_fmt(
+                    self.uniffiCloneHandle()
+                    
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_rust_buffer,
+            completeFunc: ffi_cove_rust_future_complete_rust_buffer,
+            freeFunc: ffi_cove_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterString.lift,
+            errorHandler: FfiConverterTypeTransactionDetailError_lift
+        )
+}
+    
+    /**
+     * Historical fiat value at time of transaction - cached version (no network calls)
+     */
+open func historicalFiatFmtCached() -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+    uniffi_cove_fn_method_transactiondetails_historical_fiat_fmt_cached(
+            self.uniffiCloneHandle(),$0
     )
 })
 }
@@ -29805,6 +29846,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_transactiondetails_fee_fmt() != 37631) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_transactiondetails_historical_fiat_fmt() != 9571) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_transactiondetails_historical_fiat_fmt_cached() != 37164) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_transactiondetails_is_confirmed() != 13728) {

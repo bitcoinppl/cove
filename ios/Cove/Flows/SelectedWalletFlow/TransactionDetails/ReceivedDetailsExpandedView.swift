@@ -102,6 +102,49 @@ struct ReceivedDetailsExpandedView: View {
                 }
                 .buttonStyle(PlainButtonStyle())
             }
+
+            // MARK: - Fiat Price Section
+
+            if transactionDetails.isConfirmed() {
+                Divider().padding(.vertical, 18)
+
+                HStack(alignment: .top) {
+                    Text("Fiat Price")
+                    Spacer()
+
+                    VStack(alignment: .trailing, spacing: 4) {
+                        // current fiat value
+                        AsyncView(
+                            cachedValue: transactionDetails.amountFiatFmtCached(),
+                            operation: transactionDetails.amountFiatFmt
+                        ) { amount in
+                            Text(amount)
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                        }
+
+                        // historical fiat value (when received)
+                        HStack(spacing: 4) {
+                            Image(systemName: "clock")
+                                .font(.caption2)
+                            AsyncView(
+                                cachedValue: transactionDetails.historicalFiatFmtCached(),
+                                operation: transactionDetails.historicalFiatFmt
+                            ) { amount in
+                                Text(amount)
+                                    .font(.caption)
+                            }
+                        }
+                        .foregroundStyle(.secondary)
+
+                        Text("When received")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            }
         }
         .padding(.horizontal, detailsExpandedPadding)
     }
