@@ -44,6 +44,7 @@ internal fun ReceivedTransactionDetails(
     historicalFiatFmt: String?,
 ) {
     val context = LocalContext.current
+    val tooltipText = stringResource(R.string.fiat_price_tooltip)
     var isCopied by remember { mutableStateOf(false) }
     val sub = MaterialTheme.colorScheme.onSurfaceVariant
     val fg = MaterialTheme.colorScheme.onBackground
@@ -150,8 +151,13 @@ internal fun ReceivedTransactionDetails(
                 currentFiatFmt = currentFiatFmt,
                 historicalFiatFmt = historicalFiatFmt,
                 isConfirmed = true,
-                isSent = false,
                 dividerColor = MaterialTheme.colorScheme.outlineVariant,
+                usePrimaryColor = true,
+                onInfoClick = {
+                    android.widget.Toast
+                        .makeText(context, tooltipText, android.widget.Toast.LENGTH_SHORT)
+                        .show()
+                },
             )
         }
     }

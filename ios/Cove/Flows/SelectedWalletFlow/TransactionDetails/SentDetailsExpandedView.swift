@@ -12,6 +12,8 @@ struct SentDetailsExpandedView: View {
     let transactionDetails: TransactionDetails
     let numberOfConfirmations: Int?
 
+    @State private var showingPriceInfo = false
+
     var metadata: WalletMetadata {
         manager.walletMetadata
     }
@@ -94,12 +96,18 @@ struct SentDetailsExpandedView: View {
                                 Text(amount)
                                     .font(.caption)
                             }
+                            Image(systemName: "info.circle")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                                .onTapGesture { showingPriceInfo.toggle() }
+                                .popover(isPresented: $showingPriceInfo) {
+                                    Text("Price at time of transaction")
+                                        .font(.caption)
+                                        .padding(8)
+                                        .presentationCompactAdaptation(.popover)
+                                }
                         }
                         .foregroundStyle(.secondary)
-
-                        Text("When sent")
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
                     }
                 }
                 .font(.subheadline)
