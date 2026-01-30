@@ -136,6 +136,25 @@ impl HistoricalPriceService {
         Ok(price.for_currency(currency))
     }
 
+    /// Get historical price for a block, fetching from API if not cached
+    pub async fn get_price_for_block(
+        &self,
+        network: Network,
+        block_number: u32,
+        timestamp: u64,
+        currency: FiatCurrency,
+    ) -> Result<Option<f32>> {
+        // check cache first
+        if let Ok(Some(price)) = self.db.get_price_for_block(network, block_number) {
+            return Ok(HistoricalPrice::from(price).for_currency(currency));
+        }
+
+        // fetch and cache
+        let price = self.get_and_save_price_for_timestamp(network, block_number, timestamp).await?;
+
+        Ok(price.for_currency(currency))
+    }
+
     async fn get_and_save_price_for_timestamp(
         &self,
         network: Network,

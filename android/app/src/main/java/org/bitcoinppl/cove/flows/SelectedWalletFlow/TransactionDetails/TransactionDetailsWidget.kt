@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -40,6 +41,7 @@ internal fun TransactionDetailsWidget(
     feeFiatFmt: String?,
     sentSansFeeFiatFmt: String?,
     totalSpentFiatFmt: String?,
+    historicalFiatFmt: String?,
     metadata: WalletMetadata,
 ) {
     val dividerColor = MaterialTheme.colorScheme.outlineVariant
@@ -152,11 +154,24 @@ internal fun TransactionDetailsWidget(
                 secondary = totalSpentFiatFmt,
                 isTotal = true,
             )
+
+            // fiat price section for sent transactions
+            if (isConfirmed) {
+                FiatPriceSection(
+                    currentFiatFmt = totalSpentFiatFmt,
+                    historicalFiatFmt = historicalFiatFmt,
+                    isConfirmed = true,
+                    isSent = true,
+                    dividerColor = dividerColor,
+                )
+            }
         } else {
             // received transaction details
             ReceivedTransactionDetails(
                 transactionDetails = transactionDetails,
                 numberOfConfirmations = numberOfConfirmations,
+                currentFiatFmt = totalSpentFiatFmt,
+                historicalFiatFmt = historicalFiatFmt,
             )
         }
 
@@ -210,6 +225,55 @@ internal fun DetailsWidget(
             AutoSizeText(primary, color = primaryColor, maxFontSize = 14.sp, minimumScaleFactor = 0.90f, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(6.dp))
             AsyncText(text = secondary, color = sub, style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp))
+        }
+    }
+}
+
+@Composable
+internal fun FiatPriceSection(
+    currentFiatFmt: String?,
+    historicalFiatFmt: String?,
+    isConfirmed: Boolean,
+    isSent: Boolean,
+    dividerColor: Color,
+) {
+    val sub = MaterialTheme.colorScheme.onSurfaceVariant
+    val fg = MaterialTheme.colorScheme.onBackground
+
+    Spacer(Modifier.height(24.dp))
+    Box(Modifier.fillMaxWidth().height(1.dp).background(dividerColor))
+    Spacer(Modifier.height(24.dp))
+
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+        Text(stringResource(R.string.label_fiat_price), color = sub, fontSize = 12.sp)
+        Spacer(Modifier.weight(1f))
+        Column(horizontalAlignment = Alignment.End) {
+            AsyncText(
+                text = currentFiatFmt,
+                color = fg,
+                style =
+                    MaterialTheme.typography.bodyMedium.copy(
+                        fontWeight = FontWeight.SemiBold,
+                    ),
+            )
+            if (isConfirmed && historicalFiatFmt != null) {
+                Spacer(Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Outlined.Schedule,
+                        contentDescription = null,
+                        modifier = Modifier.size(12.dp),
+                        tint = sub,
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(historicalFiatFmt, color = sub, fontSize = 12.sp)
+                }
+                Text(
+                    stringResource(if (isSent) R.string.label_when_sent else R.string.label_when_received),
+                    color = sub.copy(alpha = 0.7f),
+                    fontSize = 10.sp,
+                )
+            }
         }
     }
 }

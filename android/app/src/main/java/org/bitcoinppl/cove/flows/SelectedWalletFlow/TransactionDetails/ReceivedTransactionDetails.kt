@@ -40,6 +40,8 @@ import java.text.NumberFormat
 internal fun ReceivedTransactionDetails(
     transactionDetails: TransactionDetails,
     numberOfConfirmations: Int?,
+    currentFiatFmt: String?,
+    historicalFiatFmt: String?,
 ) {
     val context = LocalContext.current
     var isCopied by remember { mutableStateOf(false) }
@@ -140,6 +142,17 @@ internal fun ReceivedTransactionDetails(
                 delay(5000)
                 isCopied = false
             }
+        }
+
+        // fiat price section for received transactions
+        if (transactionDetails.isConfirmed()) {
+            FiatPriceSection(
+                currentFiatFmt = currentFiatFmt,
+                historicalFiatFmt = historicalFiatFmt,
+                isConfirmed = true,
+                isSent = false,
+                dividerColor = MaterialTheme.colorScheme.outlineVariant,
+            )
         }
     }
 }

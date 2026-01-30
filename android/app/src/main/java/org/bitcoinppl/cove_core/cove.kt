@@ -1657,6 +1657,10 @@ external fun uniffi_cove_checksum_method_transactiondetails_fee_fiat_fmt_cached(
 ): Short
 external fun uniffi_cove_checksum_method_transactiondetails_fee_fmt(
 ): Short
+external fun uniffi_cove_checksum_method_transactiondetails_historical_fiat_fmt(
+): Short
+external fun uniffi_cove_checksum_method_transactiondetails_historical_fiat_fmt_cached(
+): Short
 external fun uniffi_cove_checksum_method_transactiondetails_is_confirmed(
 ): Short
 external fun uniffi_cove_checksum_method_transactiondetails_is_received(
@@ -2724,6 +2728,10 @@ external fun uniffi_cove_fn_method_transactiondetails_fee_fiat_fmt(`ptr`: Long,
 external fun uniffi_cove_fn_method_transactiondetails_fee_fiat_fmt_cached(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_transactiondetails_fee_fmt(`ptr`: Long,`unit`: RustBufferBitcoinUnit.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_transactiondetails_historical_fiat_fmt(`ptr`: Long,
+): Long
+external fun uniffi_cove_fn_method_transactiondetails_historical_fiat_fmt_cached(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_transactiondetails_is_confirmed(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
@@ -4212,6 +4220,12 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_transactiondetails_fee_fmt() != 37631.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_transactiondetails_historical_fiat_fmt() != 9571.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_transactiondetails_historical_fiat_fmt_cached() != 37164.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_transactiondetails_is_confirmed() != 13728.toShort()) {
@@ -20607,6 +20621,16 @@ public interface TransactionDetailsInterface {
     
     fun `feeFmt`(`unit`: BitcoinUnit): kotlin.String?
     
+    /**
+     * Historical fiat value at time of transaction - async version (fetches from API if not cached)
+     */
+    suspend fun `historicalFiatFmt`(): kotlin.String
+    
+    /**
+     * Historical fiat value at time of transaction - cached version (no network calls)
+     */
+    fun `historicalFiatFmtCached`(): kotlin.String?
+    
     fun `isConfirmed`(): kotlin.Boolean
     
     fun `isReceived`(): kotlin.Boolean
@@ -20911,6 +20935,46 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
     UniffiLib.uniffi_cove_fn_method_transactiondetails_fee_fmt(
         it,
         FfiConverterTypeBitcoinUnit.lower(`unit`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Historical fiat value at time of transaction - async version (fetches from API if not cached)
+     */
+    @Throws(TransactionDetailException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `historicalFiatFmt`() : kotlin.String {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_transactiondetails_historical_fiat_fmt(
+                uniffiHandle,
+                
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterString.lift(it) },
+        // Error FFI converter
+        TransactionDetailException.ErrorHandler,
+    )
+    }
+
+    
+    /**
+     * Historical fiat value at time of transaction - cached version (no network calls)
+     */override fun `historicalFiatFmtCached`(): kotlin.String? {
+            return FfiConverterOptionalString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_transactiondetails_historical_fiat_fmt_cached(
+        it,
+        _status)
 }
     }
     )
