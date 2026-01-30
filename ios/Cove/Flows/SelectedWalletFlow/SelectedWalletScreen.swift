@@ -377,13 +377,21 @@ struct SelectedWalletScreen: View {
         guard let targetId = manager.scrolledTransactionId else { return }
         if case .loading = manager.loadState { return }
 
-        withAnimation {
-            proxy.scrollTo(targetId, anchor: .center)
-        }
+        Task {
+            let needsScroll = await manager.rust.transactionNeedsScroll(txId: targetId)
+            guard needsScroll else {
+                return await MainActor.run { manager.scrolledTransactionId = nil }
+            }
 
-        // clear after scroll
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            manager.scrolledTransactionId = nil
+            await MainActor.run {
+                withAnimation {
+                    proxy.scrollTo(targetId, anchor: .center)
+                }
+            }
+
+            try? await Task.sleep(for: .milliseconds(500))
+            if Task.isCancelled { return }
+            await MainActor.run { manager.scrolledTransactionId = nil }
         }
     }
 
