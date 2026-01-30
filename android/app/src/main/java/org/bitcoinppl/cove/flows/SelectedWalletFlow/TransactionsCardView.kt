@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -260,7 +261,7 @@ fun TransactionsCardView(
 }
 
 @Composable
-private fun TransactionItem(
+internal fun TransactionItem(
     txn: Transaction,
     manager: WalletManager?,
     app: AppManager?,
@@ -732,6 +733,161 @@ internal fun UnsignedTransactionWidget(
                 },
             )
         }
+    }
+}
+
+/**
+ * LazyListScope extension to add transaction items directly to a parent LazyColumn
+ *
+ * This allows transactions to be rendered as part of a larger scrollable list that includes
+ * the header and other content, rather than nested in a separate LazyColumn
+ */
+@OptIn(ExperimentalFoundationApi::class)
+fun LazyListScope.transactionItems(
+    transactions: List<Transaction>,
+    unsignedTransactions: List<UnsignedTransaction>,
+    isScanning: Boolean,
+    isFirstScan: Boolean,
+    fiatOrBtc: FiatOrBtc,
+    sensitiveVisible: Boolean,
+    showLabels: Boolean,
+    manager: WalletManager?,
+    app: AppManager?,
+    primaryText: Color,
+    secondaryText: Color,
+    dividerColor: Color,
+) {
+    val hasTransactions = transactions.isNotEmpty() || unsignedTransactions.isNotEmpty()
+
+    // "Transactions" title
+    item(key = "txn-title") {
+        Text(
+            text = stringResource(R.string.title_transactions),
+            color = secondaryText,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+        )
+    }
+
+    // show inline spinner when scanning, except during initial loading (first scan with no txns yet)
+    if (isScanning && (hasTransactions || !isFirstScan)) {
+        item(key = "scanning") {
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp)
+                        .padding(bottom = 10.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    strokeWidth = 2.dp,
+                    color = primaryText,
+                )
+            }
+        }
+    }
+
+    // render transactions
+    if (hasTransactions) {
+        // unsigned transactions first
+        items(
+            items = unsignedTransactions,
+            key = { "unsigned-${it.id()}" },
+        ) { unsignedTxn ->
+            Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+                UnsignedTransactionWidget(
+                    txn = unsignedTxn,
+                    primaryText = primaryText,
+                    secondaryText = secondaryText,
+                    app = app,
+                    manager = manager,
+                    fiatOrBtc = fiatOrBtc,
+                    sensitiveVisible = sensitiveVisible,
+                )
+                HorizontalDivider(color = dividerColor, thickness = 0.5.dp)
+            }
+        }
+
+        // regular transactions
+        items(
+            items = transactions,
+            key = {
+                when (it) {
+                    is Transaction.Confirmed -> "confirmed-${it.v1.id()}"
+                    is Transaction.Unconfirmed -> "unconfirmed-${it.v1.id()}"
+                }
+            },
+        ) { txn ->
+            Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+                TransactionItem(
+                    txn = txn,
+                    manager = manager,
+                    app = app,
+                    fiatOrBtc = fiatOrBtc,
+                    showLabels = showLabels,
+                    sensitiveVisible = sensitiveVisible,
+                    primaryText = primaryText,
+                    secondaryText = secondaryText,
+                )
+                HorizontalDivider(color = dividerColor, thickness = 0.5.dp)
+            }
+        }
+    } else if (isFirstScan) {
+        // first scan loading state
+        item(key = "first-scan-loading") {
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(200.dp),
+                contentAlignment = Alignment.TopCenter,
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.padding(top = 80.dp),
+                    color = primaryText,
+                )
+            }
+        }
+    } else {
+        // empty state
+        item(key = "empty-state") {
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp)
+                        .padding(top = 20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Icon(
+                    painter =
+                        androidx.compose.ui.res
+                            .painterResource(R.drawable.icon_currency_bitcoin),
+                    contentDescription = null,
+                    modifier = Modifier.size(48.dp),
+                    tint = secondaryText,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = stringResource(R.string.no_transactions_yet),
+                    color = secondaryText,
+                    fontWeight = FontWeight.Medium,
+                )
+                Text(
+                    text = stringResource(R.string.go_buy_some_bitcoin),
+                    color = secondaryText.copy(alpha = 0.7f),
+                    fontSize = 14.sp,
+                )
+            }
+        }
+    }
+
+    // bottom spacing
+    item(key = "txn-spacer") {
+        Spacer(Modifier.height(12.dp))
     }
 }
 

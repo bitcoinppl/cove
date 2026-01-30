@@ -1,13 +1,18 @@
 package org.bitcoinppl.cove.flows.SelectedWalletFlow
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.NorthEast
 import androidx.compose.material.icons.filled.SouthWest
@@ -19,8 +24,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -47,25 +55,53 @@ fun WalletBalanceHeaderView(
     onReceive: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(
+    // get status bar height for edge-to-edge display
+    val statusBarPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+
+    Box(
         modifier =
             modifier
                 .fillMaxWidth()
-                .padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 32.dp),
-        verticalArrangement = Arrangement.spacedBy(24.dp),
+                .background(CoveColor.midnightBlue),
     ) {
-        BalanceWidget(
-            sensitiveVisible = sensitiveVisible,
-            primaryAmount = primaryAmount,
-            secondaryAmount = secondaryAmount,
-            onToggleUnit = onToggleUnit,
-            onToggleSensitive = onToggleSensitive,
+        // pattern image overlay on top of blue background (like iOS .brightness(0.1))
+        Image(
+            painter = painterResource(id = R.drawable.image_chain_code_pattern_horizontal),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .matchParentSize()
+                    .alpha(0.5f),
         )
 
-        SendReceiveButtons(
-            onSend = onSend,
-            onReceive = onReceive,
-        )
+        // content with padding for status bar + TopAppBar overlay (similar to iOS safeAreaInsets.top + 35)
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        start = 16.dp,
+                        end = 16.dp,
+                        top = statusBarPadding + 56.dp,
+                        bottom = 48.dp,
+                    ),
+            verticalArrangement = Arrangement.spacedBy(24.dp),
+        ) {
+            BalanceWidget(
+                sensitiveVisible = sensitiveVisible,
+                primaryAmount = primaryAmount,
+                secondaryAmount = secondaryAmount,
+                onToggleUnit = onToggleUnit,
+                onToggleSensitive = onToggleSensitive,
+            )
+
+            SendReceiveButtons(
+                onSend = onSend,
+                onReceive = onReceive,
+            )
+        }
     }
 }
 
