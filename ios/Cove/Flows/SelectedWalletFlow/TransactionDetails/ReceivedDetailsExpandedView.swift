@@ -111,6 +111,7 @@ struct ReceivedDetailsExpandedView: View {
 
                 HStack(alignment: .top) {
                     Text("Fiat Price")
+                        .fontWeight(.semibold)
                     Spacer()
 
                     VStack(alignment: .trailing, spacing: 4) {
@@ -121,7 +122,6 @@ struct ReceivedDetailsExpandedView: View {
                         ) { amount in
                             Text(amount)
                                 .font(.subheadline)
-                                .fontWeight(.semibold)
                                 .foregroundStyle(.primary)
                         }
 
