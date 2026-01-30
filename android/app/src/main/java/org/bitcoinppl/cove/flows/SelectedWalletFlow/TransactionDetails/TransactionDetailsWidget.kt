@@ -254,16 +254,18 @@ internal fun FiatPriceSection(
     Spacer(Modifier.height(24.dp))
 
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-        Text(stringResource(R.string.label_fiat_price), color = textColor, fontSize = 12.sp)
+        Text(
+            stringResource(R.string.label_fiat_price),
+            color = textColor,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
         Spacer(Modifier.weight(1f))
         Column(horizontalAlignment = Alignment.End) {
             AsyncText(
                 text = currentFiatFmt,
                 color = fg,
-                style =
-                    MaterialTheme.typography.bodyMedium.copy(
-                        fontWeight = FontWeight.SemiBold,
-                    ),
+                style = MaterialTheme.typography.bodyMedium,
             )
             if (isConfirmed && historicalFiatFmt != null) {
                 Spacer(Modifier.height(4.dp))
