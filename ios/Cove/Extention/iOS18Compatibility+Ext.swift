@@ -133,6 +133,36 @@ struct SoftScrollEdgeModifier: ViewModifier {
     }
 }
 
+// MARK: - iOS 26 Background Modifiers
+
+/// applies scroll view background - coveBg without safe area on iOS 26, with safe area on earlier
+struct ScrollViewBackgroundModifier: ViewModifier {
+    let iOS26OrLater: Bool
+
+    func body(content: Content) -> some View {
+        if iOS26OrLater {
+            content.background(Color.coveBg)
+        } else {
+            content
+                .background(Color.coveBg.ignoresSafeArea(edges: .bottom))
+                .background(Color.midnightBlue.ignoresSafeArea(edges: .top))
+        }
+    }
+}
+
+/// applies outer background - coveBg on iOS 26, midnightBlue with safe area on earlier
+struct OuterBackgroundModifier: ViewModifier {
+    let iOS26OrLater: Bool
+
+    func body(content: Content) -> some View {
+        if iOS26OrLater {
+            content.background(Color.coveBg)
+        } else {
+            content.background(Color.midnightBlue.ignoresSafeArea(edges: [.top, .bottom]))
+        }
+    }
+}
+
 // MARK: - NavBar Color Modifier
 
 /// applies adaptive foreground styling to navigation bar items based on route and scroll state

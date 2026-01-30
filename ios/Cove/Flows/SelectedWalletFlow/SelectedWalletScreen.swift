@@ -441,19 +441,16 @@ struct SelectedWalletScreen: View {
                     .background(
                         VStack(spacing: 0) {
                             Color.midnightBlue
-                                .opacity(iOS26OrLater && shouldShowNavBar ? 0 : 1)
                                 .frame(height: screenHeight * 0.40 + 500)
                             Color.coveBg
                         }
                         .offset(y: -500)
-                        .animation(.easeOut(duration: 0.15), value: shouldShowNavBar)
                     )
             }
             .contentMargins(
                 .top, -(safeAreaInsets.top + navBarAndScrollInsets), for: .scrollContent
             )
-            .background(Color.coveBg.ignoresSafeArea(edges: iOS26OrLater ? [] : .bottom))
-            .background(Color.midnightBlue.ignoresSafeArea(edges: iOS26OrLater ? [] : .top))
+            .modifier(ScrollViewBackgroundModifier(iOS26OrLater: iOS26OrLater))
             .refreshable {
                 // nothing to do – let the indicator disappear right away
                 guard case .loaded = manager.loadState else { return }
@@ -490,7 +487,7 @@ struct SelectedWalletScreen: View {
                 app.isPastHeader = pastTop
             }
         }
-        .background(Color.midnightBlue.ignoresSafeArea(edges: iOS26OrLater ? [] : [.top, .bottom]))
+        .modifier(OuterBackgroundModifier(iOS26OrLater: iOS26OrLater))
         .onChange(of: manager.walletMetadata.discoveryState) { _, newValue in
             setSheetState(newValue)
         }
