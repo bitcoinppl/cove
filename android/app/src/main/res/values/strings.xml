@@ -79,6 +79,7 @@
     <string name="label_fiat_price">Fiat Price</string>
     <string name="label_when_sent">When sent</string>
     <string name="label_when_received">When received</string>
+    <string name="fiat_price_tooltip">Price at time of transaction</string>
     <string name="title_manage_utxos">Manage UTXOs</string>
     <string name="search_utxos">Search UTXOs</string>
     <string name="sort_date">Date</string>

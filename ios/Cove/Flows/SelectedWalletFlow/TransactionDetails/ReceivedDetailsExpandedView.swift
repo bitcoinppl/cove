@@ -14,6 +14,7 @@ struct ReceivedDetailsExpandedView: View {
 
     // private
     @State private var isCopied = false
+    @State private var showingPriceInfo = false
 
     @ViewBuilder
     func expandedDetailsRow(header: String, content: String) -> some View {
@@ -121,6 +122,7 @@ struct ReceivedDetailsExpandedView: View {
                             Text(amount)
                                 .font(.subheadline)
                                 .fontWeight(.semibold)
+                                .foregroundStyle(.primary)
                         }
 
                         // historical fiat value (when received)
@@ -133,17 +135,24 @@ struct ReceivedDetailsExpandedView: View {
                             ) { amount in
                                 Text(amount)
                                     .font(.caption)
+                                    .foregroundStyle(.primary)
                             }
+                            Image(systemName: "info.circle")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                                .onTapGesture { showingPriceInfo.toggle() }
+                                .popover(isPresented: $showingPriceInfo) {
+                                    Text("Price at time of transaction")
+                                        .font(.caption)
+                                        .padding(8)
+                                        .presentationCompactAdaptation(.popover)
+                                }
                         }
-                        .foregroundStyle(.secondary)
-
-                        Text("When received")
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
+                        .foregroundStyle(.primary)
                     }
                 }
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.primary)
             }
         }
         .padding(.horizontal, detailsExpandedPadding)

@@ -23,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -44,6 +45,8 @@ internal fun TransactionDetailsWidget(
     historicalFiatFmt: String?,
     metadata: WalletMetadata,
 ) {
+    val context = LocalContext.current
+    val tooltipText = stringResource(R.string.fiat_price_tooltip)
     val dividerColor = MaterialTheme.colorScheme.outlineVariant
     val sub = MaterialTheme.colorScheme.onSurfaceVariant
     val fg = MaterialTheme.colorScheme.onBackground
@@ -161,8 +164,12 @@ internal fun TransactionDetailsWidget(
                     currentFiatFmt = totalSpentFiatFmt,
                     historicalFiatFmt = historicalFiatFmt,
                     isConfirmed = true,
-                    isSent = true,
                     dividerColor = dividerColor,
+                    onInfoClick = {
+                        android.widget.Toast
+                            .makeText(context, tooltipText, android.widget.Toast.LENGTH_SHORT)
+                            .show()
+                    },
                 )
             }
         } else {
@@ -234,18 +241,20 @@ internal fun FiatPriceSection(
     currentFiatFmt: String?,
     historicalFiatFmt: String?,
     isConfirmed: Boolean,
-    isSent: Boolean,
     dividerColor: Color,
+    usePrimaryColor: Boolean = false,
+    onInfoClick: () -> Unit = {},
 ) {
     val sub = MaterialTheme.colorScheme.onSurfaceVariant
     val fg = MaterialTheme.colorScheme.onBackground
+    val textColor = if (usePrimaryColor) fg else sub
 
     Spacer(Modifier.height(24.dp))
     Box(Modifier.fillMaxWidth().height(1.dp).background(dividerColor))
     Spacer(Modifier.height(24.dp))
 
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-        Text(stringResource(R.string.label_fiat_price), color = sub, fontSize = 12.sp)
+        Text(stringResource(R.string.label_fiat_price), color = textColor, fontSize = 12.sp)
         Spacer(Modifier.weight(1f))
         Column(horizontalAlignment = Alignment.End) {
             AsyncText(
@@ -263,16 +272,23 @@ internal fun FiatPriceSection(
                         Icons.Outlined.Schedule,
                         contentDescription = null,
                         modifier = Modifier.size(12.dp),
-                        tint = sub,
+                        tint = textColor,
                     )
                     Spacer(Modifier.width(4.dp))
-                    Text(historicalFiatFmt, color = sub, fontSize = 12.sp)
+                    Text(historicalFiatFmt, color = textColor, fontSize = 12.sp)
+                    Spacer(Modifier.width(4.dp))
+                    IconButton(
+                        onClick = onInfoClick,
+                        modifier = Modifier.size(16.dp),
+                    ) {
+                        Icon(
+                            Icons.Outlined.Info,
+                            contentDescription = stringResource(R.string.fiat_price_tooltip),
+                            modifier = Modifier.size(12.dp),
+                            tint = sub.copy(alpha = 0.7f),
+                        )
+                    }
                 }
-                Text(
-                    stringResource(if (isSent) R.string.label_when_sent else R.string.label_when_received),
-                    color = sub.copy(alpha = 0.7f),
-                    fontSize = 10.sp,
-                )
             }
         }
     }
