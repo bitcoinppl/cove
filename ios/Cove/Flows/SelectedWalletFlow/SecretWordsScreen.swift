@@ -167,7 +167,7 @@ private struct SeedQrSheetView: View {
                     .padding(.horizontal, 20)
                     .padding(.top, 8)
             } else {
-                Text("Failed to generate Seed QR")
+                Text("Failed to generate SeedQR")
                     .font(.callout)
                     .foregroundStyle(.red)
                     .padding(.horizontal, 20)

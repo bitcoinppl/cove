@@ -17,7 +17,6 @@ private enum SheetState: Equatable {
     case chooseAddressType([FoundAddress])
     case qrLabelsExport
     case qrLabelsImport
-    case qrXpubExport
 }
 
 struct SelectedWalletScreen: View {
@@ -56,6 +55,11 @@ struct SelectedWalletScreen: View {
 
     var metadata: WalletMetadata {
         manager.walletMetadata
+    }
+
+    private var iOS26OrLater: Bool {
+        if #available(iOS 26.0, *) { return true }
+        return false
     }
 
     func updater(_ action: WalletManagerAction) {
@@ -141,8 +145,6 @@ struct SelectedWalletScreen: View {
             EmptyView()
         case .qrLabelsImport:
             QrCodeLabelImportView(scannedCode: $scannedLabels)
-        case .qrXpubExport:
-            EmptyView()
         }
     }
 
@@ -405,15 +407,18 @@ struct SelectedWalletScreen: View {
                     MainContent
                         .background(
                             VStack(spacing: 0) {
-                                Color.midnightBlue.frame(height: screenHeight * 0.40 + 500)
+                                Color.midnightBlue
+                                    .opacity(iOS26OrLater && shouldShowNavBar ? 0 : 1)
+                                    .frame(height: screenHeight * 0.40 + 500)
                                 Color.coveBg
                             }
                             .offset(y: -500)
+                            .animation(.easeOut(duration: 0.15), value: shouldShowNavBar)
                         )
                 }
                 .contentMargins(.top, -(safeAreaInsets.top + navBarAndScrollInsets), for: .scrollContent)
                 .background(Color.coveBg.ignoresSafeArea(edges: .bottom))
-                .background(Color.midnightBlue.ignoresSafeArea(edges: .top))
+                .background(Color.midnightBlue.ignoresSafeArea(edges: iOS26OrLater ? [] : .top))
                 .refreshable {
                     // nothing to do – let the indicator disappear right away
                     guard case .loaded = manager.loadState else { return }
@@ -465,7 +470,7 @@ struct SelectedWalletScreen: View {
                 }
             }
         }
-        .background(Color.midnightBlue.ignoresSafeArea())
+        .background(Color.midnightBlue.ignoresSafeArea(edges: iOS26OrLater ? .bottom : [.top, .bottom]))
         .onChange(of: manager.walletMetadata.discoveryState) { _, newValue in
             setSheetState(newValue)
         }
