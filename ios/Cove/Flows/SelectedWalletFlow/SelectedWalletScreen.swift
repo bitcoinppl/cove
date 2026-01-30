@@ -213,16 +213,23 @@ struct SelectedWalletScreen: View {
         }
     }
 
+    private var toolbarTextColor: Color {
+        if #available(iOS 26.0, *) {
+            return shouldShowNavBar ? .primary : .white
+        }
+        return .white
+    }
+
     @ToolbarContentBuilder
     var MainToolBar: some ToolbarContent {
         ToolbarItem(placement: .principal) {
             HStack(spacing: 10) {
                 if case .cold = metadata.walletType {
-                    BitcoinShieldIcon(width: 13, color: .white)
+                    BitcoinShieldIcon(width: 13, color: toolbarTextColor)
                 }
 
                 Text(metadata.name)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(toolbarTextColor)
                     .font(.callout)
                     .fontWeight(.semibold)
             }
@@ -428,63 +435,62 @@ struct SelectedWalletScreen: View {
     }
 
     var body: some View {
-        VStack {
-            ScrollViewReader { proxy in
-                ScrollView {
-                    MainContent
-                        .background(
-                            VStack(spacing: 0) {
-                                Color.midnightBlue
-                                    .opacity(iOS26OrLater && shouldShowNavBar ? 0 : 1)
-                                    .frame(height: screenHeight * 0.40 + 500)
-                                Color.coveBg
-                            }
-                            .offset(y: -500)
-                            .animation(.easeOut(duration: 0.15), value: shouldShowNavBar)
-                        )
-                }
-                .contentMargins(
-                    .top, -(safeAreaInsets.top + navBarAndScrollInsets), for: .scrollContent
-                )
-                .background(Color.coveBg.ignoresSafeArea(edges: .bottom))
-                .background(Color.midnightBlue.ignoresSafeArea(edges: iOS26OrLater ? [] : .top))
-                .refreshable {
-                    // nothing to do – let the indicator disappear right away
-                    guard case .loaded = manager.loadState else { return }
-                    let task = Task.detached { try? await Task.sleep(for: .seconds(1.75)) }
+        ScrollViewReader { proxy in
+            ScrollView {
+                MainContent
+                    .background(
+                        VStack(spacing: 0) {
+                            Color.midnightBlue
+                                .opacity(iOS26OrLater && shouldShowNavBar ? 0 : 1)
+                                .frame(height: screenHeight * 0.40 + 500)
+                            Color.coveBg
+                        }
+                        .offset(y: -500)
+                        .animation(.easeOut(duration: 0.15), value: shouldShowNavBar)
+                    )
+            }
+            .contentMargins(
+                .top, -(safeAreaInsets.top + navBarAndScrollInsets), for: .scrollContent
+            )
+            .background(Color.coveBg.ignoresSafeArea(edges: iOS26OrLater ? [] : .bottom))
+            .background(Color.midnightBlue.ignoresSafeArea(edges: iOS26OrLater ? [] : .top))
+            .refreshable {
+                // nothing to do – let the indicator disappear right away
+                guard case .loaded = manager.loadState else { return }
+                let task = Task.detached { try? await Task.sleep(for: .seconds(1.75)) }
 
-                    // wait for the task to complete
-                    let _ = await task.result
-                    runPostRefresh = true // mark for later
-                }
-                .task(id: runPostRefresh) {
-                    defer { runPostRefresh = false }
-                    guard case let .loaded(txns) = manager.loadState else { return }
+                // wait for the task to complete
+                let _ = await task.result
+                runPostRefresh = true // mark for later
+            }
+            .task(id: runPostRefresh) {
+                defer { runPostRefresh = false }
+                guard case let .loaded(txns) = manager.loadState else { return }
 
-                    self.manager.loadState = .scanning(txns)
-                    await manager.rust.forceWalletScan()
-                    let _ = try? await manager.rust.forceUpdateHeight()
-                    await manager.updateWalletBalance()
-                }
-                .onAppear {
-                    // Reset SendFlowManager so new send flow is fresh
-                    app.sendFlowManager = nil
-                    UIRefreshControl.appearance().tintColor = UIColor.white
-                    handleScrollToTransaction(proxy: proxy)
-                }
-                .onChange(of: manager.loadState, initial: true) {
-                    handleScrollToTransaction(proxy: proxy)
-                }
-                .scrollIndicators(.hidden)
-                .onScrollGeometryChange(for: Bool.self) { geometry in
-                    geometry.contentOffset.y > (geometry.contentInsets.top + safeAreaInsets.top - 5)
-                } action: { _, pastTop in
-                    shouldShowNavBar = pastTop
-                    app.isPastHeader = pastTop
-                }
+                self.manager.loadState = .scanning(txns)
+                await manager.rust.forceWalletScan()
+                let _ = try? await manager.rust.forceUpdateHeight()
+                await manager.updateWalletBalance()
+            }
+            .onAppear {
+                // Reset SendFlowManager so new send flow is fresh
+                app.sendFlowManager = nil
+                UIRefreshControl.appearance().tintColor = UIColor.white
+                handleScrollToTransaction(proxy: proxy)
+            }
+            .onChange(of: manager.loadState, initial: true) {
+                handleScrollToTransaction(proxy: proxy)
+            }
+            .scrollIndicators(.hidden)
+            .modifier(SoftScrollEdgeModifier())
+            .onScrollGeometryChange(for: Bool.self) { geometry in
+                geometry.contentOffset.y > (geometry.contentInsets.top + safeAreaInsets.top - 5)
+            } action: { _, pastTop in
+                shouldShowNavBar = pastTop
+                app.isPastHeader = pastTop
             }
         }
-        .background(Color.midnightBlue.ignoresSafeArea(edges: iOS26OrLater ? .bottom : [.top, .bottom]))
+        .background(Color.midnightBlue.ignoresSafeArea(edges: iOS26OrLater ? [] : [.top, .bottom]))
         .onChange(of: manager.walletMetadata.discoveryState) { _, newValue in
             setSheetState(newValue)
         }

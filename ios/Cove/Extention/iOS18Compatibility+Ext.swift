@@ -120,6 +120,19 @@ struct ConditionalTintModifier: ViewModifier {
     }
 }
 
+// MARK: - iOS 26 Scroll Edge Effect
+
+/// applies soft scroll edge effect style on iOS 26+ for liquid glass cloud appearance
+struct SoftScrollEdgeModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26, *) {
+            content.scrollEdgeEffectStyle(.soft, for: .top)
+        } else {
+            content
+        }
+    }
+}
+
 // MARK: - NavBar Color Modifier
 
 /// applies adaptive foreground styling to navigation bar items based on route and scroll state
