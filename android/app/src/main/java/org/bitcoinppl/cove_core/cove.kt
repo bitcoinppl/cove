@@ -1505,8 +1505,6 @@ external fun uniffi_cove_checksum_method_rustwalletmanager_switch_to_different_w
 ): Short
 external fun uniffi_cove_checksum_method_rustwalletmanager_transaction_details(
 ): Short
-external fun uniffi_cove_checksum_method_rustwalletmanager_transaction_needs_scroll(
-): Short
 external fun uniffi_cove_checksum_method_rustwalletmanager_validate_metadata(
 ): Short
 external fun uniffi_cove_checksum_method_rustwalletmanager_wallet_metadata(
@@ -2468,8 +2466,6 @@ external fun uniffi_cove_fn_method_rustwalletmanager_start_wallet_scan(`ptr`: Lo
 external fun uniffi_cove_fn_method_rustwalletmanager_switch_to_different_wallet_address_type(`ptr`: Long,`walletAddressType`: RustBuffer.ByValue,
 ): Long
 external fun uniffi_cove_fn_method_rustwalletmanager_transaction_details(`ptr`: Long,`txId`: Long,
-): Long
-external fun uniffi_cove_fn_method_rustwalletmanager_transaction_needs_scroll(`ptr`: Long,`txId`: RustBuffer.ByValue,
 ): Long
 external fun uniffi_cove_fn_method_rustwalletmanager_validate_metadata(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
@@ -3988,9 +3984,6 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_transaction_details() != 35364.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_transaction_needs_scroll() != 17030.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_validate_metadata() != 36684.toShort()) {
@@ -18234,12 +18227,6 @@ public interface RustWalletManagerInterface {
     
     suspend fun `transactionDetails`(`txId`: TxId): TransactionDetails
     
-    /**
-     * Check if a transaction is below the fold and needs scrolling
-     * Returns true if the transaction is at position > 5 in the combined list
-     */
-    suspend fun `transactionNeedsScroll`(`txId`: kotlin.String): kotlin.Boolean
-    
     fun `validateMetadata`()
     
     fun `walletMetadata`(): WalletMetadata
@@ -19244,30 +19231,6 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
         { FfiConverterTypeTransactionDetails.lift(it) },
         // Error FFI converter
         WalletManagerException.ErrorHandler,
-    )
-    }
-
-    
-    /**
-     * Check if a transaction is below the fold and needs scrolling
-     * Returns true if the transaction is at position > 5 in the combined list
-     */
-    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
-    override suspend fun `transactionNeedsScroll`(`txId`: kotlin.String) : kotlin.Boolean {
-        return uniffiRustCallAsync(
-        callWithHandle { uniffiHandle ->
-            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_transaction_needs_scroll(
-                uniffiHandle,
-                FfiConverterString.lower(`txId`),
-            )
-        },
-        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_i8(future, callback, continuation) },
-        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_i8(future, continuation) },
-        { future -> UniffiLib.ffi_cove_rust_future_free_i8(future) },
-        // lift function
-        { FfiConverterBoolean.lift(it) },
-        // Error FFI converter
-        UniffiNullRustCallStatusErrorHandler,
     )
     }
 

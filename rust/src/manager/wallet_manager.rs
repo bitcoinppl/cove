@@ -616,29 +616,6 @@ impl RustWalletManager {
         Ok(txns)
     }
 
-    /// Check if a transaction is below the fold and needs scrolling
-    /// Returns true if the transaction is at position > 5 in the combined list
-    #[uniffi::method]
-    pub async fn transaction_needs_scroll(&self, tx_id: String) -> bool {
-        // check unsigned transactions first
-        let unsigned = self.get_unsigned_transactions().unwrap_or_default();
-        if let Some(pos) = unsigned.iter().position(|t| t.id().to_string() == tx_id) {
-            return pos > 5;
-        }
-
-        // then check regular transactions
-        let Ok(transactions) = call!(self.actor.transactions()).await else {
-            return false;
-        };
-
-        let unsigned_count = unsigned.len();
-        if let Some(pos) = transactions.iter().position(|t| t.id().to_string() == tx_id) {
-            return (unsigned_count + pos) > 5;
-        }
-
-        false
-    }
-
     /// gets the transactions for the wallet that are currently available
     #[uniffi::method]
     pub async fn get_transactions(&self) {
