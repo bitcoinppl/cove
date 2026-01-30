@@ -57,7 +57,7 @@ type Result<T, E = Error> = std::result::Result<T, E>;
 
 #[derive(Debug, Clone, uniffi::Object)]
 pub struct AddressArgs {
-    pub address: Address,
+    pub address: Option<Address>,
     pub change_address: Option<Address>,
     pub direction: TransactionDirection,
 }
@@ -66,11 +66,11 @@ pub struct AddressArgs {
 impl AddressArgs {
     #[uniffi::constructor]
     pub fn new(
-        address: Arc<Address>,
+        address: Option<Arc<Address>>,
         change_address: Option<Arc<Address>>,
         direction: TransactionDirection,
     ) -> Self {
-        let address = Arc::unwrap_or_clone(address);
+        let address = address.map(Arc::unwrap_or_clone);
         let change_address = change_address.map(Arc::unwrap_or_clone);
 
         Self { address, change_address, direction }
@@ -376,8 +376,11 @@ impl LabelManager {
         // incoming use address
         let address_record = match args.direction {
             TransactionDirection::Incoming => {
-                let address = args.address.into_unchecked();
-                Some(AddressRecord { ref_: address.clone(), label: Some(label.to_string()) })
+                let Some(address) = args.address else { return Ok(None) };
+                Some(AddressRecord {
+                    ref_: address.into_unchecked(),
+                    label: Some(label.to_string()),
+                })
             }
             TransactionDirection::Outgoing => {
                 let Some(address) = args.change_address else { return Ok(None) };

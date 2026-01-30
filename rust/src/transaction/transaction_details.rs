@@ -44,13 +44,16 @@ pub enum TransactionDetailError {
 
     #[error("Unable to get change address: {0}")]
     ChangeAddress(String),
+
+    #[error("Transaction not found")]
+    NotFound,
 }
 
 type Error = TransactionDetailError;
 #[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Object)]
 pub struct TransactionDetails {
     pub tx_id: TxId,
-    pub address: Address,
+    pub address: Option<Address>,
     pub sent_and_received: SentAndReceived,
     pub fee: Option<Amount>,
     pub fee_rate: Option<FeeRate>,
@@ -78,13 +81,13 @@ impl TransactionDetails {
         let txid = tx.tx_node.txid;
         let sent_and_received: SentAndReceived = wallet.sent_and_received(&tx.tx_node.tx).into();
         let chain_postition = &tx.chain_position;
-        let tx_details = wallet.get_tx(txid).expect("transaction").tx_node.tx;
+        let tx_details = wallet.get_tx(txid).ok_or(Error::NotFound)?.tx_node.tx;
         let network = Network::from(wallet.network());
 
         let fee = wallet.calculate_fee(&tx_details).ok().map(Into::into);
         let fee_rate = wallet.calculate_fee_rate(&tx_details).ok().map(Into::into);
 
-        let address = Address::try_new(&tx, wallet)?;
+        let address = Address::try_new(&tx, wallet).ok();
         let pending_or_confirmed = PendingOrConfirmed::new(chain_postition);
 
         let change_address = match sent_and_received.direction {
@@ -202,8 +205,8 @@ impl TransactionDetails {
     }
 
     #[uniffi::method]
-    pub fn address(&self) -> Address {
-        self.address.clone()
+    pub fn address(&self) -> Option<Arc<Address>> {
+        self.address.clone().map(Arc::new)
     }
 
     #[uniffi::method]
@@ -376,8 +379,8 @@ impl TransactionDetails {
         Some(f.fmt(block_number).to_string())
     }
     #[uniffi::method]
-    pub fn address_spaced_out(&self) -> String {
-        self.address.spaced_out()
+    pub fn address_spaced_out(&self) -> Option<String> {
+        self.address.as_ref().map(|a| a.spaced_out())
     }
 
     /// Historical fiat value at time of transaction - cached version (no network calls)
@@ -431,7 +434,7 @@ impl TransactionDetails {
     pub fn preview_new_confirmed() -> Self {
         Self {
             tx_id: TxId::preview_new(),
-            address: Address::preview_new(),
+            address: Some(Address::preview_new()),
             sent_and_received: SentAndReceived::preview_new(),
             fee: Some(Amount::from_sat(880303)),
             fee_rate: Some(FeeRate::preview_new()),

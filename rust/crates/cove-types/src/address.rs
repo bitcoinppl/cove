@@ -115,7 +115,7 @@ impl Address {
         let txid = tx.tx_node.txid;
         let network = wallet.network();
         let direction: TransactionDirection = wallet.sent_and_received(&tx.tx_node.tx).into();
-        let tx_details = wallet.get_tx(txid).expect("transaction").tx_node.tx;
+        let tx_details = wallet.get_tx(txid).ok_or(AddressError::NoOutputs)?.tx_node.tx;
 
         let output = match direction {
             TransactionDirection::Incoming => tx_details

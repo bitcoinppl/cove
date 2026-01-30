@@ -2165,7 +2165,7 @@ external fun uniffi_cove_fn_clone_addressargs(`handle`: Long,uniffi_out_err: Uni
 ): Long
 external fun uniffi_cove_fn_free_addressargs(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-external fun uniffi_cove_fn_constructor_addressargs_new(`address`: Long,`changeAddress`: RustBuffer.ByValue,`direction`: RustBufferTransactionDirection.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_constructor_addressargs_new(`address`: RustBuffer.ByValue,`changeAddress`: RustBuffer.ByValue,`direction`: RustBufferTransactionDirection.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
 external fun uniffi_cove_fn_clone_labelmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
@@ -2704,7 +2704,7 @@ external fun uniffi_cove_fn_constructor_transactiondetails_preview_pending_recei
 external fun uniffi_cove_fn_constructor_transactiondetails_preview_pending_sent(uniffi_out_err: UniffiRustCallStatus, 
 ): Long
 external fun uniffi_cove_fn_method_transactiondetails_address(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
+): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_transactiondetails_address_spaced_out(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_transactiondetails_amount(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -4183,10 +4183,10 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_bitcointransaction_tx_id_hash() != 59698.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_transactiondetails_address() != 17286.toShort()) {
+    if (lib.uniffi_cove_checksum_method_transactiondetails_address() != 1840.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_transactiondetails_address_spaced_out() != 46633.toShort()) {
+    if (lib.uniffi_cove_checksum_method_transactiondetails_address_spaced_out() != 38824.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_transactiondetails_amount() != 53012.toShort()) {
@@ -4357,7 +4357,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_constructor_filehandler_new() != 14514.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_constructor_addressargs_new() != 27795.toShort()) {
+    if (lib.uniffi_cove_checksum_constructor_addressargs_new() != 7657.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_constructor_labelmanager_new() != 53348.toShort()) {
@@ -5265,12 +5265,12 @@ open class AddressArgs: Disposable, AutoCloseable, AddressArgsInterface
         this.handle = 0
         this.cleanable = null
     }
-    constructor(`address`: Address, `changeAddress`: Address?, `direction`: TransactionDirection) :
+    constructor(`address`: Address?, `changeAddress`: Address?, `direction`: TransactionDirection) :
         this(UniffiWithHandle, 
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_constructor_addressargs_new(
     
-        FfiConverterTypeAddress.lower(`address`),FfiConverterOptionalTypeAddress.lower(`changeAddress`),FfiConverterTypeTransactionDirection.lower(`direction`),_status)
+        FfiConverterOptionalTypeAddress.lower(`address`),FfiConverterOptionalTypeAddress.lower(`changeAddress`),FfiConverterTypeTransactionDirection.lower(`direction`),_status)
 }
     )
 
@@ -20595,9 +20595,9 @@ public object FfiConverterTypeTapSignerReader: FfiConverter<TapSignerReader, Lon
 
 public interface TransactionDetailsInterface {
     
-    fun `address`(): Address
+    fun `address`(): Address?
     
-    fun `addressSpacedOut`(): kotlin.String
+    fun `addressSpacedOut`(): kotlin.String?
     
     fun `amount`(): Amount
     
@@ -20748,8 +20748,8 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
         }
     }
 
-    override fun `address`(): Address {
-            return FfiConverterTypeAddress.lift(
+    override fun `address`(): Address? {
+            return FfiConverterOptionalTypeAddress.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_transactiondetails_address(
@@ -20761,8 +20761,8 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
     }
     
 
-    override fun `addressSpacedOut`(): kotlin.String {
-            return FfiConverterString.lift(
+    override fun `addressSpacedOut`(): kotlin.String? {
+            return FfiConverterOptionalString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_transactiondetails_address_spaced_out(
@@ -38853,6 +38853,12 @@ sealed class TransactionDetailException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
+    class NotFound(
+        ) : TransactionDetailException() {
+        override val message
+            get() = ""
+    }
+    
 
     
 
@@ -38896,6 +38902,7 @@ public object FfiConverterTypeTransactionDetailError : FfiConverterRustBuffer<Tr
             5 -> TransactionDetailException.ChangeAddress(
                 FfiConverterString.read(buf),
                 )
+            6 -> TransactionDetailException.NotFound()
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
@@ -38927,6 +38934,10 @@ public object FfiConverterTypeTransactionDetailError : FfiConverterRustBuffer<Tr
                 4UL
                 + FfiConverterString.allocationSize(value.v1)
             )
+            is TransactionDetailException.NotFound -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
         }
     }
 
@@ -38955,6 +38966,10 @@ public object FfiConverterTypeTransactionDetailError : FfiConverterRustBuffer<Tr
             is TransactionDetailException.ChangeAddress -> {
                 buf.putInt(5)
                 FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is TransactionDetailException.NotFound -> {
+                buf.putInt(6)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
