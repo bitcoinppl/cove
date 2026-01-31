@@ -38,12 +38,19 @@ struct SelectedWalletContainer: View {
         }
     }
 
+    private var iOS26OrLater: Bool {
+        if #available(iOS 26.0, *) { return true }
+        return false
+    }
+
     var body: some View {
         Group {
             if let manager {
                 SelectedWalletScreen(manager: manager)
                     .background(
-                        manager.loadState == .loading
+                        iOS26OrLater
+                            ? nil
+                            : manager.loadState == .loading
                             ? LinearGradient(
                                 colors: [
                                     .black.opacity(colorScheme == .dark ? 0.9 : 0),
@@ -63,7 +70,7 @@ struct SelectedWalletContainer: View {
                                 ], startPoint: .top, endPoint: .bottom
                             )
                     )
-                    .background(Color.white)
+                    .background(iOS26OrLater ? nil : Color.white)
 
             } else {
                 Text("Loading...")

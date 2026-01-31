@@ -63,6 +63,10 @@ class WalletManager :
     // scroll position for transaction list (persists across navigation)
     var scrolledTransactionId: String? by mutableStateOf(null)
 
+    // pending scroll ID set when clicking a transaction, transferred to scrolledTransactionId
+    // when returning to the wallet screen (avoids scrolling during navigation transition)
+    var pendingScrollTransactionId: String? = null
+
     // computed properties
     val unit: String
         get() =

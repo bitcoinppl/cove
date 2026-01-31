@@ -17,6 +17,7 @@ uniffi = { git = "https://github.com/mozilla/uniffi-rs", branch = "main", featur
 
 # sync
 parking_lot = { version = "0.12.3" }
+arc-swap = "1.7"
 
 # async
 tokio = { version = "1.43" }
@@ -238,7 +239,7 @@ bbqr = { workspace = true }
 foundation-ur = { workspace = true }
 
 # sync
-arc-swap = "1.7"
+arc-swap = { workspace = true }
 
 # macros
 paste = "1.0"

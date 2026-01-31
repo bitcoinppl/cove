@@ -4,4 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-tokio = { workspace = true, features = ["time"] }
+arc-swap = { workspace = true }
+tokio = { workspace = true, features = ["time", "rt"] }
+tracing = { workspace = true }

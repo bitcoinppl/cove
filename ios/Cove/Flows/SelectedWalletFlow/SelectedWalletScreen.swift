@@ -168,7 +168,7 @@ struct SelectedWalletScreen: View {
         showLabelsQrExport = true
     }
 
-    func showXpubQrExport() {
+    func presentXpubQrExport() {
         showXpubQrExport = true
     }
 
@@ -182,10 +182,13 @@ struct SelectedWalletScreen: View {
                     }
                 }
             } catch {
-                app.alertState = .init(.general(
-                    title: "Xpub Export Failed",
-                    message: "Unable to export public descriptors: \(error.localizedDescription)"
-                ))
+                app.alertState = .init(
+                    .general(
+                        title: "Xpub Export Failed",
+                        message:
+                        "Unable to export public descriptors: \(error.localizedDescription)"
+                    )
+                )
             }
         }
     }
@@ -200,12 +203,21 @@ struct SelectedWalletScreen: View {
                     }
                 }
             } catch {
-                app.alertState = .init(.general(
-                    title: "Label Export Failed",
-                    message: "Unable to export labels: \(error.localizedDescription)"
-                ))
+                app.alertState = .init(
+                    .general(
+                        title: "Label Export Failed",
+                        message: "Unable to export labels: \(error.localizedDescription)"
+                    )
+                )
             }
         }
+    }
+
+    private var toolbarTextColor: Color {
+        if #available(iOS 26.0, *) {
+            return shouldShowNavBar ? .primary : .white
+        }
+        return .white
     }
 
     @ToolbarContentBuilder
@@ -213,11 +225,11 @@ struct SelectedWalletScreen: View {
         ToolbarItem(placement: .principal) {
             HStack(spacing: 10) {
                 if case .cold = metadata.walletType {
-                    BitcoinShieldIcon(width: 13, color: .white)
+                    BitcoinShieldIcon(width: 13, color: toolbarTextColor)
                 }
 
                 Text(metadata.name)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(toolbarTextColor)
                     .font(.callout)
                     .fontWeight(.semibold)
             }
@@ -276,7 +288,7 @@ struct SelectedWalletScreen: View {
                     isPresented: $showExportXpubConfirmation
                 ) {
                     Button("QR Code") {
-                        showXpubQrExport()
+                        presentXpubQrExport()
                     }
 
                     Button("Share...") {
@@ -368,6 +380,21 @@ struct SelectedWalletScreen: View {
         .onChange(of: scannedLabels, initial: false, onChangeOfScannedLabels)
     }
 
+    func handleScrollToTransaction(proxy: ScrollViewProxy) {
+        guard let targetId = manager.scrolledTransactionId else { return }
+        if case .loading = manager.loadState { return }
+
+        Task {
+            await MainActor.run {
+                withAnimation { proxy.scrollTo(targetId, anchor: .center) }
+            }
+
+            try? await Task.sleep(for: .milliseconds(500))
+            if Task.isCancelled { return }
+            await MainActor.run { manager.scrolledTransactionId = nil }
+        }
+    }
+
     func onChangeOfScannedLabels(_: TaggedItem<MultiFormat>?, _ scanned: TaggedItem<MultiFormat>?) {
         guard let scanned else { return }
 
@@ -401,76 +428,60 @@ struct SelectedWalletScreen: View {
     }
 
     var body: some View {
-        VStack {
-            ScrollViewReader { proxy in
-                ScrollView {
-                    MainContent
-                        .background(
-                            VStack(spacing: 0) {
-                                Color.midnightBlue
-                                    .opacity(iOS26OrLater && shouldShowNavBar ? 0 : 1)
-                                    .frame(height: screenHeight * 0.40 + 500)
-                                Color.coveBg
-                            }
-                            .offset(y: -500)
-                            .animation(.easeOut(duration: 0.15), value: shouldShowNavBar)
-                        )
-                }
-                .contentMargins(.top, -(safeAreaInsets.top + navBarAndScrollInsets), for: .scrollContent)
-                .background(Color.coveBg.ignoresSafeArea(edges: .bottom))
-                .background(Color.midnightBlue.ignoresSafeArea(edges: iOS26OrLater ? [] : .top))
-                .refreshable {
-                    // nothing to do – let the indicator disappear right away
-                    guard case .loaded = manager.loadState else { return }
-                    let task = Task.detached { try? await Task.sleep(for: .seconds(1.75)) }
-
-                    // wait for the task to complete
-                    let _ = await task.result
-                    runPostRefresh = true // mark for later
-                }
-                .task(id: runPostRefresh) {
-                    // runs when the flag flips
-                    guard case let .loaded(txns) = manager.loadState else { return }
-                    guard runPostRefresh else { return }
-                    runPostRefresh = false
-
-                    self.manager.loadState = .scanning(txns)
-                    await manager.rust.forceWalletScan()
-                    let _ = try? await manager.rust.forceUpdateHeight()
-                    await manager.updateWalletBalance()
-                }
-                .onAppear {
-                    // Reset SendFlowManager so new send flow is fresh
-                    app.sendFlowManager = nil
-                    UIRefreshControl.appearance().tintColor = UIColor.white
-                }
-                .onChange(of: manager.loadState, initial: true) { _, newState in
-                    guard let targetId = manager.scrolledTransactionId else { return }
-
-                    let hasTransactions: Bool = switch newState {
-                    case .loading: false
-                    case let .scanning(txns): !txns.isEmpty
-                    case let .loaded(txns): !txns.isEmpty
-                    }
-
-                    guard hasTransactions else { return }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        withAnimation {
-                            proxy.scrollTo(targetId, anchor: .center)
+        ScrollViewReader { proxy in
+            ScrollView {
+                MainContent
+                    .background(
+                        VStack(spacing: 0) {
+                            Color.midnightBlue
+                                .frame(height: screenHeight * 0.40 + 500)
+                            Color.coveBg
                         }
-                        manager.scrolledTransactionId = nil
-                    }
-                }
-                .scrollIndicators(.hidden)
-                .onScrollGeometryChange(for: Bool.self) { geometry in
-                    geometry.contentOffset.y > (geometry.contentInsets.top + safeAreaInsets.top - 5)
-                } action: { _, pastTop in
-                    shouldShowNavBar = pastTop
-                    app.isPastHeader = pastTop
-                }
+                        .offset(y: -500)
+                    )
+            }
+            .contentMargins(
+                .top, -(safeAreaInsets.top + navBarAndScrollInsets), for: .scrollContent
+            )
+            .modifier(ScrollViewBackgroundModifier(iOS26OrLater: iOS26OrLater))
+            .refreshable {
+                // nothing to do – let the indicator disappear right away
+                guard case .loaded = manager.loadState else { return }
+                let task = Task.detached { try? await Task.sleep(for: .seconds(1.75)) }
+
+                // wait for the task to complete
+                let _ = await task.result
+                runPostRefresh = true // mark for later
+            }
+            .task(id: runPostRefresh) {
+                guard runPostRefresh else { return }
+                defer { runPostRefresh = false }
+                guard case let .loaded(txns) = manager.loadState else { return }
+
+                self.manager.loadState = .scanning(txns)
+                await manager.rust.forceWalletScan()
+                let _ = try? await manager.rust.forceUpdateHeight()
+                await manager.updateWalletBalance()
+            }
+            .onAppear {
+                // Reset SendFlowManager so new send flow is fresh
+                app.sendFlowManager = nil
+                UIRefreshControl.appearance().tintColor = UIColor.white
+                handleScrollToTransaction(proxy: proxy)
+            }
+            .onChange(of: manager.loadState, initial: true) {
+                handleScrollToTransaction(proxy: proxy)
+            }
+            .scrollIndicators(.hidden)
+            .modifier(SoftScrollEdgeModifier())
+            .onScrollGeometryChange(for: Bool.self) { geometry in
+                geometry.contentOffset.y > (geometry.contentInsets.top + safeAreaInsets.top - 5)
+            } action: { _, pastTop in
+                shouldShowNavBar = pastTop
+                app.isPastHeader = pastTop
             }
         }
-        .background(Color.midnightBlue.ignoresSafeArea(edges: iOS26OrLater ? .bottom : [.top, .bottom]))
+        .modifier(OuterBackgroundModifier(iOS26OrLater: iOS26OrLater))
         .onChange(of: manager.walletMetadata.discoveryState) { _, newValue in
             setSheetState(newValue)
         }

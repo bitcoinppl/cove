@@ -5,6 +5,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+use cove_tokio_ext::DebouncedTask;
+
 use act_zero::{Addr, call, send};
 use actor::WalletActor;
 use flume::Receiver;
@@ -157,6 +159,7 @@ pub struct RustWalletManager {
     pub reconcile_receiver: Arc<Receiver<SingleOrMany>>,
 
     label_manager: Arc<LabelManager>,
+    unsigned_tx_notifier: DebouncedTask<()>,
 
     #[allow(dead_code)]
     scanner: Option<Addr<WalletScanner>>,
@@ -286,6 +289,10 @@ impl RustWalletManager {
             reconciler,
             reconcile_receiver: Arc::new(receiver),
             label_manager,
+            unsigned_tx_notifier: DebouncedTask::new(
+                "unsigned_tx_notifier",
+                Duration::from_millis(100),
+            ),
             scanner,
         })
     }
@@ -349,6 +356,10 @@ impl RustWalletManager {
             reconciler: MessageSender::new(sender),
             reconcile_receiver: Arc::new(receiver),
             label_manager,
+            unsigned_tx_notifier: DebouncedTask::new(
+                "unsigned_tx_notifier",
+                Duration::from_millis(100),
+            ),
             scanner,
         })
     }
@@ -376,6 +387,10 @@ impl RustWalletManager {
             reconciler: MessageSender::new(sender),
             reconcile_receiver: Arc::new(receiver),
             label_manager,
+            unsigned_tx_notifier: DebouncedTask::new(
+                "unsigned_tx_notifier",
+                Duration::from_millis(100),
+            ),
             scanner: None,
         })
     }
@@ -566,7 +581,14 @@ impl RustWalletManager {
             .into(),
         )?;
 
-        self.reconciler.send(Message::UnsignedTransactionsChanged);
+        let reconciler = self.reconciler.clone();
+        if tokio::runtime::Handle::try_current().is_ok() {
+            self.unsigned_tx_notifier.replace(async move {
+                reconciler.send(Message::UnsignedTransactionsChanged);
+            });
+        } else {
+            reconciler.send(Message::UnsignedTransactionsChanged);
+        }
 
         Ok(())
     }
@@ -614,7 +636,14 @@ impl RustWalletManager {
         let txn = db.unsigned_transactions().delete_tx(tx_id.as_ref())?;
         send!(self.actor.cancel_txn(txn.confirm_details.psbt.0.unsigned_tx));
 
-        self.reconciler.send(Message::UnsignedTransactionsChanged);
+        let reconciler = self.reconciler.clone();
+        if tokio::runtime::Handle::try_current().is_ok() {
+            self.unsigned_tx_notifier.replace(async move {
+                reconciler.send(Message::UnsignedTransactionsChanged);
+            });
+        } else {
+            reconciler.send(Message::UnsignedTransactionsChanged);
+        }
 
         Ok(())
     }
@@ -763,23 +792,26 @@ impl RustWalletManager {
     #[uniffi::method]
     pub async fn transaction_details(&self, tx_id: Arc<TxId>) -> Result<TransactionDetails, Error> {
         let tx_id = Arc::unwrap_or_clone(tx_id);
-
         let actor = self.actor.clone();
-        let details = task::spawn(async move {
-            call!(actor.transaction_details(tx_id))
-                .await
-                .map_err_str(Error::TransactionDetailsError)
+
+        crate::loading_popup::with_loading_popup(async move {
+            let details = task::spawn(async move {
+                call!(actor.transaction_details(tx_id))
+                    .await
+                    .map_err_str(Error::TransactionDetailsError)
+            })
+            .await
+            .map_err(|e| Error::TransactionDetailsError(e.to_string()))??;
+
+            // for unconfirmed transactions, trigger a background sync to update status
+            // this uses SyncRequest with just this txid so it's fast
+            if !details.is_confirmed() {
+                send!(self.actor.perform_scan_for_single_tx_id(details.tx_id().0));
+            }
+
+            Ok(details)
         })
         .await
-        .unwrap()?;
-
-        // for unconfirmed transactions, trigger a background sync to update status
-        // this uses SyncRequest with just this txid so it's fast
-        if !details.is_confirmed() {
-            send!(self.actor.perform_scan_for_single_tx_id(details.tx_id().0));
-        }
-
-        Ok(details)
     }
 
     #[uniffi::method]
@@ -1273,8 +1305,12 @@ impl RustWalletManager {
             metadata: Arc::new(RwLock::new(metadata)),
             reconciler: MessageSender::new(sender),
             reconcile_receiver: Arc::new(receiver),
-            scanner: None,
             label_manager,
+            unsigned_tx_notifier: DebouncedTask::new(
+                "unsigned_tx_notifier",
+                Duration::from_millis(100),
+            ),
+            scanner: None,
         }
     }
 }
