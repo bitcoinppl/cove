@@ -414,10 +414,10 @@ internal fun ConfirmedTransactionWidget(
                                 val details = manager.transactionDetails(transaction.v1.id())
                                 val walletId = manager.walletMetadata?.id
                                 if (walletId != null) {
-                                    app.pushRoute(Route.TransactionDetails(walletId, details))
                                     if (index > 5) {
-                                        manager.scrolledTransactionId = transaction.v1.id().toString()
+                                        manager.pendingScrollTransactionId = transaction.v1.id().toString()
                                     }
+                                    app.pushRoute(Route.TransactionDetails(walletId, details))
                                 }
                             } catch (e: Exception) {
                                 android.util.Log.e("ConfirmedTxWidget", "Failed to load transaction details", e)
@@ -519,10 +519,10 @@ internal fun UnconfirmedTransactionWidget(
                                 val details = manager.transactionDetails(transaction.v1.id())
                                 val walletId = manager.walletMetadata?.id
                                 if (walletId != null) {
-                                    app.pushRoute(Route.TransactionDetails(walletId, details))
                                     if (index > 5) {
-                                        manager.scrolledTransactionId = transaction.v1.id().toString()
+                                        manager.pendingScrollTransactionId = transaction.v1.id().toString()
                                     }
+                                    app.pushRoute(Route.TransactionDetails(walletId, details))
                                 }
                             } catch (e: Exception) {
                                 android.util.Log.e("UnconfirmedTxWidget", "Failed to load transaction details", e)
@@ -645,11 +645,11 @@ internal fun UnsignedTransactionWidget(
                         onClick = {
                             val walletId = manager?.walletMetadata?.id
                             if (app != null && walletId != null) {
+                                if (index > 5) {
+                                    manager?.pendingScrollTransactionId = txn.id().toString()
+                                }
                                 val route = RouteFactory().sendHardwareExport(walletId, txn.details())
                                 app.pushRoute(route)
-                                if (index > 5) {
-                                    manager?.scrolledTransactionId = txn.id().toString()
-                                }
                             }
                         },
                         onLongClick = { showDeleteMenu = true },

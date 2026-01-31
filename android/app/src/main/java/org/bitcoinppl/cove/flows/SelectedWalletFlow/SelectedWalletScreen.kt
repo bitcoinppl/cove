@@ -335,6 +335,14 @@ fun SelectedWalletScreen(
                         else -> Triple(emptyList(), false, false)
                     }
 
+                // transfer pending scroll ID to active when returning from details screen
+                LaunchedEffect(Unit) {
+                    manager?.pendingScrollTransactionId?.let { id ->
+                        manager.scrolledTransactionId = id
+                        manager.pendingScrollTransactionId = null
+                    }
+                }
+
                 // scroll to saved transaction when returning from details
                 LaunchedEffect(manager?.scrolledTransactionId, hasTransactions) {
                     val targetId = manager?.scrolledTransactionId ?: return@LaunchedEffect
