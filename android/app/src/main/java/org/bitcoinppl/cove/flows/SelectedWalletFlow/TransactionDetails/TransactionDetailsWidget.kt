@@ -258,7 +258,6 @@ internal fun FiatPriceSection(
             stringResource(R.string.label_fiat_price),
             color = textColor,
             fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
         )
         Spacer(Modifier.weight(1f))
         Column(horizontalAlignment = Alignment.End) {
