@@ -146,6 +146,19 @@ struct ConfirmedTransactionView: View {
         return privateShow(manager.rust.displayFiatAmount(amount: fiatAmount.amount))
     }
 
+    private var secondaryAmount: String {
+        if case .btc = metadata.fiatOrBtc {
+            // primary is BTC, secondary is fiat
+            guard let fiatAmount = txn.fiatAmount() else { return privateShow("---") }
+            return privateShow(manager.rust.displayFiatAmount(amount: fiatAmount.amount))
+        }
+
+        // primary is fiat, secondary is BTC/sats
+        return privateShow(
+            manager.rust.displaySentAndReceivedAmount(sentAndReceived: txn.sentAndReceived())
+        )
+    }
+
     private func privateShow(_ text: String, placeholder: String = "••••••") -> String {
         if !metadata.sensitiveVisible {
             placeholder
@@ -208,7 +221,7 @@ struct ConfirmedTransactionView: View {
                     .foregroundStyle(amountColor(txn.sentAndReceived().direction()))
                     .contentTransition(.numericText())
 
-                Text(privateShow(txn.blockHeightFmt()))
+                Text(secondaryAmount)
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -251,6 +264,22 @@ struct UnconfirmedTransactionView: View {
         }
     }
 
+    private var secondaryAmount: String {
+        if case .btc = metadata.fiatOrBtc {
+            // primary is BTC, secondary is fiat
+            if let fiatAmount = txn.fiatAmount() {
+                return privateShow(manager.rust.displayFiatAmount(amount: fiatAmount.amount))
+            } else {
+                return privateShow("---")
+            }
+        }
+
+        // primary is fiat, secondary is BTC/sats
+        return privateShow(
+            manager.rust.displaySentAndReceivedAmount(sentAndReceived: txn.sentAndReceived())
+        )
+    }
+
     var body: some View {
         HStack {
             TxnIcon(direction: txn.sentAndReceived().direction(), confirmed: false)
@@ -266,6 +295,10 @@ struct UnconfirmedTransactionView: View {
             VStack(alignment: .trailing) {
                 Text(amount)
                     .foregroundStyle(amountColor(txn.sentAndReceived().direction()).opacity(0.65))
+
+                Text(secondaryAmount)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
         }
         .contentShape(Rectangle())
@@ -319,6 +352,17 @@ struct UnsignedTransactionView: View {
         return privateShow(manager.rust.displayFiatAmount(amount: fiatAmount))
     }
 
+    private var secondaryAmount: String {
+        if case .btc = metadata.fiatOrBtc {
+            // primary is BTC, secondary is fiat
+            guard let fiatAmount else { return privateShow("---") }
+            return privateShow(manager.rust.displayFiatAmount(amount: fiatAmount))
+        }
+
+        // primary is fiat, secondary is BTC/sats
+        return privateShow(manager.amountFmtUnit(txn.spendingAmount()))
+    }
+
     var body: some View {
         HStack {
             Image(systemName: "lock.open.trianglebadge.exclamationmark")
@@ -348,6 +392,10 @@ struct UnsignedTransactionView: View {
 
             VStack(alignment: .trailing) {
                 Text(amount)
+
+                Text(secondaryAmount)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
         }
         .task {

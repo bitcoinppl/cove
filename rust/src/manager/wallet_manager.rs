@@ -660,6 +660,11 @@ impl RustWalletManager {
         FIAT_CLIENT.value_in_currency_cached(*amount, currency)
     }
 
+    /// Formats a raw amount for display (e.g., "0.00050000 BTC")
+    ///
+    /// Use this for absolute amounts like balances or input values.
+    /// Does NOT include direction prefix - use `display_sent_and_received_amount`
+    /// for transaction amounts that need +/- indicators.
     #[uniffi::method(default(show_unit = true))]
     pub fn display_amount(&self, amount: Arc<Amount>, show_unit: bool) -> String {
         {
@@ -673,6 +678,10 @@ impl RustWalletManager {
         if show_unit { amount.fmt_string_with_unit(unit) } else { amount.fmt_string(unit) }
     }
 
+    /// Formats a transaction amount with direction prefix (e.g., "-0.00050000 BTC")
+    ///
+    /// Includes "-" prefix for outgoing transactions, no prefix for incoming.
+    /// Use this for displaying confirmed/unconfirmed transaction amounts in lists.
     #[uniffi::method]
     pub fn display_sent_and_received_amount(
         &self,
