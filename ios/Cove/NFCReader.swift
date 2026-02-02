@@ -70,7 +70,8 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
             if let error {
                 session.invalidate(
                     errorMessage:
-                    "Connection error: \(error.localizedDescription), please try again")
+                    "Connection error: \(error.localizedDescription), please try again"
+                )
                 return
             }
 
@@ -250,7 +251,7 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
         }
     }
 
-    // fallback function
+    /// fallback function
     func readNDEF(from tag: some NFCNDEFTag, session: NFCTagReaderSession) {
         Log.debug("reading NDEF message from tag: \(tag)")
         session.alertMessage = "Reading data please hold still..."
@@ -343,7 +344,8 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
             switch error.code {
             case .readerTransceiveErrorTagConnectionLost:
                 session.invalidate(
-                    errorMessage: "Tag connection lost, please hold your phone still")
+                    errorMessage: "Tag connection lost, please hold your phone still"
+                )
             default:
                 session.invalidate(errorMessage: "Unable to read NFC tag, try again")
             }
@@ -351,7 +353,7 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
     }
 }
 
-// should continue reading next block
+/// should continue reading next block
 private enum ParsingState {
     case incomplete
     case complete

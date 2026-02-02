@@ -9,7 +9,9 @@ import Foundation
 import SwiftUI
 
 struct LabeledColor: Identifiable {
-    var id: String { name }
+    var id: String {
+        name
+    }
 
     var color: Color
     var name: String
@@ -101,7 +103,8 @@ extension Color {
     func toHexString(colorScheme: ColorScheme) -> String {
         let resolvedColor = UIColor(self).resolvedColor(
             with:
-            UITraitCollection(userInterfaceStyle: colorScheme == .dark ? .dark : .light))
+            UITraitCollection(userInterfaceStyle: colorScheme == .dark ? .dark : .light)
+        )
 
         // Get the RGB values regardless of color space
         var r: CGFloat = 0
@@ -122,7 +125,8 @@ extension Color {
     func toHexStringAndOpacity(colorScheme: ColorScheme) -> String {
         let resolvedColor = UIColor(self).resolvedColor(
             with:
-            UITraitCollection(userInterfaceStyle: colorScheme == .dark ? .dark : .light))
+            UITraitCollection(userInterfaceStyle: colorScheme == .dark ? .dark : .light)
+        )
 
         // Get the RGBA values
         var r: CGFloat = 0

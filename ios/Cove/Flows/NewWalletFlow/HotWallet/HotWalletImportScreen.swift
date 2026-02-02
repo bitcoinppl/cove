@@ -45,7 +45,7 @@ enum ImportFieldNumber: Int, Hashable, CaseIterable {
     case twentyThree
     case twentyFour
 
-    //  0 index, covertr to field number
+    ///  0 index, covertr to field number
     var fieldNumber: Int {
         rawValue + 1
     }
@@ -59,7 +59,7 @@ enum ImportFieldNumber: Int, Hashable, CaseIterable {
     }
 }
 
-// consts
+/// consts
 extension HotWalletImportScreen {
     static let GROUPS_OF = 12
 }
@@ -146,12 +146,14 @@ struct HotWalletImportScreen: View {
 
     var buttonIsDisabled: Bool {
         enteredWords[tabIndex].map { word in autocomplete.isValidWord(word: word) }.contains(
-            false)
+            false
+        )
     }
 
     var isAllWordsValid: Bool {
         !enteredWords.joined().map { word in autocomplete.isValidWord(word: word) }.contains(
-            false)
+            false
+        )
     }
 
     var lastIndex: Int {
@@ -266,7 +268,6 @@ struct HotWalletImportScreen: View {
         }
     }
 
-    @ViewBuilder
     var KeyboardAutoCompleteView: some View {
         HStack {
             ForEach(filteredSuggestions, id: \.self) { word in
@@ -285,7 +286,6 @@ struct HotWalletImportScreen: View {
         .frame(maxWidth: .infinity)
     }
 
-    @ViewBuilder
     var ImportButton: some View {
         Button("Import wallet") {
             importWallet()
@@ -345,7 +345,6 @@ struct HotWalletImportScreen: View {
         .ignoresSafeArea(.keyboard)
     }
 
-    @ViewBuilder
     private var KeyboardToolbar: some View {
         HStack {
             ForEach(filteredSuggestions, id: \.self) { word in
@@ -365,7 +364,6 @@ struct HotWalletImportScreen: View {
         .modifier(KeyboardToolbarShapeModifier())
     }
 
-    @ViewBuilder
     var Card: some View {
         HotWalletImportCard(
             numberOfWords: numberOfWords,
@@ -377,7 +375,6 @@ struct HotWalletImportScreen: View {
         )
     }
 
-    @ViewBuilder
     var MainContent: some View {
         VStack {
             if !keyboardObserver.keyboardIsShowing {
@@ -581,7 +578,8 @@ struct HotWalletImportScreen: View {
         default:
             Log.warn("Invalid number of words: \(numberOfWords)")
             scanError = TaggedString(
-                "Invalid number of words: \(numberOfWords), we only support 12 or 24 words")
+                "Invalid number of words: \(numberOfWords), we only support 12 or 24 words"
+            )
 
             sheetState = .none
             return

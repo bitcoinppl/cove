@@ -18,7 +18,10 @@ struct SendFlowHeaderView: View {
 
     // private
     @State var showingMenu: Bool = false
-    private var metadata: WalletMetadata { manager.walletMetadata }
+    private var metadata: WalletMetadata {
+        manager.walletMetadata
+    }
+
     private var balanceString: String {
         if !metadata.sensitiveVisible {
             return "••••••"

@@ -40,7 +40,8 @@ struct VerifyWordsContainer: View {
                     .asymmetric(
                         insertion: .move(edge: .trailing),
                         removal: .move(edge: .leading)
-                    ))
+                    )
+                )
         } else {
             VerifyWordsScreen(
                 manager: manager,
@@ -51,7 +52,8 @@ struct VerifyWordsContainer: View {
                 .asymmetric(
                     insertion: .move(edge: .trailing),
                     removal: .move(edge: .leading)
-                ))
+                )
+            )
         }
     }
 
@@ -110,10 +112,12 @@ struct VerifyWordsScreen: View {
 
     @Namespace private var namespace
 
-    // alerts
+    /// alerts
     private enum AlertType: Identifiable {
         case words, skip
-        var id: Self { self }
+        var id: Self {
+            self
+        }
     }
 
     @State private var activeAlert: AlertType?

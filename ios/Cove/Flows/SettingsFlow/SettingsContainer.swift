@@ -26,7 +26,6 @@ struct SettingsContainer: View {
         )
     }
 
-    @ViewBuilder
     var FiatCurrencyPicker: some View {
         SettingsPicker(selection:
             Binding(
@@ -34,12 +33,10 @@ struct SettingsContainer: View {
                 set: {
                     app.dispatch(action: .changeFiatCurrency($0))
                 }
-            )
-        )
-        .navigationTitle("Currency")
+            ))
+            .navigationTitle("Currency")
     }
 
-    @ViewBuilder
     var AppearancePicker: some View {
         SettingsPicker(selection:
             Binding(
@@ -47,9 +44,8 @@ struct SettingsContainer: View {
                 set: {
                     app.dispatch(action: .changeColorScheme($0))
                 }
-            )
-        )
-        .navigationTitle("Appearance")
+            ))
+            .navigationTitle("Appearance")
     }
 
     var body: some View {

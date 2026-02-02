@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct FloaterPopupView: View {
-    // required
+    /// required
     let text: String
 
     // optional

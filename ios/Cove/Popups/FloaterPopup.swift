@@ -9,7 +9,7 @@ import MijickPopups
 import SwiftUI
 
 struct FloaterPopup: TopPopup {
-    // required
+    /// required
     let text: String
 
     // optional

@@ -27,7 +27,7 @@ private final class TextFieldReturnHandler: NSObject, UITextFieldDelegate {
         return false // prevents keyboard dismissal
     }
 
-    // forward all other delegate methods to original
+    /// forward all other delegate methods to original
     func textFieldDidBeginEditing(_ textField: UITextField) {
         originalDelegate?.textFieldDidBeginEditing?(textField)
     }
@@ -79,7 +79,6 @@ struct HotWalletImportCard: View {
 
     @FocusState.Binding var focusField: ImportFieldNumber?
 
-    @ViewBuilder
     var MainContent: some View {
         VStack(spacing: 0) {
             TabView(selection: $tabIndex) {
@@ -289,7 +288,8 @@ private struct AutocompleteField: View {
             autocomplete.nextFieldNumber(
                 currentFieldNumber: currentFocusField,
                 enteredWords: allEnteredWords.flatMap(\.self)
-            ))
+            )
+        )
 
         focusField = ImportFieldNumber(nextFieldNumber)
 

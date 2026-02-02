@@ -7,7 +7,9 @@
 import SwiftUI
 
 extension QrExportFormat: CaseIterable {
-    public static var allCases: [QrExportFormat] { [.bbqr, .ur] }
+    public static var allCases: [QrExportFormat] {
+        [.bbqr, .ur]
+    }
 }
 
 /// Generic QR export view that can display animated BBQr or UR QR codes
@@ -27,7 +29,9 @@ struct QrExportView: View {
     @State private var startedAt = Date()
 
     /// Whether to show the format picker (only if UR is available)
-    var showFormatPicker: Bool { generateUrStrings != nil }
+    var showFormatPicker: Bool {
+        generateUrStrings != nil
+    }
 
     /// Animation interval: dynamic based on density for both formats
     var animationInterval: TimeInterval {
@@ -109,7 +113,6 @@ struct QrExportView: View {
         }
     }
 
-    @ViewBuilder
     var AnimatedQrView: some View {
         VStack {
             // .id() forces TimelineView recreation when interval changes
@@ -139,7 +142,6 @@ struct QrExportView: View {
         }
     }
 
-    @ViewBuilder
     var ProgressIndicator: some View {
         HStack(spacing: 4) {
             ForEach(0 ..< qrs.count, id: \.self) { index in
@@ -152,10 +154,14 @@ struct QrExportView: View {
         }
     }
 
-    var canDecreaseDensity: Bool { density.canDecrease() }
-    var canIncreaseDensity: Bool { density.canIncrease() && qrs.count > 1 }
+    var canDecreaseDensity: Bool {
+        density.canDecrease()
+    }
 
-    @ViewBuilder
+    var canIncreaseDensity: Bool {
+        density.canIncrease() && qrs.count > 1
+    }
+
     var MinusButtonMinimal: some View {
         Button { density = density.decrease() } label: {
             Image(systemName: "minus")
@@ -167,7 +173,6 @@ struct QrExportView: View {
         .disabled(!canDecreaseDensity)
     }
 
-    @ViewBuilder
     var PlusButtonMinimal: some View {
         Button { density = density.increase() } label: {
             Image(systemName: "plus")
@@ -179,7 +184,6 @@ struct QrExportView: View {
         .disabled(!canIncreaseDensity)
     }
 
-    @ViewBuilder
     var DensityButtons: some View {
         HStack(spacing: 0) {
             Button { density = density.decrease() } label: {

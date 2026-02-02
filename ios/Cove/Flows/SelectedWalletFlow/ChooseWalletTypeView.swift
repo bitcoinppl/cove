@@ -13,8 +13,8 @@ public struct ChooseWalletTypeView: View {
     @State var manager: WalletManager
     @State var foundAddresses: [FoundAddress]
 
-    // private
-    // first native segwit address
+    /// private
+    /// first native segwit address
     @State private var address: AddressInfo? = nil
 
     var foundAddressesSorted: [FoundAddress] {
@@ -27,7 +27,8 @@ public struct ChooseWalletTypeView: View {
                 // switch the wallet
                 do {
                     try await manager.rust.switchToDifferentWalletAddressType(
-                        walletAddressType: foundAddress.type)
+                        walletAddressType: foundAddress.type
+                    )
                 } catch {
                     Log.error(error.localizedDescription)
                     dismiss()

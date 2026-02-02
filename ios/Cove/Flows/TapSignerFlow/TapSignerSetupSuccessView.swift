@@ -14,7 +14,7 @@ struct TapSignerSetupSuccess: View {
     let tapSigner: TapSigner
     let setup: TapSignerSetupComplete
 
-    // private
+    /// private
     @State private var walletId: WalletId? = nil
 
     func saveWallet() {

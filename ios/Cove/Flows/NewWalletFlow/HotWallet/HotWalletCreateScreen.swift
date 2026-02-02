@@ -62,7 +62,6 @@ struct WordsView: View {
         }
     }
 
-    @ViewBuilder
     var MainContent: some View {
         VStack(spacing: 24) {
             StyledWordCard(tabIndex: $tabIndex) {

@@ -13,7 +13,7 @@ struct QrCodeAddressView: View {
     @Environment(AppManager.self) var app
     @Environment(\.dismiss) private var dismiss
 
-    // passed in
+    /// passed in
     @Binding var scannedCode: TaggedString?
 
     // private
@@ -124,7 +124,8 @@ struct QrCodeAddressView: View {
                     .general(
                         title: "QR Scan Error",
                         message: "Unable to scan QR code, error: \(error.localizedDescription)"
-                    ))
+                    )
+                )
             }
 
         case let .failure(error):

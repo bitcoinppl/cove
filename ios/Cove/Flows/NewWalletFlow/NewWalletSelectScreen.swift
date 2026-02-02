@@ -23,7 +23,7 @@ struct NewWalletSelectScreen: View {
     @State private var alert: AlertItem? = nil
     @State private var isImporting = false
 
-    // sheets
+    /// sheets
     @State private var sheetState: TaggedItem<SheetState>? = nil
 
     @ViewBuilder
@@ -123,7 +123,8 @@ struct NewWalletSelectScreen: View {
                 newWalletFromXpub(fileContents)
             } catch {
                 alert = AlertItem(
-                    type: .error(error.localizedDescription))
+                    type: .error(error.localizedDescription)
+                )
             }
         }
         .alert(item: $alert) { alert in
@@ -176,7 +177,8 @@ struct NewWalletSelectScreen: View {
             let id = wallet.id()
             Log.debug("Imported Wallet: \(id)")
             alert = AlertItem(
-                type: .success("Imported Wallet Successfully"))
+                type: .success("Imported Wallet Successfully")
+            )
             try app.rust.selectWallet(id: id)
         } catch {
             alert = AlertItem(type: .error(error.localizedDescription))
@@ -207,7 +209,8 @@ struct NewWalletSelectScreen: View {
             let text = UIPasteboard.general.string ?? ""
             if text.isEmpty {
                 alert = AlertItem(
-                    type: .error("No text found on the clipboard."))
+                    type: .error("No text found on the clipboard.")
+                )
                 return
             }
 

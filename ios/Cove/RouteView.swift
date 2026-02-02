@@ -31,8 +31,7 @@ struct RouteView: View {
     }
 }
 
-@MainActor @ViewBuilder
-func routeToView(app: AppManager, route: Route) -> some View {
+@MainActor func routeToView(app: AppManager, route: Route) -> some View {
     Group {
         switch route {
         case let .loadAndReset(resetTo: routes, afterMillis: time):

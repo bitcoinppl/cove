@@ -10,10 +10,10 @@ import SwiftUI
 struct AddressTextEditor: View {
     @Environment(SendFlowPresenter.self) var presenter
 
-    // args
+    /// args
     @Binding var text: String
 
-    // private
+    /// private
     @FocusState private var focusField: SendFlowPresenter.FocusField?
 
     var isFocused: Bool {

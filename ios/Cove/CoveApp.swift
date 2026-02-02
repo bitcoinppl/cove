@@ -9,15 +9,8 @@
 import MijickPopups
 import SwiftUI
 
-struct NavigateKey: EnvironmentKey {
-    static let defaultValue: (Route) -> Void = { _ in }
-}
-
 extension EnvironmentValues {
-    var navigate: (Route) -> Void {
-        get { self[NavigateKey.self] }
-        set { self[NavigateKey.self] = newValue }
-    }
+    @Entry var navigate: (Route) -> Void = { _ in }
 }
 
 struct SafeAreaInsetsKey: EnvironmentKey {

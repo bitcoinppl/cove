@@ -6,7 +6,9 @@ struct SendFlowUtxoCustomAmountSheetView: View {
     @Environment(SendFlowManager.self) private var manager
     @Environment(\.dismiss) private var dismiss
 
-    var metadata: WalletMetadata { walletManager.walletMetadata }
+    var metadata: WalletMetadata {
+        walletManager.walletMetadata
+    }
 
     let utxos: [Utxo]
 
@@ -21,7 +23,10 @@ struct SendFlowUtxoCustomAmountSheetView: View {
 
     @FocusState private var isFocused: Bool
 
-    private var presenter: SendFlowPresenter { manager.presenter }
+    private var presenter: SendFlowPresenter {
+        manager.presenter
+    }
+
     private var smartSnapBinding: Binding<Double> {
         Binding(
             get: { customAmount },
@@ -76,15 +81,19 @@ struct SendFlowUtxoCustomAmountSheetView: View {
         )
     }
 
-    @ViewBuilder
     private var divider: some View {
         Divider()
             .padding(.vertical, 28)
             .foregroundStyle(.red)
     }
 
-    private var minSend: Double { satToDouble(minSendSats) }
-    private var step: Double { satToDouble(10) }
+    private var minSend: Double {
+        satToDouble(minSendSats)
+    }
+
+    private var step: Double {
+        satToDouble(10)
+    }
 
     private var maxSend: Double {
         var amount = manager.rust.maxSendMinusFees() ?? Amount.fromSat(sats: minSendSatsU + 1000)
@@ -92,8 +101,8 @@ struct SendFlowUtxoCustomAmountSheetView: View {
         return amountToDouble(amount)
     }
 
-    // softMaxSend is the next biggest amount below maxSend that can be selected
-    // any amount between softMaxSend and maxSend can NOT be selected, because that would create a dust UTXO
+    /// softMaxSend is the next biggest amount below maxSend that can be selected
+    /// any amount between softMaxSend and maxSend can NOT be selected, because that would create a dust UTXO
     private var softMaxSend: Double {
         let amount = manager.rust.maxSendMinusFeesAndSmallUtxo() ?? minSendAmount
         return amountToDouble(amount)

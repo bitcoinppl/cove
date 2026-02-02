@@ -89,9 +89,11 @@
                     NSLayoutConstraint.activate([
                         button.heightAnchor.constraint(equalToConstant: 50),
                         stackView.leadingAnchor.constraint(
-                            equalTo: view.layoutMarginsGuide.leadingAnchor),
+                            equalTo: view.layoutMarginsGuide.leadingAnchor
+                        ),
                         stackView.trailingAnchor.constraint(
-                            equalTo: view.layoutMarginsGuide.trailingAnchor),
+                            equalTo: view.layoutMarginsGuide.trailingAnchor
+                        ),
                         stackView.centerYAnchor.constraint(equalTo: view.centerYAnchor),
                     ])
                 }
@@ -102,7 +104,8 @@
                         ScanResult(
                             data: .string(parentView.simulatedData),
                             type: parentView.codeTypes.first ?? .qr, image: nil, corners: []
-                        ))
+                        )
+                    )
                 }
 
             #else
@@ -370,9 +373,11 @@
                         NSLayoutConstraint.activate([
                             manualCaptureButton.heightAnchor.constraint(equalToConstant: 60),
                             manualCaptureButton.widthAnchor.constraint(
-                                equalTo: manualCaptureButton.heightAnchor),
+                                equalTo: manualCaptureButton.heightAnchor
+                            ),
                             view.centerXAnchor.constraint(
-                                equalTo: manualCaptureButton.centerXAnchor),
+                                equalTo: manualCaptureButton.centerXAnchor
+                            ),
                             view.safeAreaLayoutGuide.bottomAnchor.constraint(
                                 equalTo: manualCaptureButton.bottomAnchor, constant: 32
                             ),
@@ -390,7 +395,8 @@
                             manualSelectButton.heightAnchor.constraint(equalToConstant: 50),
                             manualSelectButton.widthAnchor.constraint(equalToConstant: 60),
                             view.centerXAnchor.constraint(
-                                equalTo: manualSelectButton.centerXAnchor),
+                                equalTo: manualSelectButton.centerXAnchor
+                            ),
                             view.safeAreaLayoutGuide.bottomAnchor.constraint(
                                 equalTo: manualSelectButton.bottomAnchor, constant: 32
                             ),

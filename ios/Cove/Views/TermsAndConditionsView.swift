@@ -43,10 +43,12 @@ struct CheckboxToggleStyle: ToggleStyle {
 struct TermsAndConditionsView: View {
     let app: AppManager
 
-    // Toggle state for each acknowledgement
+    /// Toggle state for each acknowledgement
     @State private var checks: [Bool] = Array(repeating: false, count: 5)
 
-    private var allChecked: Bool { checks.allSatisfy(\.self) }
+    private var allChecked: Bool {
+        checks.allSatisfy(\.self)
+    }
 
     var body: some View {
         ScrollView {

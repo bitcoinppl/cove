@@ -104,7 +104,8 @@ struct ReceiveView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(
                         colorScheme == .light
-                            ? Color(.midnightBlue).opacity(0.95) : .midnightBlue.opacity(0.4))
+                            ? Color(.midnightBlue).opacity(0.95) : .midnightBlue.opacity(0.4)
+                    )
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .padding(.horizontal)

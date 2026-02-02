@@ -15,7 +15,7 @@ struct TapSignerImportSuccess: View {
     let tapSigner: TapSigner
     let deriveInfo: DeriveInfo
 
-    // private
+    /// private
     @State private var walletId: WalletId? = nil
 
     func saveWallet() {

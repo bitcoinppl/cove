@@ -21,7 +21,8 @@ public struct FileReader {
     func read() throws -> String {
         guard url.startAccessingSecurityScopedResource() else {
             throw FileReadError(
-                message: "Failed to access the file at \(url.path)")
+                message: "Failed to access the file at \(url.path)"
+            )
         }
 
         defer { url.stopAccessingSecurityScopedResource() }

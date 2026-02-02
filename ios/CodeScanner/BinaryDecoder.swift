@@ -129,8 +129,7 @@ extension BinaryDecoder {
         private func bytesWithInternalOffsetAvailable(_ length: Int) -> Bool {
             let availableBits = bytes.count * 8
             let requestedBits = readingOffset + (length * 8)
-            let possible = availableBits >= requestedBits
-            return possible
+            return availableBits >= requestedBits
         }
     }
 }

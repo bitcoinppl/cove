@@ -297,7 +297,7 @@ struct UnsignedTransactionView: View {
     let metadata: WalletMetadata
     let index: Int
 
-    // private
+    /// private
     @State private var fiatAmount: Double? = nil
 
     func privateShow(_ text: String, placeholder: String = "••••••") -> String {

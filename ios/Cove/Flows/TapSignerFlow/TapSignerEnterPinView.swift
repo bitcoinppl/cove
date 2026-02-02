@@ -22,7 +22,7 @@ struct TapSignerEnterPin: View {
     @State private var pin: String = ""
     @FocusState private var isFocused
 
-    // confirmed pin is correct, now run the action
+    /// confirmed pin is correct, now run the action
     func runAction(_ nfc: TapSignerNFC, _ pin: String) {
         switch action {
         case .derive: deriveAction(nfc, pin)
@@ -35,7 +35,9 @@ struct TapSignerEnterPin: View {
                         startingPin: pin,
                         chainCode: .none,
                         action: .change
-                    )))
+                    )
+                )
+            )
         case .backup:
             backupAction(nfc, pin)
         case let .sign(psbt):
@@ -83,7 +85,8 @@ struct TapSignerEnterPin: View {
                     app.alertState = .init(.tapSignerWrongPin(tapSigner, .backup))
                 } else {
                     app.alertState = .init(
-                        .general(title: "Backup Failed!", message: error.description))
+                        .general(title: "Backup Failed!", message: error.description)
+                    )
                 }
 
                 await MainActor.run { self.pin = "" }
@@ -114,7 +117,8 @@ struct TapSignerEnterPin: View {
                 } catch {
                     await MainActor.run {
                         app.alertState = .init(
-                            .general(title: "Error", message: error.localizedDescription))
+                            .general(title: "Error", message: error.localizedDescription)
+                        )
 
                         self.pin = ""
                         app.sheetState = .none
@@ -126,7 +130,8 @@ struct TapSignerEnterPin: View {
                     app.alertState = .init(.tapSignerWrongPin(tapSigner, .sign(psbt)))
                 } else {
                     app.alertState = .init(
-                        .general(title: "Signing Failed!", message: error.description))
+                        .general(title: "Signing Failed!", message: error.description)
+                    )
                     app.sheetState = .none
                 }
 

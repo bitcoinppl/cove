@@ -15,10 +15,9 @@ struct SendFlowSelectFeeRateView: View {
     @Binding var selectedOption: FeeRateOptionWithTotalFee
     @Binding var selectedPresentationDetent: PresentationDetent
 
-    // private
+    /// private
     @State private var isPresentingCustomFeeSelection: Bool = false
 
-    @ViewBuilder
     var SelectView: some View {
         VStack(spacing: 20) {
             Text("Network Fee")
@@ -220,7 +219,9 @@ private struct FeeOptionView: View {
                             feeSpeed: FeeSpeed.custom(durationMins: 10),
                             feeRate: FeeRate.fromSatPerVb(satPerVb: 143.00),
                             totalFee: Amount.fromSat(sats: 3000)
-                        ))),
+                        )
+                    )
+                ),
                 selectedOption: Binding.constant(
                     FeeRateOptionsWithTotalFee.previewNew().medium()
                 ),

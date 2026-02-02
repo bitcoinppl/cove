@@ -9,7 +9,7 @@ import MijickPopups
 import SwiftUI
 
 struct NodeSelectionView: View {
-    // private
+    /// private
     private let nodeSelector = NodeSelector()
 
     @State private var selectedNodeName: String

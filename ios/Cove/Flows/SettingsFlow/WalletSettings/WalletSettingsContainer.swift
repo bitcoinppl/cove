@@ -46,7 +46,6 @@ struct WalletSettingsContainer: View {
         }
     }
 
-    @ViewBuilder
     var LoadingOrError: some View {
         Group {
             if let error {
