@@ -236,7 +236,7 @@ impl TransactionDetails {
                 .map_err(|e| Error::FiatAmount(e.to_string()))
         })
         .await
-        .expect("amount_fiat task panicked")
+        .map_err(|e| Error::FiatAmount(format!("task failed: {e}")))?
     }
 
     #[uniffi::method]
@@ -268,7 +268,7 @@ impl TransactionDetails {
                 .map_err(|e| Error::FiatAmount(e.to_string()))
         })
         .await
-        .expect("fee_fiat_fmt task panicked")?;
+        .map_err(|e| Error::FiatAmount(format!("task failed: {e}")))??;
 
         Ok(fiat_amount_fmt(fiat))
     }
@@ -312,7 +312,7 @@ impl TransactionDetails {
                 .map_err(|e| Error::FiatAmount(e.to_string()))
         })
         .await
-        .expect("sent_sans_fee_fiat_fmt task panicked")?;
+        .map_err(|e| Error::FiatAmount(format!("task failed: {e}")))??;
 
         Ok(fiat_amount_fmt(fiat))
     }
