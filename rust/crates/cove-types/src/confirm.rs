@@ -1,16 +1,16 @@
 use std::sync::Arc;
 
+use ahash::AHashMap as HashMap;
 use bitcoin::params::Params;
+use bitcoin::{FeeRate as BdkFeeRate, TxOut};
 use serde::{Deserialize, Serialize};
+use tap::TapFallible;
 use thiserror::Error;
 
 use crate::{
     BdkTxId, Network, TxId, address::Address, amount::Amount, fees::FeeRate, psbt::Psbt,
     utxo::UtxoType,
 };
-use bitcoin::{FeeRate as BdkFeeRate, TxOut};
-
-use ahash::AHashMap as HashMap;
 
 type Error = ConfirmDetailsError;
 type Result<T, E = Error> = std::result::Result<T, E>;
@@ -437,7 +437,9 @@ impl InputOutputDetails {
 
                 AddressAndAmount::try_new_with_extra(tx_out, network, extra)
             })
-            .filter_map(Result::ok)
+            .filter_map(|r| {
+                r.tap_err(|e| tracing::warn!("Failed to parse transaction input: {e}")).ok()
+            })
             .collect();
 
         let outputs = psbt
@@ -445,7 +447,9 @@ impl InputOutputDetails {
             .output
             .iter()
             .map(|output| AddressAndAmount::try_new(output, network))
-            .filter_map(Result::ok)
+            .filter_map(|r| {
+                r.tap_err(|e| tracing::warn!("Failed to parse transaction output: {e}")).ok()
+            })
             .collect();
 
         Self { inputs, outputs }

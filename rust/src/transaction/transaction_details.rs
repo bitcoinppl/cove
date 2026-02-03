@@ -24,6 +24,7 @@ use crate::{
     wallet::{Address, address},
 };
 use cove_util::format::NumberFormatter as _;
+use tap::TapFallible;
 
 use super::{Amount, FeeRate, SentAndReceived, TxId};
 
@@ -84,10 +85,20 @@ impl TransactionDetails {
         let tx_details = wallet.get_tx(txid).ok_or(Error::NotFound)?.tx_node.tx;
         let network = Network::from(wallet.network());
 
-        let fee = wallet.calculate_fee(&tx_details).ok().map(Into::into);
-        let fee_rate = wallet.calculate_fee_rate(&tx_details).ok().map(Into::into);
+        let fee = wallet
+            .calculate_fee(&tx_details)
+            .tap_err(|e| tracing::debug!("Failed to calculate fee for {txid}: {e}"))
+            .ok()
+            .map(Into::into);
+        let fee_rate = wallet
+            .calculate_fee_rate(&tx_details)
+            .tap_err(|e| tracing::debug!("Failed to calculate fee rate for {txid}: {e}"))
+            .ok()
+            .map(Into::into);
 
-        let address = Address::try_new(&tx, wallet).ok();
+        let address = Address::try_new(&tx, wallet)
+            .tap_err(|e| tracing::debug!("Failed to get address for {txid}: {e}"))
+            .ok();
         let pending_or_confirmed = PendingOrConfirmed::new(chain_postition);
 
         let change_address = match sent_and_received.direction {
@@ -225,7 +236,7 @@ impl TransactionDetails {
                 .map_err(|e| Error::FiatAmount(e.to_string()))
         })
         .await
-        .unwrap()
+        .expect("amount_fiat task panicked")
     }
 
     #[uniffi::method]
@@ -257,7 +268,7 @@ impl TransactionDetails {
                 .map_err(|e| Error::FiatAmount(e.to_string()))
         })
         .await
-        .unwrap()?;
+        .expect("fee_fiat_fmt task panicked")?;
 
         Ok(fiat_amount_fmt(fiat))
     }
@@ -301,7 +312,7 @@ impl TransactionDetails {
                 .map_err(|e| Error::FiatAmount(e.to_string()))
         })
         .await
-        .unwrap()?;
+        .expect("sent_sans_fee_fiat_fmt task panicked")?;
 
         Ok(fiat_amount_fmt(fiat))
     }
