@@ -14,6 +14,7 @@ struct ReceivedDetailsExpandedView: View {
 
     // private
     @State private var isCopied = false
+    @State private var showingPriceInfo = false
 
     @ViewBuilder
     func expandedDetailsRow(header: String, content: String) -> some View {
@@ -101,6 +102,57 @@ struct ReceivedDetailsExpandedView: View {
                     .frame(minWidth: 100)
                 }
                 .buttonStyle(PlainButtonStyle())
+            }
+
+            // MARK: - Fiat Price Section
+
+            if transactionDetails.isConfirmed() {
+                Divider().padding(.vertical, 18)
+
+                HStack(alignment: .top) {
+                    Text("Fiat Price")
+                        .fontWeight(.semibold)
+                    Spacer()
+
+                    VStack(alignment: .trailing, spacing: 4) {
+                        // current fiat value
+                        AsyncView(
+                            cachedValue: transactionDetails.amountFiatFmtCached(),
+                            operation: transactionDetails.amountFiatFmt
+                        ) { amount in
+                            Text(amount)
+                                .font(.subheadline)
+                                .foregroundStyle(.primary)
+                        }
+
+                        // historical fiat value (when received)
+                        HStack(spacing: 4) {
+                            Image(systemName: "clock")
+                                .font(.caption2)
+                            AsyncView(
+                                cachedValue: transactionDetails.historicalFiatFmtCached(),
+                                operation: transactionDetails.historicalFiatFmt
+                            ) { amount in
+                                Text(amount)
+                                    .font(.caption)
+                                    .foregroundStyle(.primary)
+                            }
+                            Image(systemName: "info.circle")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                                .onTapGesture { showingPriceInfo.toggle() }
+                                .popover(isPresented: $showingPriceInfo) {
+                                    Text("Price at time of transaction")
+                                        .font(.caption)
+                                        .padding(8)
+                                        .presentationCompactAdaptation(.popover)
+                                }
+                        }
+                        .foregroundStyle(.primary)
+                    }
+                }
+                .font(.subheadline)
+                .foregroundStyle(.primary)
             }
         }
         .padding(.horizontal, detailsExpandedPadding)

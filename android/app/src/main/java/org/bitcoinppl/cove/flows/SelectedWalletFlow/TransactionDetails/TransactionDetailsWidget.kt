@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -22,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -40,8 +42,11 @@ internal fun TransactionDetailsWidget(
     feeFiatFmt: String?,
     sentSansFeeFiatFmt: String?,
     totalSpentFiatFmt: String?,
+    historicalFiatFmt: String?,
     metadata: WalletMetadata,
 ) {
+    val context = LocalContext.current
+    val tooltipText = stringResource(R.string.fiat_price_tooltip)
     val dividerColor = MaterialTheme.colorScheme.outlineVariant
     val sub = MaterialTheme.colorScheme.onSurfaceVariant
     val fg = MaterialTheme.colorScheme.onBackground
@@ -152,11 +157,28 @@ internal fun TransactionDetailsWidget(
                 secondary = totalSpentFiatFmt,
                 isTotal = true,
             )
+
+            // fiat price section for sent transactions
+            if (isConfirmed) {
+                FiatPriceSection(
+                    currentFiatFmt = totalSpentFiatFmt,
+                    historicalFiatFmt = historicalFiatFmt,
+                    isConfirmed = true,
+                    dividerColor = dividerColor,
+                    onInfoClick = {
+                        android.widget.Toast
+                            .makeText(context, tooltipText, android.widget.Toast.LENGTH_SHORT)
+                            .show()
+                    },
+                )
+            }
         } else {
             // received transaction details
             ReceivedTransactionDetails(
                 transactionDetails = transactionDetails,
                 numberOfConfirmations = numberOfConfirmations,
+                currentFiatFmt = totalSpentFiatFmt,
+                historicalFiatFmt = historicalFiatFmt,
             )
         }
 
@@ -210,6 +232,65 @@ internal fun DetailsWidget(
             AutoSizeText(primary, color = primaryColor, maxFontSize = 14.sp, minimumScaleFactor = 0.90f, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(6.dp))
             AsyncText(text = secondary, color = sub, style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp))
+        }
+    }
+}
+
+@Composable
+internal fun FiatPriceSection(
+    currentFiatFmt: String?,
+    historicalFiatFmt: String?,
+    isConfirmed: Boolean,
+    dividerColor: Color,
+    usePrimaryColor: Boolean = false,
+    onInfoClick: () -> Unit = {},
+) {
+    val sub = MaterialTheme.colorScheme.onSurfaceVariant
+    val fg = MaterialTheme.colorScheme.onBackground
+    val textColor = if (usePrimaryColor) fg else sub
+
+    Spacer(Modifier.height(24.dp))
+    Box(Modifier.fillMaxWidth().height(1.dp).background(dividerColor))
+    Spacer(Modifier.height(24.dp))
+
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+        Text(
+            stringResource(R.string.label_fiat_price),
+            color = textColor,
+            fontSize = 12.sp,
+        )
+        Spacer(Modifier.weight(1f))
+        Column(horizontalAlignment = Alignment.End) {
+            AsyncText(
+                text = currentFiatFmt,
+                color = fg,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            if (isConfirmed && historicalFiatFmt != null) {
+                Spacer(Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Outlined.Schedule,
+                        contentDescription = null,
+                        modifier = Modifier.size(12.dp),
+                        tint = textColor,
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(historicalFiatFmt, color = textColor, fontSize = 12.sp)
+                    Spacer(Modifier.width(4.dp))
+                    IconButton(
+                        onClick = onInfoClick,
+                        modifier = Modifier.size(16.dp),
+                    ) {
+                        Icon(
+                            Icons.Outlined.Info,
+                            contentDescription = stringResource(R.string.fiat_price_tooltip),
+                            modifier = Modifier.size(12.dp),
+                            tint = sub.copy(alpha = 0.7f),
+                        )
+                    }
+                }
+            }
         }
     }
 }

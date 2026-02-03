@@ -13,7 +13,8 @@ use numfmt::{Formatter, Precision};
 
 use crate::{
     database::Database,
-    fiat::{FiatCurrency, client::FIAT_CLIENT},
+    fiat::{FiatCurrency, client::FIAT_CLIENT, historical::HistoricalPrice},
+    historical_price_service::HistoricalPriceService,
     task,
     transaction::{TransactionDirection, Unit},
 };
@@ -378,6 +379,50 @@ impl TransactionDetails {
     pub fn address_spaced_out(&self) -> String {
         self.address.spaced_out()
     }
+
+    /// Historical fiat value at time of transaction - cached version (no network calls)
+    #[uniffi::method]
+    pub fn historical_fiat_fmt_cached(&self) -> Option<String> {
+        let block_number = self.block_number()?;
+        let db = Database::global().historical_prices();
+        let price_record = db.get_price_for_block(self.network, block_number).ok()??;
+        let price = HistoricalPrice::from(price_record);
+        let currency_price = price.for_currency(currency())?;
+
+        let fiat_value = self.amount().as_btc() * currency_price as f64;
+        Some(fmt_historical_fiat(fiat_value))
+    }
+
+    /// Historical fiat value at time of transaction - async version (fetches from API if not cached)
+    #[uniffi::method]
+    pub async fn historical_fiat_fmt(&self) -> Result<String, Error> {
+        let block_number = self
+            .block_number()
+            .ok_or(Error::FiatAmount("pending transaction has no historical price".into()))?;
+
+        let confirmed_at = match &self.pending_or_confirmed {
+            PendingOrConfirmed::Confirmed(c) => c.confirmation_time,
+            PendingOrConfirmed::Pending(_) => {
+                return Err(Error::FiatAmount("pending".into()));
+            }
+        };
+
+        let network = self.network;
+        let amount_btc = self.amount().as_btc();
+        let currency = currency();
+
+        let currency_price = task::spawn(async move {
+            let service = HistoricalPriceService::new();
+            service.get_price_for_block(network, block_number, confirmed_at, currency).await
+        })
+        .await
+        .map_err(|e| Error::FiatAmount(format!("task failed: {e}")))?
+        .map_err(|e| Error::FiatAmount(e.to_string()))?
+        .ok_or(Error::FiatAmount("no price for currency".into()))?;
+
+        let fiat_value = amount_btc * currency_price as f64;
+        Ok(fmt_historical_fiat(fiat_value))
+    }
 }
 
 #[uniffi::export]
@@ -463,4 +508,14 @@ fn fiat_amount_fmt(amount: f64) -> String {
     let suffix = currency.suffix();
 
     format!("≈ {symbol}{amount_fmt} {suffix}")
+}
+
+fn fmt_historical_fiat(amount: f64) -> String {
+    let amount_fmt = amount.thousands_fiat();
+
+    let currency = currency();
+    let symbol = currency.symbol();
+    let suffix = currency.suffix();
+
+    format!("{symbol}{amount_fmt} {suffix}")
 }

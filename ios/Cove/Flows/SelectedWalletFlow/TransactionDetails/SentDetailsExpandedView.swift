@@ -12,6 +12,8 @@ struct SentDetailsExpandedView: View {
     let transactionDetails: TransactionDetails
     let numberOfConfirmations: Int?
 
+    @State private var showingPriceInfo = false
+
     var metadata: WalletMetadata {
         manager.walletMetadata
     }
@@ -61,6 +63,55 @@ struct SentDetailsExpandedView: View {
                     }
                     .font(.caption).foregroundStyle(.tertiary)
                 }
+            }
+
+            // MARK: - Fiat Price Section
+
+            if transactionDetails.isConfirmed() {
+                Divider().padding(.vertical, 18)
+
+                HStack(alignment: .top) {
+                    Text("Fiat Price")
+                    Spacer()
+
+                    VStack(alignment: .trailing, spacing: 4) {
+                        // current fiat value
+                        AsyncView(
+                            cachedValue: transactionDetails.amountFiatFmtCached(),
+                            operation: transactionDetails.amountFiatFmt
+                        ) { amount in
+                            Text(amount)
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                        }
+
+                        // historical fiat value (when sent)
+                        HStack(spacing: 4) {
+                            Image(systemName: "clock")
+                                .font(.caption2)
+                            AsyncView(
+                                cachedValue: transactionDetails.historicalFiatFmtCached(),
+                                operation: transactionDetails.historicalFiatFmt
+                            ) { amount in
+                                Text(amount)
+                                    .font(.caption)
+                            }
+                            Image(systemName: "info.circle")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                                .onTapGesture { showingPriceInfo.toggle() }
+                                .popover(isPresented: $showingPriceInfo) {
+                                    Text("Price at time of transaction")
+                                        .font(.caption)
+                                        .padding(8)
+                                        .presentationCompactAdaptation(.popover)
+                                }
+                        }
+                        .foregroundStyle(.secondary)
+                    }
+                }
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
             }
 
             Divider().padding(.vertical, 18)

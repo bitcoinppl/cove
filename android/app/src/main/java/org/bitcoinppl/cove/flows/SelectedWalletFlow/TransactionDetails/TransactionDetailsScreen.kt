@@ -115,6 +115,7 @@ fun TransactionDetailsScreen(
     var feeFiatFmt by remember { mutableStateOf(transactionDetails.feeFiatFmtCached()) }
     var sentSansFeeFiatFmt by remember { mutableStateOf(transactionDetails.sentSansFeeFiatFmtCached()) }
     var totalSpentFiatFmt by remember { mutableStateOf(transactionDetails.amountFiatFmtCached()) }
+    var historicalFiatFmt by remember { mutableStateOf(transactionDetails.historicalFiatFmtCached()) }
 
     // get current color scheme (respects in-app theme toggle)
     val isDark = !MaterialTheme.colorScheme.isLight
@@ -151,6 +152,13 @@ fun TransactionDetailsScreen(
             } catch (e: Exception) {
                 android.util.Log.e("TransactionDetails", "Failed to fetch total fiat amount", e)
                 totalSpentFiatFmt // keep cached value on error
+            }
+        historicalFiatFmt =
+            try {
+                transactionDetails.historicalFiatFmt()
+            } catch (e: Exception) {
+                android.util.Log.e("TransactionDetails", "Failed to fetch historical fiat amount", e)
+                historicalFiatFmt // keep cached value on error
             }
     }
 
@@ -532,6 +540,7 @@ fun TransactionDetailsScreen(
                             feeFiatFmt = feeFiatFmt,
                             sentSansFeeFiatFmt = sentSansFeeFiatFmt,
                             totalSpentFiatFmt = totalSpentFiatFmt,
+                            historicalFiatFmt = historicalFiatFmt,
                             metadata = metadata,
                         )
                     }

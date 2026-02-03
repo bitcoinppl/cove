@@ -136,6 +136,25 @@ impl HistoricalPriceService {
         Ok(price.for_currency(currency))
     }
 
+    /// Get historical price for a block, fetching from API if not cached
+    pub async fn get_price_for_block(
+        &self,
+        network: Network,
+        block_number: u32,
+        timestamp: u64,
+        currency: FiatCurrency,
+    ) -> Result<Option<f32>> {
+        // check cache first
+        if let Ok(Some(price)) = self.db.get_price_for_block(network, block_number) {
+            return Ok(HistoricalPrice::from(price).for_currency(currency));
+        }
+
+        // fetch and cache
+        let price = self.get_and_save_price_for_timestamp(network, block_number, timestamp).await?;
+
+        Ok(price.for_currency(currency))
+    }
+
     async fn get_and_save_price_for_timestamp(
         &self,
         network: Network,
@@ -143,13 +162,14 @@ impl HistoricalPriceService {
         timestamp: u64,
     ) -> Result<HistoricalPrice, Error> {
         let historical_prices_response = FIAT_CLIENT.historical_prices(timestamp).await?;
-        let price = historical_prices_response.prices.first().ok_or_else(|| {
-            Error::EmptyHistoricalPrices { block_number, timestamp: block_number as u64 }
-        })?;
+        let price = historical_prices_response
+            .prices
+            .first()
+            .ok_or_else(|| Error::EmptyHistoricalPrices { block_number, timestamp })?;
 
         if let Err(error) = self.db.set_price_for_block(network, block_number, *price) {
             tracing::error!(
-                "unable to save (database error) historical price for block {block_number} at timestamp {block_number}: {error}"
+                "unable to save (database error) historical price for block {block_number} at timestamp {timestamp}: {error}"
             );
         }
 
