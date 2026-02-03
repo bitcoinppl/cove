@@ -65,6 +65,8 @@ import org.bitcoinppl.cove_core.Transaction
 import org.bitcoinppl.cove_core.UnsignedTransaction
 import org.bitcoinppl.cove_core.types.TransactionDirection
 
+private const val SCROLL_THRESHOLD_INDEX = 5
+
 enum class TransactionType { SENT, RECEIVED }
 
 /**
@@ -414,7 +416,7 @@ internal fun ConfirmedTransactionWidget(
                                 val details = manager.transactionDetails(transaction.v1.id())
                                 val walletId = manager.walletMetadata?.id
                                 if (walletId != null) {
-                                    if (index > 5) {
+                                    if (index > SCROLL_THRESHOLD_INDEX) {
                                         manager.pendingScrollTransactionId = transaction.v1.id().toString()
                                     }
                                     app.pushRoute(Route.TransactionDetails(walletId, details))
@@ -519,7 +521,7 @@ internal fun UnconfirmedTransactionWidget(
                                 val details = manager.transactionDetails(transaction.v1.id())
                                 val walletId = manager.walletMetadata?.id
                                 if (walletId != null) {
-                                    if (index > 5) {
+                                    if (index > SCROLL_THRESHOLD_INDEX) {
                                         manager.pendingScrollTransactionId = transaction.v1.id().toString()
                                     }
                                     app.pushRoute(Route.TransactionDetails(walletId, details))
@@ -645,7 +647,7 @@ internal fun UnsignedTransactionWidget(
                         onClick = {
                             val walletId = manager?.walletMetadata?.id
                             if (app != null && walletId != null) {
-                                if (index > 5) {
+                                if (index > SCROLL_THRESHOLD_INDEX) {
                                     manager?.pendingScrollTransactionId = txn.id().toString()
                                 }
                                 val route = RouteFactory().sendHardwareExport(walletId, txn.details())

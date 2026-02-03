@@ -8,6 +8,8 @@
 import MijickPopups
 import SwiftUI
 
+private let scrollThresholdIndex = 5
+
 struct TransactionsCardView: View {
     @Environment(WalletManager.self) var manager
 
@@ -154,7 +156,7 @@ struct ConfirmedTransactionView: View {
 
     private func goToTransactionDetails() {
         let txId = txn.id()
-        if index > 5 { manager.scrolledTransactionId = txId.description }
+        if index > scrollThresholdIndex { manager.scrolledTransactionId = txId.description }
 
         if let details = manager.transactionDetails[txId] {
             return navigate(Route.transactionDetails(id: metadata.id, details: details))
@@ -267,7 +269,7 @@ struct UnconfirmedTransactionView: View {
         }
         .contentShape(Rectangle())
         .onTapGesture {
-            if index > 5 { manager.scrolledTransactionId = txn.id().description }
+            if index > scrollThresholdIndex { manager.scrolledTransactionId = txn.id().description }
 
             Task {
                 do {
@@ -354,7 +356,7 @@ struct UnsignedTransactionView: View {
         }
         .contentShape(Rectangle())
         .onTapGesture {
-            if index > 5 { manager.scrolledTransactionId = txn.id().description }
+            if index > scrollThresholdIndex { manager.scrolledTransactionId = txn.id().description }
 
             let hardwareExportRoute =
                 RouteFactory().sendHardwareExport(
