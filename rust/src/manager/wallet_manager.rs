@@ -5,8 +5,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-use cove_tokio_ext::DebouncedTask;
-
 use act_zero::{Addr, call, send};
 use actor::WalletActor;
 use flume::Receiver;
@@ -159,7 +157,6 @@ pub struct RustWalletManager {
     pub reconcile_receiver: Arc<Receiver<SingleOrMany>>,
 
     label_manager: Arc<LabelManager>,
-    unsigned_tx_notifier: DebouncedTask<()>,
 
     #[allow(dead_code)]
     scanner: Option<Addr<WalletScanner>>,
@@ -289,10 +286,6 @@ impl RustWalletManager {
             reconciler,
             reconcile_receiver: Arc::new(receiver),
             label_manager,
-            unsigned_tx_notifier: DebouncedTask::new(
-                "unsigned_tx_notifier",
-                Duration::from_millis(100),
-            ),
             scanner,
         })
     }
@@ -356,10 +349,6 @@ impl RustWalletManager {
             reconciler: MessageSender::new(sender),
             reconcile_receiver: Arc::new(receiver),
             label_manager,
-            unsigned_tx_notifier: DebouncedTask::new(
-                "unsigned_tx_notifier",
-                Duration::from_millis(100),
-            ),
             scanner,
         })
     }
@@ -387,10 +376,6 @@ impl RustWalletManager {
             reconciler: MessageSender::new(sender),
             reconcile_receiver: Arc::new(receiver),
             label_manager,
-            unsigned_tx_notifier: DebouncedTask::new(
-                "unsigned_tx_notifier",
-                Duration::from_millis(100),
-            ),
             scanner: None,
         })
     }
@@ -581,14 +566,7 @@ impl RustWalletManager {
             .into(),
         )?;
 
-        let reconciler = self.reconciler.clone();
-        if tokio::runtime::Handle::try_current().is_ok() {
-            self.unsigned_tx_notifier.replace(async move {
-                reconciler.send(Message::UnsignedTransactionsChanged);
-            });
-        } else {
-            reconciler.send(Message::UnsignedTransactionsChanged);
-        }
+        self.reconciler.send(Message::UnsignedTransactionsChanged);
 
         Ok(())
     }
@@ -636,14 +614,7 @@ impl RustWalletManager {
         let txn = db.unsigned_transactions().delete_tx(tx_id.as_ref())?;
         send!(self.actor.cancel_txn(txn.confirm_details.psbt.0.unsigned_tx));
 
-        let reconciler = self.reconciler.clone();
-        if tokio::runtime::Handle::try_current().is_ok() {
-            self.unsigned_tx_notifier.replace(async move {
-                reconciler.send(Message::UnsignedTransactionsChanged);
-            });
-        } else {
-            reconciler.send(Message::UnsignedTransactionsChanged);
-        }
+        self.reconciler.send(Message::UnsignedTransactionsChanged);
 
         Ok(())
     }
@@ -1306,10 +1277,6 @@ impl RustWalletManager {
             reconciler: MessageSender::new(sender),
             reconcile_receiver: Arc::new(receiver),
             label_manager,
-            unsigned_tx_notifier: DebouncedTask::new(
-                "unsigned_tx_notifier",
-                Duration::from_millis(100),
-            ),
             scanner: None,
         }
     }
