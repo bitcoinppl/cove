@@ -17,7 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -52,10 +52,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
-import org.bitcoinppl.cove.AppAlertState
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
-import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.isLight
@@ -66,6 +64,8 @@ import org.bitcoinppl.cove_core.RouteFactory
 import org.bitcoinppl.cove_core.Transaction
 import org.bitcoinppl.cove_core.UnsignedTransaction
 import org.bitcoinppl.cove_core.types.TransactionDirection
+
+private const val SCROLL_THRESHOLD_INDEX = 5
 
 enum class TransactionType { SENT, RECEIVED }
 
@@ -102,14 +102,14 @@ fun TransactionsCardView(
     }
 
     // scroll to saved transaction when returning from details
-    LaunchedEffect(manager?.scrolledTransactionId, hasTransactions) {
+    LaunchedEffect(manager?.scrolledTransactionId, hasTransactions, transactions, unsignedTransactions) {
         val targetId = manager?.scrolledTransactionId ?: return@LaunchedEffect
         if (!hasTransactions) return@LaunchedEffect
 
         // find the index of the transaction with the matching ID
         val unsignedIndex = unsignedTransactions.indexOfFirst { it.id().toString() == targetId }
         if (unsignedIndex >= 0) {
-            listState.animateScrollToItem(unsignedIndex)
+            listState.scrollToItem(unsignedIndex)
             manager.scrolledTransactionId = null
             return@LaunchedEffect
         }
@@ -123,7 +123,7 @@ fun TransactionsCardView(
             }
         if (txIndex >= 0) {
             // offset by the number of unsigned transactions
-            listState.animateScrollToItem(unsignedTransactions.size + txIndex)
+            listState.scrollToItem(unsignedTransactions.size + txIndex)
             manager.scrolledTransactionId = null
         }
     }
@@ -212,12 +212,13 @@ fun TransactionsCardView(
                 modifier = Modifier.weight(1f),
             ) {
                 // render unsigned transactions first (pending signature)
-                items(
+                itemsIndexed(
                     items = unsignedTransactions,
-                    key = { it.id().toString() },
-                ) { unsignedTxn ->
+                    key = { _, txn -> txn.id().toString() },
+                ) { index, unsignedTxn ->
                     UnsignedTransactionWidget(
                         txn = unsignedTxn,
+                        index = index,
                         primaryText = primaryText,
                         secondaryText = secondaryText,
                         app = app,
@@ -228,17 +229,18 @@ fun TransactionsCardView(
                     HorizontalDivider(color = dividerColor, thickness = 0.5.dp)
                 }
 
-                items(
+                itemsIndexed(
                     items = transactions,
-                    key = {
-                        when (it) {
-                            is Transaction.Confirmed -> it.v1.id().toString()
-                            is Transaction.Unconfirmed -> it.v1.id().toString()
+                    key = { _, txn ->
+                        when (txn) {
+                            is Transaction.Confirmed -> txn.v1.id().toString()
+                            is Transaction.Unconfirmed -> txn.v1.id().toString()
                         }
                     },
-                ) { txn ->
+                ) { index, txn ->
                     TransactionItem(
                         txn = txn,
+                        index = unsignedTransactions.size + index,
                         manager = manager,
                         app = app,
                         fiatOrBtc = fiatOrBtc,
@@ -263,6 +265,7 @@ fun TransactionsCardView(
 @Composable
 internal fun TransactionItem(
     txn: Transaction,
+    index: Int,
     manager: WalletManager?,
     app: AppManager?,
     fiatOrBtc: FiatOrBtc,
@@ -315,6 +318,7 @@ internal fun TransactionItem(
                 date = txn.v1.confirmedAtFmt(),
                 amount = formattedAmount,
                 blockHeight = txn.v1.blockHeightFmt(),
+                index = index,
                 primaryText = primaryText,
                 secondaryText = secondaryText,
                 transaction = txn,
@@ -365,6 +369,7 @@ internal fun TransactionItem(
                 type = txType,
                 label = txLabel,
                 amount = formattedAmount,
+                index = index,
                 primaryText = primaryText,
                 transaction = txn,
                 app = app,
@@ -382,6 +387,7 @@ internal fun ConfirmedTransactionWidget(
     date: String,
     amount: String,
     blockHeight: String,
+    index: Int,
     primaryText: Color,
     secondaryText: Color,
     transaction: Transaction.Confirmed,
@@ -405,18 +411,17 @@ internal fun ConfirmedTransactionWidget(
                 .padding(vertical = 6.dp)
                 .clickable {
                     if (app != null && manager != null) {
-                        manager.scrolledTransactionId = transaction.v1.id().toString()
                         scope.launch {
                             try {
-                                app.alertState = TaggedItem(AppAlertState.Loading)
                                 val details = manager.transactionDetails(transaction.v1.id())
                                 val walletId = manager.walletMetadata?.id
-                                app.alertState = null
                                 if (walletId != null) {
+                                    if (index > SCROLL_THRESHOLD_INDEX) {
+                                        manager.pendingScrollTransactionId = transaction.v1.id().toString()
+                                    }
                                     app.pushRoute(Route.TransactionDetails(walletId, details))
                                 }
                             } catch (e: Exception) {
-                                app.alertState = null
                                 android.util.Log.e("ConfirmedTxWidget", "Failed to load transaction details", e)
                             }
                         }
@@ -489,6 +494,7 @@ internal fun UnconfirmedTransactionWidget(
     type: TransactionType,
     label: String,
     amount: String,
+    index: Int,
     primaryText: Color,
     transaction: Transaction.Unconfirmed,
     app: AppManager?,
@@ -510,18 +516,17 @@ internal fun UnconfirmedTransactionWidget(
                 .padding(vertical = 6.dp)
                 .clickable {
                     if (app != null && manager != null) {
-                        manager.scrolledTransactionId = transaction.v1.id().toString()
                         scope.launch {
                             try {
-                                app.alertState = TaggedItem(AppAlertState.Loading)
                                 val details = manager.transactionDetails(transaction.v1.id())
                                 val walletId = manager.walletMetadata?.id
-                                app.alertState = null
                                 if (walletId != null) {
+                                    if (index > SCROLL_THRESHOLD_INDEX) {
+                                        manager.pendingScrollTransactionId = transaction.v1.id().toString()
+                                    }
                                     app.pushRoute(Route.TransactionDetails(walletId, details))
                                 }
                             } catch (e: Exception) {
-                                app.alertState = null
                                 android.util.Log.e("UnconfirmedTxWidget", "Failed to load transaction details", e)
                             }
                         }
@@ -582,6 +587,7 @@ internal fun UnconfirmedTransactionWidget(
 @Composable
 internal fun UnsignedTransactionWidget(
     txn: UnsignedTransaction,
+    index: Int,
     primaryText: Color,
     secondaryText: Color,
     app: AppManager?,
@@ -639,9 +645,11 @@ internal fun UnsignedTransactionWidget(
                     .fillMaxWidth()
                     .combinedClickable(
                         onClick = {
-                            manager?.scrolledTransactionId = txn.id().toString()
                             val walletId = manager?.walletMetadata?.id
                             if (app != null && walletId != null) {
+                                if (index > SCROLL_THRESHOLD_INDEX) {
+                                    manager?.pendingScrollTransactionId = txn.id().toString()
+                                }
                                 val route = RouteFactory().sendHardwareExport(walletId, txn.details())
                                 app.pushRoute(route)
                             }
@@ -793,13 +801,14 @@ fun LazyListScope.transactionItems(
     // render transactions
     if (hasTransactions) {
         // unsigned transactions first
-        items(
+        itemsIndexed(
             items = unsignedTransactions,
-            key = { "unsigned-${it.id()}" },
-        ) { unsignedTxn ->
+            key = { _, txn -> "unsigned-${txn.id()}" },
+        ) { index, unsignedTxn ->
             Column(modifier = Modifier.padding(horizontal = 20.dp)) {
                 UnsignedTransactionWidget(
                     txn = unsignedTxn,
+                    index = index,
                     primaryText = primaryText,
                     secondaryText = secondaryText,
                     app = app,
@@ -812,18 +821,19 @@ fun LazyListScope.transactionItems(
         }
 
         // regular transactions
-        items(
+        itemsIndexed(
             items = transactions,
-            key = {
-                when (it) {
-                    is Transaction.Confirmed -> "confirmed-${it.v1.id()}"
-                    is Transaction.Unconfirmed -> "unconfirmed-${it.v1.id()}"
+            key = { _, txn ->
+                when (txn) {
+                    is Transaction.Confirmed -> "confirmed-${txn.v1.id()}"
+                    is Transaction.Unconfirmed -> "unconfirmed-${txn.v1.id()}"
                 }
             },
-        ) { txn ->
+        ) { index, txn ->
             Column(modifier = Modifier.padding(horizontal = 20.dp)) {
                 TransactionItem(
                     txn = txn,
+                    index = unsignedTransactions.size + index,
                     manager = manager,
                     app = app,
                     fiatOrBtc = fiatOrBtc,

@@ -8,6 +8,8 @@
 import MijickPopups
 import SwiftUI
 
+private let scrollThresholdIndex = 5
+
 struct TransactionsCardView: View {
     @Environment(WalletManager.self) var manager
 
@@ -37,9 +39,9 @@ struct TransactionsCardView: View {
                 }
 
                 LazyVStack(alignment: .leading) {
-                    ForEach(unsignedTransactions) { txn in
+                    ForEach(Array(unsignedTransactions.enumerated()), id: \.element.id) { index, txn in
                         VStack(alignment: .leading) {
-                            UnsignedTransactionView(txn: txn, metadata: metadata)
+                            UnsignedTransactionView(txn: txn, metadata: metadata, index: index)
                                 .contentShape(
                                     .contextMenuPreview,
                                     RoundedRectangle(cornerRadius: 8)
@@ -59,8 +61,8 @@ struct TransactionsCardView: View {
                         .id(txn.id().description)
                     }
 
-                    ForEach(transactions) { txn in
-                        TransactionRow(txn: txn, metadata: metadata)
+                    ForEach(Array(transactions.enumerated()), id: \.element.id) { index, txn in
+                        TransactionRow(txn: txn, metadata: metadata, index: unsignedTransactions.count + index)
                             .id(txn.id.description)
                     }
                 }
@@ -101,15 +103,16 @@ struct TransactionRow: View {
     @Environment(WalletManager.self) var manager
     var txn: CoveCore.Transaction
     var metadata: WalletMetadata
+    var index: Int
 
     var body: some View {
         VStack(alignment: .leading) {
             Group {
                 switch txn {
                 case let .confirmed(txn):
-                    ConfirmedTransactionView(txn: txn, metadata: metadata)
+                    ConfirmedTransactionView(txn: txn, metadata: metadata, index: index)
                 case let .unconfirmed(txn):
-                    UnconfirmedTransactionView(txn: txn, metadata: metadata)
+                    UnconfirmedTransactionView(txn: txn, metadata: metadata, index: index)
                 }
             }
             .padding(.vertical, 6)
@@ -125,6 +128,7 @@ struct ConfirmedTransactionView: View {
 
     let txn: ConfirmedTransaction
     let metadata: WalletMetadata
+    let index: Int
 
     // private
     @State private var transactionDetails: TransactionDetails? = nil
@@ -152,18 +156,17 @@ struct ConfirmedTransactionView: View {
 
     private func goToTransactionDetails() {
         let txId = txn.id()
-        manager.scrolledTransactionId = txId.description
 
         if let details = manager.transactionDetails[txId] {
+            if index > scrollThresholdIndex { manager.scrolledTransactionId = txId.description }
             return navigate(Route.transactionDetails(id: metadata.id, details: details))
         }
 
         Task {
-            await MiddlePopup(state: .loading).present()
             do {
                 let details = try await manager.transactionDetails(for: txId)
                 await MainActor.run {
-                    Task { await dismissAllPopups() }
+                    if index > scrollThresholdIndex { manager.scrolledTransactionId = txId.description }
                     navigate(Route.transactionDetails(id: metadata.id, details: details))
                 }
             } catch {
@@ -210,6 +213,7 @@ struct ConfirmedTransactionView: View {
                     .foregroundColor(.secondary)
             }
         }
+        .contentShape(Rectangle())
         .onTapGesture {
             goToTransactionDetails()
         }
@@ -222,6 +226,7 @@ struct UnconfirmedTransactionView: View {
 
     let txn: UnconfirmedTransaction
     let metadata: WalletMetadata
+    let index: Int
 
     func privateShow(_ text: String, placeholder: String = "••••••") -> String {
         if !metadata.sensitiveVisible {
@@ -262,15 +267,14 @@ struct UnconfirmedTransactionView: View {
                 Text(amount)
                     .foregroundStyle(amountColor(txn.sentAndReceived().direction()).opacity(0.65))
             }
-        }.onTapGesture {
-            manager.scrolledTransactionId = txn.id().description
-
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
             Task {
-                await MiddlePopup(state: .loading).present()
                 do {
                     let details = try await manager.rust.transactionDetails(txId: txn.id())
                     await MainActor.run {
-                        Task { await dismissAllPopups() }
+                        if index > scrollThresholdIndex { manager.scrolledTransactionId = txn.id().description }
                         navigate(Route.transactionDetails(id: metadata.id, details: details))
                     }
                 } catch {
@@ -291,6 +295,7 @@ struct UnsignedTransactionView: View {
     // args
     let txn: UnsignedTransaction
     let metadata: WalletMetadata
+    let index: Int
 
     // private
     @State private var fiatAmount: Double? = nil
@@ -349,8 +354,9 @@ struct UnsignedTransactionView: View {
             fiatAmount =
                 try? await manager.rust.amountInFiat(amount: txn.spendingAmount())
         }
+        .contentShape(Rectangle())
         .onTapGesture {
-            manager.scrolledTransactionId = txn.id().description
+            if index > scrollThresholdIndex { manager.scrolledTransactionId = txn.id().description }
 
             let hardwareExportRoute =
                 RouteFactory().sendHardwareExport(

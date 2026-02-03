@@ -763,23 +763,26 @@ impl RustWalletManager {
     #[uniffi::method]
     pub async fn transaction_details(&self, tx_id: Arc<TxId>) -> Result<TransactionDetails, Error> {
         let tx_id = Arc::unwrap_or_clone(tx_id);
-
         let actor = self.actor.clone();
-        let details = task::spawn(async move {
-            call!(actor.transaction_details(tx_id))
-                .await
-                .map_err_str(Error::TransactionDetailsError)
+
+        crate::loading_popup::with_loading_popup(async move {
+            let details = task::spawn(async move {
+                call!(actor.transaction_details(tx_id))
+                    .await
+                    .map_err_str(Error::TransactionDetailsError)
+            })
+            .await
+            .map_err(|e| Error::TransactionDetailsError(e.to_string()))??;
+
+            // for unconfirmed transactions, trigger a background sync to update status
+            // this uses SyncRequest with just this txid so it's fast
+            if !details.is_confirmed() {
+                send!(self.actor.perform_scan_for_single_tx_id(details.tx_id().0));
+            }
+
+            Ok(details)
         })
         .await
-        .unwrap()?;
-
-        // for unconfirmed transactions, trigger a background sync to update status
-        // this uses SyncRequest with just this txid so it's fast
-        if !details.is_confirmed() {
-            send!(self.actor.perform_scan_for_single_tx_id(details.tx_id().0));
-        }
-
-        Ok(details)
     }
 
     #[uniffi::method]
@@ -1273,8 +1276,8 @@ impl RustWalletManager {
             metadata: Arc::new(RwLock::new(metadata)),
             reconciler: MessageSender::new(sender),
             reconcile_receiver: Arc::new(receiver),
-            scanner: None,
             label_manager,
+            scanner: None,
         }
     }
 }
