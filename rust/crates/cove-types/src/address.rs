@@ -115,7 +115,7 @@ impl Address {
         let txid = tx.tx_node.txid;
         let network = wallet.network();
         let direction: TransactionDirection = wallet.sent_and_received(&tx.tx_node.tx).into();
-        let tx_details = wallet.get_tx(txid).expect("transaction").tx_node.tx;
+        let tx_details = wallet.get_tx(txid).ok_or(AddressError::NoOutputs)?.tx_node.tx;
 
         let output = match direction {
             TransactionDirection::Incoming => tx_details
@@ -125,7 +125,16 @@ impl Address {
                 .ok_or(AddressError::NoOutputs)?,
 
             TransactionDirection::Outgoing => {
-                tx_details.output.first().ok_or(AddressError::NoOutputs)?
+                // find the first output that can be converted to a valid address
+                // skipping OP_RETURN and other non-standard scripts
+                tx_details
+                    .output
+                    .iter()
+                    .find(|output| {
+                        BdkAddress::from_script(&output.script_pubkey, Params::from(network))
+                            .is_ok()
+                    })
+                    .ok_or(AddressError::NoOutputs)?
             }
         };
 

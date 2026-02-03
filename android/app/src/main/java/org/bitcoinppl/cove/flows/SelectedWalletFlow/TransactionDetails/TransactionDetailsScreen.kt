@@ -69,6 +69,7 @@ import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.components.ConfirmationIndicatorView
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.ui.theme.ResetStatusBarToTheme
 import org.bitcoinppl.cove.ui.theme.coveColors
 import org.bitcoinppl.cove.ui.theme.isLight
 import org.bitcoinppl.cove.utils.toColor
@@ -99,6 +100,10 @@ fun TransactionDetailsScreen(
     manager: WalletManager,
     details: TransactionDetails,
 ) {
+    // reset status bar icons to match theme (needed after navigating from SelectedWalletScreen
+    // which forces white icons for its dark header)
+    ResetStatusBarToTheme()
+
     val context = LocalContext.current
     val metadata = manager.walletMetadata ?: return
     val scope = rememberCoroutineScope()

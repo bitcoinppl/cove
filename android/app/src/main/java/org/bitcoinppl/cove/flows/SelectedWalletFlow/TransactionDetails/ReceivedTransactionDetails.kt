@@ -104,7 +104,7 @@ internal fun ReceivedTransactionDetails(
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    transactionDetails.addressSpacedOut(),
+                    transactionDetails.addressSpacedOut() ?: "",
                     color = fg,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -118,7 +118,7 @@ internal fun ReceivedTransactionDetails(
             OutlinedButton(
                 onClick = {
                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    val clip = ClipData.newPlainText("address", transactionDetails.address().string())
+                    val clip = ClipData.newPlainText("address", transactionDetails.address()?.string() ?: "")
                     clipboard.setPrimaryClip(clip)
                     isCopied = true
                 },

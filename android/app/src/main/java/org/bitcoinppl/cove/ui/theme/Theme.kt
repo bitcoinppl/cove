@@ -37,6 +37,27 @@ fun ForceLightStatusBarIcons() {
 }
 
 /**
+ * Resets status bar icons to match the current theme.
+ * Call this on screens with theme-appropriate backgrounds when navigating
+ * from screens that use ForceLightStatusBarIcons().
+ */
+@Composable
+fun ResetStatusBarToTheme() {
+    val view = LocalView.current
+    val isDark = !MaterialTheme.colorScheme.isLight
+
+    SideEffect {
+        val activity = view.context.findActivity() ?: return@SideEffect
+        val window = activity.window
+        val insetsController = WindowCompat.getInsetsController(window, view)
+
+        // light mode = dark icons (isAppearanceLightStatusBars = true)
+        // dark mode = light icons (isAppearanceLightStatusBars = false)
+        insetsController.isAppearanceLightStatusBars = !isDark
+    }
+}
+
+/**
  * Extension to check if the current ColorScheme is light mode.
  * Uses surface luminance to reliably detect theme (works with dynamic colors).
  */

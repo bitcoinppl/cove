@@ -66,6 +66,7 @@ struct QrExportView: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .lineLimit(nil)
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 1)
                 .padding(.horizontal, 40)
 
