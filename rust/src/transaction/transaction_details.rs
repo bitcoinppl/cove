@@ -416,7 +416,7 @@ impl TransactionDetails {
             service.get_price_for_block(network, block_number, confirmed_at, currency).await
         })
         .await
-        .unwrap()
+        .map_err(|e| Error::FiatAmount(format!("task failed: {e}")))?
         .map_err(|e| Error::FiatAmount(e.to_string()))?
         .ok_or(Error::FiatAmount("no price for currency".into()))?;
 
