@@ -19,7 +19,7 @@ extension String {
     }
 
     init(_ address: Address) {
-        self = address.string()
+        self = address.unformatted()
     }
 
     init(_ walletType: WalletType) {

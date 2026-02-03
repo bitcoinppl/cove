@@ -74,7 +74,7 @@ struct ReceivedDetailsExpandedView: View {
 
                 if let address = transactionDetails.address() {
                     Button(action: {
-                        UIPasteboard.general.string = address.string()
+                        UIPasteboard.general.string = address.unformatted()
                         withAnimation {
                             isCopied = true
                         }

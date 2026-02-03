@@ -632,8 +632,6 @@ public protocol AddressProtocol: AnyObject, Sendable {
     
     func spacedOut()  -> String
     
-    func string()  -> String
-    
     func unformatted()  -> String
     
 }
@@ -747,14 +745,6 @@ open func hashToUint() -> UInt64  {
 open func spacedOut() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_cove_types_fn_method_address_spaced_out(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
-open func string() -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_cove_types_fn_method_address_string(
             self.uniffiCloneHandle(),$0
     )
 })
@@ -6185,9 +6175,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_address_spaced_out() != 7307) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_types_checksum_method_address_string() != 24375) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_address_unformatted() != 36743) {

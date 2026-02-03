@@ -100,7 +100,7 @@ struct QrCodeAddressView: View {
                 case let .complete(data, haptic):
                     haptic.trigger()
                     if case let .address(addr) = data {
-                        scannedCode = TaggedString(addr.address().string())
+                        scannedCode = TaggedString(addr.address().unformatted())
                         scanComplete = true
                     } else {
                         // not an address - show error and allow retry

@@ -308,7 +308,7 @@ private struct UtxoRow: View {
         .cornerRadius(10)
         .contextMenu {
             Button(action: {
-                UIPasteboard.general.string = utxo.address.string()
+                UIPasteboard.general.string = utxo.address.unformatted()
             }) {
                 Text("Copy Address")
             }

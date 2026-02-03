@@ -314,10 +314,6 @@ impl Address {
         address_string_spaced_out(self.to_string())
     }
 
-    fn string(&self) -> String {
-        self.to_string()
-    }
-
     #[uniffi::method]
     fn unformatted(&self) -> String {
         self.to_string()

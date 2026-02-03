@@ -152,7 +152,7 @@ class SendFlowManager(
 
     fun updateAddress(address: Address) {
         if (isClosed.get()) return
-        _enteringAddress = address.string()
+        _enteringAddress = address.unformatted()
         this.address = address
         dispatch(SendFlowManagerAction.NotifyAddressChanged(address))
     }

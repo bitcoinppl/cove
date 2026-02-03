@@ -120,7 +120,7 @@ internal fun ReceivedTransactionDetails(
                 OutlinedButton(
                     onClick = {
                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        val clip = ClipData.newPlainText("address", address.string())
+                        val clip = ClipData.newPlainText("address", address.unformatted())
                         clipboard.setPrimaryClip(clip)
                         isCopied = true
                     },

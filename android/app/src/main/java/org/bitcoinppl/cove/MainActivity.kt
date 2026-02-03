@@ -440,7 +440,7 @@ private fun GlobalAlertDialog(
                 text = { Text(state.message()) },
                 confirmButton = {
                     TextButton(onClick = {
-                        copyToClipboard(state.address.string())
+                        copyToClipboard(state.address.unformatted())
                         onDismiss()
                     }) { Text("Copy Address") }
                 },
@@ -469,7 +469,7 @@ private fun GlobalAlertDialog(
                             }) { Text("Send To Address") }
                         }
                         TextButton(onClick = {
-                            copyToClipboard(state.address.string())
+                            copyToClipboard(state.address.unformatted())
                             onDismiss()
                         }) { Text("Copy Address") }
                         TextButton(onClick = onDismiss) { Text("Cancel") }
@@ -485,7 +485,7 @@ private fun GlobalAlertDialog(
                 text = { Text(state.message()) },
                 confirmButton = {
                     TextButton(onClick = {
-                        copyToClipboard(state.address.string())
+                        copyToClipboard(state.address.unformatted())
                         onDismiss()
                     }) { Text("Copy Address") }
                 },

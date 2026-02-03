@@ -52,7 +52,7 @@ struct UtxoListScreen: View {
                         .listRowBackground(Color.secondarySystemGroupedBackground)
                         .contextMenu {
                             Button(action: {
-                                UIPasteboard.general.string = utxo.address.string()
+                                UIPasteboard.general.string = utxo.address.unformatted()
                             }) {
                                 Text("Copy Address")
                             }

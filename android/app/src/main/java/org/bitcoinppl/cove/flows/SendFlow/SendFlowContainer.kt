@@ -289,7 +289,7 @@ private fun SendFlowRouteToScreen(
                                     when (multiFormat) {
                                         is MultiFormat.Address -> {
                                             val addressWithNetwork = multiFormat.v1
-                                            sendFlowManager.enteringAddress = addressWithNetwork.address().string()
+                                            sendFlowManager.enteringAddress = addressWithNetwork.address().unformatted()
                                             // if QR contains an amount (BIP21), set it
                                             addressWithNetwork.amount()?.let { amount ->
                                                 sendFlowManager.updateAmount(amount)

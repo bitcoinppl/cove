@@ -678,8 +678,6 @@ external fun uniffi_cove_types_checksum_method_address_hashtouint(
 ): Short
 external fun uniffi_cove_types_checksum_method_address_spaced_out(
 ): Short
-external fun uniffi_cove_types_checksum_method_address_string(
-): Short
 external fun uniffi_cove_types_checksum_method_address_unformatted(
 ): Short
 external fun uniffi_cove_types_checksum_method_addressinfo_address(
@@ -927,8 +925,6 @@ external fun uniffi_cove_types_fn_constructor_address_random(uniffi_out_err: Uni
 external fun uniffi_cove_types_fn_method_address_hashtouint(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
 external fun uniffi_cove_types_fn_method_address_spaced_out(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_method_address_string(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_types_fn_method_address_unformatted(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
@@ -1468,9 +1464,6 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_method_address_spaced_out() != 7307.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_types_checksum_method_address_string() != 24375.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_method_address_unformatted() != 36743.toShort()) {
@@ -2334,8 +2327,6 @@ public interface AddressInterface {
     
     fun `spacedOut`(): kotlin.String
     
-    fun `string`(): kotlin.String
-    
     fun `unformatted`(): kotlin.String
     
     companion object
@@ -2455,19 +2446,6 @@ open class Address: Disposable, AutoCloseable, AddressInterface
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_types_fn_method_address_spaced_out(
-        it,
-        _status)
-}
-    }
-    )
-    }
-    
-
-    override fun `string`(): kotlin.String {
-            return FfiConverterString.lift(
-    callWithHandle {
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_types_fn_method_address_string(
         it,
         _status)
 }
