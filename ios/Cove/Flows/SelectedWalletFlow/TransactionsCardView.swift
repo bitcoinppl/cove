@@ -156,9 +156,9 @@ struct ConfirmedTransactionView: View {
 
     private func goToTransactionDetails() {
         let txId = txn.id()
-        if index > scrollThresholdIndex { manager.scrolledTransactionId = txId.description }
 
         if let details = manager.transactionDetails[txId] {
+            if index > scrollThresholdIndex { manager.scrolledTransactionId = txId.description }
             return navigate(Route.transactionDetails(id: metadata.id, details: details))
         }
 
@@ -166,6 +166,7 @@ struct ConfirmedTransactionView: View {
             do {
                 let details = try await manager.rust.transactionDetails(txId: txId)
                 await MainActor.run {
+                    if index > scrollThresholdIndex { manager.scrolledTransactionId = txId.description }
                     navigate(Route.transactionDetails(id: metadata.id, details: details))
                 }
             } catch {
@@ -269,12 +270,11 @@ struct UnconfirmedTransactionView: View {
         }
         .contentShape(Rectangle())
         .onTapGesture {
-            if index > scrollThresholdIndex { manager.scrolledTransactionId = txn.id().description }
-
             Task {
                 do {
                     let details = try await manager.rust.transactionDetails(txId: txn.id())
                     await MainActor.run {
+                        if index > scrollThresholdIndex { manager.scrolledTransactionId = txn.id().description }
                         navigate(Route.transactionDetails(id: metadata.id, details: details))
                     }
                 } catch {
