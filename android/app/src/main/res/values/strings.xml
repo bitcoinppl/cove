@@ -177,4 +177,5 @@
     <string name="menu_download_backup">Download Backup</string>
     <string name="menu_manage_utxos">Manage UTXOs</string>
     <string name="menu_wallet_settings">Wallet Settings</string>
+    <string name="address_unavailable">Address unavailable</string>
 </resources>

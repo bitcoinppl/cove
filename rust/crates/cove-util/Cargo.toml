@@ -12,6 +12,7 @@ hex = { workspace = true }
 uniffi = { workspace = true, features = ["tokio"] }
 
 thiserror = { workspace = true }
+tracing = { workspace = true }
 numfmt = { workspace = true }
 
 memchr = { workspace = true }

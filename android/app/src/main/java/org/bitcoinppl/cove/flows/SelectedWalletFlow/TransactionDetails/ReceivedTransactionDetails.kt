@@ -92,6 +92,7 @@ internal fun ReceivedTransactionDetails(
         }
 
         // "Received At" section with address and copy button
+        val address = transactionDetails.address()
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.Top,
@@ -104,7 +105,7 @@ internal fun ReceivedTransactionDetails(
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    transactionDetails.addressSpacedOut() ?: "",
+                    transactionDetails.addressSpacedOut() ?: stringResource(R.string.address_unavailable),
                     color = fg,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -112,28 +113,30 @@ internal fun ReceivedTransactionDetails(
                 )
             }
 
-            Spacer(Modifier.width(12.dp))
+            // only show copy button when address is available
+            if (address != null) {
+                Spacer(Modifier.width(12.dp))
 
-            // copy button
-            OutlinedButton(
-                onClick = {
-                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    val clip = ClipData.newPlainText("address", transactionDetails.address()?.string() ?: "")
-                    clipboard.setPrimaryClip(clip)
-                    isCopied = true
-                },
-                shape = RoundedCornerShape(20.dp),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                colors =
-                    ButtonDefaults.outlinedButtonColors(
-                        contentColor = fg,
-                    ),
-                modifier = Modifier.padding(top = 20.dp),
-            ) {
-                Text(
-                    text = stringResource(if (isCopied) R.string.btn_copied else R.string.btn_copy),
-                    fontSize = 12.sp,
-                )
+                OutlinedButton(
+                    onClick = {
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        val clip = ClipData.newPlainText("address", address.string())
+                        clipboard.setPrimaryClip(clip)
+                        isCopied = true
+                    },
+                    shape = RoundedCornerShape(20.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                    colors =
+                        ButtonDefaults.outlinedButtonColors(
+                            contentColor = fg,
+                        ),
+                    modifier = Modifier.padding(top = 20.dp),
+                ) {
+                    Text(
+                        text = stringResource(if (isCopied) R.string.btn_copied else R.string.btn_copy),
+                        fontSize = 12.sp,
+                    )
+                }
             }
         }
 

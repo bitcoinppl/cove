@@ -1175,6 +1175,7 @@ dependencies = [
  "numfmt",
  "rand 0.9.2",
  "thiserror 2.0.18",
+ "tracing",
  "uniffi 0.31.0",
 ]
 
