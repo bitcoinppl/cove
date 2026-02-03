@@ -501,6 +501,10 @@ public protocol CryptoHdkeyProtocol: AnyObject, Sendable {
     
     /**
      * Encode as CBOR for UR
+     *
+     * # Errors
+     *
+     * Returns an error if CBOR encoding fails
      */
     func encode() throws  -> Data
     
@@ -561,6 +565,10 @@ open class CryptoHdkey: CryptoHdkeyProtocol, @unchecked Sendable {
     
     /**
      * Decode from CBOR
+     *
+     * # Errors
+     *
+     * Returns an error if CBOR decoding fails or the structure is invalid
      */
 public static func decode(cbor: Data)throws  -> CryptoHdkey  {
     return try  FfiConverterTypeCryptoHdkey_lift(try rustCallWithError(FfiConverterTypeUrError_lift) {
@@ -574,6 +582,10 @@ public static func decode(cbor: Data)throws  -> CryptoHdkey  {
     
     /**
      * Encode as CBOR for UR
+     *
+     * # Errors
+     *
+     * Returns an error if CBOR encoding fails
      */
 open func encode()throws  -> Data  {
     return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeUrError_lift) {
@@ -635,12 +647,15 @@ public func FfiConverterTypeCryptoHdkey_lower(_ value: CryptoHdkey) -> UInt64 {
 
 /**
  * crypto-psbt: PSBT encoded as CBOR byte string with tag 310
- * BCR-2020-006: https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md
+ * BCR-2020-006: <https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md>
  */
 public protocol CryptoPsbtProtocol: AnyObject, Sendable {
     
     /**
      * Encode as CBOR for UR
+     *
+     * # Errors
+     * Returns error if CBOR encoding fails
      */
     func encode() throws  -> Data
     
@@ -651,13 +666,16 @@ public protocol CryptoPsbtProtocol: AnyObject, Sendable {
     
     /**
      * Encode as UR string
+     *
+     * # Errors
+     * Returns error if CBOR encoding fails
      */
     func toUr() throws  -> String
     
 }
 /**
  * crypto-psbt: PSBT encoded as CBOR byte string with tag 310
- * BCR-2020-006: https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md
+ * BCR-2020-006: <https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md>
  */
 open class CryptoPsbt: CryptoPsbtProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -712,6 +730,9 @@ open class CryptoPsbt: CryptoPsbtProtocol, @unchecked Sendable {
     
     /**
      * Decode from CBOR
+     *
+     * # Errors
+     * Returns error if CBOR decoding or PSBT deserialization fails
      */
 public static func decode(cbor: Data)throws  -> CryptoPsbt  {
     return try  FfiConverterTypeCryptoPsbt_lift(try rustCallWithError(FfiConverterTypeUrError_lift) {
@@ -723,6 +744,9 @@ public static func decode(cbor: Data)throws  -> CryptoPsbt  {
     
     /**
      * Create from PSBT bytes
+     *
+     * # Errors
+     * Returns error if PSBT deserialization fails
      */
 public static func fromPsbtBytes(psbtBytes: Data)throws  -> CryptoPsbt  {
     return try  FfiConverterTypeCryptoPsbt_lift(try rustCallWithError(FfiConverterTypeUrError_lift) {
@@ -734,6 +758,9 @@ public static func fromPsbtBytes(psbtBytes: Data)throws  -> CryptoPsbt  {
     
     /**
      * Decode from UR string
+     *
+     * # Errors
+     * Returns error if UR parsing or CBOR decoding fails
      */
 public static func fromUr(ur: String)throws  -> CryptoPsbt  {
     return try  FfiConverterTypeCryptoPsbt_lift(try rustCallWithError(FfiConverterTypeUrError_lift) {
@@ -747,6 +774,9 @@ public static func fromUr(ur: String)throws  -> CryptoPsbt  {
     
     /**
      * Encode as CBOR for UR
+     *
+     * # Errors
+     * Returns error if CBOR encoding fails
      */
 open func encode()throws  -> Data  {
     return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeUrError_lift) {
@@ -769,6 +799,9 @@ open func toPsbtBytes() -> Data  {
     
     /**
      * Encode as UR string
+     *
+     * # Errors
+     * Returns error if CBOR encoding fails
      */
 open func toUr()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeUrError_lift) {
@@ -830,12 +863,15 @@ public func FfiConverterTypeCryptoPsbt_lower(_ value: CryptoPsbt) -> UInt64 {
 
 /**
  * crypto-seed: BIP39 seed with optional metadata
- * BCR-2020-006: https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md
+ * BCR-2020-006: <https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md>
  */
 public protocol CryptoSeedProtocol: AnyObject, Sendable {
     
     /**
      * Encode as CBOR for UR
+     *
+     * # Errors
+     * Returns error if CBOR encoding fails
      */
     func encode() throws  -> Data
     
@@ -862,7 +898,7 @@ public protocol CryptoSeedProtocol: AnyObject, Sendable {
 }
 /**
  * crypto-seed: BIP39 seed with optional metadata
- * BCR-2020-006: https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md
+ * BCR-2020-006: <https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md>
  */
 open class CryptoSeed: CryptoSeedProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -917,6 +953,9 @@ open class CryptoSeed: CryptoSeedProtocol, @unchecked Sendable {
     
     /**
      * Decode from CBOR
+     *
+     * # Errors
+     * Returns error if CBOR decoding fails or payload length is invalid
      */
 public static func decode(cbor: Data)throws  -> CryptoSeed  {
     return try  FfiConverterTypeCryptoSeed_lift(try rustCallWithError(FfiConverterTypeUrError_lift) {
@@ -928,6 +967,9 @@ public static func decode(cbor: Data)throws  -> CryptoSeed  {
     
     /**
      * Create from entropy bytes
+     *
+     * # Errors
+     * Returns error if entropy is invalid for BIP39
      */
 public static func fromEntropy(payload: Data)throws  -> CryptoSeed  {
     return try  FfiConverterTypeCryptoSeed_lift(try rustCallWithError(FfiConverterTypeUrError_lift) {
@@ -939,6 +981,9 @@ public static func fromEntropy(payload: Data)throws  -> CryptoSeed  {
     
     /**
      * Create from entropy bytes with optional metadata
+     *
+     * # Errors
+     * Returns error if entropy is invalid for BIP39
      */
 public static func fromEntropyWithMetadata(payload: Data, name: String?, note: String?, creationDate: UInt64?)throws  -> CryptoSeed  {
     return try  FfiConverterTypeCryptoSeed_lift(try rustCallWithError(FfiConverterTypeUrError_lift) {
@@ -955,6 +1000,9 @@ public static func fromEntropyWithMetadata(payload: Data, name: String?, note: S
     
     /**
      * Encode as CBOR for UR
+     *
+     * # Errors
+     * Returns error if CBOR encoding fails
      */
 open func encode()throws  -> Data  {
     return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeUrError_lift) {
@@ -1312,19 +1360,19 @@ private let initializationResult: InitializationResult = {
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
-    if (uniffi_cove_ur_checksum_method_cryptohdkey_encode() != 5721) {
+    if (uniffi_cove_ur_checksum_method_cryptohdkey_encode() != 47538) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_ur_checksum_method_cryptopsbt_encode() != 11773) {
+    if (uniffi_cove_ur_checksum_method_cryptopsbt_encode() != 6959) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_ur_checksum_method_cryptopsbt_to_psbt_bytes() != 52904) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_ur_checksum_method_cryptopsbt_to_ur() != 8360) {
+    if (uniffi_cove_ur_checksum_method_cryptopsbt_to_ur() != 32582) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_ur_checksum_method_cryptoseed_encode() != 48905) {
+    if (uniffi_cove_ur_checksum_method_cryptoseed_encode() != 57300) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_ur_checksum_method_cryptoseed_entropy() != 60295) {
@@ -1339,25 +1387,25 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_ur_checksum_method_cryptoseed_get_note() != 48679) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_ur_checksum_constructor_cryptohdkey_decode() != 58745) {
+    if (uniffi_cove_ur_checksum_constructor_cryptohdkey_decode() != 1054) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_ur_checksum_constructor_cryptopsbt_decode() != 57233) {
+    if (uniffi_cove_ur_checksum_constructor_cryptopsbt_decode() != 64081) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_ur_checksum_constructor_cryptopsbt_from_psbt_bytes() != 63629) {
+    if (uniffi_cove_ur_checksum_constructor_cryptopsbt_from_psbt_bytes() != 26270) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_ur_checksum_constructor_cryptopsbt_from_ur() != 823) {
+    if (uniffi_cove_ur_checksum_constructor_cryptopsbt_from_ur() != 46845) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_ur_checksum_constructor_cryptoseed_decode() != 59203) {
+    if (uniffi_cove_ur_checksum_constructor_cryptoseed_decode() != 39151) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_ur_checksum_constructor_cryptoseed_from_entropy() != 56252) {
+    if (uniffi_cove_ur_checksum_constructor_cryptoseed_from_entropy() != 13375) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_ur_checksum_constructor_cryptoseed_from_entropy_with_metadata() != 24161) {
+    if (uniffi_cove_ur_checksum_constructor_cryptoseed_from_entropy_with_metadata() != 63642) {
         return InitializationResult.apiChecksumMismatch
     }
 

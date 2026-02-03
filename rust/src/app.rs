@@ -438,7 +438,7 @@ impl FfiApp {
         self.load_and_reset_default_route(loading_route);
     }
 
-    /// Reset to the default route with nested routes, only used by the `LoadigAndResetContainer`
+    /// Reset to the default route with nested routes, only used by the `LoadingAndResetContainer`
     pub fn reset_after_loading(&self, to: Vec<Route>) {
         let Some(default_route) = to.first().cloned() else {
             return;

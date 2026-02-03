@@ -502,6 +502,12 @@ fileprivate struct FfiConverterString: FfiConverter {
 
 public protocol TapSignerProtocol: AnyObject, Sendable {
     
+    /**
+     * Get the full card identifier string
+     *
+     * # Panics
+     * Panics if the pubkey is invalid (should not happen as it's already validated)
+     */
     func fullCardIdent()  -> String
     
     func identFileNamePrefix()  -> String
@@ -562,6 +568,12 @@ open class TapSigner: TapSignerProtocol, @unchecked Sendable {
     
 
     
+    /**
+     * Get the full card identifier string
+     *
+     * # Panics
+     * Panics if the pubkey is invalid (should not happen as it's already validated)
+     */
 open func fullCardIdent() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_cove_tap_card_fn_method_tapsigner_full_card_ident(
@@ -1151,6 +1163,12 @@ public func FfiConverterTypeTapSignerState_lower(_ value: TapSignerState) -> Rus
     return FfiConverterTypeTapSignerState.lower(value)
 }
 
+/**
+ * Create a preview `TapSigner` for testing/UI purposes
+ *
+ * # Panics
+ * Panics if `preview` is false
+ */
 public func tapSignerPreviewNew(preview: Bool) -> TapSigner  {
     return try!  FfiConverterTypeTapSigner_lift(try! rustCall() {
     uniffi_cove_tap_card_fn_func_tap_signer_preview_new(
@@ -1174,10 +1192,10 @@ private let initializationResult: InitializationResult = {
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
-    if (uniffi_cove_tap_card_checksum_func_tap_signer_preview_new() != 8348) {
+    if (uniffi_cove_tap_card_checksum_func_tap_signer_preview_new() != 38768) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_tap_card_checksum_method_tapsigner_full_card_ident() != 40678) {
+    if (uniffi_cove_tap_card_checksum_method_tapsigner_full_card_ident() != 63578) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_tap_card_checksum_method_tapsigner_ident_file_name_prefix() != 17503) {

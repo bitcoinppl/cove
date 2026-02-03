@@ -3433,7 +3433,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_ffiapp_prices() != 42098.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_ffiapp_reset_after_loading() != 45084.toShort()) {
+    if (lib.uniffi_cove_checksum_method_ffiapp_reset_after_loading() != 34013.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_ffiapp_reset_default_route_to() != 31408.toShort()) {
@@ -9079,7 +9079,7 @@ public interface FfiAppInterface {
     fun `prices`(): PriceResponse
     
     /**
-     * Reset to the default route with nested routes, only used by the LoadigAndResetContainer
+     * Reset to the default route with nested routes, only used by the `LoadigAndResetContainer`
      */
     fun `resetAfterLoading`(`to`: List<Route>)
     
@@ -9539,7 +9539,7 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
 
     
     /**
-     * Reset to the default route with nested routes, only used by the LoadigAndResetContainer
+     * Reset to the default route with nested routes, only used by the `LoadigAndResetContainer`
      */override fun `resetAfterLoading`(`to`: List<Route>)
         = 
     callWithHandle {
@@ -25037,7 +25037,7 @@ public object FfiConverterTypeGroupedWord: FfiConverterRustBuffer<GroupedWord> {
 
 
 /**
- * A space-efficient version of HistoricalPrice where only USD is required
+ * A space-efficient version of `HistoricalPrice` where only USD is required
  * and other currencies are optional to save space when they aren't available
  */
 data class HistoricalPriceRecord (
@@ -30954,7 +30954,7 @@ public object FfiConverterTypeHardwareWalletMetadata : FfiConverterRustBuffer<Ha
 
 
 /**
- * Error type for HistoricalPriceRecord
+ * Error type for `HistoricalPriceRecord`
  */
 sealed class HistoricalPriceRecordException: kotlin.Exception() {
     

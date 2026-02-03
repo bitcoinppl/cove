@@ -688,6 +688,17 @@ open class Address: AddressProtocol, @unchecked Sendable, Equatable, Hashable {
     }
 
     
+    /**
+     * Creates an Address from a string and validates it for the given network
+     *
+     * # Errors
+     * Returns `AddressError::InvalidAddress` if the address cannot be parsed
+     * Returns `AddressError::WrongNetwork` if the address is valid but for a different network
+     * Returns `AddressError::UnsupportedNetwork` if the address is not valid for any supported network
+     *
+     * # Panics
+     * Will not panic - the expect is guarded by a preceding validity check
+     */
 public static func fromString(address: String, network: Network)throws  -> Address  {
     return try  FfiConverterTypeAddress_lift(try rustCallWithError(FfiConverterTypeAddressError_lift) {
     uniffi_cove_types_fn_constructor_address_from_string(
@@ -697,6 +708,12 @@ public static func fromString(address: String, network: Network)throws  -> Addre
 })
 }
     
+    /**
+     * Creates a preview address for testing/development
+     *
+     * # Panics
+     * Will not panic - uses a known valid hardcoded address
+     */
 public static func previewNew() -> Address  {
     return try!  FfiConverterTypeAddress_lift(try! rustCall() {
     uniffi_cove_types_fn_constructor_address_preview_new($0
@@ -704,6 +721,12 @@ public static func previewNew() -> Address  {
 })
 }
     
+    /**
+     * Creates a random address from a set of predefined test addresses
+     *
+     * # Panics
+     * Will not panic - uses known valid hardcoded addresses
+     */
 public static func random() -> Address  {
     return try!  FfiConverterTypeAddress_lift(try! rustCall() {
     uniffi_cove_types_fn_constructor_address_random($0
@@ -1159,6 +1182,12 @@ open class AddressWithNetwork: AddressWithNetworkProtocol, @unchecked Sendable {
     public func uniffiCloneHandle() -> UInt64 {
         return try! rustCall { uniffi_cove_types_fn_clone_addresswithnetwork(self.handle, $0) }
     }
+    /**
+     * Creates a new `AddressWithNetwork` from a string
+     *
+     * # Errors
+     * Returns `AddressError` if the address is invalid or for an unsupported network
+     */
 public convenience init(address: String)throws  {
     let handle =
         try rustCallWithError(FfiConverterTypeAddressError_lift) {
@@ -1270,14 +1299,26 @@ public protocol AmountProtocol: AnyObject, Sendable {
     
     func asSats()  -> UInt64
     
+    /**
+     * # Panics
+     * Will not panic - separator is a valid character
+     */
     func btcString()  -> String
     
+    /**
+     * # Panics
+     * Will not panic - separator is a valid character
+     */
     func btcStringWithUnit()  -> String
     
     func fmtString(unit: BitcoinUnit)  -> String
     
     func fmtStringWithUnit(unit: BitcoinUnit)  -> String
     
+    /**
+     * # Panics
+     * Will not panic - separator is a valid character
+     */
     func satsString()  -> String
     
     func satsStringWithUnit()  -> String
@@ -1374,6 +1415,10 @@ open func asSats() -> UInt64  {
 })
 }
     
+    /**
+     * # Panics
+     * Will not panic - separator is a valid character
+     */
 open func btcString() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_cove_types_fn_method_amount_btc_string(
@@ -1382,6 +1427,10 @@ open func btcString() -> String  {
 })
 }
     
+    /**
+     * # Panics
+     * Will not panic - separator is a valid character
+     */
 open func btcStringWithUnit() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_cove_types_fn_method_amount_btc_string_with_unit(
@@ -1408,6 +1457,10 @@ open func fmtStringWithUnit(unit: BitcoinUnit) -> String  {
 })
 }
     
+    /**
+     * # Panics
+     * Will not panic - separator is a valid character
+     */
 open func satsString() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_cove_types_fn_method_amount_sats_string(
@@ -1602,10 +1655,19 @@ public protocol ConfirmDetailsProtocol: AnyObject, Sendable {
     
     func psbtBytes()  -> Data
     
+    /**
+     * Exports PSBT as `BBQr` encoded QR strings
+     *
+     * # Errors
+     * Returns `ConfirmDetailsError::QrCodeCreation` if encoding fails
+     */
     func psbtToBbqr() throws  -> [String]
     
     /**
-     * Export PSBT as BBQr with specified max version
+     * Exports PSBT as `BBQr` with specified density
+     *
+     * # Errors
+     * Returns `ConfirmDetailsError::QrCodeCreation` if encoding fails
      */
     func psbtToBbqrWithDensity(density: QrDensity) throws  -> [String]
     
@@ -1614,12 +1676,18 @@ public protocol ConfirmDetailsProtocol: AnyObject, Sendable {
     func psbtToHex()  -> String
     
     /**
-     * Export PSBT as UR-encoded QR strings for animated display
+     * Exports PSBT as UR-encoded QR strings for animated display
+     *
+     * # Errors
+     * Returns `ConfirmDetailsError::QrCodeCreation` if encoding fails
      */
     func psbtToUr(maxFragmentLen: UInt32) throws  -> [String]
     
     /**
-     * Export PSBT as UR with specified density
+     * Exports PSBT as UR with specified density
+     *
+     * # Errors
+     * Returns `ConfirmDetailsError::QrCodeCreation` if encoding fails
      */
     func psbtToUrWithDensity(density: QrDensity) throws  -> [String]
     
@@ -1763,6 +1831,12 @@ open func psbtBytes() -> Data  {
 })
 }
     
+    /**
+     * Exports PSBT as `BBQr` encoded QR strings
+     *
+     * # Errors
+     * Returns `ConfirmDetailsError::QrCodeCreation` if encoding fails
+     */
 open func psbtToBbqr()throws  -> [String]  {
     return try  FfiConverterSequenceString.lift(try rustCallWithError(FfiConverterTypeConfirmDetailsError_lift) {
     uniffi_cove_types_fn_method_confirmdetails_psbt_to_bbqr(
@@ -1772,7 +1846,10 @@ open func psbtToBbqr()throws  -> [String]  {
 }
     
     /**
-     * Export PSBT as BBQr with specified max version
+     * Exports PSBT as `BBQr` with specified density
+     *
+     * # Errors
+     * Returns `ConfirmDetailsError::QrCodeCreation` if encoding fails
      */
 open func psbtToBbqrWithDensity(density: QrDensity)throws  -> [String]  {
     return try  FfiConverterSequenceString.lift(try rustCallWithError(FfiConverterTypeConfirmDetailsError_lift) {
@@ -1801,7 +1878,10 @@ open func psbtToHex() -> String  {
 }
     
     /**
-     * Export PSBT as UR-encoded QR strings for animated display
+     * Exports PSBT as UR-encoded QR strings for animated display
+     *
+     * # Errors
+     * Returns `ConfirmDetailsError::QrCodeCreation` if encoding fails
      */
 open func psbtToUr(maxFragmentLen: UInt32)throws  -> [String]  {
     return try  FfiConverterSequenceString.lift(try rustCallWithError(FfiConverterTypeConfirmDetailsError_lift) {
@@ -1813,7 +1893,10 @@ open func psbtToUr(maxFragmentLen: UInt32)throws  -> [String]  {
 }
     
     /**
-     * Export PSBT as UR with specified density
+     * Exports PSBT as UR with specified density
+     *
+     * # Errors
+     * Returns `ConfirmDetailsError::QrCodeCreation` if encoding fails
      */
 open func psbtToUrWithDensity(density: QrDensity)throws  -> [String]  {
     return try  FfiConverterSequenceString.lift(try rustCallWithError(FfiConverterTypeConfirmDetailsError_lift) {
@@ -3025,7 +3108,10 @@ public func FfiConverterTypeOutPoint_lower(_ value: OutPoint) -> UInt64 {
 public protocol PsbtProtocol: AnyObject, Sendable {
     
     /**
-     * Total fee in sats.
+     * Total fee in sats
+     *
+     * # Errors
+     * Returns `PsbtError` variants if fee calculation fails
      */
     func fee() throws  -> Amount
     
@@ -3040,7 +3126,7 @@ public protocol PsbtProtocol: AnyObject, Sendable {
     func txId()  -> TxId
     
     /**
-     * The virtual size of the transaction.
+     * The virtual size of the transaction
      */
     func weight()  -> UInt64
     
@@ -3084,6 +3170,12 @@ open class Psbt: PsbtProtocol, @unchecked Sendable {
     public func uniffiCloneHandle() -> UInt64 {
         return try! rustCall { uniffi_cove_types_fn_clone_psbt(self.handle, $0) }
     }
+    /**
+     * Creates a new PSBT from serialized bytes
+     *
+     * # Errors
+     * Returns `PsbtError::Other` if deserialization fails
+     */
 public convenience init(data: Data)throws  {
     let handle =
         try rustCallWithError(FfiConverterTypePsbtError_lift) {
@@ -3107,7 +3199,10 @@ public convenience init(data: Data)throws  {
 
     
     /**
-     * Total fee in sats.
+     * Total fee in sats
+     *
+     * # Errors
+     * Returns `PsbtError` variants if fee calculation fails
      */
 open func fee()throws  -> Amount  {
     return try  FfiConverterTypeAmount_lift(try rustCallWithError(FfiConverterTypePsbtError_lift) {
@@ -3140,7 +3235,7 @@ open func txId() -> TxId  {
 }
     
     /**
-     * The virtual size of the transaction.
+     * The virtual size of the transaction
      */
 open func weight() -> UInt64  {
     return try!  FfiConverterUInt64.lift(try! rustCall() {
@@ -5330,7 +5425,7 @@ public func FfiConverterTypePsbtError_lower(_ value: PsbtError) -> RustBuffer {
 public enum QrExportFormat: Equatable, Hashable, CustomStringConvertible {
     
     /**
-     * BBQr format (Binary Bitcoin QR)
+     * `BBQr` format (Binary Bitcoin QR)
      */
     case bbqr
     /**
@@ -5909,7 +6004,7 @@ public func colorSchemeSelectionCapitalizedString(colorScheme: ColorSchemeSelect
 })
 }
 /**
- * Preview ConfirmDetails for SwiftUI previews
+ * Preview `ConfirmDetails` for `SwiftUI` previews
  */
 public func confirmDetailsPreviewNew() -> ConfirmDetails  {
     return try!  FfiConverterTypeConfirmDetails_lift(try! rustCall() {
@@ -5918,7 +6013,7 @@ public func confirmDetailsPreviewNew() -> ConfirmDetails  {
 })
 }
 /**
- * Check if two QrDensity values are equal (for Swift Equatable conformance)
+ * Check if two `QrDensity` values are equal (for Swift Equatable conformance)
  */
 public func qrDensityIsEqual(lhs: QrDensity, rhs: QrDensity) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
@@ -6044,10 +6139,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_types_checksum_func_color_scheme_selection_capitalized_string() != 30731) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_func_confirm_details_preview_new() != 21539) {
+    if (uniffi_cove_types_checksum_func_confirm_details_preview_new() != 41030) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_func_qr_density_is_equal() != 3265) {
+    if (uniffi_cove_types_checksum_func_qr_density_is_equal() != 54760) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_func_fee_rate_options_with_total_fee_is_equal() != 17627) {
@@ -6140,10 +6235,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_types_checksum_method_amount_as_sats() != 8712) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_amount_btc_string() != 40813) {
+    if (uniffi_cove_types_checksum_method_amount_btc_string() != 41193) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_amount_btc_string_with_unit() != 4146) {
+    if (uniffi_cove_types_checksum_method_amount_btc_string_with_unit() != 40607) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_amount_fmt_string() != 3973) {
@@ -6152,7 +6247,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_types_checksum_method_amount_fmt_string_with_unit() != 64791) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_amount_sats_string() != 46414) {
+    if (uniffi_cove_types_checksum_method_amount_sats_string() != 34415) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_amount_sats_string_with_unit() != 53544) {
@@ -6188,10 +6283,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_types_checksum_method_confirmdetails_psbt_bytes() != 64298) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_confirmdetails_psbt_to_bbqr() != 44475) {
+    if (uniffi_cove_types_checksum_method_confirmdetails_psbt_to_bbqr() != 2152) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_confirmdetails_psbt_to_bbqr_with_density() != 46679) {
+    if (uniffi_cove_types_checksum_method_confirmdetails_psbt_to_bbqr_with_density() != 25796) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_confirmdetails_psbt_to_bbqr_with_max_version() != 52826) {
@@ -6200,10 +6295,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_types_checksum_method_confirmdetails_psbt_to_hex() != 28844) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_confirmdetails_psbt_to_ur() != 51534) {
+    if (uniffi_cove_types_checksum_method_confirmdetails_psbt_to_ur() != 59953) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_confirmdetails_psbt_to_ur_with_density() != 61309) {
+    if (uniffi_cove_types_checksum_method_confirmdetails_psbt_to_ur_with_density() != 22044) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_confirmdetails_sending_amount() != 32253) {
@@ -6320,7 +6415,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_transaction_size() != 16234) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_psbt_fee() != 23286) {
+    if (uniffi_cove_types_checksum_method_psbt_fee() != 45701) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_psbt_output_total_amount() != 21225) {
@@ -6329,7 +6424,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_types_checksum_method_psbt_tx_id() != 3954) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_psbt_weight() != 28925) {
+    if (uniffi_cove_types_checksum_method_psbt_weight() != 40555) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_outpoint_eq() != 14112) {
@@ -6371,16 +6466,16 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_types_checksum_method_txid_as_hash_string() != 7916) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_constructor_address_from_string() != 58026) {
+    if (uniffi_cove_types_checksum_constructor_address_from_string() != 4732) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_constructor_address_preview_new() != 38108) {
+    if (uniffi_cove_types_checksum_constructor_address_preview_new() != 61836) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_constructor_address_random() != 40923) {
+    if (uniffi_cove_types_checksum_constructor_address_random() != 18866) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_constructor_addresswithnetwork_new() != 11084) {
+    if (uniffi_cove_types_checksum_constructor_addresswithnetwork_new() != 55575) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_constructor_amount_from_sat() != 32795) {
@@ -6410,7 +6505,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_types_checksum_constructor_feerateoptionswithtotalfee_previewnew() != 31010) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_constructor_psbt_new() != 33253) {
+    if (uniffi_cove_types_checksum_constructor_psbt_new() != 34001) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_constructor_outpoint_previewnew() != 32440) {

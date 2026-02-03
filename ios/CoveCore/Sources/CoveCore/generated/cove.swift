@@ -690,11 +690,11 @@ open class AddressArgs: AddressArgsProtocol, @unchecked Sendable {
     public func uniffiCloneHandle() -> UInt64 {
         return try! rustCall { uniffi_cove_fn_clone_addressargs(self.handle, $0) }
     }
-public convenience init(address: Address, changeAddress: Address?, direction: TransactionDirection) {
+public convenience init(address: Address?, changeAddress: Address?, direction: TransactionDirection) {
     let handle =
         try! rustCall() {
     uniffi_cove_fn_constructor_addressargs_new(
-        FfiConverterTypeAddress_lower(address),
+        FfiConverterOptionTypeAddress.lower(address),
         FfiConverterOptionTypeAddress.lower(changeAddress),
         FfiConverterTypeTransactionDirection_lower(direction),$0
     )
@@ -2674,7 +2674,7 @@ public protocol FfiAppProtocol: AnyObject, Sendable {
     func prices() throws  -> PriceResponse
     
     /**
-     * Reset to the default route with nested routes, only used by the LoadigAndResetContainer
+     * Reset to the default route with nested routes, only used by the `LoadingAndResetContainer`
      */
     func resetAfterLoading(to: [Route]) 
     
@@ -2995,7 +2995,7 @@ open func prices()throws  -> PriceResponse  {
 }
     
     /**
-     * Reset to the default route with nested routes, only used by the LoadigAndResetContainer
+     * Reset to the default route with nested routes, only used by the `LoadingAndResetContainer`
      */
 open func resetAfterLoading(to: [Route])  {try! rustCall() {
     uniffi_cove_fn_method_ffiapp_reset_after_loading(
@@ -9198,9 +9198,9 @@ public func FfiConverterTypeTapSignerReader_lower(_ value: TapSignerReader) -> U
 
 public protocol TransactionDetailsProtocol: AnyObject, Sendable {
     
-    func address()  -> Address
+    func address()  -> Address?
     
-    func addressSpacedOut()  -> String
+    func addressSpacedOut()  -> String?
     
     func amount()  -> Amount
     
@@ -9349,16 +9349,16 @@ public static func previewPendingSent() -> TransactionDetails  {
     
 
     
-open func address() -> Address  {
-    return try!  FfiConverterTypeAddress_lift(try! rustCall() {
+open func address() -> Address?  {
+    return try!  FfiConverterOptionTypeAddress.lift(try! rustCall() {
     uniffi_cove_fn_method_transactiondetails_address(
             self.uniffiCloneHandle(),$0
     )
 })
 }
     
-open func addressSpacedOut() -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
+open func addressSpacedOut() -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
     uniffi_cove_fn_method_transactiondetails_address_spaced_out(
             self.uniffiCloneHandle(),$0
     )
@@ -11982,7 +11982,7 @@ public func FfiConverterTypeGroupedWord_lower(_ value: GroupedWord) -> RustBuffe
 
 
 /**
- * A space-efficient version of HistoricalPrice where only USD is required
+ * A space-efficient version of `HistoricalPrice` where only USD is required
  * and other currencies are optional to save space when they aren't available
  */
 public struct HistoricalPriceRecord: Equatable, Hashable {
@@ -17145,7 +17145,7 @@ public func FfiConverterTypeHardwareWalletMetadata_lower(_ value: HardwareWallet
 
 
 /**
- * Error type for HistoricalPriceRecord
+ * Error type for `HistoricalPriceRecord`
  */
 public enum HistoricalPriceRecordError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
@@ -22974,6 +22974,7 @@ public enum TransactionDetailError: Swift.Error, Equatable, Hashable, Foundation
     )
     case ChangeAddress(String
     )
+    case NotFound
 
     
 
@@ -23028,6 +23029,7 @@ public struct FfiConverterTypeTransactionDetailError: FfiConverterRustBuffer {
         case 5: return .ChangeAddress(
             try FfiConverterString.read(from: &buf)
             )
+        case 6: return .NotFound
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -23064,6 +23066,10 @@ public struct FfiConverterTypeTransactionDetailError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(5))
             FfiConverterString.write(v1, into: &buf)
             
+        
+        case .NotFound:
+            writeInt(&buf, Int32(6))
+        
         }
     }
 }
@@ -29059,7 +29065,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_ffiapp_prices() != 42098) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_ffiapp_reset_after_loading() != 45084) {
+    if (uniffi_cove_checksum_method_ffiapp_reset_after_loading() != 53361) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_reset_default_route_to() != 31408) {
@@ -29809,10 +29815,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_bitcointransaction_tx_id_hash() != 59698) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_transactiondetails_address() != 17286) {
+    if (uniffi_cove_checksum_method_transactiondetails_address() != 1840) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_transactiondetails_address_spaced_out() != 46633) {
+    if (uniffi_cove_checksum_method_transactiondetails_address_spaced_out() != 38824) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_transactiondetails_amount() != 53012) {
@@ -29983,7 +29989,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_constructor_filehandler_new() != 14514) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_constructor_addressargs_new() != 27795) {
+    if (uniffi_cove_checksum_constructor_addressargs_new() != 7657) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_labelmanager_new() != 53348) {

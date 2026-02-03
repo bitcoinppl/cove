@@ -793,10 +793,10 @@ private fun uniffiCheckContractApiVersion(lib: IntegrityCheckingUniffiLib) {
 }
 @Suppress("UNUSED_PARAMETER")
 private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
-    if (lib.uniffi_cove_tap_card_checksum_func_tap_signer_preview_new() != 8348.toShort()) {
+    if (lib.uniffi_cove_tap_card_checksum_func_tap_signer_preview_new() != 38768.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_tap_card_checksum_method_tapsigner_full_card_ident() != 40678.toShort()) {
+    if (lib.uniffi_cove_tap_card_checksum_method_tapsigner_full_card_ident() != 63578.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_tap_card_checksum_method_tapsigner_ident_file_name_prefix() != 17503.toShort()) {
@@ -1163,6 +1163,12 @@ public object FfiConverterString: FfiConverter<String, RustBuffer.ByValue> {
 
 public interface TapSignerInterface {
     
+    /**
+     * Get the full card identifier string
+     *
+     * # Panics
+     * Panics if the pubkey is invalid (should not happen as it's already validated)
+     */
     fun `fullCardIdent`(): kotlin.String
     
     fun `identFileNamePrefix`(): kotlin.String
@@ -1268,7 +1274,13 @@ open class TapSigner: Disposable, AutoCloseable, TapSignerInterface
         }
     }
 
-    override fun `fullCardIdent`(): kotlin.String {
+    
+    /**
+     * Get the full card identifier string
+     *
+     * # Panics
+     * Panics if the pubkey is invalid (should not happen as it's already validated)
+     */override fun `fullCardIdent`(): kotlin.String {
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
@@ -1804,7 +1816,13 @@ public object FfiConverterTypeTapSignerState: FfiConverterRustBuffer<TapSignerSt
     }
 }
 
- fun `tapSignerPreviewNew`(`preview`: kotlin.Boolean): TapSigner {
+
+        /**
+         * Create a preview `TapSigner` for testing/UI purposes
+         *
+         * # Panics
+         * Panics if `preview` is false
+         */ fun `tapSignerPreviewNew`(`preview`: kotlin.Boolean): TapSigner {
             return FfiConverterTypeTapSigner.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_tap_card_fn_func_tap_signer_preview_new(

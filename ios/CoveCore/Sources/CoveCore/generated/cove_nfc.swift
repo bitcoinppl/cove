@@ -554,12 +554,24 @@ public protocol FfiNfcReaderProtocol: AnyObject, Sendable {
     
     func dataFromRecords(records: [NdefRecord])  -> Data
     
+    /**
+     * Checks if reading can be resumed with the given data.
+     *
+     * # Errors
+     * Returns an error if the data does not match the expected state.
+     */
     func isResumeable(data: Data) throws 
     
     func isStarted()  -> Bool
     
     func messageInfo()  -> MessageInfo?
     
+    /**
+     * Parses NFC data into a result.
+     *
+     * # Errors
+     * Returns an error if parsing fails or if the data is incomplete.
+     */
     func parse(data: Data) throws  -> ParseResult
     
     func stringFromRecord(record: NdefRecord)  -> String?
@@ -634,6 +646,12 @@ open func dataFromRecords(records: [NdefRecord]) -> Data  {
 })
 }
     
+    /**
+     * Checks if reading can be resumed with the given data.
+     *
+     * # Errors
+     * Returns an error if the data does not match the expected state.
+     */
 open func isResumeable(data: Data)throws   {try rustCallWithError(FfiConverterTypeResumeError_lift) {
     uniffi_cove_nfc_fn_method_ffinfcreader_is_resumeable(
             self.uniffiCloneHandle(),
@@ -658,6 +676,12 @@ open func messageInfo() -> MessageInfo?  {
 })
 }
     
+    /**
+     * Parses NFC data into a result.
+     *
+     * # Errors
+     * Returns an error if parsing fails or if the data is incomplete.
+     */
 open func parse(data: Data)throws  -> ParseResult  {
     return try  FfiConverterTypeParseResult_lift(try rustCallWithError(FfiConverterTypeNfcReaderError_lift) {
     uniffi_cove_nfc_fn_method_ffinfcreader_parse(
@@ -1067,6 +1091,12 @@ open class NfcMessage: NfcMessageProtocol, @unchecked Sendable {
     }
 
     
+    /**
+     * Creates a new NFC message from optional string and data.
+     *
+     * # Errors
+     * Returns an error if neither string nor data is provided.
+     */
 public static func tryNew(string: String? = nil, data: Data? = nil)throws  -> NfcMessage  {
     return try  FfiConverterTypeNfcMessage_lift(try rustCallWithError(FfiConverterTypeNfcMessageError_lift) {
     uniffi_cove_nfc_fn_constructor_nfcmessage_try_new(
@@ -2043,8 +2073,9 @@ public enum ResumeError: Swift.Error, Equatable, Hashable, Foundation.LocalizedE
     /**
      * Block size mismatch, expected {expected}, got {actual}
      *
-     * The bytes passed in needs to be a multiple of crate::cove_nfc::BYTES_PER_BLOCK
-     * The bytes passed in needs to be the same size as the bytes in the old message (NUMBER_OF_BLOCKS_PER_CHUNK * BYTES_PER_BLOCK)
+     * The bytes passed in needs to be a multiple of `BYTES_PER_BLOCK`.
+     * The bytes passed in needs to be the same size as the bytes in the old message
+     * (`NUMBER_OF_BLOCKS_PER_CHUNK` * `BYTES_PER_BLOCK`)
      */
     case BlockSizeMismatch(expected: UInt16, actual: UInt16
     )
@@ -2358,7 +2389,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_nfc_checksum_method_ffinfcreader_data_from_records() != 47483) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_nfc_checksum_method_ffinfcreader_is_resumeable() != 29505) {
+    if (uniffi_cove_nfc_checksum_method_ffinfcreader_is_resumeable() != 29577) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_nfc_checksum_method_ffinfcreader_is_started() != 48293) {
@@ -2367,7 +2398,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_nfc_checksum_method_ffinfcreader_message_info() != 39232) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_nfc_checksum_method_ffinfcreader_parse() != 50218) {
+    if (uniffi_cove_nfc_checksum_method_ffinfcreader_parse() != 45759) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_nfc_checksum_method_ffinfcreader_string_from_record() != 37789) {
@@ -2400,7 +2431,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_nfc_checksum_constructor_nfcconst_new() != 10481) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_nfc_checksum_constructor_nfcmessage_try_new() != 25513) {
+    if (uniffi_cove_nfc_checksum_constructor_nfcmessage_try_new() != 58473) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_nfc_checksum_constructor_ndefrecordreader_new() != 55572) {

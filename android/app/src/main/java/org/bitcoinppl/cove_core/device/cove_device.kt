@@ -861,16 +861,16 @@ private fun uniffiCheckContractApiVersion(lib: IntegrityCheckingUniffiLib) {
 }
 @Suppress("UNUSED_PARAMETER")
 private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
-    if (lib.uniffi_cove_device_checksum_constructor_device_new() != 34667.toShort()) {
+    if (lib.uniffi_cove_device_checksum_constructor_device_new() != 18892.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_constructor_keychain_new() != 48183.toShort()) {
+    if (lib.uniffi_cove_device_checksum_constructor_keychain_new() != 47401.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_device_checksum_method_deviceaccess_timezone() != 54194.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_method_keychainaccess_save() != 25345.toShort()) {
+    if (lib.uniffi_cove_device_checksum_method_keychainaccess_save() != 32182.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_device_checksum_method_keychainaccess_get() != 23224.toShort()) {
@@ -1272,6 +1272,13 @@ open class Device: Disposable, AutoCloseable, DeviceInterface
         this.handle = 0
         this.cleanable = null
     }
+    /**
+     * Creates a new global device instance
+     *
+     * # Panics
+     *
+     * Panics if the device has already been initialized
+     */
     constructor(`device`: DeviceAccess) :
         this(UniffiWithHandle, 
     uniffiRustCall() { _status ->
@@ -1515,6 +1522,13 @@ open class Keychain: Disposable, AutoCloseable, KeychainInterface
         this.handle = 0
         this.cleanable = null
     }
+    /**
+     * Creates a new global keychain instance
+     *
+     * # Panics
+     *
+     * Panics if the keychain has already been initialized
+     */
     constructor(`keychain`: KeychainAccess) :
         this(UniffiWithHandle, 
     uniffiRustCall() { _status ->
@@ -1841,6 +1855,13 @@ public object FfiConverterTypeDeviceAccess: FfiConverterCallbackInterface<Device
 
 public interface KeychainAccess {
     
+    /**
+     * Saves a key-value pair
+     *
+     * # Errors
+     *
+     * Returns a `KeychainError` if the save operation fails
+     */
     fun `save`(`key`: kotlin.String, `value`: kotlin.String)
     
     fun `get`(`key`: kotlin.String): kotlin.String?
