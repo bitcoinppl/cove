@@ -144,25 +144,7 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
         }
     }
 
-    private var messageCount = 0
-    private var lastMessageTime = Date()
-
     func apply(_ message: Message) {
-        messageCount += 1
-        let now = Date()
-        let elapsed = now.timeIntervalSince(lastMessageTime)
-
-        // warn if receiving messages too rapidly (more than 10 in 1 second)
-        if elapsed < 1.0, messageCount > 10 {
-            logger.warn(
-                "RAPID MESSAGES: \(messageCount) messages in \(elapsed)s, latest: \(message)")
-        }
-
-        if elapsed >= 1.0 {
-            messageCount = 1
-            lastMessageTime = now
-        }
-
         switch message {
         case .startedInitialFullScan:
             self.loadState = .loading
