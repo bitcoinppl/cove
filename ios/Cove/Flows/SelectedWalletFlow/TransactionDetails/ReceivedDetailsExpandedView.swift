@@ -64,7 +64,7 @@ struct ReceivedDetailsExpandedView: View {
                 .multilineTextAlignment(.leading)
 
             HStack {
-                Text(transactionDetails.addressSpacedOut())
+                Text(transactionDetails.addressSpacedOut() ?? "Address unavailable")
                     .fontWeight(.semibold)
                     .multilineTextAlignment(.leading)
                     .padding(.bottom, 14)
@@ -72,36 +72,38 @@ struct ReceivedDetailsExpandedView: View {
                 Spacer()
                 Spacer()
 
-                Button(action: {
-                    UIPasteboard.general.string = transactionDetails.address().string()
-                    withAnimation {
-                        isCopied = true
-                    }
-
-                    // Reset the button text after a delay
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+                if let address = transactionDetails.address() {
+                    Button(action: {
+                        UIPasteboard.general.string = address.string()
                         withAnimation {
-                            isCopied = false
+                            isCopied = true
                         }
-                    }
-                }) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "doc.on.doc")
-                            .font(.caption)
 
-                        Text(isCopied ? "Copied" : "Copy")
-                            .font(.caption)
+                        // Reset the button text after a delay
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+                            withAnimation {
+                                isCopied = false
+                            }
+                        }
+                    }) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "doc.on.doc")
+                                .font(.caption)
+
+                            Text(isCopied ? "Copied" : "Copy")
+                                .font(.caption)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .foregroundColor(.primary)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 20)
+                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                        )
+                        .frame(minWidth: 100)
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .foregroundColor(.primary)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 20)
-                            .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                    )
-                    .frame(minWidth: 100)
+                    .buttonStyle(PlainButtonStyle())
                 }
-                .buttonStyle(PlainButtonStyle())
             }
 
             // MARK: - Fiat Price Section

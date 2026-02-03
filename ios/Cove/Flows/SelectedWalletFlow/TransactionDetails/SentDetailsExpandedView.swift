@@ -29,11 +29,13 @@ struct SentDetailsExpandedView: View {
                     .multilineTextAlignment(.leading)
 
                 Menu {
-                    Button("Copy", systemImage: "doc.on.doc") {
-                        UIPasteboard.general.string = transactionDetails.address().unformatted()
+                    if let address = transactionDetails.address() {
+                        Button("Copy", systemImage: "doc.on.doc") {
+                            UIPasteboard.general.string = address.unformatted()
+                        }
                     }
                 } label: {
-                    Text(transactionDetails.addressSpacedOut())
+                    Text(transactionDetails.addressSpacedOut() ?? "Address unavailable")
                         .multilineTextAlignment(.leading)
                 }
                 .fontWeight(.semibold)
