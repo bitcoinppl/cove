@@ -681,7 +681,7 @@ impl WalletActor {
         let now =
             SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or_else(|e| {
                 warn!("System clock skew detected: {e}");
-                0
+                u64::MAX
             });
         let txid = transaction.compute_txid();
 
@@ -698,10 +698,12 @@ impl WalletActor {
         self.send(Msg::WalletBalanceChanged(balance.into()));
 
         // send updated transactions to UI
-        if let Ok(transactions) = self.transactions().await
-            && let Ok(transactions) = transactions.await
-        {
-            self.send(Msg::UpdatedTransactions(transactions));
+        match self.transactions().await {
+            Ok(future) => match future.await {
+                Ok(transactions) => self.send(Msg::UpdatedTransactions(transactions)),
+                Err(e) => error!("Failed to get transactions after broadcast: {e}"),
+            },
+            Err(e) => error!("Failed to get transactions after broadcast: {e}"),
         }
 
         // start a transaction watcher to track confirmations

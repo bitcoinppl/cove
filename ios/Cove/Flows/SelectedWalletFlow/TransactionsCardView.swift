@@ -164,7 +164,7 @@ struct ConfirmedTransactionView: View {
 
         Task {
             do {
-                let details = try await manager.rust.transactionDetails(txId: txId)
+                let details = try await manager.transactionDetails(for: txId)
                 await MainActor.run {
                     if index > scrollThresholdIndex { manager.scrolledTransactionId = txId.description }
                     navigate(Route.transactionDetails(id: metadata.id, details: details))
