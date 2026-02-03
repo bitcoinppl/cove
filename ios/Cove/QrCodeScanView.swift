@@ -109,7 +109,8 @@ struct QrCodeScanView: View {
                 .general(
                     title: "QR Scan Error",
                     message: "Unable to scan QR code, error: \(error.localizedDescription)"
-                ))
+                )
+            )
         }
     }
 }

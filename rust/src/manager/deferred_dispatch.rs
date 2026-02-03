@@ -49,7 +49,7 @@ pub struct DeferredDispatch<T: Dispatchable> {
 }
 
 impl<T: Dispatchable> DeferredDispatch<T> {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self { actions: vec![] }
     }
 

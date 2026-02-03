@@ -83,7 +83,7 @@ impl WordValidator {
     }
 
     #[uniffi::method]
-    pub fn is_complete(&self, word_number: u8) -> bool {
+    pub const fn is_complete(&self, word_number: u8) -> bool {
         word_number > self.words.len() as u8
     }
 

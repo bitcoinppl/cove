@@ -22,7 +22,10 @@ struct TransactionDetailsLabelView: View {
         manager.rust.labelManager()
     }
 
-    var txId: TxId { details.txId() }
+    var txId: TxId {
+        details.txId()
+    }
+
     var label: String? {
         if !editingLabel.isEmpty {
             return editingLabel
@@ -88,7 +91,6 @@ struct TransactionDetailsLabelView: View {
         }
     }
 
-    @ViewBuilder
     func TxnLabel(_ label: String) -> some View {
         Menu {
             Button("Edit", systemImage: "square.and.pencil", action: setEditing)
@@ -103,7 +105,6 @@ struct TransactionDetailsLabelView: View {
         .foregroundStyle(.secondary)
     }
 
-    @ViewBuilder
     var AddLabel: some View {
         Button(action: setEditing) {
             HStack {
@@ -117,7 +118,6 @@ struct TransactionDetailsLabelView: View {
         .foregroundStyle(.secondary)
     }
 
-    @ViewBuilder
     var EditingLabel: some View {
         HStack {
             Spacer()

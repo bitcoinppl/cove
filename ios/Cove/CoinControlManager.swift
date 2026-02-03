@@ -163,7 +163,10 @@ extension WeakReconciler: CoinControlManagerReconciler where Reconciler == CoinC
         }
     }
 
-    public func dispatch(action: Action) { dispatch(action) }
+    public func dispatch(action: Action) {
+        dispatch(action)
+    }
+
     public func dispatch(_ action: Action) {
         rustBridge.async {
             self.logger.debug("dispatch: \(action)")

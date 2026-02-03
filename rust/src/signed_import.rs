@@ -140,12 +140,12 @@ impl SignedTransactionOrPsbt {
     }
 
     /// Returns true if this is a signed PSBT
-    pub fn is_psbt(&self) -> bool {
+    pub const fn is_psbt(&self) -> bool {
         matches!(self, Self::SignedPsbt(_))
     }
 
     /// Returns true if this is a finalized transaction
-    pub fn is_transaction(&self) -> bool {
+    pub const fn is_transaction(&self) -> bool {
         matches!(self, Self::Transaction(_))
     }
 
@@ -200,7 +200,7 @@ impl SignedTransactionOrPsbt {
 
     /// Returns true if this is a signed PSBT
     #[uniffi::method(name = "isPsbt")]
-    pub fn ffi_is_psbt(&self) -> bool {
+    pub const fn ffi_is_psbt(&self) -> bool {
         self.is_psbt()
     }
 

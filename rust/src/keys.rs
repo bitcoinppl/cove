@@ -152,7 +152,7 @@ impl Descriptors {
 }
 
 impl Descriptor {
-    pub fn new_from_public(extended_descriptor: ExtendedDescriptor) -> Self {
+    pub const fn new_from_public(extended_descriptor: ExtendedDescriptor) -> Self {
         Self { extended_descriptor, key_map: KeyMap::new() }
     }
 

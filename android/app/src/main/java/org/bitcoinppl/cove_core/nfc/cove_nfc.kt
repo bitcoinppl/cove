@@ -867,7 +867,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_nfc_checksum_method_ffinfcreader_data_from_records() != 47483.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_nfc_checksum_method_ffinfcreader_is_resumeable() != 29505.toShort()) {
+    if (lib.uniffi_cove_nfc_checksum_method_ffinfcreader_is_resumeable() != 29577.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_nfc_checksum_method_ffinfcreader_is_started() != 48293.toShort()) {
@@ -876,7 +876,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_nfc_checksum_method_ffinfcreader_message_info() != 39232.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_nfc_checksum_method_ffinfcreader_parse() != 50218.toShort()) {
+    if (lib.uniffi_cove_nfc_checksum_method_ffinfcreader_parse() != 45759.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_nfc_checksum_method_ffinfcreader_string_from_record() != 37789.toShort()) {
@@ -909,7 +909,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_nfc_checksum_constructor_nfcconst_new() != 10481.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_nfc_checksum_constructor_nfcmessage_try_new() != 25513.toShort()) {
+    if (lib.uniffi_cove_nfc_checksum_constructor_nfcmessage_try_new() != 58473.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_nfc_checksum_constructor_ndefrecordreader_new() != 55572.toShort()) {
@@ -1340,12 +1340,24 @@ public interface FfiNfcReaderInterface {
     
     fun `dataFromRecords`(`records`: List<NdefRecord>): kotlin.ByteArray
     
+    /**
+     * Checks if reading can be resumed with the given data.
+     *
+     * # Errors
+     * Returns an error if the data does not match the expected state.
+     */
     fun `isResumeable`(`data`: kotlin.ByteArray)
     
     fun `isStarted`(): kotlin.Boolean
     
     fun `messageInfo`(): MessageInfo?
     
+    /**
+     * Parses NFC data into a result.
+     *
+     * # Errors
+     * Returns an error if parsing fails or if the data is incomplete.
+     */
     fun `parse`(`data`: kotlin.ByteArray): ParseResult
     
     fun `stringFromRecord`(`record`: NdefRecord): kotlin.String?
@@ -1471,6 +1483,12 @@ open class FfiNfcReader: Disposable, AutoCloseable, FfiNfcReaderInterface
     
 
     
+    /**
+     * Checks if reading can be resumed with the given data.
+     *
+     * # Errors
+     * Returns an error if the data does not match the expected state.
+     */
     @Throws(ResumeException::class)override fun `isResumeable`(`data`: kotlin.ByteArray)
         = 
     callWithHandle {
@@ -1510,6 +1528,12 @@ open class FfiNfcReader: Disposable, AutoCloseable, FfiNfcReaderInterface
     
 
     
+    /**
+     * Parses NFC data into a result.
+     *
+     * # Errors
+     * Returns an error if parsing fails or if the data is incomplete.
+     */
     @Throws(NfcReaderException::class)override fun `parse`(`data`: kotlin.ByteArray): ParseResult {
             return FfiConverterTypeParseResult.lift(
     callWithHandle {
@@ -2376,6 +2400,12 @@ open class NfcMessage: Disposable, AutoCloseable, NfcMessageInterface
     
     companion object {
         
+    /**
+     * Creates a new NFC message from optional string and data.
+     *
+     * # Errors
+     * Returns an error if neither string nor data is provided.
+     */
     @Throws(NfcMessageException::class) fun `tryNew`(`string`: kotlin.String? = null, `data`: kotlin.ByteArray? = null): NfcMessage {
             return FfiConverterTypeNfcMessage.lift(
     uniffiRustCallWithError(NfcMessageException) { _status ->
@@ -3213,8 +3243,9 @@ sealed class ResumeException: kotlin.Exception() {
     /**
      * Block size mismatch, expected {expected}, got {actual}
      *
-     * The bytes passed in needs to be a multiple of crate::cove_nfc::BYTES_PER_BLOCK
-     * The bytes passed in needs to be the same size as the bytes in the old message (NUMBER_OF_BLOCKS_PER_CHUNK * BYTES_PER_BLOCK)
+     * The bytes passed in needs to be a multiple of `BYTES_PER_BLOCK`.
+     * The bytes passed in needs to be the same size as the bytes in the old message
+     * (`NUMBER_OF_BLOCKS_PER_CHUNK` * `BYTES_PER_BLOCK`)
      */
     class BlockSizeMismatch(
         

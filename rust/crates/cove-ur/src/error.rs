@@ -42,9 +42,18 @@ pub enum UrError {
 
 pub type Result<T> = std::result::Result<T, UrError>;
 
-/// Helper trait to convert any error to UrError
+/// Helper trait to convert any error to [`UrError`]
 pub trait ToUrError<T> {
+    /// Maps the error to a CBOR encode error
+    ///
+    /// # Errors
+    /// Returns `UrError::CborEncodeError` if self is an error
     fn map_err_cbor_encode(self) -> Result<T>;
+
+    /// Maps the error to a CBOR decode error
+    ///
+    /// # Errors
+    /// Returns `UrError::CborDecodeError` if self is an error
     fn map_err_cbor_decode(self) -> Result<T>;
 }
 

@@ -12,8 +12,9 @@ pub enum ResumeError {
 
     /// Block size mismatch, expected {expected}, got {actual}
     ///
-    /// The bytes passed in needs to be a multiple of crate::cove_nfc::BYTES_PER_BLOCK
-    /// The bytes passed in needs to be the same size as the bytes in the old message (NUMBER_OF_BLOCKS_PER_CHUNK * BYTES_PER_BLOCK)
+    /// The bytes passed in needs to be a multiple of `BYTES_PER_BLOCK`.
+    /// The bytes passed in needs to be the same size as the bytes in the old message
+    /// (`NUMBER_OF_BLOCKS_PER_CHUNK` * `BYTES_PER_BLOCK`)
     #[error("Block size mismatch, expected {expected}, got {actual})")]
     BlockSizeMismatch { expected: u16, actual: u16 },
 

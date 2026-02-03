@@ -52,8 +52,7 @@ impl GlobalFlagTable {
         let value = table
             .get(key)
             .map_err_str(GlobalFlagTableError::Read)?
-            .map(|value| value.value())
-            .unwrap_or(false);
+            .is_some_and(|value| value.value());
 
         Ok(value)
     }

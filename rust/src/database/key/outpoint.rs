@@ -40,7 +40,7 @@ impl redb::Key for OutPointKey {
 
 impl redb::Value for OutPointKey {
     type SelfType<'a>
-        = OutPointKey
+        = Self
     where
         Self: 'a;
 
@@ -65,8 +65,7 @@ impl redb::Value for OutPointKey {
 
     fn as_bytes<'a, 'b: 'a>(value: &'a Self::SelfType<'b>) -> Self::AsBytes<'a>
     where
-        Self: 'a,
-        Self: 'b,
+        Self: 'a + 'b,
     {
         value.as_bytes()
     }

@@ -13,7 +13,7 @@ struct TapSignerAdvancedChainCode: View {
 
     let tapSigner: TapSigner
 
-    // private
+    /// private
     @State private var chainCode: String = ""
 
     private var isButtonDisabled: Bool {

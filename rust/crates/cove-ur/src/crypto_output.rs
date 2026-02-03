@@ -1,4 +1,7 @@
-use crate::{crypto_account::OutputDescriptor, crypto_hdkey::CryptoHdkey, error::UrError};
+use crate::{
+    crypto_account::OutputDescriptor, crypto_hdkey::CryptoHdkey, error::UrError,
+    keypath::CryptoKeypath,
+};
 use pubport::descriptor::ScriptType;
 
 /// crypto-output descriptor (BCR-2020-010)
@@ -10,24 +13,32 @@ pub struct CryptoOutput {
 
 impl CryptoOutput {
     /// Decode from CBOR bytes
-    pub fn decode(cbor_bytes: Vec<u8>) -> Result<Self, UrError> {
-        let descriptor = crate::crypto_account::decode_output_descriptor(&cbor_bytes)?
+    ///
+    /// # Errors
+    /// Returns error if CBOR decoding fails or script type is unsupported
+    pub fn decode(cbor_bytes: &[u8]) -> Result<Self, UrError> {
+        let descriptor = crate::crypto_account::decode_output_descriptor(cbor_bytes)?
             .ok_or_else(|| UrError::CborDecodeError("Unsupported script type".into()))?;
         Ok(Self { descriptor })
     }
 
     /// Get the script type
-    pub fn script_type(&self) -> &ScriptType {
+    #[must_use]
+    pub const fn script_type(&self) -> &ScriptType {
         &self.descriptor.script_type
     }
 
     /// Get the HD key
-    pub fn hdkey(&self) -> &CryptoHdkey {
+    #[must_use]
+    pub const fn hdkey(&self) -> &CryptoHdkey {
         &self.descriptor.hdkey
     }
 
     /// Generate a pubport-compatible descriptor string for this output
-    /// Format: script_type([fingerprint/path]xpub/<0;1>/*)
+    /// Format: `script_type`([fingerprint/path]xpub/<0;1>/*)
+    ///
+    /// # Errors
+    /// Returns error if xpub string generation fails
     pub fn descriptor_string(&self, network: bitcoin::Network) -> Result<String, UrError> {
         let hdkey = &self.descriptor.hdkey;
         let xpub = hdkey.to_xpub_string(network)?;
@@ -38,13 +49,13 @@ impl CryptoOutput {
             .as_ref()
             .and_then(|o| o.source_fingerprint)
             .or(hdkey.parent_fingerprint)
-            .map(hex::encode)
-            .unwrap_or_else(|| "00000000".to_string());
+            .map_or_else(|| "00000000".to_string(), hex::encode);
 
         // get derivation path from origin, or use default for script type
-        let deriv_path = hdkey.origin.as_ref().map(|o| o.to_path_string()).unwrap_or_else(|| {
-            self.descriptor.script_type.descriptor_derivation_path().to_string()
-        });
+        let deriv_path = hdkey.origin.as_ref().map_or_else(
+            || self.descriptor.script_type.descriptor_derivation_path().to_string(),
+            CryptoKeypath::to_path_string,
+        );
 
         // build key expression with origin info and multipath suffix
         let key_expr = format!("[{fingerprint}/{deriv_path}]{xpub}/<0;1>/*");
@@ -66,7 +77,7 @@ mod tests {
     #[test]
     fn test_crypto_output_decode_p2wpkh() {
         let cbor = hex::decode(P2WPKH_CRYPTO_OUTPUT_HEX).unwrap();
-        let output = CryptoOutput::decode(cbor).unwrap();
+        let output = CryptoOutput::decode(&cbor).unwrap();
 
         assert_eq!(*output.script_type(), ScriptType::P2wpkh);
         assert_eq!(output.hdkey().key_data.len(), 33);
@@ -78,7 +89,7 @@ mod tests {
     #[test]
     fn test_crypto_output_descriptor_string_parseable_by_pubport() {
         let cbor = hex::decode(P2WPKH_CRYPTO_OUTPUT_HEX).unwrap();
-        let output = CryptoOutput::decode(cbor).unwrap();
+        let output = CryptoOutput::decode(&cbor).unwrap();
 
         let descriptor = output.descriptor_string(bitcoin::Network::Bitcoin).unwrap();
         println!("Generated descriptor: {}", descriptor);
@@ -98,7 +109,7 @@ mod tests {
 
         let ur = Ur::parse(ur_string).expect("UR parse failed");
         let message = ur.message_bytes().expect("No message bytes");
-        let output = CryptoOutput::decode(message).expect("CryptoOutput decode failed");
+        let output = CryptoOutput::decode(&message).expect("CryptoOutput decode failed");
         let hdkey = output.hdkey();
 
         // must have origin with master fingerprint

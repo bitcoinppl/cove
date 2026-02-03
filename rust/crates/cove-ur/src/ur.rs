@@ -13,32 +13,37 @@ pub enum Ur<'a> {
 
 impl<'a> Ur<'a> {
     /// Parse a UR string (case-insensitive scheme per spec)
+    ///
+    /// # Errors
+    /// Returns error if UR parsing fails
     pub fn parse(ur_string: &'a str) -> Result<Self> {
         if ur_string.starts_with("ur:") {
             // already lowercase, use directly
             let ur =
                 FoundationUr::parse(ur_string).map_err(|e| UrError::UrParseError(e.to_string()))?;
 
-            return Ok(Ur::Direct(ur));
+            return Ok(Self::Direct(ur));
         }
 
         // uppercase or mixed case, normalize
-        Ok(Ur::Normalized(UrNormalized::parse(ur_string)?))
+        Ok(Self::Normalized(UrNormalized::parse(ur_string)?))
     }
 
     /// Get the UR type (e.g., "crypto-account", "crypto-psbt")
+    #[must_use]
     pub fn ur_type(&self) -> &str {
         match self {
-            Ur::Normalized(inner) => inner.ur_type(),
-            Ur::Direct(ur) => ur.as_type(),
+            Self::Normalized(inner) => inner.ur_type(),
+            Self::Direct(ur) => ur.as_type(),
         }
     }
 
     /// Get message/fragment bytes (decoded from bytewords)
+    #[must_use]
     pub fn message_bytes(&self) -> Option<Vec<u8>> {
         match self {
-            Ur::Normalized(inner) => inner.message_bytes(),
-            Ur::Direct(ur) => Self::extract_message_bytes(ur),
+            Self::Normalized(inner) => inner.message_bytes(),
+            Self::Direct(ur) => Self::extract_message_bytes(ur),
         }
     }
 
@@ -57,11 +62,14 @@ impl<'a> Ur<'a> {
         }
     }
 
-    /// Get a foundation_ur::UR reference
+    /// Get a `foundation_ur::UR` reference
+    ///
+    /// # Errors
+    /// Returns error if UR parsing fails
     pub fn to_foundation_ur(&self) -> Result<FoundationUr<'_>> {
         match self {
-            Ur::Normalized(inner) => inner.to_foundation_ur(),
-            Ur::Direct(ur) => Ok(ur.clone()),
+            Self::Normalized(inner) => inner.to_foundation_ur(),
+            Self::Direct(ur) => Ok(ur.clone()),
         }
     }
 }
@@ -77,6 +85,9 @@ pub struct UrNormalized {
 
 impl UrNormalized {
     /// Parse a UR string, normalizing to lowercase
+    ///
+    /// # Errors
+    /// Returns error if UR parsing fails or type is missing
     pub fn parse(ur_string: &str) -> Result<Self> {
         let normalized = ur_string.to_ascii_lowercase();
         FoundationUr::parse(&normalized).map_err(|e| UrError::UrParseError(e.to_string()))?;
@@ -88,20 +99,25 @@ impl UrNormalized {
             .ok_or_else(|| UrError::InvalidField("Missing UR type".into()))?
             .to_string();
 
-        Ok(UrNormalized { normalized, ur_type })
+        Ok(Self { normalized, ur_type })
     }
 
     /// Get the UR type (e.g., "crypto-account", "crypto-psbt")
+    #[must_use]
     pub fn ur_type(&self) -> &str {
         &self.ur_type
     }
 
-    /// Get a foundation_ur::UR that borrows from self
+    /// Get a `foundation_ur::UR` that borrows from self
+    ///
+    /// # Errors
+    /// Returns error if UR parsing fails
     pub fn to_foundation_ur(&self) -> Result<FoundationUr<'_>> {
         FoundationUr::parse(&self.normalized).map_err(|e| UrError::UrParseError(e.to_string()))
     }
 
     /// Get message/fragment bytes (decoded from bytewords)
+    #[must_use]
     pub fn message_bytes(&self) -> Option<Vec<u8>> {
         self.to_foundation_ur().ok().and_then(|ur| Ur::extract_message_bytes(&ur))
     }

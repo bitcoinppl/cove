@@ -16,10 +16,12 @@ struct SendFlowAdvancedDetailsView: View {
     let manager: WalletManager
     let details: ConfirmDetails
 
-    // private
+    /// private
     @State private var splitOutput: SplitOutput? = nil
 
-    var metadata: WalletMetadata { manager.walletMetadata }
+    var metadata: WalletMetadata {
+        manager.walletMetadata
+    }
 
     func fiatAmount(_ amount: Amount) -> String {
         guard let prices = app.prices else {
@@ -40,7 +42,6 @@ struct SendFlowAdvancedDetailsView: View {
         }
     }
 
-    @ViewBuilder
     private var divider: some View {
         Divider()
             .padding(.vertical, 28)
@@ -143,7 +144,8 @@ struct SendFlowAdvancedDetailsView: View {
         .presentationDragIndicator(.visible)
         .task {
             splitOutput = try? await manager.rust.splitTransactionOutputs(
-                outputs: details.outputs())
+                outputs: details.outputs()
+            )
         }
     }
 }

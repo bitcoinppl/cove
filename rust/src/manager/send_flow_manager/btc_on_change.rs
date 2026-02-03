@@ -112,12 +112,11 @@ impl BtcOnChangeHandler {
             }
         };
 
-        let amount = match amount {
-            Some(a) => a,
-            None => {
-                debug!("unable to parse amount: {unformatted}");
-                return Changeset { entering_amount_btc: Some(old.into()), ..Default::default() };
-            }
+        let amount = if let Some(a) = amount {
+            a
+        } else {
+            debug!("unable to parse amount: {unformatted}");
+            return Changeset { entering_amount_btc: Some(old.into()), ..Default::default() };
         };
 
         // check if its over the max

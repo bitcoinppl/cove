@@ -44,20 +44,28 @@ pub enum TapCard {
 }
 
 impl TapCard {
-    pub fn parse(url: &str) -> Result<TapCard, parse::Error> {
+    /// Parse a tap card URL
+    ///
+    /// # Errors
+    /// Returns an error if the URL is invalid or missing required fields
+    pub fn parse(url: &str) -> Result<Self, parse::Error> {
         parse::parse_card(url)
     }
 }
 
 #[uniffi::export]
 impl TapSigner {
+    /// Get the full card identifier string
+    ///
+    /// # Panics
+    /// Panics if the pubkey is invalid (should not happen as it's already validated)
     pub fn full_card_ident(&self) -> String {
         let pubkey_bytes = PublicKey::serialize(&self.pubkey);
         parse::card_pubkey_to_full_ident(&pubkey_bytes).expect("already validated pubkey")
     }
 
     pub fn ident_file_name_prefix(&self) -> String {
-        self.full_card_ident().replace("-", "").to_ascii_lowercase()
+        self.full_card_ident().replace('-', "").to_ascii_lowercase()
     }
 
     pub fn is_equal(&self, rhs: &Self) -> bool {
@@ -97,7 +105,7 @@ impl From<parse::Error> for TapCardParseError {
     fn from(error: parse::Error) -> Self {
         use parse::Error;
         match error {
-            Error::InvalidUrl(error) => Self::InvalidUrl(error.to_string()),
+            Error::InvalidUrl(error) => Self::InvalidUrl(error),
             Error::NotUrlEncoded(error) => Self::NotUrlEncoded(error.to_string()),
             Error::MissingField(field) => Self::MissingField(field),
             Error::UnknownCardState(state) => Self::UnknownCardState(state.to_string()),
@@ -108,6 +116,10 @@ impl From<parse::Error> for TapCardParseError {
     }
 }
 
+/// Create a preview `TapSigner` for testing/UI purposes
+///
+/// # Panics
+/// Panics if `preview` is false
 #[uniffi::export]
 pub fn tap_signer_preview_new(preview: bool) -> TapSigner {
     assert!(preview);

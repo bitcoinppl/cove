@@ -18,16 +18,16 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
     var foundAddresses: [FoundAddress] = []
     var unsignedTransactions: [UnsignedTransaction] = []
 
-    // general wallet errors
+    /// general wallet errors
     var errorAlert: WalletErrorAlert? = nil
 
-    // errors in SendFlow
+    /// errors in SendFlow
     var sendFlowErrorAlert: TaggedItem<SendFlowErrorAlert>? = nil
 
-    // cached transaction details
+    /// cached transaction details
     var transactionDetails: [TxId: TransactionDetails] = [:]
 
-    // scroll position for transaction list (persists across navigation)
+    /// scroll position for transaction list (persists across navigation)
     var scrolledTransactionId: String?
 
     init(id: WalletId) throws {
@@ -236,7 +236,10 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
         }
     }
 
-    func dispatch(action: Action) { dispatch(action) }
+    func dispatch(action: Action) {
+        dispatch(action)
+    }
+
     func dispatch(_ action: Action) {
         rustBridge.async { [weak self] in
             self?.logger.debug("dispatch: \(action)")
@@ -244,7 +247,7 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
         }
     }
 
-    // PREVIEW only
+    /// PREVIEW only
     init(preview: String, _ walletMetadata: WalletMetadata? = nil) {
         assert(preview == "preview_only")
 

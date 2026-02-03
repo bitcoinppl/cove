@@ -11,7 +11,7 @@ public struct SendFlowContainer: View {
     @Environment(AppManager.self) private var app
     @Environment(\.navigate) private var navigate
 
-    // passed in
+    /// passed in
     let sendRoute: SendRoute
 
     // private

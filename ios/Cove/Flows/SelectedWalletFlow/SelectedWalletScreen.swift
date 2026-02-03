@@ -27,20 +27,20 @@ struct SelectedWalletScreen: View {
 
     private let screenHeight = UIScreen.main.bounds.height
 
-    // nav bar height (~50) + scroll view system insets (~50)
-    // safeAreaInsets.top handles device-specific differences (notch, Dynamic Island)
+    /// nav bar height (~50) + scroll view system insets (~50)
+    /// safeAreaInsets.top handles device-specific differences (notch, Dynamic Island)
     private let navBarAndScrollInsets: CGFloat = 100
 
-    // public
+    /// public
     var manager: WalletManager
 
-    // alerts & sheets
+    /// alerts & sheets
     @State private var sheetState: TaggedItem<SheetState>? = nil
 
     @State private var showingCopiedPopup = true
     @State private var shouldShowNavBar = false
 
-    // import / export
+    /// import / export
     @State var exportingBackup: ExportingBackup? = nil
 
     @State private var scannedLabels: TaggedItem<MultiFormat>? = nil
@@ -50,7 +50,7 @@ struct SelectedWalletScreen: View {
     @State private var showExportXpubConfirmation = false
     @State private var showXpubQrExport = false
 
-    // private
+    /// private
     @State private var runPostRefresh = false
 
     var metadata: WalletMetadata {

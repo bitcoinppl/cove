@@ -216,7 +216,8 @@ struct QrCodeImportScreen: View {
                         Alert(
                             title: Text("Camera Access Required"),
                             message: Text(
-                                "Please allow camera access in Settings to use this feature."),
+                                "Please allow camera access in Settings to use this feature."
+                            ),
                             primaryButton: Alert.Button.default(Text("Settings")) {
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
                                     app.popRoute()

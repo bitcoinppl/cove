@@ -8,5 +8,7 @@
 import Foundation
 
 extension WalletErrorAlert: Identifiable {
-    public var id: Self { self }
+    public var id: Self {
+        self
+    }
 }

@@ -27,28 +27,47 @@ struct SendFlowCoinControlSetAmountScreen: View {
 
     @State private var scannedCode: TaggedString? = .none
 
-    // fees
+    /// fees
     @State private var selectedPresentationDetent: PresentationDetent = .height(440)
 
     // loading
     @State private var isLoading: Bool = true
     @State private var loadingOpacity: CGFloat = 1
 
-    // custom utxo amount
+    /// custom utxo amount
     @State private var customAmountSheetIsPresented: Bool = false
 
-    private var presenter: SendFlowPresenter { sendFlowManager.presenter }
-    private var metadata: WalletMetadata { manager.walletMetadata }
-    private var network: Network { metadata.network }
+    private var presenter: SendFlowPresenter {
+        sendFlowManager.presenter
+    }
 
-    private var totalSpentInFiat: String { sendFlowManager.totalSpentInFiat }
-    private var totalFeeString: String? { sendFlowManager.totalFeeString }
-    private var totalSpentBtc: String { sendFlowManager.totalSpentInBtc }
-    private var totalSending: String { sendFlowManager.sendAmountBtc }
+    private var metadata: WalletMetadata {
+        manager.walletMetadata
+    }
+
+    private var network: Network {
+        metadata.network
+    }
+
+    private var totalSpentInFiat: String {
+        sendFlowManager.totalSpentInFiat
+    }
+
+    private var totalFeeString: String? {
+        sendFlowManager.totalFeeString
+    }
+
+    private var totalSpentBtc: String {
+        sendFlowManager.totalSpentInBtc
+    }
+
+    private var totalSending: String {
+        sendFlowManager.sendAmountBtc
+    }
 
     // MARK: Actions
 
-    // validate, create final psbt and send to next screen
+    /// validate, create final psbt and send to next screen
     private func next() {
         if validate(true) { sendFlowManager.dispatch(action: .finalizeAndGoToNextScreen) }
     }
@@ -57,7 +76,7 @@ struct SendFlowCoinControlSetAmountScreen: View {
         if validate(true) { presenter.focusField = .none }
     }
 
-    // doing it this way prevents an alert popping up when the user just goes back
+    /// doing it this way prevents an alert popping up when the user just goes back
     private func setAlertState(_ error: SendFlowError) {
         sendFlowManager.presenter.alertState = .init(.error(error))
     }
@@ -75,7 +94,6 @@ struct SendFlowCoinControlSetAmountScreen: View {
         return metadata.selectedUnit == .btc ? screenWidth * 0.09 : screenWidth * 0.10
     }
 
-    @ViewBuilder
     var AmountSection: some View {
         VStack(spacing: 8) {
             HStack(alignment: .bottom) {
@@ -305,10 +323,11 @@ struct SendFlowCoinControlSetAmountScreen: View {
         sendFlowManager.dispatch(action: .notifySelectedUnitedChanged(old: oldUnit, new: newUnit))
     }
 
-    // presenter focus field changed
+    /// presenter focus field changed
     private func focusFieldChanged(_ oldField: FocusField?, _ newField: FocusField?) {
         Log.debug(
-            "focusFieldChanged \(String(describing: oldField)) -> \(String(describing: newField))")
+            "focusFieldChanged \(String(describing: oldField)) -> \(String(describing: newField))"
+        )
 
         sendFlowManager.dispatch(action: .notifyFocusFieldChanged(old: oldField, new: newField))
     }
@@ -320,14 +339,15 @@ struct SendFlowCoinControlSetAmountScreen: View {
 
     private func scannedCodeChanged(old: TaggedString?, newValue: TaggedString?) {
         Log.debug(
-            "scannedCodeChanged \(String(describing: old)) -> \(String(describing: newValue))")
+            "scannedCodeChanged \(String(describing: old)) -> \(String(describing: newValue))"
+        )
         guard let newValue else { return }
         presenter.sheetState = nil
         sendFlowManager.dispatch(
-            action: .notifyScanCodeChanged(old: old?.item ?? "", new: newValue.item))
+            action: .notifyScanCodeChanged(old: old?.item ?? "", new: newValue.item)
+        )
     }
 
-    @ViewBuilder
     var AddressKeyboardToolbar: some View {
         HStack {
             Group {
@@ -388,7 +408,6 @@ struct SendFlowCoinControlSetAmountScreen: View {
         }
     }
 
-    @ViewBuilder
     var AmountInfoSection: some View {
         VStack(spacing: 8) {
             HStack {
@@ -411,7 +430,6 @@ struct SendFlowCoinControlSetAmountScreen: View {
         .padding(.top)
     }
 
-    @ViewBuilder
     var NetworkFeeSection: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Network Fee")
@@ -441,7 +459,6 @@ struct SendFlowCoinControlSetAmountScreen: View {
         }
     }
 
-    @ViewBuilder
     var AccountSection: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
@@ -477,7 +494,6 @@ struct SendFlowCoinControlSetAmountScreen: View {
         }
     }
 
-    @ViewBuilder
     var TotalSpendingSection: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
@@ -510,7 +526,6 @@ struct SendFlowCoinControlSetAmountScreen: View {
         }
     }
 
-    @ViewBuilder
     var NextButtonBottom: some View {
         Button(action: next) {
             Text("Next")

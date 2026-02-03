@@ -22,21 +22,25 @@ impl From<(BdkAmount, BdkAmount)> for SentAndReceived {
 #[uniffi::export]
 impl SentAndReceived {
     #[uniffi::method]
-    pub fn sent(&self) -> Amount {
+    #[must_use]
+    pub const fn sent(&self) -> Amount {
         self.sent
     }
 
     #[uniffi::method]
-    pub fn received(&self) -> Amount {
+    #[must_use]
+    pub const fn received(&self) -> Amount {
         self.received
     }
 
     #[uniffi::method]
-    pub fn direction(&self) -> TransactionDirection {
+    #[must_use]
+    pub const fn direction(&self) -> TransactionDirection {
         self.direction
     }
 
     #[uniffi::method]
+    #[must_use]
     pub fn amount(&self) -> Amount {
         match &self.direction {
             TransactionDirection::Incoming => self.received,
@@ -45,6 +49,7 @@ impl SentAndReceived {
     }
 
     #[uniffi::method]
+    #[must_use]
     pub fn external_sent(&self) -> Amount {
         // external sent doesn't make sense for incoming transactions
         if self.direction == TransactionDirection::Incoming {
@@ -55,6 +60,7 @@ impl SentAndReceived {
     }
 
     #[uniffi::method]
+    #[must_use]
     pub fn amount_fmt(&self, unit: BitcoinUnit) -> String {
         let prefix = match &self.direction {
             TransactionDirection::Incoming => "",
@@ -68,6 +74,7 @@ impl SentAndReceived {
     }
 
     #[uniffi::method]
+    #[must_use]
     pub fn label(&self) -> String {
         match &self.direction {
             TransactionDirection::Incoming => "Received",
@@ -78,6 +85,7 @@ impl SentAndReceived {
 }
 
 impl SentAndReceived {
+    #[must_use]
     pub fn preview_new() -> Self {
         let rand = rand::rng().random_range(0..3);
 
@@ -91,6 +99,7 @@ impl SentAndReceived {
         }
     }
 
+    #[must_use]
     pub fn preview_outgoing() -> Self {
         Self {
             direction: TransactionDirection::Outgoing,
@@ -99,6 +108,7 @@ impl SentAndReceived {
         }
     }
 
+    #[must_use]
     pub fn preview_incoming() -> Self {
         Self {
             direction: TransactionDirection::Incoming,

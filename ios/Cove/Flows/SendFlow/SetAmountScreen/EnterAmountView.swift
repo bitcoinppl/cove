@@ -34,7 +34,9 @@ struct EnterAmountView: View {
         }
     }
 
-    var metadata: WalletMetadata { manager.walletMetadata }
+    var metadata: WalletMetadata {
+        manager.walletMetadata
+    }
 
     var offset: CGFloat {
         if metadata.fiatOrBtc == .fiat { return 0 }
@@ -57,7 +59,6 @@ struct EnterAmountView: View {
         exceedsBalance ? .orange : .primary
     }
 
-    @ViewBuilder
     private var btcTextField: some View {
         TextField("", text: $enteringBtcAmount)
             .font(.system(size: 48, weight: .bold))
@@ -73,7 +74,6 @@ struct EnterAmountView: View {
             .frame(height: UIFont.boldSystemFont(ofSize: 48).lineHeight)
     }
 
-    @ViewBuilder
     private var fiatTextField: some View {
         TextField("", text: $enteringFiatAmount)
             .font(.system(size: 48, weight: .bold))
@@ -89,7 +89,6 @@ struct EnterAmountView: View {
             .frame(height: UIFont.boldSystemFont(ofSize: 48).lineHeight)
     }
 
-    @ViewBuilder
     private var unitSelector: some View {
         HStack(spacing: 0) {
             if metadata.fiatOrBtc == .btc {
@@ -111,7 +110,6 @@ struct EnterAmountView: View {
         }
     }
 
-    @ViewBuilder
     private var unitPopoverContent: some View {
         VStack(alignment: .center, spacing: 0) {
             Button(action: {
@@ -148,7 +146,6 @@ struct EnterAmountView: View {
         .contentShape(Rectangle())
     }
 
-    @ViewBuilder
     private var secondaryAmountRow: some View {
         HStack(spacing: 4) {
             Text(metadata.fiatOrBtc == .btc ? sendAmountFiat : sendAmountBtc)

@@ -183,7 +183,7 @@ impl RustCoinControlManager {
     pub fn dispatch(self: Arc<Self>, action: Action) {
         match action {
             Action::ChangeSort(sort_button_pressed) => {
-                self.sort_button_pressed(sort_button_pressed)
+                self.sort_button_pressed(sort_button_pressed);
             }
             Action::NotifySearchChanged(search) => self.notify_search_changed(search),
             Action::ClearSearch => {
@@ -227,13 +227,12 @@ impl RustCoinControlManager {
     }
 
     pub fn total_value_of_utxos(&self, selected_utxo_ids: &[Arc<OutPoint>]) -> Amount {
-        let selected_utxos_ids: HashSet<Arc<OutPoint>> =
-            selected_utxo_ids.iter().cloned().collect();
+        let selected_ids: HashSet<Arc<OutPoint>> = selected_utxo_ids.iter().cloned().collect();
 
         let final_amount_sats = self
             .utxos()
             .into_iter()
-            .filter(|utxo| selected_utxos_ids.contains(&utxo.outpoint))
+            .filter(|utxo| selected_ids.contains(&utxo.outpoint))
             .map(|utxo| utxo.amount.as_sats())
             .sum();
 
@@ -293,7 +292,7 @@ impl RustCoinControlManager {
         } else {
             self.state.lock().selected_utxos = new_selected_utxos.clone();
             let total_value = self.total_value_of_utxos(&new_selected_utxos).into();
-            sender.queue(Message::UpdateSelectedUtxos { utxos: new_selected_utxos, total_value })
+            sender.queue(Message::UpdateSelectedUtxos { utxos: new_selected_utxos, total_value });
         }
     }
 
@@ -386,11 +385,11 @@ impl Default for SortState {
 }
 
 impl SortState {
-    pub fn is_active(&self) -> bool {
+    pub const fn is_active(&self) -> bool {
         matches!(self, Self::Active(_))
     }
 
-    pub fn sorter(&self) -> CoinControlListSort {
+    pub const fn sorter(&self) -> CoinControlListSort {
         match self {
             Self::Active(sort) => *sort,
             Self::Inactive(sort) => *sort,
@@ -405,7 +404,7 @@ pub enum ListSortDirection {
 }
 
 impl ListSortDirection {
-    pub fn reverse(self) -> Self {
+    pub const fn reverse(self) -> Self {
         match self {
             Self::Ascending => Self::Descending,
             Self::Descending => Self::Ascending,
@@ -414,7 +413,7 @@ impl ListSortDirection {
 }
 
 impl CoinControlListSortKey {
-    pub fn to_default_sort(self) -> CoinControlListSort {
+    pub const fn to_default_sort(self) -> CoinControlListSort {
         match self {
             Self::Date => CoinControlListSort::Date(ListSortDirection::Descending),
             Self::Amount => CoinControlListSort::Amount(ListSortDirection::Descending),

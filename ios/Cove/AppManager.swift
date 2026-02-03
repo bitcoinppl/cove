@@ -19,7 +19,7 @@ private let walletModeChangeDelayMs = 250
     var alertState: TaggedItem<AppAlertState>? = .none
     var sheetState: TaggedItem<AppSheetState>? = .none
 
-    // tracks if current screen is scrolled past header for adaptive nav styling
+    /// tracks if current screen is scrolled past header for adaptive nav styling
     var isPastHeader = false
 
     var isTermsAccepted: Bool = Database().globalFlag().isTermsAccepted()
@@ -39,7 +39,7 @@ private let walletModeChangeDelayMs = 250
     @MainActor
     var isLoading = false
 
-    // changed when route is reset, to clear lifecycle view state
+    /// changed when route is reset, to clear lifecycle view state
     var routeId = UUID()
 
     @ObservationIgnored
@@ -151,7 +151,7 @@ private let walletModeChangeDelayMs = 250
         Int(rust.numWallets())
     }
 
-    // this will select the wallet and reset the route to the selectedWalletRoute
+    /// this will select the wallet and reset the route to the selectedWalletRoute
     func selectWallet(_ id: WalletId) {
         do {
             try rust.selectWallet(id: id)

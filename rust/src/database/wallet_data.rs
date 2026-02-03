@@ -210,7 +210,7 @@ pub fn get_or_create_database(id: &WalletId, location: &Path) -> Arc<redb::Datab
                 error!("failed to open database for {id}, error: {error:?}, creating a new one");
             }
         }
-    };
+    }
 
     info!("Creating a new database for wallet {id}, at {}", database_location.display());
 
@@ -236,19 +236,17 @@ fn delete_database_at_location(id: &WalletId, location: &Path) -> Result<(), std
 }
 
 impl WalletDataKey {
-    pub fn as_str(&self) -> &'static str {
+    pub const fn as_str(&self) -> &'static str {
         match self {
-            WalletDataKey::ScanState(WalletAddressType::NativeSegwit) => "scan_state_native_segwit",
-            WalletDataKey::ScanState(WalletAddressType::WrappedSegwit) => {
-                "scan_state_wrapped_segwit"
-            }
-            WalletDataKey::ScanState(WalletAddressType::Legacy) => "scan_state_legacy",
+            Self::ScanState(WalletAddressType::NativeSegwit) => "scan_state_native_segwit",
+            Self::ScanState(WalletAddressType::WrappedSegwit) => "scan_state_wrapped_segwit",
+            Self::ScanState(WalletAddressType::Legacy) => "scan_state_legacy",
         }
     }
 }
 
 impl ScanningInfo {
-    pub fn new(address_type: WalletAddressType) -> Self {
+    pub const fn new(address_type: WalletAddressType) -> Self {
         Self { address_type, count: 0 }
     }
 }

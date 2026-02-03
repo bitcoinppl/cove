@@ -9,13 +9,15 @@ pub struct MessageInfo {
 }
 
 impl MessageInfo {
-    pub fn new(payload_length: u16) -> Self {
+    #[must_use]
+    pub const fn new(payload_length: u16) -> Self {
         Self { payload_length, full_message_length: total_with_info(payload_length) }
     }
 }
 
-fn total_with_info(total_payload_length: u16) -> u16 {
-    let fixed_header_length = [226, 67, 0, 1, 0, 0, 4, 0, 3].len() as u16;
+const fn total_with_info(total_payload_length: u16) -> u16 {
+    // [226, 67, 0, 1, 0, 0, 4, 0, 3].len() == 9
+    let fixed_header_length: u16 = 9;
     let payload_length_indicator_length = if total_payload_length < 255 {
         1
     } else {

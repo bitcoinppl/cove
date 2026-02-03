@@ -34,7 +34,6 @@ where
 
     fn as_bytes<'a, 'b: 'a>(value: &'a Self::SelfType<'b>) -> Self::AsBytes<'a>
     where
-        Self: 'a,
         Self: 'b,
     {
         serde_json::to_vec(value).expect("failed to serialize")

@@ -7,9 +7,9 @@
 
 import Foundation
 
-// Takes a weak reference to a model that conform to the AnyReconciler protocol
-final class WeakReconciler<Reconciler: AnyObject, Message>: AnyReconciler, @unchecked Sendable
-    where Reconciler: AnyReconciler, Reconciler.Message == Message
+/// Takes a weak reference to a model that conform to the AnyReconciler protocol
+final class WeakReconciler<Reconciler: AnyObject & AnyReconciler, Message>: AnyReconciler, @unchecked Sendable
+    where Reconciler.Message == Message
 {
     private weak var reconciler: Reconciler?
 

@@ -41,18 +41,27 @@ type Result<T, E = Error> = std::result::Result<T, E>;
 
 #[uniffi::export]
 impl Psbt {
+    /// Creates a new PSBT from serialized bytes
+    ///
+    /// # Errors
+    /// Returns `PsbtError::Other` if deserialization fails
     #[uniffi::constructor(name = "new")]
+    #[allow(clippy::needless_pass_by_value)] // uniffi requires Vec by value
     pub fn try_new(data: Vec<u8>) -> Result<Self> {
         let psbt = BdkPsbt::deserialize(&data).map_err(|e| PsbtError::Other(e.to_string()))?;
         Ok(psbt.into())
     }
 
-    /// The virtual size of the transaction.
+    /// The virtual size of the transaction
+    #[must_use]
     pub fn weight(&self) -> u64 {
         self.0.unsigned_tx.vsize() as u64
     }
 
-    /// Total fee in sats.
+    /// Total fee in sats
+    ///
+    /// # Errors
+    /// Returns `PsbtError` variants if fee calculation fails
     pub fn fee(&self) -> Result<Amount> {
         use bitcoin::psbt::Error as E;
 
@@ -67,11 +76,13 @@ impl Psbt {
     }
 
     /// Get the transaction id of the unsigned transaction
+    #[must_use]
     pub fn tx_id(&self) -> TxId {
         self.0.unsigned_tx.compute_txid().into()
     }
 
     /// Get total sending amount of all outputs
+    #[must_use]
     pub fn output_total_amount(&self) -> Amount {
         let amount: BdkAmount = self.0.unsigned_tx.output.iter().map(|output| output.value).sum();
 
@@ -81,6 +92,7 @@ impl Psbt {
 
 impl Psbt {
     /// Get all UTXOs
+    #[must_use]
     pub fn utxos(&self) -> Vec<(TxIn, TxOut)> {
         self.utxos_iter().map(|(tx_in, tx_out)| (tx_in.clone(), tx_out)).collect()
     }

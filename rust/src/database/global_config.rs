@@ -142,7 +142,7 @@ impl GlobalConfigTable {
             let _ = self
                 .select_wallet(id.clone().into())
                 .tap_err(|error| error!("unable to select wallet for decoy {id}: {error}"));
-        };
+        }
 
         self.set(GlobalConfigKey::InDecoyMode, "true".to_string())?;
         Updater::send_update(Update::DatabaseUpdated);
@@ -169,7 +169,7 @@ impl GlobalConfigTable {
             let _ = self
                 .select_wallet(id.clone().into())
                 .tap_err(|error| error!("unable to select wallet for main {id}: {error}"));
-        };
+        }
 
         self.set(GlobalConfigKey::InDecoyMode, "false".to_string())?;
         Updater::send_update(Update::DatabaseUpdated);
@@ -204,16 +204,15 @@ impl GlobalConfigTable {
         let network = self
             .get(GlobalConfigKey::SelectedNetwork)
             .unwrap_or(None)
-            .unwrap_or("bitcoin".to_string());
+            .unwrap_or_else(|| "bitcoin".to_string());
 
-        match Network::try_from(network.as_str()) {
-            Ok(network) => network,
-            Err(_) => {
-                self.set_selected_network(Network::Bitcoin)
-                    .expect("failed to set network, please report this bug");
+        if let Ok(network) = Network::try_from(network.as_str()) {
+            network
+        } else {
+            self.set_selected_network(Network::Bitcoin)
+                .expect("failed to set network, please report this bug");
 
-                Network::Bitcoin
-            }
+            Network::Bitcoin
         }
     }
 
@@ -233,7 +232,9 @@ impl GlobalConfigTable {
     }
 
     pub fn is_in_decoy_mode(&self) -> bool {
-        self.get(GlobalConfigKey::InDecoyMode).unwrap_or(None).unwrap_or("false".to_string())
+        self.get(GlobalConfigKey::InDecoyMode)
+            .unwrap_or(None)
+            .unwrap_or_else(|| "false".to_string())
             == "true"
     }
 
@@ -241,7 +242,7 @@ impl GlobalConfigTable {
         let network = self.selected_network();
         let selected_node_key = GlobalConfigKey::SelectedNode(network);
 
-        let node_json = self.get(selected_node_key).unwrap_or(None).unwrap_or("".to_string());
+        let node_json = self.get(selected_node_key).unwrap_or(None).unwrap_or_default();
 
         serde_json::from_str(&node_json).unwrap_or_else(|_| Node::default(network))
     }

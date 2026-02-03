@@ -5,10 +5,10 @@ use tracing::{debug, error, warn};
 
 use crate::task;
 
-pub(crate) trait DebugSend: Debug + Send + Sync + 'static {}
+pub trait DebugSend: Debug + Send + Sync + 'static {}
 impl<T> DebugSend for T where T: Debug + Send + Sync + 'static {}
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SingleOrMany<T> {
     Single(T),
     Many(Vec<T>),
@@ -16,13 +16,13 @@ pub enum SingleOrMany<T> {
 
 impl<T> From<T> for SingleOrMany<T> {
     fn from(msg: T) -> Self {
-        SingleOrMany::Single(msg)
+        Self::Single(msg)
     }
 }
 
 impl<T> From<Vec<T>> for SingleOrMany<T> {
     fn from(msgs: Vec<T>) -> Self {
-        SingleOrMany::Many(msgs)
+        Self::Many(msgs)
     }
 }
 
@@ -33,7 +33,7 @@ pub struct DeferredSender<T: DebugSend> {
 }
 
 impl<T: DebugSend> DeferredSender<T> {
-    pub fn new(sender: MessageSender<T>) -> Self {
+    pub const fn new(sender: MessageSender<T>) -> Self {
         Self { sender, buffer: vec![] }
     }
 
@@ -54,7 +54,7 @@ impl<T> Clone for MessageSender<T> {
 }
 
 impl<T: DebugSend> MessageSender<T> {
-    pub fn new(sender: Sender<SingleOrMany<T>>) -> Self {
+    pub const fn new(sender: Sender<SingleOrMany<T>>) -> Self {
         Self { sender }
     }
 
@@ -62,7 +62,7 @@ impl<T: DebugSend> MessageSender<T> {
         let message = message.into();
         debug!("send: {message:?}");
         match self.sender.try_send(message) {
-            Ok(_) => {}
+            Ok(()) => {}
             Err(TrySendError::Full(message)) => {
                 warn!("[WARN] unable to send, queue is full, sending async");
 

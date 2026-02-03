@@ -851,19 +851,19 @@ private fun uniffiCheckContractApiVersion(lib: IntegrityCheckingUniffiLib) {
 }
 @Suppress("UNUSED_PARAMETER")
 private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
-    if (lib.uniffi_cove_ur_checksum_method_cryptohdkey_encode() != 5721.toShort()) {
+    if (lib.uniffi_cove_ur_checksum_method_cryptohdkey_encode() != 47538.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_ur_checksum_method_cryptopsbt_encode() != 11773.toShort()) {
+    if (lib.uniffi_cove_ur_checksum_method_cryptopsbt_encode() != 6959.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_ur_checksum_method_cryptopsbt_to_psbt_bytes() != 52904.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_ur_checksum_method_cryptopsbt_to_ur() != 8360.toShort()) {
+    if (lib.uniffi_cove_ur_checksum_method_cryptopsbt_to_ur() != 32582.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_ur_checksum_method_cryptoseed_encode() != 48905.toShort()) {
+    if (lib.uniffi_cove_ur_checksum_method_cryptoseed_encode() != 57300.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_ur_checksum_method_cryptoseed_entropy() != 60295.toShort()) {
@@ -878,25 +878,25 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_ur_checksum_method_cryptoseed_get_note() != 48679.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_ur_checksum_constructor_cryptohdkey_decode() != 58745.toShort()) {
+    if (lib.uniffi_cove_ur_checksum_constructor_cryptohdkey_decode() != 1054.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_ur_checksum_constructor_cryptopsbt_decode() != 57233.toShort()) {
+    if (lib.uniffi_cove_ur_checksum_constructor_cryptopsbt_decode() != 64081.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_ur_checksum_constructor_cryptopsbt_from_psbt_bytes() != 63629.toShort()) {
+    if (lib.uniffi_cove_ur_checksum_constructor_cryptopsbt_from_psbt_bytes() != 26270.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_ur_checksum_constructor_cryptopsbt_from_ur() != 823.toShort()) {
+    if (lib.uniffi_cove_ur_checksum_constructor_cryptopsbt_from_ur() != 46845.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_ur_checksum_constructor_cryptoseed_decode() != 59203.toShort()) {
+    if (lib.uniffi_cove_ur_checksum_constructor_cryptoseed_decode() != 39151.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_ur_checksum_constructor_cryptoseed_from_entropy() != 56252.toShort()) {
+    if (lib.uniffi_cove_ur_checksum_constructor_cryptoseed_from_entropy() != 13375.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_ur_checksum_constructor_cryptoseed_from_entropy_with_metadata() != 24161.toShort()) {
+    if (lib.uniffi_cove_ur_checksum_constructor_cryptoseed_from_entropy_with_metadata() != 63642.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
 }
@@ -1258,6 +1258,10 @@ public interface CryptoHdkeyInterface {
     
     /**
      * Encode as CBOR for UR
+     *
+     * # Errors
+     *
+     * Returns an error if CBOR encoding fails
      */
     fun `encode`(): kotlin.ByteArray
     
@@ -1366,6 +1370,10 @@ open class CryptoHdkey: Disposable, AutoCloseable, CryptoHdkeyInterface
     
     /**
      * Encode as CBOR for UR
+     *
+     * # Errors
+     *
+     * Returns an error if CBOR encoding fails
      */
     @Throws(UrException::class)override fun `encode`(): kotlin.ByteArray {
             return FfiConverterByteArray.lift(
@@ -1390,6 +1398,10 @@ open class CryptoHdkey: Disposable, AutoCloseable, CryptoHdkeyInterface
         
     /**
      * Decode from CBOR
+     *
+     * # Errors
+     *
+     * Returns an error if CBOR decoding fails or the structure is invalid
      */
     @Throws(UrException::class) fun `decode`(`cbor`: kotlin.ByteArray): CryptoHdkey {
             return FfiConverterTypeCryptoHdkey.lift(
@@ -1529,12 +1541,15 @@ public object FfiConverterTypeCryptoHdkey: FfiConverter<CryptoHdkey, Long> {
 
 /**
  * crypto-psbt: PSBT encoded as CBOR byte string with tag 310
- * BCR-2020-006: https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md
+ * BCR-2020-006: <https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md>
  */
 public interface CryptoPsbtInterface {
     
     /**
      * Encode as CBOR for UR
+     *
+     * # Errors
+     * Returns error if CBOR encoding fails
      */
     fun `encode`(): kotlin.ByteArray
     
@@ -1545,6 +1560,9 @@ public interface CryptoPsbtInterface {
     
     /**
      * Encode as UR string
+     *
+     * # Errors
+     * Returns error if CBOR encoding fails
      */
     fun `toUr`(): kotlin.String
     
@@ -1553,7 +1571,7 @@ public interface CryptoPsbtInterface {
 
 /**
  * crypto-psbt: PSBT encoded as CBOR byte string with tag 310
- * BCR-2020-006: https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md
+ * BCR-2020-006: <https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md>
  */
 open class CryptoPsbt: Disposable, AutoCloseable, CryptoPsbtInterface
 {
@@ -1654,6 +1672,9 @@ open class CryptoPsbt: Disposable, AutoCloseable, CryptoPsbtInterface
     
     /**
      * Encode as CBOR for UR
+     *
+     * # Errors
+     * Returns error if CBOR encoding fails
      */
     @Throws(UrException::class)override fun `encode`(): kotlin.ByteArray {
             return FfiConverterByteArray.lift(
@@ -1687,6 +1708,9 @@ open class CryptoPsbt: Disposable, AutoCloseable, CryptoPsbtInterface
     
     /**
      * Encode as UR string
+     *
+     * # Errors
+     * Returns error if CBOR encoding fails
      */
     @Throws(UrException::class)override fun `toUr`(): kotlin.String {
             return FfiConverterString.lift(
@@ -1711,6 +1735,9 @@ open class CryptoPsbt: Disposable, AutoCloseable, CryptoPsbtInterface
         
     /**
      * Decode from CBOR
+     *
+     * # Errors
+     * Returns error if CBOR decoding or PSBT deserialization fails
      */
     @Throws(UrException::class) fun `decode`(`cbor`: kotlin.ByteArray): CryptoPsbt {
             return FfiConverterTypeCryptoPsbt.lift(
@@ -1726,6 +1753,9 @@ open class CryptoPsbt: Disposable, AutoCloseable, CryptoPsbtInterface
         
     /**
      * Create from PSBT bytes
+     *
+     * # Errors
+     * Returns error if PSBT deserialization fails
      */
     @Throws(UrException::class) fun `fromPsbtBytes`(`psbtBytes`: kotlin.ByteArray): CryptoPsbt {
             return FfiConverterTypeCryptoPsbt.lift(
@@ -1741,6 +1771,9 @@ open class CryptoPsbt: Disposable, AutoCloseable, CryptoPsbtInterface
         
     /**
      * Decode from UR string
+     *
+     * # Errors
+     * Returns error if UR parsing or CBOR decoding fails
      */
     @Throws(UrException::class) fun `fromUr`(`ur`: kotlin.String): CryptoPsbt {
             return FfiConverterTypeCryptoPsbt.lift(
@@ -1880,12 +1913,15 @@ public object FfiConverterTypeCryptoPsbt: FfiConverter<CryptoPsbt, Long> {
 
 /**
  * crypto-seed: BIP39 seed with optional metadata
- * BCR-2020-006: https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md
+ * BCR-2020-006: <https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md>
  */
 public interface CryptoSeedInterface {
     
     /**
      * Encode as CBOR for UR
+     *
+     * # Errors
+     * Returns error if CBOR encoding fails
      */
     fun `encode`(): kotlin.ByteArray
     
@@ -1914,7 +1950,7 @@ public interface CryptoSeedInterface {
 
 /**
  * crypto-seed: BIP39 seed with optional metadata
- * BCR-2020-006: https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md
+ * BCR-2020-006: <https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md>
  */
 open class CryptoSeed: Disposable, AutoCloseable, CryptoSeedInterface
 {
@@ -2015,6 +2051,9 @@ open class CryptoSeed: Disposable, AutoCloseable, CryptoSeedInterface
     
     /**
      * Encode as CBOR for UR
+     *
+     * # Errors
+     * Returns error if CBOR encoding fails
      */
     @Throws(UrException::class)override fun `encode`(): kotlin.ByteArray {
             return FfiConverterByteArray.lift(
@@ -2103,6 +2142,9 @@ open class CryptoSeed: Disposable, AutoCloseable, CryptoSeedInterface
         
     /**
      * Decode from CBOR
+     *
+     * # Errors
+     * Returns error if CBOR decoding fails or payload length is invalid
      */
     @Throws(UrException::class) fun `decode`(`cbor`: kotlin.ByteArray): CryptoSeed {
             return FfiConverterTypeCryptoSeed.lift(
@@ -2118,6 +2160,9 @@ open class CryptoSeed: Disposable, AutoCloseable, CryptoSeedInterface
         
     /**
      * Create from entropy bytes
+     *
+     * # Errors
+     * Returns error if entropy is invalid for BIP39
      */
     @Throws(UrException::class) fun `fromEntropy`(`payload`: kotlin.ByteArray): CryptoSeed {
             return FfiConverterTypeCryptoSeed.lift(
@@ -2133,6 +2178,9 @@ open class CryptoSeed: Disposable, AutoCloseable, CryptoSeedInterface
         
     /**
      * Create from entropy bytes with optional metadata
+     *
+     * # Errors
+     * Returns error if entropy is invalid for BIP39
      */
     @Throws(UrException::class) fun `fromEntropyWithMetadata`(`payload`: kotlin.ByteArray, `name`: kotlin.String?, `note`: kotlin.String?, `creationDate`: kotlin.ULong?): CryptoSeed {
             return FfiConverterTypeCryptoSeed.lift(

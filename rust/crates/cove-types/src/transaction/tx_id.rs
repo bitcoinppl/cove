@@ -28,12 +28,14 @@ pub struct TxId(pub BdkTxid);
 #[uniffi::export]
 impl TxId {
     #[uniffi::method]
+    #[must_use]
     pub fn as_hash_string(&self) -> String {
         self.0.to_raw_hash().to_string()
     }
 }
 
 impl TxId {
+    #[must_use]
     pub fn preview_new() -> Self {
         let random_bytes = random::<[u8; 32]>();
         let hash = *bitcoin::hashes::sha256d::Hash::from_bytes_ref(&random_bytes);
@@ -72,7 +74,7 @@ impl Borrow<TxId> for &BdkTxid {
         // SAFETY: Valid because:
         // 1. TxId is #[repr(transparent)] around BdkTxid
         // 2. We're casting from &BdkTxid to &TxId
-        unsafe { &*((*self) as *const BdkTxid as *const TxId) }
+        unsafe { &*std::ptr::from_ref::<BdkTxid>(*self).cast::<TxId>() }
     }
 }
 
@@ -85,7 +87,7 @@ impl redb::Key for TxId {
 
 impl redb::Value for TxId {
     type SelfType<'a>
-        = TxId
+        = Self
     where
         Self: 'a;
 
@@ -110,7 +112,6 @@ impl redb::Value for TxId {
 
     fn as_bytes<'a, 'b: 'a>(value: &'a Self::SelfType<'b>) -> Self::AsBytes<'a>
     where
-        Self: 'a,
         Self: 'b,
     {
         value.0.as_ref()

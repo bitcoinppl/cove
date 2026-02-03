@@ -1,9 +1,9 @@
 //! crypto-coin-info: Cryptocurrency coin info
-//! BCR-2020-007: https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-007-hdkey.md
+//! BCR-2020-007: <https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-007-hdkey.md>
 
 use minicbor::{Decode, Encode};
 
-use crate::error::*;
+use crate::error::{Result, ToUrError, UrError};
 
 /// crypto-coin-info: Cryptocurrency coin info
 /// CBOR structure: #6.305({?1: uint, ?2: uint})
@@ -20,19 +20,26 @@ pub struct CryptoCoinInfo {
 }
 
 impl CryptoCoinInfo {
-    /// Create new CryptoCoinInfo
-    pub fn new(coin_type: Option<u32>, network: Option<u32>) -> Self {
+    /// Create new `CryptoCoinInfo`
+    #[must_use]
+    pub const fn new(coin_type: Option<u32>, network: Option<u32>) -> Self {
         Self { coin_type, network }
     }
 
     /// Encode as tagged CBOR
+    ///
+    /// # Errors
+    /// Returns error if CBOR encoding fails
     pub fn to_cbor(&self) -> Result<Vec<u8>> {
         minicbor::to_vec(self).map_err(|e| UrError::CborEncodeError(e.to_string()))
     }
 
     /// Decode from tagged CBOR
+    ///
+    /// # Errors
+    /// Returns error if CBOR decoding fails
     pub fn from_cbor(cbor: &[u8]) -> Result<Self> {
-        let info: CryptoCoinInfo = minicbor::decode(cbor).map_err_cbor_decode()?;
+        let info: Self = minicbor::decode(cbor).map_err_cbor_decode()?;
         Ok(info)
     }
 }

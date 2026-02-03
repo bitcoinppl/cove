@@ -13,10 +13,10 @@ private typealias FocusField = SendFlowPresenter.FocusField
 struct EnterAddressView: View {
     @Environment(SendFlowPresenter.self) private var presenter
 
-    // args
+    /// args
     @Binding var address: String
 
-    // private
+    /// private
     @FocusState private var focusField: SendFlowPresenter.FocusField?
 
     var body: some View {
@@ -62,7 +62,8 @@ struct EnterAddressView: View {
         }
         .onChange(of: address, initial: true) { _, new in
             let noSpaces = new.replacingOccurrences(of: " ", with: "").trimmingCharacters(
-                in: .whitespaces)
+                in: .whitespaces
+            )
 
             address = noSpaces
         }

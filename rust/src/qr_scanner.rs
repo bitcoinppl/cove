@@ -127,10 +127,10 @@ impl ScanProgress {
     /// Display text for the progress (e.g., "Scanned 3 of 10" or "Scanned 45%")
     pub fn display_text(&self) -> String {
         match self {
-            ScanProgress::Bbqr { scanned, total } => format!("Scanned {} of {}", scanned, total),
-            ScanProgress::Ur { percentage } => {
+            Self::Bbqr { scanned, total } => format!("Scanned {scanned} of {total}"),
+            Self::Ur { percentage } => {
                 let percent = (percentage * 100.0) as u32;
-                format!("Scanned {}%", percent)
+                format!("Scanned {percent}%")
             }
         }
     }
@@ -138,25 +138,25 @@ impl ScanProgress {
     /// Detail text for the progress (e.g., "7 parts left"), or None for UR
     pub fn detail_text(&self) -> Option<String> {
         match self {
-            ScanProgress::Bbqr { scanned, total } => {
+            Self::Bbqr { scanned, total } => {
                 let remaining = total - scanned;
                 if remaining == 1 {
                     Some("1 part left".to_string())
                 } else {
-                    Some(format!("{} parts left", remaining))
+                    Some(format!("{remaining} parts left"))
                 }
             }
-            ScanProgress::Ur { .. } => None, // UR uses fountain codes, no fixed "parts left"
+            Self::Ur { .. } => None, // UR uses fountain codes, no fixed "parts left"
         }
     }
 }
 
 impl ScanProgress {
     /// Check if this progress is greater than another (used for haptic feedback)
-    fn is_greater_than(&self, other: &ScanProgress) -> bool {
+    fn is_greater_than(&self, other: &Self) -> bool {
         match (self, other) {
-            (ScanProgress::Bbqr { scanned: a, .. }, ScanProgress::Bbqr { scanned: b, .. }) => a > b,
-            (ScanProgress::Ur { percentage: a }, ScanProgress::Ur { percentage: b }) => a > b,
+            (Self::Bbqr { scanned: a, .. }, Self::Bbqr { scanned: b, .. }) => a > b,
+            (Self::Ur { percentage: a }, Self::Ur { percentage: b }) => a > b,
             // different types shouldn't happen, but treat as progress
             _ => true,
         }
@@ -198,7 +198,7 @@ impl QrScannerFFI {
     /// Reset the scanner state for a new scan session.
     #[uniffi::method]
     pub fn reset(&self) {
-        self.0.lock().reset()
+        self.0.lock().reset();
     }
 }
 

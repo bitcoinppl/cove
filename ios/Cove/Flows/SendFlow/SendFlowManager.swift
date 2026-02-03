@@ -70,7 +70,7 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
         rust.validateFeePercentage(displayAlert: displayAlert)
     }
 
-    // private
+    /// private
     private var deboucedTask: Task<Void, Never>? = nil
 
     public init(_ rust: RustSendFlowManager, presenter: SendFlowPresenter) {
@@ -192,7 +192,10 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
         }
     }
 
-    public func dispatch(action: Action) { dispatch(action) }
+    public func dispatch(action: Action) {
+        dispatch(action)
+    }
+
     public func dispatch(_ action: Action) {
         rustBridge.async {
             self.logger.debug("dispatch: \(action)")

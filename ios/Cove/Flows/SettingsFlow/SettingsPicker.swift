@@ -12,7 +12,9 @@ protocol SettingsEnum: CustomStringConvertible & CaseIterable & Hashable {
 }
 
 extension SettingsEnum {
-    var symbol: String { "" }
+    var symbol: String {
+        ""
+    }
 }
 
 struct SettingsPicker<T: SettingsEnum>: View where T.AllCases: RandomAccessCollection {

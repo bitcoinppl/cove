@@ -6,8 +6,8 @@ use tokio::task::JoinHandle;
 pub struct AbortableTask<T>(JoinHandle<T>);
 
 impl<T> AbortableTask<T> {
-    pub fn new(handle: JoinHandle<T>) -> Self {
-        AbortableTask(handle)
+    pub const fn new(handle: JoinHandle<T>) -> Self {
+        Self(handle)
     }
 }
 
@@ -19,7 +19,7 @@ where
     where
         F: Future<Output = T> + Send + 'static,
     {
-        AbortableTask(tokio::spawn(fut))
+        Self(tokio::spawn(fut))
     }
 }
 

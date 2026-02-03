@@ -44,7 +44,6 @@ struct UtxoListScreen: View {
         }
     }
 
-    @ViewBuilder
     func UtxoList() -> some View {
         VStack(spacing: 0) {
             List(selection: manager.selectedBinding) {
@@ -96,7 +95,7 @@ struct UtxoListScreen: View {
         return "Continue (\(manager.selected.count))"
     }
 
-    // ─── Body ────────────────────────────────────────────────
+    /// ─── Body ────────────────────────────────────────────────
     var body: some View {
         VStack(spacing: 24) {
             VStack(spacing: 16) {
@@ -164,7 +163,8 @@ struct UtxoListScreen: View {
                                 leading: -35,
                                 bottom: -10,
                                 trailing: -35
-                            ))
+                            )
+                        )
                     )
                     .onTapGesture { manager.dispatch(.toggleSelectAll) }
                 }
@@ -370,7 +370,8 @@ private struct UtxoRow: View {
     AsyncPreview {
         UtxoListScreen(
             manager: CoinControlManager(
-                RustCoinControlManager.previewNew(outputCount: 0, changeCount: 0))
+                RustCoinControlManager.previewNew(outputCount: 0, changeCount: 0)
+            )
         )
         .environment(WalletManager(preview: "preview_only"))
     }

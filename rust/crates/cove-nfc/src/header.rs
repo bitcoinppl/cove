@@ -1,5 +1,6 @@
 use crate::ndef_type::NdefType;
 
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct NdefHeader {
     pub message_begin: bool,

@@ -25,7 +25,6 @@ extension View {
 
     /// Applies a glass effect with custom parameters when running on iOS 26+.
     @available(iOS 26.0, *)
-    @ViewBuilder
     func applyGlassEffect(
         _ glass: Glass,
         in shape: some Shape = DefaultGlassEffectShape()

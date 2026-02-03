@@ -5,6 +5,12 @@ use bdk_wallet::{
 };
 
 /// From: BDK
+///
+/// # Errors
+/// Returns `InsufficientFunds` if the selected UTXOs cannot cover the target amount plus fees
+///
+/// # Panics
+/// Panics if weight addition overflows (should not happen in practice)
 pub fn select_sorted_utxos(
     utxos: impl Iterator<Item = (bool, WeightedUtxo)>,
     fee_rate: FeeRate,
@@ -53,6 +59,10 @@ pub fn select_sorted_utxos(
 /// - `remaining_amount`: the amount in which the selected coins exceed the target amount
 /// - `fee_rate`: required fee rate for the current selection
 /// - `drain_script`: script to consider change creation
+///
+/// # Panics
+/// Panics if converting drain output length to virtual bytes overflows
+#[must_use]
 pub fn decide_change(remaining_amount: Amount, fee_rate: FeeRate, drain_script: &Script) -> Excess {
     let drain_output_len = serialize(drain_script).len() + 8usize;
     let change_fee =

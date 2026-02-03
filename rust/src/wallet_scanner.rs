@@ -463,8 +463,8 @@ impl WalletScanWorker {
 
                         if let Err(error) = db.set_scan_state(wallet_type, scan_state) {
                             error!("unable to update scan state: {error}");
-                        };
-                    };
+                        }
+                    }
 
                     if current_address >= scan_limit {
                         db.set_scan_state(wallet_type, ScanState::Completed)
@@ -538,7 +538,7 @@ impl Wallets {
     }
 
     pub fn try_from_mnemonic(mnemonic: &Mnemonic, network: Network) -> Result<Self, WalletError> {
-        let mut wallets = Wallets::default();
+        let mut wallets = Self::default();
 
         for type_ in [WalletAddressType::WrappedSegwit, WalletAddressType::Legacy] {
             let descriptor = mnemonic.clone().into_descriptors(None, network, type_);
@@ -559,6 +559,6 @@ impl Wallets {
 
 impl From<ScannerResponse> for WalletManagerReconcileMessage {
     fn from(response: ScannerResponse) -> Self {
-        WalletManagerReconcileMessage::WalletScannerResponse(response)
+        Self::WalletScannerResponse(response)
     }
 }

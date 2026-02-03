@@ -11,7 +11,7 @@ import SwiftUI
 struct VerificationCompleteScreen: View {
     @Environment(AppManager.self) var app
 
-    // args
+    /// args
     let manager: WalletManager
 
     var body: some View {

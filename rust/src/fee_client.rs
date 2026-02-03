@@ -137,7 +137,7 @@ impl From<FeeResponse> for FeeRateOptions {
     fn from(fees: FeeResponse) -> Self {
         let (slow_rate, slow) = {
             // slow rate is the between economy and hour fees
-            let rate = (fees.economy_fee + fees.hour_fee) / 2.0;
+            let rate = f32::midpoint(fees.economy_fee, fees.hour_fee);
 
             // rate should never be more than the hour fee
             let rate = rate.min(fees.hour_fee);

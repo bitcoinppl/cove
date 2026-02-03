@@ -94,7 +94,7 @@ struct ColorView: View {
         print("open \(docsDir)")
     }
 
-    // Helper view for each page of colors
+    /// Helper view for each page of colors
     struct ColorPageView: View {
         let colors: [LabeledColor]
 
@@ -183,7 +183,7 @@ struct ColorView: View {
     }
 }
 
-// This view will render the full content without scrolling
+/// This view will render the full content without scrolling
 struct ScrollableContentView: View {
     let content: ColorView
     let contentSize: CGSize
@@ -211,7 +211,7 @@ struct TableContent: View {
     let colors: [LabeledColor]
     var columns = 2
 
-    // Define grid layout with 2 columns
+    /// Define grid layout with 2 columns
     func columnsDef(_ c: Int) -> [GridItem] {
         Array(repeating: GridItem(.flexible(), spacing: spacing), count: c)
     }

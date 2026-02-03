@@ -90,11 +90,11 @@ impl CkTransport for TapcardTransport {
 impl From<ApduError> for TransportError {
     fn from(error: ApduError) -> Self {
         match error {
-            ApduError::CiborDe(msg) => TransportError::CiborDe(msg),
-            ApduError::CiborValue(msg) => TransportError::CiborValue(msg),
-            ApduError::CkTap(error) => TransportError::CkTap(error.into()),
-            ApduError::IncorrectSignature(msg) => TransportError::IncorrectSignature(msg),
-            ApduError::UnknownCardType(msg) => TransportError::UnknownCardType(msg),
+            ApduError::CiborDe(msg) => Self::CiborDe(msg),
+            ApduError::CiborValue(msg) => Self::CiborValue(msg),
+            ApduError::CkTap(error) => Self::CkTap(error.into()),
+            ApduError::IncorrectSignature(msg) => Self::IncorrectSignature(msg),
+            ApduError::UnknownCardType(msg) => Self::UnknownCardType(msg),
         }
     }
 }
@@ -102,13 +102,13 @@ impl From<ApduError> for TransportError {
 impl From<TransportError> for ApduError {
     fn from(error: TransportError) -> Self {
         match error {
-            TransportError::CiborDe(msg) => ApduError::CiborDe(msg),
-            TransportError::CiborValue(msg) => ApduError::CiborValue(msg),
-            TransportError::CkTap(error) => ApduError::CkTap(error.into()),
-            TransportError::IncorrectSignature(msg) => ApduError::IncorrectSignature(msg),
-            TransportError::UnknownCardType(msg) => ApduError::UnknownCardType(msg),
-            TransportError::CvcChangeError(_) => ApduError::CkTap(CkTapError::BadArguments.into()),
-            TransportError::UnknownError(_) => ApduError::CkTap(CkTapError::BadArguments.into()),
+            TransportError::CiborDe(msg) => Self::CiborDe(msg),
+            TransportError::CiborValue(msg) => Self::CiborValue(msg),
+            TransportError::CkTap(error) => Self::CkTap(error.into()),
+            TransportError::IncorrectSignature(msg) => Self::IncorrectSignature(msg),
+            TransportError::UnknownCardType(msg) => Self::UnknownCardType(msg),
+            TransportError::CvcChangeError(_) => Self::CkTap(CkTapError::BadArguments.into()),
+            TransportError::UnknownError(_) => Self::CkTap(CkTapError::BadArguments.into()),
         }
     }
 }
@@ -117,9 +117,9 @@ impl From<rust_cktap::tap_signer::TapSignerError> for TransportError {
     fn from(value: rust_cktap::tap_signer::TapSignerError) -> Self {
         use rust_cktap::tap_signer::TapSignerError as TE;
         match value {
-            TE::ApduError(error) => TransportError::from(error),
+            TE::ApduError(error) => Self::from(error),
             TE::CvcChangeError(cvc_change_error) => {
-                TransportError::CvcChangeError(cvc_change_error.to_string())
+                Self::CvcChangeError(cvc_change_error.to_string())
             }
         }
     }
@@ -130,17 +130,17 @@ impl From<rust_cktap::apdu::CkTapError> for CkTapError {
         use rust_cktap::apdu::CkTapError as CTE;
 
         match error {
-            CTE::UnluckyNumber => CkTapError::UnluckyNumber,
-            CTE::BadArguments => CkTapError::BadArguments,
-            CTE::BadAuth => CkTapError::BadAuth,
-            CTE::NeedsAuth => CkTapError::NeedsAuth,
-            CTE::UnknownCommand => CkTapError::UnknownCommand,
-            CTE::InvalidCommand => CkTapError::InvalidCommand,
-            CTE::InvalidState => CkTapError::InvalidState,
-            CTE::WeakNonce => CkTapError::WeakNonce,
-            CTE::BadCBOR => CkTapError::BadCBOR,
-            CTE::BackupFirst => CkTapError::BackupFirst,
-            CTE::RateLimited => CkTapError::RateLimited,
+            CTE::UnluckyNumber => Self::UnluckyNumber,
+            CTE::BadArguments => Self::BadArguments,
+            CTE::BadAuth => Self::BadAuth,
+            CTE::NeedsAuth => Self::NeedsAuth,
+            CTE::UnknownCommand => Self::UnknownCommand,
+            CTE::InvalidCommand => Self::InvalidCommand,
+            CTE::InvalidState => Self::InvalidState,
+            CTE::WeakNonce => Self::WeakNonce,
+            CTE::BadCBOR => Self::BadCBOR,
+            CTE::BackupFirst => Self::BackupFirst,
+            CTE::RateLimited => Self::RateLimited,
         }
     }
 }
@@ -148,17 +148,17 @@ impl From<rust_cktap::apdu::CkTapError> for CkTapError {
 impl From<CkTapError> for rust_cktap::apdu::CkTapError {
     fn from(error: CkTapError) -> Self {
         match error {
-            CkTapError::UnluckyNumber => rust_cktap::apdu::CkTapError::UnluckyNumber,
-            CkTapError::BadArguments => rust_cktap::apdu::CkTapError::BadArguments,
-            CkTapError::BadAuth => rust_cktap::apdu::CkTapError::BadAuth,
-            CkTapError::NeedsAuth => rust_cktap::apdu::CkTapError::NeedsAuth,
-            CkTapError::UnknownCommand => rust_cktap::apdu::CkTapError::UnknownCommand,
-            CkTapError::InvalidCommand => rust_cktap::apdu::CkTapError::InvalidCommand,
-            CkTapError::InvalidState => rust_cktap::apdu::CkTapError::InvalidState,
-            CkTapError::WeakNonce => rust_cktap::apdu::CkTapError::WeakNonce,
-            CkTapError::BadCBOR => rust_cktap::apdu::CkTapError::BadCBOR,
-            CkTapError::BackupFirst => rust_cktap::apdu::CkTapError::BackupFirst,
-            CkTapError::RateLimited => rust_cktap::apdu::CkTapError::RateLimited,
+            CkTapError::UnluckyNumber => Self::UnluckyNumber,
+            CkTapError::BadArguments => Self::BadArguments,
+            CkTapError::BadAuth => Self::BadAuth,
+            CkTapError::NeedsAuth => Self::NeedsAuth,
+            CkTapError::UnknownCommand => Self::UnknownCommand,
+            CkTapError::InvalidCommand => Self::InvalidCommand,
+            CkTapError::InvalidState => Self::InvalidState,
+            CkTapError::WeakNonce => Self::WeakNonce,
+            CkTapError::BadCBOR => Self::BadCBOR,
+            CkTapError::BackupFirst => Self::BackupFirst,
+            CkTapError::RateLimited => Self::RateLimited,
         }
     }
 }

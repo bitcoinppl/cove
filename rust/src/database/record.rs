@@ -15,19 +15,19 @@ pub struct Timestamps {
 
 impl<T> Record<T> {
     pub fn new(item: T) -> Self {
-        let now = jiff::Timestamp::now().as_second() as u64;
+        let now = jiff::Timestamp::now().as_second().cast_unsigned();
         Self { item, timestamps: Timestamps { created_at: now, updated_at: now } }
     }
 
-    pub fn with_timestamps(item: T, timestamps: Timestamps) -> Self {
+    pub const fn with_timestamps(item: T, timestamps: Timestamps) -> Self {
         Self { item, timestamps }
     }
 
-    pub fn created_at(&self) -> u64 {
+    pub const fn created_at(&self) -> u64 {
         self.timestamps.created_at
     }
 
-    pub fn updated_at(&self) -> u64 {
+    pub const fn updated_at(&self) -> u64 {
         self.timestamps.updated_at
     }
 }
@@ -42,12 +42,12 @@ impl<T> Record<T> {
 }
 
 impl Timestamps {
-    pub fn new(created_at: u64, updated_at: u64) -> Self {
+    pub const fn new(created_at: u64, updated_at: u64) -> Self {
         Self { created_at, updated_at }
     }
 
     pub fn now() -> Self {
-        let now = jiff::Timestamp::now().as_second() as u64;
+        let now = jiff::Timestamp::now().as_second().cast_unsigned();
         Self::new(now, now)
     }
 }

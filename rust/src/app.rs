@@ -1,4 +1,4 @@
-//! AppManager
+//! `AppManager`
 
 pub mod reconcile;
 
@@ -19,7 +19,7 @@ use crate::{
     manager::deferred_dispatch::{DeferredDispatch, Dispatchable},
     network::Network,
     node::Node,
-    router::{LOAD_AND_RESET_DELAY_MS, Route, RouteFactory, Router},
+    router::{LOAD_AND_RESET_DELAY_MS, NewWalletRoute, Route, RouteFactory, Router},
     wallet::metadata::{WalletId, WalletMetadata, WalletType},
 };
 use cove_macros::impl_default_for;
@@ -118,8 +118,8 @@ impl App {
     }
 
     /// Fetch global instance of the app, or create one if it doesn't exist
-    pub fn global() -> &'static App {
-        APP.get_or_init(App::new)
+    pub fn global() -> &'static Self {
+        APP.get_or_init(Self::new)
     }
 
     /// Return the current prices and check if an update is needed
@@ -165,7 +165,7 @@ impl App {
                 debug!("selected node change, new: {:?}", node);
 
                 match Database::global().global_config.set_selected_node(&node) {
-                    Ok(_) => {}
+                    Ok(()) => {}
                     Err(error) => {
                         error!("Unable to set selected node: {error}");
                     }
@@ -178,7 +178,7 @@ impl App {
                 crate::task::spawn(async move {
                     match FIAT_CLIENT.get_or_fetch_prices().await {
                         Ok(prices) => {
-                            Updater::send_update(AppMessage::FiatPricesChanged(prices.into()))
+                            Updater::send_update(AppMessage::FiatPricesChanged(prices.into()));
                         }
                         Err(error) => {
                             error!("unable to update prices: {error:?}");
@@ -306,7 +306,7 @@ impl FfiApp {
     #[uniffi::method]
     pub fn get_tap_signer_backup(&self, tap_signer: &cove_tap_card::TapSigner) -> Option<Vec<u8>> {
         let metadata = self.find_tap_signer_wallet(tap_signer).tap_none(|| {
-            debug!("Unable to find wallet with card ident {}", tap_signer.card_ident)
+            debug!("Unable to find wallet with card ident {}", tap_signer.card_ident);
         })?;
 
         let keychain = Keychain::global();
@@ -322,7 +322,7 @@ impl FfiApp {
     ) -> bool {
         let run = || {
             let metadata = self.find_tap_signer_wallet(tap_signer).tap_none(|| {
-                debug!("Unable to find wallet with card ident {}", tap_signer.card_ident)
+                debug!("Unable to find wallet with card ident {}", tap_signer.card_ident);
             })?;
 
             let keychain = Keychain::global();
@@ -348,7 +348,7 @@ impl FfiApp {
         if crate::build::profile() == "release-smaller"
             || crate::build::profile() == "release-speed"
         {
-            return "".to_string();
+            return String::new();
         }
 
         crate::build::profile()
@@ -359,7 +359,7 @@ impl FfiApp {
         let hash = crate::build::git_short_hash();
 
         let email = "feedback@covebitcoinwallet.com";
-        let subject = "Cove Feedback ({version})";
+        let subject = format!("Cove Feedback ({version})");
         let body = format!("Issue Description: \nversion:{version}\nhash:{hash}\niOS: {ios}\n");
 
         format!("mailto:{email}?subject{subject}&body={body}")
@@ -396,7 +396,7 @@ impl FfiApp {
     pub fn select_latest_or_new_wallet(&self) {
         if let Err(error) = self.select_latest_wallet() {
             debug!("unable to select latest wallet: {error}");
-            self.load_and_reset_default_route(Route::NewWallet(Default::default()));
+            self.load_and_reset_default_route(Route::NewWallet(NewWalletRoute::default()));
         }
     }
 
@@ -438,7 +438,7 @@ impl FfiApp {
         self.load_and_reset_default_route(loading_route);
     }
 
-    /// Reset to the default route with nested routes, only used by the LoadigAndResetContainer
+    /// Reset to the default route with nested routes, only used by the `LoadingAndResetContainer`
     pub fn reset_after_loading(&self, to: Vec<Route>) {
         let Some(default_route) = to.first().cloned() else {
             return;

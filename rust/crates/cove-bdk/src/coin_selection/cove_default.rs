@@ -14,6 +14,7 @@ pub struct CoveDefaultCoinSelection(BranchAndBoundCoinSelection<DeterministicRan
 const DEFAULT_SIZE_OF_CHANGE: u64 = 8 + 1 + 22;
 
 impl CoveDefaultCoinSelection {
+    #[must_use]
     pub fn new(seed: u64) -> Self {
         Self(BranchAndBoundCoinSelection::new(
             DEFAULT_SIZE_OF_CHANGE,

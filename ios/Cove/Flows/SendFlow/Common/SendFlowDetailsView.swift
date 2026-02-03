@@ -20,7 +20,9 @@ struct SendFlowDetailsView: View {
     @State private var presentingInputOutputDetails = false
     @State private var presentationSize: PresentationDetent = .medium
 
-    var metadata: WalletMetadata { manager.walletMetadata }
+    var metadata: WalletMetadata {
+        manager.walletMetadata
+    }
 
     func fiatAmount(_ amount: Amount) -> String {
         guard let prices = prices ?? app.prices else {
@@ -137,6 +139,7 @@ struct SendFlowDetailsView: View {
         .environment(
             SendFlowPresenter(
                 app: AppManager.shared, manager: WalletManager(preview: "preview_only")
-            ))
+            )
+        )
     }
 }

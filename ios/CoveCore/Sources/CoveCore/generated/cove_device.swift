@@ -532,6 +532,13 @@ open class Device: DeviceProtocol, @unchecked Sendable {
     public func uniffiCloneHandle() -> UInt64 {
         return try! rustCall { uniffi_cove_device_fn_clone_device(self.handle, $0) }
     }
+    /**
+     * Creates a new global device instance
+     *
+     * # Panics
+     *
+     * Panics if the device has already been initialized
+     */
 public convenience init(device: DeviceAccess) {
     let handle =
         try! rustCall() {
@@ -646,6 +653,13 @@ open class Keychain: KeychainProtocol, @unchecked Sendable {
     public func uniffiCloneHandle() -> UInt64 {
         return try! rustCall { uniffi_cove_device_fn_clone_keychain(self.handle, $0) }
     }
+    /**
+     * Creates a new global keychain instance
+     *
+     * # Panics
+     *
+     * Panics if the keychain has already been initialized
+     */
 public convenience init(keychain: KeychainAccess) {
     let handle =
         try! rustCall() {
@@ -958,6 +972,13 @@ public func FfiConverterCallbackInterfaceDeviceAccess_lower(_ v: DeviceAccess) -
 
 public protocol KeychainAccess: AnyObject, Sendable {
     
+    /**
+     * Saves a key-value pair
+     *
+     * # Errors
+     *
+     * Returns a `KeychainError` if the save operation fails
+     */
     func save(key: String, value: String) throws 
     
     func get(key: String)  -> String?
@@ -1171,16 +1192,16 @@ private let initializationResult: InitializationResult = {
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
-    if (uniffi_cove_device_checksum_constructor_device_new() != 34667) {
+    if (uniffi_cove_device_checksum_constructor_device_new() != 18892) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_constructor_keychain_new() != 48183) {
+    if (uniffi_cove_device_checksum_constructor_keychain_new() != 47401) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_device_checksum_method_deviceaccess_timezone() != 54194) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_keychainaccess_save() != 25345) {
+    if (uniffi_cove_device_checksum_method_keychainaccess_save() != 32182) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_device_checksum_method_keychainaccess_get() != 23224) {

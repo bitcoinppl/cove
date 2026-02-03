@@ -1,5 +1,5 @@
 //! crypto-account: Account descriptor with multiple output descriptors
-//! BCR-2020-015: https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-015-account.md
+//! `BCR-2020-015`: <https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-015-account.md>
 
 use minicbor::{Decoder, data::Tag};
 use pubport::descriptor::ScriptType;
@@ -8,7 +8,7 @@ use tracing::warn;
 use crate::{
     crypto_hdkey::CryptoHdkey,
     crypto_output::CryptoOutput,
-    error::*,
+    error::{Result, ToUrError, UrError},
     registry::{
         CRYPTO_ACCOUNT, CRYPTO_HDKEY, CRYPTO_OUTPUT, PAY_TO_PUBKEY_HASH, SCRIPT_HASH, TAPROOT,
         WITNESS_PUBKEY_HASH, account_keys, cbor_type, hdkey_keys, lengths,
@@ -16,7 +16,7 @@ use crate::{
 };
 
 /// crypto-account: Account with multiple output descriptors for different script types
-/// BCR-2020-015
+/// `BCR-2020-015`
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CryptoAccount {
     /// Master key fingerprint (4 bytes)
@@ -39,6 +39,11 @@ impl CryptoAccount {
     ///
     /// Some hardware wallets (like Jade Plus) send crypto-account without the outer tag,
     /// while others include it. This method handles both cases.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the CBOR data is invalid, has an unexpected tag, or is missing
+    /// required fields like `master_fingerprint`
     pub fn from_cbor(cbor: &[u8]) -> Result<Self> {
         let first_byte =
             *cbor.first().ok_or_else(|| UrError::CborDecodeError("Empty CBOR data".to_string()))?;
@@ -62,6 +67,10 @@ impl CryptoAccount {
     }
 
     /// Decode from CBOR bytes without the outer tag (for when tag is already consumed)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the CBOR data is invalid or missing required fields
     pub fn from_cbor_untagged(cbor: &[u8]) -> Result<Self> {
         let mut decoder = Decoder::new(cbor);
         Self::decode_inner(&mut decoder, cbor)
@@ -115,8 +124,9 @@ impl CryptoAccount {
         Ok(Self { master_fingerprint, output_descriptors })
     }
 
-    /// Get the preferred output descriptor (BIP84 P2WPKH > BIP49 P2SH-P2WPKH > BIP44 P2PKH)
-    /// Returns None if only P2TR is available
+    /// Get the preferred output descriptor (`BIP84` `P2WPKH` > `BIP49` `P2SH-P2WPKH` > `BIP44` `P2PKH`)
+    /// Returns `None` if only `P2TR` is available
+    #[must_use]
     pub fn get_preferred_descriptor(&self) -> Option<&OutputDescriptor> {
         self.output_descriptors
             .iter()
@@ -127,14 +137,16 @@ impl CryptoAccount {
             .or_else(|| self.output_descriptors.iter().find(|d| d.script_type == ScriptType::P2pkh))
     }
 
-    /// Check if this account only has P2TR (taproot) descriptors
+    /// Check if this account only has `P2TR` (taproot) descriptors
+    #[must_use]
     pub fn is_taproot_only(&self) -> bool {
         !self.output_descriptors.is_empty()
             && self.output_descriptors.iter().all(|d| d.script_type == ScriptType::P2tr)
     }
 
-    /// Convert to pubport Json format for multi-account discovery
-    /// Returns None if no supported descriptors are found
+    /// Convert to pubport `Json` format for multi-account discovery
+    /// Returns `None` if no supported descriptors are found
+    #[must_use]
     pub fn to_pubport_json(&self, network: bitcoin::Network) -> Option<pubport::formats::Json> {
         use pubport::{Format, descriptor::Descriptors, formats::Json};
 
@@ -146,15 +158,15 @@ impl CryptoAccount {
         for output_desc in &self.output_descriptors {
             // use CryptoOutput to generate descriptor string
             let crypto_output = CryptoOutput { descriptor: output_desc.clone() };
-            let desc_string = match crypto_output.descriptor_string(network) {
-                Ok(s) => s,
-                Err(_) => continue,
+            let Ok(desc_string) = crypto_output.descriptor_string(network) else {
+                continue;
             };
 
             // parse with pubport to get Descriptors
-            let descriptors = match Format::try_new_from_str(&desc_string) {
-                Ok(Format::Descriptor(d) | Format::KeyExpression(d)) => d,
-                _ => continue,
+            let Ok(Format::Descriptor(descriptors) | Format::KeyExpression(descriptors)) =
+                Format::try_new_from_str(&desc_string)
+            else {
+                continue;
             };
 
             match output_desc.script_type {
@@ -175,13 +187,17 @@ impl CryptoAccount {
 }
 
 /// Decode an output descriptor from CBOR
-/// Returns None for unsupported script types, Some for supported ones
+/// Returns `None` for unsupported script types, `Some` for supported ones
 ///
-/// BCR-2020-015 structure: tag(308) tag(script_type) tag(303) {hdkey_map}
+/// `BCR-2020-015` structure: `tag(308) tag(script_type) tag(303) {hdkey_map}`
 /// Where:
 /// - 308 = crypto-output wrapper
-/// - script_type = 403 (P2PKH), 404 (P2WPKH), 400 (P2SH), 409 (P2TR)
+/// - `script_type` = 403 (`P2PKH`), 404 (`P2WPKH`), 400 (`P2SH`), 409 (`P2TR`)
 /// - 303 = crypto-hdkey
+///
+/// # Errors
+///
+/// Returns an error if the CBOR structure is invalid or the hdkey cannot be decoded
 pub(crate) fn decode_output_descriptor(cbor: &[u8]) -> Result<Option<OutputDescriptor>> {
     let mut decoder = Decoder::new(cbor);
 
@@ -240,7 +256,7 @@ pub(crate) fn decode_output_descriptor(cbor: &[u8]) -> Result<Option<OutputDescr
     Ok(Some(OutputDescriptor { script_type, hdkey }))
 }
 
-/// Decode a CryptoHdkey without the outer tag
+/// Decode a `CryptoHdkey` without the outer tag
 fn decode_hdkey_untagged(cbor: &[u8]) -> Result<CryptoHdkey> {
     let mut decoder = Decoder::new(cbor);
 
@@ -275,15 +291,15 @@ fn decode_hdkey_untagged(cbor: &[u8]) -> Result<CryptoHdkey> {
                 key_data = Some(decoder.bytes().map_err_cbor_decode()?.to_vec());
             }
             hdkey_keys::CHAIN_CODE => {
-                let decoded = decoder.bytes().map_err_cbor_decode()?.to_vec();
-                if decoded.len() != lengths::CHAIN_CODE {
+                let bytes = decoder.bytes().map_err_cbor_decode()?.to_vec();
+                if bytes.len() != lengths::CHAIN_CODE {
                     return Err(UrError::InvalidPayloadLength(format!(
                         "chain_code must be {} bytes, got {}",
                         lengths::CHAIN_CODE,
-                        decoded.len()
+                        bytes.len()
                     )));
                 }
-                chain_code = Some(decoded);
+                chain_code = Some(bytes);
             }
             hdkey_keys::USE_INFO => {
                 // use_info - skip for now
@@ -520,7 +536,7 @@ mod tests {
         encoder.tag(Tag::new(CRYPTO_SEED)).unwrap();
         encoder.map(1).unwrap();
         encoder.u32(account_keys::MASTER_FINGERPRINT).unwrap();
-        encoder.u32(0x12345678).unwrap();
+        encoder.u32(0x1234_5678).unwrap();
 
         let result = CryptoAccount::from_cbor(&cbor);
         assert!(result.is_err());

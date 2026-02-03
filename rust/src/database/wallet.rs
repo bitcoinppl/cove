@@ -51,7 +51,7 @@ impl Display for WalletKey {
 
 impl From<(Network, WalletMode)> for WalletKey {
     fn from((network, mode): (Network, WalletMode)) -> Self {
-        WalletKey(network, VERSION, mode)
+        Self(network, VERSION, mode)
     }
 }
 
@@ -120,11 +120,11 @@ impl WalletsTable {
         let mut wallets = self.get_all(network, mode)?;
 
         // update the wallet
-        wallets.iter_mut().for_each(|wallet| {
+        for wallet in &mut wallets {
             if &wallet.id == id {
                 wallet.verified = true;
             }
-        });
+        }
 
         self.save_all_wallets(network, mode, wallets)?;
         Updater::send_update(Update::DatabaseUpdated);
@@ -170,11 +170,11 @@ impl WalletsTable {
         let mut wallets = self.get_all(network, mode)?;
 
         // update the wallet
-        wallets.iter_mut().for_each(|wallet| {
+        for wallet in &mut wallets {
             if wallet.id == metadata.id {
                 *wallet = metadata.clone();
             }
-        });
+        }
 
         self.save_all_wallets(network, mode, wallets)?;
 
@@ -189,11 +189,11 @@ impl WalletsTable {
         let mut wallets = self.get_all(network, mode)?;
 
         // update the wallet
-        wallets.iter_mut().for_each(|wallet| {
+        for wallet in &mut wallets {
             if metadata.id == wallet.id {
                 wallet.discovery_state = metadata.discovery_state.clone();
             }
-        });
+        }
 
         self.save_all_wallets(network, mode, wallets)?;
 
@@ -207,11 +207,11 @@ impl WalletsTable {
         let mut wallets = self.get_all(network, mode)?;
 
         // update the wallet
-        wallets.iter_mut().for_each(|wallet| {
+        for wallet in &mut wallets {
             if wallet.id == metadata.id {
                 wallet.internal = metadata.internal.clone();
             }
-        });
+        }
 
         self.save_all_wallets(network, mode, wallets)?;
 
@@ -281,13 +281,9 @@ impl WalletsTable {
         let wallets = self.get_all(network, mode)?;
 
         let wallet = wallets.into_iter().find(|wallet| {
-            wallet
-                .hardware_metadata
-                .as_ref()
-                .map(|hw| match hw {
-                    HardwareWalletMetadata::TapSigner(t) => t.card_ident == ident,
-                })
-                .unwrap_or(false)
+            wallet.hardware_metadata.as_ref().is_some_and(|hw| match hw {
+                HardwareWalletMetadata::TapSigner(t) => t.card_ident == ident,
+            })
         });
 
         Ok(wallet)

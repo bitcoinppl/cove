@@ -87,7 +87,7 @@ impl LabelManager {
 
     pub fn export_default_file_name(&self, name: String) -> String {
         let name = name
-            .replace(" ", "_")
+            .replace(' ', "_")
             .replace(|c: char| !c.is_alphanumeric() || c == '_', "")
             .to_ascii_lowercase();
 
@@ -395,7 +395,7 @@ impl LabelManager {
 
         let current = self.db.labels.get_address_record(&address_record.ref_).unwrap_or(None);
 
-        let mut timestamps = current.map(|current| current.timestamps).unwrap_or(timestamps);
+        let mut timestamps = current.map_or(timestamps, |current| current.timestamps);
 
         timestamps.updated_at = now;
 
@@ -431,7 +431,7 @@ impl LabelManager {
                 .map_err(|e| LabelManagerError::Save(e.to_string()))?;
 
             return Ok(InsertOrUpdate::Update(last_updated_at.into()));
-        };
+        }
 
         // new label,insert new record
         let now = jiff::Timestamp::now().as_second() as u64;

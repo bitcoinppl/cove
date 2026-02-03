@@ -28,7 +28,8 @@ class TapSignerNFC {
     {
         do {
             return try await .success(
-                doSetupTapSigner(factoryPin: factoryPin, newPin: newPin, chainCode: chainCode))
+                doSetupTapSigner(factoryPin: factoryPin, newPin: newPin, chainCode: chainCode)
+            )
         } catch let error as TapSignerReaderError {
             return .failure(error)
         } catch {
@@ -263,7 +264,7 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
     // public var satsCardReader: SatsCardReader? = nil
     // public var satsCardCmd: SatsCardCmd? = nil
 
-    // cmd
+    /// cmd
     init(tapcard: TapCard) {
         self.tapcard = tapcard
 
@@ -306,7 +307,8 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
             if let error {
                 session.invalidate(
                     errorMessage:
-                    "Connection error: \(error.localizedDescription), please try again")
+                    "Connection error: \(error.localizedDescription), please try again"
+                )
                 return
             }
 
@@ -394,7 +396,8 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
             case .readerTransceiveErrorTagConnectionLost:
                 tapSignerError = .Unknown("Tag connection lost, please hold your phone still")
                 session.invalidate(
-                    errorMessage: "Tag connection lost, please hold your phone still")
+                    errorMessage: "Tag connection lost, please hold your phone still"
+                )
             default:
                 tapSignerError = .Unknown("Unable to read NFC tag, try again")
                 session.invalidate(errorMessage: "Unable to read NFC tag, try again")
@@ -437,7 +440,8 @@ class TapCardTransport: TapcardTransportProtocol, @unchecked Sendable {
                 if let error {
                     logger.error("APDU error: \(error)")
                     continuation.resume(
-                        throwing: TransportError.UnknownError(error.localizedDescription))
+                        throwing: TransportError.UnknownError(error.localizedDescription)
+                    )
                     return
                 }
 
@@ -460,7 +464,8 @@ class TapCardTransport: TapcardTransportProtocol, @unchecked Sendable {
 
                     logger.error("APDU ERROR: \(errorMessage)")
                     continuation.resume(
-                        throwing: TransportError(code: statusWord, message: errorMessage))
+                        throwing: TransportError(code: statusWord, message: errorMessage)
+                    )
                     return
                 }
 

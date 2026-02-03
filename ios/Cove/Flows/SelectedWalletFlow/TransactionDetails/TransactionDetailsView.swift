@@ -27,7 +27,7 @@ struct TransactionDetailsView: View {
     private let initialDetails: TransactionDetails
     var manager: WalletManager
 
-    // read from cache (observable), fallback to initial details
+    /// read from cache (observable), fallback to initial details
     var transactionDetails: TransactionDetails {
         manager.transactionDetails[initialDetails.txId()] ?? initialDetails
     }
@@ -230,7 +230,6 @@ struct TransactionDetailsView: View {
         }
     }
 
-    @ViewBuilder
     func ContentScrollView(content: @escaping () -> some View) -> some View {
         GeometryReader { geo in
             ScrollView(.vertical) {
@@ -365,7 +364,8 @@ struct TransactionDetailsView: View {
     func getAndSetNumberOfConfirmations(from details: TransactionDetails) async -> Int? {
         if let blockNumber = details.blockNumber() {
             let numberOfConfirmations = try? await manager.rust.numberOfConfirmations(
-                blockHeight: blockNumber)
+                blockHeight: blockNumber
+            )
 
             guard let numberOfConfirmations else { return nil }
 
@@ -402,7 +402,8 @@ struct TransactionDetailsView: View {
                     let numberOfConfirmations = await getAndSetNumberOfConfirmations(from: details)
                     if let numberOfConfirmations, numberOfConfirmations >= 3, needsFrequentCheck {
                         Log.debug(
-                            "transaction fully confirmed with \(numberOfConfirmations) confirmations")
+                            "transaction fully confirmed with \(numberOfConfirmations) confirmations"
+                        )
                         needsFrequentCheck = false
                     }
                 }

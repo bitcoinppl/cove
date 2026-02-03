@@ -31,11 +31,12 @@ struct SendFlowSetAmountScreen: View {
     @State private var loadingOpacity: CGFloat = 1
 
     @State private var scrollPosition: ScrollPosition = .init(
-        idType: SendFlowPresenter.FocusField.self)
+        idType: SendFlowPresenter.FocusField.self
+    )
 
     @State private var scannedCode: TaggedString? = .none
 
-    // fees
+    /// fees
     @State private var selectedPresentationDetent: PresentationDetent = .height(440)
 
     private var presenter: SendFlowPresenter {
@@ -109,7 +110,7 @@ struct SendFlowSetAmountScreen: View {
         return true
     }
 
-    // doing it this way prevents an alert popping up when the user just goes back
+    /// doing it this way prevents an alert popping up when the user just goes back
     private func setAlertState(_ error: SendFlowError) {
         sendFlowManager.presenter.alertState = .init(.error(error))
     }
@@ -302,10 +303,11 @@ struct SendFlowSetAmountScreen: View {
         sendFlowManager.dispatch(action: .notifySelectedUnitedChanged(old: oldUnit, new: newUnit))
     }
 
-    // presenter focus field changed
+    /// presenter focus field changed
     private func focusFieldChanged(_ oldField: FocusField?, _ newField: FocusField?) {
         Log.debug(
-            "focusFieldChanged \(String(describing: oldField)) -> \(String(describing: newField))")
+            "focusFieldChanged \(String(describing: oldField)) -> \(String(describing: newField))"
+        )
 
         sendFlowManager.dispatch(action: .notifyFocusFieldChanged(old: oldField, new: newField))
 
@@ -332,14 +334,15 @@ struct SendFlowSetAmountScreen: View {
 
     private func scannedCodeChanged(old: TaggedString?, newValue: TaggedString?) {
         Log.debug(
-            "scannedCodeChanged \(String(describing: old)) -> \(String(describing: newValue))")
+            "scannedCodeChanged \(String(describing: old)) -> \(String(describing: newValue))"
+        )
         guard let newValue else { return }
         presenter.sheetState = nil
         sendFlowManager.dispatch(
-            action: .notifyScanCodeChanged(old: old?.item ?? "", new: newValue.item))
+            action: .notifyScanCodeChanged(old: old?.item ?? "", new: newValue.item)
+        )
     }
 
-    @ViewBuilder
     var AmountKeyboardToolbar: some View {
         HStack {
             Group {
@@ -381,7 +384,6 @@ struct SendFlowSetAmountScreen: View {
         }
     }
 
-    @ViewBuilder
     var AddressKeyboardToolbar: some View {
         HStack {
             Group {
@@ -448,7 +450,6 @@ struct SendFlowSetAmountScreen: View {
         }
     }
 
-    @ViewBuilder
     var AmountInfoSection: some View {
         VStack(spacing: 8) {
             HStack {
@@ -471,7 +472,6 @@ struct SendFlowSetAmountScreen: View {
         .padding(.top)
     }
 
-    @ViewBuilder
     var NetworkFeeSection: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Network Fee")
@@ -501,7 +501,6 @@ struct SendFlowSetAmountScreen: View {
         }
     }
 
-    @ViewBuilder
     var AccountSection: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
@@ -537,7 +536,6 @@ struct SendFlowSetAmountScreen: View {
         }
     }
 
-    @ViewBuilder
     var TotalSpendingSection: some View {
         VStack {
             HStack {
@@ -563,7 +561,6 @@ struct SendFlowSetAmountScreen: View {
         }
     }
 
-    @ViewBuilder
     var NextButtonBottom: some View {
         Button(action: next) {
             Text("Next")

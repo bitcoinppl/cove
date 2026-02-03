@@ -48,39 +48,34 @@ impl FiatCurrency {
         matches!(symbol, "$" | "€" | "£" | "¥")
     }
 
-    pub const fn symbol(&self) -> &'static str {
-        use FiatCurrency as F;
-
+    pub const fn symbol(self) -> &'static str {
         match self {
-            F::Usd | F::Cad | F::Aud => "$",
-            F::Eur => "€",
-            F::Gbp => "£",
-            F::Jpy => "¥",
-            F::Chf => "",
+            Self::Usd | Self::Cad | Self::Aud => "$",
+            Self::Eur => "€",
+            Self::Gbp => "£",
+            Self::Jpy => "¥",
+            Self::Chf => "",
         }
     }
 
-    pub const fn emoji(&self) -> &'static str {
+    pub const fn emoji(self) -> &'static str {
         match self {
-            FiatCurrency::Usd => "🇺🇸",
-            FiatCurrency::Cad => "🇨🇦",
-            FiatCurrency::Aud => "🇦🇺",
-            FiatCurrency::Eur => "🇪🇺",
-            FiatCurrency::Gbp => "🇬🇧",
-            FiatCurrency::Chf => "🇨🇭",
-            FiatCurrency::Jpy => "🇯🇵",
+            Self::Usd => "🇺🇸",
+            Self::Cad => "🇨🇦",
+            Self::Aud => "🇦🇺",
+            Self::Eur => "🇪🇺",
+            Self::Gbp => "🇬🇧",
+            Self::Chf => "🇨🇭",
+            Self::Jpy => "🇯🇵",
         }
     }
 
-    pub const fn suffix(&self) -> &'static str {
+    pub const fn suffix(self) -> &'static str {
         match self {
-            FiatCurrency::Usd => "",
-            FiatCurrency::Cad => "CAD",
-            FiatCurrency::Aud => "AUD",
-            FiatCurrency::Eur => "",
-            FiatCurrency::Gbp => "",
-            FiatCurrency::Chf => "CHF",
-            FiatCurrency::Jpy => "",
+            Self::Cad => "CAD",
+            Self::Aud => "AUD",
+            Self::Chf => "CHF",
+            Self::Usd | Self::Eur | Self::Gbp | Self::Jpy => "",
         }
     }
 }
@@ -111,13 +106,13 @@ impl FromStr for FiatCurrency {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "USD" => Ok(FiatCurrency::Usd),
-            "CAD" => Ok(FiatCurrency::Cad),
-            "AUD" => Ok(FiatCurrency::Aud),
-            "EUR" => Ok(FiatCurrency::Eur),
-            "GBP" => Ok(FiatCurrency::Gbp),
-            "CHF" => Ok(FiatCurrency::Chf),
-            "JPY" => Ok(FiatCurrency::Jpy),
+            "USD" => Ok(Self::Usd),
+            "CAD" => Ok(Self::Cad),
+            "AUD" => Ok(Self::Aud),
+            "EUR" => Ok(Self::Eur),
+            "GBP" => Ok(Self::Gbp),
+            "CHF" => Ok(Self::Chf),
+            "JPY" => Ok(Self::Jpy),
             _ => Err(format!("unknown fiat currency: {s}")),
         }
     }

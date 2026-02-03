@@ -175,7 +175,7 @@ impl Router {
                 Route::SelectedWallet(selected_wallet)
             } else {
                 // when there are no wallets or no selected wallet, show the new wallet screen
-                Route::NewWallet(Default::default())
+                Route::NewWallet(NewWalletRoute::default())
             };
 
         Self { app: FfiApp::global(), default: default_route, routes: vec![] }
@@ -223,7 +223,7 @@ impl BoxedRoute {
 
 impl From<ColdWalletRoute> for Route {
     fn from(cold_wallet_route: ColdWalletRoute) -> Self {
-        Route::NewWallet(NewWalletRoute::ColdWallet(cold_wallet_route))
+        Self::NewWallet(NewWalletRoute::ColdWallet(cold_wallet_route))
     }
 }
 
@@ -245,7 +245,7 @@ pub struct RouteFactory;
 #[uniffi::export]
 impl RouteFactory {
     #[uniffi::constructor]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self
     }
 
@@ -262,25 +262,25 @@ impl RouteFactory {
     }
 
     pub fn new_wallet_select(&self) -> Route {
-        Route::NewWallet(Default::default())
+        Route::NewWallet(NewWalletRoute::default())
     }
 
     pub fn new_hot_wallet(&self) -> Route {
-        Route::NewWallet(NewWalletRoute::HotWallet(Default::default()))
+        Route::NewWallet(NewWalletRoute::HotWallet(HotWalletRoute::default()))
     }
 
-    pub fn hot_wallet(&self, route: HotWalletRoute) -> Route {
+    pub const fn hot_wallet(&self, route: HotWalletRoute) -> Route {
         Route::NewWallet(NewWalletRoute::HotWallet(route))
     }
 
-    pub fn hot_wallet_import_from_scan(&self) -> Route {
+    pub const fn hot_wallet_import_from_scan(&self) -> Route {
         Route::NewWallet(NewWalletRoute::HotWallet(HotWalletRoute::Import(
             NumberOfBip39Words::Twelve,
             ImportType::Manual,
         )))
     }
 
-    pub fn secret_words(&self, wallet_id: WalletId) -> Route {
+    pub const fn secret_words(&self, wallet_id: WalletId) -> Route {
         Route::SecretWords(wallet_id)
     }
 
@@ -315,7 +315,7 @@ impl RouteFactory {
     }
 
     #[uniffi::method(default(address = None, amount = None))]
-    pub fn send_set_amount(
+    pub const fn send_set_amount(
         &self,
         id: WalletId,
         address: Option<Arc<Address>>,
@@ -327,7 +327,7 @@ impl RouteFactory {
     }
 
     #[uniffi::method(default(signed_transaction = None, signed_psbt = None))]
-    pub fn send_confirm(
+    pub const fn send_confirm(
         &self,
         id: WalletId,
         details: Arc<ConfirmDetails>,
@@ -340,17 +340,17 @@ impl RouteFactory {
         Route::Send(send)
     }
 
-    pub fn send_hardware_export(&self, id: WalletId, details: Arc<ConfirmDetails>) -> Route {
+    pub const fn send_hardware_export(&self, id: WalletId, details: Arc<ConfirmDetails>) -> Route {
         let send = SendRoute::HardwareExport { id, details };
         Route::Send(send)
     }
 
-    pub fn coin_control_send(&self, id: WalletId, utxos: Vec<Utxo>) -> Route {
+    pub const fn coin_control_send(&self, id: WalletId, utxos: Vec<Utxo>) -> Route {
         let send = SendRoute::CoinControlSetAmount { id, utxos };
         Route::Send(send)
     }
 
-    pub fn send(&self, send: SendRoute) -> Route {
+    pub const fn send(&self, send: SendRoute) -> Route {
         Route::Send(send)
     }
 
@@ -366,7 +366,7 @@ impl RouteFactory {
         self.wallet_settings(id, WalletSettingsRoute::Main)
     }
 
-    pub fn wallet_settings(&self, id: WalletId, route: WalletSettingsRoute) -> Route {
+    pub const fn wallet_settings(&self, id: WalletId, route: WalletSettingsRoute) -> Route {
         Route::Settings(SettingsRoute::Wallet { id, route })
     }
 }
@@ -406,7 +406,7 @@ fn hash_route(route: Route) -> u64 {
 
 impl From<SettingsRoute> for Route {
     fn from(settings_route: SettingsRoute) -> Self {
-        Route::Settings(settings_route)
+        Self::Settings(settings_route)
     }
 }
 

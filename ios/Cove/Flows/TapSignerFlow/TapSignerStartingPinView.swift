@@ -89,8 +89,7 @@ struct TapSignerStartingPin: View {
                                 startingPin: pin,
                                 chainCode: chainCode,
                                 action: .setup
-                            ))
-                        )
+                            )))
                     }
                 }
 

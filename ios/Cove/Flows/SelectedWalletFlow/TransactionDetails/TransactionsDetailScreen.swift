@@ -17,7 +17,7 @@ struct TransactionsDetailScreen: View {
     let id: WalletId
     let transactionDetails: TransactionDetails
 
-    // private
+    /// private
     @State var manager: WalletManager? = nil
 
     func loadManager() {

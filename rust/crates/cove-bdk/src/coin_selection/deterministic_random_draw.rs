@@ -39,7 +39,8 @@ impl CoinSelectionAlgorithm for DeterministicRandomDraw {
 }
 
 impl DeterministicRandomDraw {
-    pub fn new(seed: u64) -> Self {
+    #[must_use]
+    pub const fn new(seed: u64) -> Self {
         Self { seed }
     }
 

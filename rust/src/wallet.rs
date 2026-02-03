@@ -115,17 +115,17 @@ pub enum WalletAddressType {
 impl WalletAddressType {
     /// returns the sort order for this address type
     /// native segwit (0) < wrapped segwit (1) < legacy (2)
-    pub fn sort_order(&self) -> u8 {
+    pub const fn sort_order(&self) -> u8 {
         match self {
-            WalletAddressType::NativeSegwit => 0,
-            WalletAddressType::WrappedSegwit => 1,
-            WalletAddressType::Legacy => 2,
+            Self::NativeSegwit => 0,
+            Self::WrappedSegwit => 1,
+            Self::Legacy => 2,
         }
     }
 }
 
 #[uniffi::export]
-fn wallet_address_type_sort_order(address_type: WalletAddressType) -> u8 {
+const fn wallet_address_type_sort_order(address_type: WalletAddressType) -> u8 {
     address_type.sort_order()
 }
 
@@ -184,7 +184,7 @@ impl Wallet {
 
                 if let Err(error) = delete_wallet_specific_data(&metadata.id) {
                     warn!("clean up failed, failed to delete wallet data: {error}");
-                };
+                }
 
                 if let Err(error) = database.wallets.delete(&metadata.id) {
                     warn!("clean up failed, failed to delete wallet: {error}");
@@ -681,11 +681,11 @@ impl Wallet {
 }
 
 impl WalletAddressType {
-    pub fn index(&self) -> usize {
+    pub const fn index(&self) -> usize {
         match self {
-            WalletAddressType::NativeSegwit => 0,
-            WalletAddressType::WrappedSegwit => 1,
-            WalletAddressType::Legacy => 2,
+            Self::NativeSegwit => 0,
+            Self::WrappedSegwit => 1,
+            Self::Legacy => 2,
         }
     }
 }
@@ -727,7 +727,7 @@ mod tests {
 impl Wallet {
     #[uniffi::constructor]
     pub fn new_from_xpub(xpub: String) -> Result<Self, WalletError> {
-        Wallet::try_new_persisted_from_xpub(xpub)
+        Self::try_new_persisted_from_xpub(xpub)
     }
 
     #[uniffi::constructor]
@@ -735,6 +735,6 @@ impl Wallet {
         export: Arc<crate::hardware_export::HardwareExport>,
     ) -> Result<Self, WalletError> {
         let export = Arc::unwrap_or_clone(export);
-        Wallet::try_new_persisted_from_pubport(export.into_format())
+        Self::try_new_persisted_from_pubport(export.into_format())
     }
 }

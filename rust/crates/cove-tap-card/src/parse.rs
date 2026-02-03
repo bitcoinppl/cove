@@ -85,7 +85,10 @@ pub enum SignatureParseError {
     PubkeyIdentMismatch,
 }
 
-// Parse URL-encoded string into a Card
+/// Parse URL-encoded string into a Card
+///
+/// # Errors
+/// Returns an error if the URL is invalid or missing required fields
 pub fn parse_card(url_encoded: &str) -> Result<TapCard> {
     let url_encoded = url_encoded
         .trim()
@@ -190,7 +193,6 @@ fn message_and_signature_to_pubkeys(
             Ok(pubkey) => pubkeys.push(pubkey),
             Err(e) => {
                 debug!("unable to recover pubkey from signature: {e}, recovery id: {rec_id}");
-                continue;
             }
         }
     }
@@ -224,6 +226,10 @@ fn try_for_recovery_id(
     Ok(pubkey)
 }
 
+/// Convert a card pubkey to a full human-readable identifier
+///
+/// # Errors
+/// Returns an error if the pubkey is not 33 bytes
 pub fn card_pubkey_to_full_ident(card_pubkey: &[u8]) -> Result<String, SignatureParseError> {
     // convert pubkey into a hash formated for humans
     // - sha256(compressed-pubkey)

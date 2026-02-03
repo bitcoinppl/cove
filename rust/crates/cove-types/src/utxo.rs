@@ -58,6 +58,7 @@ pub enum UtxoError {
 }
 
 impl Utxo {
+    #[must_use]
     pub fn name(&self) -> &str {
         if let Some(label) = &self.label {
             return label;
@@ -69,6 +70,12 @@ impl Utxo {
         }
     }
 
+    /// Creates a `Utxo` from a `LocalOutput`
+    ///
+    /// # Errors
+    /// Returns `UtxoError::Unconfirmed` if the output is not confirmed
+    /// Returns `UtxoError::AddressParseError` if the address cannot be parsed
+    #[allow(clippy::needless_pass_by_value)] // LocalOutput is not cheap to clone
     pub fn try_from_local(local: LocalOutput, network: Network) -> Result<Self, UtxoError> {
         let confirmed: &ConfirmationBlockTime = match &local.chain_position {
             ChainPosition::Confirmed { anchor: confirmed, .. } => confirmed,
@@ -90,7 +97,7 @@ impl Utxo {
         let outpoint = OutPoint::from(local.outpoint);
         let derivation_index = local.derivation_index;
 
-        let utxo = Utxo {
+        let utxo = Self {
             label: None,
             datetime,
             outpoint: Arc::new(outpoint),
@@ -106,15 +113,18 @@ impl Utxo {
 }
 
 impl UtxoType {
-    pub fn is_change(&self) -> bool {
-        matches!(self, UtxoType::Change)
+    #[must_use]
+    pub const fn is_change(&self) -> bool {
+        matches!(self, Self::Change)
     }
 
-    pub fn is_output(&self) -> bool {
-        matches!(self, UtxoType::Output)
+    #[must_use]
+    pub const fn is_output(&self) -> bool {
+        matches!(self, Self::Output)
     }
 
-    pub fn reverse(self) -> Self {
+    #[must_use]
+    pub const fn reverse(self) -> Self {
         match self {
             Self::Output => Self::Change,
             Self::Change => Self::Output,
@@ -123,12 +133,14 @@ impl UtxoType {
 }
 
 impl UtxoList {
+    #[must_use]
     pub fn new(utxos: Vec<Utxo>) -> Self {
         let total: u64 = utxos.iter().map(|utxo| utxo.amount.as_ref().as_sats()).sum();
         let total = Amount::from_sat(total);
         Self { total, utxos }
     }
 
+    #[must_use]
     pub fn outpoints(&self) -> Vec<bitcoin::OutPoint> {
         self.utxos.iter().map(|utxo| utxo.outpoint.as_ref().into()).collect()
     }
@@ -142,8 +154,8 @@ impl From<Vec<Utxo>> for UtxoList {
 impl From<KeychainKind> for UtxoType {
     fn from(keychain: KeychainKind) -> Self {
         match keychain {
-            KeychainKind::External => UtxoType::Output,
-            KeychainKind::Internal => UtxoType::Change,
+            KeychainKind::External => Self::Output,
+            KeychainKind::Internal => Self::Change,
         }
     }
 }
@@ -155,9 +167,10 @@ fn utxo_name(utxo: &Utxo) -> String {
 }
 
 #[uniffi::export]
+#[allow(clippy::cast_possible_wrap)] // datetime is always valid timestamp
 fn utxo_date(utxo: &Utxo) -> String {
     let Ok(timestamp) = jiff::Timestamp::from_second(utxo.datetime as i64) else {
-        return "".to_string();
+        return String::new();
     };
 
     timestamp.strftime("%b %d, %Y").to_string()
@@ -177,18 +190,19 @@ fn utxo_is_equal(lhs: &Utxo, rhs: &Utxo) -> bool {
 
 // MARK: FFI PREVIEW
 pub mod ffi_preview {
-    use super::*;
+    use super::{Address, Amount, Arc, OutPoint, Utxo, UtxoType};
     use rand::random_range;
 
+    #[must_use]
     pub fn preview_new_utxo_list(output_count: u8, change_count: u8) -> Vec<Utxo> {
         let mut utxos = Vec::with_capacity((output_count + change_count) as usize);
 
         for _ in 0..output_count {
-            utxos.push(Utxo::preview_new_output())
+            utxos.push(Utxo::preview_new_output());
         }
 
         for _ in 0..change_count {
-            utxos.push(Utxo::preview_new_change())
+            utxos.push(Utxo::preview_new_change());
         }
 
         utxos
@@ -203,14 +217,15 @@ pub mod ffi_preview {
             Self::preview_new(UtxoType::Change)
         }
 
+        #[allow(clippy::cast_sign_loss)] // timestamp is always positive
         fn preview_new(type_: UtxoType) -> Self {
             let outpoint = OutPoint::_ffi_preview_new();
 
             let random_sats = random_range(10_100..=10_000_000);
             let amount = Amount::from_sat(random_sats).into();
 
-            let now = jiff::Timestamp::now().as_second() as u64;
-            let random_timestamp = random_range(1684242780..=now);
+            let now = jiff::Timestamp::now().as_second().cast_unsigned();
+            let random_timestamp = random_range(1_684_242_780..=now);
 
             let block_height = random_range(0..=900_000);
 
@@ -229,6 +244,7 @@ pub mod ffi_preview {
 }
 
 #[uniffi::export(name = "previewNewUtxoList")]
+#[must_use]
 pub fn _ffi_preview_new_utxo_list(output_count: u8, change_count: u8) -> Vec<Utxo> {
     ffi_preview::preview_new_utxo_list(output_count, change_count)
 }

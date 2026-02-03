@@ -1,4 +1,4 @@
-#[derive(Debug, Copy, Clone, PartialEq, uniffi::Enum)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum FfiColor {
     // default colors
     Red(FfiOpacity),
@@ -21,7 +21,7 @@ pub enum FfiColor {
 
 uniffi::custom_newtype!(FfiOpacity, u8);
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct FfiOpacity(pub u8);
 
 impl From<u8> for FfiOpacity {
@@ -30,13 +30,20 @@ impl From<u8> for FfiOpacity {
     }
 }
 
-impl Default for FfiOpacity {
-    fn default() -> Self {
-        FfiOpacity(100)
+impl FfiOpacity {
+    #[must_use]
+    pub const fn new(value: u8) -> Self {
+        Self(value)
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, uniffi::Record)]
+impl Default for FfiOpacity {
+    fn default() -> Self {
+        Self(100)
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Rgb {
     pub r: u8,
     pub g: u8,

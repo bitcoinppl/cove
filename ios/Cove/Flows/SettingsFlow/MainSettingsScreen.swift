@@ -115,7 +115,8 @@ struct MainSettingsScreen: View {
                 if enable {
                     if !app.rust.unverifiedWalletIds().isEmpty {
                         alertState = .init(
-                            .unverifiedWallets(app.rust.unverifiedWalletIds().first!))
+                            .unverifiedWallets(app.rust.unverifiedWalletIds().first!)
+                        )
 
                         return
                     }
@@ -173,7 +174,6 @@ struct MainSettingsScreen: View {
         )
     }
 
-    @ViewBuilder
     var GeneralSection: some View {
         Section(header: Text("General")) {
             SettingsRow(title: "Network", route: .network, symbol: "network")
@@ -244,7 +244,6 @@ struct MainSettingsScreen: View {
         )
     }
 
-    @ViewBuilder
     private func CancelView(_ content: () -> some View) -> some View {
         VStack {
             HStack {
@@ -530,7 +529,8 @@ struct MainSettingsScreen: View {
                     if auth.checkWipeDataPin(pin) {
                         alertState = .init(
                             .extraSetPinError(
-                                "Can't update PIN because its the same as your wipe data PIN")
+                                "Can't update PIN because its the same as your wipe data PIN"
+                            )
                         )
                         return
                     }

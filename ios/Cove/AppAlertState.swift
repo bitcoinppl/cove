@@ -10,7 +10,7 @@ public enum AppAlertState: Equatable {
     case importedSuccessfully
     case importedLabelsSuccessfully
 
-    // warn
+    /// warn
     case duplicateWallet(WalletId)
 
     // errors
@@ -34,7 +34,7 @@ public enum AppAlertState: Equatable {
     case tapSignerNoBackup(TapSigner)
     case tapSignerWrongPin(TapSigner, AfterPinAction)
 
-    // genericMessage or error
+    /// genericMessage or error
     case general(title: String, message: String)
 
     // action

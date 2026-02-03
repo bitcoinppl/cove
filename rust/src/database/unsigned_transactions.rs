@@ -213,7 +213,7 @@ impl UnsignedTransactionRecord {
     }
 
     #[uniffi::method]
-    pub fn tx_id(&self) -> TxId {
+    pub const fn tx_id(&self) -> TxId {
         self.tx_id
     }
 
@@ -223,7 +223,7 @@ impl UnsignedTransactionRecord {
     }
 
     #[uniffi::method]
-    pub fn created_at(&self) -> u64 {
+    pub const fn created_at(&self) -> u64 {
         self.created_at
     }
 }

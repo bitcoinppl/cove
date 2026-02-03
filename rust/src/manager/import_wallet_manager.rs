@@ -142,7 +142,7 @@ impl RustImportWalletManager {
 
     /// Action from the frontend to change the state of the view model
     #[uniffi::method]
-    pub fn dispatch(&self, action: ImportWalletManagerAction) {
+    pub const fn dispatch(&self, action: ImportWalletManagerAction) {
         match action {
             ImportWalletManagerAction::NoOp => {}
         }
@@ -151,7 +151,7 @@ impl RustImportWalletManager {
 
 impl_default_for!(ImportWalletManagerState);
 impl ImportWalletManagerState {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {}
     }
 }

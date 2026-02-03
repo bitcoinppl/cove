@@ -44,7 +44,7 @@ pub struct Updater(pub Sender<AppStateReconcileMessage>);
 impl Updater {
     /// Initialize global instance of the updater with a sender
     pub fn init(sender: Sender<AppStateReconcileMessage>) {
-        UPDATER.get_or_init(|| Updater(sender));
+        UPDATER.get_or_init(|| Self(sender));
     }
 
     pub fn global() -> &'static Self {

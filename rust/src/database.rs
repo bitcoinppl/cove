@@ -90,7 +90,7 @@ impl Database {
         Arc::clone(&db)
     }
 
-    fn init() -> Database {
+    fn init() -> Self {
         let main_db = get_or_create_main_database();
         let main_db_arc = Arc::new(main_db);
 
@@ -105,11 +105,11 @@ impl Database {
 
         write_txn.commit().expect("failed to commit write transaction");
 
-        Database {
-            wallets,
+        Self {
             global_flag,
             global_config,
             global_cache,
+            wallets,
             unsigned_transactions,
             historical_prices,
         }
@@ -130,7 +130,7 @@ fn get_or_create_database_with_location(database_location: PathBuf) -> redb::Dat
                 error!("failed to open database, error: {error:?}, creating a new one");
             }
         }
-    };
+    }
 
     info!("Creating a new database, at {}", database_location.display());
 

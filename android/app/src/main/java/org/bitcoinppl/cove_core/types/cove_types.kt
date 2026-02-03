@@ -1422,10 +1422,10 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_types_checksum_func_color_scheme_selection_capitalized_string() != 30731.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_func_confirm_details_preview_new() != 21539.toShort()) {
+    if (lib.uniffi_cove_types_checksum_func_confirm_details_preview_new() != 41030.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_func_qr_density_is_equal() != 3265.toShort()) {
+    if (lib.uniffi_cove_types_checksum_func_qr_density_is_equal() != 54760.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_func_fee_rate_options_with_total_fee_is_equal() != 17627.toShort()) {
@@ -1518,10 +1518,10 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_types_checksum_method_amount_as_sats() != 8712.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_amount_btc_string() != 40813.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_amount_btc_string() != 41193.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_amount_btc_string_with_unit() != 4146.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_amount_btc_string_with_unit() != 40607.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_method_amount_fmt_string() != 3973.toShort()) {
@@ -1530,7 +1530,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_types_checksum_method_amount_fmt_string_with_unit() != 64791.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_amount_sats_string() != 46414.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_amount_sats_string() != 34415.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_method_amount_sats_string_with_unit() != 53544.toShort()) {
@@ -1566,10 +1566,10 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_types_checksum_method_confirmdetails_psbt_bytes() != 64298.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_confirmdetails_psbt_to_bbqr() != 44475.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_confirmdetails_psbt_to_bbqr() != 2152.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_confirmdetails_psbt_to_bbqr_with_density() != 46679.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_confirmdetails_psbt_to_bbqr_with_density() != 25796.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_method_confirmdetails_psbt_to_bbqr_with_max_version() != 52826.toShort()) {
@@ -1578,10 +1578,10 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_types_checksum_method_confirmdetails_psbt_to_hex() != 28844.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_confirmdetails_psbt_to_ur() != 51534.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_confirmdetails_psbt_to_ur() != 59953.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_confirmdetails_psbt_to_ur_with_density() != 61309.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_confirmdetails_psbt_to_ur_with_density() != 22044.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_method_confirmdetails_sending_amount() != 32253.toShort()) {
@@ -1698,7 +1698,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_transaction_size() != 16234.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_psbt_fee() != 23286.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_psbt_fee() != 45701.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_method_psbt_output_total_amount() != 21225.toShort()) {
@@ -1707,7 +1707,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_types_checksum_method_psbt_tx_id() != 3954.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_psbt_weight() != 28925.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_psbt_weight() != 40555.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_method_outpoint_eq() != 14112.toShort()) {
@@ -1749,16 +1749,16 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_types_checksum_method_txid_as_hash_string() != 7916.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_constructor_address_from_string() != 58026.toShort()) {
+    if (lib.uniffi_cove_types_checksum_constructor_address_from_string() != 4732.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_constructor_address_preview_new() != 38108.toShort()) {
+    if (lib.uniffi_cove_types_checksum_constructor_address_preview_new() != 61836.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_constructor_address_random() != 40923.toShort()) {
+    if (lib.uniffi_cove_types_checksum_constructor_address_random() != 18866.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_constructor_addresswithnetwork_new() != 11084.toShort()) {
+    if (lib.uniffi_cove_types_checksum_constructor_addresswithnetwork_new() != 55575.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_constructor_amount_from_sat() != 32795.toShort()) {
@@ -1788,7 +1788,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_types_checksum_constructor_feerateoptionswithtotalfee_previewnew() != 31010.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_constructor_psbt_new() != 33253.toShort()) {
+    if (lib.uniffi_cove_types_checksum_constructor_psbt_new() != 34001.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_constructor_outpoint_previewnew() != 32440.toShort()) {
@@ -2522,6 +2522,17 @@ open class Address: Disposable, AutoCloseable, AddressInterface
     
     companion object {
         
+    /**
+     * Creates an Address from a string and validates it for the given network
+     *
+     * # Errors
+     * Returns `AddressError::InvalidAddress` if the address cannot be parsed
+     * Returns `AddressError::WrongNetwork` if the address is valid but for a different network
+     * Returns `AddressError::UnsupportedNetwork` if the address is not valid for any supported network
+     *
+     * # Panics
+     * Will not panic - the expect is guarded by a preceding validity check
+     */
     @Throws(AddressException::class) fun `fromString`(`address`: kotlin.String, `network`: Network): Address {
             return FfiConverterTypeAddress.lift(
     uniffiRustCallWithError(AddressException) { _status ->
@@ -2533,7 +2544,13 @@ open class Address: Disposable, AutoCloseable, AddressInterface
     }
     
 
-         fun `previewNew`(): Address {
+        
+    /**
+     * Creates a preview address for testing/development
+     *
+     * # Panics
+     * Will not panic - uses a known valid hardcoded address
+     */ fun `previewNew`(): Address {
             return FfiConverterTypeAddress.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_types_fn_constructor_address_preview_new(
@@ -2544,7 +2561,13 @@ open class Address: Disposable, AutoCloseable, AddressInterface
     }
     
 
-         fun `random`(): Address {
+        
+    /**
+     * Creates a random address from a set of predefined test addresses
+     *
+     * # Panics
+     * Will not panic - uses known valid hardcoded addresses
+     */ fun `random`(): Address {
             return FfiConverterTypeAddress.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_types_fn_constructor_address_random(
@@ -3307,6 +3330,12 @@ open class AddressWithNetwork: Disposable, AutoCloseable, AddressWithNetworkInte
         this.handle = 0
         this.cleanable = null
     }
+    /**
+     * Creates a new `AddressWithNetwork` from a string
+     *
+     * # Errors
+     * Returns `AddressError` if the address is invalid or for an unsupported network
+     */
     constructor(`address`: kotlin.String) :
         this(UniffiWithHandle, 
     uniffiRustCallWithError(AddressException) { _status ->
@@ -3579,14 +3608,26 @@ public interface AmountInterface {
     
     fun `asSats`(): kotlin.ULong
     
+    /**
+     * # Panics
+     * Will not panic - separator is a valid character
+     */
     fun `btcString`(): kotlin.String
     
+    /**
+     * # Panics
+     * Will not panic - separator is a valid character
+     */
     fun `btcStringWithUnit`(): kotlin.String
     
     fun `fmtString`(`unit`: BitcoinUnit): kotlin.String
     
     fun `fmtStringWithUnit`(`unit`: BitcoinUnit): kotlin.String
     
+    /**
+     * # Panics
+     * Will not panic - separator is a valid character
+     */
     fun `satsString`(): kotlin.String
     
     fun `satsStringWithUnit`(): kotlin.String
@@ -3716,7 +3757,11 @@ open class Amount: Disposable, AutoCloseable, AmountInterface
     }
     
 
-    override fun `btcString`(): kotlin.String {
+    
+    /**
+     * # Panics
+     * Will not panic - separator is a valid character
+     */override fun `btcString`(): kotlin.String {
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
@@ -3729,7 +3774,11 @@ open class Amount: Disposable, AutoCloseable, AmountInterface
     }
     
 
-    override fun `btcStringWithUnit`(): kotlin.String {
+    
+    /**
+     * # Panics
+     * Will not panic - separator is a valid character
+     */override fun `btcStringWithUnit`(): kotlin.String {
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
@@ -3768,7 +3817,11 @@ open class Amount: Disposable, AutoCloseable, AmountInterface
     }
     
 
-    override fun `satsString`(): kotlin.String {
+    
+    /**
+     * # Panics
+     * Will not panic - separator is a valid character
+     */override fun `satsString`(): kotlin.String {
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
@@ -4216,10 +4269,19 @@ public interface ConfirmDetailsInterface {
     
     fun `psbtBytes`(): kotlin.ByteArray
     
+    /**
+     * Exports PSBT as `BBQr` encoded QR strings
+     *
+     * # Errors
+     * Returns `ConfirmDetailsError::QrCodeCreation` if encoding fails
+     */
     fun `psbtToBbqr`(): List<kotlin.String>
     
     /**
-     * Export PSBT as BBQr with specified max version
+     * Exports PSBT as `BBQr` with specified density
+     *
+     * # Errors
+     * Returns `ConfirmDetailsError::QrCodeCreation` if encoding fails
      */
     fun `psbtToBbqrWithDensity`(`density`: QrDensity): List<kotlin.String>
     
@@ -4228,12 +4290,18 @@ public interface ConfirmDetailsInterface {
     fun `psbtToHex`(): kotlin.String
     
     /**
-     * Export PSBT as UR-encoded QR strings for animated display
+     * Exports PSBT as UR-encoded QR strings for animated display
+     *
+     * # Errors
+     * Returns `ConfirmDetailsError::QrCodeCreation` if encoding fails
      */
     fun `psbtToUr`(`maxFragmentLen`: kotlin.UInt): List<kotlin.String>
     
     /**
-     * Export PSBT as UR with specified density
+     * Exports PSBT as UR with specified density
+     *
+     * # Errors
+     * Returns `ConfirmDetailsError::QrCodeCreation` if encoding fails
      */
     fun `psbtToUrWithDensity`(`density`: QrDensity): List<kotlin.String>
     
@@ -4473,6 +4541,12 @@ open class ConfirmDetails: Disposable, AutoCloseable, ConfirmDetailsInterface
     
 
     
+    /**
+     * Exports PSBT as `BBQr` encoded QR strings
+     *
+     * # Errors
+     * Returns `ConfirmDetailsError::QrCodeCreation` if encoding fails
+     */
     @Throws(ConfirmDetailsException::class)override fun `psbtToBbqr`(): List<kotlin.String> {
             return FfiConverterSequenceString.lift(
     callWithHandle {
@@ -4488,7 +4562,10 @@ open class ConfirmDetails: Disposable, AutoCloseable, ConfirmDetailsInterface
 
     
     /**
-     * Export PSBT as BBQr with specified max version
+     * Exports PSBT as `BBQr` with specified density
+     *
+     * # Errors
+     * Returns `ConfirmDetailsError::QrCodeCreation` if encoding fails
      */
     @Throws(ConfirmDetailsException::class)override fun `psbtToBbqrWithDensity`(`density`: QrDensity): List<kotlin.String> {
             return FfiConverterSequenceString.lift(
@@ -4532,7 +4609,10 @@ open class ConfirmDetails: Disposable, AutoCloseable, ConfirmDetailsInterface
 
     
     /**
-     * Export PSBT as UR-encoded QR strings for animated display
+     * Exports PSBT as UR-encoded QR strings for animated display
+     *
+     * # Errors
+     * Returns `ConfirmDetailsError::QrCodeCreation` if encoding fails
      */
     @Throws(ConfirmDetailsException::class)override fun `psbtToUr`(`maxFragmentLen`: kotlin.UInt): List<kotlin.String> {
             return FfiConverterSequenceString.lift(
@@ -4549,7 +4629,10 @@ open class ConfirmDetails: Disposable, AutoCloseable, ConfirmDetailsInterface
 
     
     /**
-     * Export PSBT as UR with specified density
+     * Exports PSBT as UR with specified density
+     *
+     * # Errors
+     * Returns `ConfirmDetailsError::QrCodeCreation` if encoding fails
      */
     @Throws(ConfirmDetailsException::class)override fun `psbtToUrWithDensity`(`density`: QrDensity): List<kotlin.String> {
             return FfiConverterSequenceString.lift(
@@ -6928,7 +7011,10 @@ public object FfiConverterTypeOutPoint: FfiConverter<OutPoint, Long> {
 public interface PsbtInterface {
     
     /**
-     * Total fee in sats.
+     * Total fee in sats
+     *
+     * # Errors
+     * Returns `PsbtError` variants if fee calculation fails
      */
     fun `fee`(): Amount
     
@@ -6943,7 +7029,7 @@ public interface PsbtInterface {
     fun `txId`(): TxId
     
     /**
-     * The virtual size of the transaction.
+     * The virtual size of the transaction
      */
     fun `weight`(): kotlin.ULong
     
@@ -6974,6 +7060,12 @@ open class Psbt: Disposable, AutoCloseable, PsbtInterface
         this.handle = 0
         this.cleanable = null
     }
+    /**
+     * Creates a new PSBT from serialized bytes
+     *
+     * # Errors
+     * Returns `PsbtError::Other` if deserialization fails
+     */
     constructor(`data`: kotlin.ByteArray) :
         this(UniffiWithHandle, 
     uniffiRustCallWithError(PsbtException) { _status ->
@@ -7056,7 +7148,10 @@ open class Psbt: Disposable, AutoCloseable, PsbtInterface
 
     
     /**
-     * Total fee in sats.
+     * Total fee in sats
+     *
+     * # Errors
+     * Returns `PsbtError` variants if fee calculation fails
      */
     @Throws(PsbtException::class)override fun `fee`(): Amount {
             return FfiConverterTypeAmount.lift(
@@ -7105,7 +7200,7 @@ open class Psbt: Disposable, AutoCloseable, PsbtInterface
 
     
     /**
-     * The virtual size of the transaction.
+     * The virtual size of the transaction
      */override fun `weight`(): kotlin.ULong {
             return FfiConverterULong.lift(
     callWithHandle {
@@ -10163,7 +10258,7 @@ public object FfiConverterTypePsbtError : FfiConverterRustBuffer<PsbtException> 
 enum class QrExportFormat {
     
     /**
-     * BBQr format (Binary Bitcoin QR)
+     * `BBQr` format (Binary Bitcoin QR)
      */
     BBQR,
     /**
@@ -10640,7 +10735,7 @@ public typealias FfiConverterTypeWalletId = FfiConverterString
     
 
         /**
-         * Preview ConfirmDetails for SwiftUI previews
+         * Preview `ConfirmDetails` for `SwiftUI` previews
          */ fun `confirmDetailsPreviewNew`(): ConfirmDetails {
             return FfiConverterTypeConfirmDetails.lift(
     uniffiRustCall() { _status ->
@@ -10653,7 +10748,7 @@ public typealias FfiConverterTypeWalletId = FfiConverterString
     
 
         /**
-         * Check if two QrDensity values are equal (for Swift Equatable conformance)
+         * Check if two `QrDensity` values are equal (for Swift Equatable conformance)
          */ fun `qrDensityIsEqual`(`lhs`: QrDensity, `rhs`: QrDensity): kotlin.Boolean {
             return FfiConverterBoolean.lift(
     uniffiRustCall() { _status ->

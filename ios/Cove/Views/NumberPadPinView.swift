@@ -53,7 +53,7 @@ struct NumberPadPinView: View {
     }
 
     private var isBiometricAvailable: Bool {
-        /// Lock Context
+        // Lock Context
         let context = LAContext()
         return context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil)
     }
@@ -68,15 +68,15 @@ struct NumberPadPinView: View {
 
             Spacer()
 
-            /// Adding Wiggling Animation for Wrong Password With Keyframe Animator
+            // Adding Wiggling Animation for Wrong Password With Keyframe Animator
             HStack(spacing: 10) {
                 ForEach(0 ..< pinLength, id: \.self) { index in
                     RoundedRectangle(cornerRadius: 10)
                         .frame(width: 40, height: 45)
                         .foregroundStyle(.white)
-                        /// Showing Pin at each box with the help of Index
+                        // Showing Pin at each box with the help of Index
                         .overlay {
-                            /// Safe Check
+                            // Safe Check
                             if pin.count > index {
                                 let index = pin.index(pin.startIndex, offsetBy: index)
                                 let string = showPin ? String(pin[index]) : "●"
@@ -108,7 +108,7 @@ struct NumberPadPinView: View {
                     }
                 }
             )
-            /// run onEnd call back after keyframe animation
+            // run onEnd call back after keyframe animation
             .onChange(of: animateField) { _, _ in
                 let pin = pin
                 self.pin = ""
@@ -123,7 +123,7 @@ struct NumberPadPinView: View {
             Spacer()
             Spacer()
 
-            /// Custom Number Pad
+            // Custom Number Pad
             LazyVGrid(columns: Array(repeating: GridItem(), count: 3), content: {
                 ForEach(1 ... 9, id: \.self) { number in
                     Button(action: {
@@ -164,7 +164,7 @@ struct NumberPadPinView: View {
                 })
                 .tint(.white)
 
-                /// 0 and Back Button
+                // 0 and Back Button
                 Button(action: {
                     if !pin.isEmpty { pin.removeLast() }
                 }, label: {
@@ -181,7 +181,7 @@ struct NumberPadPinView: View {
                 if newValue.count == pinLength {
                     let pin = newValue
 
-                    /// Validate Pin
+                    // Validate Pin
                     if isPinCorrect(pin) {
                         withAnimation(.snappy, completionCriteria: .logicallyComplete) {
                             lockState = .unlocked

@@ -23,7 +23,7 @@ pub enum Bip39WordSpecificAutocomplete {
 #[uniffi::export]
 impl Bip39AutoComplete {
     #[uniffi::constructor]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self { max_auto_complete: 3 }
     }
 }
@@ -32,7 +32,7 @@ impl Bip39AutoComplete {
 impl Bip39AutoComplete {
     /// Find the next invalid or empty field number
     #[uniffi::method]
-    pub fn next_field_number(&self, current_field_number: u8, entered_words: Vec<String>) -> u8 {
+    pub fn next_field_number(self, current_field_number: u8, entered_words: Vec<String>) -> u8 {
         let current_index = current_field_number.saturating_sub(1) as usize;
 
         // look over the entire group, this way we find the first empty or invalid word, even if
@@ -68,7 +68,7 @@ impl AutoComplete for Bip39AutoComplete {
             .iter()
             .filter(|w| w.starts_with(&word))
             .take(self.max_auto_complete)
-            .map(|w| w.to_string())
+            .map(std::string::ToString::to_string)
             .collect()
     }
 

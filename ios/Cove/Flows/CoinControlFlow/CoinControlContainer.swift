@@ -35,7 +35,8 @@ struct CoinControlContainer: View {
             app.alertState = .init(
                 .general(
                     title: "Error!", message: "Unable to get wallet \(error.localizedDescription)"
-                ))
+                )
+            )
         }
     }
 

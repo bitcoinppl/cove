@@ -6,7 +6,7 @@
 //
 import SwiftUI
 
-// SVG
+/// SVG
 struct BitcoinShieldIcon: View {
     // args size
     var width: CGFloat? = nil
@@ -18,11 +18,18 @@ struct BitcoinShieldIcon: View {
     var bitcoinColor: Color? = nil
 
     var isResizable = false
-    func resizable() -> Self { Self(isResizable: true) }
+    func resizable() -> Self {
+        Self(isResizable: true)
+    }
 
-    // private
-    private var _shieldColor: Color { shieldColor ?? color ?? bitcoinColor ?? .primary }
-    private var _bitcoinColor: Color { bitcoinColor ?? color ?? shieldColor ?? .primary }
+    /// private
+    private var _shieldColor: Color {
+        shieldColor ?? color ?? bitcoinColor ?? .primary
+    }
+
+    private var _bitcoinColor: Color {
+        bitcoinColor ?? color ?? shieldColor ?? .primary
+    }
 
     // this is the base size of the icon, everything is scaled from this
     private let staticSize = CGSize(width: 103, height: 125)

@@ -72,7 +72,7 @@ impl State {
 
         let labels_db = WalletDataDb::new_or_existing(self.wallet_id.clone()).labels;
 
-        utxos.iter_mut().for_each(|utxo| {
+        for utxo in utxos.iter_mut() {
             let label = labels_db
                 .get_txn_label_record(utxo.outpoint.txid)
                 .ok()
@@ -87,7 +87,7 @@ impl State {
                 });
 
             utxo.label = label;
-        });
+        }
     }
 
     pub fn sort_utxos(&mut self, sort: ListSort) {
@@ -239,6 +239,6 @@ impl CoinControlManagerState {
         let search = String::new();
         let filtered_utxos = FilteredUtxos::All;
 
-        Self { wallet_id, unit, network, utxos, sort, selected_utxos, search, filtered_utxos }
+        Self { wallet_id, unit, network, utxos, filtered_utxos, sort, selected_utxos, search }
     }
 }

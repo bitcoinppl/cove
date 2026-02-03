@@ -1,12 +1,16 @@
 //! Encode/decode pre-encoded CBOR as raw bytes.
 //!
-//! Used for fields in CryptoHdkey that contain nested tagged structures
-//! (CryptoCoinInfo, CryptoKeypath) which are stored as pre-encoded CBOR bytes.
+//! Used for fields in `CryptoHdkey` that contain nested tagged structures
+//! (`CryptoCoinInfo`, `CryptoKeypath`) which are stored as pre-encoded CBOR bytes.
 
 use minicbor::decode::{Decoder, Error as DecodeError};
 use minicbor::encode::{Encoder, Error as EncodeError, Write};
 
 /// Encode by writing raw CBOR bytes directly to the writer
+///
+/// # Errors
+///
+/// Returns an error if writing to the encoder fails
 pub fn encode<C, W: Write>(
     data: &[u8],
     encoder: &mut Encoder<W>,
@@ -18,7 +22,11 @@ pub fn encode<C, W: Write>(
 }
 
 /// Decode by capturing the raw CBOR bytes of the current value
-pub fn decode<'b, C>(decoder: &mut Decoder<'b>, _ctx: &mut C) -> Result<Vec<u8>, DecodeError> {
+///
+/// # Errors
+///
+/// Returns an error if decoding fails
+pub fn decode<C>(decoder: &mut Decoder<'_>, _ctx: &mut C) -> Result<Vec<u8>, DecodeError> {
     let start = decoder.position();
     decoder.skip()?;
     let end = decoder.position();

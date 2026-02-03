@@ -25,10 +25,10 @@ struct SendFlowConfirmScreen: View {
     @State private var sendState: SendState = .idle
     @State private var isShowingErrorAlert = false
 
-    // popover to change btc and sats
+    /// popover to change btc and sats
     @State private var showingMenu: Bool = false
 
-    // locking task, cancel if its screen is leaving
+    /// locking task, cancel if its screen is leaving
     @State private var lockingTask: Task<Void, Never>? = nil
 
     var fiatAmount: String {
@@ -168,10 +168,12 @@ struct SendFlowConfirmScreen: View {
                         do {
                             if let txn = signedTransaction {
                                 _ = try await manager.rust.broadcastTransaction(
-                                    signedTransaction: txn)
+                                    signedTransaction: txn
+                                )
                             } else {
                                 _ = try await manager.rust.signAndBroadcastTransaction(
-                                    psbt: details.psbt())
+                                    psbt: details.psbt()
+                                )
                             }
                             sendState = .sent
                             isShowingAlert = true
@@ -231,7 +233,8 @@ struct SendFlowConfirmScreen: View {
                         Text(error)
                     } else {
                         Text(
-                            "Unknown error, unable to broadcast transaction, please try again!")
+                            "Unknown error, unable to broadcast transaction, please try again!"
+                        )
                     }
                 }
             )

@@ -64,17 +64,17 @@ impl SeedQr {
         Ok(Self::Compact(mnemonic))
     }
 
-    pub fn mnemonic(&self) -> &Mnemonic {
+    pub const fn mnemonic(&self) -> &Mnemonic {
         match self {
-            SeedQr::Standard(mnemonic) => mnemonic,
-            SeedQr::Compact(mnemonic) => mnemonic,
+            Self::Standard(mnemonic) => mnemonic,
+            Self::Compact(mnemonic) => mnemonic,
         }
     }
 
     pub fn into_mnemonic(self) -> Mnemonic {
         match self {
-            SeedQr::Standard(mnemonic) => mnemonic,
-            SeedQr::Compact(mnemonic) => mnemonic,
+            Self::Standard(mnemonic) => mnemonic,
+            Self::Compact(mnemonic) => mnemonic,
         }
     }
 
@@ -98,7 +98,7 @@ impl SeedQr {
 
     #[uniffi::method]
     pub fn get_words(&self) -> Vec<String> {
-        self.words().map(|word| word.to_string()).collect()
+        self.words().map(std::string::ToString::to_string).collect()
     }
 
     #[uniffi::method]
@@ -108,7 +108,7 @@ impl SeedQr {
 }
 
 fn parse_str_into_word_indexes(qr: &str) -> Result<Vec<u16>, SeedQrError> {
-    if !qr.chars().all(|c| c.is_numeric()) {
+    if !qr.chars().all(char::is_numeric) {
         return Err(SeedQrError::ContainsNonNumericChars);
     }
 

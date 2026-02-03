@@ -10,14 +10,17 @@ pub struct OutPoint {
 
 #[uniffi::export]
 impl OutPoint {
-    pub fn txid(&self) -> TxId {
+    #[must_use]
+    pub const fn txid(&self) -> TxId {
         self.txid
     }
 
+    #[must_use]
     pub fn txid_str(&self) -> String {
         self.txid.to_string()
     }
 
+    #[must_use]
     pub fn txn_link(&self) -> String {
         format!("https://mempool.space/tx/{}", self.txid_str())
     }
@@ -65,17 +68,20 @@ impl OutPoint {
     }
 
     #[uniffi::method(name = "eq")]
-    fn _ffi_eq(&self, rhs: std::sync::Arc<OutPoint>) -> bool {
+    #[allow(clippy::needless_pass_by_value)] // uniffi requires Arc by value
+    fn _ffi_eq(&self, rhs: std::sync::Arc<Self>) -> bool {
         *self == *rhs
     }
 
     // MARK: FFI PREVIEW
     #[uniffi::constructor(name = "previewNew")]
+    #[must_use]
     pub fn _ffi_preview_new() -> Self {
         Self::_ffi_with_vout(0)
     }
 
     #[uniffi::constructor(name = "withVout")]
+    #[must_use]
     pub fn _ffi_with_vout(vout: u32) -> Self {
         Self { txid: TxId::preview_new(), vout }
     }

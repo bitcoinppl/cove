@@ -182,7 +182,6 @@ struct LockView<Content: View>: View {
         )
     }
 
-    @ViewBuilder
     var PermissionsNeeded: some View {
         VStack(spacing: 20) {
             Text(
@@ -199,7 +198,6 @@ struct LockView<Content: View>: View {
         }
     }
 
-    @ViewBuilder
     var BiometricView: some View {
         VStack(spacing: 12) {
             VStack(spacing: 6) {
@@ -233,7 +231,7 @@ struct LockView<Content: View>: View {
     }
 
     private func bioMetricUnlock() async throws -> Bool {
-        /// Lock Context
+        // Lock Context
         let context = LAContext()
 
         return try await context.evaluatePolicy(
@@ -248,9 +246,9 @@ struct LockView<Content: View>: View {
         guard isBiometricAvailable else { return }
         guard lockState.wrappedValue == .locked else { return }
 
-        /// Checking and Unlocking View
+        // Checking and Unlocking View
         Task {
-            /// Requesting Biometric Unlock
+            // Requesting Biometric Unlock
             auth.isUsingBiometrics = true
 
             if await (try? bioMetricUnlock()) ?? false {
@@ -270,7 +268,7 @@ struct LockView<Content: View>: View {
 }
 
 private var isBiometricAvailable: Bool {
-    /// Lock Context
+    // Lock Context
     let context = LAContext()
     return context.canEvaluatePolicy(.deviceOwnerAuthentication, error: nil)
 }

@@ -104,10 +104,16 @@ impl Hash for AddressInfo {
 }
 
 impl Address {
-    pub fn new(address: BdkAddress) -> Self {
+    #[must_use]
+    pub const fn new(address: BdkAddress) -> Self {
         Self(address)
     }
 
+    /// Creates an Address from a transaction by extracting the relevant output address
+    ///
+    /// # Errors
+    /// Returns `AddressError::NoOutputs` if no suitable outputs are found
+    /// Returns `AddressError::ScriptError` if the script cannot be converted to an address
     pub fn try_new(
         tx: &CanonicalTx<Arc<Transaction>, ConfirmationBlockTime>,
         wallet: &bdk_wallet::Wallet,
@@ -146,12 +152,19 @@ impl Address {
         Ok(Self::new(address))
     }
 
+    #[must_use]
     pub fn into_unchecked(self) -> BdkAddress<NetworkUnchecked> {
         self.0.into_unchecked()
     }
 }
 
 impl AddressWithNetwork {
+    /// Parses a Bitcoin address string (optionally with URI scheme and amount)
+    ///
+    /// # Errors
+    /// Returns `AddressError::InvalidAddress` if the address is invalid
+    /// Returns `AddressError::EmptyAddress` if the address is empty
+    /// Returns `AddressError::UnsupportedNetwork` if the network is not supported
     pub fn try_new(str: &str) -> Result<Self, Error> {
         let (address_str, amount) = parse_bitcoin_uri(str)?;
 
@@ -176,6 +189,7 @@ impl AddressWithNetwork {
         Err(Error::UnsupportedNetwork)
     }
 
+    #[must_use]
     pub fn is_valid_for_network(&self, network: Network) -> bool {
         let current_network_type = NetworkKind::from(self.network);
         let network_type = NetworkKind::from(network);
@@ -189,10 +203,8 @@ fn parse_bitcoin_uri(input: &str) -> Result<(String, Option<Amount>), Error> {
         return Err(Error::EmptyAddress);
     }
 
-    let has_scheme = input
-        .split_once(':')
-        .map(|(scheme, _)| scheme.eq_ignore_ascii_case("bitcoin"))
-        .unwrap_or(false);
+    let has_scheme =
+        input.split_once(':').is_some_and(|(scheme, _)| scheme.eq_ignore_ascii_case("bitcoin"));
 
     let normalized = if has_scheme { input.to_string() } else { format!("bitcoin:{input}") };
     let url = Url::parse(&normalized).map_err(|_| Error::InvalidAddress)?;
@@ -202,8 +214,7 @@ fn parse_bitcoin_uri(input: &str) -> Result<(String, Option<Amount>), Error> {
     }
 
     let address = match (url.path(), url.host_str()) {
-        (address, None) if !address.is_empty() => String::from(address),
-        ("", Some(address)) if !address.is_empty() => String::from(address),
+        (address, None) | ("", Some(address)) if !address.is_empty() => String::from(address),
         _ => {
             return Err(Error::EmptyAddress);
         }
@@ -220,7 +231,12 @@ fn parse_bitcoin_uri(input: &str) -> Result<(String, Option<Amount>), Error> {
 
 #[uniffi::export]
 impl AddressWithNetwork {
+    /// Creates a new `AddressWithNetwork` from a string
+    ///
+    /// # Errors
+    /// Returns `AddressError` if the address is invalid or for an unsupported network
     #[uniffi::constructor(name = "new")]
+    #[allow(clippy::needless_pass_by_value)] // uniffi requires owned String
     pub fn new(address: String) -> Result<Self, Error> {
         Self::try_new(&address)
     }
@@ -229,7 +245,7 @@ impl AddressWithNetwork {
         self.address.clone()
     }
 
-    fn network(&self) -> Network {
+    const fn network(&self) -> Network {
         self.network
     }
 
@@ -238,6 +254,7 @@ impl AddressWithNetwork {
     }
 
     #[uniffi::method(name = "isValidForNetwork")]
+    #[must_use]
     pub fn ffi_is_valid_for_network(&self, network: Network) -> bool {
         self.is_valid_for_network(network)
     }
@@ -245,6 +262,15 @@ impl AddressWithNetwork {
 
 #[uniffi::export]
 impl Address {
+    /// Creates an Address from a string and validates it for the given network
+    ///
+    /// # Errors
+    /// Returns `AddressError::InvalidAddress` if the address cannot be parsed
+    /// Returns `AddressError::WrongNetwork` if the address is valid but for a different network
+    /// Returns `AddressError::UnsupportedNetwork` if the address is not valid for any supported network
+    ///
+    /// # Panics
+    /// Will not panic - the expect is guarded by a preceding validity check
     #[uniffi::constructor]
     pub fn from_string(address: &str, network: Network) -> Result<Self> {
         let address = address.trim();
@@ -267,7 +293,12 @@ impl Address {
         Err(Error::UnsupportedNetwork)
     }
 
+    /// Creates a preview address for testing/development
+    ///
+    /// # Panics
+    /// Will not panic - uses a known valid hardcoded address
     #[uniffi::constructor(name = "preview_new")]
+    #[must_use]
     pub fn preview_new() -> Self {
         let address = BdkAddress::from_str("bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq").unwrap();
 
@@ -278,6 +309,7 @@ impl Address {
     }
 
     #[uniffi::method]
+    #[must_use]
     pub fn spaced_out(&self) -> String {
         address_string_spaced_out(self.to_string())
     }
@@ -331,6 +363,7 @@ impl AddressInfoWithDerivation {
 }
 
 impl AddressInfoWithDerivation {
+    #[must_use]
     pub fn new(info: AddressInfo, derivation_path_prefix: Option<DerivationPath>) -> Self {
         let derivation_path = derivation_path_prefix.map(|p| format!("{p}/0/{}", info.index));
         Self { info, derivation_path }
@@ -338,6 +371,7 @@ impl AddressInfoWithDerivation {
 }
 
 #[uniffi::export]
+#[allow(clippy::needless_pass_by_value)] // uniffi requires owned String
 fn address_string_spaced_out(address: String) -> String {
     let groups = address.len() / 5;
     let mut final_address = String::with_capacity(address.len() + groups);
@@ -347,18 +381,20 @@ fn address_string_spaced_out(address: String) -> String {
             final_address.push(' ');
         }
 
-        final_address.push(char)
+        final_address.push(char);
     }
 
     final_address
 }
 
 #[uniffi::export]
+#[allow(clippy::needless_pass_by_value)] // uniffi requires owned String
 fn address_is_valid(address: String, network: Network) -> Result<(), Error> {
     address_is_valid_for_network(address, network)
 }
 
 #[uniffi::export]
+#[allow(clippy::needless_pass_by_value)] // uniffi requires owned String
 fn address_is_valid_for_network(address: String, network: Network) -> Result<(), Error> {
     Address::from_string(&address, network)?;
     Ok(())
@@ -373,7 +409,7 @@ impl<'de> Deserialize<'de> for Address {
         let bdk_address =
             BdkAddress::from_str(&s).map_err(serde::de::Error::custom)?.assume_checked();
 
-        Ok(Address(bdk_address))
+        Ok(Self(bdk_address))
     }
 }
 
@@ -400,7 +436,12 @@ mod ffi {
 
 #[uniffi::export]
 impl Address {
+    /// Creates a random address from a set of predefined test addresses
+    ///
+    /// # Panics
+    /// Will not panic - uses known valid hardcoded addresses
     #[uniffi::constructor]
+    #[must_use]
     pub fn random() -> Self {
         Self::new(BdkAddress::from_str(ffi::random_address()).unwrap().assume_checked())
     }

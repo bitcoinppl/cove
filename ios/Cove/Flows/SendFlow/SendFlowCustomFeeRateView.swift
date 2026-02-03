@@ -38,8 +38,7 @@ struct SendFlowCustomFeeRateView: View {
         Binding(
             get: {
                 let feeRate = Float(feeRate) ?? selectedOption.satPerVb()
-                let clampedFeeRate = (feeRate * 100).rounded() / 100
-                return clampedFeeRate
+                return (feeRate * 100).rounded() / 100
             },
             set: {
                 var feeRate = $0

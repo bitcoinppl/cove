@@ -10,15 +10,15 @@ pub enum NumberOfBip39Words {
 impl NumberOfBip39Words {
     pub const fn to_word_count(self) -> usize {
         match self {
-            NumberOfBip39Words::Twelve => 12,
-            NumberOfBip39Words::TwentyFour => 24,
+            Self::Twelve => 12,
+            Self::TwentyFour => 24,
         }
     }
 
     pub const fn to_entropy_bits(self) -> usize {
         match self {
-            NumberOfBip39Words::Twelve => 128,
-            NumberOfBip39Words::TwentyFour => 256,
+            Self::Twelve => 128,
+            Self::TwentyFour => 256,
         }
     }
 
@@ -28,12 +28,12 @@ impl NumberOfBip39Words {
 
     pub fn generate_mnemonic(self) -> Mnemonic {
         match self {
-            NumberOfBip39Words::Twelve => {
+            Self::Twelve => {
                 // 128 / 8  = 16
                 let random_bytes = rand::rng().random::<[u8; 16]>();
                 Mnemonic::from_entropy(&random_bytes).expect("failed to create mnemonic")
             }
-            NumberOfBip39Words::TwentyFour => {
+            Self::TwentyFour => {
                 // 256 / 8  = 32
                 let random_bytes = rand::rng().random::<[u8; 32]>();
                 Mnemonic::from_entropy(&random_bytes).expect("failed to create mnemonic")

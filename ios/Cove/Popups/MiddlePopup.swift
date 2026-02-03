@@ -9,7 +9,7 @@ import MijickPopups
 import SwiftUI
 
 struct MiddlePopup: CenterPopup {
-    // required
+    /// required
     var state: PopupState
 
     // optional

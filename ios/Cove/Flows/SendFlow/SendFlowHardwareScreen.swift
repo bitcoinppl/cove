@@ -45,7 +45,7 @@ struct SendFlowHardwareScreen: View {
     @State private var confirmationState: TaggedItem<ConfirmationState>? = .none
     @State private var inputOutputDetailsPresentationSize: PresentationDetent = .height(300)
 
-    // file import
+    /// file import
     @State private var isPresentingFilePicker = false
 
     var metadata: WalletMetadata {
@@ -111,14 +111,16 @@ struct SendFlowHardwareScreen: View {
                                 .contextMenu {
                                     Button {
                                         manager.dispatch(
-                                            action: .updateUnit(.sat))
+                                            action: .updateUnit(.sat)
+                                        )
                                     } label: {
                                         Text("sats")
                                     }
 
                                     Button {
                                         manager.dispatch(
-                                            action: .updateUnit(.btc))
+                                            action: .updateUnit(.btc)
+                                        )
                                     } label: {
                                         Text("btc")
                                     }
@@ -303,7 +305,6 @@ struct SendFlowHardwareScreen: View {
         return (record, parsed)
     }
 
-    @ViewBuilder
     var AccountSection: some View {
         VStack {
             HStack {
@@ -326,7 +327,6 @@ struct SendFlowHardwareScreen: View {
         }
     }
 
-    @ViewBuilder
     var SignTransactionSection: some View {
         VStack(spacing: 17) {
             HStack {
@@ -375,7 +375,6 @@ struct SendFlowHardwareScreen: View {
         }
     }
 
-    @ViewBuilder
     func SignTapSignerTransactionSection(_ ts: TapSigner) -> some View {
         VStack(spacing: 17) {
             HStack {

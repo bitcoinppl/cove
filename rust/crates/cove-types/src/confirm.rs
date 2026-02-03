@@ -62,7 +62,7 @@ pub enum ConfirmDetailsError {
 #[derive(Debug, Clone, Copy, Default, Hash, Eq, PartialEq, derive_more::Display, uniffi::Enum)]
 #[uniffi::export(Display)]
 pub enum QrExportFormat {
-    /// BBQr format (Binary Bitcoin QR)
+    /// `BBQr` format (Binary Bitcoin QR)
     #[default]
     #[display("BBQr")]
     Bbqr,
@@ -80,7 +80,7 @@ pub enum QrExportFormat {
 pub struct QrDensity {
     /// UR max fragment length in bytes (50-500, default 200)
     ur_fragment_len: u32,
-    /// BBQr max version (5-40, default 15)
+    /// `BBQr` max version (5-40, default 15)
     bbqr_max_version: u8,
 }
 
@@ -106,11 +106,13 @@ impl Default for QrDensity {
 #[uniffi::export]
 impl QrDensity {
     #[uniffi::constructor]
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Increase density (larger QRs, fewer animation frames)
+    #[must_use]
     pub fn increase(&self) -> Self {
         Self {
             ur_fragment_len: (self.ur_fragment_len + Self::UR_STEP).min(Self::UR_MAX),
@@ -119,6 +121,7 @@ impl QrDensity {
     }
 
     /// Decrease density (smaller QRs, more animation frames)
+    #[must_use]
     pub fn decrease(&self) -> Self {
         // use smaller step for final decrease to reach 25
         let step = if self.ur_fragment_len <= Self::UR_STEP + Self::UR_FINAL_STEP {
@@ -136,25 +139,30 @@ impl QrDensity {
         }
     }
 
-    pub fn can_increase(&self) -> bool {
+    #[must_use]
+    pub const fn can_increase(&self) -> bool {
         self.ur_fragment_len < Self::UR_MAX || self.bbqr_max_version < Self::BBQR_MAX
     }
 
-    pub fn can_decrease(&self) -> bool {
+    #[must_use]
+    pub const fn can_decrease(&self) -> bool {
         self.ur_fragment_len > Self::UR_MIN || self.bbqr_max_version > Self::BBQR_MIN
     }
 
-    pub fn ur_fragment_len(&self) -> u32 {
+    #[must_use]
+    pub const fn ur_fragment_len(&self) -> u32 {
         self.ur_fragment_len
     }
 
-    pub fn bbqr_max_version(&self) -> u8 {
+    #[must_use]
+    pub const fn bbqr_max_version(&self) -> u8 {
         self.bbqr_max_version
     }
 
     /// Get the recommended animation interval in milliseconds for UR format
     /// Lower density (smaller fragments) = slower animation for better scanning
-    pub fn ur_animation_interval_ms(&self) -> u32 {
+    #[must_use]
+    pub const fn ur_animation_interval_ms(&self) -> u32 {
         match self.ur_fragment_len {
             200.. => 250,
             150..200 => 300,
@@ -166,7 +174,8 @@ impl QrDensity {
 
     /// Get the recommended animation interval in milliseconds for BBQR format
     /// Lower density (smaller max version) = slower animation for better scanning
-    pub fn bbqr_animation_interval_ms(&self) -> u32 {
+    #[must_use]
+    pub const fn bbqr_animation_interval_ms(&self) -> u32 {
         match self.bbqr_max_version {
             15.. => 250,
             11..15 => 300,
@@ -177,8 +186,9 @@ impl QrDensity {
     }
 }
 
-/// Check if two QrDensity values are equal (for Swift Equatable conformance)
+/// Check if two `QrDensity` values are equal (for Swift Equatable conformance)
 #[uniffi::export]
+#[must_use]
 pub fn qr_density_is_equal(lhs: &QrDensity, rhs: &QrDensity) -> bool {
     lhs == rhs
 }
@@ -191,67 +201,88 @@ pub struct ExtraItem {
 
 #[uniffi::export]
 impl ConfirmDetails {
+    #[must_use]
     pub fn id(&self) -> TxId {
         self.psbt.0.unsigned_tx.compute_txid().into()
     }
 
+    #[must_use]
     pub fn id_hash(&self) -> String {
         self.id().0.to_raw_hash().to_string()
     }
 
+    #[must_use]
     pub fn normalized_id(&self) -> String {
         self.psbt.0.unsigned_tx.compute_ntxid().to_string()
     }
 
-    pub fn spending_amount(&self) -> Amount {
+    #[must_use]
+    pub const fn spending_amount(&self) -> Amount {
         self.spending_amount
     }
 
-    pub fn fee_percentage(&self) -> u64 {
+    #[must_use]
+    pub const fn fee_percentage(&self) -> u64 {
         self.fee_percentage
     }
 
-    pub fn sending_amount(&self) -> Amount {
+    #[must_use]
+    pub const fn sending_amount(&self) -> Amount {
         self.sending_amount
     }
 
-    pub fn fee_total(&self) -> Amount {
+    #[must_use]
+    pub const fn fee_total(&self) -> Amount {
         self.fee_total
     }
 
-    pub fn fee_rate(&self) -> FeeRate {
+    #[must_use]
+    pub const fn fee_rate(&self) -> FeeRate {
         self.fee_rate
     }
 
+    #[must_use]
     pub fn sending_to(&self) -> Address {
         self.sending_to.clone()
     }
 
+    #[must_use]
     pub fn inputs(&self) -> Vec<AddressAndAmount> {
         self.more_details.inputs.clone()
     }
 
+    #[must_use]
     pub fn outputs(&self) -> Vec<AddressAndAmount> {
         self.more_details.outputs.clone()
     }
 
+    #[must_use]
     pub fn psbt(&self) -> Psbt {
         self.psbt.clone()
     }
 
+    #[must_use]
     pub fn psbt_to_hex(&self) -> String {
         self.psbt.serialize_hex()
     }
 
+    #[must_use]
     pub fn psbt_bytes(&self) -> Vec<u8> {
         self.psbt.0.serialize()
     }
 
+    /// Exports PSBT as `BBQr` encoded QR strings
+    ///
+    /// # Errors
+    /// Returns `ConfirmDetailsError::QrCodeCreation` if encoding fails
     pub fn psbt_to_bbqr(&self) -> Result<Vec<String>> {
         self.psbt_to_bbqr_with_max_version(15)
     }
 
-    /// Export PSBT as BBQr with specified max version
+    /// Exports PSBT as `BBQr` with specified density
+    ///
+    /// # Errors
+    /// Returns `ConfirmDetailsError::QrCodeCreation` if encoding fails
     pub fn psbt_to_bbqr_with_density(&self, density: &QrDensity) -> Result<Vec<String>> {
         self.psbt_to_bbqr_with_max_version(density.bbqr_max_version())
     }
@@ -284,23 +315,29 @@ impl ConfirmDetails {
         Ok(split.parts)
     }
 
-    /// Export PSBT as UR with specified density
+    /// Exports PSBT as UR with specified density
+    ///
+    /// # Errors
+    /// Returns `ConfirmDetailsError::QrCodeCreation` if encoding fails
     pub fn psbt_to_ur_with_density(&self, density: &QrDensity) -> Result<Vec<String>> {
         self.psbt_to_ur(density.ur_fragment_len())
     }
 
-    /// Export PSBT as UR-encoded QR strings for animated display
+    /// Exports PSBT as UR-encoded QR strings for animated display
+    ///
+    /// # Errors
+    /// Returns `ConfirmDetailsError::QrCodeCreation` if encoding fails
     pub fn psbt_to_ur(&self, max_fragment_len: u32) -> Result<Vec<String>> {
         use cove_ur::CryptoPsbt;
         use foundation_ur::Encoder as UrEncoder;
 
         // wrap PSBT in CryptoPsbt and encode to tagged CBOR
         let crypto_psbt = CryptoPsbt::from_psbt_bytes(self.psbt.0.serialize()).map_err(|e| {
-            ConfirmDetailsError::QrCodeCreation(format!("CryptoPsbt encoding failed: {}", e))
+            ConfirmDetailsError::QrCodeCreation(format!("CryptoPsbt encoding failed: {e}"))
         })?;
 
         let cbor_psbt = crypto_psbt.encode().map_err(|e| {
-            ConfirmDetailsError::QrCodeCreation(format!("CBOR encoding failed: {}", e))
+            ConfirmDetailsError::QrCodeCreation(format!("CBOR encoding failed: {e}"))
         })?;
 
         let mut encoder = UrEncoder::new();
@@ -319,6 +356,10 @@ impl ConfirmDetails {
 }
 
 impl AddressAndAmount {
+    /// Creates an `AddressAndAmount` from a transaction output
+    ///
+    /// # Errors
+    /// Returns an error if the script cannot be converted to an address
     pub fn try_new(tx_out: &TxOut, network: Network) -> eyre::Result<Self> {
         let address = bitcoin::Address::from_script(&tx_out.script_pubkey, Params::from(network))?;
         Ok(Self {
@@ -329,6 +370,10 @@ impl AddressAndAmount {
         })
     }
 
+    /// Creates an `AddressAndAmount` from a transaction output with optional extra data
+    ///
+    /// # Errors
+    /// Returns an error if the script cannot be converted to an address
     pub fn try_new_with_extra_opt(
         tx_out: &TxOut,
         network: Network,
@@ -340,6 +385,10 @@ impl AddressAndAmount {
         }
     }
 
+    /// Creates an `AddressAndAmount` from a transaction output with extra data
+    ///
+    /// # Errors
+    /// Returns an error if the script cannot be converted to an address
     pub fn try_new_with_extra(
         tx_out: &TxOut,
         network: Network,
@@ -356,10 +405,12 @@ impl AddressAndAmount {
 }
 
 impl InputOutputDetails {
+    #[must_use]
     pub fn new(psbt: &Psbt, network: Network) -> Self {
         Self::new_with_labels_opt(psbt, network, None)
     }
 
+    #[must_use]
     pub fn new_with_labels(
         psbt: &Psbt,
         network: Network,
@@ -402,7 +453,8 @@ impl InputOutputDetails {
 }
 
 impl ExtraItem {
-    pub fn new(label: Option<String>, utxo_type: Option<UtxoType>) -> Self {
+    #[must_use]
+    pub const fn new(label: Option<String>, utxo_type: Option<UtxoType>) -> Self {
         Self { label, utxo_type }
     }
 }
@@ -411,7 +463,7 @@ impl ExtraItem {
 mod ffi_preview {
     use crate::psbt::BdkPsbt;
 
-    use super::*;
+    use super::Psbt;
 
     pub fn psbt_preview_new() -> Psbt {
         let psbt_hex = "70736274ff01009a020000000258e87a21b56daf0c23be8e7070456c336f7cbaa5c8757924f545887bb2abdd750000000000ffffffff838d0427d0ec650a68aa46bb0b098aea4422c071b2ca78352a077959d07cea1d0100000000ffffffff0270aaf00800000000160014d85c2b71d0060b09c9886aeb815e50991dda124d00e1f5050000000016001400aea9a2e5f0f876a588df5546e8742d1d87008f000000000000000000";
@@ -421,8 +473,9 @@ mod ffi_preview {
     }
 }
 
-/// Preview ConfirmDetails for SwiftUI previews
+/// Preview `ConfirmDetails` for `SwiftUI` previews
 #[uniffi::export]
+#[must_use]
 pub fn confirm_details_preview_new() -> ConfirmDetails {
     let psbt = ffi_preview::psbt_preview_new();
     let more_details = InputOutputDetails::new(&psbt, Network::Bitcoin);

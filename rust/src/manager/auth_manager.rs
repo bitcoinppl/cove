@@ -335,7 +335,7 @@ impl RustAuthManager {
 
     fn set_auth_type(&self, auth_type: AuthType) {
         match Database::global().global_config.set_auth_type(auth_type) {
-            Ok(_) => {
+            Ok(()) => {
                 self.send(Message::AuthTypeChanged(auth_type));
             }
             Err(error) => {
@@ -366,7 +366,7 @@ impl RustAuthManager {
                     AuthType::None => self.set_auth_type(AuthType::Biometric),
                     AuthType::Pin => self.set_auth_type(AuthType::Both),
                     _ => {}
-                };
+                }
             }
 
             Action::DisableBiometric => {
@@ -376,7 +376,7 @@ impl RustAuthManager {
                     AuthType::Biometric => self.set_auth_type(AuthType::None),
                     AuthType::Both => self.set_auth_type(AuthType::Pin),
                     _ => {}
-                };
+                }
             }
 
             Action::SetPin(pin) => {
@@ -420,8 +420,10 @@ impl RustAuthManager {
         action: SecuritySettingsAction,
         unverified_wallet_ids: Vec<WalletId>,
     ) -> SecuritySettingsResult {
-        use SecuritySettingsAction::*;
-        use SecuritySettingsResult::*;
+        use SecuritySettingsAction::{
+            ChangePin, ToggleBiometric, ToggleDecoyPin, TogglePin, ToggleWipeDataPin,
+        };
+        use SecuritySettingsResult::{DecoyModeLocalUpdate, ProceedToSheet, ShowAlert};
 
         match action {
             ToggleBiometric { enable } => {
@@ -554,7 +556,7 @@ impl RustAuthManager {
 
 impl_default_for!(AuthManagerState);
 impl AuthManagerState {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {}
     }
 }
