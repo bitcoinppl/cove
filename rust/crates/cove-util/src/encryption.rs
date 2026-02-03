@@ -50,7 +50,11 @@ impl Cryptor {
         Self { key, nonce }
     }
 
-    pub fn try_from_string(string: String) -> Result<Self, Error> {
+    /// Create a cryptor from a serialized string
+    ///
+    /// # Errors
+    /// Returns an error if the string is not in the correct format or contains invalid base64
+    pub fn try_from_string(string: &str) -> Result<Self, Error> {
         let (key_string, nonce_string) =
             string.split_once(SPLITTER).ok_or(Error::KeyAndNonceNotFound)?;
 
@@ -81,6 +85,10 @@ impl Cryptor {
         format!("{key_string}{SPLITTER}{nonce_string}")
     }
 
+    /// Encrypt plaintext bytes
+    ///
+    /// # Errors
+    /// Returns an error if encryption fails
     pub fn encrypt(&self, plaintext: &[u8]) -> Result<Vec<u8>, Error> {
         let encrypted =
             self.cipher().encrypt(&self.nonce, plaintext).map_err(Error::UnableToEncrypt)?;
@@ -88,7 +96,11 @@ impl Cryptor {
         Ok(encrypted)
     }
 
-    pub fn encrypt_to_string(&self, plaintext: String) -> Result<String, Error> {
+    /// Encrypt a string and return the result as base64
+    ///
+    /// # Errors
+    /// Returns an error if encryption fails
+    pub fn encrypt_to_string(&self, plaintext: &str) -> Result<String, Error> {
         let plaintext = plaintext.as_bytes();
         let encrypted = self.encrypt(plaintext)?;
         let encrypted_string = BASE64_STANDARD.encode(&encrypted);
@@ -96,6 +108,10 @@ impl Cryptor {
         Ok(encrypted_string)
     }
 
+    /// Decrypt a base64-encoded ciphertext string
+    ///
+    /// # Errors
+    /// Returns an error if decryption fails or the result is not valid UTF-8
     pub fn decrypt_from_string(&self, ciphertext: &str) -> Result<String, Error> {
         let ciphertext_bytes =
             BASE64_STANDARD.decode(ciphertext.as_bytes()).map_err(Error::Base64Decode)?;
@@ -106,6 +122,10 @@ impl Cryptor {
         Ok(decrypted_string)
     }
 
+    /// Decrypt ciphertext bytes
+    ///
+    /// # Errors
+    /// Returns an error if decryption fails
     pub fn decrypt(&self, ciphertext: &[u8]) -> Result<Vec<u8>, Error> {
         let decrypted =
             self.cipher().decrypt(&self.nonce, ciphertext).map_err(Error::UnableToDecrypt)?;

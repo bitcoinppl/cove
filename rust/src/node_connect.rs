@@ -252,29 +252,29 @@ fn parse_node_url(url: &str) -> eyre::Result<Url> {
     match (url.scheme(), url.port()) {
         ("none", Some(50002)) => url
             .set_scheme("ssl")
-            .map_err(|_| eyre!("can't set scheme to ssl"))
+            .map_err(|()| eyre!("can't set scheme to ssl"))
             .context("original: none, port is 50002")?,
         ("none", Some(50001)) => url
             .set_scheme("tcp")
-            .map_err(|_| eyre!("can't set scheme to tcp"))
+            .map_err(|()| eyre!("can't set scheme to tcp"))
             .context("original: none, port is 50001")?,
         ("none", port) => {
             url.set_scheme("tcp")
-                .map_err(|_| eyre!("can't set scheme to tcp"))
+                .map_err(|()| eyre!("can't set scheme to tcp"))
                 .wrap_err_with(|| format!("original: none, port is {port:?}"))?;
         }
         _ => {}
-    };
+    }
 
     // set the port to if not set, default to 50002 for ssl and 50001 for tcp
     match (url.port(), url.scheme()) {
         (Some(_), _) => {}
-        (None, "ssl") => url.set_port(Some(50002)).map_err(|_| eyre!("can't set port"))?,
-        (None, "tcp") => url.set_port(Some(50001)).map_err(|_| eyre!("can't set port"))?,
+        (None, "ssl") => url.set_port(Some(50002)).map_err(|()| eyre!("can't set port"))?,
+        (None, "tcp") => url.set_port(Some(50001)).map_err(|()| eyre!("can't set port"))?,
         (None, _) => {
-            url.set_port(Some(50002)).map_err(|_| eyre!("can't set port"))?;
+            url.set_port(Some(50002)).map_err(|()| eyre!("can't set port"))?;
         }
-    };
+    }
 
     Ok(url)
 }

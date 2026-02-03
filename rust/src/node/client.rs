@@ -36,8 +36,8 @@ pub enum NodeClient {
 impl core::fmt::Debug for NodeClient {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            NodeClient::Esplora(_) => write!(f, "Esplora"),
-            NodeClient::Electrum(_) => write!(f, "Electrum"),
+            Self::Esplora(_) => write!(f, "Esplora"),
+            Self::Electrum(_) => write!(f, "Electrum"),
         }
     }
 }
@@ -107,7 +107,7 @@ impl NodeClient {
     }
 
     pub async fn try_from_builder(builder: &NodeClientBuilder) -> Result<Self, Error> {
-        let node_client = NodeClient::new_with_options(&builder.node, builder.options).await?;
+        let node_client = Self::new_with_options(&builder.node, builder.options).await?;
         Ok(node_client)
     }
 
@@ -133,11 +133,11 @@ impl NodeClient {
 
     pub async fn check_url(&self) -> Result<(), Error> {
         match self {
-            NodeClient::Esplora(client) => {
+            Self::Esplora(client) => {
                 client.get_height().await?;
             }
 
-            NodeClient::Electrum(client) => {
+            Self::Electrum(client) => {
                 client.get_height().await?;
             }
         }
@@ -147,12 +147,12 @@ impl NodeClient {
 
     pub async fn get_height(&self) -> Result<usize, Error> {
         match self {
-            NodeClient::Esplora(client) => {
+            Self::Esplora(client) => {
                 let height = client.get_height().await?;
                 Ok(height as usize)
             }
 
-            NodeClient::Electrum(client) => {
+            Self::Electrum(client) => {
                 let height = client.get_height().await?;
                 Ok(height)
             }
@@ -166,12 +166,12 @@ impl NodeClient {
         stop_gap: usize,
     ) -> Result<FullScanResponse<KeychainKind>, Error> {
         let full_scan_result = match self {
-            NodeClient::Esplora(client) => {
+            Self::Esplora(client) => {
                 debug!("starting esplora full scan");
                 client.full_scan(full_scan_request, stop_gap).await?
             }
 
-            NodeClient::Electrum(client) => {
+            Self::Electrum(client) => {
                 debug!("starting electrum full scan");
                 client.full_scan(full_scan_request, tx_graph, stop_gap).await?
             }
@@ -186,8 +186,8 @@ impl NodeClient {
         scan_request: SyncRequest<(KeychainKind, u32)>,
     ) -> Result<SyncResponse, Error> {
         let scan_result = match self {
-            NodeClient::Esplora(client) => client.sync(scan_request).await?,
-            NodeClient::Electrum(client) => client.sync(scan_request, tx_graph).await?,
+            Self::Esplora(client) => client.sync(scan_request).await?,
+            Self::Electrum(client) => client.sync(scan_request, tx_graph).await?,
         };
         Ok(scan_result)
     }
@@ -197,26 +197,26 @@ impl NodeClient {
         txid: Arc<Txid>,
     ) -> Result<Option<bitcoin::Transaction>, Error> {
         match self {
-            NodeClient::Esplora(client) => client.get_confirmed_transaction(&txid).await,
-            NodeClient::Electrum(client) => client.get_confirmed_transaction(txid).await,
+            Self::Esplora(client) => client.get_confirmed_transaction(&txid).await,
+            Self::Electrum(client) => client.get_confirmed_transaction(txid).await,
         }
     }
 
     pub async fn get_block_id(&self) -> Result<BlockId, Error> {
         match self {
-            NodeClient::Esplora(client) => client.get_block_id().await,
-            NodeClient::Electrum(client) => client.get_block_id().await,
+            Self::Esplora(client) => client.get_block_id().await,
+            Self::Electrum(client) => client.get_block_id().await,
         }
     }
 
     pub async fn check_address_for_txn(&self, address: Address) -> Result<bool, Error> {
         match self {
-            NodeClient::Esplora(client) => {
+            Self::Esplora(client) => {
                 let address = client.check_address_for_txn(address).await?;
                 Ok(address)
             }
 
-            NodeClient::Electrum(client) => {
+            Self::Electrum(client) => {
                 let address = client.check_address_for_txn(address).await?;
                 Ok(address)
             }
@@ -225,8 +225,8 @@ impl NodeClient {
 
     pub async fn broadcast_transaction(&self, txn: Transaction) -> Result<Txid, Error> {
         match self {
-            NodeClient::Esplora(client) => client.broadcast_transaction(txn).await,
-            NodeClient::Electrum(client) => client.broadcast_transaction(txn).await,
+            Self::Esplora(client) => client.broadcast_transaction(txn).await,
+            Self::Electrum(client) => client.broadcast_transaction(txn).await,
         }
     }
 }

@@ -32,7 +32,7 @@ mod tests {
     /// This tests the encoding/decoding of JSON wallet data wrapped in ur:bytes,
     /// which is the format used by Foundation Passport for generic wallet export.
     ///
-    /// JSON format matches: https://github.com/Foundation-Devices/passport2
+    /// JSON format matches: <https://github.com/Foundation-Devices/passport2>
     #[test]
     fn test_ur_bytes_json_passport_format() {
         // Passport-style JSON wallet export using the "abandon" seed

@@ -489,37 +489,37 @@ impl DeriveInfo {
 }
 
 impl TapSignerResponse {
-    pub fn setup_response(&self) -> Option<&SetupCmdResponse> {
+    pub const fn setup_response(&self) -> Option<&SetupCmdResponse> {
         match self {
-            TapSignerResponse::Setup(response) => Some(response),
+            Self::Setup(response) => Some(response),
             _ => None,
         }
     }
 
-    pub fn derive_response(&self) -> Option<&DeriveInfo> {
+    pub const fn derive_response(&self) -> Option<&DeriveInfo> {
         match self {
-            TapSignerResponse::Import(response) => Some(response),
+            Self::Import(response) => Some(response),
             _ => None,
         }
     }
 
-    pub fn change_response(&self) -> Option<()> {
+    pub const fn change_response(&self) -> Option<()> {
         match self {
-            TapSignerResponse::Change => Some(()),
+            Self::Change => Some(()),
             _ => None,
         }
     }
 
     pub fn backup_response(&self) -> Option<&[u8]> {
         match self {
-            TapSignerResponse::Backup(response) => Some(response),
+            Self::Backup(response) => Some(response),
             _ => None,
         }
     }
 
     pub fn sign_response(&self) -> Option<Arc<Psbt>> {
         match self {
-            TapSignerResponse::Sign(txn) => Some(Arc::clone(txn)),
+            Self::Sign(txn) => Some(Arc::clone(txn)),
             _ => None,
         }
     }
@@ -527,23 +527,17 @@ impl TapSignerResponse {
 
 impl From<TapSignerError> for TapSignerReaderError {
     fn from(error: TapSignerError) -> Self {
-        TapSignerReaderError::TapSignerError(error.into())
+        Self::TapSignerError(error.into())
     }
 }
 
 impl TapSignerReaderError {
-    pub fn is_auth_error(&self) -> bool {
-        matches!(
-            self,
-            TapSignerReaderError::TapSignerError(TransportError::CkTap(CkTapError::BadAuth))
-        )
+    pub const fn is_auth_error(&self) -> bool {
+        matches!(self, Self::TapSignerError(TransportError::CkTap(CkTapError::BadAuth)))
     }
 
-    pub fn is_no_backup_error(&self) -> bool {
-        matches!(
-            self,
-            TapSignerReaderError::TapSignerError(TransportError::CkTap(CkTapError::BackupFirst))
-        )
+    pub const fn is_no_backup_error(&self) -> bool {
+        matches!(self, Self::TapSignerError(TransportError::CkTap(CkTapError::BackupFirst)))
     }
 }
 

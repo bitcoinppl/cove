@@ -19,7 +19,7 @@ pub enum ConverterError {
 }
 
 impl Converter {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self
     }
 
@@ -40,7 +40,7 @@ impl Converter {
         let fiat_value = self
             .parse_fiat_str(fiat_amount)
             .tap_err(|error| {
-                tracing::error!("failed to convert fiat amount: {error} ({fiat_amount})")
+                tracing::error!("failed to convert fiat amount: {error} ({fiat_amount})");
             })
             .unwrap_or_default();
 
@@ -64,7 +64,7 @@ impl Converter {
 #[uniffi::export]
 impl Converter {
     #[uniffi::constructor(name = "new")]
-    pub fn global() -> Self {
+    pub const fn global() -> Self {
         Self::new()
     }
 

@@ -189,13 +189,13 @@ impl LabelsTable {
         match label {
             Label::Transaction(txn) => {
                 let record = self.get_txn_label_record(txn.ref_)?;
-                Ok(record.map(|record| record.into()))
+                Ok(record.map(Record::into))
             }
 
             Label::Address(address_record) => {
                 let table = self.read_table(ADDRESS_TABLE)?;
                 let record = table.get(address_record.ref_)?.map(|record| record.value());
-                Ok(record.map(|record| record.into()))
+                Ok(record.map(Record::into))
             }
 
             Label::Input(input_record) => {
@@ -203,7 +203,7 @@ impl LabelsTable {
                 let key: OutPointKey = input_record.ref_.into();
 
                 let record = table.get(key)?.map(|record| record.value());
-                Ok(record.map(|record| record.into()))
+                Ok(record.map(Record::into))
             }
 
             Label::Output(output_record) => {
@@ -211,7 +211,7 @@ impl LabelsTable {
                 let key: OutPointKey = output_record.ref_.into();
 
                 let record = table.get(key)?.map(|record| record.value());
-                Ok(record.map(|record| record.into()))
+                Ok(record.map(Record::into))
             }
 
             // unsupported label types
@@ -273,7 +273,7 @@ impl LabelsTable {
 
         if let Some(current) = current {
             let mut updated = current;
-            updated.timestamps.updated_at = jiff::Timestamp::now().as_second() as u64;
+            updated.timestamps.updated_at = jiff::Timestamp::now().as_second().cast_unsigned();
             let timestamps = updated.timestamps;
 
             self.insert_label_with_timestamps(label, timestamps)?;

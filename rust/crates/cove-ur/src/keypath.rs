@@ -1,10 +1,10 @@
 //! crypto-keypath: BIP32 derivation path
-//! BCR-2020-007: https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-007-hdkey.md
+//! BCR-2020-007: <https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-007-hdkey.md>
 
 use bitcoin::bip32::ChildNumber;
 use minicbor::{Decode, Encode};
 
-use crate::error::*;
+use crate::error::{Result, ToUrError, UrError};
 
 /// BIP32 hardened derivation flag (bit 31 set)
 pub const HARDENED_FLAG: u32 = 0x8000_0000;
@@ -13,12 +13,14 @@ pub const HARDENED_FLAG: u32 = 0x8000_0000;
 pub const INDEX_MASK: u32 = 0x7FFF_FFFF;
 
 /// Check if a BIP32 path component is hardened
-pub fn is_hardened(component: u32) -> bool {
+#[must_use]
+pub const fn is_hardened(component: u32) -> bool {
     component & HARDENED_FLAG != 0
 }
 
 /// Extract the index from a BIP32 path component (strips hardened flag)
-pub fn component_index(component: u32) -> u32 {
+#[must_use]
+pub const fn component_index(component: u32) -> u32 {
     component & INDEX_MASK
 }
 
@@ -43,8 +45,9 @@ pub struct CryptoKeypath {
 }
 
 impl CryptoKeypath {
-    /// Create new CryptoKeypath
-    pub fn new(
+    /// Create new `CryptoKeypath`
+    #[must_use]
+    pub const fn new(
         components: Vec<u32>,
         source_fingerprint: Option<[u8; 4]>,
         depth: Option<u32>,
@@ -52,7 +55,8 @@ impl CryptoKeypath {
         Self { components, source_fingerprint, depth }
     }
 
-    /// Get the last path component as a ChildNumber (for xpub construction)
+    /// Get the last path component as a `ChildNumber` (for xpub construction)
+    #[must_use]
     pub fn last_child_number(&self) -> ChildNumber {
         self.components
             .last()
@@ -64,10 +68,11 @@ impl CryptoKeypath {
                     ChildNumber::from_normal_idx(index).ok()
                 }
             })
-            .unwrap_or(ChildNumber::from(0))
+            .unwrap_or_else(|| ChildNumber::from(0))
     }
 
     /// Convert components to derivation path string (e.g., "84h/0h/0h")
+    #[must_use]
     pub fn to_path_string(&self) -> String {
         self.components
             .iter()
@@ -83,11 +88,17 @@ impl CryptoKeypath {
     }
 
     /// Encode as tagged CBOR
+    ///
+    /// # Errors
+    /// Returns error if CBOR encoding fails
     pub fn to_cbor(&self) -> Result<Vec<u8>> {
         minicbor::to_vec(self).map_err(|e| UrError::CborEncodeError(e.to_string()))
     }
 
     /// Decode from tagged CBOR
+    ///
+    /// # Errors
+    /// Returns error if CBOR decoding fails
     pub fn from_cbor(cbor: &[u8]) -> Result<Self> {
         minicbor::decode(cbor).map_err_cbor_decode()
     }

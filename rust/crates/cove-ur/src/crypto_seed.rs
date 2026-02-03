@@ -1,10 +1,13 @@
 //! crypto-seed: BIP39 seed with optional metadata
-//! BCR-2020-006: https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md
+//! BCR-2020-006: <https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md>
 
 use bip39::Mnemonic;
 use minicbor::{Decode, Encode};
 
-use crate::{error::*, registry::VALID_BIP39_ENTROPY_LENGTHS};
+use crate::{
+    error::{Result, ToUrError, UrError},
+    registry::VALID_BIP39_ENTROPY_LENGTHS,
+};
 
 /// Internal CBOR representation with derive macros
 #[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
@@ -25,7 +28,7 @@ struct CryptoSeedCbor {
 }
 
 /// crypto-seed: BIP39 seed with optional metadata
-/// BCR-2020-006: https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md
+/// BCR-2020-006: <https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md>
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Object)]
 pub struct CryptoSeed {
     /// Seed entropy bytes (16, 20, 24, 28, or 32 bytes for BIP39)
@@ -40,17 +43,20 @@ pub struct CryptoSeed {
 
 impl CryptoSeed {
     /// Create from entropy bytes
-    pub fn new(payload: Vec<u8>) -> Self {
+    #[must_use]
+    pub const fn new(payload: Vec<u8>) -> Self {
         Self { payload, creation_date: None, name: None, note: None }
     }
 
     /// Create from BIP39 mnemonic
+    #[must_use]
     pub fn from_mnemonic(mnemonic: &Mnemonic) -> Self {
         Self::new(mnemonic.to_entropy())
     }
 
     /// Create with all fields
-    pub fn with_metadata(
+    #[must_use]
+    pub const fn with_metadata(
         payload: Vec<u8>,
         name: Option<String>,
         note: Option<String>,
@@ -60,13 +66,19 @@ impl CryptoSeed {
     }
 
     /// Get the payload as BIP39 mnemonic
+    ///
+    /// # Errors
+    /// Returns error if entropy is invalid for BIP39
     pub fn to_mnemonic(&self) -> Result<Mnemonic> {
         Mnemonic::from_entropy(&self.payload)
-            .map_err(|e| UrError::InvalidField(format!("Invalid BIP39 entropy: {}", e)))
+            .map_err(|e| UrError::InvalidField(format!("Invalid BIP39 entropy: {e}")))
     }
 
     /// Encode as tagged CBOR
     /// CBOR structure: #6.300({1: bytes, ?2: uint, ?3: text, ?4: text})
+    ///
+    /// # Errors
+    /// Returns error if CBOR encoding fails
     pub fn to_cbor(&self) -> Result<Vec<u8>> {
         let cbor = CryptoSeedCbor {
             payload: self.payload.clone(),
@@ -78,6 +90,9 @@ impl CryptoSeed {
     }
 
     /// Decode from tagged CBOR
+    ///
+    /// # Errors
+    /// Returns error if CBOR decoding fails or payload length is invalid
     pub fn from_cbor(cbor: &[u8]) -> Result<Self> {
         let decoded: CryptoSeedCbor = minicbor::decode(cbor).map_err_cbor_decode()?;
 
@@ -106,6 +121,9 @@ impl CryptoSeed {
 #[uniffi::export]
 impl CryptoSeed {
     /// Create from entropy bytes with optional metadata
+    ///
+    /// # Errors
+    /// Returns error if entropy is invalid for BIP39
     #[uniffi::constructor]
     pub fn from_entropy_with_metadata(
         payload: Vec<u8>,
@@ -120,6 +138,9 @@ impl CryptoSeed {
     }
 
     /// Create from entropy bytes
+    ///
+    /// # Errors
+    /// Returns error if entropy is invalid for BIP39
     #[uniffi::constructor]
     pub fn from_entropy(payload: Vec<u8>) -> Result<Self> {
         Self::from_entropy_with_metadata(payload, None, None, None)
@@ -141,17 +162,24 @@ impl CryptoSeed {
     }
 
     /// Get creation date if present
-    pub fn get_creation_date(&self) -> Option<u64> {
+    pub const fn get_creation_date(&self) -> Option<u64> {
         self.creation_date
     }
 
     /// Encode as CBOR for UR
+    ///
+    /// # Errors
+    /// Returns error if CBOR encoding fails
     pub fn encode(&self) -> Result<Vec<u8>> {
         self.to_cbor()
     }
 
     /// Decode from CBOR
+    ///
+    /// # Errors
+    /// Returns error if CBOR decoding fails or payload length is invalid
     #[uniffi::constructor]
+    #[allow(clippy::needless_pass_by_value)]
     pub fn decode(cbor: Vec<u8>) -> Result<Self> {
         Self::from_cbor(&cbor)
     }

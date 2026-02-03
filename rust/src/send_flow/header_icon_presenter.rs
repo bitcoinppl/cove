@@ -15,12 +15,12 @@ use crate::{
 #[uniffi::export]
 impl HeaderIconPresenter {
     #[uniffi::constructor]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {}
     }
 
     #[uniffi::method]
-    pub fn ring_color(
+    pub const fn ring_color(
         &self,
         state: TransactionState,
         color_scheme: FfiColorScheme,
@@ -81,7 +81,7 @@ impl HeaderIconPresenter {
     }
 
     #[uniffi::method]
-    pub fn icon_color(
+    pub const fn icon_color(
         &self,
         state: TransactionState,
         direction: TransactionDirection,
@@ -111,7 +111,7 @@ impl HeaderIconPresenter {
     }
 
     #[uniffi::method]
-    fn background_color(
+    const fn background_color(
         &self,
         state: TransactionState,
         direction: TransactionDirection,

@@ -35,8 +35,7 @@ where
 
     fn as_bytes<'a, 'b: 'a>(value: &'a Self::SelfType<'b>) -> Self::AsBytes<'a>
     where
-        Self: 'a,
-        Self: 'b,
+        Self: 'a + 'b,
     {
         let buf = Vec::new();
         cbor4ii::serde::to_vec(buf, value).unwrap()

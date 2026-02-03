@@ -37,7 +37,10 @@ pub struct ElectrumClient {
 }
 
 impl ElectrumClient {
-    pub fn new_with_options(client: Arc<ElectrumClientInner>, options: NodeClientOptions) -> Self {
+    pub const fn new_with_options(
+        client: Arc<ElectrumClientInner>,
+        options: NodeClientOptions,
+    ) -> Self {
         Self { client, options }
     }
 
@@ -136,11 +139,11 @@ impl ElectrumClient {
 
                     let txn = self.get_confirmed_transaction_fallback(*txid).await?;
                     return Ok(txn);
-                } else {
-                    return Err(Error::ElectrumGetTransaction(electrum_client::Error::Protocol(
-                        error_value,
-                    )));
                 }
+
+                return Err(Error::ElectrumGetTransaction(electrum_client::Error::Protocol(
+                    error_value,
+                )));
             }
             Err(error) => return Err(Error::ElectrumGetTransaction(error)),
         };
@@ -210,7 +213,7 @@ impl ElectrumClient {
         let client = self.client.clone();
         let tx_graph = tx_graph.clone();
         crate::unblock::run_blocking(move || {
-            client.populate_tx_cache(tx_graph.full_txs().map(|tx_node| tx_node.tx))
+            client.populate_tx_cache(tx_graph.full_txs().map(|tx_node| tx_node.tx));
         })
         .await;
         debug!("populate_tx_cache done");
@@ -235,7 +238,7 @@ impl ElectrumClient {
         let client = self.client.clone();
         let tx_graph = tx_graph.clone();
         crate::unblock::run_blocking(move || {
-            client.populate_tx_cache(tx_graph.full_txs().map(|tx_node| tx_node.tx))
+            client.populate_tx_cache(tx_graph.full_txs().map(|tx_node| tx_node.tx));
         })
         .await;
         debug!("populate_tx_cache done");
@@ -274,7 +277,7 @@ impl ElectrumClient {
         Ok(tx_id)
     }
 
-    fn default_options() -> NodeClientOptions {
+    const fn default_options() -> NodeClientOptions {
         NodeClientOptions { batch_size: ELECTRUM_BATCH_SIZE }
     }
 }

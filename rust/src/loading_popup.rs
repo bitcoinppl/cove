@@ -21,7 +21,7 @@ where
         biased;
 
         result = &mut operation => result,
-        _ = sleep(Duration::from_millis(LOADING_POPUP_DELAY_MS)) => {
+        () = sleep(Duration::from_millis(LOADING_POPUP_DELAY_MS)) => {
             Updater::send_update(Update::ShowLoadingPopup);
             popup_shown_at = Some(Instant::now());
             operation.await

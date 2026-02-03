@@ -1,5 +1,5 @@
 //! CBOR tag assignments from BCR-2020-006
-//! See: https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md
+//! See: <https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md>
 
 /// crypto-seed tag (BCR-2020-006)
 pub const CRYPTO_SEED: u64 = 300;
@@ -122,11 +122,12 @@ pub mod cbor_type {
     pub const MAP_8BYTE_LEN: u8 = 0xbb;
 
     /// Check if a byte indicates a CBOR map
-    pub fn is_map(byte: u8) -> bool {
-        (MAP_SMALL_MIN..=MAP_SMALL_MAX).contains(&byte)
-            || byte == MAP_1BYTE_LEN
-            || byte == MAP_2BYTE_LEN
-            || byte == MAP_4BYTE_LEN
-            || byte == MAP_8BYTE_LEN
+    #[must_use]
+    pub const fn is_map(byte: u8) -> bool {
+        matches!(
+            byte,
+            MAP_SMALL_MIN
+                ..=MAP_SMALL_MAX | MAP_1BYTE_LEN | MAP_2BYTE_LEN | MAP_4BYTE_LEN | MAP_8BYTE_LEN
+        )
     }
 }

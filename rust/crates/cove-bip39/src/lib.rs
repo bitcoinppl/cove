@@ -10,6 +10,10 @@ pub enum Error {
     InvalidNumberOfWords(usize),
 }
 
+/// Generate all possible final words for a BIP39 mnemonic phrase
+///
+/// # Errors
+/// Returns an error if the phrase does not have 11, 14, 17, 20 or 23 words
 pub fn generate_possible_final_words(phrase: &str) -> Result<Vec<String>, Error> {
     let (word_count, encoded_phrase) = split_and_encode_phrase(phrase);
 
@@ -44,7 +48,7 @@ pub fn generate_possible_final_words(phrase: &str) -> Result<Vec<String>, Error>
             hasher.update(final_byte_array);
 
             let checksum = hasher.finalize()[0] >> (8 - checksum_width);
-            let word_index = (candidate << checksum_width) + (checksum as u64);
+            let word_index = (candidate << checksum_width) + u64::from(checksum);
 
             wordlist[word_index as usize].to_string()
         })
@@ -62,7 +66,7 @@ fn split_and_encode_phrase(phrase: &str) -> (usize, BigUint) {
 
     for word in words {
         if let Some(word_index) = Language::English.find_word(word) {
-            encoded_phrase = (encoded_phrase << 11) | BigUint::from(word_index as u64);
+            encoded_phrase = (encoded_phrase << 11) | BigUint::from(u64::from(word_index));
         }
     }
 

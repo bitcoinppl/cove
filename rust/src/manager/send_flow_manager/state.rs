@@ -76,7 +76,7 @@ impl EnterMode {
         Self::CoinControl(CoinControlMode::new(utxos, true))
     }
 
-    pub fn is_coin_control(&self) -> bool {
+    pub const fn is_coin_control(&self) -> bool {
         matches!(self, Self::CoinControl(_))
     }
 }

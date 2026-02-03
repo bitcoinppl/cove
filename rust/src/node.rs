@@ -88,11 +88,11 @@ impl Node {
         }
     }
 
-    pub fn new_electrum(name: String, url: String, network: Network) -> Self {
+    pub const fn new_electrum(name: String, url: String, network: Network) -> Self {
         Self { name, network, api_type: ApiType::Electrum, url }
     }
 
-    pub fn new_esplora(name: String, url: String, network: Network) -> Self {
+    pub const fn new_esplora(name: String, url: String, network: Network) -> Self {
         Self { name, network, api_type: ApiType::Esplora, url }
     }
 

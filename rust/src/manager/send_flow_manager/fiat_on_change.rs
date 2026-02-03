@@ -106,7 +106,7 @@ impl FiatOnChangeHandler {
                 entering_fiat_amount: Some(old_value.to_string()),
                 ..Default::default()
             });
-        };
+        }
 
         // if the only change was formatting (adding ,) then we don't need to do anything
         if old_value_raw == new_value_raw {

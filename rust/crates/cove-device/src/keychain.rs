@@ -32,6 +32,11 @@ pub enum KeychainError {
 
 #[uniffi::export(callback_interface)]
 pub trait KeychainAccess: Send + Sync + std::fmt::Debug + 'static {
+    /// Saves a key-value pair
+    ///
+    /// # Errors
+    ///
+    /// Returns a `KeychainError` if the save operation fails
     fn save(&self, key: String, value: String) -> Result<(), KeychainError>;
     fn get(&self, key: String) -> Option<String>;
     fn delete(&self, key: String) -> bool;
@@ -44,6 +49,11 @@ pub struct Keychain(Arc<Box<dyn KeychainAccess>>);
 
 #[uniffi::export]
 impl Keychain {
+    /// Creates a new global keychain instance
+    ///
+    /// # Panics
+    ///
+    /// Panics if the keychain has already been initialized
     #[uniffi::constructor]
     pub fn new(keychain: Box<dyn KeychainAccess>) -> Self {
         if let Some(me) = REF.get() {
@@ -54,15 +64,26 @@ impl Keychain {
         let me = Self(Arc::new(keychain));
         REF.set(me).expect("failed to set keychain");
 
-        Keychain::global().clone()
+        Self::global().clone()
     }
 }
 
 impl Keychain {
+    /// Returns the global keychain instance
+    ///
+    /// # Panics
+    ///
+    /// Panics if the keychain has not been initialized
     pub fn global() -> &'static Self {
         REF.get().expect("keychain is not initialized")
     }
 
+    /// Saves a wallet's mnemonic seed encrypted in the keychain
+    ///
+    /// # Errors
+    ///
+    /// Returns a `KeychainError` if encryption or saving fails
+    #[allow(clippy::needless_pass_by_value)]
     pub fn save_wallet_key(
         &self,
         id: &WalletId,
@@ -73,7 +94,7 @@ impl Keychain {
 
         let key = wallet_mnemonic_key_name(id);
         let encrypted_secret_key = cryptor
-            .encrypt_to_string(secret_key.to_string())
+            .encrypt_to_string(&secret_key.to_string())
             .map_err(|error| KeychainError::Encrypt(error.to_string()))?;
 
         let encryption_key = cryptor.serialize_to_string();
@@ -84,6 +105,11 @@ impl Keychain {
         Ok(())
     }
 
+    /// Retrieves a wallet's mnemonic seed from the keychain
+    ///
+    /// # Errors
+    ///
+    /// Returns a `KeychainError` if decryption or parsing fails
     pub fn get_wallet_key(&self, id: &WalletId) -> Result<Option<Mnemonic>, KeychainError> {
         let key = wallet_mnemonic_key_name(id);
 
@@ -96,7 +122,7 @@ impl Keychain {
             return Ok(None);
         };
 
-        let cryptor = Cryptor::try_from_string(encryption_key)
+        let cryptor = Cryptor::try_from_string(&encryption_key)
             .map_err(|error| KeychainError::Decrypt(error.to_string()))?;
 
         let secret_key = cryptor
@@ -117,6 +143,11 @@ impl Keychain {
         self.0.delete(key)
     }
 
+    /// Saves a wallet's extended public key in the keychain
+    ///
+    /// # Errors
+    ///
+    /// Returns a `KeychainError` if saving fails
     pub fn save_wallet_xpub(&self, id: &WalletId, xpub: Xpub) -> Result<(), KeychainError> {
         let key = wallet_xpub_key_name(id);
         let xpub_string = xpub.to_string();
@@ -126,6 +157,11 @@ impl Keychain {
         Ok(())
     }
 
+    /// Retrieves a wallet's extended public key from the keychain
+    ///
+    /// # Errors
+    ///
+    /// Returns a `KeychainError` if parsing fails
     pub fn get_wallet_xpub(&self, id: &WalletId) -> Result<Option<Xpub>, KeychainError> {
         let key = wallet_xpub_key_name(id);
         let Some(xpub_string) = self.0.get(key) else {
@@ -149,6 +185,12 @@ impl Keychain {
         self.0.delete(key)
     }
 
+    /// Saves a wallet's public descriptors in the keychain
+    ///
+    /// # Errors
+    ///
+    /// Returns a `KeychainError` if saving fails
+    #[allow(clippy::needless_pass_by_value)]
     pub fn save_public_descriptor(
         &self,
         id: &WalletId,
@@ -161,6 +203,11 @@ impl Keychain {
         self.0.save(key, value)
     }
 
+    /// Retrieves a wallet's public descriptors from the keychain
+    ///
+    /// # Errors
+    ///
+    /// Returns a `KeychainError` if parsing fails
     pub fn get_public_descriptor(
         &self,
         id: &WalletId,
@@ -193,6 +240,11 @@ impl Keychain {
         self.0.delete(key)
     }
 
+    /// Saves a Tap Signer backup encrypted in the keychain
+    ///
+    /// # Errors
+    ///
+    /// Returns a `KeychainError` if encryption or saving fails
     pub fn save_tap_signer_backup(
         &self,
         id: &WalletId,
@@ -207,7 +259,7 @@ impl Keychain {
 
         // encrypt the backup
         let encrypted_backup = cryptor
-            .encrypt_to_string(backup_hex)
+            .encrypt_to_string(&backup_hex)
             .map_err(|error| KeychainError::Encrypt(error.to_string()))?;
 
         // get the encryption key as a string
@@ -220,11 +272,12 @@ impl Keychain {
         Ok(())
     }
 
+    #[must_use]
     pub fn get_tap_signer_backup(&self, id: &WalletId) -> Option<Vec<u8>> {
         let cryptor = {
             let encryption_key_key = wallet_tap_signer_encryption_key_and_nonce_key_name(id);
             let encryption_secret_key = self.0.get(encryption_key_key)?;
-            Cryptor::try_from_string(encryption_secret_key).ok()?
+            Cryptor::try_from_string(&encryption_secret_key).ok()?
         };
 
         let backup_key = wallet_tap_signer_backup_key_name(id);
@@ -244,8 +297,7 @@ impl Keychain {
         self.0.delete(backup_key)
     }
 
-    // MARK: Delete
-    // deletes all items saved in the keychain for the given wallet id
+    /// Deletes all items saved in the keychain for the given wallet id
     pub fn delete_wallet_items(&self, id: &WalletId) -> bool {
         self.delete_wallet_key(id)
             && self.delete_wallet_xpub(id)

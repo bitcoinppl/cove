@@ -12,8 +12,12 @@ use minicbor::decode::{Decoder, Error as DecodeError};
 use minicbor::encode::{Encoder, Error as EncodeError, Write};
 
 /// Encode path components as plain integers (format 1)
+///
+/// # Errors
+///
+/// Returns an error if encoding fails
 pub fn encode<C, W: Write>(
-    components: &Vec<u32>,
+    components: &[u32],
     encoder: &mut Encoder<W>,
     _ctx: &mut C,
 ) -> Result<(), EncodeError<W::Error>> {
@@ -25,11 +29,17 @@ pub fn encode<C, W: Write>(
 }
 
 /// Decode path components, supporting both formats
-pub fn decode<'b, C>(decoder: &mut Decoder<'b>, _ctx: &mut C) -> Result<Vec<u32>, DecodeError> {
+///
+/// # Errors
+///
+/// Returns an error if decoding fails or the array format is invalid
+pub fn decode<C>(decoder: &mut Decoder<'_>, _ctx: &mut C) -> Result<Vec<u32>, DecodeError> {
     let array_length =
         decoder.array()?.ok_or_else(|| DecodeError::message("expected definite-length array"))?;
 
-    let mut components = Vec::with_capacity(array_length as usize);
+    let array_length_usize =
+        usize::try_from(array_length).map_err(|_| DecodeError::message("array length overflow"))?;
+    let mut components = Vec::with_capacity(array_length_usize);
     let mut element_index = 0;
 
     while element_index < array_length {

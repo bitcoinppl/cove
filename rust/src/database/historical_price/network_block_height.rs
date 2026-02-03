@@ -24,7 +24,7 @@ impl redb::Key for NetworkBlockHeight {
 }
 
 impl redb::Value for NetworkBlockHeight {
-    type SelfType<'a> = NetworkBlockHeight;
+    type SelfType<'a> = Self;
     type AsBytes<'a> = [u8; 5];
 
     fn fixed_width() -> Option<usize> {
@@ -42,8 +42,7 @@ impl redb::Value for NetworkBlockHeight {
 
     fn as_bytes<'a, 'b: 'a>(value: &'a Self::SelfType<'b>) -> Self::AsBytes<'a>
     where
-        Self: 'a,
-        Self: 'b,
+        Self: 'a + 'b,
     {
         let mut bytes = [0; 5];
         bytes[0] = value.network.into();
@@ -53,6 +52,6 @@ impl redb::Value for NetworkBlockHeight {
     }
 
     fn type_name() -> redb::TypeName {
-        redb::TypeName::new(std::any::type_name::<NetworkBlockHeight>())
+        redb::TypeName::new(std::any::type_name::<Self>())
     }
 }

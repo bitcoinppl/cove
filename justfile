@@ -199,6 +199,30 @@ lint-swift *flags="":
 clippy *flags="":
     cargo clippy {{flags}}
 
+# Run pedantic clippy checks (excluding must_use, truncation, single_match, if_not_else, needless_continue, option_if_let_else)
+[group('lint')]
+[working-directory: 'rust']
+pedantic *flags="":
+    cargo clippy -- -D clippy::pedantic -D clippy::nursery \
+        -A clippy::must_use_candidate \
+        -A clippy::cast_possible_truncation \
+        -A clippy::single_match \
+        -A clippy::if_not_else \
+        -A clippy::needless_continue \
+        -A clippy::option_if_let_else \
+        -A clippy::unused_self \
+        -A clippy::unused_async \
+        -A clippy::significant_drop_tightening \
+        -A clippy::missing_const_for_fn \
+        -A clippy::needless_pass_by_value \
+        {{flags}}
+
+# Run full pedantic clippy checks without any allows
+[group('lint')]
+[working-directory: 'rust']
+pedantic-all *flags="":
+    cargo clippy -- -D clippy::pedantic -D clippy::nursery {{flags}}
+
 # ------------------------------------------------------------------------------
 # format
 # ------------------------------------------------------------------------------

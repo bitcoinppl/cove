@@ -16,7 +16,7 @@ pub struct UnsignedTransaction {
 
 #[uniffi::export]
 impl UnsignedTransaction {
-    pub fn id(&self) -> TxId {
+    pub const fn id(&self) -> TxId {
         self.tx_id
     }
 
@@ -28,11 +28,11 @@ impl UnsignedTransaction {
         self.confirm_details.clone()
     }
 
-    pub fn spending_amount(&self) -> Amount {
+    pub const fn spending_amount(&self) -> Amount {
         self.confirm_details.spending_amount()
     }
 
-    pub fn sending_amount(&self) -> Amount {
+    pub const fn sending_amount(&self) -> Amount {
         self.confirm_details.sending_amount()
     }
 }

@@ -38,7 +38,8 @@ pub enum MnemonicError {
 impl Mnemonic {
     pub fn try_from_id(id: &WalletId) -> Result<Self, Error> {
         let keychain = Keychain::global();
-        let mnemonic = keychain.get_wallet_key(id)?.ok_or(Error::NotAvailable(id.clone()))?;
+        let mnemonic =
+            keychain.get_wallet_key(id)?.ok_or_else(|| Error::NotAvailable(id.clone()))?;
 
         Ok(Self(mnemonic))
     }
@@ -104,7 +105,7 @@ pub fn _ffi_number_of_words_in_groups(me: NumberOfBip39Words, of: u8) -> Vec<Vec
 }
 
 #[uniffi::export(name = "numberOfWordsToWordCount")]
-pub fn _ffi_number_of_words_to_word_count(me: NumberOfBip39Words) -> u8 {
+pub const fn _ffi_number_of_words_to_word_count(me: NumberOfBip39Words) -> u8 {
     me.to_word_count() as u8
 }
 
@@ -127,7 +128,7 @@ impl Mnemonic {
 
     #[uniffi::method]
     pub fn words(&self) -> Vec<String> {
-        self.0.words().map(|word| word.to_string()).collect()
+        self.0.words().map(std::string::ToString::to_string).collect()
     }
 
     /// Converts mnemonic to SeedQR standard format string
@@ -143,7 +144,7 @@ impl Mnemonic {
                 word_list
                     .iter()
                     .position(|&w| w == word)
-                    .map(|index| format!("{:04}", index))
+                    .map(|index| format!("{index:04}"))
                     .ok_or_else(|| MnemonicError::UnknownWord(word.to_string()))
             })
             .collect()

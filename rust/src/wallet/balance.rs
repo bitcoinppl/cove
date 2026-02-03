@@ -19,7 +19,7 @@ pub struct Balance(pub bdk_wallet::Balance);
 impl Balance {
     #[uniffi::constructor]
     pub fn zero() -> Self {
-        Balance::default()
+        Self::default()
     }
 
     #[uniffi::method]

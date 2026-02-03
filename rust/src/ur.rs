@@ -45,7 +45,7 @@ pub struct UrResult {
 #[uniffi::export]
 impl UrResult {
     #[uniffi::constructor]
-    pub fn new(data: Vec<u8>, ur_type: UrType) -> Self {
+    pub const fn new(data: Vec<u8>, ur_type: UrType) -> Self {
         Self { data, ur_type }
     }
 
@@ -60,17 +60,17 @@ impl UrResult {
     }
 
     #[uniffi::method]
-    pub fn is_psbt(&self) -> bool {
+    pub const fn is_psbt(&self) -> bool {
         matches!(self.ur_type, UrType::CryptoPsbt)
     }
 
     #[uniffi::method]
-    pub fn is_seed(&self) -> bool {
+    pub const fn is_seed(&self) -> bool {
         matches!(self.ur_type, UrType::CryptoSeed)
     }
 
     #[uniffi::method]
-    pub fn is_hdkey(&self) -> bool {
+    pub const fn is_hdkey(&self) -> bool {
         matches!(self.ur_type, UrType::CryptoHdkey)
     }
 }

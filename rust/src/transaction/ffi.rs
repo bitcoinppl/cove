@@ -138,12 +138,12 @@ impl BitcoinTransaction {
 #[uniffi::export]
 impl ConfirmedTransaction {
     #[uniffi::method]
-    pub fn id(&self) -> TxId {
+    pub const fn id(&self) -> TxId {
         self.txid
     }
 
     #[uniffi::method]
-    pub fn block_height(&self) -> u32 {
+    pub const fn block_height(&self) -> u32 {
         self.block_height
     }
 
@@ -186,12 +186,12 @@ impl ConfirmedTransaction {
     }
 
     #[uniffi::method]
-    pub fn sent_and_received(&self) -> SentAndReceived {
+    pub const fn sent_and_received(&self) -> SentAndReceived {
         self.sent_and_received
     }
 
     #[uniffi::method]
-    pub fn fiat_amount(&self) -> Option<FiatAmount> {
+    pub const fn fiat_amount(&self) -> Option<FiatAmount> {
         self.fiat
     }
 }
@@ -199,17 +199,17 @@ impl ConfirmedTransaction {
 #[uniffi::export]
 impl UnconfirmedTransaction {
     #[uniffi::method]
-    pub fn id(&self) -> TxId {
+    pub const fn id(&self) -> TxId {
         self.txid
     }
 
     #[uniffi::method]
-    pub fn last_seen(&self) -> u64 {
+    pub const fn last_seen(&self) -> u64 {
         self.last_seen
     }
 
     #[uniffi::method]
-    pub fn sent_and_received(&self) -> SentAndReceived {
+    pub const fn sent_and_received(&self) -> SentAndReceived {
         self.sent_and_received
     }
 
@@ -227,7 +227,7 @@ impl UnconfirmedTransaction {
     }
 
     #[uniffi::method]
-    pub fn fiat_amount(&self) -> Option<FiatAmount> {
+    pub const fn fiat_amount(&self) -> Option<FiatAmount> {
         self.fiat
     }
 }

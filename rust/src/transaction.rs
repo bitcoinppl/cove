@@ -59,8 +59,8 @@ pub struct UnconfirmedTransaction {
 impl Transaction {
     pub fn id(&self) -> TxId {
         match self {
-            Transaction::Confirmed(confirmed) => confirmed.id(),
-            Transaction::Unconfirmed(unconfirmed) => unconfirmed.id(),
+            Self::Confirmed(confirmed) => confirmed.id(),
+            Self::Unconfirmed(unconfirmed) => unconfirmed.id(),
         }
     }
 

@@ -1,5 +1,5 @@
 //! crypto-psbt: PSBT encoded as CBOR byte string with tag 310
-//! BCR-2020-006: https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md
+//! BCR-2020-006: <https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md>
 //!
 //! Note: This type uses manual CBOR encoding/decoding (not derive macros) because:
 //! 1. The structure is `tag(310) bytes` - a simple tagged byte string, not a map
@@ -10,10 +10,13 @@ use bitcoin::psbt::Psbt as BdkPsbt;
 use foundation_ur::{UR, bytewords};
 use minicbor::{Decoder, Encoder, data::Tag};
 
-use crate::{error::*, registry::CRYPTO_PSBT};
+use crate::{
+    error::{Result, ToUrError, UrError},
+    registry::CRYPTO_PSBT,
+};
 
 /// crypto-psbt: PSBT encoded as CBOR byte string with tag 310
-/// BCR-2020-006: https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md
+/// BCR-2020-006: <https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md>
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Object)]
 pub struct CryptoPsbt {
     psbt: BdkPsbt,
@@ -21,29 +24,38 @@ pub struct CryptoPsbt {
 
 impl CryptoPsbt {
     /// Create from bitcoin PSBT
-    pub fn new(psbt: BdkPsbt) -> Self {
+    #[must_use]
+    pub const fn new(psbt: BdkPsbt) -> Self {
         Self { psbt }
     }
 
     /// Create from PSBT bytes
+    ///
+    /// # Errors
+    /// Returns error if PSBT deserialization fails
     pub fn from_bytes(psbt_bytes: &[u8]) -> Result<Self> {
         let psbt = BdkPsbt::deserialize(psbt_bytes)
-            .map_err(|e| UrError::CborDecodeError(format!("Invalid PSBT: {}", e)))?;
+            .map_err(|e| UrError::CborDecodeError(format!("Invalid PSBT: {e}")))?;
         Ok(Self { psbt })
     }
 
     /// Get the underlying PSBT
-    pub fn psbt(&self) -> &BdkPsbt {
+    #[must_use]
+    pub const fn psbt(&self) -> &BdkPsbt {
         &self.psbt
     }
 
     /// Get PSBT as bytes
+    #[must_use]
     pub fn to_bytes(&self) -> Vec<u8> {
         self.psbt.serialize()
     }
 
     /// Encode as tagged CBOR bytes
     /// CBOR structure: #6.310(bytes)
+    ///
+    /// # Errors
+    /// Returns error if CBOR encoding fails
     pub fn to_cbor(&self) -> Result<Vec<u8>> {
         let psbt_bytes = self.psbt.serialize();
 
@@ -61,39 +73,37 @@ impl CryptoPsbt {
 
     /// Decode from tagged CBOR bytes
     /// Supports both tagged (#6.310) and untagged CBOR for interoperability
+    ///
+    /// # Errors
+    /// Returns error if CBOR decoding or PSBT deserialization fails
     pub fn from_cbor(cbor: &[u8]) -> Result<Self> {
         let mut decoder = Decoder::new(cbor);
 
         // try to read tag - if present, verify it's 310
-        let psbt_bytes = match decoder.tag() {
-            Ok(tag) => {
-                // tagged format: verify tag 310
-                if tag != Tag::new(CRYPTO_PSBT) {
-                    return Err(UrError::InvalidTag {
-                        expected: CRYPTO_PSBT,
-                        actual: tag.as_u64(),
-                    });
-                }
+        if let Ok(tag) = decoder.tag() {
+            // tagged format: verify tag 310
+            if tag != Tag::new(CRYPTO_PSBT) {
+                return Err(UrError::InvalidTag { expected: CRYPTO_PSBT, actual: tag.as_u64() });
+            }
+        } else {
+            // untagged format: reset decoder to start
+            decoder = Decoder::new(cbor);
+        }
 
-                // read byte string after tag
-                decoder.bytes().map_err_cbor_decode()?.to_vec()
-            }
-            Err(_) => {
-                // untagged format: try to read as byte string directly
-                // reset decoder to start
-                decoder = Decoder::new(cbor);
-                decoder.bytes().map_err_cbor_decode()?.to_vec()
-            }
-        };
+        // read byte string
+        let psbt_bytes = decoder.bytes().map_err_cbor_decode()?.to_vec();
 
         // deserialize PSBT
         let psbt = BdkPsbt::deserialize(&psbt_bytes)
-            .map_err(|e| UrError::CborDecodeError(format!("Invalid PSBT: {}", e)))?;
+            .map_err(|e| UrError::CborDecodeError(format!("Invalid PSBT: {e}")))?;
 
         Ok(Self { psbt })
     }
 
     /// Encode as UR string (for single-part UR)
+    ///
+    /// # Errors
+    /// Returns error if CBOR encoding fails
     pub fn to_ur_string(&self) -> Result<String> {
         let cbor = self.to_cbor()?;
         let ur = UR::new("crypto-psbt", &cbor);
@@ -101,6 +111,9 @@ impl CryptoPsbt {
     }
 
     /// Decode from UR string
+    ///
+    /// # Errors
+    /// Returns error if UR parsing or CBOR decoding fails
     pub fn from_ur_string(ur: &str) -> Result<Self> {
         let ur = UR::parse(ur).map_err(|e| UrError::UrParseError(e.to_string()))?;
 
@@ -117,7 +130,7 @@ impl CryptoPsbt {
             UR::SinglePart { message, .. } => {
                 // decode bytewords to bytes (UR uses minimal style)
                 bytewords::decode(message, bytewords::Style::Minimal)
-                    .map_err(|e| UrError::UrParseError(format!("Bytewords decode error: {}", e)))?
+                    .map_err(|e| UrError::UrParseError(format!("Bytewords decode error: {e}")))?
             }
             UR::SinglePartDeserialized { message, .. } => {
                 // already deserialized
@@ -137,7 +150,11 @@ impl CryptoPsbt {
 #[uniffi::export]
 impl CryptoPsbt {
     /// Create from PSBT bytes
+    ///
+    /// # Errors
+    /// Returns error if PSBT deserialization fails
     #[uniffi::constructor]
+    #[allow(clippy::needless_pass_by_value)] // uniffi requires owned types
     pub fn from_psbt_bytes(psbt_bytes: Vec<u8>) -> Result<Self> {
         Self::from_bytes(&psbt_bytes)
     }
@@ -148,23 +165,37 @@ impl CryptoPsbt {
     }
 
     /// Encode as CBOR for UR
+    ///
+    /// # Errors
+    /// Returns error if CBOR encoding fails
     pub fn encode(&self) -> Result<Vec<u8>> {
         self.to_cbor()
     }
 
     /// Decode from CBOR
+    ///
+    /// # Errors
+    /// Returns error if CBOR decoding or PSBT deserialization fails
     #[uniffi::constructor]
+    #[allow(clippy::needless_pass_by_value)] // uniffi requires owned types
     pub fn decode(cbor: Vec<u8>) -> Result<Self> {
         Self::from_cbor(&cbor)
     }
 
     /// Encode as UR string
+    ///
+    /// # Errors
+    /// Returns error if CBOR encoding fails
     pub fn to_ur(&self) -> Result<String> {
         self.to_ur_string()
     }
 
     /// Decode from UR string
+    ///
+    /// # Errors
+    /// Returns error if UR parsing or CBOR decoding fails
     #[uniffi::constructor]
+    #[allow(clippy::needless_pass_by_value)] // uniffi requires owned types
     pub fn from_ur(ur: String) -> Result<Self> {
         Self::from_ur_string(&ur)
     }

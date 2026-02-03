@@ -8,7 +8,7 @@ edition = "2024"
 bitcoin = { workspace = true, features = ["serde"] }
 
 # Serialization/Deserialization
-serde = { workspace = true, features = ["derive"] }
+serde = { workspace = true, features = ["derive", "rc"] }
 serde_urlencoded = { workspace = true }
 
 # Utilities

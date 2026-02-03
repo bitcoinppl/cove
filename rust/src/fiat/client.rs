@@ -63,7 +63,7 @@ impl PriceResponse {
         self.get_for_currency(currency)
     }
 
-    pub fn get_for_currency(&self, currency: FiatCurrency) -> u64 {
+    pub const fn get_for_currency(&self, currency: FiatCurrency) -> u64 {
         match currency {
             FiatCurrency::Usd => self.usd,
             FiatCurrency::Eur => self.eur,

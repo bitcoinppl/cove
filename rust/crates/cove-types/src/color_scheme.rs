@@ -15,11 +15,12 @@ pub enum ColorSchemeSelection {
 }
 
 impl ColorSchemeSelection {
-    pub fn as_capitalized_string(&self) -> &'static str {
+    #[must_use]
+    pub const fn as_capitalized_string(&self) -> &'static str {
         match self {
-            ColorSchemeSelection::Light => "Light",
-            ColorSchemeSelection::Dark => "Dark",
-            ColorSchemeSelection::System => "System",
+            Self::Light => "Light",
+            Self::Dark => "Dark",
+            Self::System => "System",
         }
     }
 }
@@ -28,7 +29,7 @@ impl FromStr for ColorSchemeSelection {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(ColorSchemeSelection::from(s))
+        Ok(Self::from(s))
     }
 }
 
@@ -56,9 +57,9 @@ impl From<String> for ColorSchemeSelection {
 impl AsRef<str> for ColorSchemeSelection {
     fn as_ref(&self) -> &str {
         match self {
-            ColorSchemeSelection::Light => "light",
-            ColorSchemeSelection::Dark => "dark",
-            ColorSchemeSelection::System => "system",
+            Self::Light => "light",
+            Self::Dark => "dark",
+            Self::System => "system",
         }
     }
 }

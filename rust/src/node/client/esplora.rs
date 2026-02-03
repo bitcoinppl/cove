@@ -24,7 +24,7 @@ pub struct EsploraClient {
 }
 
 impl EsploraClient {
-    pub fn new(client: Arc<AsyncClient>) -> Self {
+    pub const fn new(client: Arc<AsyncClient>) -> Self {
         Self { client, options: NodeClientOptions { batch_size: ESPLORA_BATCH_SIZE } }
     }
 
@@ -49,7 +49,7 @@ impl EsploraClient {
         Ok(Self::new_with_options(client, options))
     }
 
-    pub fn new_with_options(client: Arc<AsyncClient>, options: NodeClientOptions) -> Self {
+    pub const fn new_with_options(client: Arc<AsyncClient>, options: NodeClientOptions) -> Self {
         Self { client, options }
     }
 

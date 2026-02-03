@@ -16,7 +16,7 @@ pub fn git_short_hash() -> String {
     GIT_SHORT_HASH.to_string()
 }
 
-pub fn is_release() -> bool {
+pub const fn is_release() -> bool {
     IS_RELEASE
 }
 

@@ -147,7 +147,7 @@ fn remove_sqlite_auxiliary_files(db_path: &Path) {
     for suffix in ["wal", "shm"] {
         let aux_path = sqlite_auxiliary_path(db_path, suffix);
         match std::fs::remove_file(&aux_path) {
-            Ok(_) => {}
+            Ok(()) => {}
             Err(e) if e.kind() == ErrorKind::NotFound => {}
             Err(e) => warn!("unable to delete sqlite {suffix} file {}: {e}", aux_path.display()),
         }

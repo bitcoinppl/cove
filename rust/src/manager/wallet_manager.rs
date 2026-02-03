@@ -867,8 +867,7 @@ impl RustWalletManager {
             metadata
                 .master_fingerprint
                 .as_deref()
-                .map(Fingerprint::as_uppercase)
-                .unwrap_or_else(|| "Unnamed Wallet".to_string())
+                .map_or_else(|| "Unnamed Wallet".to_string(), Fingerprint::as_uppercase)
         };
 
         let metadata = {
@@ -880,7 +879,7 @@ impl RustWalletManager {
         self.reconciler.send(Message::WalletMetadataChanged(metadata.clone()));
 
         if let Err(error) = Database::global().wallets.update_wallet_metadata(metadata) {
-            error!("Unable to update wallet metadata: {error:?}")
+            error!("Unable to update wallet metadata: {error:?}");
         }
     }
 
@@ -1065,10 +1064,12 @@ impl RustWalletManager {
                     }
                 };
 
-                let descriptors = descriptors.ok_or(Error::UnableToSwitch(
-                    wallet_address_type,
-                    "No descriptors found for address type".to_string(),
-                ))?;
+                let descriptors = descriptors.ok_or_else(|| {
+                    Error::UnableToSwitch(
+                        wallet_address_type,
+                        "No descriptors found for address type".to_string(),
+                    )
+                })?;
 
                 let id = self.id.clone();
                 let actor = self.actor.clone();
@@ -1208,7 +1209,7 @@ impl RustWalletManager {
         self.reconciler.send(Message::WalletMetadataChanged(metadata.clone()));
 
         if let Err(error) = Database::global().wallets.update_wallet_metadata(metadata) {
-            error!("Unable to update wallet metadata: {error:?}")
+            error!("Unable to update wallet metadata: {error:?}");
         }
     }
 }

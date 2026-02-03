@@ -7,7 +7,7 @@ use std::{
 use derive_more::Display;
 use serde::{Deserialize, Serialize};
 
-use super::{AddressInfo, WalletAddressType, fingerprint::Fingerprint};
+use super::{fingerprint::Fingerprint, AddressInfo, WalletAddressType};
 use crate::transaction::Unit;
 use crate::{database::Database, network::Network};
 use cove_tap_card::TapSigner;
@@ -254,8 +254,8 @@ impl InternalOnlyMetadata {
 }
 
 impl HardwareWalletMetadata {
-    pub fn is_tap_signer(&self) -> bool {
-        matches!(self, HardwareWalletMetadata::TapSigner(_))
+    pub const fn is_tap_signer(&self) -> bool {
+        matches!(self, Self::TapSigner(_))
     }
 }
 
@@ -310,12 +310,12 @@ impl WalletColor {
     }
 }
 
-fn default_true() -> bool {
+const fn default_true() -> bool {
     true
 }
 
-fn default_false() -> bool {
-    true
+const fn default_false() -> bool {
+    false
 }
 
 fn default_address_type() -> WalletAddressType {
@@ -340,7 +340,7 @@ fn wallet_metadata_preview() -> WalletMetadata {
     WalletMetadata::preview_new()
 }
 
-fn file_store_default() -> StoreType {
+const fn file_store_default() -> StoreType {
     StoreType::FileStore
 }
 

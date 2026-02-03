@@ -1,6 +1,6 @@
 use crate::fiat::{FiatCurrency, historical::HistoricalPrice};
 
-/// A space-efficient version of HistoricalPrice where only USD is required
+/// A space-efficient version of `HistoricalPrice` where only USD is required
 /// and other currencies are optional to save space when they aren't available
 #[derive(Debug, Copy, Clone, PartialEq, uniffi::Record)]
 pub struct HistoricalPriceRecord {
@@ -14,7 +14,7 @@ pub struct HistoricalPriceRecord {
     pub jpy: Option<f32>,
 }
 
-/// Error type for HistoricalPriceRecord
+/// Error type for `HistoricalPriceRecord`
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
 #[uniffi::export(Display)]
 pub enum HistoricalPriceRecordError {
@@ -79,7 +79,7 @@ fn positive_or_none(value: f32) -> Option<f32> {
 
 impl HistoricalPriceRecord {
     /// Get the price for a specific currency
-    pub fn for_currency(&self, currency: FiatCurrency) -> Option<f32> {
+    pub const fn for_currency(&self, currency: FiatCurrency) -> Option<f32> {
         match currency {
             FiatCurrency::Usd => Some(self.usd),
             FiatCurrency::Eur => self.eur,
@@ -121,7 +121,7 @@ impl HistoricalPriceRecord {
         let aud = get_opt(CurrencyFlag::AUD)?;
         let jpy = get_opt(CurrencyFlag::JPY)?;
 
-        Ok(HistoricalPriceRecord { time, usd, eur, gbp, cad, chf, aud, jpy })
+        Ok(Self { time, usd, eur, gbp, cad, chf, aud, jpy })
     }
 
     /// Convert to bytes
@@ -168,7 +168,7 @@ struct ByteReader<'a> {
 }
 
 impl<'a> ByteReader<'a> {
-    fn new(bytes: &'a [u8]) -> Self {
+    const fn new(bytes: &'a [u8]) -> Self {
         Self { bytes, index: 0 }
     }
 
@@ -212,7 +212,7 @@ impl From<HistoricalPriceRecord> for CurrencyFlag {
 }
 
 impl redb::Value for HistoricalPriceRecord {
-    type SelfType<'a> = HistoricalPriceRecord;
+    type SelfType<'a> = Self;
     type AsBytes<'a> = Vec<u8>;
 
     fn fixed_width() -> Option<usize> {
@@ -228,14 +228,13 @@ impl redb::Value for HistoricalPriceRecord {
 
     fn as_bytes<'a, 'b: 'a>(value: &'a Self::SelfType<'b>) -> Self::AsBytes<'a>
     where
-        Self: 'a,
-        Self: 'b,
+        Self: 'a + 'b,
     {
         value.as_bytes()
     }
 
     fn type_name() -> redb::TypeName {
-        redb::TypeName::new(std::any::type_name::<HistoricalPriceRecord>())
+        redb::TypeName::new(std::any::type_name::<Self>())
     }
 }
 

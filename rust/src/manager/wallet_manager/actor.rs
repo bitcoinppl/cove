@@ -104,10 +104,10 @@ pub enum FullScanType {
 }
 
 impl FullScanType {
-    fn stop_gap(&self) -> usize {
+    const fn stop_gap(&self) -> usize {
         match self {
-            FullScanType::Initial => 20,
-            FullScanType::Expanded => 150,
+            Self::Initial => 20,
+            Self::Expanded => 150,
         }
     }
 }
@@ -150,7 +150,7 @@ impl Actor for WalletActor {
             _ => {
                 self.send(WalletManagerReconcileMessage::WalletError(error));
             }
-        };
+        }
 
         false
     }
@@ -277,7 +277,7 @@ impl WalletActor {
 
     // cancel a transaction, reset the address & change address index
     pub async fn cancel_txn(&mut self, txn: BdkTransaction) {
-        self.wallet.bdk.cancel_tx(&txn)
+        self.wallet.bdk.cancel_tx(&txn);
     }
 
     pub async fn list_unspent(&mut self) -> ActorResult<Vec<LocalOutput>> {
@@ -301,7 +301,7 @@ impl WalletActor {
             .inspect(|tx| {
                 if let Transaction::Unconfirmed(unconfirmed) = &tx {
                     send!(self.addr.start_transaction_watcher(unconfirmed.txid.0));
-                };
+                }
             })
             .collect::<Vec<Transaction>>();
 
@@ -495,7 +495,7 @@ impl WalletActor {
         // otherwise this is a consolidation txn, sending to the same wallet so use the first output
         let output = external_outputs
             .first()
-            .cloned()
+            .copied()
             .or_else(|| psbt.unsigned_tx.output.first())
             .ok_or_else(|| error("no addess to send to found"))?;
 
@@ -503,15 +503,15 @@ impl WalletActor {
         let sending_to = bitcoin::Address::from_script(&output.script_pubkey, params)
             .map_err(|err| err_fmt("unable to get address from script", err))?;
 
-        let sending_amount = output.value;
+        let output_amount = output.value;
 
-        if sending_amount == Amount::ZERO {
+        if output_amount == Amount::ZERO {
             return Err(error("zero amount"));
         }
 
         let fee = psbt.fee().map_err(|err| err_fmt("unable to get fee", err))?;
 
-        let spending_amount = sending_amount
+        let total_spent = output_amount
             .checked_add(fee)
             .ok_or_else(|| error("fee overflow, cannot calculate spending amount"))?;
 
@@ -551,11 +551,11 @@ impl WalletActor {
             .collect();
 
         let more_details = InputOutputDetails::new_with_labels(&psbt, network.into(), extras);
-        let fee_percentage = fee.to_sat() * 100 / sending_amount.to_sat();
+        let fee_percentage = fee.to_sat() * 100 / output_amount.to_sat();
 
         let details = ConfirmDetails {
-            spending_amount: spending_amount.into(),
-            sending_amount: sending_amount.into(),
+            spending_amount: total_spent.into(),
+            sending_amount: output_amount.into(),
             fee_total: fee.into(),
             fee_rate: fee_rate.into(),
             fee_percentage,
@@ -747,7 +747,7 @@ impl WalletActor {
             let initial_transactions =
                 self.transactions().await?.await.map_err_str(Error::TransactionsRetrievalError)?;
 
-            self.send(Msg::AvailableTransactions(initial_transactions))
+            self.send(Msg::AvailableTransactions(initial_transactions));
         }
 
         // start the wallet scan in a background task
@@ -1036,7 +1036,7 @@ impl WalletActor {
             return Err(Error::InsufficientFunds(format!(
                 "custom amount {total_amount} is greater than the total amount available, total available: {utxo_total_amount}, fees: {fee_estimate}",
             )));
-        };
+        }
 
         let fee = {
             let mut max_send_estimate =
@@ -1415,7 +1415,7 @@ impl WalletActor {
             })?;
 
             self.node_client = Some(node_client);
-        };
+        }
 
         Ok(self.node_client.as_ref().expect("just checked"))
     }

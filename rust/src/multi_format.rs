@@ -149,7 +149,7 @@ impl MultiFormat {
 
             match tap_card {
                 cove_tap_card::TapCard::TapSigner(card) => {
-                    return Ok(MultiFormat::from(card));
+                    return Ok(Self::from(card));
                 }
 
                 cove_tap_card::TapCard::SatsCard(_card) => {
@@ -209,7 +209,7 @@ impl MultiFormat {
 
             UrType::CryptoOutput => {
                 // decode crypto-output CBOR structure
-                let crypto_output = cove_ur::CryptoOutput::decode(data.to_vec())
+                let crypto_output = cove_ur::CryptoOutput::decode(data)
                     .map_err(|_| MultiFormatError::UnrecognizedFormat)?;
 
                 // get descriptor string using inferred network from UR metadata

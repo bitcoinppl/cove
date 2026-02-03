@@ -3,8 +3,8 @@ use std::fmt::Display;
 pub trait ResultExt<T, InitialError> {
     /// Map an error to a string-based error variant
     ///
-    /// This allows converting `Result<T, InitialError>` to `Result<T, FinalError>` where FinalError has a variant
-    /// that takes a String, using the Display implementation of InitialError.
+    /// This allows converting `Result<T, InitialError>` to `Result<T, FinalError>` where `FinalError` has a variant
+    /// that takes a String, using the Display implementation of `InitialError`.
     ///
     /// # Example
     /// ```rust
@@ -22,14 +22,20 @@ pub trait ResultExt<T, InitialError> {
     ///     Ok(())
     /// }
     /// ```
+    ///
+    /// # Errors
+    /// Returns the error transformed by the provided function
     fn map_err_str<FinalError, F>(self, f: F) -> Result<T, FinalError>
     where
         InitialError: Display,
         F: FnOnce(String) -> FinalError;
 
-    /// map an error using Into::into before passing to error constructor
+    /// Map an error using `Into::into` before passing to error constructor
     ///
-    /// shorthand for map_err(|e| f(e.into())) to convert errors using Into trait
+    /// Shorthand for `map_err(|e| f(e.into()))` to convert errors using Into trait
+    ///
+    /// # Errors
+    /// Returns the error transformed by the provided function
     fn map_err_into<I, FinalError, F>(self, f: F) -> Result<T, FinalError>
     where
         InitialError: Into<I>,

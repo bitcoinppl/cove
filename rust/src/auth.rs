@@ -107,7 +107,7 @@ impl AuthPin {
 #[uniffi::export]
 impl AuthPin {
     #[uniffi::constructor]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {}
     }
 

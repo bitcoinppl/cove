@@ -17,6 +17,10 @@ type Result<T, E = Error> = std::result::Result<T, E>;
 
 #[uniffi::export]
 impl NfcMessage {
+    /// Creates a new NFC message from optional string and data.
+    ///
+    /// # Errors
+    /// Returns an error if neither string nor data is provided.
     #[uniffi::constructor(default(string = None, data = None))]
     pub fn try_new(mut string: Option<String>, mut data: Option<Vec<u8>>) -> Result<Self> {
         if let Some(str) = &string
@@ -40,20 +44,20 @@ impl NfcMessage {
     }
 
     #[uniffi::method]
+    #[must_use]
     pub fn string(&self) -> Option<String> {
         match self {
-            NfcMessage::String(s) => Some(s.clone()),
-            NfcMessage::Both(s, _d) => Some(s.clone()),
-            _ => None,
+            Self::String(s) | Self::Both(s, _) => Some(s.clone()),
+            Self::Data(_) => None,
         }
     }
 
     #[uniffi::method]
+    #[must_use]
     pub fn data(&self) -> Option<Vec<u8>> {
         match self {
-            NfcMessage::Data(d) => Some(d.clone()),
-            NfcMessage::Both(_s, d) => Some(d.clone()),
-            _ => None,
+            Self::Data(d) | Self::Both(_, d) => Some(d.clone()),
+            Self::String(_) => None,
         }
     }
 }

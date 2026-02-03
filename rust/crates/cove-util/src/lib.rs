@@ -33,6 +33,10 @@ pub fn sha256_hash(bytes: &[u8]) -> Sha256Hash {
     Sha256Hash::hash(bytes)
 }
 
+/// Create a message digest from bytes for signing
+///
+/// # Panics
+/// Panics if the hash is not 32 bytes (should never happen with SHA256)
 pub fn message_digest(message: &[u8]) -> bitcoin::secp256k1::Message {
     let hash = sha256_hash(message);
     let digest: &[u8; 32] = hash.as_ref();
@@ -40,9 +44,8 @@ pub fn message_digest(message: &[u8]) -> bitcoin::secp256k1::Message {
 }
 
 pub fn split_at_decimal_point(amount: &str) -> (&str, &str, &str) {
-    let decimal_index = match memchr::memchr(b'.', amount.as_bytes()) {
-        Some(decimal_index) => decimal_index,
-        None => return (amount, "", ""),
+    let Some(decimal_index) = memchr::memchr(b'.', amount.as_bytes()) else {
+        return (amount, "", "");
     };
 
     let before_decimal = &amount[..decimal_index];
@@ -67,7 +70,7 @@ pub fn _ffi_generate_random_chain_code() -> String {
 
 #[uniffi::export(name = "hexToUtf8String")]
 fn _ffi_hex_to_utf8_string(hex: &str) -> Option<String> {
-    let bytes = _ffi_hex_decode(hex)?;
+    let bytes = hex::decode(hex).ok()?;
     String::from_utf8(bytes).ok()
 }
 

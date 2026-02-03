@@ -19,9 +19,22 @@ pub enum Error {
 type Result<T, E = Error> = std::result::Result<T, E>;
 
 pub trait DescriptorExt {
+    /// Returns the descriptor public key from the descriptor
+    ///
+    /// # Errors
+    /// Returns an error if the descriptor type is unsupported (bare, multisig)
     fn descriptor_public_key(&self) -> Result<&DescriptorPublicKey, Error>;
+
+    /// Returns the full origin string including descriptor type and fingerprint/path
+    ///
+    /// # Errors
+    /// Returns an error if the descriptor type is unsupported or has no origin
     fn full_origin(&self) -> Result<String>;
 
+    /// Returns the origin tuple of fingerprint and derivation path
+    ///
+    /// # Errors
+    /// Returns an error if the descriptor has no origin or is unsupported
     fn origin(&self) -> Result<&(Fingerprint, DerivationPath)> {
         let public_key = self.descriptor_public_key()?;
 
@@ -34,6 +47,10 @@ pub trait DescriptorExt {
         origin.as_ref().ok_or(Error::NoOrigin)
     }
 
+    /// Returns the derivation path from the origin
+    ///
+    /// # Errors
+    /// Returns an error if the descriptor has no origin or is unsupported
     fn derivation_path(&self) -> Result<DerivationPath> {
         let origin = self.origin()?;
         Ok(origin.1.clone())
@@ -48,6 +65,7 @@ pub trait DescriptorExt {
 }
 
 impl DescriptorExt for Descriptor<DescriptorPublicKey> {
+    #[allow(clippy::use_self)] // using D alias for readability
     fn descriptor_public_key(&self) -> Result<&DescriptorPublicKey, Error> {
         use bdk_wallet::miniscript::Descriptor as D;
         use bdk_wallet::miniscript::descriptor::ShInner;

@@ -19,6 +19,10 @@ use crate::{
     record::NdefRecord,
 };
 
+/// Parses NDEF records from the input stream.
+///
+/// # Errors
+/// Returns an error if the input is incomplete or malformed.
 pub fn parse_ndef_records(
     input: &mut Stream<'_>,
     info: &MessageInfo,
@@ -44,6 +48,10 @@ pub fn parse_ndef_records(
     Ok(records)
 }
 
+/// Parses a single NDEF record from the input stream.
+///
+/// # Errors
+/// Returns an error if the input is incomplete or malformed.
 pub fn parse_ndef_record(input: &mut Stream<'_>) -> ModalResult<NdefRecord> {
     let header = parse_header.parse_next(input)?;
     let type_ = parse_type(input, header.type_length)?;
@@ -53,13 +61,20 @@ pub fn parse_ndef_record(input: &mut Stream<'_>) -> ModalResult<NdefRecord> {
     Ok(NdefRecord { header, type_, id, payload })
 }
 
+/// Parses the NDEF message info header from the input stream.
+///
+/// # Errors
+/// Returns an error if the input is incomplete or the header is invalid.
 pub fn parse_message_info(input: &mut Stream<'_>) -> ModalResult<MessageInfo> {
     let _ = literal([226, 67, 0, 1, 0, 0, 4, 0, 3]).parse_next(input)?;
 
     let length_indicator = be_u8.parse_next(input)?;
 
-    let total_payload_length =
-        if length_indicator == 255 { be_u16.parse_next(input)? } else { length_indicator as u16 };
+    let total_payload_length = if length_indicator == 255 {
+        be_u16.parse_next(input)?
+    } else {
+        u16::from(length_indicator)
+    };
 
     Ok(MessageInfo::new(total_payload_length))
 }
@@ -96,7 +111,7 @@ fn parse_header(input: &mut Stream<'_>) -> ModalResult<NdefHeader> {
     };
 
     let payload_length = if short_record {
-        any.map(|x: u8| x as u32).parse_next(input)?
+        any.map(|x: u8| u32::from(x)).parse_next(input)?
     } else {
         winnow::binary::u32(Endianness::Big).parse_next(input)?
     };
@@ -153,7 +168,7 @@ fn parse_payload(
 
         let language_code = take(language_code_length as usize).parse_next(input)?;
 
-        let remaining_length = payload_length - language_code_length as u32 - 1;
+        let remaining_length = payload_length - u32::from(language_code_length) - 1;
         let text = take(remaining_length as usize).parse_next(input)?;
 
         let parsed_text = if is_utf16 {

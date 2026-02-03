@@ -78,11 +78,16 @@ impl Default for NfcReader {
 }
 
 impl NfcReader {
-    pub fn new() -> NfcReader {
-        NfcReader { state: ParserState::default() }
+    #[must_use]
+    pub fn new() -> Self {
+        Self { state: ParserState::default() }
     }
 
-    /// Parse the entire message if possible, if not return the unused data and the message info
+    /// Parses the entire message if possible, if not return the unused data and the message info.
+    ///
+    /// # Errors
+    /// Returns an error if parsing fails or if trying to parse an already-parsed message.
+    #[allow(clippy::cast_possible_truncation)]
     pub fn parse(&mut self, data: Vec<u8>) -> Result<ParseResult, NfcReaderError> {
         match &mut self.state {
             ParserState::NotStarted => {
@@ -107,14 +112,12 @@ impl NfcReader {
         }
     }
 
+    #[allow(clippy::cast_possible_truncation)]
     fn parse_incomplete<'a>(
         &mut self,
         data: impl StreamExt + 'a,
     ) -> Result<ParseResult, NfcReaderError> {
-        let parsing = match &mut self.state {
-            ParserState::Parsing(parsing_state) => parsing_state,
-            _ => panic!("not in parsing state"),
-        };
+        let ParserState::Parsing(parsing) = &mut self.state else { panic!("not in parsing state") };
 
         // need more data to parse the message
         if (parsing.needed as usize) >= data.len() {
@@ -161,8 +164,12 @@ impl NfcReader {
         }
     }
 
-    /// Try resuming on a partially parsed message
-    pub fn is_resumeable(&mut self, data: Vec<u8>) -> Result<(), ResumeError> {
+    /// Tries resuming on a partially parsed message.
+    ///
+    /// # Errors
+    /// Returns an error if the data does not match the expected state for resuming.
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn is_resumeable(&mut self, data: &[u8]) -> Result<(), ResumeError> {
         let expected_bytes = BYTES_PER_BLOCK * NUMBER_OF_BLOCKS_PER_CHUNK;
         let data_len = data.len() as u16;
 
@@ -185,7 +192,7 @@ impl NfcReader {
             }
         };
 
-        let Some(first_block_hash) = &get_first_block_hash(&data) else {
+        let Some(first_block_hash) = &get_first_block_hash(data) else {
             return Err(ResumeError::UnableToGetFirstBlockHash);
         };
 
@@ -203,12 +210,14 @@ impl NfcReader {
     }
 
     /// Check if the reader is started
-    pub fn is_started(&self) -> bool {
+    #[must_use]
+    pub const fn is_started(&self) -> bool {
         matches!(self.state, ParserState::Parsing(_))
     }
 
     /// Get the message info, if we have that info
-    pub fn message_info(&self) -> Option<&MessageInfo> {
+    #[must_use]
+    pub const fn message_info(&self) -> Option<&MessageInfo> {
         match &self.state {
             ParserState::Parsing(parsing_state) => Some(&parsing_state.message_info),
             ParserState::Complete | ParserState::NotStarted => None,

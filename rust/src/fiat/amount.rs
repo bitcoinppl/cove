@@ -36,7 +36,7 @@ impl FiatAmount {
 // PREVIEW ONLY
 //
 impl FiatAmount {
-    pub fn preview_new() -> Self {
+    pub const fn preview_new() -> Self {
         Self { amount: 120.38, currency: FiatCurrency::Usd }
     }
 }

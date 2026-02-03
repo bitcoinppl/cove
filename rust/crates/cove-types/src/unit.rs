@@ -24,10 +24,11 @@ pub enum BitcoinUnit {
 use strum::IntoEnumIterator;
 
 impl BitcoinUnit {
-    pub fn toggle(self) -> Self {
+    #[must_use]
+    pub const fn toggle(self) -> Self {
         match self {
-            BitcoinUnit::Btc => BitcoinUnit::Sat,
-            BitcoinUnit::Sat => BitcoinUnit::Btc,
+            Self::Btc => Self::Sat,
+            Self::Sat => Self::Btc,
         }
     }
 }
@@ -40,8 +41,8 @@ fn all_units() -> Vec<BitcoinUnit> {
 impl Display for BitcoinUnit {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            BitcoinUnit::Btc => write!(f, "BTC"),
-            BitcoinUnit::Sat => write!(f, "SATS"),
+            Self::Btc => write!(f, "BTC"),
+            Self::Sat => write!(f, "SATS"),
         }
     }
 }

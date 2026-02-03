@@ -192,7 +192,7 @@ impl PendingOrConfirmed {
         }
     }
 
-    fn is_confirmed(&self) -> bool {
+    const fn is_confirmed(&self) -> bool {
         matches!(self, Self::Confirmed(_))
     }
 }
@@ -200,7 +200,7 @@ impl PendingOrConfirmed {
 #[uniffi::export]
 impl TransactionDetails {
     #[uniffi::method]
-    pub fn tx_id(&self) -> TxId {
+    pub const fn tx_id(&self) -> TxId {
         self.tx_id
     }
 
@@ -249,7 +249,7 @@ impl TransactionDetails {
 
     #[uniffi::method]
     pub async fn fee_fiat_fmt(&self) -> Result<String, Error> {
-        let fee = self.fee.ok_or(Error::Fee("No fee".to_string()))?;
+        let fee = self.fee.ok_or_else(|| Error::Fee("No fee".to_string()))?;
         let fiat = task::spawn(async move {
             FIAT_CLIENT
                 .current_value_in_currency(fee, currency())
@@ -292,7 +292,7 @@ impl TransactionDetails {
 
     #[uniffi::method]
     pub async fn sent_sans_fee_fiat_fmt(&self) -> Result<String, Error> {
-        let amount = self.sent_sans_fee().ok_or(Error::Fee("No fee".to_string()))?;
+        let amount = self.sent_sans_fee().ok_or_else(|| Error::Fee("No fee".to_string()))?;
 
         let fiat = task::spawn(async move {
             FIAT_CLIENT
@@ -365,7 +365,7 @@ impl TransactionDetails {
     }
 
     #[uniffi::method]
-    pub fn block_number(&self) -> Option<u32> {
+    pub const fn block_number(&self) -> Option<u32> {
         match &self.pending_or_confirmed {
             PendingOrConfirmed::Pending(_) => None,
             PendingOrConfirmed::Confirmed(confirmed) => Some(confirmed.block_number),
@@ -380,7 +380,7 @@ impl TransactionDetails {
     }
     #[uniffi::method]
     pub fn address_spaced_out(&self) -> Option<String> {
-        self.address.as_ref().map(|a| a.spaced_out())
+        self.address.as_ref().map(cove_types::address::Address::spaced_out)
     }
 
     /// Historical fiat value at time of transaction - cached version (no network calls)
@@ -399,9 +399,9 @@ impl TransactionDetails {
     /// Historical fiat value at time of transaction - async version (fetches from API if not cached)
     #[uniffi::method]
     pub async fn historical_fiat_fmt(&self) -> Result<String, Error> {
-        let block_number = self
-            .block_number()
-            .ok_or(Error::FiatAmount("pending transaction has no historical price".into()))?;
+        let block_number = self.block_number().ok_or_else(|| {
+            Error::FiatAmount("pending transaction has no historical price".into())
+        })?;
 
         let confirmed_at = match &self.pending_or_confirmed {
             PendingOrConfirmed::Confirmed(c) => c.confirmation_time,
@@ -421,7 +421,7 @@ impl TransactionDetails {
         .await
         .map_err(|e| Error::FiatAmount(format!("task failed: {e}")))?
         .map_err(|e| Error::FiatAmount(e.to_string()))?
-        .ok_or(Error::FiatAmount("no price for currency".into()))?;
+        .ok_or_else(|| Error::FiatAmount("no price for currency".into()))?;
 
         let fiat_value = amount_btc * currency_price as f64;
         Ok(fmt_historical_fiat(fiat_value))
@@ -436,11 +436,11 @@ impl TransactionDetails {
             tx_id: TxId::preview_new(),
             address: Some(Address::preview_new()),
             sent_and_received: SentAndReceived::preview_new(),
-            fee: Some(Amount::from_sat(880303)),
+            fee: Some(Amount::from_sat(880_303)),
             fee_rate: Some(FeeRate::preview_new()),
             pending_or_confirmed: PendingOrConfirmed::Confirmed(ConfirmedDetails {
                 block_number: 840_000,
-                confirmation_time: 1677721600,
+                confirmation_time: 1_677_721_600,
             }),
             network: Network::Bitcoin,
             labels: Default::default(),
@@ -469,7 +469,7 @@ impl TransactionDetails {
         let mut me = Self::preview_new_confirmed();
         me.sent_and_received = SentAndReceived::preview_incoming();
         me.pending_or_confirmed =
-            PendingOrConfirmed::Pending(PendingDetails { last_seen: 1677721600 });
+            PendingOrConfirmed::Pending(PendingDetails { last_seen: 1_677_721_600 });
 
         me
     }
@@ -479,7 +479,7 @@ impl TransactionDetails {
         let mut me = Self::preview_new_confirmed();
         me.sent_and_received = SentAndReceived::preview_outgoing();
         me.pending_or_confirmed =
-            PendingOrConfirmed::Pending(PendingDetails { last_seen: 1677721600 });
+            PendingOrConfirmed::Pending(PendingDetails { last_seen: 1_677_721_600 });
 
         me
     }

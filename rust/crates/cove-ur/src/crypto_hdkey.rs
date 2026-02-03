@@ -1,8 +1,8 @@
 //! crypto-hdkey: Hierarchical Deterministic Key (BIP32)
-//! BCR-2020-007: https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-007-hdkey.md
+//! BCR-2020-007: <https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-007-hdkey.md>
 //!
 //! Note: This type uses manual CBOR encoding/decoding (not derive macros) because:
-//! 1. Fields 5-7 (use_info, origin, children) contain embedded tagged CBOR structures
+//! 1. Fields 5-7 (`use_info`, `origin`, `children`) contain embedded tagged CBOR structures
 //! 2. These nested types must be pre-encoded with their own tags (305, 304)
 //! 3. The raw CBOR bytes are appended directly to the buffer
 //! 4. Decoding requires position tracking and recursive parsing
@@ -13,9 +13,16 @@ use minicbor::{Decoder, Encoder, data::Tag};
 
 use crate::{
     coin_info::CryptoCoinInfo,
-    error::*,
+    error::{Result, ToUrError, UrError},
     keypath::CryptoKeypath,
-    registry::{CRYPTO_HDKEY, hdkey_keys::*, lengths},
+    registry::{
+        CRYPTO_HDKEY,
+        hdkey_keys::{
+            CHAIN_CODE, CHILDREN, IS_MASTER, IS_PRIVATE, KEY_DATA, NAME, ORIGIN,
+            PARENT_FINGERPRINT, SOURCE, USE_INFO,
+        },
+        lengths,
+    },
 };
 
 /// crypto-hdkey: Hierarchical Deterministic Key (BIP32)
@@ -45,14 +52,12 @@ pub struct CryptoHdkey {
 
 impl CryptoHdkey {
     /// Create from extended public key (xpub)
+    #[must_use]
     pub fn from_xpub(xpub: &Xpub) -> Self {
         let key_data = xpub.public_key.serialize().to_vec();
         let chain_code = Some(xpub.chain_code.to_bytes().to_vec());
-        let parent_fingerprint = if xpub.parent_fingerprint.to_bytes() != [0, 0, 0, 0] {
-            Some(xpub.parent_fingerprint.to_bytes())
-        } else {
-            None
-        };
+        let parent_fingerprint = (xpub.parent_fingerprint.to_bytes() != [0, 0, 0, 0])
+            .then(|| xpub.parent_fingerprint.to_bytes());
 
         Self {
             is_master: xpub.depth == 0,
@@ -69,14 +74,12 @@ impl CryptoHdkey {
     }
 
     /// Create from extended private key (xpriv)
+    #[must_use]
     pub fn from_xpriv(xpriv: &Xpriv) -> Self {
         let key_data = xpriv.private_key.secret_bytes().to_vec();
         let chain_code = Some(xpriv.chain_code.to_bytes().to_vec());
-        let parent_fingerprint = if xpriv.parent_fingerprint.to_bytes() != [0, 0, 0, 0] {
-            Some(xpriv.parent_fingerprint.to_bytes())
-        } else {
-            None
-        };
+        let parent_fingerprint = (xpriv.parent_fingerprint.to_bytes() != [0, 0, 0, 0])
+            .then(|| xpriv.parent_fingerprint.to_bytes());
 
         Self {
             is_master: xpriv.depth == 0,
@@ -93,24 +96,28 @@ impl CryptoHdkey {
     }
 
     /// Encode as tagged CBOR
-    /// CBOR structure: #6.303({1: bool, 2: bool, 3: bytes, ?4: bytes, ...})
+    /// CBOR structure: `#6.303({1: bool, 2: bool, 3: bytes, ?4: bytes, ...})`
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if CBOR encoding fails
     pub fn to_cbor(&self) -> Result<Vec<u8>> {
         // pre-encode embedded structures (they contain their own CBOR tags)
-        let use_info_cbor = self.use_info.as_ref().map(|u| u.to_cbor()).transpose()?;
-        let origin_cbor = self.origin.as_ref().map(|o| o.to_cbor()).transpose()?;
-        let children_cbor = self.children.as_ref().map(|c| c.to_cbor()).transpose()?;
+        let use_info_cbor = self.use_info.as_ref().map(CryptoCoinInfo::to_cbor).transpose()?;
+        let origin_cbor = self.origin.as_ref().map(CryptoKeypath::to_cbor).transpose()?;
+        let children_cbor = self.children.as_ref().map(CryptoKeypath::to_cbor).transpose()?;
 
         let mut buffer = Vec::new();
 
         // count fields
         let field_count = 3 // is_master, is_private, key_data always present
-            + self.chain_code.is_some() as u64
-            + self.use_info.is_some() as u64
-            + self.origin.is_some() as u64
-            + self.children.is_some() as u64
-            + self.parent_fingerprint.is_some() as u64
-            + self.name.is_some() as u64
-            + self.source.is_some() as u64;
+            + u64::from(self.chain_code.is_some())
+            + u64::from(self.use_info.is_some())
+            + u64::from(self.origin.is_some())
+            + u64::from(self.children.is_some())
+            + u64::from(self.parent_fingerprint.is_some())
+            + u64::from(self.name.is_some())
+            + u64::from(self.source.is_some());
 
         // write tag, map header, and fields 1-4 with encoder
         {
@@ -139,16 +146,20 @@ impl CryptoHdkey {
 
         // fields 5-7 contain pre-encoded CBOR with their own tags, so we append
         // the map key followed by raw CBOR bytes directly to the buffer
+        // these constants are small values (5, 6, 7) that fit in a u8
+        #[allow(clippy::cast_possible_truncation)]
         if let Some(cbor) = use_info_cbor {
-            buffer.push(USE_INFO as u8); // CBOR uint for small values
+            buffer.push(USE_INFO as u8);
             buffer.extend_from_slice(&cbor);
         }
+        #[allow(clippy::cast_possible_truncation)]
         if let Some(cbor) = origin_cbor {
-            buffer.push(ORIGIN as u8); // CBOR uint for small values
+            buffer.push(ORIGIN as u8);
             buffer.extend_from_slice(&cbor);
         }
+        #[allow(clippy::cast_possible_truncation)]
         if let Some(cbor) = children_cbor {
-            buffer.push(CHILDREN as u8); // CBOR uint for small values
+            buffer.push(CHILDREN as u8);
             buffer.extend_from_slice(&cbor);
         }
 
@@ -174,6 +185,14 @@ impl CryptoHdkey {
     }
 
     /// Decode from tagged CBOR
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The CBOR tag is not 303 (crypto-hdkey)
+    /// - Required fields are missing
+    /// - Key data length is invalid
+    /// - CBOR decoding fails
     pub fn from_cbor(cbor: &[u8]) -> Result<Self> {
         let mut decoder = Decoder::new(cbor);
 
@@ -264,6 +283,8 @@ impl CryptoHdkey {
         let expected_len =
             if is_private { lengths::PRIVATE_KEY } else { lengths::COMPRESSED_PUBKEY };
         if key_data.len() != expected_len {
+            // key lengths (32, 33) fit in u64
+            #[allow(clippy::cast_possible_truncation)]
             return Err(UrError::InvalidKeyDataLength {
                 expected: expected_len as u64,
                 actual: key_data.len() as u64,
@@ -288,33 +309,43 @@ impl CryptoHdkey {
 #[uniffi::export]
 impl CryptoHdkey {
     /// Encode as CBOR for UR
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if CBOR encoding fails
     pub fn encode(&self) -> Result<Vec<u8>> {
         self.to_cbor()
     }
 
     /// Decode from CBOR
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if CBOR decoding fails or the structure is invalid
     #[uniffi::constructor]
+    #[allow(clippy::needless_pass_by_value)] // uniffi requires owned Vec
     pub fn decode(cbor: Vec<u8>) -> Result<Self> {
         Self::from_cbor(&cbor)
     }
 }
 
 impl CryptoHdkey {
-    /// Infer network from UR metadata, defaulting to mainnet if not available.
+    /// Infer network from UR metadata, defaulting to mainnet if not available
     ///
     /// Checks in order:
     /// 1. `use_info.network` - explicit network field (0=mainnet, 1=testnet)
-    /// 2. Derivation path coin_type - second component (0=mainnet, 1=testnet)
+    /// 2. Derivation path `coin_type` - second component (0=mainnet, 1=testnet)
     /// 3. Default to mainnet
+    #[must_use]
     pub fn infer_network(&self) -> bitcoin::Network {
         // check use_info.network first (explicit)
         if let Some(ref use_info) = self.use_info
             && let Some(network) = use_info.network
         {
-            return match network {
-                0 => bitcoin::Network::Bitcoin,
-                1 => bitcoin::Network::Testnet,
-                _ => bitcoin::Network::Bitcoin,
+            return if network == 1 {
+                bitcoin::Network::Testnet
+            } else {
+                bitcoin::Network::Bitcoin
             };
         }
 
@@ -322,11 +353,11 @@ impl CryptoHdkey {
         if let Some(ref origin) = self.origin
             && origin.components.len() >= 2
         {
-            let coin_type = origin.components[1] & 0x7FFFFFFF; // strip hardened bit
-            return match coin_type {
-                0 => bitcoin::Network::Bitcoin,
-                1 => bitcoin::Network::Testnet,
-                _ => bitcoin::Network::Bitcoin,
+            let coin_type = origin.components[1] & 0x7FFF_FFFF; // strip hardened bit
+            return if coin_type == 1 {
+                bitcoin::Network::Testnet
+            } else {
+                bitcoin::Network::Bitcoin
             };
         }
 
@@ -334,7 +365,16 @@ impl CryptoHdkey {
     }
 
     /// Convert to xpub string (for public keys only)
-    /// Note: Not exposed to uniffi because bitcoin::Network is not uniffi-compatible
+    ///
+    /// Note: Not exposed to uniffi because `bitcoin::Network` is not uniffi-compatible
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The key is a private key
+    /// - The key is a master key
+    /// - Key data is invalid
+    /// - Chain code is missing
     pub fn to_xpub_string(&self, network: bitcoin::Network) -> Result<String> {
         use bitcoin::bip32::{ChildNumber, Fingerprint, Xpub};
         use bitcoin::secp256k1::PublicKey;
@@ -362,6 +402,8 @@ impl CryptoHdkey {
             .try_into()
             .map_err(|_| UrError::InvalidKeyData("chain_code must be 32 bytes".to_string()))?;
 
+        // BIP32 path depth is typically small (under 10), truncation is safe
+        #[allow(clippy::cast_possible_truncation)]
         let (depth, child_number) = match &self.origin {
             Some(origin) => (origin.components.len() as u8, origin.last_child_number()),
             None => (3, ChildNumber::from(0)), // account level, e.g. m/86'/0'/0'
