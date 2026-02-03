@@ -8,6 +8,7 @@ edition = "2024"
 # macros
 cove-macros = { path = "../cove-macros" }
 cove-ur = { path = "../cove-ur" }
+cove-util = { path = "../cove-util" }
 
 # bitcoin
 bitcoin = { workspace = true, features = ["serde"] }
@@ -67,6 +68,7 @@ hex = { workspace = true }
 
 # util
 ahash = { workspace = true }
+tap = { workspace = true }
 url = { workspace = true }
 
 [build-dependencies]

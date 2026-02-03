@@ -1125,6 +1125,7 @@ dependencies = [
  "bitcoin",
  "cove-macros",
  "cove-ur",
+ "cove-util",
  "derive_more",
  "eyre",
  "foundation-ur",
@@ -1137,6 +1138,7 @@ dependencies = [
  "serde",
  "serde_json",
  "strum",
+ "tap",
  "thiserror 2.0.18",
  "tracing",
  "uniffi 0.31.0",
@@ -1173,6 +1175,7 @@ dependencies = [
  "numfmt",
  "rand 0.9.2",
  "thiserror 2.0.18",
+ "tracing",
  "uniffi 0.31.0",
 ]
 

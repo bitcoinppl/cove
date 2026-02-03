@@ -7,7 +7,7 @@ use std::{
 use derive_more::Display;
 use serde::{Deserialize, Serialize};
 
-use super::{fingerprint::Fingerprint, AddressInfo, WalletAddressType};
+use super::{AddressInfo, WalletAddressType, fingerprint::Fingerprint};
 use crate::transaction::Unit;
 use crate::{database::Database, network::Network};
 use cove_tap_card::TapSigner;

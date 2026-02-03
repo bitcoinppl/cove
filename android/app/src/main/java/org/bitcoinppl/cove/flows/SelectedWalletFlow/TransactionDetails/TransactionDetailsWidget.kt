@@ -74,7 +74,7 @@ internal fun TransactionDetailsWidget(
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    transactionDetails.addressSpacedOut() ?: "",
+                    transactionDetails.addressSpacedOut() ?: stringResource(R.string.address_unavailable),
                     color = fg,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,

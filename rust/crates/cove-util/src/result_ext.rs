@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-pub trait ResultExt<T, InitialError> {
+pub trait ResultExt<T, E> {
     /// Map an error to a string-based error variant
     ///
     /// This allows converting `Result<T, InitialError>` to `Result<T, FinalError>` where `FinalError` has a variant
@@ -27,7 +27,7 @@ pub trait ResultExt<T, InitialError> {
     /// Returns the error transformed by the provided function
     fn map_err_str<FinalError, F>(self, f: F) -> Result<T, FinalError>
     where
-        InitialError: Display,
+        E: Display,
         F: FnOnce(String) -> FinalError;
 
     /// Map an error using `Into::into` before passing to error constructor
@@ -38,22 +38,22 @@ pub trait ResultExt<T, InitialError> {
     /// Returns the error transformed by the provided function
     fn map_err_into<I, FinalError, F>(self, f: F) -> Result<T, FinalError>
     where
-        InitialError: Into<I>,
+        E: Into<I>,
         F: FnOnce(I) -> FinalError;
 }
 
-impl<Type, InitialError> ResultExt<Type, InitialError> for Result<Type, InitialError> {
-    fn map_err_str<FinalError, F>(self, f: F) -> Result<Type, FinalError>
+impl<T, E> ResultExt<T, E> for Result<T, E> {
+    fn map_err_str<FinalError, F>(self, f: F) -> Result<T, FinalError>
     where
-        InitialError: Display,
+        E: Display,
         F: FnOnce(String) -> FinalError,
     {
         self.map_err(|e| f(e.to_string()))
     }
 
-    fn map_err_into<I, FinalError, F>(self, f: F) -> Result<Type, FinalError>
+    fn map_err_into<I, FinalError, F>(self, f: F) -> Result<T, FinalError>
     where
-        InitialError: Into<I>,
+        E: Into<I>,
         F: FnOnce(I) -> FinalError,
     {
         self.map_err(|e| f(e.into()))
