@@ -6,11 +6,9 @@ pub mod fiat_on_change;
 mod sanitize;
 pub mod state;
 
-use std::sync::{
-    Arc,
-    atomic::{AtomicBool, Ordering},
-};
+use std::{sync::Arc, time::Duration};
 
+use cove_tokio_ext::DebouncedTask;
 use cove_util::result_ext::ResultExt as _;
 
 use crate::{
@@ -87,7 +85,7 @@ pub struct RustSendFlowManager {
     reconciler: MessageSender<Message>,
     reconcile_receiver: Arc<Receiver<SingleOrMany>>,
 
-    checking_fees: AtomicBool,
+    fee_check_task: DebouncedTask<()>,
 }
 
 #[derive(Debug, Clone, PartialEq, uniffi::Enum)]
@@ -193,7 +191,7 @@ impl RustSendFlowManager {
             wallet_manager,
             reconciler: message_sender,
             reconcile_receiver: Arc::new(receiver),
-            checking_fees: AtomicBool::new(false),
+            fee_check_task: DebouncedTask::new("fee_check", Duration::from_millis(200)),
         }
         .into();
 
@@ -768,7 +766,7 @@ impl RustSendFlowManager {
 
             if current_amount_sats != Some(amount_sats) {
                 sender.queue(Message::UpdateAmountSats(amount_sats));
-                self.sync_wrap_get_or_update_fee_rate_options();
+                self.schedule_fee_rate_update();
             }
         }
 
@@ -831,7 +829,7 @@ impl RustSendFlowManager {
             let btc_amount = btc_amount.as_sats();
             self.state.lock().amount_sats = Some(btc_amount);
             sender.queue(Message::UpdateAmountSats(btc_amount));
-            self.sync_wrap_get_or_update_fee_rate_options();
+            self.schedule_fee_rate_update();
         }
 
         if let Some(None) = max_selected {
@@ -889,7 +887,7 @@ impl RustSendFlowManager {
         let mut sender = DeferredSender::new(self.reconciler.clone());
         sender.queue(Message::UpdateAmountFiat(0.0));
         sender.queue(Message::UpdateAmountSats(0));
-        self.sync_wrap_get_or_update_fee_rate_options();
+        self.schedule_fee_rate_update();
 
         // fiat
         let currency = self.state.lock().selected_fiat_currency;
@@ -991,7 +989,7 @@ impl RustSendFlowManager {
 
         if old_amount_sats != Some(amount_sats) {
             sender.queue(Message::UpdateAmountSats(amount_sats));
-            self.sync_wrap_get_or_update_fee_rate_options();
+            self.schedule_fee_rate_update();
         }
 
         if let Some(price) = btc_price_in_fiat {
@@ -1727,32 +1725,14 @@ impl RustSendFlowManager {
         }
     }
 
-    fn sync_wrap_get_or_update_fee_rate_options(self: &Arc<Self>) {
-        if self.checking_fees.load(Ordering::Relaxed) {
-            return;
-        }
-
+    fn schedule_fee_rate_update(self: &Arc<Self>) {
         let me = self.clone();
-        task::spawn(async move {
+        self.fee_check_task.replace(async move {
             me.get_or_update_fee_rate_options().await;
         });
     }
 
     async fn get_or_update_fee_rate_options(self: &Arc<Self>) {
-        if self
-            .checking_fees
-            .compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed)
-            .is_err()
-        {
-            // another check is running
-            return;
-        }
-
-        self.do_get_or_update_fee_rate_options().await;
-        self.checking_fees.store(false, Ordering::Relaxed);
-    }
-
-    async fn do_get_or_update_fee_rate_options(self: &Arc<Self>) {
         debug!("get_or_update_fee_rate_options");
 
         let mut sender = DeferredSender::new(self.reconciler.clone());
