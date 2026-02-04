@@ -295,7 +295,6 @@ internal fun TransactionItem(
                     )
                 }
 
-            val fiatPrefix = if (direction == TransactionDirection.OUTGOING) "-" else ""
             val formattedAmount: String =
                 manager?.let {
                     when (fiatOrBtc) {
@@ -303,7 +302,7 @@ internal fun TransactionItem(
                         FiatOrBtc.FIAT -> {
                             val fiatAmount = txn.v1.fiatAmount()
                             if (fiatAmount != null) {
-                                fiatPrefix + it.rust.displayFiatAmount(fiatAmount.amount)
+                                it.rust.displayFiatAmountWithDirection(fiatAmount.amount, direction)
                             } else {
                                 "---"
                             }
@@ -318,7 +317,7 @@ internal fun TransactionItem(
                             // primary is BTC, secondary is fiat
                             val fiatAmount = txn.v1.fiatAmount()
                             if (fiatAmount != null) {
-                                fiatPrefix + it.rust.displayFiatAmount(fiatAmount.amount)
+                                it.rust.displayFiatAmountWithDirection(fiatAmount.amount, direction)
                             } else {
                                 "---"
                             }
@@ -366,7 +365,6 @@ internal fun TransactionItem(
                     )
                 }
 
-            val fiatPrefix = if (direction == TransactionDirection.OUTGOING) "-" else ""
             val formattedAmount: String =
                 manager?.let {
                     when (fiatOrBtc) {
@@ -374,7 +372,7 @@ internal fun TransactionItem(
                         FiatOrBtc.FIAT -> {
                             val fiatAmount = txn.v1.fiatAmount()
                             if (fiatAmount != null) {
-                                fiatPrefix + it.rust.displayFiatAmount(fiatAmount.amount)
+                                it.rust.displayFiatAmountWithDirection(fiatAmount.amount, direction)
                             } else {
                                 "---"
                             }
@@ -389,7 +387,7 @@ internal fun TransactionItem(
                             // primary is BTC, secondary is fiat
                             val fiatAmount = txn.v1.fiatAmount()
                             if (fiatAmount != null) {
-                                fiatPrefix + it.rust.displayFiatAmount(fiatAmount.amount)
+                                it.rust.displayFiatAmountWithDirection(fiatAmount.amount, direction)
                             } else {
                                 "---"
                             }
@@ -676,7 +674,7 @@ internal fun UnsignedTransactionWidget(
                 FiatOrBtc.FIAT -> {
                     val amount = fiatAmount
                     if (amount != null) {
-                        "-" + it.rust.displayFiatAmount(amount)
+                        it.rust.displayFiatAmountWithDirection(amount, TransactionDirection.OUTGOING)
                     } else {
                         "---"
                     }
@@ -691,7 +689,7 @@ internal fun UnsignedTransactionWidget(
                     // primary is BTC, secondary is fiat
                     val amount = fiatAmount
                     if (amount != null) {
-                        "-" + it.rust.displayFiatAmount(amount)
+                        it.rust.displayFiatAmountWithDirection(amount, TransactionDirection.OUTGOING)
                     } else {
                         "---"
                     }

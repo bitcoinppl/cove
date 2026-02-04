@@ -32,8 +32,8 @@ use crate::{
     tap_card::tap_signer_reader::DeriveInfo,
     task::{self, spawn_actor},
     transaction::{
-        Amount, FeeRate, SentAndReceived, Transaction, TransactionDetails, TxId, Unit,
-        ffi::BitcoinTransaction, unsigned_transaction::UnsignedTransaction,
+        Amount, FeeRate, SentAndReceived, Transaction, TransactionDetails, TransactionDirection,
+        TxId, Unit, ffi::BitcoinTransaction, unsigned_transaction::UnsignedTransaction,
     },
     wallet::{
         Address, AddressInfo, Wallet, WalletAddressType, WalletError,
@@ -718,6 +718,24 @@ impl RustWalletManager {
         }
 
         format!("{symbol}{fiat}")
+    }
+
+    /// Formats a fiat amount with direction prefix (e.g., "-$50.00")
+    ///
+    /// Includes "-" prefix for outgoing transactions, no prefix for incoming.
+    /// Use this for displaying confirmed/unconfirmed transaction fiat amounts in lists.
+    #[uniffi::method(default(with_suffix = true))]
+    pub fn display_fiat_amount_with_direction(
+        &self,
+        amount: f64,
+        direction: TransactionDirection,
+        with_suffix: bool,
+    ) -> String {
+        let prefix = match direction {
+            TransactionDirection::Incoming => "",
+            TransactionDirection::Outgoing => "-",
+        };
+        format!("{prefix}{}", self.display_fiat_amount(amount, with_suffix))
     }
 
     #[uniffi::method]
