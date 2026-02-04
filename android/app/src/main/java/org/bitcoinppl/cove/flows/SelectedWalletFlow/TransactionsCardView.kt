@@ -52,8 +52,10 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
+import org.bitcoinppl.cove.AppAlertState
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.isLight
@@ -806,6 +808,15 @@ internal fun UnsignedTransactionWidget(
                         manager?.rust?.deleteUnsignedTransaction(txn.id())
                     } catch (e: Exception) {
                         android.util.Log.e("UnsignedTxWidget", "Failed to delete unsigned transaction", e)
+                        app?.let {
+                            it.alertState =
+                                TaggedItem(
+                                    AppAlertState.General(
+                                        title = "Delete Failed",
+                                        message = "Unable to delete transaction: ${e.localizedMessage ?: e.message ?: "Unknown error"}",
+                                    ),
+                                )
+                        }
                     }
                 },
             )

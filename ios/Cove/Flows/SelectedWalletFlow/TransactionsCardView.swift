@@ -11,6 +11,7 @@ import SwiftUI
 private let scrollThresholdIndex = 5
 
 struct TransactionsCardView: View {
+    @Environment(AppManager.self) var app
     @Environment(WalletManager.self) var manager
 
     let transactions: [CoveCore.Transaction]
@@ -49,7 +50,15 @@ struct TransactionsCardView: View {
                                 )
                                 .contextMenu {
                                     Button(role: .destructive) {
-                                        try? manager.rust.deleteUnsignedTransaction(txId: txn.id())
+                                        do {
+                                            try manager.rust.deleteUnsignedTransaction(txId: txn.id())
+                                        } catch {
+                                            Log.error("Failed to delete unsigned transaction \(txn.id()): \(error)")
+                                            app.alertState = .init(.general(
+                                                title: "Delete Failed",
+                                                message: "Unable to delete transaction: \(error.localizedDescription)"
+                                            ))
+                                        }
                                     } label: {
                                         Label("Delete", systemImage: "trash")
                                     }
