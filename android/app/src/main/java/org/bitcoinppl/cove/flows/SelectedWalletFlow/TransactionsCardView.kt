@@ -52,8 +52,10 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
+import org.bitcoinppl.cove.AppAlertState
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.isLight
@@ -297,14 +299,12 @@ internal fun TransactionItem(
 
             val formattedAmount: String =
                 manager?.let {
-                    val amount = txn.v1.sentAndReceived().amount()
-                    val prefix = if (direction == TransactionDirection.OUTGOING) "-" else ""
                     when (fiatOrBtc) {
-                        FiatOrBtc.BTC -> prefix + it.displayAmount(amount, showUnit = true)
+                        FiatOrBtc.BTC -> it.rust.displaySentAndReceivedAmount(txn.v1.sentAndReceived())
                         FiatOrBtc.FIAT -> {
                             val fiatAmount = txn.v1.fiatAmount()
                             if (fiatAmount != null) {
-                                prefix + it.rust.displayFiatAmount(fiatAmount.amount)
+                                it.rust.displayFiatAmountWithDirection(fiatAmount.amount, direction)
                             } else {
                                 "---"
                             }
@@ -312,12 +312,31 @@ internal fun TransactionItem(
                     }
                 } ?: txn.v1.sentAndReceived().label()
 
+            val secondaryAmount: String =
+                manager?.let {
+                    when (fiatOrBtc) {
+                        FiatOrBtc.BTC -> {
+                            // primary is BTC, secondary is fiat
+                            val fiatAmount = txn.v1.fiatAmount()
+                            if (fiatAmount != null) {
+                                it.rust.displayFiatAmountWithDirection(fiatAmount.amount, direction)
+                            } else {
+                                "---"
+                            }
+                        }
+                        FiatOrBtc.FIAT -> {
+                            // primary is fiat, secondary is BTC
+                            it.rust.displaySentAndReceivedAmount(txn.v1.sentAndReceived())
+                        }
+                    }
+                } ?: "---"
+
             ConfirmedTransactionWidget(
                 type = txType,
                 label = txLabel,
                 date = txn.v1.confirmedAtFmt(),
                 amount = formattedAmount,
-                blockHeight = txn.v1.blockHeightFmt(),
+                secondaryAmount = secondaryAmount,
                 index = index,
                 primaryText = primaryText,
                 secondaryText = secondaryText,
@@ -350,14 +369,12 @@ internal fun TransactionItem(
 
             val formattedAmount: String =
                 manager?.let {
-                    val amount = txn.v1.sentAndReceived().amount()
-                    val prefix = if (direction == TransactionDirection.OUTGOING) "-" else ""
                     when (fiatOrBtc) {
-                        FiatOrBtc.BTC -> prefix + it.displayAmount(amount, showUnit = true)
+                        FiatOrBtc.BTC -> it.rust.displaySentAndReceivedAmount(txn.v1.sentAndReceived())
                         FiatOrBtc.FIAT -> {
                             val fiatAmount = txn.v1.fiatAmount()
                             if (fiatAmount != null) {
-                                prefix + it.rust.displayFiatAmount(fiatAmount.amount)
+                                it.rust.displayFiatAmountWithDirection(fiatAmount.amount, direction)
                             } else {
                                 "---"
                             }
@@ -365,12 +382,33 @@ internal fun TransactionItem(
                     }
                 } ?: txn.v1.sentAndReceived().label()
 
+            val secondaryAmount: String =
+                manager?.let {
+                    when (fiatOrBtc) {
+                        FiatOrBtc.BTC -> {
+                            // primary is BTC, secondary is fiat
+                            val fiatAmount = txn.v1.fiatAmount()
+                            if (fiatAmount != null) {
+                                it.rust.displayFiatAmountWithDirection(fiatAmount.amount, direction)
+                            } else {
+                                "---"
+                            }
+                        }
+                        FiatOrBtc.FIAT -> {
+                            // primary is fiat, secondary is BTC
+                            it.rust.displaySentAndReceivedAmount(txn.v1.sentAndReceived())
+                        }
+                    }
+                } ?: "---"
+
             UnconfirmedTransactionWidget(
                 type = txType,
                 label = txLabel,
                 amount = formattedAmount,
+                secondaryAmount = secondaryAmount,
                 index = index,
                 primaryText = primaryText,
+                secondaryText = secondaryText,
                 transaction = txn,
                 app = app,
                 manager = manager,
@@ -386,7 +424,7 @@ internal fun ConfirmedTransactionWidget(
     label: String,
     date: String,
     amount: String,
-    blockHeight: String,
+    secondaryAmount: String,
     index: Int,
     primaryText: Color,
     secondaryText: Color,
@@ -480,7 +518,7 @@ internal fun ConfirmedTransactionWidget(
                 fontWeight = FontWeight.Normal,
             )
             Text(
-                text = privateShow(blockHeight),
+                text = privateShow(secondaryAmount),
                 color = secondaryText,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Normal,
@@ -494,8 +532,10 @@ internal fun UnconfirmedTransactionWidget(
     type: TransactionType,
     label: String,
     amount: String,
+    secondaryAmount: String,
     index: Int,
     primaryText: Color,
+    secondaryText: Color,
     transaction: Transaction.Unconfirmed,
     app: AppManager?,
     manager: WalletManager?,
@@ -579,6 +619,12 @@ internal fun UnconfirmedTransactionWidget(
                 fontSize = 17.sp,
                 fontWeight = FontWeight.Normal,
             )
+            Text(
+                text = privateShow(secondaryAmount),
+                color = secondaryText.copy(alpha = 0.65f),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Normal,
+            )
         }
     }
 }
@@ -622,21 +668,40 @@ internal fun UnsignedTransactionWidget(
             Color.Black.copy(alpha = 0.75f)
         }
 
-    // format the spending amount
+    // format the spending amount (unsigned transactions are always outgoing)
     val formattedAmount =
         manager?.let {
             when (fiatOrBtc) {
-                FiatOrBtc.BTC -> it.displayAmount(txn.spendingAmount(), showUnit = true)
+                FiatOrBtc.BTC -> it.rust.displayAmountWithDirection(txn.spendingAmount(), TransactionDirection.OUTGOING)
                 FiatOrBtc.FIAT -> {
                     val amount = fiatAmount
                     if (amount != null) {
-                        it.rust.displayFiatAmount(amount)
+                        it.rust.displayFiatAmountWithDirection(amount, TransactionDirection.OUTGOING)
                     } else {
                         "---"
                     }
                 }
             }
         } ?: txn.spendingAmount().satsStringWithUnit()
+
+    val secondaryAmount =
+        manager?.let {
+            when (fiatOrBtc) {
+                FiatOrBtc.BTC -> {
+                    // primary is BTC, secondary is fiat
+                    val amount = fiatAmount
+                    if (amount != null) {
+                        it.rust.displayFiatAmountWithDirection(amount, TransactionDirection.OUTGOING)
+                    } else {
+                        "---"
+                    }
+                }
+                FiatOrBtc.FIAT -> {
+                    // primary is fiat, secondary is BTC
+                    it.rust.displayAmountWithDirection(txn.spendingAmount(), TransactionDirection.OUTGOING)
+                }
+            }
+        } ?: "---"
 
     Box {
         Row(
@@ -716,6 +781,12 @@ internal fun UnsignedTransactionWidget(
                     fontSize = 17.sp,
                     fontWeight = FontWeight.Normal,
                 )
+                Text(
+                    text = privateShow(secondaryAmount),
+                    color = secondaryText,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Normal,
+                )
             }
         }
 
@@ -737,6 +808,15 @@ internal fun UnsignedTransactionWidget(
                         manager?.rust?.deleteUnsignedTransaction(txn.id())
                     } catch (e: Exception) {
                         android.util.Log.e("UnsignedTxWidget", "Failed to delete unsigned transaction", e)
+                        app?.let {
+                            it.alertState =
+                                TaggedItem(
+                                    AppAlertState.General(
+                                        title = "Delete Failed",
+                                        message = "Unable to delete transaction: ${e.localizedMessage ?: e.message ?: "Unknown error"}",
+                                    ),
+                                )
+                        }
                     }
                 },
             )

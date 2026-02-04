@@ -11,6 +11,7 @@ import SwiftUI
 private let scrollThresholdIndex = 5
 
 struct TransactionsCardView: View {
+    @Environment(AppManager.self) var app
     @Environment(WalletManager.self) var manager
 
     let transactions: [CoveCore.Transaction]
@@ -49,7 +50,15 @@ struct TransactionsCardView: View {
                                 )
                                 .contextMenu {
                                     Button(role: .destructive) {
-                                        try? manager.rust.deleteUnsignedTransaction(txId: txn.id())
+                                        do {
+                                            try manager.rust.deleteUnsignedTransaction(txId: txn.id())
+                                        } catch {
+                                            Log.error("Failed to delete unsigned transaction \(txn.id()): \(error)")
+                                            app.alertState = .init(.general(
+                                                title: "Delete Failed",
+                                                message: "Unable to delete transaction: \(error.localizedDescription)"
+                                            ))
+                                        }
                                     } label: {
                                         Label("Delete", systemImage: "trash")
                                     }
@@ -143,7 +152,30 @@ struct ConfirmedTransactionView: View {
 
         // fiat
         guard let fiatAmount = txn.fiatAmount() else { return privateShow("---") }
-        return privateShow(manager.rust.displayFiatAmount(amount: fiatAmount.amount))
+        return privateShow(
+            manager.rust.displayFiatAmountWithDirection(
+                amount: fiatAmount.amount,
+                direction: txn.sentAndReceived().direction()
+            )
+        )
+    }
+
+    private var secondaryAmount: String {
+        if case .btc = metadata.fiatOrBtc {
+            // primary is BTC, secondary is fiat
+            guard let fiatAmount = txn.fiatAmount() else { return privateShow("---") }
+            return privateShow(
+                manager.rust.displayFiatAmountWithDirection(
+                    amount: fiatAmount.amount,
+                    direction: txn.sentAndReceived().direction()
+                )
+            )
+        }
+
+        // primary is fiat, secondary is BTC/sats
+        return privateShow(
+            manager.rust.displaySentAndReceivedAmount(sentAndReceived: txn.sentAndReceived())
+        )
     }
 
     private func privateShow(_ text: String, placeholder: String = "••••••") -> String {
@@ -208,7 +240,7 @@ struct ConfirmedTransactionView: View {
                     .foregroundStyle(amountColor(txn.sentAndReceived().direction()))
                     .contentTransition(.numericText())
 
-                Text(privateShow(txn.blockHeightFmt()))
+                Text(secondaryAmount)
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -245,10 +277,36 @@ struct UnconfirmedTransactionView: View {
 
         // fiat
         if let fiatAmount = txn.fiatAmount() {
-            return privateShow(manager.rust.displayFiatAmount(amount: fiatAmount.amount))
+            return privateShow(
+                manager.rust.displayFiatAmountWithDirection(
+                    amount: fiatAmount.amount,
+                    direction: txn.sentAndReceived().direction()
+                )
+            )
         } else {
             return privateShow("---")
         }
+    }
+
+    private var secondaryAmount: String {
+        if case .btc = metadata.fiatOrBtc {
+            // primary is BTC, secondary is fiat
+            if let fiatAmount = txn.fiatAmount() {
+                return privateShow(
+                    manager.rust.displayFiatAmountWithDirection(
+                        amount: fiatAmount.amount,
+                        direction: txn.sentAndReceived().direction()
+                    )
+                )
+            } else {
+                return privateShow("---")
+            }
+        }
+
+        // primary is fiat, secondary is BTC/sats
+        return privateShow(
+            manager.rust.displaySentAndReceivedAmount(sentAndReceived: txn.sentAndReceived())
+        )
     }
 
     var body: some View {
@@ -266,6 +324,10 @@ struct UnconfirmedTransactionView: View {
             VStack(alignment: .trailing) {
                 Text(amount)
                     .foregroundStyle(amountColor(txn.sentAndReceived().direction()).opacity(0.65))
+
+                Text(secondaryAmount)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
         }
         .contentShape(Rectangle())
@@ -309,14 +371,29 @@ struct UnsignedTransactionView: View {
     }
 
     private var amount: String {
-        // btc or sats
+        // btc or sats (unsigned transactions are always outgoing)
         if case .btc = metadata.fiatOrBtc {
-            return privateShow(manager.amountFmtUnit(txn.spendingAmount()))
+            return privateShow(manager.rust.displayAmountWithDirection(amount: txn.spendingAmount(), direction: .outgoing))
         }
 
         // fiat
         guard let fiatAmount else { return privateShow("---") }
-        return privateShow(manager.rust.displayFiatAmount(amount: fiatAmount))
+        return privateShow(
+            manager.rust.displayFiatAmountWithDirection(amount: fiatAmount, direction: .outgoing)
+        )
+    }
+
+    private var secondaryAmount: String {
+        if case .btc = metadata.fiatOrBtc {
+            // primary is BTC, secondary is fiat
+            guard let fiatAmount else { return privateShow("---") }
+            return privateShow(
+                manager.rust.displayFiatAmountWithDirection(amount: fiatAmount, direction: .outgoing)
+            )
+        }
+
+        // primary is fiat, secondary is BTC/sats
+        return privateShow(manager.rust.displayAmountWithDirection(amount: txn.spendingAmount(), direction: .outgoing))
     }
 
     var body: some View {
@@ -348,6 +425,10 @@ struct UnsignedTransactionView: View {
 
             VStack(alignment: .trailing) {
                 Text(amount)
+
+                Text(secondaryAmount)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
         }
         .task {

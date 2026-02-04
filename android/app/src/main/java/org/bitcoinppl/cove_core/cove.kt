@@ -1435,7 +1435,11 @@ external fun uniffi_cove_checksum_method_rustwalletmanager_dispatch(
 ): Short
 external fun uniffi_cove_checksum_method_rustwalletmanager_display_amount(
 ): Short
+external fun uniffi_cove_checksum_method_rustwalletmanager_display_amount_with_direction(
+): Short
 external fun uniffi_cove_checksum_method_rustwalletmanager_display_fiat_amount(
+): Short
+external fun uniffi_cove_checksum_method_rustwalletmanager_display_fiat_amount_with_direction(
 ): Short
 external fun uniffi_cove_checksum_method_rustwalletmanager_display_sent_and_received_amount(
 ): Short
@@ -2401,7 +2405,11 @@ external fun uniffi_cove_fn_method_rustwalletmanager_dispatch(`ptr`: Long,`actio
 ): Unit
 external fun uniffi_cove_fn_method_rustwalletmanager_display_amount(`ptr`: Long,`amount`: Long,`showUnit`: Byte,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_rustwalletmanager_display_amount_with_direction(`ptr`: Long,`amount`: Long,`direction`: RustBufferTransactionDirection.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_rustwalletmanager_display_fiat_amount(`ptr`: Long,`amount`: Double,`withSuffix`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_rustwalletmanager_display_fiat_amount_with_direction(`ptr`: Long,`amount`: Double,`direction`: RustBufferTransactionDirection.ByValue,`withSuffix`: Byte,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_rustwalletmanager_display_sent_and_received_amount(`ptr`: Long,`sentAndReceived`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
@@ -3886,13 +3894,19 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_dispatch() != 14781.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_display_amount() != 42440.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_display_amount() != 41368.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_display_amount_with_direction() != 60498.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_display_fiat_amount() != 60595.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_display_sent_and_received_amount() != 41756.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_display_fiat_amount_with_direction() != 5406.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_display_sent_and_received_amount() != 49538.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_export_labels_for_qr() != 32503.toShort()) {
@@ -18140,10 +18154,39 @@ public interface RustWalletManagerInterface {
      */
     fun `dispatch`(`action`: WalletManagerAction)
     
+    /**
+     * Formats a raw amount for display (e.g., "0.00050000 BTC")
+     *
+     * Use this for absolute amounts like balances or input values.
+     * Does NOT include direction prefix - use `display_sent_and_received_amount`
+     * for transaction amounts that need +/- indicators.
+     */
     fun `displayAmount`(`amount`: Amount, `showUnit`: kotlin.Boolean = true): kotlin.String
+    
+    /**
+     * Formats a BTC amount with direction prefix (e.g., "-0.00050000 BTC")
+     *
+     * Includes "-" prefix for outgoing transactions, no prefix for incoming.
+     * Use this for displaying unsigned transaction BTC amounts in lists.
+     */
+    fun `displayAmountWithDirection`(`amount`: Amount, `direction`: TransactionDirection): kotlin.String
     
     fun `displayFiatAmount`(`amount`: kotlin.Double, `withSuffix`: kotlin.Boolean = true): kotlin.String
     
+    /**
+     * Formats a fiat amount with direction prefix (e.g., "-$50.00")
+     *
+     * Includes "-" prefix for outgoing transactions, no prefix for incoming.
+     * Use this for displaying confirmed/unconfirmed transaction fiat amounts in lists.
+     */
+    fun `displayFiatAmountWithDirection`(`amount`: kotlin.Double, `direction`: TransactionDirection, `withSuffix`: kotlin.Boolean = true): kotlin.String
+    
+    /**
+     * Formats a transaction amount with direction prefix (e.g., "-0.00050000 BTC")
+     *
+     * Includes "-" prefix for outgoing transactions, no prefix for incoming.
+     * Use this for displaying confirmed/unconfirmed transaction amounts in lists.
+     */
     fun `displaySentAndReceivedAmount`(`sentAndReceived`: SentAndReceived): kotlin.String
     
     /**
@@ -18574,13 +18617,39 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     
     
 
-    override fun `displayAmount`(`amount`: Amount, `showUnit`: kotlin.Boolean): kotlin.String {
+    
+    /**
+     * Formats a raw amount for display (e.g., "0.00050000 BTC")
+     *
+     * Use this for absolute amounts like balances or input values.
+     * Does NOT include direction prefix - use `display_sent_and_received_amount`
+     * for transaction amounts that need +/- indicators.
+     */override fun `displayAmount`(`amount`: Amount, `showUnit`: kotlin.Boolean): kotlin.String {
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustwalletmanager_display_amount(
         it,
         FfiConverterTypeAmount.lower(`amount`),FfiConverterBoolean.lower(`showUnit`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Formats a BTC amount with direction prefix (e.g., "-0.00050000 BTC")
+     *
+     * Includes "-" prefix for outgoing transactions, no prefix for incoming.
+     * Use this for displaying unsigned transaction BTC amounts in lists.
+     */override fun `displayAmountWithDirection`(`amount`: Amount, `direction`: TransactionDirection): kotlin.String {
+            return FfiConverterString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_display_amount_with_direction(
+        it,
+        FfiConverterTypeAmount.lower(`amount`),FfiConverterTypeTransactionDirection.lower(`direction`),_status)
 }
     }
     )
@@ -18600,7 +18669,32 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     }
     
 
-    override fun `displaySentAndReceivedAmount`(`sentAndReceived`: SentAndReceived): kotlin.String {
+    
+    /**
+     * Formats a fiat amount with direction prefix (e.g., "-$50.00")
+     *
+     * Includes "-" prefix for outgoing transactions, no prefix for incoming.
+     * Use this for displaying confirmed/unconfirmed transaction fiat amounts in lists.
+     */override fun `displayFiatAmountWithDirection`(`amount`: kotlin.Double, `direction`: TransactionDirection, `withSuffix`: kotlin.Boolean): kotlin.String {
+            return FfiConverterString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_display_fiat_amount_with_direction(
+        it,
+        FfiConverterDouble.lower(`amount`),FfiConverterTypeTransactionDirection.lower(`direction`),FfiConverterBoolean.lower(`withSuffix`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Formats a transaction amount with direction prefix (e.g., "-0.00050000 BTC")
+     *
+     * Includes "-" prefix for outgoing transactions, no prefix for incoming.
+     * Use this for displaying confirmed/unconfirmed transaction amounts in lists.
+     */override fun `displaySentAndReceivedAmount`(`sentAndReceived`: SentAndReceived): kotlin.String {
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->

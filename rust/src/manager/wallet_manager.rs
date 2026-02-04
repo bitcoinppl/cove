@@ -32,8 +32,8 @@ use crate::{
     tap_card::tap_signer_reader::DeriveInfo,
     task::{self, spawn_actor},
     transaction::{
-        Amount, FeeRate, SentAndReceived, Transaction, TransactionDetails, TxId, Unit,
-        ffi::BitcoinTransaction, unsigned_transaction::UnsignedTransaction,
+        Amount, FeeRate, SentAndReceived, Transaction, TransactionDetails, TransactionDirection,
+        TxId, Unit, ffi::BitcoinTransaction, unsigned_transaction::UnsignedTransaction,
     },
     wallet::{
         Address, AddressInfo, Wallet, WalletAddressType, WalletError,
@@ -660,6 +660,11 @@ impl RustWalletManager {
         FIAT_CLIENT.value_in_currency_cached(*amount, currency)
     }
 
+    /// Formats a raw amount for display (e.g., "0.00050000 BTC")
+    ///
+    /// Use this for absolute amounts like balances or input values.
+    /// Does NOT include direction prefix - use `display_sent_and_received_amount`
+    /// for transaction amounts that need +/- indicators.
     #[uniffi::method(default(show_unit = true))]
     pub fn display_amount(&self, amount: Arc<Amount>, show_unit: bool) -> String {
         {
@@ -673,6 +678,27 @@ impl RustWalletManager {
         if show_unit { amount.fmt_string_with_unit(unit) } else { amount.fmt_string(unit) }
     }
 
+    /// Formats a BTC amount with direction prefix (e.g., "-0.00050000 BTC")
+    ///
+    /// Includes "-" prefix for outgoing transactions, no prefix for incoming.
+    /// Use this for displaying unsigned transaction BTC amounts in lists.
+    #[uniffi::method]
+    pub fn display_amount_with_direction(
+        &self,
+        amount: Arc<Amount>,
+        direction: TransactionDirection,
+    ) -> String {
+        let formatted = self.display_amount(amount, true);
+        match direction {
+            TransactionDirection::Outgoing => format!("-{formatted}"),
+            TransactionDirection::Incoming => formatted,
+        }
+    }
+
+    /// Formats a transaction amount with direction prefix (e.g., "-0.00050000 BTC")
+    ///
+    /// Includes "-" prefix for outgoing transactions, no prefix for incoming.
+    /// Use this for displaying confirmed/unconfirmed transaction amounts in lists.
     #[uniffi::method]
     pub fn display_sent_and_received_amount(
         &self,
@@ -709,6 +735,24 @@ impl RustWalletManager {
         }
 
         format!("{symbol}{fiat}")
+    }
+
+    /// Formats a fiat amount with direction prefix (e.g., "-$50.00")
+    ///
+    /// Includes "-" prefix for outgoing transactions, no prefix for incoming.
+    /// Use this for displaying confirmed/unconfirmed transaction fiat amounts in lists.
+    #[uniffi::method(default(with_suffix = true))]
+    pub fn display_fiat_amount_with_direction(
+        &self,
+        amount: f64,
+        direction: TransactionDirection,
+        with_suffix: bool,
+    ) -> String {
+        let prefix = match direction {
+            TransactionDirection::Incoming => "",
+            TransactionDirection::Outgoing => "-",
+        };
+        format!("{prefix}{}", self.display_fiat_amount(amount, with_suffix))
     }
 
     #[uniffi::method]
