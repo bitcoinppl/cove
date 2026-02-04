@@ -670,7 +670,7 @@ internal fun UnsignedTransactionWidget(
     val formattedAmount =
         manager?.let {
             when (fiatOrBtc) {
-                FiatOrBtc.BTC -> "-" + it.displayAmount(txn.spendingAmount(), showUnit = true)
+                FiatOrBtc.BTC -> it.rust.displayAmountWithDirection(txn.spendingAmount(), TransactionDirection.OUTGOING)
                 FiatOrBtc.FIAT -> {
                     val amount = fiatAmount
                     if (amount != null) {
@@ -696,7 +696,7 @@ internal fun UnsignedTransactionWidget(
                 }
                 FiatOrBtc.FIAT -> {
                     // primary is fiat, secondary is BTC
-                    "-" + it.displayAmount(txn.spendingAmount(), showUnit = true)
+                    it.rust.displayAmountWithDirection(txn.spendingAmount(), TransactionDirection.OUTGOING)
                 }
             }
         } ?: "---"

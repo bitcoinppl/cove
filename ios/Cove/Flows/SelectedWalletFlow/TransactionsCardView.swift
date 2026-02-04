@@ -364,7 +364,7 @@ struct UnsignedTransactionView: View {
     private var amount: String {
         // btc or sats (unsigned transactions are always outgoing)
         if case .btc = metadata.fiatOrBtc {
-            return privateShow("-" + manager.amountFmtUnit(txn.spendingAmount()))
+            return privateShow(manager.rust.displayAmountWithDirection(amount: txn.spendingAmount(), direction: .outgoing))
         }
 
         // fiat
@@ -384,7 +384,7 @@ struct UnsignedTransactionView: View {
         }
 
         // primary is fiat, secondary is BTC/sats
-        return privateShow("-" + manager.amountFmtUnit(txn.spendingAmount()))
+        return privateShow(manager.rust.displayAmountWithDirection(amount: txn.spendingAmount(), direction: .outgoing))
     }
 
     var body: some View {

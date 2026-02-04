@@ -678,6 +678,23 @@ impl RustWalletManager {
         if show_unit { amount.fmt_string_with_unit(unit) } else { amount.fmt_string(unit) }
     }
 
+    /// Formats a BTC amount with direction prefix (e.g., "-0.00050000 BTC")
+    ///
+    /// Includes "-" prefix for outgoing transactions, no prefix for incoming.
+    /// Use this for displaying unsigned transaction BTC amounts in lists.
+    #[uniffi::method]
+    pub fn display_amount_with_direction(
+        &self,
+        amount: Arc<Amount>,
+        direction: TransactionDirection,
+    ) -> String {
+        let formatted = self.display_amount(amount, true);
+        match direction {
+            TransactionDirection::Outgoing => format!("-{formatted}"),
+            TransactionDirection::Incoming => formatted,
+        }
+    }
+
     /// Formats a transaction amount with direction prefix (e.g., "-0.00050000 BTC")
     ///
     /// Includes "-" prefix for outgoing transactions, no prefix for incoming.

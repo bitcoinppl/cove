@@ -7638,10 +7638,39 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
      */
     func dispatch(action: WalletManagerAction) 
     
+    /**
+     * Formats a raw amount for display (e.g., "0.00050000 BTC")
+     *
+     * Use this for absolute amounts like balances or input values.
+     * Does NOT include direction prefix - use `display_sent_and_received_amount`
+     * for transaction amounts that need +/- indicators.
+     */
     func displayAmount(amount: Amount, showUnit: Bool)  -> String
+    
+    /**
+     * Formats a BTC amount with direction prefix (e.g., "-0.00050000 BTC")
+     *
+     * Includes "-" prefix for outgoing transactions, no prefix for incoming.
+     * Use this for displaying unsigned transaction BTC amounts in lists.
+     */
+    func displayAmountWithDirection(amount: Amount, direction: TransactionDirection)  -> String
     
     func displayFiatAmount(amount: Double, withSuffix: Bool)  -> String
     
+    /**
+     * Formats a fiat amount with direction prefix (e.g., "-$50.00")
+     *
+     * Includes "-" prefix for outgoing transactions, no prefix for incoming.
+     * Use this for displaying confirmed/unconfirmed transaction fiat amounts in lists.
+     */
+    func displayFiatAmountWithDirection(amount: Double, direction: TransactionDirection, withSuffix: Bool)  -> String
+    
+    /**
+     * Formats a transaction amount with direction prefix (e.g., "-0.00050000 BTC")
+     *
+     * Includes "-" prefix for outgoing transactions, no prefix for incoming.
+     * Use this for displaying confirmed/unconfirmed transaction amounts in lists.
+     */
     func displaySentAndReceivedAmount(sentAndReceived: SentAndReceived)  -> String
     
     /**
@@ -8009,12 +8038,35 @@ open func dispatch(action: WalletManagerAction)  {try! rustCall() {
 }
 }
     
+    /**
+     * Formats a raw amount for display (e.g., "0.00050000 BTC")
+     *
+     * Use this for absolute amounts like balances or input values.
+     * Does NOT include direction prefix - use `display_sent_and_received_amount`
+     * for transaction amounts that need +/- indicators.
+     */
 open func displayAmount(amount: Amount, showUnit: Bool = true) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_cove_fn_method_rustwalletmanager_display_amount(
             self.uniffiCloneHandle(),
         FfiConverterTypeAmount_lower(amount),
         FfiConverterBool.lower(showUnit),$0
+    )
+})
+}
+    
+    /**
+     * Formats a BTC amount with direction prefix (e.g., "-0.00050000 BTC")
+     *
+     * Includes "-" prefix for outgoing transactions, no prefix for incoming.
+     * Use this for displaying unsigned transaction BTC amounts in lists.
+     */
+open func displayAmountWithDirection(amount: Amount, direction: TransactionDirection) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_method_rustwalletmanager_display_amount_with_direction(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeAmount_lower(amount),
+        FfiConverterTypeTransactionDirection_lower(direction),$0
     )
 })
 }
@@ -8029,6 +8081,29 @@ open func displayFiatAmount(amount: Double, withSuffix: Bool = true) -> String  
 })
 }
     
+    /**
+     * Formats a fiat amount with direction prefix (e.g., "-$50.00")
+     *
+     * Includes "-" prefix for outgoing transactions, no prefix for incoming.
+     * Use this for displaying confirmed/unconfirmed transaction fiat amounts in lists.
+     */
+open func displayFiatAmountWithDirection(amount: Double, direction: TransactionDirection, withSuffix: Bool = true) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_method_rustwalletmanager_display_fiat_amount_with_direction(
+            self.uniffiCloneHandle(),
+        FfiConverterDouble.lower(amount),
+        FfiConverterTypeTransactionDirection_lower(direction),
+        FfiConverterBool.lower(withSuffix),$0
+    )
+})
+}
+    
+    /**
+     * Formats a transaction amount with direction prefix (e.g., "-0.00050000 BTC")
+     *
+     * Includes "-" prefix for outgoing transactions, no prefix for incoming.
+     * Use this for displaying confirmed/unconfirmed transaction amounts in lists.
+     */
 open func displaySentAndReceivedAmount(sentAndReceived: SentAndReceived) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_cove_fn_method_rustwalletmanager_display_sent_and_received_amount(
@@ -29518,13 +29593,19 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustwalletmanager_dispatch() != 14781) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustwalletmanager_display_amount() != 42440) {
+    if (uniffi_cove_checksum_method_rustwalletmanager_display_amount() != 41368) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustwalletmanager_display_amount_with_direction() != 60498) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_display_fiat_amount() != 60595) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustwalletmanager_display_sent_and_received_amount() != 41756) {
+    if (uniffi_cove_checksum_method_rustwalletmanager_display_fiat_amount_with_direction() != 5406) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustwalletmanager_display_sent_and_received_amount() != 49538) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_export_labels_for_qr() != 32503) {
