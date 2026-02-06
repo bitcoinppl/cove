@@ -2885,6 +2885,14 @@ external fun uniffi_cove_fn_init_callback_vtable_tapcardtransportprotocol(`vtabl
 ): Unit
 external fun uniffi_cove_fn_method_apperror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_appalertstate_display_type(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_appalertstate_is_equal(`ptr`: RustBuffer.ByValue,`rhs`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Byte
+external fun uniffi_cove_fn_method_appalertstate_message(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_appalertstate_title(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_autherror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_convertererror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -26297,6 +26305,40 @@ public object FfiConverterTypeAfterPinAction : FfiConverterRustBuffer<AfterPinAc
 
 
 
+
+enum class AlertDisplayType {
+    
+    FULL_ALERT,
+    TOAST;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeAlertDisplayType: FfiConverterRustBuffer<AlertDisplayType> {
+    override fun read(buf: ByteBuffer) = try {
+        AlertDisplayType.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: AlertDisplayType) = 4UL
+
+    override fun write(value: AlertDisplayType, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
 sealed class AmountOrMax: Disposable  {
     
     data class Amount(
@@ -26701,6 +26743,876 @@ public object FfiConverterTypeAppAction : FfiConverterRustBuffer<AppAction>{
             }
             is AppAction.AcceptTerms -> {
                 buf.putInt(10)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+sealed class AppAlertState: Disposable  {
+    
+    object ImportedSuccessfully : AppAlertState()
+    
+    
+    object ImportedLabelsSuccessfully : AppAlertState()
+    
+    
+    data class DuplicateWallet(
+        val `walletId`: org.bitcoinppl.cove_core.types.WalletId) : AppAlertState()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class HotWalletKeyMissing(
+        val `walletId`: org.bitcoinppl.cove_core.types.WalletId) : AppAlertState()
+        
+    {
+        
+
+        companion object
+    }
+    
+    object InvalidWordGroup : AppAlertState()
+    
+    
+    data class ErrorImportingHotWallet(
+        val `message`: kotlin.String) : AppAlertState()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class AddressWrongNetwork(
+        val `address`: org.bitcoinppl.cove_core.types.Address, 
+        val `network`: org.bitcoinppl.cove_core.types.Network, 
+        val `currentNetwork`: org.bitcoinppl.cove_core.types.Network) : AppAlertState()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class FoundAddress(
+        val `address`: org.bitcoinppl.cove_core.types.Address, 
+        val `amount`: org.bitcoinppl.cove_core.types.Amount?) : AppAlertState()
+        
+    {
+        
+
+        companion object
+    }
+    
+    object UnableToSelectWallet : AppAlertState()
+    
+    
+    data class ErrorImportingHardwareWallet(
+        val `message`: kotlin.String) : AppAlertState()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class InvalidFileFormat(
+        val `message`: kotlin.String) : AppAlertState()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class NoWalletSelected(
+        val `address`: org.bitcoinppl.cove_core.types.Address) : AppAlertState()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class InvalidFormat(
+        val `message`: kotlin.String) : AppAlertState()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class NoUnsignedTransactionFound(
+        val `txId`: org.bitcoinppl.cove_core.types.TxId) : AppAlertState()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class UnableToGetAddress(
+        val `error`: kotlin.String) : AppAlertState()
+        
+    {
+        
+
+        companion object
+    }
+    
+    object NoCameraPermission : AppAlertState()
+    
+    
+    data class FailedToScanQr(
+        val `error`: kotlin.String) : AppAlertState()
+        
+    {
+        
+
+        companion object
+    }
+    
+    object CantSendOnWatchOnlyWallet : AppAlertState()
+    
+    
+    data class TapSignerSetupFailed(
+        val `message`: kotlin.String) : AppAlertState()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class TapSignerDeriveFailed(
+        val `message`: kotlin.String) : AppAlertState()
+        
+    {
+        
+
+        companion object
+    }
+    
+    object TapSignerInvalidAuth : AppAlertState()
+    
+    
+    data class TapSignerNoBackup(
+        val `tapSigner`: org.bitcoinppl.cove_core.tapcard.TapSigner) : AppAlertState()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class TapSignerWrongPin(
+        val `tapSigner`: org.bitcoinppl.cove_core.tapcard.TapSigner, 
+        val `action`: org.bitcoinppl.cove_core.AfterPinAction) : AppAlertState()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class General(
+        val `title`: kotlin.String, 
+        val `message`: kotlin.String) : AppAlertState()
+        
+    {
+        
+
+        companion object
+    }
+    
+    object Loading : AppAlertState()
+    
+    
+    object ConfirmWatchOnly : AppAlertState()
+    
+    
+    data class UninitializedTapSigner(
+        val `tapSigner`: org.bitcoinppl.cove_core.tapcard.TapSigner) : AppAlertState()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class TapSignerWalletFound(
+        val `walletId`: org.bitcoinppl.cove_core.types.WalletId) : AppAlertState()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class InitializedTapSigner(
+        val `tapSigner`: org.bitcoinppl.cove_core.tapcard.TapSigner) : AppAlertState()
+        
+    {
+        
+
+        companion object
+    }
+    
+
+    
+    @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
+    override fun destroy() {
+        when(this) {
+            is AppAlertState.ImportedSuccessfully -> {// Nothing to destroy
+            }
+            is AppAlertState.ImportedLabelsSuccessfully -> {// Nothing to destroy
+            }
+            is AppAlertState.DuplicateWallet -> {
+                
+    Disposable.destroy(
+        this.`walletId`
+    )
+                
+            }
+            is AppAlertState.HotWalletKeyMissing -> {
+                
+    Disposable.destroy(
+        this.`walletId`
+    )
+                
+            }
+            is AppAlertState.InvalidWordGroup -> {// Nothing to destroy
+            }
+            is AppAlertState.ErrorImportingHotWallet -> {
+                
+    Disposable.destroy(
+        this.`message`
+    )
+                
+            }
+            is AppAlertState.AddressWrongNetwork -> {
+                
+    Disposable.destroy(
+        this.`address`,
+        this.`network`,
+        this.`currentNetwork`
+    )
+                
+            }
+            is AppAlertState.FoundAddress -> {
+                
+    Disposable.destroy(
+        this.`address`,
+        this.`amount`
+    )
+                
+            }
+            is AppAlertState.UnableToSelectWallet -> {// Nothing to destroy
+            }
+            is AppAlertState.ErrorImportingHardwareWallet -> {
+                
+    Disposable.destroy(
+        this.`message`
+    )
+                
+            }
+            is AppAlertState.InvalidFileFormat -> {
+                
+    Disposable.destroy(
+        this.`message`
+    )
+                
+            }
+            is AppAlertState.NoWalletSelected -> {
+                
+    Disposable.destroy(
+        this.`address`
+    )
+                
+            }
+            is AppAlertState.InvalidFormat -> {
+                
+    Disposable.destroy(
+        this.`message`
+    )
+                
+            }
+            is AppAlertState.NoUnsignedTransactionFound -> {
+                
+    Disposable.destroy(
+        this.`txId`
+    )
+                
+            }
+            is AppAlertState.UnableToGetAddress -> {
+                
+    Disposable.destroy(
+        this.`error`
+    )
+                
+            }
+            is AppAlertState.NoCameraPermission -> {// Nothing to destroy
+            }
+            is AppAlertState.FailedToScanQr -> {
+                
+    Disposable.destroy(
+        this.`error`
+    )
+                
+            }
+            is AppAlertState.CantSendOnWatchOnlyWallet -> {// Nothing to destroy
+            }
+            is AppAlertState.TapSignerSetupFailed -> {
+                
+    Disposable.destroy(
+        this.`message`
+    )
+                
+            }
+            is AppAlertState.TapSignerDeriveFailed -> {
+                
+    Disposable.destroy(
+        this.`message`
+    )
+                
+            }
+            is AppAlertState.TapSignerInvalidAuth -> {// Nothing to destroy
+            }
+            is AppAlertState.TapSignerNoBackup -> {
+                
+    Disposable.destroy(
+        this.`tapSigner`
+    )
+                
+            }
+            is AppAlertState.TapSignerWrongPin -> {
+                
+    Disposable.destroy(
+        this.`tapSigner`,
+        this.`action`
+    )
+                
+            }
+            is AppAlertState.General -> {
+                
+    Disposable.destroy(
+        this.`title`,
+        this.`message`
+    )
+                
+            }
+            is AppAlertState.Loading -> {// Nothing to destroy
+            }
+            is AppAlertState.ConfirmWatchOnly -> {// Nothing to destroy
+            }
+            is AppAlertState.UninitializedTapSigner -> {
+                
+    Disposable.destroy(
+        this.`tapSigner`
+    )
+                
+            }
+            is AppAlertState.TapSignerWalletFound -> {
+                
+    Disposable.destroy(
+        this.`walletId`
+    )
+                
+            }
+            is AppAlertState.InitializedTapSigner -> {
+                
+    Disposable.destroy(
+        this.`tapSigner`
+    )
+                
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+    
+
+    
+     fun `displayType`(): AlertDisplayType {
+            return FfiConverterTypeAlertDisplayType.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_appalertstate_display_type(FfiConverterTypeAppAlertState.lower(this),
+        _status)
+}
+    )
+    }
+    
+
+     fun `isEqual`(`rhs`: AppAlertState): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_appalertstate_is_equal(FfiConverterTypeAppAlertState.lower(this),
+        FfiConverterTypeAppAlertState.lower(`rhs`),_status)
+}
+    )
+    }
+    
+
+     fun `message`(): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_appalertstate_message(FfiConverterTypeAppAlertState.lower(this),
+        _status)
+}
+    )
+    }
+    
+
+     fun `title`(): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_appalertstate_title(FfiConverterTypeAppAlertState.lower(this),
+        _status)
+}
+    )
+    }
+    
+
+    
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeAppAlertState : FfiConverterRustBuffer<AppAlertState>{
+    override fun read(buf: ByteBuffer): AppAlertState {
+        return when(buf.getInt()) {
+            1 -> AppAlertState.ImportedSuccessfully
+            2 -> AppAlertState.ImportedLabelsSuccessfully
+            3 -> AppAlertState.DuplicateWallet(
+                FfiConverterTypeWalletId.read(buf),
+                )
+            4 -> AppAlertState.HotWalletKeyMissing(
+                FfiConverterTypeWalletId.read(buf),
+                )
+            5 -> AppAlertState.InvalidWordGroup
+            6 -> AppAlertState.ErrorImportingHotWallet(
+                FfiConverterString.read(buf),
+                )
+            7 -> AppAlertState.AddressWrongNetwork(
+                FfiConverterTypeAddress.read(buf),
+                FfiConverterTypeNetwork.read(buf),
+                FfiConverterTypeNetwork.read(buf),
+                )
+            8 -> AppAlertState.FoundAddress(
+                FfiConverterTypeAddress.read(buf),
+                FfiConverterOptionalTypeAmount.read(buf),
+                )
+            9 -> AppAlertState.UnableToSelectWallet
+            10 -> AppAlertState.ErrorImportingHardwareWallet(
+                FfiConverterString.read(buf),
+                )
+            11 -> AppAlertState.InvalidFileFormat(
+                FfiConverterString.read(buf),
+                )
+            12 -> AppAlertState.NoWalletSelected(
+                FfiConverterTypeAddress.read(buf),
+                )
+            13 -> AppAlertState.InvalidFormat(
+                FfiConverterString.read(buf),
+                )
+            14 -> AppAlertState.NoUnsignedTransactionFound(
+                FfiConverterTypeTxId.read(buf),
+                )
+            15 -> AppAlertState.UnableToGetAddress(
+                FfiConverterString.read(buf),
+                )
+            16 -> AppAlertState.NoCameraPermission
+            17 -> AppAlertState.FailedToScanQr(
+                FfiConverterString.read(buf),
+                )
+            18 -> AppAlertState.CantSendOnWatchOnlyWallet
+            19 -> AppAlertState.TapSignerSetupFailed(
+                FfiConverterString.read(buf),
+                )
+            20 -> AppAlertState.TapSignerDeriveFailed(
+                FfiConverterString.read(buf),
+                )
+            21 -> AppAlertState.TapSignerInvalidAuth
+            22 -> AppAlertState.TapSignerNoBackup(
+                FfiConverterTypeTapSigner.read(buf),
+                )
+            23 -> AppAlertState.TapSignerWrongPin(
+                FfiConverterTypeTapSigner.read(buf),
+                FfiConverterTypeAfterPinAction.read(buf),
+                )
+            24 -> AppAlertState.General(
+                FfiConverterString.read(buf),
+                FfiConverterString.read(buf),
+                )
+            25 -> AppAlertState.Loading
+            26 -> AppAlertState.ConfirmWatchOnly
+            27 -> AppAlertState.UninitializedTapSigner(
+                FfiConverterTypeTapSigner.read(buf),
+                )
+            28 -> AppAlertState.TapSignerWalletFound(
+                FfiConverterTypeWalletId.read(buf),
+                )
+            29 -> AppAlertState.InitializedTapSigner(
+                FfiConverterTypeTapSigner.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: AppAlertState) = when(value) {
+        is AppAlertState.ImportedSuccessfully -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is AppAlertState.ImportedLabelsSuccessfully -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is AppAlertState.DuplicateWallet -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeWalletId.allocationSize(value.`walletId`)
+            )
+        }
+        is AppAlertState.HotWalletKeyMissing -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeWalletId.allocationSize(value.`walletId`)
+            )
+        }
+        is AppAlertState.InvalidWordGroup -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is AppAlertState.ErrorImportingHotWallet -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`message`)
+            )
+        }
+        is AppAlertState.AddressWrongNetwork -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeAddress.allocationSize(value.`address`)
+                + FfiConverterTypeNetwork.allocationSize(value.`network`)
+                + FfiConverterTypeNetwork.allocationSize(value.`currentNetwork`)
+            )
+        }
+        is AppAlertState.FoundAddress -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeAddress.allocationSize(value.`address`)
+                + FfiConverterOptionalTypeAmount.allocationSize(value.`amount`)
+            )
+        }
+        is AppAlertState.UnableToSelectWallet -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is AppAlertState.ErrorImportingHardwareWallet -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`message`)
+            )
+        }
+        is AppAlertState.InvalidFileFormat -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`message`)
+            )
+        }
+        is AppAlertState.NoWalletSelected -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeAddress.allocationSize(value.`address`)
+            )
+        }
+        is AppAlertState.InvalidFormat -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`message`)
+            )
+        }
+        is AppAlertState.NoUnsignedTransactionFound -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeTxId.allocationSize(value.`txId`)
+            )
+        }
+        is AppAlertState.UnableToGetAddress -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`error`)
+            )
+        }
+        is AppAlertState.NoCameraPermission -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is AppAlertState.FailedToScanQr -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`error`)
+            )
+        }
+        is AppAlertState.CantSendOnWatchOnlyWallet -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is AppAlertState.TapSignerSetupFailed -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`message`)
+            )
+        }
+        is AppAlertState.TapSignerDeriveFailed -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`message`)
+            )
+        }
+        is AppAlertState.TapSignerInvalidAuth -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is AppAlertState.TapSignerNoBackup -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeTapSigner.allocationSize(value.`tapSigner`)
+            )
+        }
+        is AppAlertState.TapSignerWrongPin -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeTapSigner.allocationSize(value.`tapSigner`)
+                + FfiConverterTypeAfterPinAction.allocationSize(value.`action`)
+            )
+        }
+        is AppAlertState.General -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`title`)
+                + FfiConverterString.allocationSize(value.`message`)
+            )
+        }
+        is AppAlertState.Loading -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is AppAlertState.ConfirmWatchOnly -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is AppAlertState.UninitializedTapSigner -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeTapSigner.allocationSize(value.`tapSigner`)
+            )
+        }
+        is AppAlertState.TapSignerWalletFound -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeWalletId.allocationSize(value.`walletId`)
+            )
+        }
+        is AppAlertState.InitializedTapSigner -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeTapSigner.allocationSize(value.`tapSigner`)
+            )
+        }
+    }
+
+    override fun write(value: AppAlertState, buf: ByteBuffer) {
+        when(value) {
+            is AppAlertState.ImportedSuccessfully -> {
+                buf.putInt(1)
+                Unit
+            }
+            is AppAlertState.ImportedLabelsSuccessfully -> {
+                buf.putInt(2)
+                Unit
+            }
+            is AppAlertState.DuplicateWallet -> {
+                buf.putInt(3)
+                FfiConverterTypeWalletId.write(value.`walletId`, buf)
+                Unit
+            }
+            is AppAlertState.HotWalletKeyMissing -> {
+                buf.putInt(4)
+                FfiConverterTypeWalletId.write(value.`walletId`, buf)
+                Unit
+            }
+            is AppAlertState.InvalidWordGroup -> {
+                buf.putInt(5)
+                Unit
+            }
+            is AppAlertState.ErrorImportingHotWallet -> {
+                buf.putInt(6)
+                FfiConverterString.write(value.`message`, buf)
+                Unit
+            }
+            is AppAlertState.AddressWrongNetwork -> {
+                buf.putInt(7)
+                FfiConverterTypeAddress.write(value.`address`, buf)
+                FfiConverterTypeNetwork.write(value.`network`, buf)
+                FfiConverterTypeNetwork.write(value.`currentNetwork`, buf)
+                Unit
+            }
+            is AppAlertState.FoundAddress -> {
+                buf.putInt(8)
+                FfiConverterTypeAddress.write(value.`address`, buf)
+                FfiConverterOptionalTypeAmount.write(value.`amount`, buf)
+                Unit
+            }
+            is AppAlertState.UnableToSelectWallet -> {
+                buf.putInt(9)
+                Unit
+            }
+            is AppAlertState.ErrorImportingHardwareWallet -> {
+                buf.putInt(10)
+                FfiConverterString.write(value.`message`, buf)
+                Unit
+            }
+            is AppAlertState.InvalidFileFormat -> {
+                buf.putInt(11)
+                FfiConverterString.write(value.`message`, buf)
+                Unit
+            }
+            is AppAlertState.NoWalletSelected -> {
+                buf.putInt(12)
+                FfiConverterTypeAddress.write(value.`address`, buf)
+                Unit
+            }
+            is AppAlertState.InvalidFormat -> {
+                buf.putInt(13)
+                FfiConverterString.write(value.`message`, buf)
+                Unit
+            }
+            is AppAlertState.NoUnsignedTransactionFound -> {
+                buf.putInt(14)
+                FfiConverterTypeTxId.write(value.`txId`, buf)
+                Unit
+            }
+            is AppAlertState.UnableToGetAddress -> {
+                buf.putInt(15)
+                FfiConverterString.write(value.`error`, buf)
+                Unit
+            }
+            is AppAlertState.NoCameraPermission -> {
+                buf.putInt(16)
+                Unit
+            }
+            is AppAlertState.FailedToScanQr -> {
+                buf.putInt(17)
+                FfiConverterString.write(value.`error`, buf)
+                Unit
+            }
+            is AppAlertState.CantSendOnWatchOnlyWallet -> {
+                buf.putInt(18)
+                Unit
+            }
+            is AppAlertState.TapSignerSetupFailed -> {
+                buf.putInt(19)
+                FfiConverterString.write(value.`message`, buf)
+                Unit
+            }
+            is AppAlertState.TapSignerDeriveFailed -> {
+                buf.putInt(20)
+                FfiConverterString.write(value.`message`, buf)
+                Unit
+            }
+            is AppAlertState.TapSignerInvalidAuth -> {
+                buf.putInt(21)
+                Unit
+            }
+            is AppAlertState.TapSignerNoBackup -> {
+                buf.putInt(22)
+                FfiConverterTypeTapSigner.write(value.`tapSigner`, buf)
+                Unit
+            }
+            is AppAlertState.TapSignerWrongPin -> {
+                buf.putInt(23)
+                FfiConverterTypeTapSigner.write(value.`tapSigner`, buf)
+                FfiConverterTypeAfterPinAction.write(value.`action`, buf)
+                Unit
+            }
+            is AppAlertState.General -> {
+                buf.putInt(24)
+                FfiConverterString.write(value.`title`, buf)
+                FfiConverterString.write(value.`message`, buf)
+                Unit
+            }
+            is AppAlertState.Loading -> {
+                buf.putInt(25)
+                Unit
+            }
+            is AppAlertState.ConfirmWatchOnly -> {
+                buf.putInt(26)
+                Unit
+            }
+            is AppAlertState.UninitializedTapSigner -> {
+                buf.putInt(27)
+                FfiConverterTypeTapSigner.write(value.`tapSigner`, buf)
+                Unit
+            }
+            is AppAlertState.TapSignerWalletFound -> {
+                buf.putInt(28)
+                FfiConverterTypeWalletId.write(value.`walletId`, buf)
+                Unit
+            }
+            is AppAlertState.InitializedTapSigner -> {
+                buf.putInt(29)
+                FfiConverterTypeTapSigner.write(value.`tapSigner`, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }

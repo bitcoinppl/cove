@@ -11,6 +11,7 @@ import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowManager
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowPresenter
 import org.bitcoinppl.cove_core.*
+import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.tapcard.*
 import org.bitcoinppl.cove_core.types.*
 import java.util.UUID

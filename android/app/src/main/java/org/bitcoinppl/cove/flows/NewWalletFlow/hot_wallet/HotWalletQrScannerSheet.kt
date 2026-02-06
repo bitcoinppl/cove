@@ -12,10 +12,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
-import org.bitcoinppl.cove.AppAlertState
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.QrCodeScanView
 import org.bitcoinppl.cove.TaggedItem
+import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.MultiFormat
 import org.bitcoinppl.cove_core.groupedPlainWordsOf
 

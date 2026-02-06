@@ -36,6 +36,7 @@ import com.google.accompanist.permissions.rememberPermissionState
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
+import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.MultiFormat
 import org.bitcoinppl.cove_core.QrScanner
 import org.bitcoinppl.cove_core.ScanProgress

@@ -52,60 +52,7 @@ struct CoveApp: App {
 
     @ViewBuilder
     private func alertMessage(alert: TaggedItem<AppAlertState>) -> some View {
-        let text =
-            switch alert.item {
-            case .invalidWordGroup:
-                "The words from the file does not create a valid wallet. Please check the words and try again."
-            case .duplicateWallet:
-                "This wallet has already been imported! Taking you there now..."
-            case .errorImportingHotWallet:
-                "Error Importing Wallet"
-            case .importedSuccessfully:
-                "Wallet Imported Successfully"
-            case .importedLabelsSuccessfully:
-                "Labels Imported Successfully"
-            case .unableToSelectWallet:
-                "Unable to select wallet, please try again"
-            case let .errorImportingHardwareWallet(error):
-                "Error: \(error)"
-            case .invalidFileFormat:
-                "The file or scanned code did not match any formats that Cove supports."
-            case let .invalidFormat(error):
-                error
-            case let .addressWrongNetwork(
-                address, network, currentNetwork
-            ):
-                "The address \(address.string()) is on the wrong network. You are on \(currentNetwork), and the address was for \(network)."
-            case let .noWalletSelected(address),
-                 let .foundAddress(address, _):
-                address.unformatted()
-            case .noCameraPermission:
-                "Please allow camera access in Settings to use this feature."
-            case let .failedToScanQr(error):
-                "Error: \(error)"
-            case let .noUnsignedTransactionFound(txId):
-                "No unsigned transaction found for transaction \(txId.asHashString())"
-            case let .unableToGetAddress(error):
-                "Error: \(error)"
-            case .cantSendOnWatchOnlyWallet:
-                "This is watch-only wallet and cannot send transactions. Please import this wallet again to enable sending transactions."
-            case .uninitializedTapSigner:
-                "This TAPSIGNER has not been setup yet. Would you like to setup it now?"
-            case let .tapSignerSetupFailed(error):
-                "Please try again.\(error)"
-            case let .tapSignerDeriveFailed(error):
-                "Please try again.\nError: \(error)"
-            case .tapSignerInvalidAuth, .tapSignerWrongPin:
-                "The PIN you entered was incorrect. Please try again."
-            case .intializedTapSigner:
-                "Would you like to start using this TAPSIGNER with Cove?"
-            case .tapSignerWalletFound:
-                "Would you like to go to this wallet?"
-            case .tapSignerNoBackup:
-                "Can't change the PIN without taking a backup of the wallet. Would you like to take a backup now?"
-            case .general(title: _, let message):
-                message
-            }
+        let text = alert.item.message()
 
         if case .foundAddress = alert.item {
             Text(text.map { "\($0)\u{200B}" }.joined())
@@ -142,7 +89,7 @@ struct CoveApp: App {
             Button("Cancel") {
                 app.alertState = .none
             }
-        case let .foundAddress(address, amount):
+        case let .foundAddress(address: address, amount: amount):
             Button("Copy Address") {
                 UIPasteboard.general.string = String(address)
             }
@@ -175,14 +122,14 @@ struct CoveApp: App {
             Button("Cancel", role: .cancel) {
                 app.alertState = .none
             }
-        case let .tapSignerWalletFound(id):
-            Button("Yes") { app.selectWallet(id) }
+        case let .tapSignerWalletFound(walletId):
+            Button("Yes") { app.selectWallet(walletId) }
             Button("Cancel", role: .cancel) { app.alertState = .none }
-        case let .intializedTapSigner(t):
+        case let .initializedTapSigner(tapSigner):
             Button("Yes") {
                 app.sheetState = .init(
                     .tapSigner(
-                        .enterPin(tapSigner: t, action: .derive)
+                        .enterPin(tapSigner: tapSigner, action: .derive)
                     )
                 )
             }
@@ -213,7 +160,10 @@ struct CoveApp: App {
              .tapSignerInvalidAuth,
              .tapSignerDeriveFailed,
              .general,
-             .invalidFormat:
+             .invalidFormat,
+             .loading,
+             .hotWalletKeyMissing,
+             .confirmWatchOnly:
             Button("OK") {
                 app.alertState = .none
             }
@@ -268,17 +218,17 @@ struct CoveApp: App {
                 Log.debug("Invalid words: \(error)")
                 app.alertState = TaggedItem(.invalidWordGroup)
             case let .WalletAlreadyExists(walletId):
-                app.alertState = TaggedItem(.duplicateWallet(walletId))
+                app.alertState = TaggedItem(.duplicateWallet(walletId: walletId))
             default:
                 Log.error("Unable to import wallet: \(error)")
                 app.alertState = TaggedItem(
-                    .errorImportingHotWallet(error.localizedDescription)
+                    .errorImportingHotWallet(message: error.localizedDescription)
                 )
             }
         } catch {
             Log.error("Unknown error \(error)")
             app.alertState = TaggedItem(
-                .errorImportingHotWallet(error.localizedDescription)
+                .errorImportingHotWallet(message: error.localizedDescription)
             )
         }
     }
@@ -291,14 +241,14 @@ struct CoveApp: App {
             app.alertState = TaggedItem(.importedSuccessfully)
             try app.rust.selectWallet(id: id)
         } catch let WalletError.WalletAlreadyExists(id) {
-            app.alertState = TaggedItem(.duplicateWallet(id))
+            app.alertState = TaggedItem(.duplicateWallet(walletId: id))
 
             if (try? app.rust.selectWallet(id: id)) == nil {
                 app.alertState = TaggedItem(.unableToSelectWallet)
             }
         } catch {
             app.alertState = TaggedItem(
-                .errorImportingHardwareWallet(error.localizedDescription)
+                .errorImportingHardwareWallet(message: error.localizedDescription)
             )
         }
     }
@@ -310,7 +260,7 @@ struct CoveApp: App {
         let selectedWallet = Database().globalConfig().selectedWallet()
 
         if selectedWallet == nil {
-            app.alertState = TaggedItem(AppAlertState.noWalletSelected(address))
+            app.alertState = TaggedItem(AppAlertState.noWalletSelected(address: address))
             return
         }
 
@@ -324,7 +274,7 @@ struct CoveApp: App {
         }
 
         let amount = addressWithNetwork.amount()
-        app.alertState = TaggedItem(.foundAddress(address, amount))
+        app.alertState = TaggedItem(.foundAddress(address: address, amount: amount))
     }
 
     func handleTransaction(_ transaction: BitcoinTransaction) {
@@ -337,7 +287,7 @@ struct CoveApp: App {
 
         guard let txnRecord else {
             Log.error("No unsigned transaction found for \(transaction.txId())")
-            app.alertState = .init(.noUnsignedTransactionFound(transaction.txId()))
+            app.alertState = .init(.noUnsignedTransactionFound(txId: transaction.txId()))
             return
         }
 
@@ -357,7 +307,7 @@ struct CoveApp: App {
 
         guard let txnRecord else {
             Log.error("No unsigned transaction found for PSBT \(psbt.txId())")
-            app.alertState = .init(.noUnsignedTransactionFound(psbt.txId()))
+            app.alertState = .init(.noUnsignedTransactionFound(txId: psbt.txId()))
             return
         }
 
@@ -396,7 +346,7 @@ struct CoveApp: App {
 
                 app.alertState = TaggedItem(
                     .invalidFileFormat(
-                        "Currently BIP329 labels must be imported through the wallet actions"
+                        message: "Currently BIP329 labels must be imported through the wallet actions"
                     )
                 )
             case let .signedPsbt(psbt):
@@ -407,7 +357,7 @@ struct CoveApp: App {
             case let FileHandlerError.NotRecognizedFormat(multiFormatError):
                 Log.error("Unrecognized format mulit format error: \(multiFormatError)")
                 app.alertState = TaggedItem(
-                    .invalidFileFormat(multiFormatError.localizedDescription)
+                    .invalidFileFormat(message: multiFormatError.localizedDescription)
                 )
 
             case let FileHandlerError.OpenFile(error):
@@ -428,7 +378,7 @@ struct CoveApp: App {
     func setInvalidlabels() {
         app.alertState = TaggedItem(
             .invalidFileFormat(
-                "Currently BIP329 labels must be imported through the wallet actions"
+                message: "Currently BIP329 labels must be imported through the wallet actions"
             )
         )
     }
@@ -448,12 +398,12 @@ struct CoveApp: App {
             case let .signedPsbt(psbt):
                 handleSignedPsbt(psbt)
             case let .tapSignerUnused(tapSigner):
-                app.alertState = .init(.uninitializedTapSigner(tapSigner))
+                app.alertState = .init(.uninitializedTapSigner(tapSigner: tapSigner))
             case let .tapSignerReady(tapSigner):
                 if let wallet = app.findTapSignerWallet(tapSigner) {
-                    app.alertState = .init(.tapSignerWalletFound(wallet.id))
+                    app.alertState = .init(.tapSignerWalletFound(walletId: wallet.id))
                 } else {
-                    app.alertState = .init(.intializedTapSigner(tapSigner))
+                    app.alertState = .init(.initializedTapSigner(tapSigner: tapSigner))
                 }
             case let .bip329Labels(labels):
                 guard let manager = app.walletManager else { return setInvalidlabels() }
@@ -474,11 +424,11 @@ struct CoveApp: App {
                 Log.error(
                     "MultiFormat not recognized: \(multiFormatError): \(multiFormatError.description)"
                 )
-                app.alertState = TaggedItem(.invalidFormat(multiFormatError.description))
+                app.alertState = TaggedItem(.invalidFormat(message: multiFormatError.description))
 
             default:
                 Log.error("Unable to handle scanned code, error: \(error)")
-                app.alertState = TaggedItem(.invalidFileFormat(error.localizedDescription))
+                app.alertState = TaggedItem(.invalidFileFormat(message: error.localizedDescription))
             }
         }
     }
@@ -589,11 +539,11 @@ struct CoveApp: App {
                 Log.error(
                     "MultiFormat not recognized: \(multiFormatError): \(multiFormatError.description)"
                 )
-                app.alertState = TaggedItem(.invalidFormat(multiFormatError.description))
+                app.alertState = TaggedItem(.invalidFormat(message: multiFormatError.description))
 
             default:
                 Log.error("Unable to handle scanned code, error: \(error)")
-                app.alertState = TaggedItem(.invalidFileFormat(error.localizedDescription))
+                app.alertState = TaggedItem(.invalidFileFormat(message: error.localizedDescription))
             }
         }
     }

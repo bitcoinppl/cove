@@ -12,12 +12,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import org.bitcoinppl.cove.AppAlertState
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.CoinControlManager
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove_core.*
+import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.types.*
 
 /**

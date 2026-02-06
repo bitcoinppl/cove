@@ -22,11 +22,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
-import org.bitcoinppl.cove.AppAlertState
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.QrCodeScanView
 import org.bitcoinppl.cove.TaggedItem
+import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.MultiFormat
 import org.bitcoinppl.cove_core.Wallet
 import org.bitcoinppl.cove_core.WalletException

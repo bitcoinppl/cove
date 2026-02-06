@@ -52,7 +52,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
-import org.bitcoinppl.cove.AppAlertState
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.TaggedItem
@@ -60,6 +59,7 @@ import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.isLight
 import org.bitcoinppl.cove.views.AutoSizeText
+import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.FiatOrBtc
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.RouteFactory

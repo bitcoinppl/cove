@@ -53,9 +53,9 @@ struct TapSignerEnterPin: View {
             case let .failure(error):
                 if error.isAuthError {
                     app.sheetState = nil
-                    app.alertState = .init(.tapSignerWrongPin(tapSigner, .derive))
+                    app.alertState = .init(.tapSignerWrongPin(tapSigner: tapSigner, action: .derive))
                 } else {
-                    app.alertState = .init(.tapSignerDeriveFailed(error.description))
+                    app.alertState = .init(.tapSignerDeriveFailed(message: error.description))
                 }
             }
 
@@ -82,7 +82,7 @@ struct TapSignerEnterPin: View {
             case let .failure(error):
                 if error.isAuthError {
                     app.sheetState = nil
-                    app.alertState = .init(.tapSignerWrongPin(tapSigner, .backup))
+                    app.alertState = .init(.tapSignerWrongPin(tapSigner: tapSigner, action: .backup))
                 } else {
                     app.alertState = .init(
                         .general(title: "Backup Failed!", message: error.description)
@@ -127,7 +127,7 @@ struct TapSignerEnterPin: View {
             case let .failure(error):
                 if error.isAuthError {
                     app.sheetState = nil
-                    app.alertState = .init(.tapSignerWrongPin(tapSigner, .sign(psbt)))
+                    app.alertState = .init(.tapSignerWrongPin(tapSigner: tapSigner, action: .sign(psbt)))
                 } else {
                     app.alertState = .init(
                         .general(title: "Signing Failed!", message: error.description)
