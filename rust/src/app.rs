@@ -1,5 +1,6 @@
 //! `AppManager`
 
+pub mod alert_state;
 pub mod reconcile;
 
 use std::{sync::Arc, time::Duration};

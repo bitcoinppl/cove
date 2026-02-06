@@ -9,9 +9,9 @@ import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.bitcoinppl.cove.AppAlertState
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.TaggedItem
+import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.util.hexEncode
 
 /**

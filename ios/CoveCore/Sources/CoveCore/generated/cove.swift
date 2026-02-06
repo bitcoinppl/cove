@@ -13407,6 +13407,73 @@ public func FfiConverterTypeAfterPinAction_lower(_ value: AfterPinAction) -> Rus
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum AlertDisplayType: Equatable, Hashable {
+    
+    case fullAlert
+    case toast
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension AlertDisplayType: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAlertDisplayType: FfiConverterRustBuffer {
+    typealias SwiftType = AlertDisplayType
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AlertDisplayType {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .fullAlert
+        
+        case 2: return .toast
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: AlertDisplayType, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .fullAlert:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .toast:
+            writeInt(&buf, Int32(2))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAlertDisplayType_lift(_ buf: RustBuffer) throws -> AlertDisplayType {
+    return try FfiConverterTypeAlertDisplayType.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAlertDisplayType_lower(_ value: AlertDisplayType) -> RustBuffer {
+    return FfiConverterTypeAlertDisplayType.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum AmountOrMax {
     
     case amount(Amount
@@ -13686,6 +13753,360 @@ public func FfiConverterTypeAppAction_lift(_ buf: RustBuffer) throws -> AppActio
 #endif
 public func FfiConverterTypeAppAction_lower(_ value: AppAction) -> RustBuffer {
     return FfiConverterTypeAppAction.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum AppAlertState {
+    
+    case importedSuccessfully
+    case importedLabelsSuccessfully
+    case duplicateWallet(walletId: WalletId
+    )
+    case hotWalletKeyMissing(walletId: WalletId
+    )
+    case invalidWordGroup
+    case errorImportingHotWallet(message: String
+    )
+    case addressWrongNetwork(address: Address, network: Network, currentNetwork: Network
+    )
+    case foundAddress(address: Address, amount: Amount?
+    )
+    case unableToSelectWallet
+    case errorImportingHardwareWallet(message: String
+    )
+    case invalidFileFormat(message: String
+    )
+    case noWalletSelected(address: Address
+    )
+    case invalidFormat(message: String
+    )
+    case noUnsignedTransactionFound(txId: TxId
+    )
+    case unableToGetAddress(error: String
+    )
+    case noCameraPermission
+    case failedToScanQr(error: String
+    )
+    case cantSendOnWatchOnlyWallet
+    case tapSignerSetupFailed(message: String
+    )
+    case tapSignerDeriveFailed(message: String
+    )
+    case tapSignerInvalidAuth
+    case tapSignerNoBackup(tapSigner: TapSigner
+    )
+    case tapSignerWrongPin(tapSigner: TapSigner, action: AfterPinAction
+    )
+    case general(title: String, message: String
+    )
+    case loading
+    case confirmWatchOnly
+    case uninitializedTapSigner(tapSigner: TapSigner
+    )
+    case tapSignerWalletFound(walletId: WalletId
+    )
+    case initializedTapSigner(tapSigner: TapSigner
+    )
+
+
+
+public func displayType() -> AlertDisplayType  {
+    return try!  FfiConverterTypeAlertDisplayType_lift(try! rustCall() {
+    uniffi_cove_fn_method_appalertstate_display_type(
+            FfiConverterTypeAppAlertState_lower(self),$0
+    )
+})
+}
+
+public func isEqual(rhs: AppAlertState) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_method_appalertstate_is_equal(
+            FfiConverterTypeAppAlertState_lower(self),
+        FfiConverterTypeAppAlertState_lower(rhs),$0
+    )
+})
+}
+
+public func message() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_method_appalertstate_message(
+            FfiConverterTypeAppAlertState_lower(self),$0
+    )
+})
+}
+
+public func title() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_method_appalertstate_title(
+            FfiConverterTypeAppAlertState_lower(self),$0
+    )
+})
+}
+
+
+
+}
+
+#if compiler(>=6)
+extension AppAlertState: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAppAlertState: FfiConverterRustBuffer {
+    typealias SwiftType = AppAlertState
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AppAlertState {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .importedSuccessfully
+        
+        case 2: return .importedLabelsSuccessfully
+        
+        case 3: return .duplicateWallet(walletId: try FfiConverterTypeWalletId.read(from: &buf)
+        )
+        
+        case 4: return .hotWalletKeyMissing(walletId: try FfiConverterTypeWalletId.read(from: &buf)
+        )
+        
+        case 5: return .invalidWordGroup
+        
+        case 6: return .errorImportingHotWallet(message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 7: return .addressWrongNetwork(address: try FfiConverterTypeAddress.read(from: &buf), network: try FfiConverterTypeNetwork.read(from: &buf), currentNetwork: try FfiConverterTypeNetwork.read(from: &buf)
+        )
+        
+        case 8: return .foundAddress(address: try FfiConverterTypeAddress.read(from: &buf), amount: try FfiConverterOptionTypeAmount.read(from: &buf)
+        )
+        
+        case 9: return .unableToSelectWallet
+        
+        case 10: return .errorImportingHardwareWallet(message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 11: return .invalidFileFormat(message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 12: return .noWalletSelected(address: try FfiConverterTypeAddress.read(from: &buf)
+        )
+        
+        case 13: return .invalidFormat(message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 14: return .noUnsignedTransactionFound(txId: try FfiConverterTypeTxId.read(from: &buf)
+        )
+        
+        case 15: return .unableToGetAddress(error: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 16: return .noCameraPermission
+        
+        case 17: return .failedToScanQr(error: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 18: return .cantSendOnWatchOnlyWallet
+        
+        case 19: return .tapSignerSetupFailed(message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 20: return .tapSignerDeriveFailed(message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 21: return .tapSignerInvalidAuth
+        
+        case 22: return .tapSignerNoBackup(tapSigner: try FfiConverterTypeTapSigner.read(from: &buf)
+        )
+        
+        case 23: return .tapSignerWrongPin(tapSigner: try FfiConverterTypeTapSigner.read(from: &buf), action: try FfiConverterTypeAfterPinAction.read(from: &buf)
+        )
+        
+        case 24: return .general(title: try FfiConverterString.read(from: &buf), message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 25: return .loading
+        
+        case 26: return .confirmWatchOnly
+        
+        case 27: return .uninitializedTapSigner(tapSigner: try FfiConverterTypeTapSigner.read(from: &buf)
+        )
+        
+        case 28: return .tapSignerWalletFound(walletId: try FfiConverterTypeWalletId.read(from: &buf)
+        )
+        
+        case 29: return .initializedTapSigner(tapSigner: try FfiConverterTypeTapSigner.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: AppAlertState, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .importedSuccessfully:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .importedLabelsSuccessfully:
+            writeInt(&buf, Int32(2))
+        
+        
+        case let .duplicateWallet(walletId):
+            writeInt(&buf, Int32(3))
+            FfiConverterTypeWalletId.write(walletId, into: &buf)
+            
+        
+        case let .hotWalletKeyMissing(walletId):
+            writeInt(&buf, Int32(4))
+            FfiConverterTypeWalletId.write(walletId, into: &buf)
+            
+        
+        case .invalidWordGroup:
+            writeInt(&buf, Int32(5))
+        
+        
+        case let .errorImportingHotWallet(message):
+            writeInt(&buf, Int32(6))
+            FfiConverterString.write(message, into: &buf)
+            
+        
+        case let .addressWrongNetwork(address,network,currentNetwork):
+            writeInt(&buf, Int32(7))
+            FfiConverterTypeAddress.write(address, into: &buf)
+            FfiConverterTypeNetwork.write(network, into: &buf)
+            FfiConverterTypeNetwork.write(currentNetwork, into: &buf)
+            
+        
+        case let .foundAddress(address,amount):
+            writeInt(&buf, Int32(8))
+            FfiConverterTypeAddress.write(address, into: &buf)
+            FfiConverterOptionTypeAmount.write(amount, into: &buf)
+            
+        
+        case .unableToSelectWallet:
+            writeInt(&buf, Int32(9))
+        
+        
+        case let .errorImportingHardwareWallet(message):
+            writeInt(&buf, Int32(10))
+            FfiConverterString.write(message, into: &buf)
+            
+        
+        case let .invalidFileFormat(message):
+            writeInt(&buf, Int32(11))
+            FfiConverterString.write(message, into: &buf)
+            
+        
+        case let .noWalletSelected(address):
+            writeInt(&buf, Int32(12))
+            FfiConverterTypeAddress.write(address, into: &buf)
+            
+        
+        case let .invalidFormat(message):
+            writeInt(&buf, Int32(13))
+            FfiConverterString.write(message, into: &buf)
+            
+        
+        case let .noUnsignedTransactionFound(txId):
+            writeInt(&buf, Int32(14))
+            FfiConverterTypeTxId.write(txId, into: &buf)
+            
+        
+        case let .unableToGetAddress(error):
+            writeInt(&buf, Int32(15))
+            FfiConverterString.write(error, into: &buf)
+            
+        
+        case .noCameraPermission:
+            writeInt(&buf, Int32(16))
+        
+        
+        case let .failedToScanQr(error):
+            writeInt(&buf, Int32(17))
+            FfiConverterString.write(error, into: &buf)
+            
+        
+        case .cantSendOnWatchOnlyWallet:
+            writeInt(&buf, Int32(18))
+        
+        
+        case let .tapSignerSetupFailed(message):
+            writeInt(&buf, Int32(19))
+            FfiConverterString.write(message, into: &buf)
+            
+        
+        case let .tapSignerDeriveFailed(message):
+            writeInt(&buf, Int32(20))
+            FfiConverterString.write(message, into: &buf)
+            
+        
+        case .tapSignerInvalidAuth:
+            writeInt(&buf, Int32(21))
+        
+        
+        case let .tapSignerNoBackup(tapSigner):
+            writeInt(&buf, Int32(22))
+            FfiConverterTypeTapSigner.write(tapSigner, into: &buf)
+            
+        
+        case let .tapSignerWrongPin(tapSigner,action):
+            writeInt(&buf, Int32(23))
+            FfiConverterTypeTapSigner.write(tapSigner, into: &buf)
+            FfiConverterTypeAfterPinAction.write(action, into: &buf)
+            
+        
+        case let .general(title,message):
+            writeInt(&buf, Int32(24))
+            FfiConverterString.write(title, into: &buf)
+            FfiConverterString.write(message, into: &buf)
+            
+        
+        case .loading:
+            writeInt(&buf, Int32(25))
+        
+        
+        case .confirmWatchOnly:
+            writeInt(&buf, Int32(26))
+        
+        
+        case let .uninitializedTapSigner(tapSigner):
+            writeInt(&buf, Int32(27))
+            FfiConverterTypeTapSigner.write(tapSigner, into: &buf)
+            
+        
+        case let .tapSignerWalletFound(walletId):
+            writeInt(&buf, Int32(28))
+            FfiConverterTypeWalletId.write(walletId, into: &buf)
+            
+        
+        case let .initializedTapSigner(tapSigner):
+            writeInt(&buf, Int32(29))
+            FfiConverterTypeTapSigner.write(tapSigner, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAppAlertState_lift(_ buf: RustBuffer) throws -> AppAlertState {
+    return try FfiConverterTypeAppAlertState.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAppAlertState_lower(_ value: AppAlertState) -> RustBuffer {
+    return FfiConverterTypeAppAlertState.lower(value)
 }
 
 

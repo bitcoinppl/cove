@@ -22,7 +22,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import kotlinx.coroutines.launch
-import org.bitcoinppl.cove.AppAlertState
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.Auth
 import org.bitcoinppl.cove.QrCodeScanView
@@ -30,6 +29,7 @@ import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.sheets.FeeRateSelectorSheet
 import org.bitcoinppl.cove_core.*
+import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.types.*
 
 /** UI state for tracking send transaction progress */
@@ -305,7 +305,7 @@ private fun SendFlowRouteToScreen(
                                         else -> {
                                             app.alertState =
                                                 TaggedItem(
-                                                    org.bitcoinppl.cove.AppAlertState.General(
+                                                    AppAlertState.General(
                                                         title = "Invalid QR Code",
                                                         message = "Please scan a valid Bitcoin address QR code",
                                                     ),

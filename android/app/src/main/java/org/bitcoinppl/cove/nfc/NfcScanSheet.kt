@@ -32,12 +32,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
-import org.bitcoinppl.cove.AppAlertState
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.findActivity
 import org.bitcoinppl.cove.ui.theme.title3
+import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.multiFormatTryFromNfcMessage
 import org.bitcoinppl.cove_core.nfc.NfcMessage
 

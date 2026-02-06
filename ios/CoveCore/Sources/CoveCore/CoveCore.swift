@@ -21,6 +21,12 @@ extension Amount: Equatable {
     }
 }
 
+extension AppAlertState: Equatable {
+    public static func == (lhs: AppAlertState, rhs: AppAlertState) -> Bool {
+        lhs.isEqual(rhs: rhs)
+    }
+}
+
 extension PriceResponse: Equatable {
     public static func == (lhs: PriceResponse, rhs: PriceResponse) -> Bool {
         pricesAreEqual(lhs: lhs, rhs: rhs)

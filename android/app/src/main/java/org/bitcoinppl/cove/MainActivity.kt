@@ -74,7 +74,9 @@ import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove.views.LockView
 import org.bitcoinppl.cove.views.TermsAndConditionsSheet
 import org.bitcoinppl.cove_core.AfterPinAction
+import org.bitcoinppl.cove_core.AlertDisplayType
 import org.bitcoinppl.cove_core.AppAction
+import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.Database
 import org.bitcoinppl.cove_core.NewWalletRoute
 import org.bitcoinppl.cove_core.Route
@@ -358,7 +360,7 @@ private fun GlobalAlertHandler(
     val alertState = app.alertState ?: return
     val state = alertState.item
 
-    if (state.isSnackbar()) {
+    if (state.displayType() == AlertDisplayType.TOAST) {
         LaunchedEffect(alertState.id) {
             snackbarHostState.showSnackbar(
                 message = state.message(),
