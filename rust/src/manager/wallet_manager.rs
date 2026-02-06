@@ -261,8 +261,9 @@ impl RustWalletManager {
             .ok_or(Error::WalletDoesNotExist)?;
 
         let id = metadata.id.clone();
-        let wallet = Wallet::try_load_persisted(id.clone())?;
-        let metadata = wallet.metadata.clone();
+        let mut wallet = Wallet::try_load_persisted(id.clone())?;
+        let metadata = downgrade_hot_wallet_without_private_key(wallet.metadata.clone());
+        wallet.metadata = metadata.clone();
 
         // read cached and send to UI immediately
         let cached_balance: Balance = wallet.balance();
@@ -1335,6 +1336,36 @@ impl Drop for RustWalletManager {
     fn drop(&mut self) {
         debug!("[DROP] Wallet View manager: {}", self.id);
     }
+}
+
+fn downgrade_hot_wallet_without_private_key(mut metadata: WalletMetadata) -> WalletMetadata {
+    if metadata.wallet_type != WalletType::Hot {
+        return metadata;
+    }
+
+    let has_private_key = match Keychain::global().get_wallet_key(&metadata.id) {
+        Ok(Some(_)) => true,
+        Ok(None) => false,
+        Err(error) => {
+            warn!("failed to read hot wallet private key for {}: {error}", metadata.id);
+            false
+        }
+    };
+
+    if has_private_key {
+        return metadata;
+    }
+
+    warn!("hot wallet {} is missing private key in keychain, downgrading to cold", metadata.id);
+
+    metadata.wallet_type = WalletType::Cold;
+    metadata.hardware_metadata = None;
+
+    if let Err(error) = Database::global().wallets.update_wallet_metadata(metadata.clone()) {
+        error!("failed to persist cold-wallet downgrade for {}: {error}", metadata.id);
+    }
+
+    metadata
 }
 
 /// Get the public descriptor content for export

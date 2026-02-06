@@ -15,6 +15,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.WalletLoadState
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.components.FullPageLoadingView
@@ -28,6 +29,7 @@ import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.RouteFactory
 import org.bitcoinppl.cove_core.SendRoute
 import org.bitcoinppl.cove_core.WalletManagerAction
+import org.bitcoinppl.cove_core.WalletType
 import org.bitcoinppl.cove_core.types.WalletId
 
 // delay to allow UI to settle before updating balance
@@ -56,6 +58,16 @@ fun SelectedWalletContainer(
         manager = null
         loadedId = null
 
+        val wasHotWalletBeforeLoad =
+            runCatching {
+                Database()
+                    .wallets()
+                    .all()
+                    .firstOrNull { it.id == requestedId }
+                    ?.walletType ==
+                    WalletType.HOT
+            }.getOrDefault(false)
+
         try {
             android.util.Log.d(tag, "getting wallet $requestedId")
             val wm = app.getWalletManager(requestedId)
@@ -64,6 +76,10 @@ fun SelectedWalletContainer(
             if (isActive && requestedId == id) {
                 manager = wm
                 loadedId = requestedId
+
+                if (wasHotWalletBeforeLoad && wm.walletMetadata?.walletType == WalletType.COLD) {
+                    app.alertState = TaggedItem(AppAlertState.HotWalletKeyMissing(requestedId))
+                }
 
                 // small delay then update balance
                 delay(BALANCE_UPDATE_DELAY_MS)

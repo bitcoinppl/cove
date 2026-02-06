@@ -67,13 +67,31 @@ struct CoveApp: App {
     @ViewBuilder
     private func alertButtons(alert: TaggedItem<AppAlertState>) -> some View {
         switch alert.item {
-        case let .duplicateWallet(walletId):
+        case let .duplicateWallet(walletId: walletId):
             Button("OK") {
                 app.alertState = .none
                 app.isSidebarVisible = false
                 try? app.rust.selectWallet(id: walletId)
             }
-        case .addressWrongNetwork(let address, network: _, currentNetwork: _):
+        case .hotWalletKeyMissing:
+            Button("Import 12 Words") {
+                app.alertState = .none
+                app.loadAndReset(to: .newWallet(.hotWallet(.import(.twelve, .manual))))
+            }
+
+            Button("Import 24 Words") {
+                app.alertState = .none
+                app.loadAndReset(to: .newWallet(.hotWallet(.import(.twentyFour, .manual))))
+            }
+
+            Button("Use as Watch Only", role: .cancel) {
+                app.alertState = .init(.confirmWatchOnly)
+            }
+        case .confirmWatchOnly:
+            Button("I Understand", role: .destructive) {
+                app.alertState = .none
+            }
+        case let .addressWrongNetwork(address, _, _):
             Button("Copy Address") {
                 UIPasteboard.general.string = String(address)
             }
