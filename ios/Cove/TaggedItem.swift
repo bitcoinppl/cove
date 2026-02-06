@@ -15,9 +15,13 @@ extension TaggedString {
     }
 }
 
-struct TaggedItem<T: Equatable>: Identifiable, Equatable {
+struct TaggedItem<T>: Identifiable, Equatable {
     let id = UUID()
     let item: T
+
+    static func == (lhs: TaggedItem, rhs: TaggedItem) -> Bool {
+        lhs.id == rhs.id
+    }
 
     init(_ item: T) {
         self.item = item

@@ -78,7 +78,10 @@ import org.bitcoinppl.cove_core.AlertDisplayType
 import org.bitcoinppl.cove_core.AppAction
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.Database
+import org.bitcoinppl.cove_core.HotWalletRoute
+import org.bitcoinppl.cove_core.ImportType
 import org.bitcoinppl.cove_core.NewWalletRoute
+import org.bitcoinppl.cove_core.NumberOfBip39Words
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.RouteFactory
 import org.bitcoinppl.cove_core.TapSignerRoute
@@ -407,6 +410,43 @@ private fun GlobalAlertDialog(
                             app.alertState = TaggedItem(AppAlertState.UnableToSelectWallet)
                         }
                     }) { Text("OK") }
+                },
+            )
+        }
+
+        is AppAlertState.HotWalletKeyMissing -> {
+            AlertDialog(
+                onDismissRequest = onDismiss,
+                title = { Text(state.title()) },
+                text = { Text(state.message()) },
+                confirmButton = {
+                    Column {
+                        TextButton(onClick = {
+                            onDismiss()
+                            app.resetRoute(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWELVE, ImportType.MANUAL))))
+                        }) { Text("Import 12 Words") }
+                        TextButton(onClick = {
+                            onDismiss()
+                            app.resetRoute(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWENTY_FOUR, ImportType.MANUAL))))
+                        }) { Text("Import 24 Words") }
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        onDismiss()
+                        app.alertState = TaggedItem(AppAlertState.ConfirmWatchOnly)
+                    }) { Text("Use as Watch Only") }
+                },
+            )
+        }
+
+        is AppAlertState.ConfirmWatchOnly -> {
+            AlertDialog(
+                onDismissRequest = onDismiss,
+                title = { Text(state.title()) },
+                text = { Text(state.message()) },
+                confirmButton = {
+                    TextButton(onClick = onDismiss) { Text("I Understand") }
                 },
             )
         }

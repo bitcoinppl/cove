@@ -19,8 +19,16 @@ struct SelectedWalletContainer: View {
         if manager != nil, app.walletManager == nil { return }
 
         do {
+            let wasHotWallet =
+                (try? Database().wallets().all().first(where: { $0.id == id })?.walletType == .hot)
+                    ?? false
+
             Log.debug("Getting wallet \(id)")
             manager = try app.getWalletManager(id: id)
+
+            if wasHotWallet, manager?.walletMetadata.walletType == .cold {
+                app.alertState = .init(.hotWalletKeyMissing(walletId: id))
+            }
         } catch {
             Log.error("Something went very wrong: \(error)")
             do {
