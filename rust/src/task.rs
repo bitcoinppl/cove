@@ -15,6 +15,7 @@ pub fn init_tokio() {
     }
 
     let tokio = tokio::runtime::Handle::current();
+    cove_tokio_ext::runtime::init(tokio.clone());
     TOKIO.set(tokio).expect("failed to set tokio runtime");
 }
 

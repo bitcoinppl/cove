@@ -19,7 +19,7 @@ where
     where
         F: Future<Output = T> + Send + 'static,
     {
-        Self(tokio::spawn(fut))
+        Self(crate::runtime::spawn(fut))
     }
 }
 
