@@ -1,13 +1,11 @@
 use act_zero::{Actor, Addr};
 use core::future::Future;
-use std::sync::OnceLock;
 
+use cove_tokio_ext::runtime::TOKIO;
 use futures::task::{Spawn, SpawnError};
-use tokio::{runtime::Handle, task::JoinHandle};
+use tokio::task::JoinHandle;
 
 struct CustomRuntime;
-
-static TOKIO: OnceLock<Handle> = OnceLock::new();
 
 pub fn init_tokio() {
     if is_tokio_initalized() {
@@ -15,8 +13,7 @@ pub fn init_tokio() {
     }
 
     let tokio = tokio::runtime::Handle::current();
-    cove_tokio_ext::runtime::init(tokio.clone());
-    TOKIO.set(tokio).expect("failed to set tokio runtime");
+    cove_tokio_ext::runtime::init(tokio);
 }
 
 pub fn is_tokio_initalized() -> bool {
