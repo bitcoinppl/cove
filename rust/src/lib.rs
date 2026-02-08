@@ -62,7 +62,6 @@ mod signed_import;
 mod tap_card;
 mod transaction;
 mod transaction_watcher;
-mod unblock;
 mod ur;
 mod wallet;
 mod wallet_scanner;

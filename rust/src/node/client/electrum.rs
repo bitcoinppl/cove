@@ -59,7 +59,7 @@ impl ElectrumClient {
         let url = node.url.strip_suffix('/').unwrap_or(&node.url).to_string();
 
         // use spawn_blocking for the synchronous TCP connection to avoid blocking the async runtime
-        let inner_client = crate::unblock::run_blocking(move || Client::new(&url))
+        let inner_client = cove_tokio::unblock::run_blocking(move || Client::new(&url))
             .await
             .map_err(Error::CreateElectrumClient)?;
 
@@ -71,7 +71,7 @@ impl ElectrumClient {
 
     pub async fn get_height(&self) -> Result<usize, Error> {
         let client = self.client.clone();
-        let header = crate::unblock::run_blocking(move || {
+        let header = cove_tokio::unblock::run_blocking(move || {
             client
                 .inner
                 .block_headers_subscribe()
@@ -85,7 +85,7 @@ impl ElectrumClient {
 
     pub async fn get_block_id(&self) -> Result<BlockId, Error> {
         let client = self.client.clone();
-        let header_notification = crate::unblock::run_blocking(move || {
+        let header_notification = cove_tokio::unblock::run_blocking(move || {
             client
                 .inner
                 .block_headers_subscribe()
@@ -106,7 +106,7 @@ impl ElectrumClient {
     ) -> Result<Option<bitcoin::Transaction>, Error> {
         let client = self.client.clone();
         let txid_string = txid.to_string();
-        let result = crate::unblock::run_blocking(move || {
+        let result = cove_tokio::unblock::run_blocking(move || {
             client
                 .inner
                 .raw_call(
@@ -172,7 +172,7 @@ impl ElectrumClient {
         let txid_clone = txid;
 
         let tx: Transaction =
-            crate::unblock::run_blocking(move || client.inner.transaction_get(&txid_clone))
+            cove_tokio::unblock::run_blocking(move || client.inner.transaction_get(&txid_clone))
                 .await
                 .tap_err(|error| error!("electrum failed to get transaction: {error:?}"))
                 .map_err(Error::ElectrumGetTransaction)?;
@@ -185,7 +185,7 @@ impl ElectrumClient {
             let script = output.script_pubkey.clone();
 
             let history =
-                crate::unblock::run_blocking(move || client.inner.script_get_history(&script))
+                cove_tokio::unblock::run_blocking(move || client.inner.script_get_history(&script))
                     .await
                     .map_err(Error::ElectrumGetTransaction)?;
 
@@ -212,7 +212,7 @@ impl ElectrumClient {
         debug!("start populate_tx_cache");
         let client = self.client.clone();
         let tx_graph = tx_graph.clone();
-        crate::unblock::run_blocking(move || {
+        cove_tokio::unblock::run_blocking(move || {
             client.populate_tx_cache(tx_graph.full_txs().map(|tx_node| tx_node.tx));
         })
         .await;
@@ -221,7 +221,7 @@ impl ElectrumClient {
         let client = self.client.clone();
         let batch_size = self.options.batch_size;
 
-        let result = crate::unblock::run_blocking(move || {
+        let result = cove_tokio::unblock::run_blocking(move || {
             client.full_scan(request, stop_gap, batch_size, false).map_err(Error::ElectrumScan)
         })
         .await?;
@@ -237,7 +237,7 @@ impl ElectrumClient {
         debug!("start populate_tx_cache");
         let client = self.client.clone();
         let tx_graph = tx_graph.clone();
-        crate::unblock::run_blocking(move || {
+        cove_tokio::unblock::run_blocking(move || {
             client.populate_tx_cache(tx_graph.full_txs().map(|tx_node| tx_node.tx));
         })
         .await;
@@ -248,16 +248,17 @@ impl ElectrumClient {
 
         let client = client.clone();
 
-        let result = crate::unblock::run_blocking(move || client.sync(request, batch_size, false))
-            .await
-            .map_err(Error::ElectrumScan)?;
+        let result =
+            cove_tokio::unblock::run_blocking(move || client.sync(request, batch_size, false))
+                .await
+                .map_err(Error::ElectrumScan)?;
 
         Ok(result)
     }
 
     pub async fn check_address_for_txn(&self, address: Address) -> Result<bool, Error> {
         let client = self.client.clone();
-        let txns = crate::unblock::run_blocking(move || {
+        let txns = cove_tokio::unblock::run_blocking(move || {
             let script = address.script_pubkey();
             client.inner.script_get_history(&script)
         })
@@ -269,7 +270,7 @@ impl ElectrumClient {
 
     pub async fn broadcast_transaction(&self, txn: Transaction) -> Result<Txid, Error> {
         let client = self.client.clone();
-        let tx_id = crate::unblock::run_blocking(move || {
+        let tx_id = cove_tokio::unblock::run_blocking(move || {
             client.inner.transaction_broadcast(&txn).map_err(Error::ElectrumBroadcast)
         })
         .await?;
