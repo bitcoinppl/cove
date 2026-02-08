@@ -530,7 +530,7 @@ impl FfiApp {
 
     /// run all initialization tasks here, only called once
     pub async fn init_on_start(&self) {
-        cove_tokio::task::init_tokio();
+        cove_tokio::init();
 
         // get / update prices
         cove_tokio::task::spawn(async move {

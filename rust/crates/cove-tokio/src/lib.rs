@@ -1,26 +1,26 @@
 mod abortable_task;
 mod debounced_task;
 pub mod task;
+mod timeout;
 pub mod unblock;
+
+use std::sync::OnceLock;
+use tokio::runtime::Handle;
 
 pub use abortable_task::AbortableTask;
 pub use debounced_task::DebouncedTask;
+pub use timeout::FutureTimeoutExt;
 
-use std::future::Future;
-use std::time::Duration;
-use tokio::time;
+pub(crate) static TOKIO: OnceLock<Handle> = OnceLock::new();
 
-/// Blanket extension trait: implemented for *all* futures.
-pub trait FutureTimeoutExt: Future + Sized {
-    /// Wrap this future in a Tokio timeout.
-    fn with_timeout(self, dur: Duration) -> time::Timeout<Self> {
-        time::timeout(dur, self)
+pub fn init() {
+    if is_tokio_initialized() {
+        return;
     }
 
-    /// Wrap this future in a timeout that ends at an absolute deadline.
-    fn with_deadline(self, deadline: time::Instant) -> time::Timeout<Self> {
-        time::timeout_at(deadline, self)
-    }
+    let _ = TOKIO.set(Handle::current());
 }
 
-impl<F: Future> FutureTimeoutExt for F {}
+pub fn is_tokio_initialized() -> bool {
+    TOKIO.get().is_some()
+}

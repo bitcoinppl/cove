@@ -1,30 +1,11 @@
-use std::sync::OnceLock;
+use crate::TOKIO;
 
 use act_zero::{Actor, Addr};
 use core::future::Future;
 use futures::task::{Spawn, SpawnError};
-use tokio::{runtime::Handle, task::JoinHandle};
-
-pub(crate) static TOKIO: OnceLock<Handle> = OnceLock::new();
+use tokio::task::JoinHandle;
 
 struct CustomRuntime;
-
-pub fn init(handle: Handle) {
-    let _ = TOKIO.set(handle);
-}
-
-pub fn init_tokio() {
-    if is_tokio_initialized() {
-        return;
-    }
-
-    let tokio = Handle::current();
-    init(tokio);
-}
-
-pub fn is_tokio_initialized() -> bool {
-    TOKIO.get().is_some()
-}
 
 impl Spawn for CustomRuntime {
     fn spawn_obj(&self, future: futures::future::FutureObj<'static, ()>) -> Result<(), SpawnError> {
