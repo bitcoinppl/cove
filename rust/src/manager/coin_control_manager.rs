@@ -15,11 +15,11 @@ use cove_types::{
 };
 use parking_lot::Mutex;
 
-use crate::task;
 use crate::{
     manager::deferred_sender::{self, DeferredSender},
     wallet::metadata::WalletMetadata,
 };
+use cove_tokio::task;
 use flume::Receiver;
 use tracing::trace;
 

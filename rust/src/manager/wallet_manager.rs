@@ -12,6 +12,7 @@ use parking_lot::RwLock;
 use tap::TapFallible as _;
 use tracing::{debug, error, warn};
 
+use cove_tokio::task::{self, spawn_actor};
 use cove_util::{format::NumberFormatter as _, result_ext::ResultExt as _};
 
 use crate::{
@@ -30,7 +31,6 @@ use crate::{
     reporting::HistoricalFiatPriceReport,
     router::Route,
     tap_card::tap_signer_reader::DeriveInfo,
-    task::{self, spawn_actor},
     transaction::{
         Amount, FeeRate, SentAndReceived, Transaction, TransactionDetails, TransactionDirection,
         TxId, Unit, ffi::BitcoinTransaction, unsigned_transaction::UnsignedTransaction,
@@ -470,7 +470,7 @@ impl RustWalletManager {
             let content = get_public_descriptor_content(&id)?;
             let max_version = density.bbqr_max_version();
 
-            crate::task::spawn_blocking(move || {
+            cove_tokio::task::spawn_blocking(move || {
                 let data = content.as_bytes();
                 let version = Version::try_from(max_version).unwrap_or(Version::V15);
 
@@ -507,7 +507,7 @@ impl RustWalletManager {
                 .map_err(|e| Error::TransactionsRetrievalError(e.to_string()))?
                 .map_err(|e| Error::GetHistoricalPricesError(e.to_string()))?;
 
-            crate::task::spawn_blocking(move || {
+            cove_tokio::task::spawn_blocking(move || {
                 let fiat_currency =
                     Database::global().global_config.fiat_currency().unwrap_or_default();
                 let report = HistoricalFiatPriceReport::new(fiat_currency, txns_with_prices);
@@ -1045,10 +1045,14 @@ impl RustWalletManager {
             Some(cached_fees)
                 if cached_fees.last_fetched > Instant::now() - Duration::from_secs(30) =>
             {
-                crate::task::spawn(async move { crate::fee_client::get_and_update_fees().await });
+                cove_tokio::task::spawn(
+                    async move { crate::fee_client::get_and_update_fees().await },
+                );
             }
             None => {
-                crate::task::spawn(async move { crate::fee_client::get_and_update_fees().await });
+                cove_tokio::task::spawn(
+                    async move { crate::fee_client::get_and_update_fees().await },
+                );
             }
             _ => {}
         }

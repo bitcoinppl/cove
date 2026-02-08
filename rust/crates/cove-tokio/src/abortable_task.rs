@@ -19,7 +19,7 @@ where
     where
         F: Future<Output = T> + Send + 'static,
     {
-        Self(crate::runtime::spawn(fut))
+        Self(crate::task::spawn(fut))
     }
 }
 

@@ -967,7 +967,7 @@ dependencies = [
  "cove-macros",
  "cove-nfc",
  "cove-tap-card",
- "cove-tokio-ext",
+ "cove-tokio",
  "cove-types",
  "cove-ur",
  "cove-util",
@@ -1107,10 +1107,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "cove-tokio-ext"
+name = "cove-tokio"
 version = "0.1.0"
 dependencies = [
+ "act-zero",
  "arc-swap",
+ "futures",
  "tokio",
  "tracing",
 ]

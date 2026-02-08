@@ -123,7 +123,7 @@ impl FiatClient {
         if let Some(prices) = PRICES.load().as_ref() {
             let now_secs = Timestamp::now().as_second() as u64;
             if (now_secs - prices.fetched_at) > BACKGROUND_REFRESH_INTERVAL {
-                crate::task::spawn(async move { fetch_and_update_prices_if_needed().await });
+                cove_tokio::task::spawn(async move { fetch_and_update_prices_if_needed().await });
             }
 
             return Some(*prices);

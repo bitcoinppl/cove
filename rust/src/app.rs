@@ -176,7 +176,7 @@ impl App {
             AppAction::UpdateFiatPrices => {
                 debug!("updating fiat prices");
 
-                crate::task::spawn(async move {
+                cove_tokio::task::spawn(async move {
                     match FIAT_CLIENT.get_or_fetch_prices().await {
                         Ok(prices) => {
                             Updater::send_update(AppMessage::FiatPricesChanged(prices.into()));
@@ -191,7 +191,7 @@ impl App {
             AppAction::UpdateFees => {
                 debug!("updating fees");
 
-                crate::task::spawn(async move {
+                cove_tokio::task::spawn(async move {
                     match FEE_CLIENT.fetch_and_get_fees().await {
                         Ok(fees) => {
                             Updater::send_update(AppMessage::FeesChanged(fees));
@@ -530,10 +530,10 @@ impl FfiApp {
 
     /// run all initialization tasks here, only called once
     pub async fn init_on_start(&self) {
-        crate::task::init_tokio();
+        cove_tokio::init();
 
         // get / update prices
-        crate::task::spawn(async move {
+        cove_tokio::task::spawn(async move {
             let init_result = (|| crate::fiat::client::init_prices())
                 .retry(
                     ConstantBuilder::default()
@@ -554,7 +554,7 @@ impl FfiApp {
         });
 
         // get / update fees
-        crate::task::spawn(async move {
+        cove_tokio::task::spawn(async move {
             // init fees from database cache or network and update the UI
             crate::fee_client::init_and_update_fees().await;
         });
