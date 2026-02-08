@@ -15,9 +15,9 @@ use crate::{
     database::Database,
     fiat::{FiatCurrency, client::FIAT_CLIENT, historical::HistoricalPrice},
     historical_price_service::HistoricalPriceService,
-    task,
     transaction::{TransactionDirection, Unit},
 };
+use cove_tokio::task;
 
 use crate::{
     device::Device,

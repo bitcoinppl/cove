@@ -3,5 +3,5 @@ where
     F: FnOnce() -> R + Send + 'static,
     R: Send + 'static,
 {
-    crate::task::spawn_blocking(f).await.expect("blocking task failed")
+    cove_tokio::task::spawn_blocking(f).await.expect("blocking task failed")
 }

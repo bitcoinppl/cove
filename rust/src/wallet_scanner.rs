@@ -7,6 +7,7 @@ use bdk_wallet::{
     descriptor::ExtendedDescriptor,
 };
 use bip39::Mnemonic;
+use cove_tokio::task::spawn_actor;
 use cove_util::result_ext::ResultExt as _;
 use eyre::Context;
 use flume::Sender;
@@ -25,7 +26,6 @@ use crate::{
     manager::wallet_manager::{SingleOrMany, WalletManagerReconcileMessage},
     mnemonic::MnemonicExt,
     node::{client::NodeClientOptions, client_builder::NodeClientBuilder},
-    task::spawn_actor,
     wallet::{
         WalletAddressType, WalletError,
         metadata::{DiscoveryState, FoundAddress, FoundJson, WalletId, WalletMetadata},

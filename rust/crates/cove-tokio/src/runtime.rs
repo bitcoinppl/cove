@@ -15,6 +15,6 @@ where
 {
     TOKIO
         .get()
-        .expect("tokio runtime not initialized, call cove_tokio_ext::runtime::init first")
+        .expect("tokio runtime not initialized, call cove_tokio::runtime::init first")
         .spawn(fut)
 }

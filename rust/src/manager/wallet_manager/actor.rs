@@ -37,7 +37,7 @@ use bitcoin::{Amount, FeeRate as BdkFeeRate, OutPoint, TxIn, Txid};
 use bitcoin::{Transaction as BdkTransaction, params::Params};
 use cove_bdk::coin_selection::CoveDefaultCoinSelection;
 use cove_common::consts::{GAP_LIMIT, MIN_SEND_AMOUNT};
-use cove_tokio_ext::FutureTimeoutExt as _;
+use cove_tokio::FutureTimeoutExt as _;
 use cove_types::{
     address::AddressInfoWithDerivation,
     confirm::{AddressAndAmount, ConfirmDetails, ExtraItem, InputOutputDetails, SplitOutput},

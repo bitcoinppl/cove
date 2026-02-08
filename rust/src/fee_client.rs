@@ -70,7 +70,7 @@ impl FeeClient {
                 return Some(cached.fees);
             }
 
-            crate::task::spawn(async move {
+            cove_tokio::task::spawn(async move {
                 if let Err(e) = fetch_and_update_fees_if_needed().await {
                     warn!("background fee refresh failed: {e:?}");
                 }

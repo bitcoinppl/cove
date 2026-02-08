@@ -1,7 +1,7 @@
 use act_zero::{Actor, Addr};
 use core::future::Future;
 
-use cove_tokio_ext::runtime::TOKIO;
+use crate::runtime::TOKIO;
 use futures::task::{Spawn, SpawnError};
 use tokio::task::JoinHandle;
 
@@ -13,7 +13,7 @@ pub fn init_tokio() {
     }
 
     let tokio = tokio::runtime::Handle::current();
-    cove_tokio_ext::runtime::init(tokio);
+    crate::runtime::init(tokio);
 }
 
 pub fn is_tokio_initalized() -> bool {

@@ -8,7 +8,7 @@ pub mod state;
 
 use std::{sync::Arc, time::Duration};
 
-use cove_tokio_ext::DebouncedTask;
+use cove_tokio::DebouncedTask;
 use cove_util::result_ext::ResultExt as _;
 
 use crate::{
@@ -16,7 +16,6 @@ use crate::{
     fee_client::FEE_CLIENT,
     fiat::client::PriceResponse,
     router::RouteFactory,
-    task,
     transaction::FeeRate,
     wallet::{
         Address,
@@ -211,7 +210,7 @@ impl RustSendFlowManager {
     pub fn listen_for_updates(&self, reconciler: Box<Reconciler>) {
         let reconcile_receiver = self.reconcile_receiver.clone();
 
-        task::spawn(async move {
+        cove_tokio::task::spawn(async move {
             while let Ok(field) = reconcile_receiver.recv_async().await {
                 trace!("reconcile_receiver: {field:?}");
                 match field {
@@ -518,7 +517,7 @@ impl RustSendFlowManager {
             let is_max_selected = self.state.lock().max_selected.is_some();
             if is_max_selected {
                 let me = self.clone();
-                task::spawn(async move { me.select_max_send_report_error().await });
+                cove_tokio::task::spawn(async move { me.select_max_send_report_error().await });
                 return false;
             }
 
@@ -619,7 +618,7 @@ impl RustSendFlowManager {
 
             Action::SelectMaxSend => {
                 let me = self.clone();
-                task::spawn(async move { me.select_max_send_report_error().await });
+                cove_tokio::task::spawn(async move { me.select_max_send_report_error().await });
             }
 
             Action::ClearSendAmount => self.clear_send_amount(),
@@ -731,7 +730,7 @@ impl RustSendFlowManager {
 
         let needs_fee_rate_options_base = self.state.lock().fee_rate_options_base.is_none();
         if needs_fee_rate_options_base {
-            crate::task::spawn(async move {
+            cove_tokio::task::spawn(async move {
                 me.get_and_update_base_fee_rate_options().await;
             });
         }
@@ -867,7 +866,7 @@ impl RustSendFlowManager {
         // when we have a valid address, use that to get the fee rate options
         let me = self.clone();
         let is_max_selected = self.state.lock().max_selected.is_some();
-        task::spawn(async move {
+        cove_tokio::task::spawn(async move {
             me.get_or_update_fee_rate_options().await;
 
             if is_max_selected {
@@ -1158,7 +1157,7 @@ impl RustSendFlowManager {
 
         // update the fee rate options for utxos
         let me = self.clone();
-        task::spawn(async move {
+        cove_tokio::task::spawn(async move {
             me.get_or_update_fee_rate_options().await;
         });
 
@@ -1176,7 +1175,7 @@ impl RustSendFlowManager {
 
         // update the fee rate options
         let me = self.clone();
-        task::spawn(async move {
+        cove_tokio::task::spawn(async move {
             me.get_or_update_fee_rate_options().await;
         });
     }
@@ -1524,7 +1523,7 @@ impl RustSendFlowManager {
         // lets update the fee rate options if its needed
         let me = self.clone();
         let is_max_selected = self.state.lock().max_selected.is_some();
-        task::spawn(async move {
+        cove_tokio::task::spawn(async move {
             me.get_or_update_fee_rate_options().await;
             if is_max_selected {
                 me.select_max_send_report_error().await;
@@ -1564,7 +1563,7 @@ impl RustSendFlowManager {
         let send_mode = self.state.lock().mode.clone();
         let manager = self.wallet_manager.clone();
 
-        task::spawn(async move {
+        cove_tokio::task::spawn(async move {
             let confirm_details = match send_mode {
                 EnterMode::SetAmount => {
                     manager.confirm_txn(amount, address, selected_fee_rate.fee_rate).await
@@ -1675,7 +1674,7 @@ impl RustSendFlowManager {
     /// If no cached fees exist, fetches fees first and sets has_base_fees
     fn background_init_tasks(self: &Arc<Self>) {
         let me = self.clone();
-        task::spawn(async move {
+        cove_tokio::task::spawn(async move {
             // run all refreshes concurrently
             tokio::join!(
                 me.get_first_address(),
@@ -1685,7 +1684,7 @@ impl RustSendFlowManager {
         });
 
         let state = self.state.clone();
-        task::spawn(async move {
+        cove_tokio::task::spawn(async move {
             let result = (|| crate::fee_client::get_and_update_fees()).retry(
                 ExponentialBuilder::default()
                     .with_min_delay(std::time::Duration::from_millis(100))

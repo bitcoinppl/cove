@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use flume::{Sender, TrySendError};
 use tracing::{debug, error, warn};
 
-use crate::task;
+use cove_tokio::task;
 
 pub trait DebugSend: Debug + Send + Sync + 'static {}
 impl<T> DebugSend for T where T: Debug + Send + Sync + 'static {}

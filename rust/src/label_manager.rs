@@ -242,7 +242,7 @@ impl LabelManager {
     pub async fn export(&self) -> Result<String, LabelManagerError> {
         let db = self.db.clone();
 
-        crate::task::spawn_blocking(move || {
+        cove_tokio::task::spawn_blocking(move || {
             let labels =
                 db.labels.all_labels().map_err(|e| LabelManagerError::Get(e.to_string()))?;
 
@@ -269,7 +269,7 @@ impl LabelManager {
         let labels_jsonl = self.export().await?;
         let max_version = density.bbqr_max_version();
 
-        crate::task::spawn_blocking(move || {
+        cove_tokio::task::spawn_blocking(move || {
             let data = labels_jsonl.as_bytes();
             let version = Version::try_from(max_version).unwrap_or(Version::V15);
 

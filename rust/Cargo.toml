@@ -116,7 +116,7 @@ cove-common = { path = "./crates/cove-common" }
 cove-bip39 = { path = "./crates/cove-bip39" }
 cove-device = { path = "./crates/cove-device" }
 cove-bdk = { path = "./crates/cove-bdk" }
-cove-tokio-ext = { path = "./crates/cove-tokio-ext" }
+cove-tokio = { path = "./crates/cove-tokio" }
 
 # bitcoin
 bitcoin = { workspace = true }
