@@ -1,22 +1,28 @@
+use std::sync::OnceLock;
+
 use act_zero::{Actor, Addr};
 use core::future::Future;
-
-use crate::runtime::TOKIO;
 use futures::task::{Spawn, SpawnError};
-use tokio::task::JoinHandle;
+use tokio::{runtime::Handle, task::JoinHandle};
+
+pub(crate) static TOKIO: OnceLock<Handle> = OnceLock::new();
 
 struct CustomRuntime;
 
+pub fn init(handle: Handle) {
+    let _ = TOKIO.set(handle);
+}
+
 pub fn init_tokio() {
-    if is_tokio_initalized() {
+    if is_tokio_initialized() {
         return;
     }
 
-    let tokio = tokio::runtime::Handle::current();
-    crate::runtime::init(tokio);
+    let tokio = Handle::current();
+    init(tokio);
 }
 
-pub fn is_tokio_initalized() -> bool {
+pub fn is_tokio_initialized() -> bool {
     TOKIO.get().is_some()
 }
 
@@ -32,7 +38,7 @@ where
     T: Future + Send + 'static,
     T::Output: Send + 'static,
 {
-    TOKIO.get().expect("tokio runtime not initalized").spawn(task)
+    TOKIO.get().expect("tokio runtime not initialized").spawn(task)
 }
 
 #[allow(dead_code)]
@@ -41,7 +47,7 @@ where
     T: Future + Send + 'static,
     T::Output: Send + 'static,
 {
-    let handle = TOKIO.get().expect("tokio runtime not initalized");
+    let handle = TOKIO.get().expect("tokio runtime not initialized");
     handle.block_on(task)
 }
 
@@ -50,7 +56,7 @@ where
     F: FnOnce() -> R + Send + 'static,
     R: Send + 'static,
 {
-    TOKIO.get().expect("tokio runtime not initalized").spawn_blocking(f)
+    TOKIO.get().expect("tokio runtime not initialized").spawn_blocking(f)
 }
 
 /// Provides an infallible way to spawn an actor onto the Tokio runtime,
