@@ -442,7 +442,7 @@ private fun UtxoItemRow(
             }
             Spacer(Modifier.height(4.dp))
             Text(
-                text = utxo.address.string(),
+                text = utxo.address.unformatted(),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 12.sp,
                 maxLines = 1,

@@ -231,7 +231,7 @@ fun CoinControlSetAmountScreen(
                             presenter.sheetState = null
                             when (multiFormat) {
                                 is MultiFormat.Address -> {
-                                    sendFlowManager.enteringAddress = multiFormat.v1.address().string()
+                                    sendFlowManager.enteringAddress = multiFormat.v1.address().unformatted()
                                     // clear focus to show formatted address
                                     presenter.focusField = null
                                 }

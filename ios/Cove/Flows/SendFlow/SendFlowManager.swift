@@ -89,7 +89,7 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
     }
 
     public func setAddress(_ address: Address) {
-        self._enteringAddress = address.string()
+        self._enteringAddress = address.unformatted()
         self.address = address
         self.dispatch(action: .notifyAddressChanged(address))
     }
