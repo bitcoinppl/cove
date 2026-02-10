@@ -24,5 +24,9 @@ tracing = { workspace = true }
 # uniffi
 uniffi = { workspace = true }
 
+# crypto
+rand = { workspace = true }
+zeroize = { workspace = true }
+
 # hex
 hex = { workspace = true }
