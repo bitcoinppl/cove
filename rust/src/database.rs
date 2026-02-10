@@ -2,6 +2,7 @@
 //! That will be available across the app, and will be persisted across app launches.
 
 pub mod cbor;
+pub mod encrypted_backend;
 pub mod error;
 pub mod global_cache;
 pub mod global_config;
@@ -91,6 +92,9 @@ impl Database {
     }
 
     fn init() -> Self {
+        #[cfg(test)]
+        encrypted_backend::set_test_encryption_key();
+
         let main_db = get_or_create_main_database();
         let main_db_arc = Arc::new(main_db);
 
@@ -121,20 +125,22 @@ fn get_or_create_main_database() -> redb::Database {
     get_or_create_database_with_location(location)
 }
 
-fn get_or_create_database_with_location(database_location: PathBuf) -> redb::Database {
-    if database_location.exists() {
-        let db = redb::Database::open(&database_location);
-        match db {
-            Ok(db) => return db,
-            Err(error) => {
-                error!("failed to open database, error: {error:?}, creating a new one");
-            }
-        }
-    }
+fn get_or_create_database_with_location(path: PathBuf) -> redb::Database {
+    let key = encrypted_backend::encryption_key()
+        .expect("encryption key must be set before opening databases");
 
-    info!("Creating a new database, at {}", database_location.display());
+    let backend = if path.exists() {
+        encrypted_backend::EncryptedBackend::open(&path, key)
+            .expect("failed to open encrypted database")
+    } else {
+        info!("Creating a new encrypted database at {}", path.display());
+        encrypted_backend::EncryptedBackend::create(&path, key)
+            .expect("failed to create encrypted database")
+    };
 
-    redb::Database::create(&database_location).expect("failed to create database")
+    redb::Database::builder()
+        .create_with_backend(backend)
+        .expect("failed to open database with encrypted backend")
 }
 
 #[cfg(not(test))]

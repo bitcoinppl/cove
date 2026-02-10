@@ -10,7 +10,7 @@ use once_cell::sync::Lazy;
 use parking_lot::RwLock;
 use redb::{ReadOnlyTable, TableDefinition};
 use serde::{Deserialize, Serialize};
-use tracing::{debug, error, info};
+use tracing::{debug, info};
 
 use crate::wallet::{WalletAddressType, metadata::WalletId};
 use cove_common::consts::WALLET_DATA_DIR;
@@ -92,6 +92,7 @@ impl WalletDataDb {
 
     #[cfg(test)]
     pub fn new_test(id: WalletId) -> Self {
+        super::encrypted_backend::set_test_encryption_key();
         let tmp = tempfile::tempdir().expect("failed to create temp dir");
         Self::new_with_db_location(id, tmp.path())
     }
@@ -186,7 +187,7 @@ impl WalletDataDb {
 
 /// Get an existing database or create a new one
 pub fn get_or_create_database(id: &WalletId, location: &Path) -> Arc<redb::Database> {
-    let database_location = database_location(id, location);
+    let path = database_location(id, location);
 
     // check if we already have a database connection for this id and return it
     {
@@ -196,25 +197,22 @@ pub fn get_or_create_database(id: &WalletId, location: &Path) -> Arc<redb::Datab
         }
     }
 
-    if database_location.exists() {
-        let db = redb::Database::open(&database_location);
-        match db {
-            Ok(db) => {
-                let mut db_connections = DATABASE_CONNECTIONS.write();
-                let db = Arc::new(db);
-                db_connections.insert(id.clone(), db.clone());
+    let key = super::encrypted_backend::encryption_key()
+        .expect("encryption key must be set before opening databases");
 
-                return db;
-            }
-            Err(error) => {
-                error!("failed to open database for {id}, error: {error:?}, creating a new one");
-            }
-        }
-    }
+    let backend = if path.exists() {
+        super::encrypted_backend::EncryptedBackend::open(&path, key)
+            .expect("failed to open encrypted database")
+    } else {
+        info!("Creating a new encrypted database for wallet {id}, at {}", path.display());
+        super::encrypted_backend::EncryptedBackend::create(&path, key)
+            .expect("failed to create encrypted database")
+    };
 
-    info!("Creating a new database for wallet {id}, at {}", database_location.display());
+    let db = redb::Database::builder()
+        .create_with_backend(backend)
+        .expect("failed to open database with encrypted backend");
 
-    let db = redb::Database::create(&database_location).expect("failed to create database");
     let mut db_connections = DATABASE_CONNECTIONS.write();
     let db = Arc::new(db);
     db_connections.insert(id.clone(), db.clone());
