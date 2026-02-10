@@ -1,5 +1,6 @@
 pub mod encryption;
 pub mod format;
+pub mod key_derivation;
 pub mod result_ext;
 
 pub use result_ext::ResultExt;
