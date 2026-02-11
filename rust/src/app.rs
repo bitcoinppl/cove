@@ -86,6 +86,11 @@ impl App {
         // one time init
         crate::logging::init();
 
+        // derive encryption key from master key before any database access
+        let cspp = cove_cspp::Cspp::new(cove_device::keychain::Keychain::global().clone());
+        let key = cspp.sensitive_data_key().expect("failed to derive encryption key");
+        crate::database::encrypted_backend::set_encryption_key(key);
+
         // Set up the updater channel
         let (sender, receiver): (Sender<AppMessage>, Receiver<AppMessage>) = flume::bounded(1000);
 

@@ -964,6 +964,7 @@ dependencies = [
  "cove-bdk",
  "cove-bip39",
  "cove-common",
+ "cove-cspp",
  "cove-device",
  "cove-macros",
  "cove-nfc",
@@ -1056,12 +1057,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "cove-cspp"
+version = "0.1.0"
+dependencies = [
+ "cove-util",
+ "hex",
+ "hkdf",
+ "rand 0.9.2",
+ "sha2",
+ "thiserror 2.0.18",
+ "zeroize",
+]
+
+[[package]]
 name = "cove-device"
 version = "0.1.0"
 dependencies = [
  "bdk_wallet",
  "bip39",
  "bitcoin",
+ "cove-cspp",
  "cove-types",
  "cove-util",
  "hex",
@@ -1176,11 +1191,9 @@ dependencies = [
  "chacha20poly1305",
  "cove-macros",
  "hex",
- "hkdf",
  "memchr",
  "numfmt",
  "rand 0.9.2",
- "sha2",
  "thiserror 2.0.18",
  "tracing",
  "uniffi 0.31.0",
