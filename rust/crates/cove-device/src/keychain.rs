@@ -8,6 +8,7 @@ use bip39::Mnemonic;
 use once_cell::sync::OnceCell;
 use tracing::warn;
 
+use cove_cspp::CsppStore;
 use cove_types::WalletId;
 use cove_util::encryption::Cryptor;
 
@@ -83,7 +84,6 @@ impl Keychain {
     /// # Errors
     ///
     /// Returns a `KeychainError` if encryption or saving fails
-    #[allow(clippy::needless_pass_by_value)]
     pub fn save_wallet_key(
         &self,
         id: &WalletId,
@@ -303,6 +303,22 @@ impl Keychain {
             && self.delete_wallet_xpub(id)
             && self.delete_public_descriptor(id)
             && self.delete_tap_signer_backup(id)
+    }
+}
+
+impl CsppStore for Keychain {
+    type Error = KeychainError;
+
+    fn save(&self, key: String, value: String) -> Result<(), KeychainError> {
+        self.0.save(key, value)
+    }
+
+    fn get(&self, key: String) -> Option<String> {
+        self.0.get(key)
+    }
+
+    fn delete(&self, key: String) -> bool {
+        self.0.delete(key)
     }
 }
 

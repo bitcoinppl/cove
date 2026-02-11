@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 # cove crates
+cove-cspp = { path = "../cove-cspp" }
 cove-types = { path = "../cove-types" }
 cove-util = { path = "../cove-util" }
 
@@ -23,10 +24,6 @@ tracing = { workspace = true }
 
 # uniffi
 uniffi = { workspace = true }
-
-# crypto
-rand = { workspace = true }
-zeroize = { workspace = true }
 
 # hex
 hex = { workspace = true }

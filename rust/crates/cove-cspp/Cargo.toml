@@ -1,0 +1,14 @@
+[package]
+name = "cove-cspp"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+cove-util = { path = "../cove-util" }
+
+hkdf = { workspace = true }
+sha2 = { workspace = true }
+rand = { workspace = true }
+zeroize = { workspace = true, features = ["derive"] }
+hex = { workspace = true }
+thiserror = { workspace = true }
