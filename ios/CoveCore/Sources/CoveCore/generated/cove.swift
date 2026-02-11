@@ -25566,6 +25566,8 @@ public enum WalletManagerReconcileMessage {
     case unsignedTransactionsChanged
     case sendFlowError(SendFlowErrorAlert
     )
+    case hotWalletKeyMissing(WalletId
+    )
 
 
 
@@ -25622,6 +25624,9 @@ public struct FfiConverterTypeWalletManagerReconcileMessage: FfiConverterRustBuf
         case 12: return .unsignedTransactionsChanged
         
         case 13: return .sendFlowError(try FfiConverterTypeSendFlowErrorAlert.read(from: &buf)
+        )
+        
+        case 14: return .hotWalletKeyMissing(try FfiConverterTypeWalletId.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -25693,6 +25698,11 @@ public struct FfiConverterTypeWalletManagerReconcileMessage: FfiConverterRustBuf
         case let .sendFlowError(v1):
             writeInt(&buf, Int32(13))
             FfiConverterTypeSendFlowErrorAlert.write(v1, into: &buf)
+            
+        
+        case let .hotWalletKeyMissing(v1):
+            writeInt(&buf, Int32(14))
+            FfiConverterTypeWalletId.write(v1, into: &buf)
             
         }
     }

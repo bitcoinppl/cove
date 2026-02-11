@@ -53,7 +53,7 @@ use cove_types::{confirm::AddressAndAmount, fees::FeeRateOptions};
 
 use super::{
     coin_control_manager::RustCoinControlManager,
-    deferred_sender::{self, MessageSender},
+    deferred_sender::{self, DeferredSender, MessageSender},
     send_flow_manager::RustSendFlowManager,
 };
 
@@ -82,6 +82,7 @@ pub enum WalletManagerReconcileMessage {
     UnsignedTransactionsChanged,
 
     SendFlowError(SendFlowErrorAlert),
+    HotWalletKeyMissing(WalletId),
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
@@ -254,24 +255,35 @@ impl RustWalletManager {
         let network = Database::global().global_config.selected_network();
         let mode = Database::global().global_config.wallet_mode();
 
+        let reconciler = MessageSender::new(sender.clone());
+        let mut deferred = DeferredSender::new(reconciler.clone());
+
+        let wallet = {
+            let mut wallet = Wallet::try_load_persisted(id.clone())?;
+            downgrade_and_notify_if_needed(&mut wallet.metadata, &mut deferred);
+            wallet
+        };
+
         let metadata = Database::global()
             .wallets
             .get(&id, network, mode)
             .map_err_str(Error::GetSelectedWalletError)?
             .ok_or(Error::WalletDoesNotExist)?;
 
+        // sanity check to make sure the wallet metadata is correct
+        if wallet.metadata != metadata {
+            return Err(Error::UnknownError(
+                "Database contains incorrect wallet metadata".to_string(),
+            ));
+        }
+
         let id = metadata.id.clone();
-        let mut wallet = Wallet::try_load_persisted(id.clone())?;
-        let metadata = downgrade_hot_wallet_without_private_key(wallet.metadata.clone());
-        wallet.metadata = metadata.clone();
 
         // read cached and send to UI immediately
         let cached_balance: Balance = wallet.balance();
         let cached_transactions: Vec<Transaction> = wallet.transactions();
-
-        let reconciler = MessageSender::new(sender.clone());
-        reconciler.send(Message::WalletBalanceChanged(cached_balance.into()));
-        reconciler.send(Message::AvailableTransactions(cached_transactions));
+        deferred.queue(Message::WalletBalanceChanged(cached_balance.into()));
+        deferred.queue(Message::AvailableTransactions(cached_transactions));
 
         let actor = task::spawn_actor(WalletActor::new(wallet, sender.clone()));
 
@@ -1338,9 +1350,14 @@ impl Drop for RustWalletManager {
     }
 }
 
-fn downgrade_hot_wallet_without_private_key(mut metadata: WalletMetadata) -> WalletMetadata {
+/// If a hot wallet's private key is missing from the keychain, downgrade it to
+/// cold and queue a `HotWalletKeyMissing` notification so the UI can alert the user
+fn downgrade_and_notify_if_needed(
+    metadata: &mut WalletMetadata,
+    deferred: &mut DeferredSender<Message>,
+) {
     if metadata.wallet_type != WalletType::Hot {
-        return metadata;
+        return;
     }
 
     let has_private_key = match Keychain::global().get_wallet_key(&metadata.id) {
@@ -1353,11 +1370,10 @@ fn downgrade_hot_wallet_without_private_key(mut metadata: WalletMetadata) -> Wal
     };
 
     if has_private_key {
-        return metadata;
+        return;
     }
 
     warn!("hot wallet {} is missing private key in keychain, downgrading to cold", metadata.id);
-
     metadata.wallet_type = WalletType::Cold;
     metadata.hardware_metadata = None;
 
@@ -1365,7 +1381,7 @@ fn downgrade_hot_wallet_without_private_key(mut metadata: WalletMetadata) -> Wal
         error!("failed to persist cold-wallet downgrade for {}: {error}", metadata.id);
     }
 
-    metadata
+    deferred.queue(Message::HotWalletKeyMissing(metadata.id.clone()));
 }
 
 /// Get the public descriptor content for export

@@ -123,6 +123,7 @@ impl RustImportWalletManager {
             })
             .unwrap_or_default();
 
+        // wallet already exists, either as a hot or cold/watch-only wallet
         if let Some((id, _)) = all_fingerprints.into_iter().find(|(_, f)| f == &fingerprint) {
             let keychain = Keychain::global();
 

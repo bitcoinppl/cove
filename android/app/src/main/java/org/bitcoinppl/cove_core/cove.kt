@@ -42856,6 +42856,15 @@ sealed class WalletManagerReconcileMessage: Disposable  {
         companion object
     }
     
+    data class HotWalletKeyMissing(
+        val v1: org.bitcoinppl.cove_core.types.WalletId) : WalletManagerReconcileMessage()
+        
+    {
+        
+
+        companion object
+    }
+    
 
     
     @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
@@ -42942,6 +42951,13 @@ sealed class WalletManagerReconcileMessage: Disposable  {
     )
                 
             }
+            is WalletManagerReconcileMessage.HotWalletKeyMissing -> {
+                
+    Disposable.destroy(
+        this.v1
+    )
+                
+            }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
     
@@ -42993,6 +43009,9 @@ public object FfiConverterTypeWalletManagerReconcileMessage : FfiConverterRustBu
             12 -> WalletManagerReconcileMessage.UnsignedTransactionsChanged
             13 -> WalletManagerReconcileMessage.SendFlowException(
                 FfiConverterTypeSendFlowErrorAlert.read(buf),
+                )
+            14 -> WalletManagerReconcileMessage.HotWalletKeyMissing(
+                FfiConverterTypeWalletId.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
@@ -43088,6 +43107,13 @@ public object FfiConverterTypeWalletManagerReconcileMessage : FfiConverterRustBu
                 + FfiConverterTypeSendFlowErrorAlert.allocationSize(value.v1)
             )
         }
+        is WalletManagerReconcileMessage.HotWalletKeyMissing -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeWalletId.allocationSize(value.v1)
+            )
+        }
     }
 
     override fun write(value: WalletManagerReconcileMessage, buf: ByteBuffer) {
@@ -43153,6 +43179,11 @@ public object FfiConverterTypeWalletManagerReconcileMessage : FfiConverterRustBu
             is WalletManagerReconcileMessage.SendFlowException -> {
                 buf.putInt(13)
                 FfiConverterTypeSendFlowErrorAlert.write(value.v1, buf)
+                Unit
+            }
+            is WalletManagerReconcileMessage.HotWalletKeyMissing -> {
+                buf.putInt(14)
+                FfiConverterTypeWalletId.write(value.v1, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
