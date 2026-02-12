@@ -1,0 +1,42 @@
+Cove is the easiest way to use your hardware wallet on mobile. Create hot wallets in one tap or connect your Coldcard, TAPSIGNER, Krux, Jade, SeedSigner, Foundation Passport and more for cold storage security.
+
+Why Cove?
+    •    One-tap hot wallets – Create a wallet in seconds. Your private keys are encrypted and stored locally, secured by Face ID / Touch ID and a PIN you control.
+    •    Hardware-wallet ready – Bring your Coldcard, TAPSIGNER, Krux, Jade, SeedSigner, Foundation Passport and more. Cove speaks PSBT and seamlessly signs via QR (BBQr & UR), NFC, or file import.
+    •    SeedQR & descriptor export – Scan and export SeedQR backups, plus share xpub and descriptors as QR codes for easy multi-device setup.
+    •    Full UTXO control – Select, label and track coins with BIP329 compatibility so your labels stay in sync with desktop wallets like Sparrow.
+    •    Tax-ready exports – CSV export with historical fiat prices and UTC/local timestamps for tax reporting.
+    •    Decoy & Wipe PINs – Enter a special PIN to reveal a minimal "decoy" wallet or to securely wipe data if you're under duress.
+    •    Multiple address types – Native Segwit, Wrapped Segwit, and Legacy address support.
+    •    Always in style – Beautiful light & dark modes, modern typography and thoughtful animations make using Bitcoin a joy.
+    •    Built for you – Choose your fiat currency, point Cove at your favorite Electrum or Esplora node, and toggle advanced features as you grow.
+    •    Open & auditable – Powered by the battle-tested Bitcoin Development Kit (BDK) and 100% open-source code for maximum transparency.
+
+Advanced features when you're ready
+    •    Watch only wallet support
+    •    Custom fee selection
+    •    Coin-control, advanced UTXO search, filter and sort, find and send only the UTXOs you choose
+    •    Transaction notes using BIP329 labels & CSV export with historical fiat prices
+    •    Secure backup via BIP39 recovery phrase verification workflow
+    •    Optional trick-pins, including wipe and decoy PINs
+    •    SeedQR backup and restore
+    •    Xpub and descriptor export as QR
+
+Whether you're stacking for the first time or an advanced user, Cove lets you use Bitcoin your way—no compromises.
+
+Security at every turn
+
+Cove never touches your seed or sees your private keys. All sensitive operations run 100% on-device, backed by Apple's Secure Enclave whenever available. Review the source, build it yourself, or just enjoy peace of mind knowing the code is open for anyone to audit.
+
+Get started today
+    1.    Download Cove and create a hot wallet (takes ~30 seconds).
+    2.    Verify your recovery words and set a PIN.
+    3.    Send, receive or connect your hardware wallet for advanced flows.
+
+Bitcoin, on your terms—simple, secure, and feature-packed. That's Cove.
+
+---
+Support: support@covebitcoinwallet.com
+Privacy Policy: covebitcoinwallet.com/privacy
+Terms & Conditions: covebitcoinwallet.com/terms
+---
