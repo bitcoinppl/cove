@@ -77,6 +77,7 @@ import org.bitcoinppl.cove_core.AfterPinAction
 import org.bitcoinppl.cove_core.AlertDisplayType
 import org.bitcoinppl.cove_core.AppAction
 import org.bitcoinppl.cove_core.AppAlertState
+import org.bitcoinppl.cove_core.ColdWalletRoute
 import org.bitcoinppl.cove_core.Database
 import org.bitcoinppl.cove_core.HotWalletRoute
 import org.bitcoinppl.cove_core.ImportType
@@ -85,6 +86,8 @@ import org.bitcoinppl.cove_core.NumberOfBip39Words
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.RouteFactory
 import org.bitcoinppl.cove_core.TapSignerRoute
+import org.bitcoinppl.cove_core.Wallet
+import org.bitcoinppl.cove_core.WalletType
 import org.bitcoinppl.cove_core.types.ColorSchemeSelection
 
 class MainActivity : FragmentActivity() {
@@ -415,6 +418,7 @@ private fun GlobalAlertDialog(
         }
 
         is AppAlertState.HotWalletKeyMissing -> {
+            val walletId = state.walletId
             AlertDialog(
                 onDismissRequest = onDismiss,
                 title = { Text(state.title()) },
@@ -429,6 +433,13 @@ private fun GlobalAlertDialog(
                             onDismiss()
                             app.resetRoute(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWENTY_FOUR, ImportType.MANUAL))))
                         }) { Text("Import 24 Words") }
+                        TextButton(onClick = {
+                            onDismiss()
+                            try {
+                                app.rust.setWalletType(walletId, WalletType.COLD)
+                            } catch (_: Exception) {
+                            }
+                        }) { Text("Use with Hardware Wallet") }
                     }
                 },
                 dismissButton = {
@@ -685,6 +696,105 @@ private fun GlobalAlertDialog(
                             app.resetRoute(Route.NewWallet(NewWalletRoute.Select))
                         }
                     }) { Text("OK") }
+                },
+            )
+        }
+
+        is AppAlertState.CantSendOnWatchOnlyWallet -> {
+            AlertDialog(
+                onDismissRequest = onDismiss,
+                title = { Text(state.title()) },
+                text = { Text(state.message()) },
+                confirmButton = {
+                    Column {
+                        TextButton(onClick = {
+                            onDismiss()
+                            app.alertState = TaggedItem(AppAlertState.WatchOnlyImportHardware)
+                        }) { Text("Import Hardware Wallet") }
+                        TextButton(onClick = {
+                            onDismiss()
+                            app.alertState = TaggedItem(AppAlertState.WatchOnlyImportWords)
+                        }) { Text("Import Words") }
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = onDismiss) { Text("Cancel") }
+                },
+            )
+        }
+
+        is AppAlertState.WatchOnlyImportHardware -> {
+            AlertDialog(
+                onDismissRequest = onDismiss,
+                title = { Text(state.title()) },
+                text = { Text(state.message()) },
+                confirmButton = {
+                    Column {
+                        TextButton(onClick = {
+                            onDismiss()
+                            app.loadAndReset(Route.NewWallet(NewWalletRoute.ColdWallet(ColdWalletRoute.QR_CODE)))
+                        }) { Text("QR Code") }
+                        TextButton(onClick = {
+                            onDismiss()
+                            app.scanNfc()
+                        }) { Text("NFC") }
+                        TextButton(onClick = {
+                            onDismiss()
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            val text =
+                                clipboard.primaryClip
+                                    ?.getItemAt(0)
+                                    ?.text
+                                    ?.toString()
+                            if (!text.isNullOrBlank()) {
+                                try {
+                                    val wallet = Wallet.newFromXpub(xpub = text.trim())
+                                    val id = wallet.id()
+                                    app.rust.selectWallet(id)
+                                    app.resetRoute(Route.SelectedWallet(id))
+                                } catch (e: Exception) {
+                                    app.alertState =
+                                        TaggedItem(
+                                            AppAlertState.ErrorImportingHardwareWallet(e.message ?: "Unknown error"),
+                                        )
+                                }
+                            }
+                        }) { Text("Paste") }
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = onDismiss) { Text("Cancel") }
+                },
+            )
+        }
+
+        is AppAlertState.WatchOnlyImportWords -> {
+            AlertDialog(
+                onDismissRequest = onDismiss,
+                title = { Text(state.title()) },
+                text = { Text(state.message()) },
+                confirmButton = {
+                    Column {
+                        TextButton(onClick = {
+                            onDismiss()
+                            app.loadAndReset(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWENTY_FOUR, ImportType.QR))))
+                        }) { Text("Scan QR") }
+                        TextButton(onClick = {
+                            onDismiss()
+                            app.loadAndReset(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWENTY_FOUR, ImportType.NFC))))
+                        }) { Text("NFC") }
+                        TextButton(onClick = {
+                            onDismiss()
+                            app.loadAndReset(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWELVE, ImportType.MANUAL))))
+                        }) { Text("12 Words") }
+                        TextButton(onClick = {
+                            onDismiss()
+                            app.loadAndReset(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWENTY_FOUR, ImportType.MANUAL))))
+                        }) { Text("24 Words") }
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = onDismiss) { Text("Cancel") }
                 },
             )
         }

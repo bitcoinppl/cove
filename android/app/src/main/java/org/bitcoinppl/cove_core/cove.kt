@@ -1143,6 +1143,8 @@ external fun uniffi_cove_checksum_method_ffiapp_select_latest_or_new_wallet(
 ): Short
 external fun uniffi_cove_checksum_method_ffiapp_select_wallet(
 ): Short
+external fun uniffi_cove_checksum_method_ffiapp_set_wallet_type(
+): Short
 external fun uniffi_cove_checksum_method_ffiapp_state(
 ): Short
 external fun uniffi_cove_checksum_method_ffiapp_unverified_wallet_ids(
@@ -1950,6 +1952,8 @@ external fun uniffi_cove_fn_method_ffiapp_save_tap_signer_backup(`ptr`: Long,`ta
 external fun uniffi_cove_fn_method_ffiapp_select_latest_or_new_wallet(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
 external fun uniffi_cove_fn_method_ffiapp_select_wallet(`ptr`: Long,`id`: RustBufferWalletId.ByValue,`nextRoute`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
+external fun uniffi_cove_fn_method_ffiapp_set_wallet_type(`ptr`: Long,`id`: RustBufferWalletId.ByValue,`walletType`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
 external fun uniffi_cove_fn_method_ffiapp_state(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
@@ -3465,6 +3469,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_ffiapp_select_wallet() != 51673.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_ffiapp_set_wallet_type() != 40849.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_ffiapp_state() != 49253.toShort()) {
@@ -9131,6 +9138,11 @@ public interface FfiAppInterface {
      */
     fun `selectWallet`(`id`: WalletId, `nextRoute`: Route? = null)
     
+    /**
+     * Update a wallet's type and persist to database
+     */
+    fun `setWalletType`(`id`: WalletId, `walletType`: WalletType)
+    
     fun `state`(): AppState
     
     /**
@@ -9647,6 +9659,22 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
     UniffiLib.uniffi_cove_fn_method_ffiapp_select_wallet(
         it,
         FfiConverterTypeWalletId.lower(`id`),FfiConverterOptionalTypeRoute.lower(`nextRoute`),_status)
+}
+    }
+    
+    
+
+    
+    /**
+     * Update a wallet's type and persist to database
+     */
+    @Throws(DatabaseException::class)override fun `setWalletType`(`id`: WalletId, `walletType`: WalletType)
+        = 
+    callWithHandle {
+    uniffiRustCallWithError(DatabaseException) { _status ->
+    UniffiLib.uniffi_cove_fn_method_ffiapp_set_wallet_type(
+        it,
+        FfiConverterTypeWalletId.lower(`id`),FfiConverterTypeWalletType.lower(`walletType`),_status)
 }
     }
     
@@ -26940,6 +26968,12 @@ sealed class AppAlertState: Disposable  {
     object ConfirmWatchOnly : AppAlertState()
     
     
+    object WatchOnlyImportHardware : AppAlertState()
+    
+    
+    object WatchOnlyImportWords : AppAlertState()
+    
+    
     data class UninitializedTapSigner(
         val `tapSigner`: org.bitcoinppl.cove_core.tapcard.TapSigner) : AppAlertState()
         
@@ -27114,6 +27148,10 @@ sealed class AppAlertState: Disposable  {
             }
             is AppAlertState.ConfirmWatchOnly -> {// Nothing to destroy
             }
+            is AppAlertState.WatchOnlyImportHardware -> {// Nothing to destroy
+            }
+            is AppAlertState.WatchOnlyImportWords -> {// Nothing to destroy
+            }
             is AppAlertState.UninitializedTapSigner -> {
                 
     Disposable.destroy(
@@ -27257,13 +27295,15 @@ public object FfiConverterTypeAppAlertState : FfiConverterRustBuffer<AppAlertSta
                 )
             25 -> AppAlertState.Loading
             26 -> AppAlertState.ConfirmWatchOnly
-            27 -> AppAlertState.UninitializedTapSigner(
+            27 -> AppAlertState.WatchOnlyImportHardware
+            28 -> AppAlertState.WatchOnlyImportWords
+            29 -> AppAlertState.UninitializedTapSigner(
                 FfiConverterTypeTapSigner.read(buf),
                 )
-            28 -> AppAlertState.TapSignerWalletFound(
+            30 -> AppAlertState.TapSignerWalletFound(
                 FfiConverterTypeWalletId.read(buf),
                 )
-            29 -> AppAlertState.InitializedTapSigner(
+            31 -> AppAlertState.InitializedTapSigner(
                 FfiConverterTypeTapSigner.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -27449,6 +27489,18 @@ public object FfiConverterTypeAppAlertState : FfiConverterRustBuffer<AppAlertSta
                 4UL
             )
         }
+        is AppAlertState.WatchOnlyImportHardware -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is AppAlertState.WatchOnlyImportWords -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
         is AppAlertState.UninitializedTapSigner -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
@@ -27600,18 +27652,26 @@ public object FfiConverterTypeAppAlertState : FfiConverterRustBuffer<AppAlertSta
                 buf.putInt(26)
                 Unit
             }
-            is AppAlertState.UninitializedTapSigner -> {
+            is AppAlertState.WatchOnlyImportHardware -> {
                 buf.putInt(27)
+                Unit
+            }
+            is AppAlertState.WatchOnlyImportWords -> {
+                buf.putInt(28)
+                Unit
+            }
+            is AppAlertState.UninitializedTapSigner -> {
+                buf.putInt(29)
                 FfiConverterTypeTapSigner.write(value.`tapSigner`, buf)
                 Unit
             }
             is AppAlertState.TapSignerWalletFound -> {
-                buf.putInt(28)
+                buf.putInt(30)
                 FfiConverterTypeWalletId.write(value.`walletId`, buf)
                 Unit
             }
             is AppAlertState.InitializedTapSigner -> {
-                buf.putInt(29)
+                buf.putInt(31)
                 FfiConverterTypeTapSigner.write(value.`tapSigner`, buf)
                 Unit
             }
@@ -30193,6 +30253,12 @@ sealed class DatabaseException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
+    class WalletNotFound(
+        ) : DatabaseException() {
+        override val message
+            get() = ""
+    }
+    
 
     
 
@@ -30248,6 +30314,7 @@ public object FfiConverterTypeDatabaseError : FfiConverterRustBuffer<DatabaseExc
             9 -> DatabaseException.Serialization(
                 FfiConverterTypeSerdeError.read(buf),
                 )
+            10 -> DatabaseException.WalletNotFound()
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
@@ -30299,6 +30366,10 @@ public object FfiConverterTypeDatabaseError : FfiConverterRustBuffer<DatabaseExc
                 4UL
                 + FfiConverterTypeSerdeError.allocationSize(value.v1)
             )
+            is DatabaseException.WalletNotFound -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
         }
     }
 
@@ -30347,6 +30418,10 @@ public object FfiConverterTypeDatabaseError : FfiConverterRustBuffer<DatabaseExc
             is DatabaseException.Serialization -> {
                 buf.putInt(9)
                 FfiConverterTypeSerdeError.write(value.v1, buf)
+                Unit
+            }
+            is DatabaseException.WalletNotFound -> {
+                buf.putInt(10)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -43482,9 +43557,6 @@ enum class WalletType {
     HOT,
     COLD,
     XPUB_ONLY,
-    /**
-     * deprecated, use XpubOnly instead
-     */
     WATCH_ONLY;
 
     

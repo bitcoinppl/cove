@@ -73,7 +73,7 @@ struct CoveApp: App {
                 app.isSidebarVisible = false
                 try? app.rust.selectWallet(id: walletId)
             }
-        case .hotWalletKeyMissing:
+        case let .hotWalletKeyMissing(walletId: walletId):
             Button("Import 12 Words") {
                 app.alertState = .none
                 app.loadAndReset(to: .newWallet(.hotWallet(.import(.twelve, .manual))))
@@ -82,6 +82,11 @@ struct CoveApp: App {
             Button("Import 24 Words") {
                 app.alertState = .none
                 app.loadAndReset(to: .newWallet(.hotWallet(.import(.twentyFour, .manual))))
+            }
+
+            Button("Use with Hardware Wallet") {
+                app.alertState = .none
+                try? app.rust.setWalletType(id: walletId, walletType: .cold)
             }
 
             Button("Use as Watch Only", role: .cancel) {
@@ -163,6 +168,61 @@ struct CoveApp: App {
                 app.sheetState = .init(.tapSigner(.enterPin(tapSigner: tapSigner, action: action)))
             }
             Button("Cancel", role: .cancel) { app.alertState = .none }
+        case .cantSendOnWatchOnlyWallet:
+            Button("Import Hardware Wallet") {
+                app.alertState = .init(.watchOnlyImportHardware)
+            }
+            Button("Import Words") {
+                app.alertState = .init(.watchOnlyImportWords)
+            }
+            Button("Cancel", role: .cancel) {
+                app.alertState = .none
+            }
+        case .watchOnlyImportHardware:
+            Button("QR Code") {
+                app.alertState = .none
+                app.loadAndReset(to: .newWallet(.coldWallet(.qrCode)))
+            }
+            Button("NFC") {
+                app.alertState = .none
+                app.nfcReader.scan()
+            }
+            Button("Paste") {
+                app.alertState = .none
+                let text = UIPasteboard.general.string ?? ""
+                if text.isEmpty { return }
+                do {
+                    let wallet = try Wallet.newFromXpub(xpub: text)
+                    try app.rust.selectWallet(id: wallet.id())
+                } catch {
+                    app.alertState = .init(
+                        .errorImportingHardwareWallet(message: error.localizedDescription)
+                    )
+                }
+            }
+            Button("Cancel", role: .cancel) {
+                app.alertState = .none
+            }
+        case .watchOnlyImportWords:
+            Button("Scan QR") {
+                app.alertState = .none
+                app.loadAndReset(to: .newWallet(.hotWallet(.import(.twentyFour, .qr))))
+            }
+            Button("NFC") {
+                app.alertState = .none
+                app.loadAndReset(to: .newWallet(.hotWallet(.import(.twentyFour, .nfc))))
+            }
+            Button("12 Words") {
+                app.alertState = .none
+                app.loadAndReset(to: .newWallet(.hotWallet(.import(.twelve, .manual))))
+            }
+            Button("24 Words") {
+                app.alertState = .none
+                app.loadAndReset(to: .newWallet(.hotWallet(.import(.twentyFour, .manual))))
+            }
+            Button("Cancel", role: .cancel) {
+                app.alertState = .none
+            }
         case .invalidWordGroup,
              .errorImportingHotWallet,
              .importedSuccessfully,
@@ -173,7 +233,6 @@ struct CoveApp: App {
              .unableToGetAddress,
              .failedToScanQr,
              .noUnsignedTransactionFound,
-             .cantSendOnWatchOnlyWallet,
              .tapSignerSetupFailed,
              .tapSignerInvalidAuth,
              .tapSignerDeriveFailed,
