@@ -6,15 +6,17 @@ HOT WALLET
 • Biometric and PIN security
 
 HARDWARE WALLET SUPPORT
-• Bring your Coldcard, TAPSIGNER, Krux, Jade, SeedSigner, or Foundation Passport
-• PSBT support with QR (BBQr) and NFC signing
+• Coldcard, TAPSIGNER, Krux, Jade, SeedSigner, and Foundation Passport
+• PSBT signing via QR (BBQr & UR), NFC, and file import
+• SeedQR backup and restore
+• Xpub and descriptor export as QR
 • Watch-only wallet support
 
 FULL COIN CONTROL
 • Select, label, and track your UTXOs
 • Advanced search, filtering, and sorting
 • BIP329 label sync with desktop wallets
-• Exportable transaction history
+• CSV export with historical fiat prices for tax reporting
 
 SECURITY FIRST
 • Decoy & Wipe PINs for emergency situations
@@ -23,6 +25,7 @@ SECURITY FIRST
 • No data ever leaves your phone
 
 YOUR WALLET, YOUR WAY
+• Native Segwit, Wrapped Segwit, and Legacy addresses
 • Beautiful light & dark modes
 • Custom fiat currency selection
 • Connect to your own Electrum or Esplora node
