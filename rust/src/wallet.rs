@@ -285,20 +285,55 @@ impl Wallet {
 
         let fingerprint = pubport_descriptors.fingerprint();
 
-        // make sure its not already imported
+        // compute xpub and descriptors early so they're available for the upgrade path
+        let xpub =
+            pubport_descriptors.xpub().map_err(Into::into).map_err(WalletError::ParseXpubError)?;
+        let descriptors: Descriptors = pubport_descriptors.into();
+
+        // check for existing wallet with same fingerprint, upgrade watch-only → cold
         if let Some(fingerprint) = fingerprint.as_ref() {
-            // update the fingerprint
             let fingerprint: Fingerprint = (*fingerprint).into();
             metadata.master_fingerprint = Some(fingerprint.into());
 
-            check_for_duplicate_wallet(network, mode, fingerprint)?;
+            let existing = database
+                .wallets
+                .get_all(network, mode)
+                .map(|wallets| {
+                    wallets
+                        .into_iter()
+                        .filter_map(|wm| {
+                            let fp = wm.master_fingerprint.as_ref()?;
+                            (fp.as_ref() == &fingerprint).then_some(wm)
+                        })
+                        .next()
+                })
+                .unwrap_or(None);
+
+            if let Some(mut existing_metadata) = existing {
+                if existing_metadata.wallet_type != WalletType::WatchOnly {
+                    return Err(WalletError::WalletAlreadyExists(existing_metadata.id));
+                }
+
+                let existing_id = existing_metadata.id.clone();
+
+                keychain.save_wallet_xpub(&existing_id, xpub)?;
+
+                existing_metadata.wallet_type = WalletType::Cold;
+                existing_metadata.origin = descriptors.origin().ok();
+
+                keychain.save_public_descriptor(
+                    &existing_id,
+                    descriptors.external.extended_descriptor,
+                    descriptors.internal.extended_descriptor,
+                )?;
+                database.wallets.update_wallet_metadata(existing_metadata.clone())?;
+                database.global_config.select_wallet(existing_id.clone())?;
+
+                return Self::try_load_persisted(existing_id);
+            }
         }
 
         let fingerprint = fingerprint.map(|s| s.to_string());
-        let xpub =
-            pubport_descriptors.xpub().map_err(Into::into).map_err(WalletError::ParseXpubError)?;
-
-        let descriptors: Descriptors = pubport_descriptors.into();
 
         metadata.name = match &fingerprint {
             Some(fingerprint) => format!("Imported {}", fingerprint.to_ascii_uppercase()),
