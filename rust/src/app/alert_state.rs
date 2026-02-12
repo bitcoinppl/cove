@@ -51,6 +51,10 @@ pub enum AppAlertState {
     // confirmation
     ConfirmWatchOnly,
 
+    // watch-only import sub-alerts
+    WatchOnlyImportHardware,
+    WatchOnlyImportWords,
+
     // action
     UninitializedTapSigner { tap_signer: Arc<TapSigner> },
     TapSignerWalletFound { wallet_id: WalletId },
@@ -78,6 +82,8 @@ impl AppAlertState {
             Self::NoUnsignedTransactionFound { .. } => "No Unsigned Transaction Found",
             Self::UnableToGetAddress { .. } => "Unable to Get Address",
             Self::CantSendOnWatchOnlyWallet | Self::ConfirmWatchOnly => "Watch Only Wallet",
+            Self::WatchOnlyImportHardware => "Import Hardware Wallet",
+            Self::WatchOnlyImportWords => "Import Words",
             Self::UninitializedTapSigner { .. } => "Setup TAPSIGNER?",
             Self::TapSignerSetupFailed { .. } => "Setup Failed",
             Self::TapSignerDeriveFailed { .. } => "TAPSIGNER Import Failed",
@@ -161,7 +167,14 @@ impl AppAlertState {
                 format!("Error getting address, more info: {error}")
             }
             Self::CantSendOnWatchOnlyWallet => {
-                "You cannot send from a watch-only wallet".to_string()
+                "This wallet can only be used to watch your transactions. To be able to send, either import the seed words for this wallet or import the public key from your hardware wallet."
+                    .to_string()
+            }
+            Self::WatchOnlyImportHardware => {
+                "Choose how to import your hardware wallet".to_string()
+            }
+            Self::WatchOnlyImportWords => {
+                "Choose how to import your seed words".to_string()
             }
             Self::UninitializedTapSigner { .. } => {
                 "This TAPSIGNER has not been set up yet. Would you like to set it up now?"

@@ -2704,6 +2704,11 @@ public protocol FfiAppProtocol: AnyObject, Sendable {
      */
     func selectWallet(id: WalletId, nextRoute: Route?) throws 
     
+    /**
+     * Update a wallet's type and persist to database
+     */
+    func setWalletType(id: WalletId, walletType: WalletType) throws 
+    
     func state()  -> AppState
     
     /**
@@ -3060,6 +3065,18 @@ open func selectWallet(id: WalletId, nextRoute: Route? = nil)throws   {try rustC
             self.uniffiCloneHandle(),
         FfiConverterTypeWalletId_lower(id),
         FfiConverterOptionTypeRoute.lower(nextRoute),$0
+    )
+}
+}
+    
+    /**
+     * Update a wallet's type and persist to database
+     */
+open func setWalletType(id: WalletId, walletType: WalletType)throws   {try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
+    uniffi_cove_fn_method_ffiapp_set_wallet_type(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeWalletId_lower(id),
+        FfiConverterTypeWalletType_lower(walletType),$0
     )
 }
 }
@@ -13804,6 +13821,8 @@ public enum AppAlertState {
     )
     case loading
     case confirmWatchOnly
+    case watchOnlyImportHardware
+    case watchOnlyImportWords
     case uninitializedTapSigner(tapSigner: TapSigner
     )
     case tapSignerWalletFound(walletId: WalletId
@@ -13933,13 +13952,17 @@ public struct FfiConverterTypeAppAlertState: FfiConverterRustBuffer {
         
         case 26: return .confirmWatchOnly
         
-        case 27: return .uninitializedTapSigner(tapSigner: try FfiConverterTypeTapSigner.read(from: &buf)
+        case 27: return .watchOnlyImportHardware
+        
+        case 28: return .watchOnlyImportWords
+        
+        case 29: return .uninitializedTapSigner(tapSigner: try FfiConverterTypeTapSigner.read(from: &buf)
         )
         
-        case 28: return .tapSignerWalletFound(walletId: try FfiConverterTypeWalletId.read(from: &buf)
+        case 30: return .tapSignerWalletFound(walletId: try FfiConverterTypeWalletId.read(from: &buf)
         )
         
-        case 29: return .initializedTapSigner(tapSigner: try FfiConverterTypeTapSigner.read(from: &buf)
+        case 31: return .initializedTapSigner(tapSigner: try FfiConverterTypeTapSigner.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -14076,18 +14099,26 @@ public struct FfiConverterTypeAppAlertState: FfiConverterRustBuffer {
             writeInt(&buf, Int32(26))
         
         
-        case let .uninitializedTapSigner(tapSigner):
+        case .watchOnlyImportHardware:
             writeInt(&buf, Int32(27))
+        
+        
+        case .watchOnlyImportWords:
+            writeInt(&buf, Int32(28))
+        
+        
+        case let .uninitializedTapSigner(tapSigner):
+            writeInt(&buf, Int32(29))
             FfiConverterTypeTapSigner.write(tapSigner, into: &buf)
             
         
         case let .tapSignerWalletFound(walletId):
-            writeInt(&buf, Int32(28))
+            writeInt(&buf, Int32(30))
             FfiConverterTypeWalletId.write(walletId, into: &buf)
             
         
         case let .initializedTapSigner(tapSigner):
-            writeInt(&buf, Int32(29))
+            writeInt(&buf, Int32(31))
             FfiConverterTypeTapSigner.write(tapSigner, into: &buf)
             
         }
@@ -16079,6 +16110,7 @@ public enum DatabaseError: Swift.Error, Equatable, Hashable, Foundation.Localize
     )
     case Serialization(SerdeError
     )
+    case WalletNotFound
 
     
 
@@ -16145,6 +16177,7 @@ public struct FfiConverterTypeDatabaseError: FfiConverterRustBuffer {
         case 9: return .Serialization(
             try FfiConverterTypeSerdeError.read(from: &buf)
             )
+        case 10: return .WalletNotFound
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -16201,6 +16234,10 @@ public struct FfiConverterTypeDatabaseError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(9))
             FfiConverterTypeSerdeError.write(v1, into: &buf)
             
+        
+        case .WalletNotFound:
+            writeInt(&buf, Int32(10))
+        
         }
     }
 }
@@ -26066,9 +26103,6 @@ public enum WalletType: Equatable, Hashable, CustomStringConvertible {
     case hot
     case cold
     case xpubOnly
-    /**
-     * deprecated, use XpubOnly instead
-     */
     case watchOnly
 
 
@@ -29587,6 +29621,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_select_wallet() != 51673) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_ffiapp_set_wallet_type() != 40849) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_state() != 49253) {
