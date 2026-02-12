@@ -1351,7 +1351,7 @@ impl Drop for RustWalletManager {
 }
 
 /// If a hot wallet's private key is missing from the keychain, downgrade it to
-/// cold and queue a `HotWalletKeyMissing` notification so the UI can alert the user
+/// watch-only and queue a `HotWalletKeyMissing` notification so the UI can alert the user
 fn downgrade_and_notify_if_needed(
     metadata: &mut WalletMetadata,
     deferred: &mut DeferredSender<Message>,
@@ -1373,12 +1373,15 @@ fn downgrade_and_notify_if_needed(
         return;
     }
 
-    warn!("hot wallet {} is missing private key in keychain, downgrading to cold", metadata.id);
-    metadata.wallet_type = WalletType::Cold;
+    warn!(
+        "hot wallet {} is missing private key in keychain, downgrading to watch-only",
+        metadata.id
+    );
+    metadata.wallet_type = WalletType::WatchOnly;
     metadata.hardware_metadata = None;
 
     if let Err(error) = Database::global().wallets.update_wallet_metadata(metadata.clone()) {
-        error!("failed to persist cold-wallet downgrade for {}: {error}", metadata.id);
+        error!("failed to persist watch-only downgrade for {}: {error}", metadata.id);
     }
 
     deferred.queue(Message::HotWalletKeyMissing(metadata.id.clone()));
