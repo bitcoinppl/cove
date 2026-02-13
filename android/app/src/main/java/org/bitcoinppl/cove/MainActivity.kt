@@ -437,7 +437,15 @@ private fun GlobalAlertDialog(
                             onDismiss()
                             try {
                                 app.rust.setWalletType(walletId, WalletType.COLD)
-                            } catch (_: Exception) {
+                            } catch (e: Exception) {
+                                Log.e("GlobalAlert", "Failed to set wallet type to cold", e)
+                                app.alertState =
+                                    TaggedItem(
+                                        AppAlertState.General(
+                                            title = "Error",
+                                            message = e.message ?: "Failed to convert wallet",
+                                        ),
+                                    )
                             }
                         }) { Text("Use with Hardware Wallet") }
                     }
