@@ -912,6 +912,21 @@ impl RustWalletManager {
     }
 
     #[uniffi::method]
+    pub fn set_wallet_type(&self, wallet_type: WalletType) {
+        let metadata = {
+            let mut metadata = self.metadata.write();
+            metadata.wallet_type = wallet_type;
+            metadata.clone()
+        };
+
+        self.reconciler.send(Message::WalletMetadataChanged(metadata.clone()));
+
+        if let Err(error) = Database::global().wallets.update_wallet_metadata(metadata) {
+            error!("Unable to update wallet metadata: {error:?}");
+        }
+    }
+
+    #[uniffi::method]
     pub fn validate_metadata(&self) {
         let name = {
             let metadata = self.metadata.read();

@@ -1501,6 +1501,8 @@ external fun uniffi_cove_checksum_method_rustwalletmanager_sent_and_received_fia
 ): Short
 external fun uniffi_cove_checksum_method_rustwalletmanager_set_wallet_metadata(
 ): Short
+external fun uniffi_cove_checksum_method_rustwalletmanager_set_wallet_type(
+): Short
 external fun uniffi_cove_checksum_method_rustwalletmanager_sign_and_broadcast_transaction(
 ): Short
 external fun uniffi_cove_checksum_method_rustwalletmanager_split_transaction_outputs(
@@ -2472,6 +2474,8 @@ external fun uniffi_cove_fn_method_rustwalletmanager_selected_fiat_currency(`ptr
 external fun uniffi_cove_fn_method_rustwalletmanager_sent_and_received_fiat(`ptr`: Long,`sentAndReceived`: Long,
 ): Long
 external fun uniffi_cove_fn_method_rustwalletmanager_set_wallet_metadata(`ptr`: Long,`metadata`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
+external fun uniffi_cove_fn_method_rustwalletmanager_set_wallet_type(`ptr`: Long,`walletType`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
 external fun uniffi_cove_fn_method_rustwalletmanager_sign_and_broadcast_transaction(`ptr`: Long,`psbt`: Long,
 ): Long
@@ -4006,6 +4010,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_set_wallet_metadata() != 11441.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_set_wallet_type() != 29503.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_sign_and_broadcast_transaction() != 32531.toShort()) {
@@ -18310,6 +18317,8 @@ public interface RustWalletManagerInterface {
     
     fun `setWalletMetadata`(`metadata`: WalletMetadata)
     
+    fun `setWalletType`(`walletType`: WalletType)
+    
     suspend fun `signAndBroadcastTransaction`(`psbt`: Psbt)
     
     suspend fun `splitTransactionOutputs`(`outputs`: List<AddressAndAmount>): SplitOutput
@@ -19265,6 +19274,18 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     UniffiLib.uniffi_cove_fn_method_rustwalletmanager_set_wallet_metadata(
         it,
         FfiConverterTypeWalletMetadata.lower(`metadata`),_status)
+}
+    }
+    
+    
+
+    override fun `setWalletType`(`walletType`: WalletType)
+        = 
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_set_wallet_type(
+        it,
+        FfiConverterTypeWalletType.lower(`walletType`),_status)
 }
     }
     

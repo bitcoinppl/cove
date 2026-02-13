@@ -62,6 +62,7 @@ import org.bitcoinppl.cove.views.MaterialDivider
 import org.bitcoinppl.cove.views.MaterialSection
 import org.bitcoinppl.cove.views.MaterialSettingsItem
 import org.bitcoinppl.cove.views.SectionHeader
+import org.bitcoinppl.cove_core.Database
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.WalletColor
@@ -242,6 +243,26 @@ fun WalletSettingsScreen(
                             },
                             onClick = {
                                 manager.dispatch(WalletManagerAction.ToggleShowLabels)
+                            },
+                        )
+                    }
+                }
+
+                if (BuildConfig.DEBUG) {
+                    SectionHeader("Debug")
+                    MaterialSection {
+                        MaterialSettingsItem(
+                            title = "Simulate Missing Key",
+                            titleColor = CoveColor.WarningOrange,
+                            onClick = {
+                                manager.rust.setWalletType(WalletType.HOT)
+                                val wallets = runCatching { Database().wallets().all() }.getOrElse { emptyList() }
+                                val other = wallets.firstOrNull { it.id != metadata.id }
+                                if (other != null) {
+                                    app.rust.selectWallet(other.id)
+                                } else {
+                                    app.popRoute()
+                                }
                             },
                         )
                     }

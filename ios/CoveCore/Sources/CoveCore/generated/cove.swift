@@ -7775,6 +7775,8 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
     
     func setWalletMetadata(metadata: WalletMetadata) 
     
+    func setWalletType(walletType: WalletType) 
+    
     func signAndBroadcastTransaction(psbt: Psbt) async throws 
     
     func splitTransactionOutputs(outputs: [AddressAndAmount]) async throws  -> SplitOutput
@@ -8535,6 +8537,14 @@ open func setWalletMetadata(metadata: WalletMetadata)  {try! rustCall() {
     uniffi_cove_fn_method_rustwalletmanager_set_wallet_metadata(
             self.uniffiCloneHandle(),
         FfiConverterTypeWalletMetadata_lower(metadata),$0
+    )
+}
+}
+    
+open func setWalletType(walletType: WalletType)  {try! rustCall() {
+    uniffi_cove_fn_method_rustwalletmanager_set_wallet_type(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeWalletType_lower(walletType),$0
     )
 }
 }
@@ -30158,6 +30168,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_set_wallet_metadata() != 11441) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustwalletmanager_set_wallet_type() != 29503) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_sign_and_broadcast_transaction() != 32531) {
