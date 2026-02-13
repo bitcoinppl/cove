@@ -732,7 +732,7 @@ private fun GlobalAlertDialog(
                     Column {
                         TextButton(onClick = {
                             onDismiss()
-                            app.loadAndReset(Route.NewWallet(NewWalletRoute.ColdWallet(ColdWalletRoute.QR_CODE)))
+                            app.pushRoute(Route.NewWallet(NewWalletRoute.ColdWallet(ColdWalletRoute.QR_CODE)))
                         }) { Text("QR Code") }
                         TextButton(onClick = {
                             onDismiss()
@@ -777,19 +777,19 @@ private fun GlobalAlertDialog(
                     Column {
                         TextButton(onClick = {
                             onDismiss()
-                            app.loadAndReset(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWENTY_FOUR, ImportType.QR))))
+                            app.pushRoute(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWENTY_FOUR, ImportType.QR))))
                         }) { Text("Scan QR") }
                         TextButton(onClick = {
                             onDismiss()
-                            app.loadAndReset(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWENTY_FOUR, ImportType.NFC))))
+                            app.pushRoute(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWENTY_FOUR, ImportType.NFC))))
                         }) { Text("NFC") }
                         TextButton(onClick = {
                             onDismiss()
-                            app.loadAndReset(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWELVE, ImportType.MANUAL))))
+                            app.pushRoute(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWELVE, ImportType.MANUAL))))
                         }) { Text("12 Words") }
                         TextButton(onClick = {
                             onDismiss()
-                            app.loadAndReset(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWENTY_FOUR, ImportType.MANUAL))))
+                            app.pushRoute(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWENTY_FOUR, ImportType.MANUAL))))
                         }) { Text("24 Words") }
                     }
                 },

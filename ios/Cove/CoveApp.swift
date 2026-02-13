@@ -90,7 +90,7 @@ struct CoveApp: App {
             }
 
             Button("Use as Watch Only", role: .cancel) {
-                app.alertState = .init(.confirmWatchOnly)
+                DispatchQueue.main.async { app.alertState = .init(.confirmWatchOnly) }
             }
         case .confirmWatchOnly:
             Button("I Understand", role: .destructive) {
@@ -170,10 +170,10 @@ struct CoveApp: App {
             Button("Cancel", role: .cancel) { app.alertState = .none }
         case .cantSendOnWatchOnlyWallet:
             Button("Import Hardware Wallet") {
-                app.alertState = .init(.watchOnlyImportHardware)
+                DispatchQueue.main.async { app.alertState = .init(.watchOnlyImportHardware) }
             }
             Button("Import Words") {
-                app.alertState = .init(.watchOnlyImportWords)
+                DispatchQueue.main.async { app.alertState = .init(.watchOnlyImportWords) }
             }
             Button("Cancel", role: .cancel) {
                 app.alertState = .none
@@ -181,7 +181,7 @@ struct CoveApp: App {
         case .watchOnlyImportHardware:
             Button("QR Code") {
                 app.alertState = .none
-                app.loadAndReset(to: .newWallet(.coldWallet(.qrCode)))
+                app.pushRoute(.newWallet(.coldWallet(.qrCode)))
             }
             Button("NFC") {
                 app.alertState = .none
@@ -195,9 +195,11 @@ struct CoveApp: App {
                     let wallet = try Wallet.newFromXpub(xpub: text)
                     try app.rust.selectWallet(id: wallet.id())
                 } catch {
-                    app.alertState = .init(
-                        .errorImportingHardwareWallet(message: error.localizedDescription)
-                    )
+                    DispatchQueue.main.async {
+                        app.alertState = .init(
+                            .errorImportingHardwareWallet(message: error.localizedDescription)
+                        )
+                    }
                 }
             }
             Button("Cancel", role: .cancel) {
@@ -206,19 +208,19 @@ struct CoveApp: App {
         case .watchOnlyImportWords:
             Button("Scan QR") {
                 app.alertState = .none
-                app.loadAndReset(to: .newWallet(.hotWallet(.import(.twentyFour, .qr))))
+                app.pushRoute(.newWallet(.hotWallet(.import(.twentyFour, .qr))))
             }
             Button("NFC") {
                 app.alertState = .none
-                app.loadAndReset(to: .newWallet(.hotWallet(.import(.twentyFour, .nfc))))
+                app.pushRoute(.newWallet(.hotWallet(.import(.twentyFour, .nfc))))
             }
             Button("12 Words") {
                 app.alertState = .none
-                app.loadAndReset(to: .newWallet(.hotWallet(.import(.twelve, .manual))))
+                app.pushRoute(.newWallet(.hotWallet(.import(.twelve, .manual))))
             }
             Button("24 Words") {
                 app.alertState = .none
-                app.loadAndReset(to: .newWallet(.hotWallet(.import(.twentyFour, .manual))))
+                app.pushRoute(.newWallet(.hotWallet(.import(.twentyFour, .manual))))
             }
             Button("Cancel", role: .cancel) {
                 app.alertState = .none
