@@ -225,6 +225,8 @@ struct HotWalletImportScreen: View {
                 Log.error("Unable to save wallet metadata to database: \(databaseError)")
             case let .BdkError(error):
                 Log.error("Unable to import wallet: \(error)")
+            case let .MissingMetadata(walletId):
+                Log.error("Wallet metadata missing for \(walletId)")
             }
         } catch {
             Log.error("Unknown error \(error)")

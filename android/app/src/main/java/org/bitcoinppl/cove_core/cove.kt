@@ -32409,6 +32409,14 @@ sealed class ImportWalletException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
+    class MissingMetadata(
+        
+        val v1: WalletId
+        ) : ImportWalletException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+    
     class Database(
         
         val v1: DatabaseException
@@ -32465,10 +32473,13 @@ public object FfiConverterTypeImportWalletError : FfiConverterRustBuffer<ImportW
             4 -> ImportWalletException.WalletAlreadyExists(
                 FfiConverterTypeWalletId.read(buf),
                 )
-            5 -> ImportWalletException.Database(
+            5 -> ImportWalletException.MissingMetadata(
+                FfiConverterTypeWalletId.read(buf),
+                )
+            6 -> ImportWalletException.Database(
                 FfiConverterTypeDatabaseError.read(buf),
                 )
-            6 -> ImportWalletException.BdkException(
+            7 -> ImportWalletException.BdkException(
                 FfiConverterString.read(buf),
                 )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
@@ -32493,6 +32504,11 @@ public object FfiConverterTypeImportWalletError : FfiConverterRustBuffer<ImportW
                 + FfiConverterTypeKeychainError.allocationSize(value.v1)
             )
             is ImportWalletException.WalletAlreadyExists -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterTypeWalletId.allocationSize(value.v1)
+            )
+            is ImportWalletException.MissingMetadata -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
                 + FfiConverterTypeWalletId.allocationSize(value.v1)
@@ -32532,13 +32548,18 @@ public object FfiConverterTypeImportWalletError : FfiConverterRustBuffer<ImportW
                 FfiConverterTypeWalletId.write(value.v1, buf)
                 Unit
             }
-            is ImportWalletException.Database -> {
+            is ImportWalletException.MissingMetadata -> {
                 buf.putInt(5)
+                FfiConverterTypeWalletId.write(value.v1, buf)
+                Unit
+            }
+            is ImportWalletException.Database -> {
+                buf.putInt(6)
                 FfiConverterTypeDatabaseError.write(value.v1, buf)
                 Unit
             }
             is ImportWalletException.BdkException -> {
-                buf.putInt(6)
+                buf.putInt(7)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }

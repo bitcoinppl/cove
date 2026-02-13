@@ -18041,6 +18041,8 @@ public enum ImportWalletError: Swift.Error, Equatable, Hashable, Foundation.Loca
     )
     case WalletAlreadyExists(WalletId
     )
+    case MissingMetadata(WalletId
+    )
     case Database(DatabaseError
     )
     case BdkError(String
@@ -18096,10 +18098,13 @@ public struct FfiConverterTypeImportWalletError: FfiConverterRustBuffer {
         case 4: return .WalletAlreadyExists(
             try FfiConverterTypeWalletId.read(from: &buf)
             )
-        case 5: return .Database(
+        case 5: return .MissingMetadata(
+            try FfiConverterTypeWalletId.read(from: &buf)
+            )
+        case 6: return .Database(
             try FfiConverterTypeDatabaseError.read(from: &buf)
             )
-        case 6: return .BdkError(
+        case 7: return .BdkError(
             try FfiConverterString.read(from: &buf)
             )
 
@@ -18134,13 +18139,18 @@ public struct FfiConverterTypeImportWalletError: FfiConverterRustBuffer {
             FfiConverterTypeWalletId.write(v1, into: &buf)
             
         
-        case let .Database(v1):
+        case let .MissingMetadata(v1):
             writeInt(&buf, Int32(5))
+            FfiConverterTypeWalletId.write(v1, into: &buf)
+            
+        
+        case let .Database(v1):
+            writeInt(&buf, Int32(6))
             FfiConverterTypeDatabaseError.write(v1, into: &buf)
             
         
         case let .BdkError(v1):
-            writeInt(&buf, Int32(6))
+            writeInt(&buf, Int32(7))
             FfiConverterString.write(v1, into: &buf)
             
         }
