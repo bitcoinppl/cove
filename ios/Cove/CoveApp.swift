@@ -67,13 +67,46 @@ struct CoveApp: App {
     @ViewBuilder
     private func alertButtons(alert: TaggedItem<AppAlertState>) -> some View {
         switch alert.item {
-        case let .duplicateWallet(walletId):
+        case let .duplicateWallet(walletId: walletId):
             Button("OK") {
                 app.alertState = .none
                 app.isSidebarVisible = false
                 try? app.rust.selectWallet(id: walletId)
             }
-        case .addressWrongNetwork(let address, network: _, currentNetwork: _):
+        case let .hotWalletKeyMissing(walletId: walletId):
+            Button("Import 12 Words") {
+                app.alertState = .none
+                app.loadAndReset(to: .newWallet(.hotWallet(.import(.twelve, .manual))))
+            }
+
+            Button("Import 24 Words") {
+                app.alertState = .none
+                app.loadAndReset(to: .newWallet(.hotWallet(.import(.twentyFour, .manual))))
+            }
+
+            Button("Use with Hardware Wallet") {
+                do {
+                    try app.rust.setWalletType(id: walletId, walletType: .cold)
+                    app.alertState = .none
+                } catch {
+                    Log.error("Failed to set wallet type to cold: \(error)")
+                    DispatchQueue.main.async {
+                        app.alertState = .init(.general(
+                            title: "Error",
+                            message: error.localizedDescription
+                        ))
+                    }
+                }
+            }
+
+            Button("Use as Watch Only", role: .cancel) {
+                DispatchQueue.main.async { app.alertState = .init(.confirmWatchOnly) }
+            }
+        case .confirmWatchOnly:
+            Button("I Understand", role: .destructive) {
+                app.alertState = .none
+            }
+        case let .addressWrongNetwork(address, _, _):
             Button("Copy Address") {
                 UIPasteboard.general.string = String(address)
             }
@@ -145,6 +178,64 @@ struct CoveApp: App {
                 app.sheetState = .init(.tapSigner(.enterPin(tapSigner: tapSigner, action: action)))
             }
             Button("Cancel", role: .cancel) { app.alertState = .none }
+        case .cantSendOnWatchOnlyWallet:
+            Button("Import Hardware Wallet") {
+                DispatchQueue.main.async { app.alertState = .init(.watchOnlyImportHardware) }
+            }
+            Button("Import Words") {
+                DispatchQueue.main.async { app.alertState = .init(.watchOnlyImportWords) }
+            }
+            Button("Cancel", role: .cancel) {
+                app.alertState = .none
+            }
+        case .watchOnlyImportHardware:
+            Button("QR Code") {
+                app.alertState = .none
+                app.pushRoute(.newWallet(.coldWallet(.qrCode)))
+            }
+            Button("NFC") {
+                app.alertState = .none
+                app.nfcReader.scan()
+            }
+            Button("Paste") {
+                app.alertState = .none
+                let text = UIPasteboard.general.string ?? ""
+                if text.isEmpty { return }
+                do {
+                    let wallet = try Wallet.newFromXpub(xpub: text)
+                    try app.rust.selectWallet(id: wallet.id())
+                    app.resetRoute(to: .selectedWallet(wallet.id()))
+                } catch {
+                    DispatchQueue.main.async {
+                        app.alertState = .init(
+                            .errorImportingHardwareWallet(message: error.localizedDescription)
+                        )
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) {
+                app.alertState = .none
+            }
+        case .watchOnlyImportWords:
+            Button("Scan QR") {
+                app.alertState = .none
+                app.pushRoute(.newWallet(.hotWallet(.import(.twentyFour, .qr))))
+            }
+            Button("NFC") {
+                app.alertState = .none
+                app.pushRoute(.newWallet(.hotWallet(.import(.twentyFour, .nfc))))
+            }
+            Button("12 Words") {
+                app.alertState = .none
+                app.pushRoute(.newWallet(.hotWallet(.import(.twelve, .manual))))
+            }
+            Button("24 Words") {
+                app.alertState = .none
+                app.pushRoute(.newWallet(.hotWallet(.import(.twentyFour, .manual))))
+            }
+            Button("Cancel", role: .cancel) {
+                app.alertState = .none
+            }
         case .invalidWordGroup,
              .errorImportingHotWallet,
              .importedSuccessfully,
@@ -155,7 +246,6 @@ struct CoveApp: App {
              .unableToGetAddress,
              .failedToScanQr,
              .noUnsignedTransactionFound,
-             .cantSendOnWatchOnlyWallet,
              .tapSignerSetupFailed,
              .tapSignerInvalidAuth,
              .tapSignerDeriveFailed,

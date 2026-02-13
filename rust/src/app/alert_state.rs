@@ -51,6 +51,10 @@ pub enum AppAlertState {
     // confirmation
     ConfirmWatchOnly,
 
+    // watch-only import sub-alerts
+    WatchOnlyImportHardware,
+    WatchOnlyImportWords,
+
     // action
     UninitializedTapSigner { tap_signer: Arc<TapSigner> },
     TapSignerWalletFound { wallet_id: WalletId },
@@ -78,6 +82,8 @@ impl AppAlertState {
             Self::NoUnsignedTransactionFound { .. } => "No Unsigned Transaction Found",
             Self::UnableToGetAddress { .. } => "Unable to Get Address",
             Self::CantSendOnWatchOnlyWallet | Self::ConfirmWatchOnly => "Watch Only Wallet",
+            Self::WatchOnlyImportHardware => "Import Hardware Wallet",
+            Self::WatchOnlyImportWords => "Import Words",
             Self::UninitializedTapSigner { .. } => "Setup TAPSIGNER?",
             Self::TapSignerSetupFailed { .. } => "Setup Failed",
             Self::TapSignerDeriveFailed { .. } => "TAPSIGNER Import Failed",
@@ -101,8 +107,18 @@ impl AppAlertState {
                 "This wallet has already been imported! Taking you there now...".to_string()
             }
             Self::HotWalletKeyMissing { .. } => {
-                "This wallet's private key is no longer available on this device. It has been converted to watch-only. To restore full access, import your seed words."
-                    .to_string()
+                let base = "This wallet's private key is no longer available on this device. It has been converted to watch-only. To restore full access, import your seed words.";
+
+                #[cfg(target_os = "ios")]
+                let backup_type = "iCloud";
+
+                #[cfg(target_os = "android")]
+                let backup_type = "Android";
+
+                #[cfg(not(any(target_os = "ios", target_os = "android")))]
+                let backup_type = "device";
+
+                format!("{base}\n\nThis can happen when restoring from a backup to a new phone. For security reasons, private keys are not included in regular {backup_type} backups.")
             }
             Self::ConfirmWatchOnly => {
                 "You will not be able to send any bitcoin with this wallet. You will only be able to create receive addresses and view transactions."
@@ -151,7 +167,14 @@ impl AppAlertState {
                 format!("Error getting address, more info: {error}")
             }
             Self::CantSendOnWatchOnlyWallet => {
-                "You cannot send from a watch-only wallet".to_string()
+                "This wallet can only be used to watch your transactions. To be able to send, either import the seed words for this wallet or import the public key from your hardware wallet."
+                    .to_string()
+            }
+            Self::WatchOnlyImportHardware => {
+                "Choose how to import your hardware wallet".to_string()
+            }
+            Self::WatchOnlyImportWords => {
+                "Choose how to import your seed words".to_string()
             }
             Self::UninitializedTapSigner { .. } => {
                 "This TAPSIGNER has not been set up yet. Would you like to set it up now?"

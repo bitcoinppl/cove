@@ -145,6 +145,21 @@ struct WalletSettingsView: View {
                 .padding(.vertical, 1)
             }
 
+            #if DEBUG
+                Section(header: Text("Debug")) {
+                    Button("Simulate Missing Key") {
+                        do {
+                            try app.rust.setWalletType(id: metadata.id, walletType: .hot)
+                            dismiss()
+                        } catch {
+                            Log.error("Failed to set wallet type to hot: \(error)")
+                        }
+                    }
+                    .font(.subheadline)
+                    .foregroundColor(.orange)
+                }
+            #endif
+
             Section(header: Text("Danger Zone")) {
                 if manager.walletMetadata.walletType == .hot {
                     Button {

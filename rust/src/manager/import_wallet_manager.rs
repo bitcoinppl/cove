@@ -7,12 +7,12 @@ use parking_lot::RwLock;
 
 use crate::{
     database::{self, Database},
-    keychain::KeychainError,
+    keychain::{Keychain, KeychainError},
     mnemonic::MnemonicExt as _,
     wallet::{
         Wallet,
         fingerprint::Fingerprint,
-        metadata::{WalletId, WalletMetadata},
+        metadata::{WalletId, WalletMetadata, WalletType},
     },
 };
 
@@ -61,6 +61,9 @@ pub enum ImportWalletError {
 
     #[error("wallet already exists")]
     WalletAlreadyExists(WalletId),
+
+    #[error("wallet metadata missing for existing wallet")]
+    MissingMetadata(WalletId),
 
     #[error("failed to save wallet: {0}")]
     Database(#[from] database::Error),
@@ -123,8 +126,43 @@ impl RustImportWalletManager {
             })
             .unwrap_or_default();
 
+        // wallet already exists, either as a hot or cold/watch-only wallet
         if let Some((id, _)) = all_fingerprints.into_iter().find(|(_, f)| f == &fingerprint) {
-            return Err(ImportWalletError::WalletAlreadyExists(id));
+            let mut metadata = Database::global()
+                .wallets
+                .get(&id, network, mode)?
+                .ok_or_else(|| ImportWalletError::MissingMetadata(id.clone()))?;
+
+            if metadata.wallet_type == WalletType::Hot {
+                Database::global().global_config.select_wallet(id.clone())?;
+                return Err(ImportWalletError::WalletAlreadyExists(id));
+            }
+
+            let keychain = Keychain::global();
+
+            // Restore the private key material for an existing wallet.
+            keychain.save_wallet_key(&id, mnemonic.clone())?;
+
+            // Keep xpub/descriptors in sync with the imported mnemonic.
+            let xpub = mnemonic.xpub(network.into());
+            keychain.save_wallet_xpub(&id, xpub)?;
+
+            let descriptors =
+                mnemonic.clone().into_descriptors(None, network, metadata.address_type);
+            keychain.save_public_descriptor(
+                &id,
+                descriptors.external.extended_descriptor,
+                descriptors.internal.extended_descriptor,
+            )?;
+
+            // Imported mnemonic means this wallet can now sign locally.
+            metadata.wallet_type = WalletType::Hot;
+            metadata.hardware_metadata = None;
+            metadata.verified = true;
+            Database::global().wallets.update_wallet_metadata(metadata.clone())?;
+            Database::global().global_config.select_wallet(id)?;
+
+            return Ok(metadata);
         }
 
         // get current number of wallets and add one;

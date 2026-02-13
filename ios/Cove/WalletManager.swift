@@ -207,6 +207,9 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
 
         case let .sendFlowError(error):
             self.sendFlowErrorAlert = TaggedItem(error)
+
+        case let .hotWalletKeyMissing(walletId):
+            AppManager.shared.alertState = .init(.hotWalletKeyMissing(walletId: walletId))
         }
     }
 

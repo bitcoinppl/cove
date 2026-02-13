@@ -419,6 +419,27 @@ impl FfiApp {
             .collect::<Vec<WalletId>>()
     }
 
+    /// Update a wallet's type and persist to database
+    #[uniffi::method]
+    pub fn set_wallet_type(
+        &self,
+        id: WalletId,
+        wallet_type: WalletType,
+    ) -> Result<(), DatabaseError> {
+        let network = Database::global().global_config.selected_network();
+        let mode = Database::global().global_config.wallet_mode();
+
+        let mut metadata = Database::global()
+            .wallets
+            .get(&id, network, mode)?
+            .ok_or(DatabaseError::WalletNotFound)?;
+
+        metadata.wallet_type = wallet_type;
+        Database::global().wallets.update_wallet_metadata(metadata)?;
+
+        Ok(())
+    }
+
     /// Load and reset the default route after default delay
     pub fn load_and_reset_default_route(&self, route: Route) {
         self.load_and_reset_default_route_after(route, LOAD_AND_RESET_DELAY_MS);

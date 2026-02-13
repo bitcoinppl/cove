@@ -286,6 +286,10 @@ class WalletManager :
             is WalletManagerReconcileMessage.SendFlowException -> {
                 sendFlowErrorAlert = TaggedItem(message.v1)
             }
+
+            is WalletManagerReconcileMessage.HotWalletKeyMissing -> {
+                AppManager.getInstance().alertState = TaggedItem(AppAlertState.HotWalletKeyMissing(message.v1))
+            }
         }
     }
 
