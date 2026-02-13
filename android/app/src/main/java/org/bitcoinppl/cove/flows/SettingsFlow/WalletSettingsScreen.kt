@@ -246,6 +246,24 @@ fun WalletSettingsScreen(
                     }
                 }
 
+                if (BuildConfig.DEBUG) {
+                    SectionHeader("Debug")
+                    MaterialSection {
+                        MaterialSettingsItem(
+                            title = "Simulate Missing Key",
+                            titleColor = CoveColor.WarningOrange,
+                            onClick = {
+                                try {
+                                    app.rust.setWalletType(metadata.id, WalletType.HOT)
+                                    app.popRoute()
+                                } catch (e: Exception) {
+                                    Log.e("WalletSettingsScreen", "Failed to set wallet type to hot", e)
+                                }
+                            },
+                        )
+                    }
+                }
+
                 SectionHeader(stringResource(R.string.title_wallet_danger_zone))
                 MaterialSection {
                     Column {
