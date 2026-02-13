@@ -109,16 +109,17 @@ impl AppAlertState {
             Self::HotWalletKeyMissing { .. } => {
                 let base = "This wallet's private key is no longer available on this device. It has been converted to watch-only. To restore full access, import your seed words.";
 
-                #[cfg(target_os = "ios")]
-                let backup_type = "iCloud";
+                cfg_if::cfg_if! {
+                    if #[cfg(target_os = "ios")] {
+                        let backup_type = "iOS";
+                    } else if #[cfg(target_os = "android")] {
+                        let backup_type = "Android";
+                    } else {
+                        let backup_type = "device";
+                    }
+                }
 
-                #[cfg(target_os = "android")]
-                let backup_type = "Android";
-
-                #[cfg(not(any(target_os = "ios", target_os = "android")))]
-                let backup_type = "device";
-
-                format!("{base}\n\nThis can happen when restoring from a backup to a new phone. For security reasons, private keys are not included in regular {backup_type} backups.")
+                format!("{base}\n\nThis can happen when restoring from a backup to a new phone. For security reasons, private keys are not included in regular {backup_type} device backups.")
             }
             Self::ConfirmWatchOnly => {
                 "You will not be able to send any bitcoin with this wallet. You will only be able to create receive addresses and view transactions."

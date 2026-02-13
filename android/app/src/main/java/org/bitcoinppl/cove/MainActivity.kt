@@ -424,15 +424,19 @@ private fun GlobalAlertDialog(
                 title = { Text(state.title()) },
                 text = { Text(state.message()) },
                 confirmButton = {
-                    Column {
+                    Column(horizontalAlignment = Alignment.End) {
                         TextButton(onClick = {
                             onDismiss()
-                            app.resetRoute(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWELVE, ImportType.MANUAL))))
+                            app.pushRoute(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWELVE, ImportType.MANUAL))))
                         }) { Text("Import 12 Words") }
                         TextButton(onClick = {
                             onDismiss()
-                            app.resetRoute(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWENTY_FOUR, ImportType.MANUAL))))
+                            app.pushRoute(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWENTY_FOUR, ImportType.MANUAL))))
                         }) { Text("Import 24 Words") }
+                        TextButton(onClick = {
+                            onDismiss()
+                            app.alertState = TaggedItem(AppAlertState.ConfirmWatchOnly)
+                        }) { Text("Use as Watch Only") }
                         TextButton(onClick = {
                             onDismiss()
                             try {
@@ -441,12 +445,6 @@ private fun GlobalAlertDialog(
                             }
                         }) { Text("Use with Hardware Wallet") }
                     }
-                },
-                dismissButton = {
-                    TextButton(onClick = {
-                        onDismiss()
-                        app.alertState = TaggedItem(AppAlertState.ConfirmWatchOnly)
-                    }) { Text("Use as Watch Only") }
                 },
             )
         }
@@ -732,7 +730,7 @@ private fun GlobalAlertDialog(
                     Column {
                         TextButton(onClick = {
                             onDismiss()
-                            app.loadAndReset(Route.NewWallet(NewWalletRoute.ColdWallet(ColdWalletRoute.QR_CODE)))
+                            app.pushRoute(Route.NewWallet(NewWalletRoute.ColdWallet(ColdWalletRoute.QR_CODE)))
                         }) { Text("QR Code") }
                         TextButton(onClick = {
                             onDismiss()
@@ -777,19 +775,19 @@ private fun GlobalAlertDialog(
                     Column {
                         TextButton(onClick = {
                             onDismiss()
-                            app.loadAndReset(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWENTY_FOUR, ImportType.QR))))
+                            app.pushRoute(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWENTY_FOUR, ImportType.QR))))
                         }) { Text("Scan QR") }
                         TextButton(onClick = {
                             onDismiss()
-                            app.loadAndReset(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWENTY_FOUR, ImportType.NFC))))
+                            app.pushRoute(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWENTY_FOUR, ImportType.NFC))))
                         }) { Text("NFC") }
                         TextButton(onClick = {
                             onDismiss()
-                            app.loadAndReset(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWELVE, ImportType.MANUAL))))
+                            app.pushRoute(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWELVE, ImportType.MANUAL))))
                         }) { Text("12 Words") }
                         TextButton(onClick = {
                             onDismiss()
-                            app.loadAndReset(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWENTY_FOUR, ImportType.MANUAL))))
+                            app.pushRoute(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWENTY_FOUR, ImportType.MANUAL))))
                         }) { Text("24 Words") }
                     }
                 },
