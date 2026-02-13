@@ -128,6 +128,16 @@ impl RustImportWalletManager {
 
         // wallet already exists, either as a hot or cold/watch-only wallet
         if let Some((id, _)) = all_fingerprints.into_iter().find(|(_, f)| f == &fingerprint) {
+            let mut metadata = Database::global()
+                .wallets
+                .get(&id, network, mode)?
+                .ok_or_else(|| ImportWalletError::MissingMetadata(id.clone()))?;
+
+            if metadata.wallet_type == WalletType::Hot {
+                Database::global().global_config.select_wallet(id.clone())?;
+                return Err(ImportWalletError::WalletAlreadyExists(id));
+            }
+
             let keychain = Keychain::global();
 
             // Restore the private key material for an existing wallet.
@@ -136,11 +146,6 @@ impl RustImportWalletManager {
             // Keep xpub/descriptors in sync with the imported mnemonic.
             let xpub = mnemonic.xpub(network.into());
             keychain.save_wallet_xpub(&id, xpub)?;
-
-            let mut metadata = Database::global()
-                .wallets
-                .get(&id, network, mode)?
-                .ok_or_else(|| ImportWalletError::MissingMetadata(id.clone()))?;
 
             let descriptors =
                 mnemonic.clone().into_descriptors(None, network, metadata.address_type);
