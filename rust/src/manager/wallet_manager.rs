@@ -258,11 +258,8 @@ impl RustWalletManager {
         let reconciler = MessageSender::new(sender.clone());
         let mut deferred = DeferredSender::new(reconciler.clone());
 
-        let wallet = {
-            let mut wallet = Wallet::try_load_persisted(id.clone())?;
-            downgrade_and_notify_if_needed(&mut wallet.metadata, &mut deferred);
-            wallet
-        };
+        let mut wallet = Wallet::try_load_persisted(id.clone())?;
+        wallet.metadata = downgrade_and_notify_if_needed(wallet.metadata, &mut deferred)?;
 
         let metadata = Database::global()
             .wallets
@@ -1353,38 +1350,41 @@ impl Drop for RustWalletManager {
 /// If a hot wallet's private key is missing from the keychain, downgrade it to
 /// watch-only and queue a `HotWalletKeyMissing` notification so the UI can alert the user
 fn downgrade_and_notify_if_needed(
-    metadata: &mut WalletMetadata,
+    metadata: WalletMetadata,
     deferred: &mut DeferredSender<Message>,
-) {
+) -> Result<WalletMetadata, Error> {
     if metadata.wallet_type != WalletType::Hot {
-        return;
+        return Ok(metadata);
     }
 
     let has_private_key = match Keychain::global().get_wallet_key(&metadata.id) {
         Ok(Some(_)) => true,
         Ok(None) => false,
         Err(error) => {
-            warn!("failed to read hot wallet private key for {}: {error}", metadata.id);
-            false
+            return Err(Error::UnknownError(format!(
+                "failed to read keychain for {}: {error}",
+                metadata.id
+            )));
         }
     };
 
     if has_private_key {
-        return;
+        return Ok(metadata);
     }
 
-    warn!(
-        "hot wallet {} is missing private key in keychain, downgrading to watch-only",
-        metadata.id
-    );
-    metadata.wallet_type = WalletType::WatchOnly;
-    metadata.hardware_metadata = None;
+    let id = metadata.id.clone();
+    warn!("hot wallet {id} is missing private key in keychain, downgrading to watch-only",);
 
-    if let Err(error) = Database::global().wallets.update_wallet_metadata(metadata.clone()) {
-        error!("failed to persist watch-only downgrade for {}: {error}", metadata.id);
-    }
+    let mut updated = metadata;
+    updated.wallet_type = WalletType::WatchOnly;
+    updated.hardware_metadata = None;
 
-    deferred.queue(Message::HotWalletKeyMissing(metadata.id.clone()));
+    Database::global().wallets.update_wallet_metadata(updated.clone()).map_err(|e| {
+        Error::UnknownError(format!("failed to persist watch-only downgrade for {id}: {e}",))
+    })?;
+
+    deferred.queue(Message::HotWalletKeyMissing(updated.id.clone()));
+    Ok(updated)
 }
 
 /// Get the public descriptor content for export

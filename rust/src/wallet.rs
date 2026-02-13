@@ -297,17 +297,13 @@ impl Wallet {
 
             let existing = database
                 .wallets
-                .get_all(network, mode)
-                .map(|wallets| {
-                    wallets
-                        .into_iter()
-                        .filter_map(|wm| {
-                            let fp = wm.master_fingerprint.as_ref()?;
-                            (fp.as_ref() == &fingerprint).then_some(wm)
-                        })
-                        .next()
+                .get_all(network, mode)?
+                .into_iter()
+                .filter_map(|wm| {
+                    let fp = wm.master_fingerprint.as_ref()?;
+                    (fp.as_ref() == &fingerprint).then_some(wm)
                 })
-                .unwrap_or(None);
+                .next();
 
             if let Some(mut existing_metadata) = existing {
                 if existing_metadata.wallet_type != WalletType::WatchOnly {

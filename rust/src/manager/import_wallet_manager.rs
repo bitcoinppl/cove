@@ -62,6 +62,9 @@ pub enum ImportWalletError {
     #[error("wallet already exists")]
     WalletAlreadyExists(WalletId),
 
+    #[error("wallet metadata missing for existing wallet")]
+    MissingMetadata(WalletId),
+
     #[error("failed to save wallet: {0}")]
     Database(#[from] database::Error),
 
@@ -137,7 +140,7 @@ impl RustImportWalletManager {
             let mut metadata = Database::global()
                 .wallets
                 .get(&id, network, mode)?
-                .ok_or_else(|| ImportWalletError::WalletAlreadyExists(id.clone()))?;
+                .ok_or_else(|| ImportWalletError::MissingMetadata(id.clone()))?;
 
             let descriptors =
                 mnemonic.clone().into_descriptors(None, network, metadata.address_type);

@@ -85,8 +85,18 @@ struct CoveApp: App {
             }
 
             Button("Use with Hardware Wallet") {
-                app.alertState = .none
-                try? app.rust.setWalletType(id: walletId, walletType: .cold)
+                do {
+                    try app.rust.setWalletType(id: walletId, walletType: .cold)
+                    app.alertState = .none
+                } catch {
+                    Log.error("Failed to set wallet type to cold: \(error)")
+                    DispatchQueue.main.async {
+                        app.alertState = .init(.general(
+                            title: "Error",
+                            message: error.localizedDescription
+                        ))
+                    }
+                }
             }
 
             Button("Use as Watch Only", role: .cancel) {
@@ -194,6 +204,7 @@ struct CoveApp: App {
                 do {
                     let wallet = try Wallet.newFromXpub(xpub: text)
                     try app.rust.selectWallet(id: wallet.id())
+                    app.resetRoute(to: .selectedWallet(wallet.id()))
                 } catch {
                     DispatchQueue.main.async {
                         app.alertState = .init(
