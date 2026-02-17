@@ -17,6 +17,7 @@ use crate::{
 };
 
 use cove_macros::impl_default_for;
+use tracing::warn;
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum ImportWalletManagerReconcileMessage {
@@ -30,9 +31,10 @@ pub trait ImportWalletManagerReconciler: Send + Sync + std::fmt::Debug + 'static
 }
 
 #[derive(Clone, Debug, uniffi::Object)]
-#[allow(dead_code)]
 pub struct RustImportWalletManager {
+    #[allow(dead_code)]
     pub state: Arc<RwLock<ImportWalletManagerState>>,
+    #[allow(dead_code)]
     pub reconciler: Sender<ImportWalletManagerReconcileMessage>,
     pub reconcile_receiver: Arc<Receiver<ImportWalletManagerReconcileMessage>>,
 }
@@ -110,35 +112,31 @@ impl RustImportWalletManager {
         let network = Database::global().global_config.selected_network();
         let mode = Database::global().global_config.wallet_mode();
 
-        // make sure its not already imported
         let fingerprint: Fingerprint = mnemonic.xpub(network.into()).fingerprint().into();
-        let all_fingerprints: Vec<(WalletId, Fingerprint)> = Database::global()
+
+        // check if the wallet already exists using the fingerprint
+        let existing_wallet = Database::global()
             .wallets
             .get_all(network, mode)
-            .map(|wallets| {
-                wallets
-                    .into_iter()
-                    .filter_map(|wallet_metadata| {
-                        let fingerprint = Fingerprint::try_new(&wallet_metadata.id).ok()?;
-                        Some((wallet_metadata.id, fingerprint))
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
+            .unwrap_or_default()
+            .into_iter()
+            .find(|wallet_metadata| wallet_metadata.wallet_matches_fingerprint(fingerprint));
 
-        // wallet already exists, either as a hot or cold/watch-only wallet
-        if let Some((id, _)) = all_fingerprints.into_iter().find(|(_, f)| f == &fingerprint) {
-            let mut metadata = Database::global()
-                .wallets
-                .get(&id, network, mode)?
-                .ok_or_else(|| ImportWalletError::MissingMetadata(id.clone()))?;
+        if let Some(mut metadata) = existing_wallet {
+            let id = metadata.id.clone();
+            let keychain = Keychain::global();
 
             if metadata.wallet_type == WalletType::Hot {
-                Database::global().global_config.select_wallet(id.clone())?;
-                return Err(ImportWalletError::WalletAlreadyExists(id));
+                if keychain.get_wallet_key(&id)?.is_none() {
+                    warn!("hot wallet {id} is missing private key, restoring from imported words");
+                } else {
+                    warn!(
+                        "attempted to import words for existing hot wallet {id}, showing duplicate alert"
+                    );
+                    Database::global().global_config.select_wallet(id.clone())?;
+                    return Err(ImportWalletError::WalletAlreadyExists(id));
+                }
             }
-
-            let keychain = Keychain::global();
 
             // Restore the private key material for an existing wallet.
             keychain.save_wallet_key(&id, mnemonic.clone())?;

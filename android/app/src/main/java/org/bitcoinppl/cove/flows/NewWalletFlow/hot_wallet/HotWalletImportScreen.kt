@@ -256,6 +256,7 @@ fun HotWalletImportScreen(
             Log.d("HotWalletImport", "Invalid word group while importing hot wallet")
             alertState = AlertState.InvalidWords
         } catch (e: ImportWalletException.WalletAlreadyExists) {
+            Log.w("HotWalletImport", "Attempted to import words for an existing hot wallet: ${e.v1}")
             duplicateWalletId = e.v1
             alertState = AlertState.DuplicateWallet
         } catch (e: Exception) {

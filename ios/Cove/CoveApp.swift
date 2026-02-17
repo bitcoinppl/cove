@@ -308,6 +308,7 @@ struct CoveApp: App {
                 Log.debug("Invalid words: \(error)")
                 app.alertState = TaggedItem(.invalidWordGroup)
             case let .WalletAlreadyExists(walletId):
+                Log.warn("Attempted to import words for an existing hot wallet: \(walletId)")
                 app.alertState = TaggedItem(.duplicateWallet(walletId: walletId))
             default:
                 Log.error("Unable to import wallet: \(error)")

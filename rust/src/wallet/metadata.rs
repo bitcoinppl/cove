@@ -4,6 +4,7 @@ use std::{
     time::Duration,
 };
 
+use cove_device::keychain::Keychain;
 use derive_more::Display;
 use serde::{Deserialize, Serialize};
 
@@ -204,6 +205,24 @@ impl WalletMetadata {
         me.discovery_state = DiscoveryState::StartedMnemonic;
 
         Self { network, verified: true, ..me }
+    }
+
+    pub fn wallet_matches_fingerprint(&self, fingerprint: Fingerprint) -> bool {
+        if let Some(saved_fingerprint) = self.master_fingerprint.as_ref() {
+            if saved_fingerprint.as_ref() == &fingerprint {
+                return true;
+            }
+        }
+
+        // fallback to check fingerprint with the xpub stored in keychain
+        let xpub = match Keychain::global().get_wallet_xpub(&self.id).ok().flatten() {
+            Some(xpub) => xpub,
+            None => return false,
+        };
+
+        let saved_fingerprint = xpub.fingerprint();
+        let saved_fingerprint_bytes: &[u8; 4] = saved_fingerprint.as_ref();
+        saved_fingerprint_bytes == fingerprint.as_ref()
     }
 
     pub fn preview_new() -> Self {

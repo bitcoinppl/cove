@@ -216,6 +216,7 @@ struct HotWalletImportScreen: View {
                 Log.debug("Invalid words: \(error)")
                 alertState = .init(.invalidWords)
             case let .WalletAlreadyExists(walletId):
+                Log.warn("Attempted to import words for an existing hot wallet: \(walletId)")
                 alertState = .init(.duplicateWallet(walletId))
             case let .WalletImportError(error):
                 Log.error("Import error: \(error)")

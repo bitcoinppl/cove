@@ -383,6 +383,7 @@ class AppManager private constructor() : FfiReconcile {
             Log.d(tag, "Invalid word group detected")
             alertState = TaggedItem(AppAlertState.InvalidWordGroup)
         } catch (e: ImportWalletException.WalletAlreadyExists) {
+            Log.w(tag, "Attempted to import words for an existing hot wallet: ${e.v1}")
             alertState = TaggedItem(AppAlertState.DuplicateWallet(e.v1))
             try {
                 rust.selectWallet(e.v1)

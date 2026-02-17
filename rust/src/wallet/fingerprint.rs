@@ -55,6 +55,10 @@ impl Fingerprint {
 
         Ok(Self(fingerprint))
     }
+
+    pub fn as_ref(&self) -> &[u8; 4] {
+        self.0.as_ref()
+    }
 }
 
 impl Serialize for Fingerprint {
