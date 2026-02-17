@@ -384,9 +384,10 @@ private struct AutocompleteField: View {
 
                     if text != word {
                         text = word
-                        submitFocusField()
-                        return
                     }
+
+                    submitFocusField()
+                    return
                 }
             }
     }
