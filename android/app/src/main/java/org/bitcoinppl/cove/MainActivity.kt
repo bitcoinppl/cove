@@ -712,7 +712,7 @@ private fun GlobalAlertDialog(
                 title = { Text(state.title()) },
                 text = { Text(state.message()) },
                 confirmButton = {
-                    Column {
+                    Column(horizontalAlignment = Alignment.End) {
                         TextButton(onClick = {
                             onDismiss()
                             app.alertState = TaggedItem(AppAlertState.WatchOnlyImportHardware)
@@ -721,10 +721,8 @@ private fun GlobalAlertDialog(
                             onDismiss()
                             app.alertState = TaggedItem(AppAlertState.WatchOnlyImportWords)
                         }) { Text("Import Words") }
+                        TextButton(onClick = onDismiss) { Text("Cancel") }
                     }
-                },
-                dismissButton = {
-                    TextButton(onClick = onDismiss) { Text("Cancel") }
                 },
             )
         }
@@ -735,7 +733,7 @@ private fun GlobalAlertDialog(
                 title = { Text(state.title()) },
                 text = { Text(state.message()) },
                 confirmButton = {
-                    Column {
+                    Column(horizontalAlignment = Alignment.End) {
                         TextButton(onClick = {
                             onDismiss()
                             app.pushRoute(Route.NewWallet(NewWalletRoute.ColdWallet(ColdWalletRoute.QR_CODE)))
@@ -766,10 +764,8 @@ private fun GlobalAlertDialog(
                                 }
                             }
                         }) { Text("Paste") }
+                        TextButton(onClick = onDismiss) { Text("Cancel") }
                     }
-                },
-                dismissButton = {
-                    TextButton(onClick = onDismiss) { Text("Cancel") }
                 },
             )
         }
@@ -780,7 +776,7 @@ private fun GlobalAlertDialog(
                 title = { Text(state.title()) },
                 text = { Text(state.message()) },
                 confirmButton = {
-                    Column {
+                    Column(horizontalAlignment = Alignment.End) {
                         TextButton(onClick = {
                             onDismiss()
                             app.pushRoute(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWENTY_FOUR, ImportType.QR))))
@@ -797,10 +793,8 @@ private fun GlobalAlertDialog(
                             onDismiss()
                             app.pushRoute(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWENTY_FOUR, ImportType.MANUAL))))
                         }) { Text("24 Words") }
+                        TextButton(onClick = onDismiss) { Text("Cancel") }
                     }
-                },
-                dismissButton = {
-                    TextButton(onClick = onDismiss) { Text("Cancel") }
                 },
             )
         }

@@ -176,6 +176,7 @@ fun SelectedWalletScreen(
     // state for wallet name rename dropdown
     var showRenameMenu by remember { mutableStateOf(false) }
     val isColdWallet = manager?.walletMetadata?.walletType == WalletType.COLD
+    val isWatchOnly = manager?.walletMetadata?.walletType == WalletType.WATCH_ONLY
 
     // force white status bar icons for midnight blue background
     ForceLightStatusBarIcons()
@@ -417,6 +418,7 @@ fun SelectedWalletScreen(
                                     onToggleSensitive = { manager?.dispatch(WalletManagerAction.ToggleSensitiveVisibility) },
                                     onSend = onSend,
                                     onReceive = onReceive,
+                                    isWatchOnly = isWatchOnly,
                                 )
                             }
 

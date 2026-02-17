@@ -53,6 +53,7 @@ fun WalletBalanceHeaderView(
     onToggleSensitive: () -> Unit,
     onSend: () -> Unit,
     onReceive: () -> Unit,
+    isWatchOnly: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     // get status bar height for edge-to-edge display
@@ -100,6 +101,7 @@ fun WalletBalanceHeaderView(
             SendReceiveButtons(
                 onSend = onSend,
                 onReceive = onReceive,
+                isWatchOnly = isWatchOnly,
             )
         }
     }
@@ -197,6 +199,7 @@ private fun AmountDisplay(
 private fun SendReceiveButtons(
     onSend: () -> Unit,
     onReceive: () -> Unit,
+    isWatchOnly: Boolean = false,
 ) {
     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         ImageButton(
@@ -205,8 +208,8 @@ private fun SendReceiveButtons(
             onClick = onSend,
             colors =
                 androidx.compose.material3.ButtonDefaults.buttonColors(
-                    containerColor = CoveColor.btnPrimary,
-                    contentColor = CoveColor.midnightBlue,
+                    containerColor = if (isWatchOnly) Color.Gray else CoveColor.btnPrimary,
+                    contentColor = if (isWatchOnly) CoveColor.midnightBlue.copy(alpha = 0.6f) else CoveColor.midnightBlue,
                 ),
             modifier = Modifier.weight(1f),
         )
