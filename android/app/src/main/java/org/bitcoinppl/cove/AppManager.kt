@@ -160,6 +160,15 @@ class AppManager private constructor() : FfiReconcile {
         return manager
     }
 
+    fun clearWalletManager() {
+        try {
+            walletManager?.close()
+        } catch (e: Exception) {
+            Log.w(tag, "Error closing WalletManager: ${e.message}")
+        }
+        walletManager = null
+    }
+
     fun clearSendFlowManager() {
         try {
             sendFlowManager?.close()

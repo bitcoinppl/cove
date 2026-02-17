@@ -251,6 +251,7 @@ fun HotWalletImportScreen(
         try {
             val walletMetadata = manager.importWallet(enteredWords)
             app.rust.selectWallet(walletMetadata.id)
+            app.clearWalletManager()
             app.resetRoute(Route.SelectedWallet(walletMetadata.id))
         } catch (e: ImportWalletException.InvalidWordGroup) {
             Log.d("HotWalletImport", "Invalid word group while importing hot wallet")
