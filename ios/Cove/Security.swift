@@ -19,7 +19,11 @@ class KeychainAccessor: KeychainAccess {
     }
 
     func save(key: String, value: String) throws {
-        if !keychain.set(value, forKey: key) {
+        if !keychain.set(
+            value,
+            forKey: key,
+            withAccess: .accessibleWhenUnlockedThisDeviceOnly
+        ) {
             throw KeychainError.Save
         }
     }
