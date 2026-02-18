@@ -17,6 +17,7 @@ use crate::{
     xpub::{self, XpubError},
 };
 use balance::Balance;
+use bdk_wallet::bitcoin::bip32::Xpub;
 use bdk_wallet::chain::rusqlite::Connection;
 use bdk_wallet::{KeychainKind, descriptor::ExtendedDescriptor, keys::DescriptorPublicKey};
 use bip39::Mnemonic;
@@ -296,39 +297,18 @@ impl Wallet {
             let fingerprint: Fingerprint = (*fingerprint).into();
             metadata.master_fingerprint = Some(fingerprint.into());
 
-            let existing = database
-                .wallets
-                .get_all(network, mode)?
-                .into_iter()
-                .filter_map(|wm| {
-                    let fp = wm.master_fingerprint.as_ref()?;
-                    (fp.as_ref() == &fingerprint).then_some(wm)
-                })
-                .next();
+            let existing = database.wallets.get_all(network, mode)?.into_iter().find(|wm| {
+                wm.master_fingerprint.as_ref().is_some_and(|fp| fp.as_ref() == &fingerprint)
+            });
 
-            if let Some(mut existing_metadata) = existing {
-                if existing_metadata.wallet_type != WalletType::WatchOnly {
-                    return Err(WalletError::WalletAlreadyExists(existing_metadata.id));
-                }
-
-                let existing_id = existing_metadata.id.clone();
-
-                keychain.save_wallet_xpub(&existing_id, xpub)?;
-
-                existing_metadata.wallet_type = WalletType::Cold;
-                existing_metadata.origin = descriptors.origin().ok();
-
-                keychain.save_public_descriptor(
-                    &existing_id,
-                    descriptors.external.extended_descriptor,
-                    descriptors.internal.extended_descriptor,
-                )?;
-                database.wallets.update_wallet_metadata(existing_metadata.clone())?;
-                database.global_config.select_wallet(existing_id.clone())?;
-
-                Updater::send_update(Update::ClearCachedWalletManager(existing_id.clone()));
-
-                return Self::try_load_persisted(existing_id);
+            if let Some(existing_metadata) = existing {
+                return Self::upgrade_to_cold(
+                    existing_metadata,
+                    xpub,
+                    descriptors,
+                    keychain,
+                    &database,
+                );
             }
         }
 
@@ -662,6 +642,37 @@ impl Wallet {
         self.bdk.persist(&mut self.db.lock()).map_err_str(WalletError::PersistError)?;
 
         Ok(())
+    }
+
+    /// Upgrade an existing watch-only wallet to cold by saving the xpub and descriptors
+    fn upgrade_to_cold(
+        mut metadata: WalletMetadata,
+        xpub: Xpub,
+        descriptors: Descriptors,
+        keychain: &Keychain,
+        database: &Database,
+    ) -> Result<Self, WalletError> {
+        if metadata.wallet_type != WalletType::WatchOnly {
+            return Err(WalletError::WalletAlreadyExists(metadata.id));
+        }
+
+        let id = metadata.id.clone();
+        keychain.save_wallet_xpub(&id, xpub)?;
+
+        metadata.wallet_type = WalletType::Cold;
+        metadata.origin = descriptors.origin().ok();
+
+        keychain.save_public_descriptor(
+            &id,
+            descriptors.external.extended_descriptor,
+            descriptors.internal.extended_descriptor,
+        )?;
+
+        database.wallets.update_wallet_metadata(metadata.clone())?;
+        database.global_config.select_wallet(id.clone())?;
+
+        Updater::send_update(Update::ClearCachedWalletManager(id.clone()));
+        Self::try_load_persisted(id)
     }
 }
 
