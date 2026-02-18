@@ -6,17 +6,19 @@ use flume::{Receiver, Sender};
 use parking_lot::RwLock;
 
 use crate::{
+    app::reconcile::{Update, Updater},
     database::{self, Database},
-    keychain::KeychainError,
+    keychain::{Keychain, KeychainError},
     mnemonic::MnemonicExt as _,
     wallet::{
         Wallet,
         fingerprint::Fingerprint,
-        metadata::{WalletId, WalletMetadata},
+        metadata::{WalletId, WalletMetadata, WalletType},
     },
 };
 
 use cove_macros::impl_default_for;
+use tracing::{info, warn};
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum ImportWalletManagerReconcileMessage {
@@ -30,9 +32,10 @@ pub trait ImportWalletManagerReconciler: Send + Sync + std::fmt::Debug + 'static
 }
 
 #[derive(Clone, Debug, uniffi::Object)]
-#[allow(dead_code)]
 pub struct RustImportWalletManager {
+    #[allow(dead_code)]
     pub state: Arc<RwLock<ImportWalletManagerState>>,
+    #[allow(dead_code)]
     pub reconciler: Sender<ImportWalletManagerReconcileMessage>,
     pub reconcile_receiver: Arc<Receiver<ImportWalletManagerReconcileMessage>>,
 }
@@ -61,6 +64,9 @@ pub enum ImportWalletError {
 
     #[error("wallet already exists")]
     WalletAlreadyExists(WalletId),
+
+    #[error("wallet metadata missing for existing wallet")]
+    MissingMetadata(WalletId),
 
     #[error("failed to save wallet: {0}")]
     Database(#[from] database::Error),
@@ -107,37 +113,73 @@ impl RustImportWalletManager {
         let network = Database::global().global_config.selected_network();
         let mode = Database::global().global_config.wallet_mode();
 
-        // make sure its not already imported
         let fingerprint: Fingerprint = mnemonic.xpub(network.into()).fingerprint().into();
-        let all_fingerprints: Vec<(WalletId, Fingerprint)> = Database::global()
+
+        // check if the wallet already exists using the fingerprint
+        let existing_wallet = Database::global()
             .wallets
             .get_all(network, mode)
-            .map(|wallets| {
-                wallets
-                    .into_iter()
-                    .filter_map(|wallet_metadata| {
-                        let fingerprint = Fingerprint::try_new(&wallet_metadata.id).ok()?;
-                        Some((wallet_metadata.id, fingerprint))
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
+            .unwrap_or_default()
+            .into_iter()
+            .find(|wallet_metadata| wallet_metadata.matches_fingerprint(fingerprint));
 
-        if let Some((id, _)) = all_fingerprints.into_iter().find(|(_, f)| f == &fingerprint) {
+        // new wallet, create it and return
+        if existing_wallet.is_none() {
+            // get current number of wallets and add one;
+            let number_of_wallets = Database::global().wallets.len(network, mode).unwrap_or(0);
+
+            let name = format!("Wallet {}", number_of_wallets + 1);
+            let wallet_metadata =
+                WalletMetadata::new_imported_from_mnemonic(name, network, fingerprint);
+
+            Wallet::try_new_persisted_and_selected(wallet_metadata.clone(), mnemonic.clone(), None)
+                .map_err_str(ImportWalletError::WalletImportError)?;
+
+            return Ok(wallet_metadata);
+        }
+
+        // existing wallet
+        let mut metadata = existing_wallet.expect("wallet exists, just checked above");
+        let id = metadata.id.clone();
+        let keychain = Keychain::global();
+
+        // hot wallets with private key already in keychain, don't do anything else
+        if metadata.wallet_type == WalletType::Hot && keychain.get_wallet_key(&id)?.is_some() {
+            warn!(
+                "attempted to import words for existing hot wallet {id}, showing duplicate alert"
+            );
+
+            Database::global().global_config.select_wallet(id.clone())?;
             return Err(ImportWalletError::WalletAlreadyExists(id));
         }
 
-        // get current number of wallets and add one;
-        let number_of_wallets = Database::global().wallets.len(network, mode).unwrap_or(0);
+        info!("adding mnemonic to existing wallet {id}");
 
-        let name = format!("Wallet {}", number_of_wallets + 1);
-        let wallet_metadata =
-            WalletMetadata::new_imported_from_mnemonic(name, network, fingerprint);
+        // save the private key material for an existing wallet.
+        keychain.save_wallet_key(&id, mnemonic.clone())?;
 
-        Wallet::try_new_persisted_and_selected(wallet_metadata.clone(), mnemonic.clone(), None)
-            .map_err_str(ImportWalletError::WalletImportError)?;
+        // save xpub/descriptors in keychain too
+        let xpub = mnemonic.xpub(network.into());
+        keychain.save_wallet_xpub(&id, xpub)?;
 
-        Ok(wallet_metadata)
+        // save public descriptors in keychain too
+        let descriptors = mnemonic.clone().into_descriptors(None, network, metadata.address_type);
+        keychain.save_public_descriptor(
+            &id,
+            descriptors.external.extended_descriptor,
+            descriptors.internal.extended_descriptor,
+        )?;
+
+        // imported mnemonic means this wallet can now sign locally.
+        metadata.wallet_type = WalletType::Hot;
+        metadata.hardware_metadata = None;
+        metadata.verified = true;
+
+        Database::global().wallets.update_wallet_metadata(metadata.clone())?;
+        Database::global().global_config.select_wallet(id.clone())?;
+        Updater::send_update(Update::ClearCachedWalletManager(id));
+
+        Ok(metadata)
     }
 
     /// Action from the frontend to change the state of the view model

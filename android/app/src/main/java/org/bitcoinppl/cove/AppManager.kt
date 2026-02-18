@@ -80,7 +80,8 @@ class AppManager private constructor() : FfiReconcile {
     // tracks whether async runtime has been initialized
     var asyncRuntimeReady by mutableStateOf(false)
 
-    // cached managers (not observable)
+    // multiple screens within the same wallet (send, coin control, tx details, settings)
+    // call getWalletManager, this avoids recreating the actor and reconciler each time
     internal var walletManager: WalletManager? = null
         private set
 
@@ -158,6 +159,15 @@ class AppManager private constructor() : FfiReconcile {
         val manager = SendFlowManager(wm.rust.newSendFlowManager(wm.balance), presenter)
         sendFlowManager = manager
         return manager
+    }
+
+    fun clearWalletManager() {
+        try {
+            walletManager?.close()
+        } catch (e: Exception) {
+            Log.w(tag, "Error closing WalletManager: ${e.message}")
+        }
+        walletManager = null
     }
 
     fun clearSendFlowManager() {
@@ -383,6 +393,7 @@ class AppManager private constructor() : FfiReconcile {
             Log.d(tag, "Invalid word group detected")
             alertState = TaggedItem(AppAlertState.InvalidWordGroup)
         } catch (e: ImportWalletException.WalletAlreadyExists) {
+            Log.w(tag, "Attempted to import words for an existing hot wallet: ${e.v1}")
             alertState = TaggedItem(AppAlertState.DuplicateWallet(e.v1))
             try {
                 rust.selectWallet(e.v1)
@@ -410,7 +421,20 @@ class AppManager private constructor() : FfiReconcile {
                 val id = wallet.id()
                 Log.d(tag, "Imported Wallet: $id")
                 alertState = TaggedItem(AppAlertState.ImportedSuccessfully)
-                rust.selectWallet(id)
+
+                // if we're not already on this wallet, navigate to it
+                if (walletManager?.id != id) {
+                    rust.selectWallet(id)
+                }
+
+                // upgrade watch-only → cold in-place
+                if (walletManager?.id == id && walletManager?.walletMetadata?.walletType != WalletType.HOT) {
+                    try {
+                        walletManager?.rust?.setWalletType(WalletType.COLD)
+                    } catch (e: Exception) {
+                        Log.e(tag, "Failed to set wallet type to cold", e)
+                    }
+                }
             } finally {
                 wallet.close()
             }
@@ -604,6 +628,12 @@ class AppManager private constructor() : FfiReconcile {
 
                 is AppStateReconcileMessage.WalletsChanged -> {
                     wallets = runCatching { database.wallets().all() }.getOrElse { emptyList() }
+                }
+
+                is AppStateReconcileMessage.ClearCachedWalletManager -> {
+                    if (walletManager?.id == message.v1) {
+                        clearWalletManager()
+                    }
                 }
 
                 is AppStateReconcileMessage.ShowLoadingPopup -> {

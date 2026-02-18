@@ -1499,6 +1499,8 @@ external fun uniffi_cove_checksum_method_rustwalletmanager_sent_and_received_fia
 ): Short
 external fun uniffi_cove_checksum_method_rustwalletmanager_set_wallet_metadata(
 ): Short
+external fun uniffi_cove_checksum_method_rustwalletmanager_set_wallet_type(
+): Short
 external fun uniffi_cove_checksum_method_rustwalletmanager_sign_and_broadcast_transaction(
 ): Short
 external fun uniffi_cove_checksum_method_rustwalletmanager_split_transaction_outputs(
@@ -2468,6 +2470,8 @@ external fun uniffi_cove_fn_method_rustwalletmanager_selected_fiat_currency(`ptr
 external fun uniffi_cove_fn_method_rustwalletmanager_sent_and_received_fiat(`ptr`: Long,`sentAndReceived`: Long,
 ): Long
 external fun uniffi_cove_fn_method_rustwalletmanager_set_wallet_metadata(`ptr`: Long,`metadata`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
+external fun uniffi_cove_fn_method_rustwalletmanager_set_wallet_type(`ptr`: Long,`walletType`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
 external fun uniffi_cove_fn_method_rustwalletmanager_sign_and_broadcast_transaction(`ptr`: Long,`psbt`: Long,
 ): Long
@@ -3999,6 +4003,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_set_wallet_metadata() != 11441.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_set_wallet_type() != 23118.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_sign_and_broadcast_transaction() != 32531.toShort()) {
@@ -18282,6 +18289,8 @@ public interface RustWalletManagerInterface {
     
     fun `setWalletMetadata`(`metadata`: WalletMetadata)
     
+    fun `setWalletType`(`walletType`: WalletType)
+    
     suspend fun `signAndBroadcastTransaction`(`psbt`: Psbt)
     
     suspend fun `splitTransactionOutputs`(`outputs`: List<AddressAndAmount>): SplitOutput
@@ -19237,6 +19246,19 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     UniffiLib.uniffi_cove_fn_method_rustwalletmanager_set_wallet_metadata(
         it,
         FfiConverterTypeWalletMetadata.lower(`metadata`),_status)
+}
+    }
+    
+    
+
+    
+    @Throws(WalletManagerException::class)override fun `setWalletType`(`walletType`: WalletType)
+        = 
+    callWithHandle {
+    uniffiRustCallWithError(WalletManagerException) { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_set_wallet_type(
+        it,
+        FfiConverterTypeWalletType.lower(`walletType`),_status)
 }
     }
     
@@ -26940,6 +26962,12 @@ sealed class AppAlertState: Disposable  {
     object ConfirmWatchOnly : AppAlertState()
     
     
+    object WatchOnlyImportHardware : AppAlertState()
+    
+    
+    object WatchOnlyImportWords : AppAlertState()
+    
+    
     data class UninitializedTapSigner(
         val `tapSigner`: org.bitcoinppl.cove_core.tapcard.TapSigner) : AppAlertState()
         
@@ -27114,6 +27142,10 @@ sealed class AppAlertState: Disposable  {
             }
             is AppAlertState.ConfirmWatchOnly -> {// Nothing to destroy
             }
+            is AppAlertState.WatchOnlyImportHardware -> {// Nothing to destroy
+            }
+            is AppAlertState.WatchOnlyImportWords -> {// Nothing to destroy
+            }
             is AppAlertState.UninitializedTapSigner -> {
                 
     Disposable.destroy(
@@ -27257,13 +27289,15 @@ public object FfiConverterTypeAppAlertState : FfiConverterRustBuffer<AppAlertSta
                 )
             25 -> AppAlertState.Loading
             26 -> AppAlertState.ConfirmWatchOnly
-            27 -> AppAlertState.UninitializedTapSigner(
+            27 -> AppAlertState.WatchOnlyImportHardware
+            28 -> AppAlertState.WatchOnlyImportWords
+            29 -> AppAlertState.UninitializedTapSigner(
                 FfiConverterTypeTapSigner.read(buf),
                 )
-            28 -> AppAlertState.TapSignerWalletFound(
+            30 -> AppAlertState.TapSignerWalletFound(
                 FfiConverterTypeWalletId.read(buf),
                 )
-            29 -> AppAlertState.InitializedTapSigner(
+            31 -> AppAlertState.InitializedTapSigner(
                 FfiConverterTypeTapSigner.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -27449,6 +27483,18 @@ public object FfiConverterTypeAppAlertState : FfiConverterRustBuffer<AppAlertSta
                 4UL
             )
         }
+        is AppAlertState.WatchOnlyImportHardware -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is AppAlertState.WatchOnlyImportWords -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
         is AppAlertState.UninitializedTapSigner -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
@@ -27600,18 +27646,26 @@ public object FfiConverterTypeAppAlertState : FfiConverterRustBuffer<AppAlertSta
                 buf.putInt(26)
                 Unit
             }
-            is AppAlertState.UninitializedTapSigner -> {
+            is AppAlertState.WatchOnlyImportHardware -> {
                 buf.putInt(27)
+                Unit
+            }
+            is AppAlertState.WatchOnlyImportWords -> {
+                buf.putInt(28)
+                Unit
+            }
+            is AppAlertState.UninitializedTapSigner -> {
+                buf.putInt(29)
                 FfiConverterTypeTapSigner.write(value.`tapSigner`, buf)
                 Unit
             }
             is AppAlertState.TapSignerWalletFound -> {
-                buf.putInt(28)
+                buf.putInt(30)
                 FfiConverterTypeWalletId.write(value.`walletId`, buf)
                 Unit
             }
             is AppAlertState.InitializedTapSigner -> {
-                buf.putInt(29)
+                buf.putInt(31)
                 FfiConverterTypeTapSigner.write(value.`tapSigner`, buf)
                 Unit
             }
@@ -27817,6 +27871,15 @@ sealed class AppStateReconcileMessage: Disposable  {
     object WalletsChanged : AppStateReconcileMessage()
     
     
+    data class ClearCachedWalletManager(
+        val v1: org.bitcoinppl.cove_core.types.WalletId) : AppStateReconcileMessage()
+        
+    {
+        
+
+        companion object
+    }
+    
     object ShowLoadingPopup : AppStateReconcileMessage()
     
     
@@ -27905,6 +27968,13 @@ sealed class AppStateReconcileMessage: Disposable  {
             }
             is AppStateReconcileMessage.WalletsChanged -> {// Nothing to destroy
             }
+            is AppStateReconcileMessage.ClearCachedWalletManager -> {
+                
+    Disposable.destroy(
+        this.v1
+    )
+                
+            }
             is AppStateReconcileMessage.ShowLoadingPopup -> {// Nothing to destroy
             }
             is AppStateReconcileMessage.HideLoadingPopup -> {// Nothing to destroy
@@ -27960,8 +28030,11 @@ public object FfiConverterTypeAppStateReconcileMessage : FfiConverterRustBuffer<
                 )
             12 -> AppStateReconcileMessage.AcceptedTerms
             13 -> AppStateReconcileMessage.WalletsChanged
-            14 -> AppStateReconcileMessage.ShowLoadingPopup
-            15 -> AppStateReconcileMessage.HideLoadingPopup
+            14 -> AppStateReconcileMessage.ClearCachedWalletManager(
+                FfiConverterTypeWalletId.read(buf),
+                )
+            15 -> AppStateReconcileMessage.ShowLoadingPopup
+            16 -> AppStateReconcileMessage.HideLoadingPopup
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -28056,6 +28129,13 @@ public object FfiConverterTypeAppStateReconcileMessage : FfiConverterRustBuffer<
                 4UL
             )
         }
+        is AppStateReconcileMessage.ClearCachedWalletManager -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeWalletId.allocationSize(value.v1)
+            )
+        }
         is AppStateReconcileMessage.ShowLoadingPopup -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
@@ -28135,12 +28215,17 @@ public object FfiConverterTypeAppStateReconcileMessage : FfiConverterRustBuffer<
                 buf.putInt(13)
                 Unit
             }
-            is AppStateReconcileMessage.ShowLoadingPopup -> {
+            is AppStateReconcileMessage.ClearCachedWalletManager -> {
                 buf.putInt(14)
+                FfiConverterTypeWalletId.write(value.v1, buf)
+                Unit
+            }
+            is AppStateReconcileMessage.ShowLoadingPopup -> {
+                buf.putInt(15)
                 Unit
             }
             is AppStateReconcileMessage.HideLoadingPopup -> {
-                buf.putInt(15)
+                buf.putInt(16)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -30193,6 +30278,12 @@ sealed class DatabaseException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
+    class WalletNotFound(
+        ) : DatabaseException() {
+        override val message
+            get() = ""
+    }
+    
 
     
 
@@ -30248,6 +30339,7 @@ public object FfiConverterTypeDatabaseError : FfiConverterRustBuffer<DatabaseExc
             9 -> DatabaseException.Serialization(
                 FfiConverterTypeSerdeError.read(buf),
                 )
+            10 -> DatabaseException.WalletNotFound()
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
@@ -30299,6 +30391,10 @@ public object FfiConverterTypeDatabaseError : FfiConverterRustBuffer<DatabaseExc
                 4UL
                 + FfiConverterTypeSerdeError.allocationSize(value.v1)
             )
+            is DatabaseException.WalletNotFound -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
         }
     }
 
@@ -30347,6 +30443,10 @@ public object FfiConverterTypeDatabaseError : FfiConverterRustBuffer<DatabaseExc
             is DatabaseException.Serialization -> {
                 buf.putInt(9)
                 FfiConverterTypeSerdeError.write(value.v1, buf)
+                Unit
+            }
+            is DatabaseException.WalletNotFound -> {
+                buf.putInt(10)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -32334,6 +32434,14 @@ sealed class ImportWalletException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
+    class MissingMetadata(
+        
+        val v1: WalletId
+        ) : ImportWalletException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+    
     class Database(
         
         val v1: DatabaseException
@@ -32390,10 +32498,13 @@ public object FfiConverterTypeImportWalletError : FfiConverterRustBuffer<ImportW
             4 -> ImportWalletException.WalletAlreadyExists(
                 FfiConverterTypeWalletId.read(buf),
                 )
-            5 -> ImportWalletException.Database(
+            5 -> ImportWalletException.MissingMetadata(
+                FfiConverterTypeWalletId.read(buf),
+                )
+            6 -> ImportWalletException.Database(
                 FfiConverterTypeDatabaseError.read(buf),
                 )
-            6 -> ImportWalletException.BdkException(
+            7 -> ImportWalletException.BdkException(
                 FfiConverterString.read(buf),
                 )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
@@ -32418,6 +32529,11 @@ public object FfiConverterTypeImportWalletError : FfiConverterRustBuffer<ImportW
                 + FfiConverterTypeKeychainError.allocationSize(value.v1)
             )
             is ImportWalletException.WalletAlreadyExists -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterTypeWalletId.allocationSize(value.v1)
+            )
+            is ImportWalletException.MissingMetadata -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
                 + FfiConverterTypeWalletId.allocationSize(value.v1)
@@ -32457,13 +32573,18 @@ public object FfiConverterTypeImportWalletError : FfiConverterRustBuffer<ImportW
                 FfiConverterTypeWalletId.write(value.v1, buf)
                 Unit
             }
-            is ImportWalletException.Database -> {
+            is ImportWalletException.MissingMetadata -> {
                 buf.putInt(5)
+                FfiConverterTypeWalletId.write(value.v1, buf)
+                Unit
+            }
+            is ImportWalletException.Database -> {
+                buf.putInt(6)
                 FfiConverterTypeDatabaseError.write(value.v1, buf)
                 Unit
             }
             is ImportWalletException.BdkException -> {
-                buf.putInt(6)
+                buf.putInt(7)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
@@ -42248,6 +42369,14 @@ sealed class WalletManagerException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
+    class SetWalletTypeException(
+        
+        val v1: kotlin.String
+        ) : WalletManagerException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+    
     class GetHeightException(
         ) : WalletManagerException() {
         override val message
@@ -42430,49 +42559,52 @@ public object FfiConverterTypeWalletManagerError : FfiConverterRustBuffer<Wallet
             10 -> WalletManagerException.NextAddressException(
                 FfiConverterString.read(buf),
                 )
-            11 -> WalletManagerException.GetHeightException()
-            12 -> WalletManagerException.TransactionDetailsException(
+            11 -> WalletManagerException.SetWalletTypeException(
                 FfiConverterString.read(buf),
                 )
-            13 -> WalletManagerException.ActorNotFound()
-            14 -> WalletManagerException.UnableToSwitch(
+            12 -> WalletManagerException.GetHeightException()
+            13 -> WalletManagerException.TransactionDetailsException(
+                FfiConverterString.read(buf),
+                )
+            14 -> WalletManagerException.ActorNotFound()
+            15 -> WalletManagerException.UnableToSwitch(
                 FfiConverterTypeWalletAddressType.read(buf),
                 FfiConverterString.read(buf),
                 )
-            15 -> WalletManagerException.FiatException(
+            16 -> WalletManagerException.FiatException(
                 FfiConverterString.read(buf),
                 )
-            16 -> WalletManagerException.FeesException(
+            17 -> WalletManagerException.FeesException(
                 FfiConverterString.read(buf),
                 )
-            17 -> WalletManagerException.BuildTxException(
+            18 -> WalletManagerException.BuildTxException(
                 FfiConverterString.read(buf),
                 )
-            18 -> WalletManagerException.InsufficientFunds(
+            19 -> WalletManagerException.InsufficientFunds(
                 FfiConverterString.read(buf),
                 )
-            19 -> WalletManagerException.GetConfirmDetailsException(
+            20 -> WalletManagerException.GetConfirmDetailsException(
                 FfiConverterString.read(buf),
                 )
-            20 -> WalletManagerException.SignAndBroadcastException(
+            21 -> WalletManagerException.SignAndBroadcastException(
                 FfiConverterString.read(buf),
                 )
-            21 -> WalletManagerException.Converter(
+            22 -> WalletManagerException.Converter(
                 FfiConverterTypeConverterError.read(buf),
                 )
-            22 -> WalletManagerException.UnknownException(
+            23 -> WalletManagerException.UnknownException(
                 FfiConverterString.read(buf),
                 )
-            23 -> WalletManagerException.PsbtFinalizeException(
+            24 -> WalletManagerException.PsbtFinalizeException(
                 FfiConverterString.read(buf),
                 )
-            24 -> WalletManagerException.GetHistoricalPricesException(
+            25 -> WalletManagerException.GetHistoricalPricesException(
                 FfiConverterString.read(buf),
                 )
-            25 -> WalletManagerException.CsvCreationException(
+            26 -> WalletManagerException.CsvCreationException(
                 FfiConverterString.read(buf),
                 )
-            26 -> WalletManagerException.AddUtxosException(
+            27 -> WalletManagerException.AddUtxosException(
                 FfiConverterString.read(buf),
                 )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
@@ -42526,6 +42658,11 @@ public object FfiConverterTypeWalletManagerError : FfiConverterRustBuffer<Wallet
                 + FfiConverterString.allocationSize(value.v1)
             )
             is WalletManagerException.NextAddressException -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+            is WalletManagerException.SetWalletTypeException -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
                 + FfiConverterString.allocationSize(value.v1)
@@ -42663,82 +42800,87 @@ public object FfiConverterTypeWalletManagerError : FfiConverterRustBuffer<Wallet
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is WalletManagerException.GetHeightException -> {
+            is WalletManagerException.SetWalletTypeException -> {
                 buf.putInt(11)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is WalletManagerException.GetHeightException -> {
+                buf.putInt(12)
                 Unit
             }
             is WalletManagerException.TransactionDetailsException -> {
-                buf.putInt(12)
+                buf.putInt(13)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
             is WalletManagerException.ActorNotFound -> {
-                buf.putInt(13)
+                buf.putInt(14)
                 Unit
             }
             is WalletManagerException.UnableToSwitch -> {
-                buf.putInt(14)
+                buf.putInt(15)
                 FfiConverterTypeWalletAddressType.write(value.v1, buf)
                 FfiConverterString.write(value.v2, buf)
                 Unit
             }
             is WalletManagerException.FiatException -> {
-                buf.putInt(15)
-                FfiConverterString.write(value.v1, buf)
-                Unit
-            }
-            is WalletManagerException.FeesException -> {
                 buf.putInt(16)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is WalletManagerException.BuildTxException -> {
+            is WalletManagerException.FeesException -> {
                 buf.putInt(17)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is WalletManagerException.InsufficientFunds -> {
+            is WalletManagerException.BuildTxException -> {
                 buf.putInt(18)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is WalletManagerException.GetConfirmDetailsException -> {
+            is WalletManagerException.InsufficientFunds -> {
                 buf.putInt(19)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is WalletManagerException.SignAndBroadcastException -> {
+            is WalletManagerException.GetConfirmDetailsException -> {
                 buf.putInt(20)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is WalletManagerException.Converter -> {
+            is WalletManagerException.SignAndBroadcastException -> {
                 buf.putInt(21)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is WalletManagerException.Converter -> {
+                buf.putInt(22)
                 FfiConverterTypeConverterError.write(value.v1, buf)
                 Unit
             }
             is WalletManagerException.UnknownException -> {
-                buf.putInt(22)
-                FfiConverterString.write(value.v1, buf)
-                Unit
-            }
-            is WalletManagerException.PsbtFinalizeException -> {
                 buf.putInt(23)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is WalletManagerException.GetHistoricalPricesException -> {
+            is WalletManagerException.PsbtFinalizeException -> {
                 buf.putInt(24)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is WalletManagerException.CsvCreationException -> {
+            is WalletManagerException.GetHistoricalPricesException -> {
                 buf.putInt(25)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is WalletManagerException.AddUtxosException -> {
+            is WalletManagerException.CsvCreationException -> {
                 buf.putInt(26)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is WalletManagerException.AddUtxosException -> {
+                buf.putInt(27)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
@@ -42856,6 +42998,15 @@ sealed class WalletManagerReconcileMessage: Disposable  {
         companion object
     }
     
+    data class HotWalletKeyMissing(
+        val v1: org.bitcoinppl.cove_core.types.WalletId) : WalletManagerReconcileMessage()
+        
+    {
+        
+
+        companion object
+    }
+    
 
     
     @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
@@ -42942,6 +43093,13 @@ sealed class WalletManagerReconcileMessage: Disposable  {
     )
                 
             }
+            is WalletManagerReconcileMessage.HotWalletKeyMissing -> {
+                
+    Disposable.destroy(
+        this.v1
+    )
+                
+            }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
     
@@ -42993,6 +43151,9 @@ public object FfiConverterTypeWalletManagerReconcileMessage : FfiConverterRustBu
             12 -> WalletManagerReconcileMessage.UnsignedTransactionsChanged
             13 -> WalletManagerReconcileMessage.SendFlowException(
                 FfiConverterTypeSendFlowErrorAlert.read(buf),
+                )
+            14 -> WalletManagerReconcileMessage.HotWalletKeyMissing(
+                FfiConverterTypeWalletId.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
@@ -43088,6 +43249,13 @@ public object FfiConverterTypeWalletManagerReconcileMessage : FfiConverterRustBu
                 + FfiConverterTypeSendFlowErrorAlert.allocationSize(value.v1)
             )
         }
+        is WalletManagerReconcileMessage.HotWalletKeyMissing -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeWalletId.allocationSize(value.v1)
+            )
+        }
     }
 
     override fun write(value: WalletManagerReconcileMessage, buf: ByteBuffer) {
@@ -43153,6 +43321,11 @@ public object FfiConverterTypeWalletManagerReconcileMessage : FfiConverterRustBu
             is WalletManagerReconcileMessage.SendFlowException -> {
                 buf.putInt(13)
                 FfiConverterTypeSendFlowErrorAlert.write(value.v1, buf)
+                Unit
+            }
+            is WalletManagerReconcileMessage.HotWalletKeyMissing -> {
+                buf.putInt(14)
+                FfiConverterTypeWalletId.write(value.v1, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -43451,9 +43624,6 @@ enum class WalletType {
     HOT,
     COLD,
     XPUB_ONLY,
-    /**
-     * deprecated, use XpubOnly instead
-     */
     WATCH_ONLY;
 
     

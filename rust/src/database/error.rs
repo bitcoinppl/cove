@@ -45,6 +45,9 @@ pub enum DatabaseError {
 
     #[error("unable to serialize or deserialize: {0}")]
     Serialization(#[from] SerdeError),
+
+    #[error("wallet not found")]
+    WalletNotFound,
 }
 
 impl From<redb::TransactionError> for Error {

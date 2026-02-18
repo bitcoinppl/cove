@@ -42,6 +42,8 @@ private let walletModeChangeDelayMs = 250
     /// changed when route is reset, to clear lifecycle view state
     var routeId = UUID()
 
+    /// Multiple screens within the same wallet (send, coin control, tx details, settings)
+    /// call getWalletManager, this avoids recreating the actor and reconciler each time
     @ObservationIgnored
     var walletManager: WalletManager?
 
@@ -274,6 +276,11 @@ private let walletModeChangeDelayMs = 250
 
             case .walletsChanged:
                 wallets = (try? database.wallets().all()) ?? []
+
+            case let .clearCachedWalletManager(walletId):
+                if walletManager?.id == walletId {
+                    walletManager = nil
+                }
 
             case .showLoadingPopup:
                 Task { await MiddlePopup(state: .loading).present() }

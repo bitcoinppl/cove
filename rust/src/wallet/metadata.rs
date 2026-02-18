@@ -132,8 +132,6 @@ pub enum WalletType {
     Hot,
     Cold,
     XpubOnly,
-
-    /// deprecated, use XpubOnly instead
     WatchOnly,
 }
 
@@ -206,6 +204,11 @@ impl WalletMetadata {
         me.discovery_state = DiscoveryState::StartedMnemonic;
 
         Self { network, verified: true, ..me }
+    }
+
+    pub fn matches_fingerprint(&self, fingerprint: Fingerprint) -> bool {
+        let Some(wallet_fingerprint) = self.master_fingerprint.as_ref() else { return false };
+        wallet_fingerprint.as_ref() == &fingerprint
     }
 
     pub fn preview_new() -> Self {

@@ -246,6 +246,7 @@ arc-swap = { workspace = true }
 
 # macros
 paste = "1.0"
+cfg-if = "1.0"
 
 # bit twiddling
 bitflags = "2.9"

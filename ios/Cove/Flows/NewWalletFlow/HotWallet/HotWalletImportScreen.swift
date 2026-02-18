@@ -209,6 +209,7 @@ struct HotWalletImportScreen: View {
         do {
             let walletMetadata = try manager.rust.importWallet(enteredWords: enteredWords)
             try app.rust.selectWallet(id: walletMetadata.id)
+            app.walletManager = nil
             app.resetRoute(to: .selectedWallet(walletMetadata.id))
         } catch let error as ImportWalletError {
             switch error {
@@ -216,6 +217,7 @@ struct HotWalletImportScreen: View {
                 Log.debug("Invalid words: \(error)")
                 alertState = .init(.invalidWords)
             case let .WalletAlreadyExists(walletId):
+                Log.warn("Attempted to import words for an existing hot wallet: \(walletId)")
                 alertState = .init(.duplicateWallet(walletId))
             case let .WalletImportError(error):
                 Log.error("Import error: \(error)")
@@ -225,6 +227,8 @@ struct HotWalletImportScreen: View {
                 Log.error("Unable to save wallet metadata to database: \(databaseError)")
             case let .BdkError(error):
                 Log.error("Unable to import wallet: \(error)")
+            case let .MissingMetadata(walletId):
+                Log.error("Wallet metadata missing for \(walletId)")
             }
         } catch {
             Log.error("Unknown error \(error)")

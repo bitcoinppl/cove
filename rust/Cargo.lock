@@ -959,6 +959,7 @@ dependencies = [
  "bitflags",
  "bitvec",
  "cbor4ii",
+ "cfg-if",
  "chacha20poly1305",
  "cove-bdk",
  "cove-bip39",

@@ -6,6 +6,7 @@ pub mod metadata;
 use std::{str::FromStr as _, sync::Arc};
 
 use crate::{
+    app::reconcile::{Update, Updater},
     bdk_store::BdkStore,
     database::{self, Database},
     keychain::{Keychain, KeychainError},
@@ -16,6 +17,7 @@ use crate::{
     xpub::{self, XpubError},
 };
 use balance::Balance;
+use bdk_wallet::bitcoin::bip32::Xpub;
 use bdk_wallet::chain::rusqlite::Connection;
 use bdk_wallet::{KeychainKind, descriptor::ExtendedDescriptor, keys::DescriptorPublicKey};
 use bip39::Mnemonic;
@@ -82,6 +84,8 @@ pub struct Wallet {
     pub network: Network,
     pub bdk: bdk_wallet::PersistedWallet<Connection>,
     pub metadata: WalletMetadata,
+    // BDK's PersistedWallet<P> takes &mut P by reference on persist/load/create,
+    // it doesn't hold the connection itself
     db: Mutex<Connection>,
 }
 
@@ -266,8 +270,6 @@ impl Wallet {
         let id = WalletId::new();
         let mut metadata = WalletMetadata::new_for_hardware(id.clone(), "", None);
 
-        let mut store = BdkStore::try_new(&id, network).map_err_str(WalletError::LoadError)?;
-
         let pubport_descriptors = match pubport {
             Format::Descriptor(descriptors) => descriptors,
             Format::Json(json) => {
@@ -285,20 +287,34 @@ impl Wallet {
 
         let fingerprint = pubport_descriptors.fingerprint();
 
-        // make sure its not already imported
+        // compute xpub and descriptors early so they're available for the upgrade path
+        let xpub =
+            pubport_descriptors.xpub().map_err(Into::into).map_err(WalletError::ParseXpubError)?;
+        let descriptors: Descriptors = pubport_descriptors.into();
+
+        // check for existing wallet with same fingerprint, upgrade watch-only → cold
         if let Some(fingerprint) = fingerprint.as_ref() {
-            // update the fingerprint
             let fingerprint: Fingerprint = (*fingerprint).into();
             metadata.master_fingerprint = Some(fingerprint.into());
 
-            check_for_duplicate_wallet(network, mode, fingerprint)?;
+            let existing = database.wallets.get_all(network, mode)?.into_iter().find(|wm| {
+                wm.master_fingerprint.as_ref().is_some_and(|fp| fp.as_ref() == &fingerprint)
+            });
+
+            if let Some(existing_metadata) = existing {
+                return Self::upgrade_to_cold(
+                    existing_metadata,
+                    xpub,
+                    descriptors,
+                    keychain,
+                    &database,
+                );
+            }
         }
 
-        let fingerprint = fingerprint.map(|s| s.to_string());
-        let xpub =
-            pubport_descriptors.xpub().map_err(Into::into).map_err(WalletError::ParseXpubError)?;
+        let mut store = BdkStore::try_new(&id, network).map_err_str(WalletError::LoadError)?;
 
-        let descriptors: Descriptors = pubport_descriptors.into();
+        let fingerprint = fingerprint.map(|s| s.to_string());
 
         metadata.name = match &fingerprint {
             Some(fingerprint) => format!("Imported {}", fingerprint.to_ascii_uppercase()),
@@ -626,6 +642,37 @@ impl Wallet {
         self.bdk.persist(&mut self.db.lock()).map_err_str(WalletError::PersistError)?;
 
         Ok(())
+    }
+
+    /// Upgrade an existing watch-only wallet to cold by saving the xpub and descriptors
+    fn upgrade_to_cold(
+        mut metadata: WalletMetadata,
+        xpub: Xpub,
+        descriptors: Descriptors,
+        keychain: &Keychain,
+        database: &Database,
+    ) -> Result<Self, WalletError> {
+        if metadata.wallet_type != WalletType::WatchOnly {
+            return Err(WalletError::WalletAlreadyExists(metadata.id));
+        }
+
+        let id = metadata.id.clone();
+        keychain.save_wallet_xpub(&id, xpub)?;
+
+        metadata.wallet_type = WalletType::Cold;
+        metadata.origin = descriptors.origin().ok();
+
+        keychain.save_public_descriptor(
+            &id,
+            descriptors.external.extended_descriptor,
+            descriptors.internal.extended_descriptor,
+        )?;
+
+        database.wallets.update_wallet_metadata(metadata.clone())?;
+        database.global_config.select_wallet(id.clone())?;
+
+        Updater::send_update(Update::ClearCachedWalletManager(id.clone()));
+        Self::try_load_persisted(id)
     }
 }
 

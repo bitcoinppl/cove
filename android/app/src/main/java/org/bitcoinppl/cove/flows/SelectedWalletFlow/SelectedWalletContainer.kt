@@ -21,6 +21,8 @@ import org.bitcoinppl.cove.components.FullPageLoadingView
 import org.bitcoinppl.cove.wallet.WalletExportState
 import org.bitcoinppl.cove.wallet.WalletSheetsHost
 import org.bitcoinppl.cove.wallet.rememberWalletExportLaunchers
+import org.bitcoinppl.cove.TaggedItem
+import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.Database
 import org.bitcoinppl.cove_core.DiscoveryState
 import org.bitcoinppl.cove_core.FoundAddress
@@ -28,6 +30,7 @@ import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.RouteFactory
 import org.bitcoinppl.cove_core.SendRoute
 import org.bitcoinppl.cove_core.WalletManagerAction
+import org.bitcoinppl.cove_core.WalletType
 import org.bitcoinppl.cove_core.types.WalletId
 
 // delay to allow UI to settle before updating balance
@@ -184,7 +187,10 @@ fun SelectedWalletContainer(
                 },
                 canGoBack = canGoBack,
                 onSend = {
-                    // check balance before navigating to send flow
+                    if (wm.walletMetadata?.walletType == WalletType.WATCH_ONLY) {
+                        app.alertState = TaggedItem(AppAlertState.CantSendOnWatchOnlyWallet)
+                        return@SelectedWalletScreen
+                    }
                     val balance = wm.balance.spendable().asSats()
                     if (balance > 0u.toULong()) {
                         app.pushRoute(Route.Send(SendRoute.SetAmount(id, null, null)))

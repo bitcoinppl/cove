@@ -12,7 +12,7 @@ use crate::{
     network::Network,
     node::Node,
     router::Route,
-    wallet::metadata::WalletMode,
+    wallet::metadata::{WalletId, WalletMode},
 };
 
 #[derive(Debug, uniffi::Enum)]
@@ -31,6 +31,7 @@ pub enum AppStateReconcileMessage {
     PushedRoute(Route),
     AcceptedTerms,
     WalletsChanged,
+    ClearCachedWalletManager(WalletId),
     ShowLoadingPopup,
     HideLoadingPopup,
 }

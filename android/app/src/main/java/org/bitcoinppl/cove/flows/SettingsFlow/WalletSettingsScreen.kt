@@ -61,6 +61,7 @@ import org.bitcoinppl.cove.views.MaterialDivider
 import org.bitcoinppl.cove.views.MaterialSection
 import org.bitcoinppl.cove.views.MaterialSettingsItem
 import org.bitcoinppl.cove.views.SectionHeader
+import org.bitcoinppl.cove_core.Database
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.WalletColor
@@ -245,6 +246,7 @@ fun WalletSettingsScreen(
                         )
                     }
                 }
+
 
                 SectionHeader(stringResource(R.string.title_wallet_danger_zone))
                 MaterialSection {
