@@ -83,6 +83,8 @@ pub struct Wallet {
     pub network: Network,
     pub bdk: bdk_wallet::PersistedWallet<Connection>,
     pub metadata: WalletMetadata,
+    // BDK's PersistedWallet<P> takes &mut P by reference on persist/load/create,
+    // it doesn't hold the connection itself
     db: Mutex<Connection>,
 }
 

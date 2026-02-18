@@ -1143,8 +1143,6 @@ external fun uniffi_cove_checksum_method_ffiapp_select_latest_or_new_wallet(
 ): Short
 external fun uniffi_cove_checksum_method_ffiapp_select_wallet(
 ): Short
-external fun uniffi_cove_checksum_method_ffiapp_set_wallet_type(
-): Short
 external fun uniffi_cove_checksum_method_ffiapp_state(
 ): Short
 external fun uniffi_cove_checksum_method_ffiapp_unverified_wallet_ids(
@@ -1954,8 +1952,6 @@ external fun uniffi_cove_fn_method_ffiapp_save_tap_signer_backup(`ptr`: Long,`ta
 external fun uniffi_cove_fn_method_ffiapp_select_latest_or_new_wallet(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
 external fun uniffi_cove_fn_method_ffiapp_select_wallet(`ptr`: Long,`id`: RustBufferWalletId.ByValue,`nextRoute`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): Unit
-external fun uniffi_cove_fn_method_ffiapp_set_wallet_type(`ptr`: Long,`id`: RustBufferWalletId.ByValue,`walletType`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
 external fun uniffi_cove_fn_method_ffiapp_state(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
@@ -3473,9 +3469,6 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_ffiapp_select_wallet() != 51673.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_method_ffiapp_set_wallet_type() != 40849.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_ffiapp_state() != 49253.toShort()) {
@@ -9145,11 +9138,6 @@ public interface FfiAppInterface {
      */
     fun `selectWallet`(`id`: WalletId, `nextRoute`: Route? = null)
     
-    /**
-     * Update a wallet's type and persist to database
-     */
-    fun `setWalletType`(`id`: WalletId, `walletType`: WalletType)
-    
     fun `state`(): AppState
     
     /**
@@ -9666,22 +9654,6 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
     UniffiLib.uniffi_cove_fn_method_ffiapp_select_wallet(
         it,
         FfiConverterTypeWalletId.lower(`id`),FfiConverterOptionalTypeRoute.lower(`nextRoute`),_status)
-}
-    }
-    
-    
-
-    
-    /**
-     * Update a wallet's type and persist to database
-     */
-    @Throws(DatabaseException::class)override fun `setWalletType`(`id`: WalletId, `walletType`: WalletType)
-        = 
-    callWithHandle {
-    uniffiRustCallWithError(DatabaseException) { _status ->
-    UniffiLib.uniffi_cove_fn_method_ffiapp_set_wallet_type(
-        it,
-        FfiConverterTypeWalletId.lower(`id`),FfiConverterTypeWalletType.lower(`walletType`),_status)
 }
     }
     
@@ -27898,6 +27870,15 @@ sealed class AppStateReconcileMessage: Disposable  {
     object WalletsChanged : AppStateReconcileMessage()
     
     
+    data class ClearCachedWalletManager(
+        val v1: org.bitcoinppl.cove_core.types.WalletId) : AppStateReconcileMessage()
+        
+    {
+        
+
+        companion object
+    }
+    
     object ShowLoadingPopup : AppStateReconcileMessage()
     
     
@@ -27986,6 +27967,13 @@ sealed class AppStateReconcileMessage: Disposable  {
             }
             is AppStateReconcileMessage.WalletsChanged -> {// Nothing to destroy
             }
+            is AppStateReconcileMessage.ClearCachedWalletManager -> {
+                
+    Disposable.destroy(
+        this.v1
+    )
+                
+            }
             is AppStateReconcileMessage.ShowLoadingPopup -> {// Nothing to destroy
             }
             is AppStateReconcileMessage.HideLoadingPopup -> {// Nothing to destroy
@@ -28041,8 +28029,11 @@ public object FfiConverterTypeAppStateReconcileMessage : FfiConverterRustBuffer<
                 )
             12 -> AppStateReconcileMessage.AcceptedTerms
             13 -> AppStateReconcileMessage.WalletsChanged
-            14 -> AppStateReconcileMessage.ShowLoadingPopup
-            15 -> AppStateReconcileMessage.HideLoadingPopup
+            14 -> AppStateReconcileMessage.ClearCachedWalletManager(
+                FfiConverterTypeWalletId.read(buf),
+                )
+            15 -> AppStateReconcileMessage.ShowLoadingPopup
+            16 -> AppStateReconcileMessage.HideLoadingPopup
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -28137,6 +28128,13 @@ public object FfiConverterTypeAppStateReconcileMessage : FfiConverterRustBuffer<
                 4UL
             )
         }
+        is AppStateReconcileMessage.ClearCachedWalletManager -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeWalletId.allocationSize(value.v1)
+            )
+        }
         is AppStateReconcileMessage.ShowLoadingPopup -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
@@ -28216,12 +28214,17 @@ public object FfiConverterTypeAppStateReconcileMessage : FfiConverterRustBuffer<
                 buf.putInt(13)
                 Unit
             }
-            is AppStateReconcileMessage.ShowLoadingPopup -> {
+            is AppStateReconcileMessage.ClearCachedWalletManager -> {
                 buf.putInt(14)
+                FfiConverterTypeWalletId.write(value.v1, buf)
+                Unit
+            }
+            is AppStateReconcileMessage.ShowLoadingPopup -> {
+                buf.putInt(15)
                 Unit
             }
             is AppStateReconcileMessage.HideLoadingPopup -> {
-                buf.putInt(15)
+                buf.putInt(16)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }

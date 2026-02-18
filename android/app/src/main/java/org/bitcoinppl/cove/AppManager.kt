@@ -420,7 +420,16 @@ class AppManager private constructor() : FfiReconcile {
                 val id = wallet.id()
                 Log.d(tag, "Imported Wallet: $id")
                 alertState = TaggedItem(AppAlertState.ImportedSuccessfully)
-                rust.selectWallet(id)
+
+                // if we're not already on this wallet, navigate to it
+                if (walletManager?.id != id) {
+                    rust.selectWallet(id)
+                }
+
+                // upgrade watch-only → cold in-place
+                if (walletManager?.id == id && walletManager?.walletMetadata?.walletType != WalletType.HOT) {
+                    walletManager?.rust?.setWalletType(WalletType.COLD)
+                }
             } finally {
                 wallet.close()
             }
@@ -617,9 +626,7 @@ class AppManager private constructor() : FfiReconcile {
                 }
 
                 is AppStateReconcileMessage.ClearCachedWalletManager -> {
-                    if (walletManager?.id == message.v1) {
-                        clearWalletManager()
-                    }
+                    clearWalletManager()
                 }
 
                 is AppStateReconcileMessage.ShowLoadingPopup -> {

@@ -2704,11 +2704,6 @@ public protocol FfiAppProtocol: AnyObject, Sendable {
      */
     func selectWallet(id: WalletId, nextRoute: Route?) throws 
     
-    /**
-     * Update a wallet's type and persist to database
-     */
-    func setWalletType(id: WalletId, walletType: WalletType) throws 
-    
     func state()  -> AppState
     
     /**
@@ -3065,18 +3060,6 @@ open func selectWallet(id: WalletId, nextRoute: Route? = nil)throws   {try rustC
             self.uniffiCloneHandle(),
         FfiConverterTypeWalletId_lower(id),
         FfiConverterOptionTypeRoute.lower(nextRoute),$0
-    )
-}
-}
-    
-    /**
-     * Update a wallet's type and persist to database
-     */
-open func setWalletType(id: WalletId, walletType: WalletType)throws   {try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
-    uniffi_cove_fn_method_ffiapp_set_wallet_type(
-            self.uniffiCloneHandle(),
-        FfiConverterTypeWalletId_lower(id),
-        FfiConverterTypeWalletType_lower(walletType),$0
     )
 }
 }
@@ -14273,6 +14256,8 @@ public enum AppStateReconcileMessage {
     )
     case acceptedTerms
     case walletsChanged
+    case clearCachedWalletManager(WalletId
+    )
     case showLoadingPopup
     case hideLoadingPopup
 
@@ -14332,9 +14317,12 @@ public struct FfiConverterTypeAppStateReconcileMessage: FfiConverterRustBuffer {
         
         case 13: return .walletsChanged
         
-        case 14: return .showLoadingPopup
+        case 14: return .clearCachedWalletManager(try FfiConverterTypeWalletId.read(from: &buf)
+        )
         
-        case 15: return .hideLoadingPopup
+        case 15: return .showLoadingPopup
+        
+        case 16: return .hideLoadingPopup
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -14407,12 +14395,17 @@ public struct FfiConverterTypeAppStateReconcileMessage: FfiConverterRustBuffer {
             writeInt(&buf, Int32(13))
         
         
-        case .showLoadingPopup:
+        case let .clearCachedWalletManager(v1):
             writeInt(&buf, Int32(14))
+            FfiConverterTypeWalletId.write(v1, into: &buf)
+            
+        
+        case .showLoadingPopup:
+            writeInt(&buf, Int32(15))
         
         
         case .hideLoadingPopup:
-            writeInt(&buf, Int32(15))
+            writeInt(&buf, Int32(16))
         
         }
     }
@@ -29641,9 +29634,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_select_wallet() != 51673) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_ffiapp_set_wallet_type() != 40849) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_state() != 49253) {
