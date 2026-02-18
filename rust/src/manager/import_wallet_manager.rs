@@ -17,7 +17,7 @@ use crate::{
 };
 
 use cove_macros::impl_default_for;
-use tracing::warn;
+use tracing::{info, warn};
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum ImportWalletManagerReconcileMessage {
@@ -122,58 +122,62 @@ impl RustImportWalletManager {
             .into_iter()
             .find(|wallet_metadata| wallet_metadata.matches_fingerprint(fingerprint));
 
-        if let Some(mut metadata) = existing_wallet {
-            let id = metadata.id.clone();
-            let keychain = Keychain::global();
+        // new wallet, create it and return
+        if existing_wallet.is_none() {
+            // get current number of wallets and add one;
+            let number_of_wallets = Database::global().wallets.len(network, mode).unwrap_or(0);
 
-            if metadata.wallet_type == WalletType::Hot {
-                if keychain.get_wallet_key(&id)?.is_none() {
-                    warn!("hot wallet {id} is missing private key, restoring from imported words");
-                } else {
-                    warn!(
-                        "attempted to import words for existing hot wallet {id}, showing duplicate alert"
-                    );
-                    Database::global().global_config.select_wallet(id.clone())?;
-                    return Err(ImportWalletError::WalletAlreadyExists(id));
-                }
-            }
+            let name = format!("Wallet {}", number_of_wallets + 1);
+            let wallet_metadata =
+                WalletMetadata::new_imported_from_mnemonic(name, network, fingerprint);
 
-            // Restore the private key material for an existing wallet.
-            keychain.save_wallet_key(&id, mnemonic.clone())?;
+            Wallet::try_new_persisted_and_selected(wallet_metadata.clone(), mnemonic.clone(), None)
+                .map_err_str(ImportWalletError::WalletImportError)?;
 
-            // Keep xpub/descriptors in sync with the imported mnemonic.
-            let xpub = mnemonic.xpub(network.into());
-            keychain.save_wallet_xpub(&id, xpub)?;
-
-            let descriptors =
-                mnemonic.clone().into_descriptors(None, network, metadata.address_type);
-            keychain.save_public_descriptor(
-                &id,
-                descriptors.external.extended_descriptor,
-                descriptors.internal.extended_descriptor,
-            )?;
-
-            // Imported mnemonic means this wallet can now sign locally.
-            metadata.wallet_type = WalletType::Hot;
-            metadata.hardware_metadata = None;
-            metadata.verified = true;
-            Database::global().wallets.update_wallet_metadata(metadata.clone())?;
-            Database::global().global_config.select_wallet(id)?;
-
-            return Ok(metadata);
+            return Ok(wallet_metadata);
         }
 
-        // get current number of wallets and add one;
-        let number_of_wallets = Database::global().wallets.len(network, mode).unwrap_or(0);
+        // existing wallet
+        let mut metadata = existing_wallet.expect("wallet exists, just checked above");
+        let id = metadata.id.clone();
+        let keychain = Keychain::global();
 
-        let name = format!("Wallet {}", number_of_wallets + 1);
-        let wallet_metadata =
-            WalletMetadata::new_imported_from_mnemonic(name, network, fingerprint);
+        // hot wallets with private key already in keychain, don't do anything else
+        if metadata.wallet_type == WalletType::Hot && keychain.get_wallet_key(&id)?.is_some() {
+            warn!(
+                "attempted to import words for existing hot wallet {id}, showing duplicate alert"
+            );
 
-        Wallet::try_new_persisted_and_selected(wallet_metadata.clone(), mnemonic.clone(), None)
-            .map_err_str(ImportWalletError::WalletImportError)?;
+            Database::global().global_config.select_wallet(id.clone())?;
+            return Err(ImportWalletError::WalletAlreadyExists(id));
+        }
 
-        Ok(wallet_metadata)
+        info!("adding mnemonic to existing wallet {id}");
+
+        // save the private key material for an existing wallet.
+        keychain.save_wallet_key(&id, mnemonic.clone())?;
+
+        // save xpub/descriptors in keychain too
+        let xpub = mnemonic.xpub(network.into());
+        keychain.save_wallet_xpub(&id, xpub)?;
+
+        // save public descriptors in keychain too
+        let descriptors = mnemonic.clone().into_descriptors(None, network, metadata.address_type);
+        keychain.save_public_descriptor(
+            &id,
+            descriptors.external.extended_descriptor,
+            descriptors.internal.extended_descriptor,
+        )?;
+
+        // imported mnemonic means this wallet can now sign locally.
+        metadata.wallet_type = WalletType::Hot;
+        metadata.hardware_metadata = None;
+        metadata.verified = true;
+
+        Database::global().wallets.update_wallet_metadata(metadata.clone())?;
+        Database::global().global_config.select_wallet(id)?;
+
+        Ok(metadata)
     }
 
     /// Action from the frontend to change the state of the view model

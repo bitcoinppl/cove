@@ -7758,7 +7758,7 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
     
     func setWalletMetadata(metadata: WalletMetadata) 
     
-    func setWalletType(walletType: WalletType) 
+    func setWalletType(walletType: WalletType) throws 
     
     func signAndBroadcastTransaction(psbt: Psbt) async throws 
     
@@ -8524,7 +8524,7 @@ open func setWalletMetadata(metadata: WalletMetadata)  {try! rustCall() {
 }
 }
     
-open func setWalletType(walletType: WalletType)  {try! rustCall() {
+open func setWalletType(walletType: WalletType)throws   {try rustCallWithError(FfiConverterTypeWalletManagerError_lift) {
     uniffi_cove_fn_method_rustwalletmanager_set_wallet_type(
             self.uniffiCloneHandle(),
         FfiConverterTypeWalletType_lower(walletType),$0
@@ -25287,6 +25287,8 @@ public enum WalletManagerError: Swift.Error, Equatable, Hashable, Foundation.Loc
     )
     case NextAddressError(String
     )
+    case SetWalletTypeError(String
+    )
     case GetHeightError
     case TransactionDetailsError(String
     )
@@ -25384,49 +25386,52 @@ public struct FfiConverterTypeWalletManagerError: FfiConverterRustBuffer {
         case 10: return .NextAddressError(
             try FfiConverterString.read(from: &buf)
             )
-        case 11: return .GetHeightError
-        case 12: return .TransactionDetailsError(
+        case 11: return .SetWalletTypeError(
             try FfiConverterString.read(from: &buf)
             )
-        case 13: return .ActorNotFound
-        case 14: return .UnableToSwitch(
+        case 12: return .GetHeightError
+        case 13: return .TransactionDetailsError(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 14: return .ActorNotFound
+        case 15: return .UnableToSwitch(
             try FfiConverterTypeWalletAddressType.read(from: &buf), 
             try FfiConverterString.read(from: &buf)
             )
-        case 15: return .FiatError(
+        case 16: return .FiatError(
             try FfiConverterString.read(from: &buf)
             )
-        case 16: return .FeesError(
+        case 17: return .FeesError(
             try FfiConverterString.read(from: &buf)
             )
-        case 17: return .BuildTxError(
+        case 18: return .BuildTxError(
             try FfiConverterString.read(from: &buf)
             )
-        case 18: return .InsufficientFunds(
+        case 19: return .InsufficientFunds(
             try FfiConverterString.read(from: &buf)
             )
-        case 19: return .GetConfirmDetailsError(
+        case 20: return .GetConfirmDetailsError(
             try FfiConverterString.read(from: &buf)
             )
-        case 20: return .SignAndBroadcastError(
+        case 21: return .SignAndBroadcastError(
             try FfiConverterString.read(from: &buf)
             )
-        case 21: return .Converter(
+        case 22: return .Converter(
             try FfiConverterTypeConverterError.read(from: &buf)
             )
-        case 22: return .UnknownError(
+        case 23: return .UnknownError(
             try FfiConverterString.read(from: &buf)
             )
-        case 23: return .PsbtFinalizeError(
+        case 24: return .PsbtFinalizeError(
             try FfiConverterString.read(from: &buf)
             )
-        case 24: return .GetHistoricalPricesError(
+        case 25: return .GetHistoricalPricesError(
             try FfiConverterString.read(from: &buf)
             )
-        case 25: return .CsvCreationError(
+        case 26: return .CsvCreationError(
             try FfiConverterString.read(from: &buf)
             )
-        case 26: return .AddUtxosError(
+        case 27: return .AddUtxosError(
             try FfiConverterString.read(from: &buf)
             )
 
@@ -25490,82 +25495,87 @@ public struct FfiConverterTypeWalletManagerError: FfiConverterRustBuffer {
             FfiConverterString.write(v1, into: &buf)
             
         
-        case .GetHeightError:
+        case let .SetWalletTypeError(v1):
             writeInt(&buf, Int32(11))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case .GetHeightError:
+            writeInt(&buf, Int32(12))
         
         
         case let .TransactionDetailsError(v1):
-            writeInt(&buf, Int32(12))
+            writeInt(&buf, Int32(13))
             FfiConverterString.write(v1, into: &buf)
             
         
         case .ActorNotFound:
-            writeInt(&buf, Int32(13))
+            writeInt(&buf, Int32(14))
         
         
         case let .UnableToSwitch(v1,v2):
-            writeInt(&buf, Int32(14))
+            writeInt(&buf, Int32(15))
             FfiConverterTypeWalletAddressType.write(v1, into: &buf)
             FfiConverterString.write(v2, into: &buf)
             
         
         case let .FiatError(v1):
-            writeInt(&buf, Int32(15))
-            FfiConverterString.write(v1, into: &buf)
-            
-        
-        case let .FeesError(v1):
             writeInt(&buf, Int32(16))
             FfiConverterString.write(v1, into: &buf)
             
         
-        case let .BuildTxError(v1):
+        case let .FeesError(v1):
             writeInt(&buf, Int32(17))
             FfiConverterString.write(v1, into: &buf)
             
         
-        case let .InsufficientFunds(v1):
+        case let .BuildTxError(v1):
             writeInt(&buf, Int32(18))
             FfiConverterString.write(v1, into: &buf)
             
         
-        case let .GetConfirmDetailsError(v1):
+        case let .InsufficientFunds(v1):
             writeInt(&buf, Int32(19))
             FfiConverterString.write(v1, into: &buf)
             
         
-        case let .SignAndBroadcastError(v1):
+        case let .GetConfirmDetailsError(v1):
             writeInt(&buf, Int32(20))
             FfiConverterString.write(v1, into: &buf)
             
         
-        case let .Converter(v1):
+        case let .SignAndBroadcastError(v1):
             writeInt(&buf, Int32(21))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .Converter(v1):
+            writeInt(&buf, Int32(22))
             FfiConverterTypeConverterError.write(v1, into: &buf)
             
         
         case let .UnknownError(v1):
-            writeInt(&buf, Int32(22))
-            FfiConverterString.write(v1, into: &buf)
-            
-        
-        case let .PsbtFinalizeError(v1):
             writeInt(&buf, Int32(23))
             FfiConverterString.write(v1, into: &buf)
             
         
-        case let .GetHistoricalPricesError(v1):
+        case let .PsbtFinalizeError(v1):
             writeInt(&buf, Int32(24))
             FfiConverterString.write(v1, into: &buf)
             
         
-        case let .CsvCreationError(v1):
+        case let .GetHistoricalPricesError(v1):
             writeInt(&buf, Int32(25))
             FfiConverterString.write(v1, into: &buf)
             
         
-        case let .AddUtxosError(v1):
+        case let .CsvCreationError(v1):
             writeInt(&buf, Int32(26))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .AddUtxosError(v1):
+            writeInt(&buf, Int32(27))
             FfiConverterString.write(v1, into: &buf)
             
         }
@@ -30170,7 +30180,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustwalletmanager_set_wallet_metadata() != 11441) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustwalletmanager_set_wallet_type() != 29503) {
+    if (uniffi_cove_checksum_method_rustwalletmanager_set_wallet_type() != 23118) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_sign_and_broadcast_transaction() != 32531) {
