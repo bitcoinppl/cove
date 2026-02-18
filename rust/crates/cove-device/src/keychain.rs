@@ -81,6 +81,11 @@ impl Keychain {
 
     /// Saves a wallet's mnemonic seed encrypted in the keychain
     ///
+    /// The mnemonic is encrypted with a random [`Cryptor`] before storage. The
+    /// keychain itself provides at-rest encryption, but this extra layer prevents
+    /// the plaintext mnemonic from being accidentally exposed if other code
+    /// enumerates keychain entries — it must be explicitly decrypted to be read
+    ///
     /// # Errors
     ///
     /// Returns a `KeychainError` if encryption or saving fails
@@ -241,6 +246,10 @@ impl Keychain {
     }
 
     /// Saves a Tap Signer backup encrypted in the keychain
+    ///
+    /// Encrypted with a random [`Cryptor`] before storage for the same reason as
+    /// [`save_wallet_key`](Self::save_wallet_key) — prevents accidental plaintext
+    /// exposure when keychain entries are enumerated
     ///
     /// # Errors
     ///

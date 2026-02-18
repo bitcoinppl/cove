@@ -15,6 +15,11 @@ impl<S: CsppStore> Cspp<S> {
     }
 
     /// Saves the master key encrypted via the underlying store
+    ///
+    /// The master key is encrypted with a random [`Cryptor`] before storage. The
+    /// keychain already provides at-rest encryption, but this extra layer prevents
+    /// the plaintext key from being accidentally exposed if other code enumerates
+    /// keychain entries — it must be explicitly decrypted to be read
     pub fn save_master_key(&self, master_key: &MasterKey) -> Result<(), CsppError> {
         let hex = hex::encode(master_key.as_bytes());
         let cryptor = Cryptor::new();
