@@ -440,7 +440,7 @@ private fun GlobalAlertDialog(
                         TextButton(onClick = {
                             onDismiss()
                             try {
-                                app.rust.setWalletType(walletId, WalletType.COLD)
+                                app.getWalletManager(walletId).rust.setWalletType(WalletType.COLD)
                             } catch (e: Exception) {
                                 Log.e("GlobalAlert", "Failed to set wallet type to cold", e)
                                 app.alertState =

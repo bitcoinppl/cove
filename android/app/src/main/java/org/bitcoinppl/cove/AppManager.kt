@@ -616,6 +616,12 @@ class AppManager private constructor() : FfiReconcile {
                     wallets = runCatching { database.wallets().all() }.getOrElse { emptyList() }
                 }
 
+                is AppStateReconcileMessage.ClearCachedWalletManager -> {
+                    if (walletManager?.id == message.v1) {
+                        clearWalletManager()
+                    }
+                }
+
                 is AppStateReconcileMessage.ShowLoadingPopup -> {
                     alertState = TaggedItem(AppAlertState.Loading)
                 }

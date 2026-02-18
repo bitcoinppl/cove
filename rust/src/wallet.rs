@@ -6,6 +6,7 @@ pub mod metadata;
 use std::{str::FromStr as _, sync::Arc};
 
 use crate::{
+    app::reconcile::{Update, Updater},
     bdk_store::BdkStore,
     database::{self, Database},
     keychain::{Keychain, KeychainError},
@@ -324,6 +325,8 @@ impl Wallet {
                 )?;
                 database.wallets.update_wallet_metadata(existing_metadata.clone())?;
                 database.global_config.select_wallet(existing_id.clone())?;
+
+                Updater::send_update(Update::ClearCachedWalletManager(existing_id.clone()));
 
                 return Self::try_load_persisted(existing_id);
             }

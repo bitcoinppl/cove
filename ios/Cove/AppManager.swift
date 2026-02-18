@@ -275,6 +275,11 @@ private let walletModeChangeDelayMs = 250
             case .walletsChanged:
                 wallets = (try? database.wallets().all()) ?? []
 
+            case let .clearCachedWalletManager(walletId):
+                if walletManager?.id == walletId {
+                    walletManager = nil
+                }
+
             case .showLoadingPopup:
                 Task { await MiddlePopup(state: .loading).present() }
 
