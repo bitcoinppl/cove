@@ -144,8 +144,8 @@ impl Keychain {
         let encryption_key_key = wallet_mnemonic_encryption_and_nonce_key_name(id);
         let key = wallet_mnemonic_key_name(id);
 
-        self.0.delete(encryption_key_key);
-        self.0.delete(key)
+        self.0.delete(key);
+        self.0.delete(encryption_key_key)
     }
 
     /// Saves a wallet's extended public key in the keychain
@@ -302,8 +302,8 @@ impl Keychain {
         let encryption_key_key = wallet_tap_signer_encryption_key_and_nonce_key_name(id);
         let backup_key = wallet_tap_signer_backup_key_name(id);
 
-        self.0.delete(encryption_key_key);
-        self.0.delete(backup_key)
+        self.0.delete(backup_key);
+        self.0.delete(encryption_key_key)
     }
 
     /// Deletes all items saved in the keychain for the given wallet id
