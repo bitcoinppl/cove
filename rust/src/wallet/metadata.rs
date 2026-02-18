@@ -208,10 +208,10 @@ impl WalletMetadata {
     }
 
     pub fn wallet_matches_fingerprint(&self, fingerprint: Fingerprint) -> bool {
-        if let Some(saved_fingerprint) = self.master_fingerprint.as_ref() {
-            if saved_fingerprint.as_ref() == &fingerprint {
-                return true;
-            }
+        if let Some(saved_fingerprint) = self.master_fingerprint.as_ref()
+            && saved_fingerprint.as_ref() == &fingerprint
+        {
+            return true;
         }
 
         // fallback to check fingerprint with the xpub stored in keychain

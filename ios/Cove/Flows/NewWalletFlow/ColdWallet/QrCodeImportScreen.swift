@@ -148,7 +148,7 @@ struct QrCodeImportScreen: View {
                 }
                 let id = wallet.id()
                 Log.debug("Imported Wallet: \(id)")
-                alert = AlertItem(type: .success("Imported Wallet Successfully"))
+                app.alertState = TaggedItem(.importedSuccessfully)
                 try app.rust.selectWallet(id: id)
             } catch let WalletError.MultiFormat(error) {
                 app.popRoute()
