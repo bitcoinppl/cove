@@ -4,7 +4,6 @@ use std::{
     time::Duration,
 };
 
-use cove_device::keychain::Keychain;
 use derive_more::Display;
 use serde::{Deserialize, Serialize};
 

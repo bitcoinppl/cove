@@ -428,7 +428,11 @@ class AppManager private constructor() : FfiReconcile {
 
                 // upgrade watch-only → cold in-place
                 if (walletManager?.id == id && walletManager?.walletMetadata?.walletType != WalletType.HOT) {
-                    walletManager?.rust?.setWalletType(WalletType.COLD)
+                    try {
+                        walletManager?.rust?.setWalletType(WalletType.COLD)
+                    } catch (e: Exception) {
+                        Log.e(tag, "Failed to set wallet type to cold", e)
+                    }
                 }
             } finally {
                 wallet.close()
@@ -626,7 +630,9 @@ class AppManager private constructor() : FfiReconcile {
                 }
 
                 is AppStateReconcileMessage.ClearCachedWalletManager -> {
-                    clearWalletManager()
+                    if (walletManager?.id == message.v1) {
+                        clearWalletManager()
+                    }
                 }
 
                 is AppStateReconcileMessage.ShowLoadingPopup -> {

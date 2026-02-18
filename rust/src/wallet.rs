@@ -269,8 +269,6 @@ impl Wallet {
         let id = WalletId::new();
         let mut metadata = WalletMetadata::new_for_hardware(id.clone(), "", None);
 
-        let mut store = BdkStore::try_new(&id, network).map_err_str(WalletError::LoadError)?;
-
         let pubport_descriptors = match pubport {
             Format::Descriptor(descriptors) => descriptors,
             Format::Json(json) => {
@@ -333,6 +331,8 @@ impl Wallet {
                 return Self::try_load_persisted(existing_id);
             }
         }
+
+        let mut store = BdkStore::try_new(&id, network).map_err_str(WalletError::LoadError)?;
 
         let fingerprint = fingerprint.map(|s| s.to_string());
 

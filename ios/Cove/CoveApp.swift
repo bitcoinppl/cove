@@ -338,7 +338,7 @@ struct CoveApp: App {
 
             // upgrade watch-only → cold in-place
             if app.walletManager?.id == id, app.walletManager?.walletMetadata.walletType != .hot {
-                app.walletManager?.rust.setWalletType(walletType: .cold)
+                try app.walletManager?.rust.setWalletType(walletType: .cold)
             }
         } catch let WalletError.WalletAlreadyExists(id) {
             app.alertState = TaggedItem(.duplicateWallet(walletId: id))

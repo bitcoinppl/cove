@@ -197,6 +197,9 @@ pub enum WalletManagerError {
     #[error("unable to get next address: {0}")]
     NextAddressError(String),
 
+    #[error("unable to set wallet type: {0}")]
+    SetWalletTypeError(String),
+
     #[error("unable to get height")]
     GetHeightError,
 
@@ -912,18 +915,19 @@ impl RustWalletManager {
     }
 
     #[uniffi::method]
-    pub fn set_wallet_type(&self, wallet_type: WalletType) {
-        let metadata = {
-            let mut metadata = self.metadata.write();
-            metadata.wallet_type = wallet_type;
-            metadata.clone()
-        };
+    pub fn set_wallet_type(&self, wallet_type: WalletType) -> Result<(), Error> {
+        let mut metadata = self.metadata.read().clone();
+        metadata.wallet_type = wallet_type;
 
-        self.reconciler.send(Message::WalletMetadataChanged(metadata.clone()));
+        Database::global()
+            .wallets
+            .update_wallet_metadata(metadata.clone())
+            .map_err(|e| Error::SetWalletTypeError(format!("{e:?}")))?;
 
-        if let Err(error) = Database::global().wallets.update_wallet_metadata(metadata) {
-            error!("Unable to update wallet metadata: {error:?}");
-        }
+        *self.metadata.write() = metadata.clone();
+        self.reconciler.send(Message::WalletMetadataChanged(metadata));
+
+        Ok(())
     }
 
     #[uniffi::method]
