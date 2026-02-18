@@ -120,7 +120,7 @@ impl RustImportWalletManager {
             .get_all(network, mode)
             .unwrap_or_default()
             .into_iter()
-            .find(|wallet_metadata| wallet_metadata.wallet_matches_fingerprint(fingerprint));
+            .find(|wallet_metadata| wallet_metadata.matches_fingerprint(fingerprint));
 
         if let Some(mut metadata) = existing_wallet {
             let id = metadata.id.clone();
