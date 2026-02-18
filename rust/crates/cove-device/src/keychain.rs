@@ -265,9 +265,9 @@ impl Keychain {
         // get the encryption key as a string
         let encryption_key = cryptor.serialize_to_string();
 
-        // save the backup and encryption key
-        self.0.save(backup_key, encrypted_backup)?;
+        // save encryption key first to avoid orphaned encrypted data
         self.0.save(encryption_key_key, encryption_key)?;
+        self.0.save(backup_key, encrypted_backup)?;
 
         Ok(())
     }

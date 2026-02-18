@@ -25,11 +25,11 @@ impl<S: CsppStore> Cspp<S> {
         let encryption_key = cryptor.serialize_to_string();
 
         self.0
-            .save(MASTER_KEY_NAME.into(), encrypted)
+            .save(MASTER_KEY_ENCRYPTION_KEY_AND_NONCE.into(), encryption_key)
             .map_err(|e| CsppError::Save(e.to_string()))?;
 
         self.0
-            .save(MASTER_KEY_ENCRYPTION_KEY_AND_NONCE.into(), encryption_key)
+            .save(MASTER_KEY_NAME.into(), encrypted)
             .map_err(|e| CsppError::Save(e.to_string()))?;
 
         Ok(())
