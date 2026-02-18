@@ -80,7 +80,8 @@ class AppManager private constructor() : FfiReconcile {
     // tracks whether async runtime has been initialized
     var asyncRuntimeReady by mutableStateOf(false)
 
-    // cached managers (not observable)
+    // multiple screens within the same wallet (send, coin control, tx details, settings)
+    // call getWalletManager, this avoids recreating the actor and reconciler each time
     internal var walletManager: WalletManager? = null
         private set
 
