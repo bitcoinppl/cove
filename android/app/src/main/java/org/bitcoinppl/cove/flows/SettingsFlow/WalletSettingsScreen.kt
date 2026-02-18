@@ -50,7 +50,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.AppManager
-import org.bitcoinppl.cove.BuildConfig
 import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletManager
@@ -248,25 +247,6 @@ fun WalletSettingsScreen(
                     }
                 }
 
-                if (BuildConfig.DEBUG) {
-                    SectionHeader("Debug")
-                    MaterialSection {
-                        MaterialSettingsItem(
-                            title = "Simulate Missing Key",
-                            titleColor = CoveColor.WarningOrange,
-                            onClick = {
-                                manager.rust.setWalletType(WalletType.HOT)
-                                val wallets = runCatching { Database().wallets().all() }.getOrElse { emptyList() }
-                                val other = wallets.firstOrNull { it.id != metadata.id }
-                                if (other != null) {
-                                    app.rust.selectWallet(other.id)
-                                } else {
-                                    app.popRoute()
-                                }
-                            },
-                        )
-                    }
-                }
 
                 SectionHeader(stringResource(R.string.title_wallet_danger_zone))
                 MaterialSection {

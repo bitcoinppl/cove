@@ -145,23 +145,6 @@ struct WalletSettingsView: View {
                 .padding(.vertical, 1)
             }
 
-            #if DEBUG
-                Section(header: Text("Debug")) {
-                    Button("Simulate Missing Key") {
-                        manager.rust.setWalletType(walletType: .hot)
-                        if let wallets = try? Database().wallets().all(),
-                           let other = wallets.first(where: { $0.id != manager.walletMetadata.id })
-                        {
-                            app.selectWallet(other.id)
-                        } else {
-                            dismiss()
-                        }
-                    }
-                    .font(.subheadline)
-                    .foregroundColor(.orange)
-                }
-            #endif
-
             Section(header: Text("Danger Zone")) {
                 if manager.walletMetadata.walletType == .hot {
                     Button {
