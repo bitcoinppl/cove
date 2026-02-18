@@ -6,6 +6,7 @@ use flume::{Receiver, Sender};
 use parking_lot::RwLock;
 
 use crate::{
+    app::reconcile::{Update, Updater},
     database::{self, Database},
     keychain::{Keychain, KeychainError},
     mnemonic::MnemonicExt as _,
@@ -175,7 +176,8 @@ impl RustImportWalletManager {
         metadata.verified = true;
 
         Database::global().wallets.update_wallet_metadata(metadata.clone())?;
-        Database::global().global_config.select_wallet(id)?;
+        Database::global().global_config.select_wallet(id.clone())?;
+        Updater::send_update(Update::ClearCachedWalletManager(id));
 
         Ok(metadata)
     }
