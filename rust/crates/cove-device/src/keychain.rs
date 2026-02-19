@@ -8,6 +8,7 @@ use bip39::Mnemonic;
 use once_cell::sync::OnceCell;
 use tracing::warn;
 
+use cove_cspp::CsppStore;
 use cove_types::WalletId;
 use cove_util::encryption::Cryptor;
 
@@ -80,10 +81,14 @@ impl Keychain {
 
     /// Saves a wallet's mnemonic seed encrypted in the keychain
     ///
+    /// The mnemonic is encrypted with a random [`Cryptor`] before storage. The
+    /// keychain itself provides at-rest encryption, but this extra layer prevents
+    /// the plaintext mnemonic from being accidentally exposed if other code
+    /// enumerates keychain entries — it must be explicitly decrypted to be read
+    ///
     /// # Errors
     ///
     /// Returns a `KeychainError` if encryption or saving fails
-    #[allow(clippy::needless_pass_by_value)]
     pub fn save_wallet_key(
         &self,
         id: &WalletId,
@@ -139,8 +144,12 @@ impl Keychain {
         let encryption_key_key = wallet_mnemonic_encryption_and_nonce_key_name(id);
         let key = wallet_mnemonic_key_name(id);
 
-        self.0.delete(encryption_key_key);
-        self.0.delete(key)
+        // delete encrypted data before its encryption key (reverse of save order)
+        // so a partial failure never leaves orphaned data without a decryption key,
+        // and code that checks for the key's existence won't see stale encrypted
+        // data after the decryption key has already been removed
+        self.0.delete(key);
+        self.0.delete(encryption_key_key)
     }
 
     /// Saves a wallet's extended public key in the keychain
@@ -242,6 +251,10 @@ impl Keychain {
 
     /// Saves a Tap Signer backup encrypted in the keychain
     ///
+    /// Encrypted with a random [`Cryptor`] before storage for the same reason as
+    /// [`save_wallet_key`](Self::save_wallet_key) — prevents accidental plaintext
+    /// exposure when keychain entries are enumerated
+    ///
     /// # Errors
     ///
     /// Returns a `KeychainError` if encryption or saving fails
@@ -265,9 +278,9 @@ impl Keychain {
         // get the encryption key as a string
         let encryption_key = cryptor.serialize_to_string();
 
-        // save the backup and encryption key
-        self.0.save(backup_key, encrypted_backup)?;
+        // save encryption key first to avoid orphaned encrypted data
         self.0.save(encryption_key_key, encryption_key)?;
+        self.0.save(backup_key, encrypted_backup)?;
 
         Ok(())
     }
@@ -293,8 +306,12 @@ impl Keychain {
         let encryption_key_key = wallet_tap_signer_encryption_key_and_nonce_key_name(id);
         let backup_key = wallet_tap_signer_backup_key_name(id);
 
-        self.0.delete(encryption_key_key);
-        self.0.delete(backup_key)
+        // delete encrypted data before its encryption key (reverse of save order)
+        // so a partial failure never leaves orphaned data without a decryption key,
+        // and code that checks for the key's existence won't see stale encrypted
+        // data after the decryption key has already been removed
+        self.0.delete(backup_key);
+        self.0.delete(encryption_key_key)
     }
 
     /// Deletes all items saved in the keychain for the given wallet id
@@ -303,6 +320,22 @@ impl Keychain {
             && self.delete_wallet_xpub(id)
             && self.delete_public_descriptor(id)
             && self.delete_tap_signer_backup(id)
+    }
+}
+
+impl CsppStore for Keychain {
+    type Error = KeychainError;
+
+    fn save(&self, key: String, value: String) -> Result<(), KeychainError> {
+        self.0.save(key, value)
+    }
+
+    fn get(&self, key: String) -> Option<String> {
+        self.0.get(key)
+    }
+
+    fn delete(&self, key: String) -> bool {
+        self.0.delete(key)
     }
 }
 

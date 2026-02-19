@@ -11,6 +11,16 @@ use cove_macros::impl_default_for;
 
 const SPLITTER: &str = "::";
 
+/// ChaCha20-Poly1305 authenticated encryption wrapper
+///
+/// Primarily used to encrypt sensitive values (mnemonics, master keys, tap signer
+/// backups) before storing them in the OS keychain. The keychain already provides
+/// at-rest encryption, but wrapping values with a Cryptor ensures they can't be
+/// accidentally leaked by code that enumerates or inspects keychain entries — the
+/// values are ciphertext until explicitly decrypted
+///
+/// Usage: create a fresh `Cryptor` (random key + nonce), encrypt the secret, then
+/// store both the ciphertext and the serialized Cryptor as separate keychain entries
 #[derive(Debug, Clone)]
 pub struct Cryptor {
     key: Key,
