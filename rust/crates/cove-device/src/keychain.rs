@@ -144,6 +144,10 @@ impl Keychain {
         let encryption_key_key = wallet_mnemonic_encryption_and_nonce_key_name(id);
         let key = wallet_mnemonic_key_name(id);
 
+        // delete encrypted data before its encryption key (reverse of save order)
+        // so a partial failure never leaves orphaned data without a decryption key,
+        // and code that checks for the key's existence won't see stale encrypted
+        // data after the decryption key has already been removed
         self.0.delete(key);
         self.0.delete(encryption_key_key)
     }
@@ -302,6 +306,10 @@ impl Keychain {
         let encryption_key_key = wallet_tap_signer_encryption_key_and_nonce_key_name(id);
         let backup_key = wallet_tap_signer_backup_key_name(id);
 
+        // delete encrypted data before its encryption key (reverse of save order)
+        // so a partial failure never leaves orphaned data without a decryption key,
+        // and code that checks for the key's existence won't see stale encrypted
+        // data after the decryption key has already been removed
         self.0.delete(backup_key);
         self.0.delete(encryption_key_key)
     }
