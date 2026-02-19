@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 cove-util = { path = "../cove-util" }
 
+arc-swap = { workspace = true }
 hkdf = { workspace = true }
 sha2 = { workspace = true }
 rand = { workspace = true }

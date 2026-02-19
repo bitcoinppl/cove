@@ -1,3 +1,6 @@
+use std::sync::{Arc, LazyLock, Mutex};
+
+use arc_swap::ArcSwapOption;
 use cove_util::encryption::Cryptor;
 
 use crate::error::CsppError;
@@ -7,11 +10,55 @@ use crate::store::CsppStore;
 const MASTER_KEY_NAME: &str = "cspp::v1::master_key";
 const MASTER_KEY_ENCRYPTION_KEY_AND_NONCE: &str = "cspp::v1::master_key_encryption_key_and_nonce";
 
+static INIT_LOCK: Mutex<()> = Mutex::new(());
+static MASTER_KEY_CACHE: LazyLock<ArcSwapOption<[u8; 32]>> =
+    LazyLock::new(|| ArcSwapOption::new(None));
+
 pub struct Cspp<S: CsppStore>(S);
 
 impl<S: CsppStore> Cspp<S> {
     pub fn new(store: S) -> Self {
         Self(store)
+    }
+
+    /// Loads the master key from the store, or generates and saves a new one
+    ///
+    /// Uses double-checked locking to prevent a TOCTOU race where two threads
+    /// could both observe no key and generate different master keys
+    pub fn get_or_create_master_key(&self) -> Result<MasterKey, CsppError> {
+        // fast path (lock-free): return cached key
+        if let Some(bytes) = MASTER_KEY_CACHE.load().as_deref() {
+            return Ok(MasterKey::from_bytes(*bytes));
+        }
+
+        // slow path: acquire init lock for double-checked initialization
+        let _guard = INIT_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+
+        // re-check cache after acquiring lock
+        if let Some(bytes) = MASTER_KEY_CACHE.load().as_deref() {
+            return Ok(MasterKey::from_bytes(*bytes));
+        }
+
+        // try loading from store
+        if let Some(key) = self.get_master_key()? {
+            MASTER_KEY_CACHE.store(Some(Arc::new(*key.as_bytes())));
+            return Ok(key);
+        }
+
+        // generate and save new key
+        let key = MasterKey::generate();
+        self.save_master_key(&key)?;
+        MASTER_KEY_CACHE.store(Some(Arc::new(*key.as_bytes())));
+
+        Ok(key)
+    }
+
+    /// Deletes the master key from the store
+    pub fn delete_master_key(&self) -> bool {
+        let _guard = INIT_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        MASTER_KEY_CACHE.store(None);
+        self.0.delete(MASTER_KEY_NAME.into());
+        self.0.delete(MASTER_KEY_ENCRYPTION_KEY_AND_NONCE.into())
     }
 
     /// Saves the master key encrypted via the underlying store
@@ -20,7 +67,7 @@ impl<S: CsppStore> Cspp<S> {
     /// keychain already provides at-rest encryption, but this extra layer prevents
     /// the plaintext key from being accidentally exposed if other code enumerates
     /// keychain entries — it must be explicitly decrypted to be read
-    pub fn save_master_key(&self, master_key: &MasterKey) -> Result<(), CsppError> {
+    fn save_master_key(&self, master_key: &MasterKey) -> Result<(), CsppError> {
         let hex = hex::encode(master_key.as_bytes());
         let cryptor = Cryptor::new();
 
@@ -40,8 +87,8 @@ impl<S: CsppStore> Cspp<S> {
         Ok(())
     }
 
-    /// Loads the master key from the store, returns None if not found
-    pub fn get_master_key(&self) -> Result<Option<MasterKey>, CsppError> {
+    /// Loads the master key, returns None if not found
+    fn get_master_key(&self) -> Result<Option<MasterKey>, CsppError> {
         let Some(encryption_secret) = self.0.get(MASTER_KEY_ENCRYPTION_KEY_AND_NONCE.into()) else {
             return Ok(None);
         };
@@ -65,21 +112,9 @@ impl<S: CsppStore> Cspp<S> {
         Ok(Some(MasterKey::from_bytes(bytes)))
     }
 
-    /// Deletes the master key from the store
-    pub fn delete_master_key(&self) -> bool {
-        self.0.delete(MASTER_KEY_NAME.into());
-        self.0.delete(MASTER_KEY_ENCRYPTION_KEY_AND_NONCE.into())
-    }
-
-    /// Loads the master key from the store, or generates and saves a new one
-    pub fn get_or_create_master_key(&self) -> Result<MasterKey, CsppError> {
-        if let Some(key) = self.get_master_key()? {
-            return Ok(key);
-        }
-
-        let key = MasterKey::generate();
-        self.save_master_key(&key)?;
-        Ok(key)
+    #[cfg(test)]
+    fn reset_cache() {
+        MASTER_KEY_CACHE.store(None);
     }
 }
 
@@ -89,6 +124,9 @@ mod tests {
     use std::sync::Mutex;
 
     use super::*;
+
+    // serializes tests that touch the global MASTER_KEY_CACHE
+    static CACHE_TEST_LOCK: Mutex<()> = Mutex::new(());
 
     #[derive(Debug)]
     struct MockStore(Mutex<HashMap<String, String>>);
@@ -122,6 +160,9 @@ mod tests {
 
     #[test]
     fn master_key_store_and_load_roundtrip() {
+        let _guard = CACHE_TEST_LOCK.lock().unwrap();
+        Cspp::<MockStore>::reset_cache();
+
         let cspp = mock_cspp();
         let original = MasterKey::generate();
         let original_bytes = *original.as_bytes();
@@ -141,6 +182,9 @@ mod tests {
 
     #[test]
     fn get_or_create_creates_when_missing() {
+        let _guard = CACHE_TEST_LOCK.lock().unwrap();
+        Cspp::<MockStore>::reset_cache();
+
         let cspp = mock_cspp();
         let first = cspp.get_or_create_master_key().unwrap();
         let first_bytes = *first.as_bytes();
@@ -151,6 +195,9 @@ mod tests {
 
     #[test]
     fn get_or_create_reuses_existing() {
+        let _guard = CACHE_TEST_LOCK.lock().unwrap();
+        Cspp::<MockStore>::reset_cache();
+
         let cspp = mock_cspp();
         let original = MasterKey::generate();
         let original_bytes = *original.as_bytes();

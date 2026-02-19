@@ -1060,6 +1060,7 @@ dependencies = [
 name = "cove-cspp"
 version = "0.1.0"
 dependencies = [
+ "arc-swap",
  "cove-util",
  "hex",
  "hkdf",
