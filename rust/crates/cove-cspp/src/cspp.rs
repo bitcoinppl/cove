@@ -2,6 +2,7 @@ use std::sync::{Arc, LazyLock, Mutex};
 
 use arc_swap::ArcSwapOption;
 use cove_util::encryption::Cryptor;
+use zeroize::Zeroizing;
 
 use crate::error::CsppError;
 use crate::master_key::MasterKey;
@@ -11,7 +12,7 @@ const MASTER_KEY_NAME: &str = "cspp::v1::master_key";
 const MASTER_KEY_ENCRYPTION_KEY_AND_NONCE: &str = "cspp::v1::master_key_encryption_key_and_nonce";
 
 static INIT_LOCK: Mutex<()> = Mutex::new(());
-static MASTER_KEY_CACHE: LazyLock<ArcSwapOption<[u8; 32]>> =
+static MASTER_KEY_CACHE: LazyLock<ArcSwapOption<Zeroizing<[u8; 32]>>> =
     LazyLock::new(|| ArcSwapOption::new(None));
 
 pub struct Cspp<S: CsppStore>(S);
@@ -28,7 +29,7 @@ impl<S: CsppStore> Cspp<S> {
     pub fn get_or_create_master_key(&self) -> Result<MasterKey, CsppError> {
         // fast path (lock-free): return cached key
         if let Some(bytes) = MASTER_KEY_CACHE.load().as_deref() {
-            return Ok(MasterKey::from_bytes(*bytes));
+            return Ok(MasterKey::from_bytes(**bytes));
         }
 
         // slow path: acquire init lock for double-checked initialization
@@ -36,19 +37,19 @@ impl<S: CsppStore> Cspp<S> {
 
         // re-check cache after acquiring lock
         if let Some(bytes) = MASTER_KEY_CACHE.load().as_deref() {
-            return Ok(MasterKey::from_bytes(*bytes));
+            return Ok(MasterKey::from_bytes(**bytes));
         }
 
         // try loading from store
         if let Some(key) = self.get_master_key()? {
-            MASTER_KEY_CACHE.store(Some(Arc::new(*key.as_bytes())));
+            MASTER_KEY_CACHE.store(Some(Arc::new(Zeroizing::new(*key.as_bytes()))));
             return Ok(key);
         }
 
         // generate and save new key
         let key = MasterKey::generate();
         self.save_master_key(&key)?;
-        MASTER_KEY_CACHE.store(Some(Arc::new(*key.as_bytes())));
+        MASTER_KEY_CACHE.store(Some(Arc::new(Zeroizing::new(*key.as_bytes()))));
 
         Ok(key)
     }
