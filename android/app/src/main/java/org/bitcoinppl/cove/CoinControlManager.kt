@@ -138,7 +138,7 @@ class CoinControlManager(
         updateSendFlowManagerTask?.cancel()
         updateSendFlowManagerTask =
             mainScope.launch {
-                delay(100)
+                delay(SEND_FLOW_UPDATE_DELAY_MS)
                 if (!isActive) return@launch
                 val selectedUtxos = utxos.filter { selected.contains(it.outpoint.hashToUint()) }
                 sfm.dispatch(SendFlowManagerAction.SetCoinControlMode(selectedUtxos))
@@ -210,5 +210,16 @@ class CoinControlManager(
         updateSendFlowManagerTask?.cancel()
         mainScope.cancel()
         rust.close()
+    }
+
+    companion object {
+
+        /**
+         * delay before propagating coin control selection to SendFlowManager
+         *
+         * batches rapid UTXO selection changes into a single update
+         * prevents excessive dispatch and recomputation during multi-select
+         */
+        private const val SEND_FLOW_UPDATE_DELAY_MS = 100L
     }
 }
