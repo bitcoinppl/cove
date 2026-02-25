@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use redb::TableDefinition;
+use serde::{Deserialize, Serialize};
 use tap::TapFallible as _;
 use tracing::{error, warn};
 
@@ -21,6 +22,12 @@ pub const TABLE: TableDefinition<&'static str, String> = TableDefinition::new("g
 
 type Result<T, E = Error> = std::result::Result<T, E>;
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, uniffi::Enum)]
+pub enum CloudBackup {
+    Disabled,
+    Enabled { last_sync: Option<u64> },
+}
+
 #[derive(Debug, Clone, Copy, uniffi::Enum)]
 pub enum GlobalConfigKey {
     SelectedWalletId,
@@ -36,6 +43,7 @@ pub enum GlobalConfigKey {
     MainSelectedWalletId,
     DecoySelectedWalletId,
     LockedAt,
+    CloudBackup,
 }
 
 impl From<GlobalConfigKey> for &'static str {
@@ -57,6 +65,7 @@ impl From<GlobalConfigKey> for &'static str {
             GlobalConfigKey::MainSelectedWalletId => "main_selected_wallet_id",
             GlobalConfigKey::DecoySelectedWalletId => "decoy_selected_wallet_id",
             GlobalConfigKey::LockedAt => "locked_at",
+            GlobalConfigKey::CloudBackup => "cloud_backup",
         }
     }
 }
@@ -260,6 +269,22 @@ impl GlobalConfigTable {
         Ok(())
     }
 
+    pub fn cloud_backup(&self) -> CloudBackup {
+        let json = self.get(GlobalConfigKey::CloudBackup).unwrap_or(None).unwrap_or_default();
+        serde_json::from_str(&json).unwrap_or(CloudBackup::Disabled)
+    }
+
+    pub fn set_cloud_backup(&self, value: &CloudBackup) -> Result<()> {
+        let json = serde_json::to_string(value)
+            .map_err(|error| SerdeError::SerializationError(error.to_string()))?;
+
+        self.set(GlobalConfigKey::CloudBackup, json)
+    }
+
+    pub fn delete_cloud_backup(&self) -> Result<()> {
+        self.delete(GlobalConfigKey::CloudBackup)
+    }
+
     #[uniffi::method(name = "selectedFiatCurrency")]
     fn _selected_fiat_currency(&self) -> FiatCurrency {
         self.fiat_currency().unwrap_or_default()
@@ -372,5 +397,33 @@ mod tests {
 
         let key: &str = GlobalConfigKey::SelectedNode(Network::Testnet).into();
         assert_eq!(key, "selected_node_testnet");
+    }
+
+    #[test]
+    fn test_cloud_backup_key() {
+        use super::GlobalConfigKey;
+
+        let key: &str = GlobalConfigKey::CloudBackup.into();
+        assert_eq!(key, "cloud_backup");
+    }
+
+    #[test]
+    fn test_cloud_backup_serde() {
+        use super::CloudBackup;
+
+        let disabled = CloudBackup::Disabled;
+        let json = serde_json::to_string(&disabled).unwrap();
+        let parsed: CloudBackup = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, CloudBackup::Disabled);
+
+        let enabled_no_sync = CloudBackup::Enabled { last_sync: None };
+        let json = serde_json::to_string(&enabled_no_sync).unwrap();
+        let parsed: CloudBackup = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, CloudBackup::Enabled { last_sync: None });
+
+        let enabled_with_sync = CloudBackup::Enabled { last_sync: Some(1700000000) };
+        let json = serde_json::to_string(&enabled_with_sync).unwrap();
+        let parsed: CloudBackup = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, CloudBackup::Enabled { last_sync: Some(1700000000) });
     }
 }
