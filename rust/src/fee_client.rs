@@ -135,14 +135,16 @@ pub struct CachedFeeResponse {
 /// Convert fee response to fee rate options
 impl From<FeeResponse> for FeeRateOptions {
     fn from(fees: FeeResponse) -> Self {
-        /// Minimum supported fee rate in sat/vb
-        const MIN_FEE_RATE: f32 = 1.0;
+        /// Policy minimum fee rate in sat/vb
+        const POLICY_MIN_FEE_RATE: f32 = 1.0;
 
         /// Minimum gap between fee tiers to ensure they're visually distinct
         const TIER_GAP: f32 = 0.1;
 
+        let min_relay_rate = fees.minimum_fee.max(POLICY_MIN_FEE_RATE);
+
         let slow_rate =
-            f32::midpoint(fees.economy_fee, fees.hour_fee).min(fees.hour_fee).max(MIN_FEE_RATE);
+            f32::midpoint(fees.economy_fee, fees.hour_fee).min(fees.hour_fee).max(min_relay_rate);
 
         let medium_rate = fees.half_hour_fee.max(slow_rate + TIER_GAP);
         let fast_rate = fees.fastest_fee.max(medium_rate + TIER_GAP);
@@ -253,9 +255,9 @@ mod tests {
         let fees = fee_response(0.1, 0.5, 0.5, 1.0);
         let options = FeeRateOptions::from(fees);
 
-        assert_eq!(options.slow.fee_rate.sat_per_vb(), 1.0);
-        assert_eq!(options.medium.fee_rate.sat_per_vb(), 1.1);
-        assert_eq!(options.fast.fee_rate.sat_per_vb(), 1.2);
+        assert_eq!(options.slow.fee_rate.to_sat_per_kwu(), 250); // 1.0 sat/vb
+        assert_eq!(options.medium.fee_rate.to_sat_per_kwu(), 275); // 1.1 sat/vb
+        assert_eq!(options.fast.fee_rate.to_sat_per_kwu(), 300); // 1.2 sat/vb
     }
 
     #[test]
@@ -263,9 +265,9 @@ mod tests {
         let fees = fee_response(0.1, 0.1, 0.1, 0.1);
         let options = FeeRateOptions::from(fees);
 
-        assert_eq!(options.slow.fee_rate.sat_per_vb(), 1.0);
-        assert_eq!(options.medium.fee_rate.sat_per_vb(), 1.1);
-        assert_eq!(options.fast.fee_rate.sat_per_vb(), 1.2);
+        assert_eq!(options.slow.fee_rate.to_sat_per_kwu(), 250); // 1.0 sat/vb
+        assert_eq!(options.medium.fee_rate.to_sat_per_kwu(), 275); // 1.1 sat/vb
+        assert_eq!(options.fast.fee_rate.to_sat_per_kwu(), 300); // 1.2 sat/vb
     }
 
     #[test]
@@ -273,9 +275,9 @@ mod tests {
         let fees = fee_response(1.0, 1.0, 1.0, 1.0);
         let options = FeeRateOptions::from(fees);
 
-        assert_eq!(options.slow.fee_rate.sat_per_vb(), 1.0);
-        assert_eq!(options.medium.fee_rate.sat_per_vb(), 1.1);
-        assert_eq!(options.fast.fee_rate.sat_per_vb(), 1.2);
+        assert_eq!(options.slow.fee_rate.to_sat_per_kwu(), 250); // 1.0 sat/vb
+        assert_eq!(options.medium.fee_rate.to_sat_per_kwu(), 275); // 1.1 sat/vb
+        assert_eq!(options.fast.fee_rate.to_sat_per_kwu(), 300); // 1.2 sat/vb
     }
 
     #[test]
@@ -284,9 +286,9 @@ mod tests {
         let fees = fee_response(5.0, 10.0, 15.0, 20.0);
         let options = FeeRateOptions::from(fees);
 
-        assert_eq!(options.slow.fee_rate.sat_per_vb(), 7.5); // midpoint(5, 10)
-        assert_eq!(options.medium.fee_rate.sat_per_vb(), 15.0);
-        assert_eq!(options.fast.fee_rate.sat_per_vb(), 20.0);
+        assert_eq!(options.slow.fee_rate.to_sat_per_kwu(), 1875); // 7.5 sat/vb
+        assert_eq!(options.medium.fee_rate.to_sat_per_kwu(), 3750); // 15.0 sat/vb
+        assert_eq!(options.fast.fee_rate.to_sat_per_kwu(), 5000); // 20.0 sat/vb
     }
 
     #[test]
@@ -294,8 +296,44 @@ mod tests {
         let fees = fee_response(1.0, 2.0, 3.0, 5.0);
         let options = FeeRateOptions::from(fees);
 
-        assert_eq!(options.slow.fee_rate.sat_per_vb(), 1.5); // midpoint(1, 2)
-        assert_eq!(options.medium.fee_rate.sat_per_vb(), 3.0);
-        assert_eq!(options.fast.fee_rate.sat_per_vb(), 5.0);
+        assert_eq!(options.slow.fee_rate.to_sat_per_kwu(), 375); // 1.5 sat/vb
+        assert_eq!(options.medium.fee_rate.to_sat_per_kwu(), 750); // 3.0 sat/vb
+        assert_eq!(options.fast.fee_rate.to_sat_per_kwu(), 1250); // 5.0 sat/vb
+    }
+
+    #[test]
+    fn minimum_fee_above_floor() {
+        // API's minimum_fee is 2.0, higher than MIN_FEE_RATE (1.0)
+        // all tiers should respect this higher minimum
+        let fees = FeeResponse {
+            fastest_fee: 2.0,
+            half_hour_fee: 2.0,
+            hour_fee: 2.0,
+            economy_fee: 2.0,
+            minimum_fee: 2.0,
+        };
+        let options = FeeRateOptions::from(fees);
+
+        assert_eq!(options.slow.fee_rate.to_sat_per_kwu(), 500); // 2.0 sat/vb
+        assert_eq!(options.medium.fee_rate.to_sat_per_kwu(), 525); // 2.1 sat/vb
+        assert_eq!(options.fast.fee_rate.to_sat_per_kwu(), 550); // 2.2 sat/vb
+    }
+
+    #[test]
+    fn minimum_fee_lifts_slow_above_raw() {
+        // economy and hour are below minimum_fee
+        // slow should be lifted to minimum_fee, not midpoint
+        let fees = FeeResponse {
+            fastest_fee: 5.0,
+            half_hour_fee: 3.0,
+            hour_fee: 1.0,
+            economy_fee: 0.5,
+            minimum_fee: 1.5,
+        };
+        let options = FeeRateOptions::from(fees);
+
+        assert_eq!(options.slow.fee_rate.to_sat_per_kwu(), 375); // 1.5 sat/vb (floor)
+        assert_eq!(options.medium.fee_rate.to_sat_per_kwu(), 750); // 3.0 sat/vb
+        assert_eq!(options.fast.fee_rate.to_sat_per_kwu(), 1250); // 5.0 sat/vb
     }
 }
