@@ -498,12 +498,12 @@ impl RustWalletManager {
                         max_version: version,
                     },
                 )
-                .map_err(|e| Error::UnknownError(format!("BBQr encoding failed: {e}")))?;
+                .map_err_prefix("BBQr encoding failed", Error::UnknownError)?;
 
                 Ok(split.parts)
             })
             .await
-            .map_err(|e| Error::UnknownError(e.to_string()))?
+            .map_err_str(Error::UnknownError)?
         })
         .await
     }
@@ -517,8 +517,8 @@ impl RustWalletManager {
         with_loading_popup(async move {
             let txns_with_prices = call!(actor.txns_with_prices())
                 .await
-                .map_err(|e| Error::TransactionsRetrievalError(e.to_string()))?
-                .map_err(|e| Error::GetHistoricalPricesError(e.to_string()))?;
+                .map_err_str(Error::TransactionsRetrievalError)?
+                .map_err_str(Error::GetHistoricalPricesError)?;
 
             cove_tokio::task::spawn_blocking(move || {
                 let fiat_currency =
@@ -538,7 +538,7 @@ impl RustWalletManager {
                 Ok(TransactionExportResult { content: csv.into_string(), filename })
             })
             .await
-            .map_err(|e| Error::CsvCreationError(e.to_string()))?
+            .map_err_str(Error::CsvCreationError)?
         })
         .await
     }
@@ -829,7 +829,7 @@ impl RustWalletManager {
                     .map_err_str(Error::TransactionDetailsError)
             })
             .await
-            .map_err(|e| Error::TransactionDetailsError(e.to_string()))??;
+            .map_err_str(Error::TransactionDetailsError)??;
 
             // for unconfirmed transactions, trigger a background sync to update status
             // this uses SyncRequest with just this txid so it's fast
@@ -922,7 +922,7 @@ impl RustWalletManager {
         Database::global()
             .wallets
             .update_wallet_metadata(metadata.clone())
-            .map_err(|e| Error::SetWalletTypeError(format!("{e:?}")))?;
+            .map_err_debug(Error::SetWalletTypeError)?;
 
         *self.metadata.write() = metadata.clone();
         self.reconciler.send(Message::WalletMetadataChanged(metadata));
@@ -1416,7 +1416,7 @@ fn get_public_descriptor_content(id: &WalletId) -> Result<String, Error> {
 
     // fallback to loading from BDK wallet
     let wallet = Wallet::try_load_persisted(id.clone())
-        .map_err(|e| Error::UnknownError(format!("failed to load wallet: {e}")))?;
+        .map_err_prefix("failed to load wallet", Error::UnknownError)?;
 
     let external = wallet.bdk.public_descriptor(bdk_wallet::KeychainKind::External);
     let internal = wallet.bdk.public_descriptor(bdk_wallet::KeychainKind::Internal);

@@ -6,6 +6,7 @@
 //!
 //! This module provides [`SignedTransactionOrPsbt`] to detect and parse both formats.
 
+use cove_util::result_ext::ResultExt as _;
 use std::sync::Arc;
 
 use base64::{Engine as _, prelude::BASE64_STANDARD};
@@ -76,8 +77,7 @@ impl SignedTransactionOrPsbt {
     pub fn try_from_bytes(data: &[u8]) -> Result<Self> {
         // check for PSBT magic bytes first
         if data.len() >= PSBT_MAGIC.len() && &data[..PSBT_MAGIC.len()] == PSBT_MAGIC {
-            let psbt =
-                Psbt::try_new(data.to_vec()).map_err(|e| Error::PsbtParseError(e.to_string()))?;
+            let psbt = Psbt::try_new(data.to_vec()).map_err_str(Error::PsbtParseError)?;
             return Ok(Self::SignedPsbt(Arc::new(psbt)));
         }
 
@@ -109,11 +109,9 @@ impl SignedTransactionOrPsbt {
     fn try_parse_psbt_string(input: &str) -> Result<Self> {
         // base64-encoded PSBT detection (case-sensitive for base64)
         if input.starts_with(PSBT_BASE64_PREFIX) {
-            let bytes = BASE64_STANDARD
-                .decode(input)
-                .map_err(|e| Error::Base64DecodeError(e.to_string()))?;
+            let bytes = BASE64_STANDARD.decode(input).map_err_str(Error::Base64DecodeError)?;
 
-            let psbt = Psbt::try_new(bytes).map_err(|e| Error::PsbtParseError(e.to_string()))?;
+            let psbt = Psbt::try_new(bytes).map_err_str(Error::PsbtParseError)?;
 
             return Ok(Self::SignedPsbt(Arc::new(psbt)));
         }
@@ -121,9 +119,9 @@ impl SignedTransactionOrPsbt {
         // hex-encoded PSBT detection (case-insensitive)
         let input_lower = input.to_ascii_lowercase();
         if input_lower.starts_with(PSBT_HEX_PREFIX) {
-            let bytes = hex::decode(input).map_err(|e| Error::HexDecodeError(e.to_string()))?;
+            let bytes = hex::decode(input).map_err_str(Error::HexDecodeError)?;
 
-            let psbt = Psbt::try_new(bytes).map_err(|e| Error::PsbtParseError(e.to_string()))?;
+            let psbt = Psbt::try_new(bytes).map_err_str(Error::PsbtParseError)?;
 
             return Ok(Self::SignedPsbt(Arc::new(psbt)));
         }

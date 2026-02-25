@@ -1,4 +1,6 @@
 use std::sync::{Mutex, OnceLock};
+
+use cove_util::ResultExt;
 use tracing::{error, info};
 
 /// Async bootstrap: initializes the tokio runtime, runs critical storage bootstrap
@@ -81,8 +83,7 @@ fn do_bootstrap() -> Result<(), AppInitError> {
 
     // derive encryption key from master key before any database access
     let cspp = cove_cspp::Cspp::new(cove_device::keychain::Keychain::global().clone());
-    let master_key =
-        cspp.get_or_create_master_key().map_err(|e| AppInitError::KeyDerivation(e.to_string()))?;
+    let master_key = cspp.get_or_create_master_key().map_err_str(AppInitError::KeyDerivation)?;
 
     let key = master_key.sensitive_data_key();
     crate::database::encrypted_backend::set_encryption_key(key);
@@ -91,13 +92,13 @@ fn do_bootstrap() -> Result<(), AppInitError> {
 
     // recover interrupted redb migrations then migrate plaintext → encrypted
     crate::database::migration::recover_interrupted_migrations()
-        .map_err(|e| AppInitError::MainDatabaseMigration(format!("{e:#}")))?;
+        .map_err_display_alt(AppInitError::MainDatabaseMigration)?;
 
     crate::database::migration::migrate_main_database_if_needed()
-        .map_err(|e| AppInitError::MainDatabaseMigration(format!("{e:#}")))?;
+        .map_err_display_alt(AppInitError::MainDatabaseMigration)?;
 
     crate::database::migration::migrate_wallet_databases_if_needed()
-        .map_err(|e| AppInitError::WalletDatabaseMigration(format!("{e:#}")))?;
+        .map_err_display_alt(AppInitError::WalletDatabaseMigration)?;
 
     info!("Storage bootstrap complete");
     Ok(())

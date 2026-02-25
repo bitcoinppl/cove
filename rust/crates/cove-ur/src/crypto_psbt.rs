@@ -7,6 +7,7 @@
 //! 3. Derive macros don't provide significant simplification for this structure
 
 use bitcoin::psbt::Psbt as BdkPsbt;
+use cove_util::ResultExt as _;
 use foundation_ur::{UR, bytewords};
 use minicbor::{Decoder, Encoder, data::Tag};
 
@@ -35,7 +36,7 @@ impl CryptoPsbt {
     /// Returns error if PSBT deserialization fails
     pub fn from_bytes(psbt_bytes: &[u8]) -> Result<Self> {
         let psbt = BdkPsbt::deserialize(psbt_bytes)
-            .map_err(|e| UrError::CborDecodeError(format!("Invalid PSBT: {e}")))?;
+            .map_err_prefix("Invalid PSBT", UrError::CborDecodeError)?;
         Ok(Self { psbt })
     }
 
@@ -63,10 +64,10 @@ impl CryptoPsbt {
         let mut encoder = Encoder::new(&mut buffer);
 
         // write tag 310
-        encoder.tag(Tag::new(CRYPTO_PSBT)).map_err(|e| UrError::CborEncodeError(e.to_string()))?;
+        encoder.tag(Tag::new(CRYPTO_PSBT)).map_err_str(UrError::CborEncodeError)?;
 
         // write PSBT as byte string
-        encoder.bytes(&psbt_bytes).map_err(|e| UrError::CborEncodeError(e.to_string()))?;
+        encoder.bytes(&psbt_bytes).map_err_str(UrError::CborEncodeError)?;
 
         Ok(buffer)
     }
@@ -95,7 +96,7 @@ impl CryptoPsbt {
 
         // deserialize PSBT
         let psbt = BdkPsbt::deserialize(&psbt_bytes)
-            .map_err(|e| UrError::CborDecodeError(format!("Invalid PSBT: {e}")))?;
+            .map_err_prefix("Invalid PSBT", UrError::CborDecodeError)?;
 
         Ok(Self { psbt })
     }
@@ -115,7 +116,7 @@ impl CryptoPsbt {
     /// # Errors
     /// Returns error if UR parsing or CBOR decoding fails
     pub fn from_ur_string(ur: &str) -> Result<Self> {
-        let ur = UR::parse(ur).map_err(|e| UrError::UrParseError(e.to_string()))?;
+        let ur = UR::parse(ur).map_err_str(UrError::UrParseError)?;
 
         // verify UR type
         if ur.as_type() != "crypto-psbt" {
@@ -130,7 +131,7 @@ impl CryptoPsbt {
             UR::SinglePart { message, .. } => {
                 // decode bytewords to bytes (UR uses minimal style)
                 bytewords::decode(message, bytewords::Style::Minimal)
-                    .map_err(|e| UrError::UrParseError(format!("Bytewords decode error: {e}")))?
+                    .map_err_prefix("Bytewords decode error", UrError::UrParseError)?
             }
             UR::SinglePartDeserialized { message, .. } => {
                 // already deserialized

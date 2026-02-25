@@ -7,6 +7,7 @@
 //! This represents the "how" - how to reassemble animated QR sequences. Once scanning
 //! completes, the result is converted to [`crate::multi_format::MultiFormat`].
 
+use cove_util::result_ext::ResultExt as _;
 use std::sync::Arc;
 
 use bbqr::{
@@ -213,8 +214,8 @@ fn parse_ur(qr: &str) -> Result<(QrScanner, ScanResult), MultiQrError> {
     match ur.to_foundation_ur()? {
         foundation_ur::UR::SinglePart { .. } | foundation_ur::UR::SinglePartDeserialized { .. } => {
             debug!("Single-part UR, converting to MultiFormat");
-            let multi_format = MultiFormat::try_from_string(qr)
-                .map_err(|e| MultiQrError::ParseError(e.to_string()))?;
+            let multi_format =
+                MultiFormat::try_from_string(qr).map_err_str(MultiQrError::ParseError)?;
 
             let result =
                 ScanResult::Complete { data: multi_format, haptic: HapticFeedback::Success };
@@ -227,7 +228,7 @@ fn parse_ur(qr: &str) -> Result<(QrScanner, ScanResult), MultiQrError> {
             debug!("Multi-part UR, using decoder");
             let mut decoder = UrDecoder::default();
             let foundation_ur = ur.to_foundation_ur()?;
-            decoder.receive(foundation_ur).map_err(|e| UrError::UrParseError(e.to_string()))?;
+            decoder.receive(foundation_ur).map_err_str(UrError::UrParseError)?;
 
             let percentage = decoder.estimated_percent_complete();
             let progress = ScanProgress::Ur { percentage };
@@ -257,13 +258,13 @@ fn parse_bbqr_data(
 
     match file_type {
         FileType::Transaction => {
-            MultiFormat::try_from_data(&data).map_err(|e| MultiQrError::ParseError(e.to_string()))
+            MultiFormat::try_from_data(&data).map_err_str(MultiQrError::ParseError)
         }
 
         FileType::Psbt => {
             // parse raw PSBT bytes and return as SignedPsbt
-            let psbt = cove_types::psbt::Psbt::try_new(data)
-                .map_err(|e| MultiQrError::ParseError(e.to_string()))?;
+            let psbt =
+                cove_types::psbt::Psbt::try_new(data).map_err_str(MultiQrError::ParseError)?;
 
             Ok(MultiFormat::SignedPsbt(Arc::new(psbt)))
         }
@@ -272,8 +273,7 @@ fn parse_bbqr_data(
 
         FileType::UnicodeText | FileType::Json => {
             let data_string = String::from_utf8(data).map_err(|_| MultiQrError::InvalidUtf8)?;
-            MultiFormat::try_from_string(&data_string)
-                .map_err(|e| MultiQrError::ParseError(e.to_string()))
+            MultiFormat::try_from_string(&data_string).map_err_str(MultiQrError::ParseError)
         }
     }
 }
@@ -282,8 +282,7 @@ fn parse_bbqr_data(
 /// Returns the new state and the scan result.
 fn parse_bbqr(qr: &str, header: Header) -> Result<(QrScanner, ScanResult), MultiQrError> {
     let mut joiner = ContinuousJoiner::new();
-    let join_result =
-        joiner.add_part(qr.to_string()).map_err(|e| MultiQrError::ParseError(e.to_string()))?;
+    let join_result = joiner.add_part(qr.to_string()).map_err_str(MultiQrError::ParseError)?;
 
     match join_result {
         ContinuousJoinResult::Complete(result) => {
@@ -396,8 +395,8 @@ impl QrScanner {
         }
 
         // plain string - address, xpub, etc.
-        let multi_format = MultiFormat::try_from_string(&qr)
-            .map_err(|e| MultiQrError::ParseError(e.to_string()))?;
+        let multi_format =
+            MultiFormat::try_from_string(&qr).map_err_str(MultiQrError::ParseError)?;
         let result = ScanResult::Complete { data: multi_format, haptic: HapticFeedback::Success };
         Ok((Self::Complete(result.clone()), result))
     }
@@ -407,10 +406,8 @@ impl QrScanner {
         mut bbqr: BbqrInProgress,
         qr: &str,
     ) -> Result<(Self, ScanResult), MultiQrError> {
-        let join_result = bbqr
-            .joiner
-            .add_part(qr.to_string())
-            .map_err(|e| MultiQrError::ParseError(e.to_string()))?;
+        let join_result =
+            bbqr.joiner.add_part(qr.to_string()).map_err_str(MultiQrError::ParseError)?;
 
         match join_result {
             ContinuousJoinResult::Complete(result) => {
@@ -447,13 +444,13 @@ impl QrScanner {
 
         let parsed_ur = Ur::parse(qr)?;
         let foundation_ur = parsed_ur.to_foundation_ur()?;
-        ur.decoder.receive(foundation_ur).map_err(|e| UrError::UrParseError(e.to_string()))?;
+        ur.decoder.receive(foundation_ur).map_err_str(UrError::UrParseError)?;
 
         if ur.decoder.is_complete() {
             let message = ur
                 .decoder
                 .message()
-                .map_err(|e| UrError::UrParseError(e.to_string()))?
+                .map_err_str(UrError::UrParseError)?
                 .ok_or_else(|| UrError::UrParseError("No message".into()))?;
             let ur_type_str = ur.decoder.ur_type().unwrap_or("bytes");
             debug!("UR complete: type={ur_type_str}, len={}", message.len());

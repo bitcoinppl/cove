@@ -1173,6 +1173,7 @@ version = "0.1.0"
 dependencies = [
  "bip39",
  "bitcoin",
+ "cove-util",
  "eyre",
  "foundation-ur",
  "hex",

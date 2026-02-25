@@ -1,4 +1,5 @@
 use cove_nfc::message::NfcMessage;
+use cove_util::result_ext::ResultExt as _;
 use derive_more::{
     AsRef, Deref,
     derive::{From, Into},
@@ -57,7 +58,7 @@ impl BitcoinTransaction {
         // 32 bytes for the sha256 hash
         let tx_bytes = &data[64..];
         let transaction = bitcoin::consensus::deserialize::<bitcoin::Transaction>(tx_bytes)
-            .map_err(|e| BitcoinTransactionError::ParseTransactionError(e.to_string()));
+            .map_err_str(BitcoinTransactionError::ParseTransactionError);
 
         if let Ok(transaction) = transaction {
             return Ok(transaction.into());
@@ -65,7 +66,7 @@ impl BitcoinTransaction {
 
         // try again with the full data
         let transaction = bitcoin::consensus::deserialize::<bitcoin::Transaction>(data)
-            .map_err(|e| BitcoinTransactionError::ParseTransactionError(e.to_string()))?;
+            .map_err_str(BitcoinTransactionError::ParseTransactionError)?;
 
         Ok(transaction.into())
     }
@@ -73,13 +74,13 @@ impl BitcoinTransaction {
     pub fn try_from_str(tx_hex: &str) -> Result<Self> {
         let tx_hex = tx_hex.trim();
 
-        let tx_bytes = hex::decode(tx_hex.trim())
-            .map_err(|e| BitcoinTransactionError::HexDecodeError(e.to_string()));
+        let tx_bytes =
+            hex::decode(tx_hex.trim()).map_err_str(BitcoinTransactionError::HexDecodeError);
 
         // hex encoded txn
         if let Ok(tx_bytes) = tx_bytes {
             let transaction: bitcoin::Transaction = bitcoin::consensus::deserialize(&tx_bytes)
-                .map_err(|e| BitcoinTransactionError::ParseTransactionError(e.to_string()))?;
+                .map_err_str(BitcoinTransactionError::ParseTransactionError)?;
 
             return Ok(transaction.into());
         }
