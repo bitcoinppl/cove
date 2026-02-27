@@ -8,6 +8,8 @@ const IOS_TARGET_DEVICE: &str = "aarch64-apple-ios";
 const IOS_TARGET_SIMULATOR: &str = "aarch64-apple-ios-sim";
 const IOS_LIB_NAME: &str = "libcove.a";
 const BINDINGS_DIR: &str = "./bindings";
+// must match IPHONEOS_DEPLOYMENT_TARGET in ios/Cove.xcodeproj/project.pbxproj
+const IPHONEOS_DEPLOYMENT_TARGET: &str = "18.0";
 const UNIFFI_MODULE_NAME: &str = "cove_core_ffi";
 const MODULEMAP_FILENAME: &str = "module.modulemap";
 const SPM_PACKAGE_DIR: &str = "../ios/CoveCore/";
@@ -58,6 +60,7 @@ impl IosBuildType {
 
 pub fn build_ios(build_type: IosBuildType, device: bool, _sign: bool, verbose: bool) -> Result<()> {
     let sh = Shell::new()?;
+    sh.set_var("IPHONEOS_DEPLOYMENT_TARGET", IPHONEOS_DEPLOYMENT_TARGET);
 
     // check for xcodebuild
     if !command_exists("xcodebuild") {
