@@ -32,6 +32,7 @@
 mod database;
 
 mod app;
+mod bootstrap;
 mod router;
 
 mod auth;

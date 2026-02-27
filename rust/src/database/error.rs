@@ -48,6 +48,27 @@ pub enum DatabaseError {
 
     #[error("wallet not found")]
     WalletNotFound,
+
+    #[error("encryption key not set before database access")]
+    EncryptionKeyNotSet,
+
+    #[error("storage bootstrap failed: {0}")]
+    BootstrapFailed(String),
+
+    #[error("failed to open encrypted backend at {path}: {error}")]
+    BackendOpen { path: String, error: String },
+
+    #[error("truncated or corrupt encrypted block at {path}: {error}")]
+    CorruptBlock { path: String, error: String },
+
+    #[error("database is already open by another process")]
+    DatabaseAlreadyOpen,
+
+    #[error("header integrity check failed at {path}: {error}")]
+    HeaderIntegrity { path: String, error: String },
+
+    #[error("database at {path} is not encrypted; migration may not have completed")]
+    PlaintextNotAllowed { path: String },
 }
 
 impl From<redb::TransactionError> for Error {
@@ -65,5 +86,17 @@ impl From<redb::TableError> for Error {
 impl From<redb::StorageError> for Error {
     fn from(error: redb::StorageError) -> Self {
         Self::TableAccess(error.to_string())
+    }
+}
+
+impl From<redb::CommitError> for Error {
+    fn from(error: redb::CommitError) -> Self {
+        Self::DatabaseAccess(error.to_string())
+    }
+}
+
+impl From<std::io::Error> for Error {
+    fn from(error: std::io::Error) -> Self {
+        Self::DatabaseAccess(error.to_string())
     }
 }

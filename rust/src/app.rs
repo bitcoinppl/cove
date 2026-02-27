@@ -80,11 +80,15 @@ type Error = AppError;
 impl_default_for!(App);
 impl App {
     /// Create a new instance of the app
-    pub fn new() -> Self {
+    fn new() -> Self {
         set_env();
 
         // one time init
         crate::logging::init();
+
+        // storage must be bootstrapped before any database access
+        // bootstrap() should already be called from the front-end, this is a safety net
+        crate::bootstrap::ensure_storage_bootstrapped().expect("storage bootstrap failed");
 
         // Set up the updater channel
         let (sender, receiver): (Sender<AppMessage>, Receiver<AppMessage>) = flume::bounded(1000);
@@ -528,10 +532,8 @@ impl FfiApp {
         self.inner().listen_for_updates(updater);
     }
 
-    /// run all initialization tasks here, only called once
-    pub async fn init_on_start(&self) {
-        cove_tokio::init();
-
+    /// Fetch external data (prices, fees) with retry logic, called after AppManager creation
+    pub async fn init_data(&self) {
         // get / update prices
         cove_tokio::task::spawn(async move {
             let init_result = (|| crate::fiat::client::init_prices())

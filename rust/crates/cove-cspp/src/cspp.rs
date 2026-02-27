@@ -117,11 +117,6 @@ impl<S: CsppStore> Cspp<S> {
 
         Ok(Some(MasterKey::from_bytes(bytes)))
     }
-
-    #[cfg(test)]
-    fn reset_cache() {
-        MASTER_KEY_CACHE.store(None);
-    }
 }
 
 #[cfg(test)]
@@ -140,6 +135,12 @@ mod tests {
     impl MockStore {
         fn new() -> Self {
             Self(Mutex::new(HashMap::new()))
+        }
+    }
+
+    impl Cspp<MockStore> {
+        fn reset_cache() {
+            MASTER_KEY_CACHE.store(None);
         }
     }
 

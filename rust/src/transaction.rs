@@ -74,8 +74,11 @@ impl Transaction {
 
         let fiat = FiatAmount::try_new(&sent_and_received, fiat_currency).ok();
 
-        let label_db = WalletDataDb::new_or_existing(wallet_id.clone());
-        let labels = label_db.labels.all_labels_for_txn(tx.tx_node.txid).unwrap_or_default().into();
+        let labels = WalletDataDb::new_or_existing(wallet_id.clone())
+            .ok()
+            .and_then(|db| db.labels.all_labels_for_txn(tx.tx_node.txid).ok())
+            .unwrap_or_default()
+            .into();
 
         match tx.chain_position {
             BdkChainPosition::Unconfirmed { last_seen, .. } => {

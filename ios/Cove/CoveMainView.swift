@@ -1,0 +1,732 @@
+//
+//  CoveMainView.swift
+//  Cove
+//
+//  Created by Praveen Perera on 6/17/24.
+//
+
+import SwiftUI
+
+struct CoveMainView: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.scenePhase) private var phase
+
+    @State var app: AppManager
+    @State var auth: AuthManager
+
+    @State var id = UUID()
+    @State var showCover: Bool = true
+    @State var scannedCode: TaggedItem<MultiFormat>? = .none
+    @State var coverClearTask: Task<Void, Never>?
+
+    @ViewBuilder
+    private func alertMessage(alert: TaggedItem<AppAlertState>) -> some View {
+        let text = alert.item.message()
+
+        if case .foundAddress = alert.item {
+            Text(text.map { "\($0)\u{200B}" }.joined())
+                .font(.system(.caption2, design: .monospaced))
+                .minimumScaleFactor(0.5)
+                .lineLimit(2)
+        } else {
+            Text(text)
+        }
+    }
+
+    @ViewBuilder
+    private func alertButtons(alert: TaggedItem<AppAlertState>) -> some View {
+        switch alert.item {
+        case let .duplicateWallet(walletId: walletId):
+            Button("OK") {
+                app.alertState = .none
+                app.isSidebarVisible = false
+                try? app.rust.selectWallet(id: walletId)
+            }
+        case let .hotWalletKeyMissing(walletId: walletId):
+            Button("Import 12 Words") {
+                app.alertState = .none
+                app.loadAndReset(to: .newWallet(.hotWallet(.import(.twelve, .manual))))
+            }
+
+            Button("Import 24 Words") {
+                app.alertState = .none
+                app.loadAndReset(to: .newWallet(.hotWallet(.import(.twentyFour, .manual))))
+            }
+
+            Button("Use with Hardware Wallet") {
+                do {
+                    try app.getWalletManager(id: walletId).rust.setWalletType(walletType: .cold)
+                    app.alertState = .none
+                } catch {
+                    Log.error("Failed to set wallet type to cold: \(error)")
+                    DispatchQueue.main.async {
+                        app.alertState = .init(
+                            .general(
+                                title: "Error",
+                                message: error.localizedDescription
+                            )
+                        )
+                    }
+                }
+            }
+
+            Button("Use as Watch Only", role: .cancel) {
+                DispatchQueue.main.async { app.alertState = .init(.confirmWatchOnly) }
+            }
+        case .confirmWatchOnly:
+            Button("I Understand", role: .destructive) {
+                app.alertState = .none
+            }
+        case let .addressWrongNetwork(address, _, _):
+            Button("Copy Address") {
+                UIPasteboard.general.string = String(address)
+            }
+
+            Button("Cancel") {
+                app.alertState = .none
+            }
+        case let .noWalletSelected(address):
+            Button("Copy Address") {
+                UIPasteboard.general.string = String(address)
+            }
+
+            Button("Cancel") {
+                app.alertState = .none
+            }
+        case let .foundAddress(address: address, amount: amount):
+            Button("Copy Address") {
+                UIPasteboard.general.string = String(address)
+            }
+
+            if let id = Database().globalConfig().selectedWallet() {
+                Button("Send To Address") {
+                    let route = RouteFactory().sendSetAmount(
+                        id: id, address: address, amount: amount
+                    )
+                    app.pushRoute(route)
+                    app.alertState = .none
+                }
+            }
+
+            Button("Cancel") {
+                app.alertState = .none
+            }
+        case .noCameraPermission:
+            Button("OK") {
+                app.alertState = .none
+                let url = URL(string: UIApplication.openSettingsURLString)!
+                UIApplication.shared.open(url)
+            }
+        case let .uninitializedTapSigner(tapSigner):
+            Button("Yes") {
+                app.isSidebarVisible = false
+                app.sheetState = .init(.tapSigner(TapSignerRoute.initSelect(tapSigner)))
+            }
+
+            Button("Cancel", role: .cancel) {
+                app.alertState = .none
+            }
+        case let .tapSignerWalletFound(walletId):
+            Button("Yes") { app.selectWallet(walletId) }
+            Button("Cancel", role: .cancel) { app.alertState = .none }
+        case let .initializedTapSigner(tapSigner):
+            Button("Yes") {
+                app.sheetState = .init(
+                    .tapSigner(
+                        .enterPin(tapSigner: tapSigner, action: .derive)
+                    )
+                )
+            }
+            Button("Cancel", role: .cancel) { app.alertState = .none }
+        case let .tapSignerNoBackup(tapSigner):
+            Button("Yes") {
+                print("TODO: go to backup screen \(tapSigner)}")
+                // TODO: go to backup screen
+            }
+            Button("Cancel", role: .cancel) { app.alertState = .none }
+        case let .tapSignerWrongPin(tapSigner, action):
+            Button("Try Again") {
+                app.sheetState = .init(.tapSigner(.enterPin(tapSigner: tapSigner, action: action)))
+            }
+            Button("Cancel", role: .cancel) { app.alertState = .none }
+        case .cantSendOnWatchOnlyWallet:
+            Button("Import Hardware Wallet") {
+                DispatchQueue.main.async { app.alertState = .init(.watchOnlyImportHardware) }
+            }
+            Button("Import Words") {
+                DispatchQueue.main.async { app.alertState = .init(.watchOnlyImportWords) }
+            }
+            Button("Cancel", role: .cancel) {
+                app.alertState = .none
+            }
+        case .watchOnlyImportHardware:
+            Button("QR Code") {
+                app.alertState = .none
+                app.pushRoute(.newWallet(.coldWallet(.qrCode)))
+            }
+            Button("NFC") {
+                app.alertState = .none
+                app.nfcReader.scan()
+            }
+            Button("Paste") {
+                app.alertState = .none
+                let text = UIPasteboard.general.string ?? ""
+                if text.isEmpty { return }
+                do {
+                    let wallet = try Wallet.newFromXpub(xpub: text)
+                    try app.rust.selectWallet(id: wallet.id())
+                    app.resetRoute(to: .selectedWallet(wallet.id()))
+                } catch {
+                    DispatchQueue.main.async {
+                        app.alertState = .init(
+                            .errorImportingHardwareWallet(message: error.localizedDescription)
+                        )
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) {
+                app.alertState = .none
+            }
+        case .watchOnlyImportWords:
+            Button("Scan QR") {
+                app.alertState = .none
+                app.pushRoute(.newWallet(.hotWallet(.import(.twentyFour, .qr))))
+            }
+            Button("NFC") {
+                app.alertState = .none
+                app.pushRoute(.newWallet(.hotWallet(.import(.twentyFour, .nfc))))
+            }
+            Button("12 Words") {
+                app.alertState = .none
+                app.pushRoute(.newWallet(.hotWallet(.import(.twelve, .manual))))
+            }
+            Button("24 Words") {
+                app.alertState = .none
+                app.pushRoute(.newWallet(.hotWallet(.import(.twentyFour, .manual))))
+            }
+            Button("Cancel", role: .cancel) {
+                app.alertState = .none
+            }
+        case .invalidWordGroup,
+             .errorImportingHotWallet,
+             .importedSuccessfully,
+             .unableToSelectWallet,
+             .errorImportingHardwareWallet,
+             .invalidFileFormat,
+             .importedLabelsSuccessfully,
+             .unableToGetAddress,
+             .failedToScanQr,
+             .noUnsignedTransactionFound,
+             .tapSignerSetupFailed,
+             .tapSignerInvalidAuth,
+             .tapSignerDeriveFailed,
+             .general,
+             .invalidFormat,
+             .loading:
+            Button("OK") {
+                app.alertState = .none
+            }
+        }
+    }
+
+    private var showingAlert: Binding<Bool> {
+        Binding(
+            get: { app.alertState != nil },
+            set: { newValue in
+                if !newValue {
+                    app.alertState = .none
+                }
+            }
+        )
+    }
+
+    var navBarColor: Color {
+        switch app.currentRoute {
+        case .newWallet(.hotWallet(.create)):
+            Color.white
+        case .newWallet(.hotWallet(.verifyWords)):
+            Color.white
+        case .selectedWallet:
+            Color.white
+        default:
+            Color.blue
+        }
+    }
+
+    @MainActor
+    func importHotWallet(_ words: [String]) {
+        do {
+            let manager = ImportWalletManager()
+            let walletMetadata = try manager.rust.importWallet(enteredWords: [words])
+            try app.rust.selectWallet(id: walletMetadata.id)
+        } catch let error as ImportWalletError {
+            switch error {
+            case let .InvalidWordGroup(error):
+                Log.debug("Invalid words: \(error)")
+                app.alertState = TaggedItem(.invalidWordGroup)
+            case let .WalletAlreadyExists(walletId):
+                Log.warn("Attempted to import words for an existing hot wallet: \(walletId)")
+                app.alertState = TaggedItem(.duplicateWallet(walletId: walletId))
+            default:
+                Log.error("Unable to import wallet: \(error)")
+                app.alertState = TaggedItem(
+                    .errorImportingHotWallet(message: error.localizedDescription)
+                )
+            }
+        } catch {
+            Log.error("Unknown error \(error)")
+            app.alertState = TaggedItem(
+                .errorImportingHotWallet(message: error.localizedDescription)
+            )
+        }
+    }
+
+    func importColdWallet(_ export: HardwareExport) {
+        do {
+            let wallet = try Wallet.newFromExport(export: export)
+            let id = wallet.id()
+            Log.debug("Imported Wallet: \(id)")
+            app.alertState = TaggedItem(.importedSuccessfully)
+
+            // if we're not already on this wallet, navigate to it
+            if app.walletManager?.id != id {
+                try app.rust.selectWallet(id: id)
+            }
+
+            // upgrade watch-only → cold in-place
+            if app.walletManager?.id == id, app.walletManager?.walletMetadata.walletType != .hot {
+                try app.walletManager?.rust.setWalletType(walletType: .cold)
+            }
+        } catch let WalletError.WalletAlreadyExists(id) {
+            app.alertState = TaggedItem(.duplicateWallet(walletId: id))
+
+            if (try? app.rust.selectWallet(id: id)) == nil {
+                app.alertState = TaggedItem(.unableToSelectWallet)
+            }
+        } catch {
+            app.alertState = TaggedItem(
+                .errorImportingHardwareWallet(message: error.localizedDescription)
+            )
+        }
+    }
+
+    func handleAddress(_ addressWithNetwork: AddressWithNetwork) {
+        let currentNetwork = Database().globalConfig().selectedNetwork()
+        let address = addressWithNetwork.address()
+        let network = addressWithNetwork.network()
+        let selectedWallet = Database().globalConfig().selectedWallet()
+
+        if selectedWallet == nil {
+            app.alertState = TaggedItem(AppAlertState.noWalletSelected(address: address))
+            return
+        }
+
+        if !addressWithNetwork.isValidForNetwork(network: currentNetwork) {
+            app.alertState = TaggedItem(
+                AppAlertState.addressWrongNetwork(
+                    address: address, network: network, currentNetwork: currentNetwork
+                )
+            )
+            return
+        }
+
+        let amount = addressWithNetwork.amount()
+        app.alertState = TaggedItem(.foundAddress(address: address, amount: amount))
+    }
+
+    func handleTransaction(_ transaction: BitcoinTransaction) {
+        Log.debug(
+            "Received BitcoinTransaction: \(transaction): \(transaction.txIdHash())"
+        )
+
+        let db = Database().unsignedTransactions()
+        let txnRecord = db.getTx(txId: transaction.txId())
+
+        guard let txnRecord else {
+            Log.error("No unsigned transaction found for \(transaction.txId())")
+            app.alertState = .init(.noUnsignedTransactionFound(txId: transaction.txId()))
+            return
+        }
+
+        let route = RouteFactory().sendConfirm(
+            id: txnRecord.walletId(), details: txnRecord.confirmDetails(),
+            signedTransaction: transaction
+        )
+
+        app.pushRoute(route)
+    }
+
+    func handleSignedPsbt(_ psbt: Psbt) {
+        Log.debug("Received signed PSBT: \(psbt.txId())")
+
+        let db = Database().unsignedTransactions()
+        let txnRecord = db.getTx(txId: psbt.txId())
+
+        guard let txnRecord else {
+            Log.error("No unsigned transaction found for PSBT \(psbt.txId())")
+            app.alertState = .init(.noUnsignedTransactionFound(txId: psbt.txId()))
+            return
+        }
+
+        let route = RouteFactory().sendConfirm(
+            id: txnRecord.walletId(), details: txnRecord.confirmDetails(),
+            signedPsbt: psbt
+        )
+
+        app.pushRoute(route)
+    }
+
+    func handleFileOpen(_ url: URL) {
+        let fileHandler = FileHandler(filePath: url.absoluteString)
+
+        do {
+            let readResult = try fileHandler.read()
+            switch readResult {
+            case let .mnemonic(mnemonic):
+                importHotWallet(mnemonic.words())
+            case let .hardwareExport(export):
+                importColdWallet(export)
+            case let .address(addressWithNetwork):
+                handleAddress(addressWithNetwork)
+            case let .transaction(txn):
+                handleTransaction(txn)
+            case let .tapSignerUnused(tapSigner):
+                app.sheetState = .init(.tapSigner(TapSignerRoute.initSelect(tapSigner)))
+            case let .tapSignerReady(tapSigner):
+                let panic =
+                    "TAPSIGNER not implemented \(tapSigner) doesn't make sense for file import"
+                Log.error(panic)
+            case let .bip329Labels(labels):
+                if let selectedWallet = Database().globalConfig().selectedWallet() {
+                    return try LabelManager(id: selectedWallet).import(labels: labels)
+                }
+
+                app.alertState = TaggedItem(
+                    .invalidFileFormat(
+                        message:
+                        "Currently BIP329 labels must be imported through the wallet actions"
+                    )
+                )
+            case let .signedPsbt(psbt):
+                handleSignedPsbt(psbt)
+            }
+        } catch {
+            switch error {
+            case let FileHandlerError.NotRecognizedFormat(multiFormatError):
+                Log.error("Unrecognized format mulit format error: \(multiFormatError)")
+                app.alertState = TaggedItem(
+                    .invalidFileFormat(message: multiFormatError.localizedDescription)
+                )
+
+            case let FileHandlerError.OpenFile(error):
+                Log.error("File handler error: \(error)")
+
+            case let FileHandlerError.ReadFile(error):
+                Log.error("Unable to read file: \(error)")
+
+            case FileHandlerError.FileNotFound:
+                Log.error("File not found")
+
+            default:
+                Log.error("Unknown error file handling file: \(error)")
+            }
+        }
+    }
+
+    func setInvalidlabels() {
+        app.alertState = TaggedItem(
+            .invalidFileFormat(
+                message: "Currently BIP329 labels must be imported through the wallet actions"
+            )
+        )
+    }
+
+    @MainActor
+    func handleMultiFormat(_ multiFormat: MultiFormat) {
+        do {
+            switch multiFormat {
+            case let .mnemonic(mnemonic):
+                importHotWallet(mnemonic.words())
+            case let .hardwareExport(export):
+                importColdWallet(export)
+            case let .address(addressWithNetwork):
+                handleAddress(addressWithNetwork)
+            case let .transaction(transaction):
+                handleTransaction(transaction)
+            case let .signedPsbt(psbt):
+                handleSignedPsbt(psbt)
+            case let .tapSignerUnused(tapSigner):
+                app.alertState = .init(.uninitializedTapSigner(tapSigner: tapSigner))
+            case let .tapSignerReady(tapSigner):
+                if let wallet = app.findTapSignerWallet(tapSigner) {
+                    app.alertState = .init(.tapSignerWalletFound(walletId: wallet.id))
+                } else {
+                    app.alertState = .init(.initializedTapSigner(tapSigner: tapSigner))
+                }
+            case let .bip329Labels(labels):
+                guard let manager = app.walletManager else { return setInvalidlabels() }
+                guard let selectedWallet = Database().globalConfig().selectedWallet() else {
+                    return setInvalidlabels()
+                }
+
+                // import the labels
+                try LabelManager(id: selectedWallet).import(labels: labels)
+                app.alertState = .init(.importedLabelsSuccessfully)
+
+                // when labels are imported, we need to get the transactions again with the updated labels
+                Task { await manager.rust.getTransactions() }
+            }
+        } catch {
+            switch error {
+            case let multiFormatError as MultiFormatError:
+                Log.error(
+                    "MultiFormat not recognized: \(multiFormatError): \(multiFormatError.description)"
+                )
+                app.alertState = TaggedItem(.invalidFormat(message: multiFormatError.description))
+
+            default:
+                Log.error("Unable to handle scanned code, error: \(error)")
+                app.alertState = TaggedItem(.invalidFileFormat(message: error.localizedDescription))
+            }
+        }
+    }
+
+    @ViewBuilder
+    func SheetContent(_ state: TaggedItem<AppSheetState>) -> some View {
+        switch state.item {
+        case .qr:
+            QrCodeScanView(app: app, scannedCode: $scannedCode)
+        case let .tapSigner(route):
+            TapSignerContainer(route: route)
+                .environment(app)
+        }
+    }
+
+    var BodyView: some View {
+        Group {
+            if !app.isTermsAccepted {
+                CoverView()
+                    .sheet(isPresented: Binding.constant(!app.isTermsAccepted), onDismiss: {}) {
+                        TermsAndConditionsView(app: app)
+                            .interactiveDismissDisabled(true)
+                            .presentationDetents([.large])
+                    }
+            } else {
+                LockView(
+                    lockType: auth.type,
+                    isPinCorrect: { pin in
+                        auth.handleAndReturnUnlockMode(pin) != .locked
+                    },
+                    showPin: false,
+                    lockState: $auth.lockState,
+                    onUnlock: { _ in
+                        withAnimation { showCover = false }
+                    }
+                ) {
+                    SidebarContainer {
+                        NavigationStack(path: $app.router.routes) {
+                            RouteView(app: app)
+                                .navigationDestination(
+                                    for: Route.self,
+                                    destination: { route in
+                                        RouteView(app: app, route: route)
+                                    }
+                                )
+                                .toolbar {
+                                    ToolbarItem(placement: .navigationBarLeading) {
+                                        Button(action: {
+                                            withAnimation {
+                                                app.toggleSidebar()
+                                            }
+                                        }) {
+                                            Image(systemName: "line.horizontal.3")
+                                                .modifier(
+                                                    NavBarColorModifier(
+                                                        route: app.currentRoute,
+                                                        isPastHeader: app.isPastHeader
+                                                    )
+                                                )
+                                        }
+                                        .contentShape(Rectangle())
+                                    }
+                                }
+                        }
+                        .modifier(ConditionalRouteTintModifier(route: app.router.routes.last))
+                    }
+                }
+                .fullScreenCover(isPresented: $app.isLoading) {
+                    FullPageLoadingView().interactiveDismissDisabled(true)
+                }
+                .fullScreenCover(isPresented: $showCover) {
+                    CoverView().interactiveDismissDisabled(true)
+                }
+            }
+        }
+        .onChange(of: auth.lockState) { old, new in
+            Log.warn("AUTH LOCK STATE CHANGED: \(old) --> \(new)")
+        }
+        .environment(app)
+        .environment(auth)
+    }
+
+    func onChangeRoute(_ old: [Route], _ new: [Route]) {
+        if !old.isEmpty, new.isEmpty { id = UUID() }
+
+        app.dispatch(action: AppAction.updateRoute(routes: new))
+    }
+
+    func onChangeQr(
+        _: TaggedItem<MultiFormat>?, _ scannedCode: TaggedItem<MultiFormat>?
+    ) {
+        Log.debug("[COVE APP ROOT] onChangeQr")
+        guard let scannedCode else { return }
+        app.sheetState = .none
+        handleMultiFormat(scannedCode.item)
+    }
+
+    func onChangeNfc(_: NfcMessage?, _ nfcMessage: NfcMessage?) {
+        Log.debug("[COVE APP ROOT] onChangeNfc")
+        guard let nfcMessage else { return }
+        do {
+            let multiFormat = try nfcMessage.tryIntoMultiFormat()
+            handleMultiFormat(multiFormat)
+        } catch {
+            switch error {
+            case let multiFormatError as MultiFormatError:
+                Log.error(
+                    "MultiFormat not recognized: \(multiFormatError): \(multiFormatError.description)"
+                )
+                app.alertState = TaggedItem(.invalidFormat(message: multiFormatError.description))
+
+            default:
+                Log.error("Unable to handle scanned code, error: \(error)")
+                app.alertState = TaggedItem(.invalidFileFormat(message: error.localizedDescription))
+            }
+        }
+    }
+
+    func handleScenePhaseChange(_ oldPhase: ScenePhase, _ newPhase: ScenePhase) {
+        Log.debug(
+            "[SCENE PHASE]: \(oldPhase) --> \(newPhase) && using biometrics: \(auth.isUsingBiometrics)"
+        )
+
+        if !auth.isAuthEnabled {
+            showCover = false
+            auth.unlock()
+        }
+
+        if newPhase == .active {
+            showCover = false
+            guard app.asyncRuntimeReady else { return }
+            app.dispatch(action: AppAction.updateFees)
+            app.dispatch(action: AppAction.updateFiatPrices)
+        }
+
+        // PIN auth active, no biometrics, leaving app
+        if auth.isAuthEnabled,
+           !auth.isUsingBiometrics,
+           oldPhase == .active,
+           newPhase == .inactive
+        {
+            Log.debug("[scene] app going inactive")
+            coverClearTask?.cancel()
+
+            let tapSignerScanning = app.tapSignerNfc?.isScanning ?? false
+            if !app.nfcWriter.isScanning, !app.nfcReader.isScanning, !tapSignerScanning {
+                showCover = true
+            }
+
+            // prevent getting stuck on show cover
+            coverClearTask = Task {
+                try? await Task.sleep(for: .milliseconds(100))
+                if Task.isCancelled { return }
+
+                if phase == .active { showCover = false }
+
+                try? await Task.sleep(for: .milliseconds(200))
+                if Task.isCancelled { return }
+
+                if phase == .active { showCover = false }
+            }
+        }
+
+        // close all open sheets when going into the background
+        if auth.isAuthEnabled, newPhase == .background {
+            Log.debug("[scene] app going into background")
+            coverClearTask?.cancel()
+
+            // don't lock or dismiss sheets if any NFC operation is active
+            let tapSignerScanning = app.tapSignerNfc?.isScanning ?? false
+            if app.nfcWriter.isScanning || app.nfcReader.isScanning || tapSignerScanning {
+                Log.debug("[scene] NFC operation active, not dismissing sheets or locking")
+                return
+            }
+
+            showCover = true
+            if auth.lockState != .locked { auth.lock() }
+
+            UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }
+                .flatMap(\.windows)
+                .forEach { window in
+                    window.rootViewController?.dismiss(animated: false)
+                }
+
+            // dismiss all keyboard
+            UIApplication.shared.endEditing()
+        }
+
+        // auth enabled, opening app again
+        if auth.isAuthEnabled, oldPhase == .inactive, newPhase == .active {
+            guard let lockedAt = auth.lockedAt else { return }
+            let sinceLocked = Date.now.timeIntervalSince(lockedAt)
+            Log.debug("[ROOT][AUTH] lockedAt \(lockedAt) == \(sinceLocked)")
+
+            // less than 1 second, auto unlock if PIN only, and not in decoy mode
+            // TODO: make this configurable and put in DB
+            if auth.type == .pin, !auth.isDecoyPinEnabled, sinceLocked < 2 {
+                showCover = false
+                auth.unlock()
+                return
+            }
+
+            if sinceLocked < 1 {
+                showCover = false
+                auth.unlock()
+            }
+        }
+
+        // sanity check, get out of decoy mode if PIN is disabled
+        if auth.isInDecoyMode(), newPhase == .active,
+           auth.type == .none || auth.type == .biometric
+        {
+            auth.switchToMainMode()
+        }
+    }
+
+    var body: some View {
+        BodyView
+            .id(id)
+            .environment(\.navigate) { route in
+                app.pushRoute(route)
+            }
+            .environment(app)
+            .preferredColorScheme(app.colorScheme)
+            .onChange(of: app.router.routes, onChangeRoute)
+            .onChange(of: app.selectedNetwork) { id = UUID() }
+            // QR code scanning
+            .onChange(of: scannedCode, onChangeQr)
+            // NFC scanning
+            .onChange(of: app.nfcReader.scannedMessage, onChangeNfc)
+            .alert(
+                app.alertState?.item.title() ?? "Alert",
+                isPresented: showingAlert,
+                presenting: app.alertState,
+                actions: alertButtons,
+                message: alertMessage
+            )
+            .sheet(item: $app.sheetState, content: SheetContent)
+            .onOpenURL(perform: handleFileOpen)
+            .onChange(of: phase, initial: true, handleScenePhaseChange)
+    }
+}

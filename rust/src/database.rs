@@ -2,6 +2,7 @@
 //! That will be available across the app, and will be persisted across app launches.
 
 pub mod cbor;
+pub mod encrypted_backend;
 pub mod error;
 pub mod global_cache;
 pub mod global_config;
@@ -9,6 +10,7 @@ pub mod global_flag;
 pub mod historical_price;
 pub mod key;
 pub mod macros;
+pub mod migration;
 pub mod record;
 pub mod unsigned_transactions;
 pub mod wallet;
@@ -26,7 +28,7 @@ use unsigned_transactions::UnsignedTransactionsTable;
 use wallet::WalletsTable;
 
 use once_cell::sync::OnceCell;
-use tracing::{error, info};
+use tracing::error;
 
 use cove_common::consts::ROOT_DATA_DIR;
 
@@ -79,22 +81,34 @@ impl Database {
             return;
         }
 
-        DATABASE.get().expect("database not initialized").swap(Arc::new(Self::init()));
+        let db = Self::init().expect("failed to reinitialize database after reset");
+        DATABASE.get().expect("database not initialized").swap(Arc::new(db));
     }
 }
 
 impl Database {
     pub fn global() -> Arc<Self> {
-        let db = DATABASE.get_or_init(|| ArcSwap::new(Arc::new(Self::init()))).load();
+        let db = DATABASE
+            .get_or_init(|| {
+                let db = Self::init().expect("failed to initialize main database");
+                ArcSwap::new(Arc::new(db))
+            })
+            .load();
 
         Arc::clone(&db)
     }
 
-    fn init() -> Self {
-        let main_db = get_or_create_main_database();
+    fn init() -> Result<Self, error::DatabaseError> {
+        #[cfg(test)]
+        crate::bootstrap::set_test_bootstrapped();
+
+        crate::bootstrap::ensure_storage_bootstrapped()
+            .map_err(|e| error::DatabaseError::BootstrapFailed(e.to_string()))?;
+
+        let main_db = get_or_create_main_database()?;
         let main_db_arc = Arc::new(main_db);
 
-        let write_txn = main_db_arc.begin_write().expect("failed to begin write transaction");
+        let write_txn = main_db_arc.begin_write()?;
 
         let wallets = WalletsTable::new(main_db_arc.clone(), &write_txn);
         let global_flag = GlobalFlagTable::new(main_db_arc.clone(), &write_txn);
@@ -103,38 +117,21 @@ impl Database {
         let unsigned_transactions = UnsignedTransactionsTable::new(main_db_arc.clone(), &write_txn);
         let historical_prices = HistoricalPriceTable::new(main_db_arc.clone(), &write_txn);
 
-        write_txn.commit().expect("failed to commit write transaction");
+        write_txn.commit()?;
 
-        Self {
+        Ok(Self {
             global_flag,
             global_config,
             global_cache,
             wallets,
             unsigned_transactions,
             historical_prices,
-        }
+        })
     }
 }
 
-fn get_or_create_main_database() -> redb::Database {
-    let location = database_location();
-    get_or_create_database_with_location(location)
-}
-
-fn get_or_create_database_with_location(database_location: PathBuf) -> redb::Database {
-    if database_location.exists() {
-        let db = redb::Database::open(&database_location);
-        match db {
-            Ok(db) => return db,
-            Err(error) => {
-                error!("failed to open database, error: {error:?}, creating a new one");
-            }
-        }
-    }
-
-    info!("Creating a new database, at {}", database_location.display());
-
-    redb::Database::create(&database_location).expect("failed to create database")
+fn get_or_create_main_database() -> Result<redb::Database, error::DatabaseError> {
+    encrypted_backend::open_or_create_database(&database_location())
 }
 
 #[cfg(not(test))]

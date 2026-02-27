@@ -2642,9 +2642,9 @@ public protocol FfiAppProtocol: AnyObject, Sendable {
     func hasWallets()  -> Bool
     
     /**
-     * run all initialization tasks here, only called once
+     * Fetch external data (prices, fees) with retry logic, called after AppManager creation
      */
-    func initOnStart() async 
+    func initData() async 
     
     /**
      * check if the router is at the root route (no routes to go back to)
@@ -2904,13 +2904,13 @@ open func hasWallets() -> Bool  {
 }
     
     /**
-     * run all initialization tasks here, only called once
+     * Fetch external data (prices, fees) with retry logic, called after AppManager creation
      */
-open func initOnStart()async   {
+open func initData()async   {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
-                uniffi_cove_fn_method_ffiapp_init_on_start(
+                uniffi_cove_fn_method_ffiapp_init_data(
                     self.uniffiCloneHandle()
                     
                 )
@@ -14228,6 +14228,96 @@ public func FfiConverterTypeAppError_lower(_ value: AppError) -> RustBuffer {
     return FfiConverterTypeAppError.lower(value)
 }
 
+
+public enum AppInitError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
+
+    
+    
+    case KeyDerivation(message: String)
+    
+    case MainDatabaseMigration(message: String)
+    
+    case WalletDatabaseMigration(message: String)
+    
+
+    
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
+}
+
+#if compiler(>=6)
+extension AppInitError: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAppInitError: FfiConverterRustBuffer {
+    typealias SwiftType = AppInitError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AppInitError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        
+
+        
+        case 1: return .KeyDerivation(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 2: return .MainDatabaseMigration(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 3: return .WalletDatabaseMigration(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: AppInitError, into buf: inout [UInt8]) {
+        switch value {
+
+        
+
+        
+        case .KeyDerivation(_ /* message is ignored*/):
+            writeInt(&buf, Int32(1))
+        case .MainDatabaseMigration(_ /* message is ignored*/):
+            writeInt(&buf, Int32(2))
+        case .WalletDatabaseMigration(_ /* message is ignored*/):
+            writeInt(&buf, Int32(3))
+
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAppInitError_lift(_ buf: RustBuffer) throws -> AppInitError {
+    return try FfiConverterTypeAppInitError.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAppInitError_lower(_ value: AppInitError) -> RustBuffer {
+    return FfiConverterTypeAppInitError.lower(value)
+}
+
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -16114,6 +16204,16 @@ public enum DatabaseError: Swift.Error, Equatable, Hashable, Foundation.Localize
     case Serialization(SerdeError
     )
     case WalletNotFound
+    case EncryptionKeyNotSet
+    case BootstrapFailed(String
+    )
+    case BackendOpen(path: String, error: String
+    )
+    case CorruptBlock(path: String, error: String
+    )
+    case DatabaseAlreadyOpen
+    case HeaderIntegrity(path: String, error: String
+    )
 
     
 
@@ -16181,6 +16281,23 @@ public struct FfiConverterTypeDatabaseError: FfiConverterRustBuffer {
             try FfiConverterTypeSerdeError.read(from: &buf)
             )
         case 10: return .WalletNotFound
+        case 11: return .EncryptionKeyNotSet
+        case 12: return .BootstrapFailed(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 13: return .BackendOpen(
+            path: try FfiConverterString.read(from: &buf), 
+            error: try FfiConverterString.read(from: &buf)
+            )
+        case 14: return .CorruptBlock(
+            path: try FfiConverterString.read(from: &buf), 
+            error: try FfiConverterString.read(from: &buf)
+            )
+        case 15: return .DatabaseAlreadyOpen
+        case 16: return .HeaderIntegrity(
+            path: try FfiConverterString.read(from: &buf), 
+            error: try FfiConverterString.read(from: &buf)
+            )
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -16241,6 +16358,37 @@ public struct FfiConverterTypeDatabaseError: FfiConverterRustBuffer {
         case .WalletNotFound:
             writeInt(&buf, Int32(10))
         
+        
+        case .EncryptionKeyNotSet:
+            writeInt(&buf, Int32(11))
+        
+        
+        case let .BootstrapFailed(v1):
+            writeInt(&buf, Int32(12))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .BackendOpen(path,error):
+            writeInt(&buf, Int32(13))
+            FfiConverterString.write(path, into: &buf)
+            FfiConverterString.write(error, into: &buf)
+            
+        
+        case let .CorruptBlock(path,error):
+            writeInt(&buf, Int32(14))
+            FfiConverterString.write(path, into: &buf)
+            FfiConverterString.write(error, into: &buf)
+            
+        
+        case .DatabaseAlreadyOpen:
+            writeInt(&buf, Int32(15))
+        
+        
+        case let .HeaderIntegrity(path,error):
+            writeInt(&buf, Int32(16))
+            FfiConverterString.write(path, into: &buf)
+            FfiConverterString.write(error, into: &buf)
+            
         }
     }
 }
@@ -29000,6 +29148,29 @@ public func setRootDataDir(path: String)throws   {try rustCallWithError(FfiConve
     )
 }
 }
+/**
+ * Async bootstrap: initializes the tokio runtime, runs critical storage bootstrap
+ * (encryption key derivation + redb migrations) on a blocking thread, then
+ * attempts BDK migration. BDK migration failures are non-blocking — the app
+ * continues with unencrypted BDK databases and retries on next launch.
+ *
+ * Returns `Ok(None)` when everything succeeds, `Ok(Some(warning))` when BDK
+ * migration failed but the app can continue, or `Err` for critical failures
+ */
+public func bootstrap()async throws  -> String?  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_func_bootstrap(
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_rust_buffer,
+            completeFunc: ffi_cove_rust_future_complete_rust_buffer,
+            freeFunc: ffi_cove_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterOptionString.lift,
+            errorHandler: FfiConverterTypeAppInitError_lift
+        )
+}
 public func allFiatCurrencies() -> [FiatCurrency]  {
     return try!  FfiConverterSequenceTypeFiatCurrency.lift(try! rustCall() {
     uniffi_cove_fn_func_all_fiat_currencies($0
@@ -29412,6 +29583,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_func_set_root_data_dir() != 56109) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_func_bootstrap() != 11214) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_func_all_fiat_currencies() != 53482) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -29604,7 +29778,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_ffiapp_has_wallets() != 65260) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_ffiapp_init_on_start() != 30417) {
+    if (uniffi_cove_checksum_method_ffiapp_init_data() != 8970) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_is_at_root() != 23036) {

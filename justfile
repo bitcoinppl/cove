@@ -10,7 +10,7 @@ list:
 # Run an xtask command
 [group('utils')]
 xtask *args:
-    cd rust && cargo xtask {{args}}
+    cd rust && test -f target/debug/xtask || cargo build --package xtask -q && ./target/debug/xtask {{args}}
 
 # Sign a PSBT and output all formats (base64, hex, binary, bbqr-gif, ur-gif)
 # Requires MNEMONIC env var (set in .envrc or pass directly)

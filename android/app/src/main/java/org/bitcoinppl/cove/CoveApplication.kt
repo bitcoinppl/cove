@@ -21,6 +21,7 @@ class CoveApplication : Application() {
     // hold references to FFI objects for proper cleanup
     private var keychain: Keychain? = null
     private var device: Device? = null
+    private var bootstrapCompleted = false
 
     override fun onCreate() {
         super.onCreate()
@@ -47,16 +48,16 @@ class CoveApplication : Application() {
             throw RuntimeException("Failed to initialize security infrastructure", e)
         }
 
-        // initialize app manager to ensure updater is ready before lifecycle callbacks
+        // bootstrap and AppManager init deferred to MainActivity via onBootstrapComplete()
+    }
+
+    /// Called from MainActivity after bootstrap completes on the main thread
+    fun onBootstrapComplete() {
+        if (bootstrapCompleted) return
+        bootstrapCompleted = true
+
         AppManager.getInstance()
-
-        // setup app lifecycle observer for auth lock/unlock
         setupLifecycleObserver()
-
-        // register memory cleanup callbacks
-        // NOTE: Android does not guarantee process-level cleanup - the OS may kill the process
-        // without notice. Sensitive data should be managed via Android Keystore/EncryptedSharedPreferences
-        // or hardened in Rust destructors as secondary mitigation
         setupMemoryCallbacks()
     }
 

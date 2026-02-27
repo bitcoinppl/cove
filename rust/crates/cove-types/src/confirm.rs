@@ -23,6 +23,7 @@ pub struct ConfirmDetails {
     pub sending_amount: Amount,
     pub fee_total: Amount,
     pub fee_rate: FeeRate,
+    #[serde(default)]
     pub fee_percentage: u64,
     pub sending_to: Address,
     pub psbt: Psbt,
