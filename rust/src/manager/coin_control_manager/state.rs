@@ -70,7 +70,10 @@ impl State {
     pub fn load_utxo_labels(&mut self) {
         let utxos = &mut self.utxos;
 
-        let labels_db = WalletDataDb::new_or_existing(self.wallet_id.clone()).labels;
+        let Some(wallet_db) = WalletDataDb::new_or_existing(self.wallet_id.clone()).ok() else {
+            return;
+        };
+        let labels_db = wallet_db.labels;
 
         for utxo in utxos.iter_mut() {
             let label = labels_db

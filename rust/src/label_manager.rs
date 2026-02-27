@@ -81,7 +81,8 @@ impl AddressArgs {
 impl LabelManager {
     #[uniffi::constructor]
     pub fn new(id: WalletId) -> Self {
-        let db = WalletDataDb::new_or_existing(id.clone());
+        let db = WalletDataDb::new_or_existing(id.clone())
+            .expect("failed to open wallet database for label manager");
         Self { id, db }
     }
 

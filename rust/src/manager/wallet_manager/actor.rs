@@ -158,7 +158,8 @@ impl Actor for WalletActor {
 
 impl WalletActor {
     pub fn new(wallet: Wallet, reconciler: Sender<SingleOrMany>) -> Self {
-        let db = WalletDataDb::new_or_existing(wallet.id.clone());
+        let db = WalletDataDb::new_or_existing(wallet.id.clone())
+            .expect("failed to open wallet database for wallet actor");
         let seed = rand::rng().random();
 
         Self {
