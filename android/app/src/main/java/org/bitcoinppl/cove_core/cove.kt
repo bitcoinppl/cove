@@ -987,6 +987,8 @@ internal object IntegrityCheckingUniffiLib {
     }
     external fun uniffi_cove_checksum_func_set_root_data_dir(
 ): Short
+external fun uniffi_cove_checksum_func_bootstrap(
+): Short
 external fun uniffi_cove_checksum_func_all_fiat_currencies(
 ): Short
 external fun uniffi_cove_checksum_func_fiat_currency_emoji(
@@ -1115,7 +1117,7 @@ external fun uniffi_cove_checksum_method_ffiapp_go_to_selected_wallet(
 ): Short
 external fun uniffi_cove_checksum_method_ffiapp_has_wallets(
 ): Short
-external fun uniffi_cove_checksum_method_ffiapp_init_on_start(
+external fun uniffi_cove_checksum_method_ffiapp_init_data(
 ): Short
 external fun uniffi_cove_checksum_method_ffiapp_is_at_root(
 ): Short
@@ -1925,7 +1927,7 @@ external fun uniffi_cove_fn_method_ffiapp_go_to_selected_wallet(`ptr`: Long,unif
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_ffiapp_has_wallets(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-external fun uniffi_cove_fn_method_ffiapp_init_on_start(`ptr`: Long,
+external fun uniffi_cove_fn_method_ffiapp_init_data(`ptr`: Long,
 ): Long
 external fun uniffi_cove_fn_method_ffiapp_is_at_root(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
@@ -3011,6 +3013,8 @@ external fun uniffi_cove_fn_method_walletmetadata_uniffi_trait_hash(`ptr`: RustB
 ): Long
 external fun uniffi_cove_fn_func_set_root_data_dir(`path`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
+external fun uniffi_cove_fn_func_bootstrap(
+): Long
 external fun uniffi_cove_fn_func_all_fiat_currencies(uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_func_fiat_currency_emoji(`fiatCurrency`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -3237,6 +3241,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_func_set_root_data_dir() != 56109.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_func_bootstrap() != 11214.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_func_all_fiat_currencies() != 53482.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -3429,7 +3436,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_ffiapp_has_wallets() != 65260.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_ffiapp_init_on_start() != 30417.toShort()) {
+    if (lib.uniffi_cove_checksum_method_ffiapp_init_data() != 8970.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_ffiapp_is_at_root() != 23036.toShort()) {
@@ -9076,9 +9083,9 @@ public interface FfiAppInterface {
     fun `hasWallets`(): kotlin.Boolean
     
     /**
-     * run all initialization tasks here, only called once
+     * Fetch external data (prices, fees) with retry logic, called after AppManager creation
      */
-    suspend fun `initOnStart`()
+    suspend fun `initData`()
     
     /**
      * check if the router is at the root route (no routes to go back to)
@@ -9442,13 +9449,13 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
 
     
     /**
-     * run all initialization tasks here, only called once
+     * Fetch external data (prices, fees) with retry logic, called after AppManager creation
      */
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
-    override suspend fun `initOnStart`() {
+    override suspend fun `initData`() {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
-            UniffiLib.uniffi_cove_fn_method_ffiapp_init_on_start(
+            UniffiLib.uniffi_cove_fn_method_ffiapp_init_data(
                 uniffiHandle,
                 
             )
@@ -27769,6 +27776,62 @@ public object FfiConverterTypeAppError : FfiConverterRustBuffer<AppException> {
 
 
 
+
+
+sealed class AppInitException(message: String): kotlin.Exception(message) {
+        
+        class KeyDerivation(message: String) : AppInitException(message)
+        
+        class MainDatabaseMigration(message: String) : AppInitException(message)
+        
+        class WalletDatabaseMigration(message: String) : AppInitException(message)
+        
+
+    companion object ErrorHandler : UniffiRustCallStatusErrorHandler<AppInitException> {
+        override fun lift(error_buf: RustBuffer.ByValue): AppInitException = FfiConverterTypeAppInitError.lift(error_buf)
+    }
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeAppInitError : FfiConverterRustBuffer<AppInitException> {
+    override fun read(buf: ByteBuffer): AppInitException {
+        
+            return when(buf.getInt()) {
+            1 -> AppInitException.KeyDerivation(FfiConverterString.read(buf))
+            2 -> AppInitException.MainDatabaseMigration(FfiConverterString.read(buf))
+            3 -> AppInitException.WalletDatabaseMigration(FfiConverterString.read(buf))
+            else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
+        }
+        
+    }
+
+    override fun allocationSize(value: AppInitException): ULong {
+        return 4UL
+    }
+
+    override fun write(value: AppInitException, buf: ByteBuffer) {
+        when(value) {
+            is AppInitException.KeyDerivation -> {
+                buf.putInt(1)
+                Unit
+            }
+            is AppInitException.MainDatabaseMigration -> {
+                buf.putInt(2)
+                Unit
+            }
+            is AppInitException.WalletDatabaseMigration -> {
+                buf.putInt(3)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+
+}
+
+
+
 sealed class AppStateReconcileMessage: Disposable  {
     
     data class DefaultRouteChanged(
@@ -30284,6 +30347,56 @@ sealed class DatabaseException: kotlin.Exception() {
             get() = ""
     }
     
+    class EncryptionKeyNotSet(
+        ) : DatabaseException() {
+        override val message
+            get() = ""
+    }
+    
+    class BootstrapFailed(
+        
+        val v1: kotlin.String
+        ) : DatabaseException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+    
+    class BackendOpen(
+        
+        val `path`: kotlin.String, 
+        
+        val `error`: kotlin.String
+        ) : DatabaseException() {
+        override val message
+            get() = "path=${ `path` }, error=${ `error` }"
+    }
+    
+    class CorruptBlock(
+        
+        val `path`: kotlin.String, 
+        
+        val `error`: kotlin.String
+        ) : DatabaseException() {
+        override val message
+            get() = "path=${ `path` }, error=${ `error` }"
+    }
+    
+    class DatabaseAlreadyOpen(
+        ) : DatabaseException() {
+        override val message
+            get() = ""
+    }
+    
+    class HeaderIntegrity(
+        
+        val `path`: kotlin.String, 
+        
+        val `error`: kotlin.String
+        ) : DatabaseException() {
+        override val message
+            get() = "path=${ `path` }, error=${ `error` }"
+    }
+    
 
     
 
@@ -30340,6 +30453,23 @@ public object FfiConverterTypeDatabaseError : FfiConverterRustBuffer<DatabaseExc
                 FfiConverterTypeSerdeError.read(buf),
                 )
             10 -> DatabaseException.WalletNotFound()
+            11 -> DatabaseException.EncryptionKeyNotSet()
+            12 -> DatabaseException.BootstrapFailed(
+                FfiConverterString.read(buf),
+                )
+            13 -> DatabaseException.BackendOpen(
+                FfiConverterString.read(buf),
+                FfiConverterString.read(buf),
+                )
+            14 -> DatabaseException.CorruptBlock(
+                FfiConverterString.read(buf),
+                FfiConverterString.read(buf),
+                )
+            15 -> DatabaseException.DatabaseAlreadyOpen()
+            16 -> DatabaseException.HeaderIntegrity(
+                FfiConverterString.read(buf),
+                FfiConverterString.read(buf),
+                )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
@@ -30395,6 +30525,37 @@ public object FfiConverterTypeDatabaseError : FfiConverterRustBuffer<DatabaseExc
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
             )
+            is DatabaseException.EncryptionKeyNotSet -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is DatabaseException.BootstrapFailed -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+            is DatabaseException.BackendOpen -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.`path`)
+                + FfiConverterString.allocationSize(value.`error`)
+            )
+            is DatabaseException.CorruptBlock -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.`path`)
+                + FfiConverterString.allocationSize(value.`error`)
+            )
+            is DatabaseException.DatabaseAlreadyOpen -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is DatabaseException.HeaderIntegrity -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.`path`)
+                + FfiConverterString.allocationSize(value.`error`)
+            )
         }
     }
 
@@ -30447,6 +30608,37 @@ public object FfiConverterTypeDatabaseError : FfiConverterRustBuffer<DatabaseExc
             }
             is DatabaseException.WalletNotFound -> {
                 buf.putInt(10)
+                Unit
+            }
+            is DatabaseException.EncryptionKeyNotSet -> {
+                buf.putInt(11)
+                Unit
+            }
+            is DatabaseException.BootstrapFailed -> {
+                buf.putInt(12)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is DatabaseException.BackendOpen -> {
+                buf.putInt(13)
+                FfiConverterString.write(value.`path`, buf)
+                FfiConverterString.write(value.`error`, buf)
+                Unit
+            }
+            is DatabaseException.CorruptBlock -> {
+                buf.putInt(14)
+                FfiConverterString.write(value.`path`, buf)
+                FfiConverterString.write(value.`error`, buf)
+                Unit
+            }
+            is DatabaseException.DatabaseAlreadyOpen -> {
+                buf.putInt(15)
+                Unit
+            }
+            is DatabaseException.HeaderIntegrity -> {
+                buf.putInt(16)
+                FfiConverterString.write(value.`path`, buf)
+                FfiConverterString.write(value.`error`, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -46213,6 +46405,30 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
 }
     
     
+
+        /**
+         * Async bootstrap: initializes the tokio runtime, runs critical storage bootstrap
+         * (encryption key derivation + redb migrations) on a blocking thread, then
+         * attempts BDK migration. BDK migration failures are non-blocking — the app
+         * continues with unencrypted BDK databases and retries on next launch.
+         *
+         * Returns `Ok(None)` when everything succeeds, `Ok(Some(warning))` when BDK
+         * migration failed but the app can continue, or `Err` for critical failures
+         */
+    @Throws(AppInitException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+     suspend fun `bootstrap`() : kotlin.String? {
+        return uniffiRustCallAsync(
+        UniffiLib.uniffi_cove_fn_func_bootstrap(),
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterOptionalString.lift(it) },
+        // Error FFI converter
+        AppInitException.ErrorHandler,
+    )
+    }
  fun `allFiatCurrencies`(): List<FiatCurrency> {
             return FfiConverterSequenceTypeFiatCurrency.lift(
     uniffiRustCall() { _status ->
