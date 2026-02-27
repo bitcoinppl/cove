@@ -247,6 +247,7 @@ impl From<ScanningInfo> for ScanState {
 impl WalletDataDb {
     pub fn new_test(id: WalletId) -> (Self, tempfile::TempDir) {
         super::encrypted_backend::set_test_encryption_key();
+        DATABASE_CONNECTIONS.write().remove(&id);
         let tmp = tempfile::tempdir().expect("failed to create temp dir");
         let db = Self::new_with_db_location(id, tmp.path()).expect("failed to create test db");
         (db, tmp)
