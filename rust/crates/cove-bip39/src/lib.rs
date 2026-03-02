@@ -79,7 +79,7 @@ mod test {
 
     use bip39::Mnemonic;
     use num_bigint::BigUint;
-    use rand::Rng as _;
+    use rand::RngExt as _;
 
     use super::generate_possible_final_words;
     use crate::split_and_encode_phrase;

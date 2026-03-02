@@ -262,7 +262,7 @@ mod tests {
         }
     }
 
-    fn random_record(rng: &mut impl rand::Rng) -> HistoricalPriceRecord {
+    fn random_record(rng: &mut impl rand::RngExt) -> HistoricalPriceRecord {
         HistoricalPriceRecord {
             time: 1745268220,
             usd: rng.random_range(0.0..500_000.0),

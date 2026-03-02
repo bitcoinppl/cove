@@ -19,7 +19,7 @@ where
 }
 
 pub fn generate_random_chain_code() -> [u8; 32] {
-    use rand::Rng as _;
+    use rand::RngExt as _;
 
     let rng = &mut rand::rng();
     let mut chain_code = [0u8; 32];
