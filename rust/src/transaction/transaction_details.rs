@@ -23,7 +23,7 @@ use crate::{
     device::Device,
     wallet::{Address, address},
 };
-use cove_util::format::NumberFormatter as _;
+use cove_util::{format::NumberFormatter as _, result_ext::ResultExt as _};
 use tap::TapFallible;
 
 use super::{Amount, FeeRate, SentAndReceived, TxId};
@@ -117,7 +117,7 @@ impl TransactionDetails {
                     Some(script) => {
                         let network = wallet.network();
                         let address = bitcoin::Address::from_script(&script, Params::from(network))
-                            .map_err(|e| Error::ChangeAddress(e.to_string()))?;
+                            .map_err_str(Error::ChangeAddress)?;
 
                         Some(address)
                     }
@@ -233,10 +233,10 @@ impl TransactionDetails {
             FIAT_CLIENT
                 .current_value_in_currency(amount, currency())
                 .await
-                .map_err(|e| Error::FiatAmount(e.to_string()))
+                .map_err_str(Error::FiatAmount)
         })
         .await
-        .map_err(|e| Error::FiatAmount(format!("task failed: {e}")))?
+        .map_err_prefix("task failed", Error::FiatAmount)?
     }
 
     #[uniffi::method]
@@ -265,10 +265,10 @@ impl TransactionDetails {
             FIAT_CLIENT
                 .current_value_in_currency(fee, currency())
                 .await
-                .map_err(|e| Error::FiatAmount(e.to_string()))
+                .map_err_str(Error::FiatAmount)
         })
         .await
-        .map_err(|e| Error::FiatAmount(format!("task failed: {e}")))??;
+        .map_err_prefix("task failed", Error::FiatAmount)??;
 
         Ok(fiat_amount_fmt(fiat))
     }
@@ -309,10 +309,10 @@ impl TransactionDetails {
             FIAT_CLIENT
                 .current_value_in_currency(amount, currency())
                 .await
-                .map_err(|e| Error::FiatAmount(e.to_string()))
+                .map_err_str(Error::FiatAmount)
         })
         .await
-        .map_err(|e| Error::FiatAmount(format!("task failed: {e}")))??;
+        .map_err_prefix("task failed", Error::FiatAmount)??;
 
         Ok(fiat_amount_fmt(fiat))
     }
@@ -430,8 +430,8 @@ impl TransactionDetails {
             service.get_price_for_block(network, block_number, confirmed_at, currency).await
         })
         .await
-        .map_err(|e| Error::FiatAmount(format!("task failed: {e}")))?
-        .map_err(|e| Error::FiatAmount(e.to_string()))?
+        .map_err_prefix("task failed", Error::FiatAmount)?
+        .map_err_str(Error::FiatAmount)?
         .ok_or_else(|| Error::FiatAmount("no price for currency".into()))?;
 
         let fiat_value = amount_btc * currency_price as f64;

@@ -2,6 +2,7 @@
 //! BCR-2020-007: <https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-007-hdkey.md>
 
 use bitcoin::bip32::ChildNumber;
+use cove_util::ResultExt as _;
 use minicbor::{Decode, Encode};
 
 use crate::error::{Result, ToUrError, UrError};
@@ -92,7 +93,7 @@ impl CryptoKeypath {
     /// # Errors
     /// Returns error if CBOR encoding fails
     pub fn to_cbor(&self) -> Result<Vec<u8>> {
-        minicbor::to_vec(self).map_err(|e| UrError::CborEncodeError(e.to_string()))
+        minicbor::to_vec(self).map_err_str(UrError::CborEncodeError)
     }
 
     /// Decode from tagged CBOR

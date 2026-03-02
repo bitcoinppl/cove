@@ -1,3 +1,4 @@
+use cove_util::ResultExt as _;
 use std::sync::{Arc, LazyLock, Mutex};
 
 use arc_swap::ArcSwapOption;
@@ -77,18 +78,15 @@ impl<S: CsppStore> Cspp<S> {
         let hex = hex::encode(master_key.as_bytes());
         let cryptor = Cryptor::new();
 
-        let encrypted =
-            cryptor.encrypt_to_string(&hex).map_err(|e| CsppError::Encrypt(e.to_string()))?;
+        let encrypted = cryptor.encrypt_to_string(&hex).map_err_str(CsppError::Encrypt)?;
 
         let encryption_key = cryptor.serialize_to_string();
 
         self.0
             .save(MASTER_KEY_ENCRYPTION_KEY_AND_NONCE.into(), encryption_key)
-            .map_err(|e| CsppError::Save(e.to_string()))?;
+            .map_err_str(CsppError::Save)?;
 
-        self.0
-            .save(MASTER_KEY_NAME.into(), encrypted)
-            .map_err(|e| CsppError::Save(e.to_string()))?;
+        self.0.save(MASTER_KEY_NAME.into(), encrypted).map_err_str(CsppError::Save)?;
 
         Ok(())
     }
@@ -103,15 +101,13 @@ impl<S: CsppStore> Cspp<S> {
             return Ok(None);
         };
 
-        let cryptor = Cryptor::try_from_string(&encryption_secret)
-            .map_err(|e| CsppError::Decrypt(e.to_string()))?;
+        let cryptor =
+            Cryptor::try_from_string(&encryption_secret).map_err_str(CsppError::Decrypt)?;
 
-        let hex = cryptor
-            .decrypt_from_string(&encrypted)
-            .map_err(|e| CsppError::Decrypt(e.to_string()))?;
+        let hex = cryptor.decrypt_from_string(&encrypted).map_err_str(CsppError::Decrypt)?;
 
         let bytes: [u8; 32] = hex::decode(hex)
-            .map_err(|e| CsppError::InvalidData(e.to_string()))?
+            .map_err_str(CsppError::InvalidData)?
             .try_into()
             .map_err(|_| CsppError::InvalidData("master key not 32 bytes".into()))?;
 

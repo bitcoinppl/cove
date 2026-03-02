@@ -2,6 +2,7 @@
 //! BCR-2020-006: <https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md>
 
 use bip39::Mnemonic;
+use cove_util::ResultExt as _;
 use minicbor::{Decode, Encode};
 
 use crate::{
@@ -71,7 +72,7 @@ impl CryptoSeed {
     /// Returns error if entropy is invalid for BIP39
     pub fn to_mnemonic(&self) -> Result<Mnemonic> {
         Mnemonic::from_entropy(&self.payload)
-            .map_err(|e| UrError::InvalidField(format!("Invalid BIP39 entropy: {e}")))
+            .map_err_prefix("Invalid BIP39 entropy", UrError::InvalidField)
     }
 
     /// Encode as tagged CBOR
@@ -86,7 +87,7 @@ impl CryptoSeed {
             name: self.name.clone(),
             note: self.note.clone(),
         };
-        minicbor::to_vec(&cbor).map_err(|e| UrError::CborEncodeError(e.to_string()))
+        minicbor::to_vec(&cbor).map_err_str(UrError::CborEncodeError)
     }
 
     /// Decode from tagged CBOR

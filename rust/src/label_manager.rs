@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use cove_util::result_ext::ResultExt as _;
+
 use crate::{
     database::{InsertOrUpdate, Record, record::Timestamps, wallet_data::WalletDataDb},
     multi_format::Bip329Labels,
@@ -158,12 +160,12 @@ impl LabelManager {
             self.db
                 .labels
                 .insert_labels_with_timestamps(input_labels, timestamps)
-                .map_err(|e| LabelManagerError::SaveInputLabels(e.to_string()))?;
+                .map_err_str(LabelManagerError::SaveInputLabels)?;
 
             self.db
                 .labels
                 .insert_labels_with_timestamps(output_labels, timestamps)
-                .map_err(|e| LabelManagerError::SaveOutputLabels(e.to_string()))?;
+                .map_err_str(LabelManagerError::SaveOutputLabels)?;
 
             return Ok(());
         }
@@ -175,11 +177,8 @@ impl LabelManager {
     }
 
     pub fn delete_labels_for_txn(&self, tx_id: Arc<TxId>) -> Result<(), LabelManagerError> {
-        let Some(txn_label) = self
-            .db
-            .labels
-            .get_txn_label_record(tx_id.0)
-            .map_err(|e| LabelManagerError::Get(e.to_string()))?
+        let Some(txn_label) =
+            self.db.labels.get_txn_label_record(tx_id.0).map_err_str(LabelManagerError::Get)?
         else {
             return Ok(());
         };
@@ -190,13 +189,13 @@ impl LabelManager {
             .db
             .labels
             .txn_input_records_iter(tx_id.0)
-            .map_err(|e| LabelManagerError::GetInputRecords(e.to_string()))?;
+            .map_err_str(LabelManagerError::GetInputRecords)?;
 
         let output_records = self
             .db
             .labels
             .txn_output_records_iter(tx_id.0)
-            .map_err(|e| LabelManagerError::GetOutputRecords(e.to_string()))?;
+            .map_err_str(LabelManagerError::GetOutputRecords)?;
 
         // create list of labels to delete
         let mut labels_to_delete = vec![Label::from(txn_label.item)];
@@ -222,7 +221,7 @@ impl LabelManager {
         self.db
             .labels
             .delete_labels(labels_to_delete)
-            .map_err(|e| LabelManagerError::DeleteLabels(e.to_string()))?;
+            .map_err_str(LabelManagerError::DeleteLabels)?;
 
         Ok(())
     }
@@ -234,8 +233,7 @@ impl LabelManager {
     }
 
     pub fn import(&self, jsonl: &str) -> Result<(), LabelManagerError> {
-        let labels =
-            Labels::try_from_str(jsonl).map_err(|e| LabelManagerError::Parse(e.to_string()))?;
+        let labels = Labels::try_from_str(jsonl).map_err_str(LabelManagerError::Parse)?;
 
         self.import_labels(labels)
     }
@@ -244,15 +242,14 @@ impl LabelManager {
         let db = self.db.clone();
 
         cove_tokio::task::spawn_blocking(move || {
-            let labels =
-                db.labels.all_labels().map_err(|e| LabelManagerError::Get(e.to_string()))?;
+            let labels = db.labels.all_labels().map_err_str(LabelManagerError::Get)?;
 
-            let labels = labels.export().map_err(|e| LabelManagerError::Export(e.to_string()))?;
+            let labels = labels.export().map_err_str(LabelManagerError::Export)?;
 
             Ok(labels)
         })
         .await
-        .map_err(|e| LabelManagerError::Export(e.to_string()))?
+        .map_err_str(LabelManagerError::Export)?
     }
 
     /// Export labels as BBQr-encoded QR strings for animated display
@@ -285,12 +282,12 @@ impl LabelManager {
                     max_version: version,
                 },
             )
-            .map_err(|e| LabelManagerError::Export(format!("BBQr encoding failed: {e}")))?;
+            .map_err_prefix("BBQr encoding failed", LabelManagerError::Export)?;
 
             Ok(split.parts)
         })
         .await
-        .map_err(|e| LabelManagerError::Export(e.to_string()))?
+        .map_err_str(LabelManagerError::Export)?
     }
 }
 
@@ -298,7 +295,7 @@ impl LabelManager {
     pub fn import_labels(&self, labels: impl Into<Labels>) -> Result<(), LabelManagerError> {
         let labels = labels.into();
 
-        self.db.labels.insert_labels(labels).map_err(|e| LabelManagerError::Save(e.to_string()))?;
+        self.db.labels.insert_labels(labels).map_err_str(LabelManagerError::Save)?;
 
         Ok(())
     }
@@ -313,7 +310,7 @@ impl LabelManager {
             .db
             .labels
             .txn_input_records_iter(tx_id.as_ref())
-            .map_err(|e| LabelManagerError::GetInputRecords(e.to_string()))?
+            .map_err_str(LabelManagerError::GetInputRecords)?
             .map(|record| (record.item.ref_.vout, record))
             .collect::<HashMap<u32, Record<InputRecord>>>();
 
@@ -321,7 +318,7 @@ impl LabelManager {
             .db
             .labels
             .txn_output_records_iter(tx_id.as_ref())
-            .map_err(|e| LabelManagerError::GetOutputRecords(e.to_string()))?
+            .map_err_str(LabelManagerError::GetOutputRecords)?
             .map(|record| (record.item.ref_.vout, record))
             .collect::<HashMap<u32, Record<OutputRecord>>>();
 
@@ -356,12 +353,12 @@ impl LabelManager {
         self.db
             .labels
             .insert_records(input_records)
-            .map_err(|e| LabelManagerError::SaveInputLabels(e.to_string()))?;
+            .map_err_str(LabelManagerError::SaveInputLabels)?;
 
         self.db
             .labels
             .insert_records(output_records)
-            .map_err(|e| LabelManagerError::SaveOutputLabels(e.to_string()))?;
+            .map_err_str(LabelManagerError::SaveOutputLabels)?;
 
         Ok(())
     }
@@ -403,7 +400,7 @@ impl LabelManager {
         self.db
             .labels
             .insert_label_with_timestamps(address_record, timestamps)
-            .map_err(|e| LabelManagerError::SaveAddressLabels(e.to_string()))?;
+            .map_err_str(LabelManagerError::SaveAddressLabels)?;
 
         Ok(Some(()))
     }
@@ -429,7 +426,7 @@ impl LabelManager {
             self.db
                 .labels
                 .insert_label_with_timestamps(updated, timestamps)
-                .map_err(|e| LabelManagerError::Save(e.to_string()))?;
+                .map_err_str(LabelManagerError::Save)?;
 
             return Ok(InsertOrUpdate::Update(last_updated_at.into()));
         }
@@ -441,7 +438,7 @@ impl LabelManager {
         self.db
             .labels
             .insert_label_with_timestamps(label, Timestamps::new(now, now))
-            .map_err(|e| LabelManagerError::Save(e.to_string()))?;
+            .map_err_str(LabelManagerError::Save)?;
 
         Ok(InsertOrUpdate::Insert(now.into()))
     }

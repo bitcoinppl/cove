@@ -16,6 +16,7 @@ pub mod unsigned_transactions;
 pub mod wallet;
 pub mod wallet_data;
 
+use cove_util::result_ext::ResultExt as _;
 use std::{path::PathBuf, sync::Arc};
 
 use arc_swap::ArcSwap;
@@ -103,7 +104,7 @@ impl Database {
         crate::bootstrap::set_test_bootstrapped();
 
         crate::bootstrap::ensure_storage_bootstrapped()
-            .map_err(|e| error::DatabaseError::BootstrapFailed(e.to_string()))?;
+            .map_err_str(error::DatabaseError::BootstrapFailed)?;
 
         let main_db = get_or_create_main_database()?;
         let main_db_arc = Arc::new(main_db);
