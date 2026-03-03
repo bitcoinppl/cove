@@ -1407,11 +1407,15 @@ fn downgrade_and_notify_if_needed(
 }
 
 /// Get the public descriptor content for export
+///
+/// Tries single-line BIP-389 multipath `<0;1>` format first,
+/// falls back to two normalized descriptors on separate lines
 fn get_public_descriptor_content(id: &WalletId) -> Result<String, Error> {
+    use cove_bdk::descriptor_ext::DescriptorExt;
+
     // try keychain first
-    if let Ok(Some(descriptors)) = Keychain::global().get_public_descriptor(id) {
-        let (external, internal) = descriptors;
-        return Ok(format!("{external}\n{internal}"));
+    if let Ok(Some((external, internal))) = Keychain::global().get_public_descriptor(id) {
+        return Ok(DescriptorExt::to_export_string(&external, &internal));
     }
 
     // fallback to loading from BDK wallet
@@ -1421,7 +1425,7 @@ fn get_public_descriptor_content(id: &WalletId) -> Result<String, Error> {
     let external = wallet.bdk.public_descriptor(bdk_wallet::KeychainKind::External);
     let internal = wallet.bdk.public_descriptor(bdk_wallet::KeychainKind::Internal);
 
-    Ok(format!("{external}\n{internal}"))
+    Ok(DescriptorExt::to_export_string(external, internal))
 }
 
 #[uniffi::export]
