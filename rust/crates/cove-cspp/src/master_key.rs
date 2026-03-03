@@ -1,4 +1,4 @@
-use rand::Rng as _;
+use rand::RngExt as _;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 #[derive(Zeroize, ZeroizeOnDrop)]

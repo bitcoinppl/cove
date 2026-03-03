@@ -3,7 +3,7 @@ use bdk_wallet::{
     bitcoin::{Amount, FeeRate, Script, key::rand::RngCore},
     coin_selection::{CoinSelectionAlgorithm, CoinSelectionResult, InsufficientFunds},
 };
-use rand::{RngCore as _, SeedableRng as _};
+use rand::{Rng as _, SeedableRng as _};
 
 use crate::util::select_sorted_utxos;
 
