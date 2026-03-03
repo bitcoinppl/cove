@@ -340,6 +340,7 @@ impl From<cove_bdk::descriptor_ext::Error> for DescriptorKeyParseError {
             E::NoOrigin => Self::NoOrigin,
             E::UnsupportedDescriptor(s) => Self::UnsupportedDescriptor(s),
             E::UnsupportedDescriptorType(s) => Self::UnsupportedDescriptorType(s),
+            E::NotMatchingPair => Self::UnsupportedDescriptor(error.to_string()),
         }
     }
 }
@@ -437,5 +438,232 @@ mod tests {
         let derive_info = derive_info();
         let parsed_descriptors = Descriptors::new_from_tap_signer(&derive_info).unwrap();
         assert!(parsed_descriptors.external.xpub().is_some());
+    }
+
+    fn test_xpub() -> &'static str {
+        "xpub6DM7CYgaTMdMbhTcLTUWmNUE5WLXK5hx8ZMa4sRw8qYJPqtqKYiKnwsmT8A6AijDVAUZRivdBnXdR8QE7Y9vVnqvzPL3fXCmu1WtCRLdAoz"
+    }
+
+    #[test]
+    fn test_user_reported_checksum_bug() {
+        use cove_bdk::descriptor_ext::DescriptorExt;
+
+        let xpub = test_xpub();
+        let fingerprint = "a262308d";
+
+        // build the multipath descriptor like try_new_bip84 does
+        let multipath = format!("wpkh([{fingerprint}/84h/0h/0h]{xpub}/<0;1>/*)");
+        let pubport_descs = pubport::descriptor::Descriptors::try_from_line(&multipath).unwrap();
+        let bdk_descs: Descriptors = pubport_descs.into();
+
+        // the raw BDK Display uses ' notation — this is what caused the Sparrow error
+        let raw_int = bdk_descs.internal.extended_descriptor.to_string();
+        assert!(raw_int.contains("84'"), "raw BDK output uses ' notation");
+
+        // to_normalized_string() should produce h-notation with correct checksum
+        let ext_str = bdk_descs.external.extended_descriptor.to_normalized_string();
+        let int_str = bdk_descs.internal.extended_descriptor.to_normalized_string();
+
+        assert!(ext_str.contains("84h/0h/0h"), "external should use h-notation");
+        assert!(int_str.contains("84h/0h/0h"), "internal should use h-notation");
+
+        assert_valid_checksum(&ext_str, "normalized external");
+        assert_valid_checksum(&int_str, "normalized internal");
+
+        // verify the old buggy checksum is NOT present
+        let int_checksum = extract_checksum(&int_str);
+        assert_ne!(int_checksum, "j3u3ae2x", "should not use apostrophe-notation checksum");
+
+        // multipath format should combine into <0;1> with valid checksum
+        let multipath_str = DescriptorExt::to_multipath_string(
+            &bdk_descs.external.extended_descriptor,
+            &bdk_descs.internal.extended_descriptor,
+        )
+        .unwrap();
+
+        assert!(multipath_str.contains("/<0;1>/*"), "should use multipath notation");
+        assert!(multipath_str.contains("84h/0h/0h"), "multipath should use h-notation");
+        assert_valid_checksum(&multipath_str, "multipath");
+    }
+
+    /// Helper: extract the checksum from a descriptor string (after '#')
+    fn extract_checksum(desc_str: &str) -> &str {
+        desc_str.rsplit('#').next().unwrap()
+    }
+
+    /// Helper: compute expected checksum from descriptor body (before '#')
+    fn compute_checksum(desc_str: &str) -> String {
+        let body = desc_str.split('#').next().unwrap();
+        bdk_wallet::miniscript::descriptor::checksum::desc_checksum(body).unwrap()
+    }
+
+    /// Helper: verify a descriptor string has a valid checksum
+    fn assert_valid_checksum(desc_str: &str, label: &str) {
+        let attached = extract_checksum(desc_str);
+        let expected = compute_checksum(desc_str);
+        assert_eq!(
+            attached, expected,
+            "{label}: checksum mismatch — attached '{attached}', expected '{expected}'\n  descriptor: {desc_str}"
+        );
+    }
+
+    #[test]
+    fn test_pubport_to_bdk_roundtrip_checksum() {
+        // test the From<pubport::descriptor::Descriptors> conversion at keys.rs:323-333
+        // miniscript 13 → string → miniscript 12 → string should produce valid checksums
+        let multipath = "wpkh([817e7be0/84h/0h/0h]xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM/<0;1>/*)#60tjs4c7";
+
+        let pubport_descs = pubport::descriptor::Descriptors::try_from_line(multipath).unwrap();
+
+        // check pubport (miniscript 13) produces valid checksums
+        let ext_13 = pubport_descs.external.to_string();
+        let int_13 = pubport_descs.internal.to_string();
+        assert_valid_checksum(&ext_13, "pubport external");
+        assert_valid_checksum(&int_13, "pubport internal");
+
+        // convert to BDK (miniscript 12) via the From impl
+        let bdk_descs: Descriptors = pubport_descs.into();
+        let ext_12 = bdk_descs.external.extended_descriptor.to_string();
+        let int_12 = bdk_descs.internal.extended_descriptor.to_string();
+        assert_valid_checksum(&ext_12, "BDK external");
+        assert_valid_checksum(&int_12, "BDK internal");
+    }
+
+    #[test]
+    fn test_pubport_to_bdk_roundtrip_checksum_apostrophe_notation() {
+        // same test with ' (apostrophe) hardened notation
+        let multipath = "wpkh([817e7be0/84'/0'/0']xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM/<0;1>/*)";
+
+        let pubport_descs = pubport::descriptor::Descriptors::try_from_line(multipath).unwrap();
+        let bdk_descs: Descriptors = pubport_descs.into();
+
+        let ext_str = bdk_descs.external.extended_descriptor.to_string();
+        let int_str = bdk_descs.internal.extended_descriptor.to_string();
+        assert_valid_checksum(&ext_str, "BDK external (apostrophe input)");
+        assert_valid_checksum(&int_str, "BDK internal (apostrophe input)");
+    }
+
+    #[test]
+    fn test_descriptor_checksum_survives_save_load_cycle() {
+        use cove_bdk::descriptor_ext::DescriptorExt as _;
+
+        // simulate save_public_descriptor → get_public_descriptor → export (normalized)
+        let multipath = desc();
+        let pubport_descs = pubport::descriptor::Descriptors::try_from_line(multipath).unwrap();
+        let bdk_descs: Descriptors = pubport_descs.into();
+
+        // save: format!("{ext}\n{int}") — saved with apostrophe notation
+        let saved = format!(
+            "{}\n{}",
+            bdk_descs.external.extended_descriptor, bdk_descs.internal.extended_descriptor
+        );
+
+        // load: parse back from string
+        let mut lines = saved.lines();
+        let ext_loaded: ExtendedDescriptor = lines.next().unwrap().parse().unwrap();
+        let int_loaded: ExtendedDescriptor = lines.next().unwrap().parse().unwrap();
+
+        // export: normalize to h-notation (like get_public_descriptor_content does)
+        let ext_exported = ext_loaded.to_normalized_string();
+        let int_exported = int_loaded.to_normalized_string();
+
+        assert!(ext_exported.contains("84h/0h/0h"), "exported external should use h-notation");
+        assert!(int_exported.contains("84h/0h/0h"), "exported internal should use h-notation");
+        assert_valid_checksum(&ext_exported, "round-trip external");
+        assert_valid_checksum(&int_exported, "round-trip internal");
+    }
+
+    #[test]
+    fn test_multipath_split_independent_checksums() {
+        // verify split descriptors get independent correct checksums, not the multipath's checksum
+        let multipath = desc();
+        let multipath_checksum = extract_checksum(multipath);
+
+        let pubport_descs = pubport::descriptor::Descriptors::try_from_line(multipath).unwrap();
+        let bdk_descs: Descriptors = pubport_descs.into();
+
+        let ext_str = bdk_descs.external.extended_descriptor.to_string();
+        let int_str = bdk_descs.internal.extended_descriptor.to_string();
+
+        // each split descriptor should have its own checksum, different from multipath
+        let ext_checksum = extract_checksum(&ext_str);
+        let int_checksum = extract_checksum(&int_str);
+
+        assert_ne!(
+            ext_checksum, multipath_checksum,
+            "external checksum should differ from multipath checksum"
+        );
+        assert_ne!(
+            int_checksum, multipath_checksum,
+            "internal checksum should differ from multipath checksum"
+        );
+        assert_ne!(ext_checksum, int_checksum, "external and internal checksums should differ");
+
+        assert_valid_checksum(&ext_str, "split external");
+        assert_valid_checksum(&int_str, "split internal");
+    }
+
+    #[test]
+    fn test_bdk_wallet_public_descriptor_checksums() {
+        // test the fallback export path: create BDK wallet → public_descriptor()
+        let pubport_descs = pubport::descriptor::Descriptors::try_from_line(desc()).unwrap();
+        let bdk_descs: Descriptors = pubport_descs.into();
+
+        let wallet = bdk_descs.into_create_params().create_wallet_no_persist().unwrap();
+
+        let ext = wallet.public_descriptor(KeychainKind::External);
+        let int = wallet.public_descriptor(KeychainKind::Internal);
+
+        let ext_str = ext.to_string();
+        let int_str = int.to_string();
+
+        assert_valid_checksum(&ext_str, "BDK wallet external");
+        assert_valid_checksum(&int_str, "BDK wallet internal");
+    }
+
+    #[test]
+    fn test_multipath_export_normalizes_notation() {
+        use cove_bdk::descriptor_ext::DescriptorExt;
+
+        let xpub = "xpub6DRKtpLKk2qctgengkaD7B6w32X5w6RAUntvLeS1uA9dz93Y1RRopvPBdRdA3KLdnxYyjWiFePzpZpVEJ6LcuiugmrijzzHeatrGcDvz4Yq";
+        let fp = "831a3f84";
+
+        // input with h notation
+        let h_multipath = format!("wpkh([{fp}/84h/0h/0h]{xpub}/<0;1>/*)");
+        let h_descs: Descriptors =
+            pubport::descriptor::Descriptors::try_from_line(&h_multipath).unwrap().into();
+
+        // input with ' notation (same key, different notation)
+        let apos_multipath = format!("wpkh([{fp}/84'/0'/0']{xpub}/<0;1>/*)");
+        let apos_descs: Descriptors =
+            pubport::descriptor::Descriptors::try_from_line(&apos_multipath).unwrap().into();
+
+        // both should produce the same multipath export
+        let h_export = DescriptorExt::to_multipath_string(
+            &h_descs.external.extended_descriptor,
+            &h_descs.internal.extended_descriptor,
+        )
+        .unwrap();
+        let apos_export = DescriptorExt::to_multipath_string(
+            &apos_descs.external.extended_descriptor,
+            &apos_descs.internal.extended_descriptor,
+        )
+        .unwrap();
+
+        assert_eq!(h_export, apos_export, "both notations should produce identical export");
+        assert!(h_export.contains("84h/0h/0h"), "should use h-notation");
+        assert!(h_export.contains("/<0;1>/*"), "should use multipath notation");
+        assert_valid_checksum(&h_export, "multipath export");
+    }
+
+    #[test]
+    fn test_tap_signer_descriptor_checksums() {
+        let parsed_descriptors = Descriptors::new_from_tap_signer(&derive_info()).unwrap();
+
+        let ext_str = parsed_descriptors.external.extended_descriptor.to_string();
+        let int_str = parsed_descriptors.internal.extended_descriptor.to_string();
+
+        assert_valid_checksum(&ext_str, "tap signer external");
+        assert_valid_checksum(&int_str, "tap signer internal");
     }
 }
