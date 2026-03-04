@@ -373,6 +373,11 @@ alias iac := install-android-clean
 run-ios:
     just xtask run-ios && just notf "done run ios"
 
+# Show logcat for cove process
+[group('util')]
+logcat:
+    adb logcat --pid=$(adb shell pidof org.bitcoinppl.cove)
+
 # ------------------------------------------------------------------------------
 # helpers
 # ------------------------------------------------------------------------------
