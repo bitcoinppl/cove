@@ -42,15 +42,18 @@ minicbor-serde = { version = "0.6", features = ["std"] }
 
 # encryption / hashing
 chacha20poly1305 = "0.10.1"
+hmac = "0.12.1"
+hkdf = "0.12.4"
 sha2 = "0.10.8"
-rand = "0.9"
+zeroize = "1.8.1"
+rand = "0.10"
 
 # bdk / bitcoin
 bitcoin = { version = "0.32" }
-bdk_wallet = { version = "2.0", features = ["keys-bip39", "file_store", "rusqlite"] }
-bip39 = { version = "2.0.0", features = ["zeroize"] }
-bip329 = { version = "0.4.0" }
-pubport = { version = "0.5.0" }
+bdk_wallet = { version = "2.3", features = ["keys-bip39", "file_store", "rusqlite"] }
+bip39 = { version = "2.2", features = ["zeroize"] }
+bip329 = { version = "0.4" }
+pubport = { version = "0.5" }
 
 # bitcoin nodes
 bdk_esplora = { version = "0.22", features = ["async-https-rustls", "tokio"], default-features = false }
@@ -69,7 +72,7 @@ numfmt = { git = "https://github.com/bitcoinppl/numfmt" }
 num-bigint = "0.4"
 
 # http client
-reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+reqwest = { version = "0.13", features = ["json", "rustls-no-provider"], default-features = false }
 
 # time
 jiff = { version = "0.2", features = [] }
@@ -83,7 +86,8 @@ thiserror = "2.0"
 eyre = "0.6"
 
 # database
-redb = "2.4"
+redb = "2.6"
+rusqlite = { version = "0.31", features = ["bundled-sqlcipher-vendored-openssl"] }
 
 # ids
 nid = "3.0"
@@ -93,7 +97,7 @@ dirs = "6.0"
 
 # derive stuff
 derive_more = { version = "2.0" }
-strum = { version = "0.27", features = ["derive"] }
+strum = { version = "0.28", features = ["derive"] }
 
 # extensions
 tap = "1.0"
@@ -114,6 +118,7 @@ cove-tap-card = { path = "./crates/cove-tap-card" }
 cove-types = { path = "./crates/cove-types" }
 cove-common = { path = "./crates/cove-common" }
 cove-bip39 = { path = "./crates/cove-bip39" }
+cove-cspp = { path = "./crates/cove-cspp" }
 cove-device = { path = "./crates/cove-device" }
 cove-bdk = { path = "./crates/cove-bdk" }
 cove-tokio = { path = "./crates/cove-tokio" }
@@ -148,14 +153,14 @@ backon = "1.3"
 
 # crypto
 rand = { workspace = true }
-zeroize = "1.8.1"
+zeroize = { workspace = true }
 
 # hashing
 sha2 = { workspace = true }
 argon2 = { version = "0.5.0", features = ["password-hash"] }
 
 # concurrency
-flume = { version = "0.11", features = ["async"] }
+flume = { version = "0.12", features = ["async"] }
 parking_lot = { workspace = true, features = ["deadlock_detection"] }
 once_cell = { workspace = true }
 
@@ -174,6 +179,7 @@ dirs = { workspace = true }
 
 # database
 redb = { workspace = true }
+rusqlite = { workspace = true }
 
 # ids
 nid = "3.0"
@@ -222,12 +228,13 @@ url = { workspace = true }
 
 # encryption
 chacha20poly1305 = { workspace = true }
+hmac = { workspace = true }
 
 # fast hashmap
 ahash = { workspace = true }
 
 # http client
-reqwest = { workspace = true, features = ["json", "rustls-tls"], default-features = false }
+reqwest = { workspace = true, features = ["json", "rustls-no-provider"], default-features = false }
 
 # parsing
 winnow = { workspace = true }
@@ -256,6 +263,9 @@ csv = "1.3"
 
 # string fuzzy search
 strsim = "0.11"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+libc = "0.2"
 
 [build-dependencies]
 uniffi = { workspace = true, features = ["build"] }

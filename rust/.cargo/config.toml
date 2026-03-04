@@ -1,6 +1,9 @@
 [alias]
 xtask = "run --package xtask --"
 
+[env]
+IPHONEOS_DEPLOYMENT_TARGET = "18.0"
+
 # 16 KB page size alignment for Android (required by Play Store for SDK 35+)
 # backwards compatible with 4 KB devices
 [target.aarch64-linux-android]
