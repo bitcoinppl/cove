@@ -1007,7 +1007,6 @@ dependencies = [
  "cove-bdk",
  "cove-bip39",
  "cove-common",
- "cove-cspp",
  "cove-device",
  "cove-macros",
  "cove-nfc",
