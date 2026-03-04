@@ -72,7 +72,7 @@ numfmt = { git = "https://github.com/bitcoinppl/numfmt" }
 num-bigint = "0.4"
 
 # http client
-reqwest = { version = "0.13", features = ["json", "rustls"], default-features = false }
+reqwest = { version = "0.13", features = ["json", "rustls-no-provider"], default-features = false }
 
 # time
 jiff = { version = "0.2", features = [] }
@@ -234,7 +234,7 @@ hmac = { workspace = true }
 ahash = { workspace = true }
 
 # http client
-reqwest = { workspace = true, features = ["json", "rustls"], default-features = false }
+reqwest = { workspace = true, features = ["json", "rustls-no-provider"], default-features = false }
 
 # parsing
 winnow = { workspace = true }
