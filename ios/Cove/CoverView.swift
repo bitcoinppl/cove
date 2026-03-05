@@ -50,6 +50,8 @@ private struct StorageErrorView: View {
 
 private struct SplashLoadingView: View {
     @State private var showSpinner = false
+    @State private var statusMessage: String? = nil
+    @State private var encryptionProgress: Double? = nil
 
     var body: some View {
         VStack(spacing: 24) {
@@ -63,10 +65,40 @@ private struct SplashLoadingView: View {
                 ProgressView()
                     .tint(.white)
             }
+
+            if let statusMessage {
+                Text(statusMessage)
+                    .font(.subheadline)
+                    .foregroundColor(.white.opacity(0.7))
+            }
+
+            if let encryptionProgress {
+                ProgressView(value: encryptionProgress)
+                    .progressViewStyle(.linear)
+                    .tint(.white)
+                    .frame(width: 200)
+            }
         }
         .task {
             try? await Task.sleep(for: .milliseconds(CoverView.spinnerDelayMs))
             showSpinner = true
+        }
+        .task {
+            while !Task.isCancelled {
+                do { try await Task.sleep(for: .milliseconds(66)) }
+                catch { break }
+
+                if let progress = activeMigration()?.progress(),
+                   progress.total > 0
+                {
+                    statusMessage = "Encrypting data..."
+                    encryptionProgress =
+                        Double(progress.current) / Double(progress.total)
+                } else if encryptionProgress != nil {
+                    statusMessage = nil
+                    encryptionProgress = nil
+                }
+            }
         }
     }
 }

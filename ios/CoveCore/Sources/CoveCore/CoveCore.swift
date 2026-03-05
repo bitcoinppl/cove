@@ -254,3 +254,9 @@ public extension CoinControlListSortKey {
         coinControlListSortKeyToString(key: self)
     }
 }
+
+public extension BootstrapStep {
+    var isMigrationInProgress: Bool {
+        bootstrapStepIsMigrationInProgress(step: self)
+    }
+}
