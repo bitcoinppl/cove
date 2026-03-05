@@ -978,9 +978,8 @@ fileprivate struct UniffiCallbackInterfaceAutoComplete {
     // Create the VTable using a series of closures.
     // Swift automatically converts these into C callback functions.
     //
-    // This creates 1-element array, since this seems to be the only way to construct a const
-    // pointer that we can pass to the Rust code.
-    static let vtable: [UniffiVTableCallbackInterfaceAutoComplete] = [UniffiVTableCallbackInterfaceAutoComplete(
+    // Store the vtable directly.
+    static let vtable: UniffiVTableCallbackInterfaceAutoComplete = UniffiVTableCallbackInterfaceAutoComplete(
         uniffiFree: { (uniffiHandle: UInt64) -> () in
             do {
                 try FfiConverterTypeAutoComplete.handleMap.remove(handle: uniffiHandle)
@@ -1043,11 +1042,19 @@ fileprivate struct UniffiCallbackInterfaceAutoComplete {
                 writeReturn: writeReturn
             )
         }
-    )]
+    )
+
+    // Rust stores this pointer for future callback invocations, so it must live
+    // for the process lifetime (not just for the init function call).
+    static let vtablePtr: UnsafePointer<UniffiVTableCallbackInterfaceAutoComplete> = {
+        let ptr = UnsafeMutablePointer<UniffiVTableCallbackInterfaceAutoComplete>.allocate(capacity: 1)
+        ptr.initialize(to: vtable)
+        return UnsafePointer(ptr)
+    }()
 }
 
 private func uniffiCallbackInitAutoComplete() {
-    uniffi_cove_fn_init_callback_vtable_autocomplete(UniffiCallbackInterfaceAutoComplete.vtable)
+    uniffi_cove_fn_init_callback_vtable_autocomplete(UniffiCallbackInterfaceAutoComplete.vtablePtr)
 }
 
 #if swift(>=5.8)
@@ -3723,9 +3730,13 @@ public protocol GlobalConfigTableProtocol: AnyObject, Sendable {
     
     func clearSelectedWallet() throws 
     
+    func cloudBackup()  -> CloudBackup
+    
     func colorScheme()  -> ColorSchemeSelection
     
     func delete(key: GlobalConfigKey) throws 
+    
+    func deleteCloudBackup() throws 
     
     func deleteHashedPinCode() throws 
     
@@ -3750,6 +3761,8 @@ public protocol GlobalConfigTableProtocol: AnyObject, Sendable {
     func set(key: GlobalConfigKey, value: String) throws 
     
     func setColorScheme(colorScheme: ColorSchemeSelection) throws 
+    
+    func setCloudBackup(value: CloudBackup) throws 
     
     func setHashedPinCode(hashedPinCode: String) throws 
     
@@ -3828,6 +3841,14 @@ open func clearSelectedWallet()throws   {try rustCallWithError(FfiConverterTypeD
 }
 }
     
+open func cloudBackup() -> CloudBackup  {
+    return try!  FfiConverterTypeCloudBackup_lift(try! rustCall() {
+    uniffi_cove_fn_method_globalconfigtable_cloud_backup(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
 open func colorScheme() -> ColorSchemeSelection  {
     return try!  FfiConverterTypeColorSchemeSelection_lift(try! rustCall() {
     uniffi_cove_fn_method_globalconfigtable_colorscheme(
@@ -3840,6 +3861,13 @@ open func delete(key: GlobalConfigKey)throws   {try rustCallWithError(FfiConvert
     uniffi_cove_fn_method_globalconfigtable_delete(
             self.uniffiCloneHandle(),
         FfiConverterTypeGlobalConfigKey_lower(key),$0
+    )
+}
+}
+    
+open func deleteCloudBackup()throws   {try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
+    uniffi_cove_fn_method_globalconfigtable_delete_cloud_backup(
+            self.uniffiCloneHandle(),$0
     )
 }
 }
@@ -3937,6 +3965,14 @@ open func setColorScheme(colorScheme: ColorSchemeSelection)throws   {try rustCal
     uniffi_cove_fn_method_globalconfigtable_setcolorscheme(
             self.uniffiCloneHandle(),
         FfiConverterTypeColorSchemeSelection_lower(colorScheme),$0
+    )
+}
+}
+    
+open func setCloudBackup(value: CloudBackup)throws   {try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
+    uniffi_cove_fn_method_globalconfigtable_set_cloud_backup(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeCloudBackup_lower(value),$0
     )
 }
 }
@@ -4998,6 +5034,137 @@ public func FfiConverterTypeLabelsTable_lift(_ handle: UInt64) throws -> LabelsT
 #endif
 public func FfiConverterTypeLabelsTable_lower(_ value: LabelsTable) -> UInt64 {
     return FfiConverterTypeLabelsTable.lower(value)
+}
+
+
+
+
+
+
+public protocol MigrationProtocol: AnyObject, Sendable {
+    
+    /**
+     * Cancel the migration, equivalent to calling `cancel_bootstrap()`
+     */
+    func cancel() 
+    
+    func progress()  -> MigrationProgress
+    
+}
+open class Migration: MigrationProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_cove_fn_clone_migration(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_migration(handle, $0) }
+    }
+
+    
+
+    
+    /**
+     * Cancel the migration, equivalent to calling `cancel_bootstrap()`
+     */
+open func cancel()  {try! rustCall() {
+    uniffi_cove_fn_method_migration_cancel(
+            self.uniffiCloneHandle(),$0
+    )
+}
+}
+    
+open func progress() -> MigrationProgress  {
+    return try!  FfiConverterTypeMigrationProgress_lift(try! rustCall() {
+    uniffi_cove_fn_method_migration_progress(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMigration: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = Migration
+
+    public static func lift(_ handle: UInt64) throws -> Migration {
+        return Migration(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: Migration) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Migration {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: Migration, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMigration_lift(_ handle: UInt64) throws -> Migration {
+    return try FfiConverterTypeMigration.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMigration_lower(_ value: Migration) -> UInt64 {
+    return FfiConverterTypeMigration.lower(value)
 }
 
 
@@ -12325,6 +12492,60 @@ public func FfiConverterTypeLabelExportResult_lower(_ value: LabelExportResult) 
 }
 
 
+public struct MigrationProgress: Equatable, Hashable {
+    public var current: UInt32
+    public var total: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(current: UInt32, total: UInt32) {
+        self.current = current
+        self.total = total
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension MigrationProgress: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMigrationProgress: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MigrationProgress {
+        return
+            try MigrationProgress(
+                current: FfiConverterUInt32.read(from: &buf), 
+                total: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: MigrationProgress, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.current, into: &buf)
+        FfiConverterUInt32.write(value.total, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMigrationProgress_lift(_ buf: RustBuffer) throws -> MigrationProgress {
+    return try FfiConverterTypeMigrationProgress.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMigrationProgress_lower(_ value: MigrationProgress) -> RustBuffer {
+    return FfiConverterTypeMigrationProgress.lower(value)
+}
+
+
 public struct Node: Equatable, Hashable {
     public var name: String
     public var network: Network
@@ -14239,6 +14460,10 @@ public enum AppInitError: Swift.Error, Equatable, Hashable, Foundation.Localized
     
     case WalletDatabaseMigration(message: String)
     
+    case Cancelled(message: String)
+    
+    case AlreadyCalled(message: String)
+    
 
     
 
@@ -14280,6 +14505,14 @@ public struct FfiConverterTypeAppInitError: FfiConverterRustBuffer {
             message: try FfiConverterString.read(from: &buf)
         )
         
+        case 4: return .Cancelled(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 5: return .AlreadyCalled(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -14297,6 +14530,10 @@ public struct FfiConverterTypeAppInitError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(2))
         case .WalletDatabaseMigration(_ /* message is ignored*/):
             writeInt(&buf, Int32(3))
+        case .Cancelled(_ /* message is ignored*/):
+            writeInt(&buf, Int32(4))
+        case .AlreadyCalled(_ /* message is ignored*/):
+            writeInt(&buf, Int32(5))
 
         
         }
@@ -15224,6 +15461,136 @@ public func FfiConverterTypeBitcoinTransactionError_lower(_ value: BitcoinTransa
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum BootstrapStep: Equatable, Hashable {
+    
+    case notStarted
+    case initializing
+    case tokioInitialized
+    case derivingEncryptionKey
+    case encryptionKeySet
+    case recoveringInterruptedMigrations
+    case migratingMainDatabase
+    case migratingWalletDatabases
+    case redbMigrationComplete
+    case migratingBdkDatabases
+    case complete
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension BootstrapStep: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBootstrapStep: FfiConverterRustBuffer {
+    typealias SwiftType = BootstrapStep
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BootstrapStep {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .notStarted
+        
+        case 2: return .initializing
+        
+        case 3: return .tokioInitialized
+        
+        case 4: return .derivingEncryptionKey
+        
+        case 5: return .encryptionKeySet
+        
+        case 6: return .recoveringInterruptedMigrations
+        
+        case 7: return .migratingMainDatabase
+        
+        case 8: return .migratingWalletDatabases
+        
+        case 9: return .redbMigrationComplete
+        
+        case 10: return .migratingBdkDatabases
+        
+        case 11: return .complete
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: BootstrapStep, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .notStarted:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .initializing:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .tokioInitialized:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .derivingEncryptionKey:
+            writeInt(&buf, Int32(4))
+        
+        
+        case .encryptionKeySet:
+            writeInt(&buf, Int32(5))
+        
+        
+        case .recoveringInterruptedMigrations:
+            writeInt(&buf, Int32(6))
+        
+        
+        case .migratingMainDatabase:
+            writeInt(&buf, Int32(7))
+        
+        
+        case .migratingWalletDatabases:
+            writeInt(&buf, Int32(8))
+        
+        
+        case .redbMigrationComplete:
+            writeInt(&buf, Int32(9))
+        
+        
+        case .migratingBdkDatabases:
+            writeInt(&buf, Int32(10))
+        
+        
+        case .complete:
+            writeInt(&buf, Int32(11))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBootstrapStep_lift(_ buf: RustBuffer) throws -> BootstrapStep {
+    return try FfiConverterTypeBootstrapStep.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBootstrapStep_lower(_ value: BootstrapStep) -> RustBuffer {
+    return FfiConverterTypeBootstrapStep.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum ButtonPresentation: Equatable, Hashable {
     
     case notSelected
@@ -15500,6 +15867,76 @@ public func FfiConverterTypeCkTapError_lift(_ buf: RustBuffer) throws -> CkTapEr
 public func FfiConverterTypeCkTapError_lower(_ value: CkTapError) -> RustBuffer {
     return FfiConverterTypeCkTapError.lower(value)
 }
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum CloudBackup: Equatable, Hashable {
+    
+    case disabled
+    case enabled(lastSync: UInt64?
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension CloudBackup: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCloudBackup: FfiConverterRustBuffer {
+    typealias SwiftType = CloudBackup
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackup {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .disabled
+        
+        case 2: return .enabled(lastSync: try FfiConverterOptionUInt64.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CloudBackup, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .disabled:
+            writeInt(&buf, Int32(1))
+        
+        
+        case let .enabled(lastSync):
+            writeInt(&buf, Int32(2))
+            FfiConverterOptionUInt64.write(lastSync, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackup_lift(_ buf: RustBuffer) throws -> CloudBackup {
+    return try FfiConverterTypeCloudBackup.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackup_lower(_ value: CloudBackup) -> RustBuffer {
+    return FfiConverterTypeCloudBackup.lower(value)
+}
+
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
@@ -16214,6 +16651,8 @@ public enum DatabaseError: Swift.Error, Equatable, Hashable, Foundation.Localize
     case DatabaseAlreadyOpen
     case HeaderIntegrity(path: String, error: String
     )
+    case PlaintextNotAllowed(path: String
+    )
 
     
 
@@ -16297,6 +16736,9 @@ public struct FfiConverterTypeDatabaseError: FfiConverterRustBuffer {
         case 16: return .HeaderIntegrity(
             path: try FfiConverterString.read(from: &buf), 
             error: try FfiConverterString.read(from: &buf)
+            )
+        case 17: return .PlaintextNotAllowed(
+            path: try FfiConverterString.read(from: &buf)
             )
 
          default: throw UniffiInternalError.unexpectedEnumCase
@@ -16388,6 +16830,11 @@ public struct FfiConverterTypeDatabaseError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(16))
             FfiConverterString.write(path, into: &buf)
             FfiConverterString.write(error, into: &buf)
+            
+        
+        case let .PlaintextNotAllowed(path):
+            writeInt(&buf, Int32(17))
+            FfiConverterString.write(path, into: &buf)
             
         }
     }
@@ -17289,6 +17736,7 @@ public enum GlobalConfigKey: Equatable, Hashable {
     case mainSelectedWalletId
     case decoySelectedWalletId
     case lockedAt
+    case cloudBackup
 
 
 
@@ -17336,6 +17784,8 @@ public struct FfiConverterTypeGlobalConfigKey: FfiConverterRustBuffer {
         case 12: return .decoySelectedWalletId
         
         case 13: return .lockedAt
+        
+        case 14: return .cloudBackup
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -17396,6 +17846,10 @@ public struct FfiConverterTypeGlobalConfigKey: FfiConverterRustBuffer {
         
         case .lockedAt:
             writeInt(&buf, Int32(13))
+        
+        
+        case .cloudBackup:
+            writeInt(&buf, Int32(14))
         
         }
     }
@@ -26620,9 +27074,8 @@ fileprivate struct UniffiCallbackInterfaceAuthManagerReconciler {
     // Create the VTable using a series of closures.
     // Swift automatically converts these into C callback functions.
     //
-    // This creates 1-element array, since this seems to be the only way to construct a const
-    // pointer that we can pass to the Rust code.
-    static let vtable: [UniffiVTableCallbackInterfaceAuthManagerReconciler] = [UniffiVTableCallbackInterfaceAuthManagerReconciler(
+    // Store the vtable directly.
+    static let vtable: UniffiVTableCallbackInterfaceAuthManagerReconciler = UniffiVTableCallbackInterfaceAuthManagerReconciler(
         uniffiFree: { (uniffiHandle: UInt64) -> () in
             do {
                 try FfiConverterCallbackInterfaceAuthManagerReconciler.handleMap.remove(handle: uniffiHandle)
@@ -26661,11 +27114,19 @@ fileprivate struct UniffiCallbackInterfaceAuthManagerReconciler {
                 writeReturn: writeReturn
             )
         }
-    )]
+    )
+
+    // Rust stores this pointer for future callback invocations, so it must live
+    // for the process lifetime (not just for the init function call).
+    static let vtablePtr: UnsafePointer<UniffiVTableCallbackInterfaceAuthManagerReconciler> = {
+        let ptr = UnsafeMutablePointer<UniffiVTableCallbackInterfaceAuthManagerReconciler>.allocate(capacity: 1)
+        ptr.initialize(to: vtable)
+        return UnsafePointer(ptr)
+    }()
 }
 
 private func uniffiCallbackInitAuthManagerReconciler() {
-    uniffi_cove_fn_init_callback_vtable_authmanagerreconciler(UniffiCallbackInterfaceAuthManagerReconciler.vtable)
+    uniffi_cove_fn_init_callback_vtable_authmanagerreconciler(UniffiCallbackInterfaceAuthManagerReconciler.vtablePtr)
 }
 
 // FfiConverter protocol for callback interfaces
@@ -26749,9 +27210,8 @@ fileprivate struct UniffiCallbackInterfaceCoinControlManagerReconciler {
     // Create the VTable using a series of closures.
     // Swift automatically converts these into C callback functions.
     //
-    // This creates 1-element array, since this seems to be the only way to construct a const
-    // pointer that we can pass to the Rust code.
-    static let vtable: [UniffiVTableCallbackInterfaceCoinControlManagerReconciler] = [UniffiVTableCallbackInterfaceCoinControlManagerReconciler(
+    // Store the vtable directly.
+    static let vtable: UniffiVTableCallbackInterfaceCoinControlManagerReconciler = UniffiVTableCallbackInterfaceCoinControlManagerReconciler(
         uniffiFree: { (uniffiHandle: UInt64) -> () in
             do {
                 try FfiConverterCallbackInterfaceCoinControlManagerReconciler.handleMap.remove(handle: uniffiHandle)
@@ -26814,11 +27274,19 @@ fileprivate struct UniffiCallbackInterfaceCoinControlManagerReconciler {
                 writeReturn: writeReturn
             )
         }
-    )]
+    )
+
+    // Rust stores this pointer for future callback invocations, so it must live
+    // for the process lifetime (not just for the init function call).
+    static let vtablePtr: UnsafePointer<UniffiVTableCallbackInterfaceCoinControlManagerReconciler> = {
+        let ptr = UnsafeMutablePointer<UniffiVTableCallbackInterfaceCoinControlManagerReconciler>.allocate(capacity: 1)
+        ptr.initialize(to: vtable)
+        return UnsafePointer(ptr)
+    }()
 }
 
 private func uniffiCallbackInitCoinControlManagerReconciler() {
-    uniffi_cove_fn_init_callback_vtable_coincontrolmanagerreconciler(UniffiCallbackInterfaceCoinControlManagerReconciler.vtable)
+    uniffi_cove_fn_init_callback_vtable_coincontrolmanagerreconciler(UniffiCallbackInterfaceCoinControlManagerReconciler.vtablePtr)
 }
 
 // FfiConverter protocol for callback interfaces
@@ -26900,9 +27368,8 @@ fileprivate struct UniffiCallbackInterfaceFfiReconcile {
     // Create the VTable using a series of closures.
     // Swift automatically converts these into C callback functions.
     //
-    // This creates 1-element array, since this seems to be the only way to construct a const
-    // pointer that we can pass to the Rust code.
-    static let vtable: [UniffiVTableCallbackInterfaceFfiReconcile] = [UniffiVTableCallbackInterfaceFfiReconcile(
+    // Store the vtable directly.
+    static let vtable: UniffiVTableCallbackInterfaceFfiReconcile = UniffiVTableCallbackInterfaceFfiReconcile(
         uniffiFree: { (uniffiHandle: UInt64) -> () in
             do {
                 try FfiConverterCallbackInterfaceFfiReconcile.handleMap.remove(handle: uniffiHandle)
@@ -26941,11 +27408,19 @@ fileprivate struct UniffiCallbackInterfaceFfiReconcile {
                 writeReturn: writeReturn
             )
         }
-    )]
+    )
+
+    // Rust stores this pointer for future callback invocations, so it must live
+    // for the process lifetime (not just for the init function call).
+    static let vtablePtr: UnsafePointer<UniffiVTableCallbackInterfaceFfiReconcile> = {
+        let ptr = UnsafeMutablePointer<UniffiVTableCallbackInterfaceFfiReconcile>.allocate(capacity: 1)
+        ptr.initialize(to: vtable)
+        return UnsafePointer(ptr)
+    }()
 }
 
 private func uniffiCallbackInitFfiReconcile() {
-    uniffi_cove_fn_init_callback_vtable_ffireconcile(UniffiCallbackInterfaceFfiReconcile.vtable)
+    uniffi_cove_fn_init_callback_vtable_ffireconcile(UniffiCallbackInterfaceFfiReconcile.vtablePtr)
 }
 
 // FfiConverter protocol for callback interfaces
@@ -27027,9 +27502,8 @@ fileprivate struct UniffiCallbackInterfaceImportWalletManagerReconciler {
     // Create the VTable using a series of closures.
     // Swift automatically converts these into C callback functions.
     //
-    // This creates 1-element array, since this seems to be the only way to construct a const
-    // pointer that we can pass to the Rust code.
-    static let vtable: [UniffiVTableCallbackInterfaceImportWalletManagerReconciler] = [UniffiVTableCallbackInterfaceImportWalletManagerReconciler(
+    // Store the vtable directly.
+    static let vtable: UniffiVTableCallbackInterfaceImportWalletManagerReconciler = UniffiVTableCallbackInterfaceImportWalletManagerReconciler(
         uniffiFree: { (uniffiHandle: UInt64) -> () in
             do {
                 try FfiConverterCallbackInterfaceImportWalletManagerReconciler.handleMap.remove(handle: uniffiHandle)
@@ -27068,11 +27542,19 @@ fileprivate struct UniffiCallbackInterfaceImportWalletManagerReconciler {
                 writeReturn: writeReturn
             )
         }
-    )]
+    )
+
+    // Rust stores this pointer for future callback invocations, so it must live
+    // for the process lifetime (not just for the init function call).
+    static let vtablePtr: UnsafePointer<UniffiVTableCallbackInterfaceImportWalletManagerReconciler> = {
+        let ptr = UnsafeMutablePointer<UniffiVTableCallbackInterfaceImportWalletManagerReconciler>.allocate(capacity: 1)
+        ptr.initialize(to: vtable)
+        return UnsafePointer(ptr)
+    }()
 }
 
 private func uniffiCallbackInitImportWalletManagerReconciler() {
-    uniffi_cove_fn_init_callback_vtable_importwalletmanagerreconciler(UniffiCallbackInterfaceImportWalletManagerReconciler.vtable)
+    uniffi_cove_fn_init_callback_vtable_importwalletmanagerreconciler(UniffiCallbackInterfaceImportWalletManagerReconciler.vtablePtr)
 }
 
 // FfiConverter protocol for callback interfaces
@@ -27154,9 +27636,8 @@ fileprivate struct UniffiCallbackInterfacePendingWalletManagerReconciler {
     // Create the VTable using a series of closures.
     // Swift automatically converts these into C callback functions.
     //
-    // This creates 1-element array, since this seems to be the only way to construct a const
-    // pointer that we can pass to the Rust code.
-    static let vtable: [UniffiVTableCallbackInterfacePendingWalletManagerReconciler] = [UniffiVTableCallbackInterfacePendingWalletManagerReconciler(
+    // Store the vtable directly.
+    static let vtable: UniffiVTableCallbackInterfacePendingWalletManagerReconciler = UniffiVTableCallbackInterfacePendingWalletManagerReconciler(
         uniffiFree: { (uniffiHandle: UInt64) -> () in
             do {
                 try FfiConverterCallbackInterfacePendingWalletManagerReconciler.handleMap.remove(handle: uniffiHandle)
@@ -27195,11 +27676,19 @@ fileprivate struct UniffiCallbackInterfacePendingWalletManagerReconciler {
                 writeReturn: writeReturn
             )
         }
-    )]
+    )
+
+    // Rust stores this pointer for future callback invocations, so it must live
+    // for the process lifetime (not just for the init function call).
+    static let vtablePtr: UnsafePointer<UniffiVTableCallbackInterfacePendingWalletManagerReconciler> = {
+        let ptr = UnsafeMutablePointer<UniffiVTableCallbackInterfacePendingWalletManagerReconciler>.allocate(capacity: 1)
+        ptr.initialize(to: vtable)
+        return UnsafePointer(ptr)
+    }()
 }
 
 private func uniffiCallbackInitPendingWalletManagerReconciler() {
-    uniffi_cove_fn_init_callback_vtable_pendingwalletmanagerreconciler(UniffiCallbackInterfacePendingWalletManagerReconciler.vtable)
+    uniffi_cove_fn_init_callback_vtable_pendingwalletmanagerreconciler(UniffiCallbackInterfacePendingWalletManagerReconciler.vtablePtr)
 }
 
 // FfiConverter protocol for callback interfaces
@@ -27283,9 +27772,8 @@ fileprivate struct UniffiCallbackInterfaceSendFlowManagerReconciler {
     // Create the VTable using a series of closures.
     // Swift automatically converts these into C callback functions.
     //
-    // This creates 1-element array, since this seems to be the only way to construct a const
-    // pointer that we can pass to the Rust code.
-    static let vtable: [UniffiVTableCallbackInterfaceSendFlowManagerReconciler] = [UniffiVTableCallbackInterfaceSendFlowManagerReconciler(
+    // Store the vtable directly.
+    static let vtable: UniffiVTableCallbackInterfaceSendFlowManagerReconciler = UniffiVTableCallbackInterfaceSendFlowManagerReconciler(
         uniffiFree: { (uniffiHandle: UInt64) -> () in
             do {
                 try FfiConverterCallbackInterfaceSendFlowManagerReconciler.handleMap.remove(handle: uniffiHandle)
@@ -27348,11 +27836,19 @@ fileprivate struct UniffiCallbackInterfaceSendFlowManagerReconciler {
                 writeReturn: writeReturn
             )
         }
-    )]
+    )
+
+    // Rust stores this pointer for future callback invocations, so it must live
+    // for the process lifetime (not just for the init function call).
+    static let vtablePtr: UnsafePointer<UniffiVTableCallbackInterfaceSendFlowManagerReconciler> = {
+        let ptr = UnsafeMutablePointer<UniffiVTableCallbackInterfaceSendFlowManagerReconciler>.allocate(capacity: 1)
+        ptr.initialize(to: vtable)
+        return UnsafePointer(ptr)
+    }()
 }
 
 private func uniffiCallbackInitSendFlowManagerReconciler() {
-    uniffi_cove_fn_init_callback_vtable_sendflowmanagerreconciler(UniffiCallbackInterfaceSendFlowManagerReconciler.vtable)
+    uniffi_cove_fn_init_callback_vtable_sendflowmanagerreconciler(UniffiCallbackInterfaceSendFlowManagerReconciler.vtablePtr)
 }
 
 // FfiConverter protocol for callback interfaces
@@ -27435,9 +27931,8 @@ fileprivate struct UniffiCallbackInterfaceTapcardTransportProtocol {
     // Create the VTable using a series of closures.
     // Swift automatically converts these into C callback functions.
     //
-    // This creates 1-element array, since this seems to be the only way to construct a const
-    // pointer that we can pass to the Rust code.
-    static let vtable: [UniffiVTableCallbackInterfaceTapcardTransportProtocol] = [UniffiVTableCallbackInterfaceTapcardTransportProtocol(
+    // Store the vtable directly.
+    static let vtable: UniffiVTableCallbackInterfaceTapcardTransportProtocol = UniffiVTableCallbackInterfaceTapcardTransportProtocol(
         uniffiFree: { (uniffiHandle: UInt64) -> () in
             do {
                 try FfiConverterCallbackInterfaceTapcardTransportProtocol.handleMap.remove(handle: uniffiHandle)
@@ -27543,11 +28038,19 @@ fileprivate struct UniffiCallbackInterfaceTapcardTransportProtocol {
                 droppedCallback: uniffiOutDroppedCallback
             )
         }
-    )]
+    )
+
+    // Rust stores this pointer for future callback invocations, so it must live
+    // for the process lifetime (not just for the init function call).
+    static let vtablePtr: UnsafePointer<UniffiVTableCallbackInterfaceTapcardTransportProtocol> = {
+        let ptr = UnsafeMutablePointer<UniffiVTableCallbackInterfaceTapcardTransportProtocol>.allocate(capacity: 1)
+        ptr.initialize(to: vtable)
+        return UnsafePointer(ptr)
+    }()
 }
 
 private func uniffiCallbackInitTapcardTransportProtocol() {
-    uniffi_cove_fn_init_callback_vtable_tapcardtransportprotocol(UniffiCallbackInterfaceTapcardTransportProtocol.vtable)
+    uniffi_cove_fn_init_callback_vtable_tapcardtransportprotocol(UniffiCallbackInterfaceTapcardTransportProtocol.vtablePtr)
 }
 
 // FfiConverter protocol for callback interfaces
@@ -27628,9 +28131,8 @@ fileprivate struct UniffiCallbackInterfaceWalletManagerReconciler {
     // Create the VTable using a series of closures.
     // Swift automatically converts these into C callback functions.
     //
-    // This creates 1-element array, since this seems to be the only way to construct a const
-    // pointer that we can pass to the Rust code.
-    static let vtable: [UniffiVTableCallbackInterfaceWalletManagerReconciler] = [UniffiVTableCallbackInterfaceWalletManagerReconciler(
+    // Store the vtable directly.
+    static let vtable: UniffiVTableCallbackInterfaceWalletManagerReconciler = UniffiVTableCallbackInterfaceWalletManagerReconciler(
         uniffiFree: { (uniffiHandle: UInt64) -> () in
             do {
                 try FfiConverterCallbackInterfaceWalletManagerReconciler.handleMap.remove(handle: uniffiHandle)
@@ -27693,11 +28195,19 @@ fileprivate struct UniffiCallbackInterfaceWalletManagerReconciler {
                 writeReturn: writeReturn
             )
         }
-    )]
+    )
+
+    // Rust stores this pointer for future callback invocations, so it must live
+    // for the process lifetime (not just for the init function call).
+    static let vtablePtr: UnsafePointer<UniffiVTableCallbackInterfaceWalletManagerReconciler> = {
+        let ptr = UnsafeMutablePointer<UniffiVTableCallbackInterfaceWalletManagerReconciler>.allocate(capacity: 1)
+        ptr.initialize(to: vtable)
+        return UnsafePointer(ptr)
+    }()
 }
 
 private func uniffiCallbackInitWalletManagerReconciler() {
-    uniffi_cove_fn_init_callback_vtable_walletmanagerreconciler(UniffiCallbackInterfaceWalletManagerReconciler.vtable)
+    uniffi_cove_fn_init_callback_vtable_walletmanagerreconciler(UniffiCallbackInterfaceWalletManagerReconciler.vtablePtr)
 }
 
 // FfiConverter protocol for callback interfaces
@@ -27971,6 +28481,30 @@ fileprivate struct FfiConverterOptionTypeFingerprint: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeFingerprint.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeMigration: FfiConverterRustBuffer {
+    typealias SwiftType = Migration?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeMigration.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeMigration.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -29152,10 +29686,13 @@ public func setRootDataDir(path: String)throws   {try rustCallWithError(FfiConve
  * Async bootstrap: initializes the tokio runtime, runs critical storage bootstrap
  * (encryption key derivation + redb migrations) on a blocking thread, then
  * attempts BDK migration. BDK migration failures are non-blocking — the app
- * continues with unencrypted BDK databases and retries on next launch.
+ * continues with unencrypted BDK databases and retries on next launch
  *
  * Returns `Ok(None)` when everything succeeds, `Ok(Some(warning))` when BDK
  * migration failed but the app can continue, or `Err` for critical failures
+ *
+ * Re-entrant safe: returns `Ok(None)` if already complete, or
+ * `Err(AlreadyCalled)` if another call is still in progress
  */
 public func bootstrap()async throws  -> String?  {
     return
@@ -29170,6 +29707,47 @@ public func bootstrap()async throws  -> String?  {
             liftFunc: FfiConverterOptionString.lift,
             errorHandler: FfiConverterTypeAppInitError_lift
         )
+}
+/**
+ * Current bootstrap step, readable from Swift/Kotlin for diagnostics on timeout or failure
+ */
+public func bootstrapProgress() -> BootstrapStep  {
+    return try!  FfiConverterTypeBootstrapStep_lift(try! rustCall() {
+    uniffi_cove_fn_func_bootstrap_progress($0
+    )
+})
+}
+public func bootstrapStepIsMigrationInProgress(step: BootstrapStep) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_func_bootstrap_step_is_migration_in_progress(
+        FfiConverterTypeBootstrapStep_lower(step),$0
+    )
+})
+}
+/**
+ * Signal the bootstrap to stop at the next cancellation check point,
+ * typically called from the frontend watchdog when a timeout fires
+ *
+ * Cancellation is cooperative: the blocking thread only checks between
+ * complete database operations. Individual migrations (two-phase swap)
+ * always run to completion, preserving atomicity. Do not add
+ * check_cancelled() or is_cancelled() calls inside migrate_single_bdk_database
+ * or migrate_wallet_database
+ */
+public func cancelBootstrap()  {try! rustCall() {
+    uniffi_cove_fn_func_cancel_bootstrap($0
+    )
+}
+}
+/**
+ * Returns the active migration object if one has been registered,
+ * used by the frontend to poll progress
+ */
+public func activeMigration() -> Migration?  {
+    return try!  FfiConverterOptionTypeMigration.lift(try! rustCall() {
+    uniffi_cove_fn_func_active_migration($0
+    )
+})
 }
 public func allFiatCurrencies() -> [FiatCurrency]  {
     return try!  FfiConverterSequenceTypeFiatCurrency.lift(try! rustCall() {
@@ -29583,7 +30161,19 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_func_set_root_data_dir() != 56109) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_func_bootstrap() != 11214) {
+    if (uniffi_cove_checksum_func_bootstrap() != 30405) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_bootstrap_progress() != 47242) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_bootstrap_step_is_migration_in_progress() != 43717) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_cancel_bootstrap() != 59164) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_active_migration() != 29388) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_all_fiat_currencies() != 53482) {
@@ -29859,6 +30449,12 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_bip39wordspecificautocomplete_next_field_number() != 62639) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_migration_cancel() != 11370) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_migration_progress() != 29592) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_converter_parse_fiat_str() != 21091) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -29889,10 +30485,16 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_globalconfigtable_clear_selected_wallet() != 50864) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_globalconfigtable_cloud_backup() != 65410) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_globalconfigtable_colorscheme() != 59965) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalconfigtable_delete() != 4239) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_globalconfigtable_delete_cloud_backup() != 7359) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalconfigtable_delete_hashed_pin_code() != 24897) {
@@ -29929,6 +30531,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalconfigtable_setcolorscheme() != 39030) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_globalconfigtable_set_cloud_backup() != 11846) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalconfigtable_set_hashed_pin_code() != 44857) {
