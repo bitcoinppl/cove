@@ -37,6 +37,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -65,7 +66,11 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.flows.TapSignerFlow.TapSignerContainer
 import org.bitcoinppl.cove.navigation.CoveNavDisplay
 import org.bitcoinppl.cove.nfc.NfcScanSheet
@@ -75,7 +80,13 @@ import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove.views.LockView
 import org.bitcoinppl.cove.views.TermsAndConditionsSheet
 import org.bitcoinppl.cove_core.bootstrap
+import org.bitcoinppl.cove_core.activeMigration
+import org.bitcoinppl.cove_core.bootstrapProgress
+import org.bitcoinppl.cove.utils.isMigrationInProgress
+import org.bitcoinppl.cove_core.cancelBootstrap
 import org.bitcoinppl.cove_core.AfterPinAction
+import org.bitcoinppl.cove_core.AppInitException
+import org.bitcoinppl.cove_core.BootstrapStep
 import org.bitcoinppl.cove_core.AlertDisplayType
 import org.bitcoinppl.cove_core.AppAction
 import org.bitcoinppl.cove_core.AppAlertState
@@ -168,7 +179,14 @@ class MainActivity : FragmentActivity() {
                     BootstrapErrorView(errorMessage = bootstrapError!!)
                 } else {
                     var showSpinner by remember { mutableStateOf(false) }
-                    SplashLoadingView(showSpinner = showSpinner)
+                    var splashStatus by remember { mutableStateOf<String?>(null) }
+                    var encryptionProgress by remember { mutableStateOf<Float?>(null) }
+
+                    SplashLoadingView(
+                        showSpinner = showSpinner,
+                        statusMessage = splashStatus,
+                        progress = encryptionProgress,
+                    )
 
                     LaunchedEffect(Unit) {
                         delay(SPINNER_DELAY_MS)
@@ -176,18 +194,68 @@ class MainActivity : FragmentActivity() {
                     }
 
                     LaunchedEffect(Unit) {
-                        try {
-                            val warning = bootstrap()
+                        fun completeBootstrap(warning: String? = null) {
+                            splashStatus = null
+                            encryptionProgress = null
                             (application as CoveApplication).onBootstrapComplete()
                             val appInstance = AppManager.getInstance()
-                            appInstance.rust.initData()
                             appInstance.asyncRuntimeReady = true
                             isBootstrapped = true
                             bootstrapped = true
                             bdkMigrationWarning = warning
-                        } catch (e: Exception) {
-                            bootstrapError = e.message ?: "Unknown error"
+
+                            // non-blocking — initData preloads caches and prices but is not
+                            // required for core functionality, failures are logged but not surfaced to the user
+                            this@MainActivity.lifecycleScope.launch {
+                                appInstance.rust.initData()
+                                Log.d(TAG, "[STARTUP] initData completed")
+                            }
                         }
+
+                        val warning: String?
+
+                        try {
+                            warning = runBootstrapWithWatchdog { status, progress ->
+                                splashStatus = status
+                                encryptionProgress = progress
+                            }
+                        } catch (e: BootstrapTimeoutException) {
+                            val step = bootstrapProgress()
+
+                            if (step == BootstrapStep.COMPLETE) {
+                                // BDK migration retries every launch, so any lost warning will surface next time
+                                Log.w(TAG, "[STARTUP] bootstrap completed despite timeout — migration warning (if any) was lost and will retry on next launch")
+                                completeBootstrap()
+                            } else {
+                                Log.e(TAG, "[STARTUP] bootstrap timed out, last step: $step")
+                                bootstrapError =
+                                    "App startup timed out. Please force-quit and try again.\n\nPlease contact feedback@covebitcoinwallet.com"
+                            }
+
+                            return@LaunchedEffect
+                        } catch (e: kotlinx.coroutines.CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            val step = bootstrapProgress()
+                            if (step == BootstrapStep.COMPLETE) {
+                                Log.w(TAG, "[STARTUP] bootstrap completed despite error — treating as success", e)
+                                completeBootstrap()
+                            } else if (e is AppInitException.AlreadyCalled) {
+                                Log.e(TAG, "[STARTUP] bootstrap already called at step: $step", e)
+                                bootstrapError =
+                                    "App initialization error. Please force-quit and restart."
+                            } else if (e is AppInitException.Cancelled) {
+                                Log.e(TAG, "[STARTUP] bootstrap cancelled at step: $step", e)
+                                bootstrapError =
+                                    "App startup timed out. Please force-quit and try again.\n\nPlease contact feedback@covebitcoinwallet.com"
+                            } else {
+                                Log.e(TAG, "[STARTUP] bootstrap failed at step: $step", e)
+                                bootstrapError = e.message ?: "Unknown error"
+                            }
+                            return@LaunchedEffect
+                        }
+
+                        completeBootstrap(warning)
                     }
                 }
                 return@setContent
@@ -301,6 +369,53 @@ class MainActivity : FragmentActivity() {
 
         privacyCoverView = container
     }
+
+    private suspend fun runBootstrapWithWatchdog(
+        onMigrationProgress: (status: String?, progress: Float?) -> Unit,
+    ): String? = coroutineScope {
+        val bootstrapDeferred = async { bootstrap() }
+        launch { watchBootstrap(bootstrapDeferred, onMigrationProgress) }
+        bootstrapDeferred.await()
+    }
+
+    private suspend fun watchBootstrap(
+        bootstrapDeferred: kotlinx.coroutines.Deferred<*>,
+        onMigrationProgress: (status: String?, progress: Float?) -> Unit,
+    ) {
+        val startTime = System.currentTimeMillis()
+        var migrationDetected = false
+        var progressCleared = true
+
+        while (bootstrapDeferred.isActive) {
+            delay(66)
+
+            val step = bootstrapProgress()
+            if (!migrationDetected && step.isMigrationInProgress) {
+                migrationDetected = true
+            }
+
+            val progress = activeMigration()?.progress()
+            if (progress != null && progress.total > 0u) {
+                migrationDetected = true
+                progressCleared = false
+                onMigrationProgress("Encrypting data...", progress.current.toFloat() / progress.total.toFloat())
+            } else if (!progressCleared) {
+                progressCleared = true
+                onMigrationProgress(null, null)
+            }
+
+            val elapsed = System.currentTimeMillis() - startTime
+            // longer timeout to accommodate low-end Android hardware
+            val timeoutMs = if (migrationDetected) 60_000L else 20_000L
+            if (elapsed >= timeoutMs && bootstrapDeferred.isActive) {
+                Log.w(TAG, "[STARTUP] watchdog firing after ${elapsed}ms (timeout=${timeoutMs}ms, migration=$migrationDetected)")
+                cancelBootstrap()
+                throw BootstrapTimeoutException()
+            }
+        }
+    }
+
+    private class BootstrapTimeoutException : Exception("bootstrap timed out")
 
     companion object {
         /** Delay before showing the loading spinner, in milliseconds.
@@ -849,7 +964,11 @@ private fun BootstrapErrorView(errorMessage: String) {
 }
 
 @Composable
-private fun SplashLoadingView(showSpinner: Boolean) {
+private fun SplashLoadingView(
+    showSpinner: Boolean,
+    statusMessage: String? = null,
+    progress: Float? = null,
+) {
     Box(
         modifier = Modifier.fillMaxSize().background(Color.Black),
         contentAlignment = Alignment.Center,
@@ -863,6 +982,25 @@ private fun SplashLoadingView(showSpinner: Boolean) {
             if (showSpinner) {
                 Spacer(modifier = Modifier.height(24.dp))
                 CircularProgressIndicator(color = Color.White)
+            }
+
+            if (statusMessage != null) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    statusMessage,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White.copy(alpha = 0.7f),
+                )
+            }
+
+            if (progress != null) {
+                Spacer(modifier = Modifier.height(12.dp))
+                LinearProgressIndicator(
+                    progress = { progress },
+                    modifier = Modifier.fillMaxWidth(0.6f),
+                    color = Color.White,
+                    trackColor = Color.White.copy(alpha = 0.2f),
+                )
             }
         }
     }
