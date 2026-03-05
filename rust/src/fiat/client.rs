@@ -295,6 +295,7 @@ mod tests {
 
     #[tokio::test]
     async fn run_all_tests() {
+        let _ = rustls::crypto::ring::default_provider().install_default();
         test_get_prices().await;
         test_get_price_for().await;
         test_get_value_in_usd().await;

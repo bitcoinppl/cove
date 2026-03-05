@@ -861,9 +861,8 @@ fileprivate struct UniffiCallbackInterfaceDeviceAccess {
     // Create the VTable using a series of closures.
     // Swift automatically converts these into C callback functions.
     //
-    // This creates 1-element array, since this seems to be the only way to construct a const
-    // pointer that we can pass to the Rust code.
-    static let vtable: [UniffiVTableCallbackInterfaceDeviceAccess] = [UniffiVTableCallbackInterfaceDeviceAccess(
+    // Store the vtable directly.
+    static let vtable: UniffiVTableCallbackInterfaceDeviceAccess = UniffiVTableCallbackInterfaceDeviceAccess(
         uniffiFree: { (uniffiHandle: UInt64) -> () in
             do {
                 try FfiConverterCallbackInterfaceDeviceAccess.handleMap.remove(handle: uniffiHandle)
@@ -900,11 +899,19 @@ fileprivate struct UniffiCallbackInterfaceDeviceAccess {
                 writeReturn: writeReturn
             )
         }
-    )]
+    )
+
+    // Rust stores this pointer for future callback invocations, so it must live
+    // for the process lifetime (not just for the init function call).
+    static let vtablePtr: UnsafePointer<UniffiVTableCallbackInterfaceDeviceAccess> = {
+        let ptr = UnsafeMutablePointer<UniffiVTableCallbackInterfaceDeviceAccess>.allocate(capacity: 1)
+        ptr.initialize(to: vtable)
+        return UnsafePointer(ptr)
+    }()
 }
 
 private func uniffiCallbackInitDeviceAccess() {
-    uniffi_cove_device_fn_init_callback_vtable_deviceaccess(UniffiCallbackInterfaceDeviceAccess.vtable)
+    uniffi_cove_device_fn_init_callback_vtable_deviceaccess(UniffiCallbackInterfaceDeviceAccess.vtablePtr)
 }
 
 // FfiConverter protocol for callback interfaces
@@ -994,9 +1001,8 @@ fileprivate struct UniffiCallbackInterfaceKeychainAccess {
     // Create the VTable using a series of closures.
     // Swift automatically converts these into C callback functions.
     //
-    // This creates 1-element array, since this seems to be the only way to construct a const
-    // pointer that we can pass to the Rust code.
-    static let vtable: [UniffiVTableCallbackInterfaceKeychainAccess] = [UniffiVTableCallbackInterfaceKeychainAccess(
+    // Store the vtable directly.
+    static let vtable: UniffiVTableCallbackInterfaceKeychainAccess = UniffiVTableCallbackInterfaceKeychainAccess(
         uniffiFree: { (uniffiHandle: UInt64) -> () in
             do {
                 try FfiConverterCallbackInterfaceKeychainAccess.handleMap.remove(handle: uniffiHandle)
@@ -1086,11 +1092,19 @@ fileprivate struct UniffiCallbackInterfaceKeychainAccess {
                 writeReturn: writeReturn
             )
         }
-    )]
+    )
+
+    // Rust stores this pointer for future callback invocations, so it must live
+    // for the process lifetime (not just for the init function call).
+    static let vtablePtr: UnsafePointer<UniffiVTableCallbackInterfaceKeychainAccess> = {
+        let ptr = UnsafeMutablePointer<UniffiVTableCallbackInterfaceKeychainAccess>.allocate(capacity: 1)
+        ptr.initialize(to: vtable)
+        return UnsafePointer(ptr)
+    }()
 }
 
 private func uniffiCallbackInitKeychainAccess() {
-    uniffi_cove_device_fn_init_callback_vtable_keychainaccess(UniffiCallbackInterfaceKeychainAccess.vtable)
+    uniffi_cove_device_fn_init_callback_vtable_keychainaccess(UniffiCallbackInterfaceKeychainAccess.vtablePtr)
 }
 
 // FfiConverter protocol for callback interfaces

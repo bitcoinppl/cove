@@ -59,14 +59,10 @@ struct CoveApp: App {
             }
             .task {
                 do {
-                    let warning = try await bootstrap()
-                    self.app = AppManager.shared
-                    await self.app?.rust.initData()
-                    self.app?.asyncRuntimeReady = true
-                    self.auth = AuthManager.shared
-                    self.bdkMigrationWarning = warning
+                    let warning = try await bootstrapWithTimeout()
+                    completeBootstrap(warning: warning)
                 } catch {
-                    bootstrapError = error.localizedDescription
+                    handleBootstrapError(error)
                 }
             }
             .alert(
@@ -83,5 +79,114 @@ struct CoveApp: App {
                 )
             }
         }
+    }
+}
+
+extension CoveApp {
+    private func bootstrapWithTimeout() async throws -> String? {
+        try await withThrowingTaskGroup(of: BootstrapResult.self) { group in
+            group.addTask { try await .completed(warning: bootstrap()) }
+            group.addTask { try await self.bootstrapWatchdog() }
+
+            guard let result = try await group.next() else {
+                throw BootstrapTimeoutError()
+            }
+            group.cancelAll()
+
+            switch result {
+            case let .completed(warning): return warning
+            case .timedOut: throw BootstrapTimeoutError()
+            }
+        }
+    }
+
+    /// Adaptive timeout watchdog — extends timeout when migration is detected
+    private func bootstrapWatchdog() async throws -> BootstrapResult {
+        let startTime = ContinuousClock.now
+        var migrationDetected = false
+
+        while !Task.isCancelled {
+            try await Task.sleep(for: .milliseconds(66))
+
+            if !migrationDetected {
+                let step = bootstrapProgress()
+                if step.isMigrationInProgress {
+                    migrationDetected = true
+                } else if let progress = activeMigration()?.progress(), progress.total > 0 {
+                    migrationDetected = true
+                }
+            }
+
+            let elapsed = ContinuousClock.now - startTime
+            // shorter timeout since iOS hardware is more uniform
+            let timeout: Duration = migrationDetected ? .seconds(20) : .seconds(10)
+            if elapsed >= timeout {
+                Log.warn("[STARTUP] watchdog firing after \(elapsed) (timeout=\(timeout), migration=\(migrationDetected))")
+                cancelBootstrap()
+                return .timedOut
+            }
+        }
+        return .timedOut
+    }
+
+    private func handleBootstrapError(_ error: Error) {
+        if error is BootstrapTimeoutError {
+            let step = bootstrapProgress()
+            if step == .complete {
+                Log.warn("[STARTUP] bootstrap completed despite timeout — migration warning (if any) was lost and will retry on next launch")
+                completeBootstrap()
+            } else {
+                Log.error("[STARTUP] bootstrap timed out, last step: \(step)")
+                bootstrapError =
+                    "App startup timed out. Please force-quit and try again.\n\nPlease contact feedback@covebitcoinwallet.com"
+            }
+        } else if error is CancellationError {
+            Log.info("[STARTUP] bootstrap task cancelled (app lifecycle)")
+        } else {
+            let step = bootstrapProgress()
+            if step == .complete {
+                Log.warn("[STARTUP] bootstrap completed despite error — treating as success")
+                completeBootstrap()
+            } else if case AppInitError.AlreadyCalled = error {
+                Log.error("[STARTUP] bootstrap already called at step: \(step)")
+                bootstrapError =
+                    "App initialization error. Please force-quit and restart."
+            } else if case AppInitError.Cancelled = error {
+                Log.error("[STARTUP] bootstrap cancelled at step: \(step)")
+                bootstrapError =
+                    "App startup timed out. Please force-quit and try again.\n\nPlease contact feedback@covebitcoinwallet.com"
+            } else {
+                Log.error("[STARTUP] bootstrap failed at step: \(step), error: \(error)")
+                bootstrapError = error.localizedDescription
+            }
+        }
+    }
+
+    private func completeBootstrap(warning: String? = nil) {
+        let appManager = AppManager.shared
+        appManager.asyncRuntimeReady = true
+        self.app = appManager
+        self.auth = AuthManager.shared
+        self.bdkMigrationWarning = warning
+        startInitData(appManager)
+    }
+
+    /// Non-blocking — initData preloads caches and prices but is not required for core functionality
+    private func startInitData(_ appManager: AppManager) {
+        Task {
+            await appManager.rust.initData()
+            Log.info("[STARTUP] initData completed")
+        }
+    }
+}
+
+private enum BootstrapResult {
+    case completed(warning: String?)
+    case timedOut
+}
+
+private struct BootstrapTimeoutError: LocalizedError {
+    var errorDescription: String? {
+        "bootstrap timed out"
     }
 }
