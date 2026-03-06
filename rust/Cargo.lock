@@ -1102,27 +1102,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "cove-cspp"
-version = "0.1.0"
-dependencies = [
- "arc-swap",
- "cove-util",
- "hex",
- "hkdf",
- "rand 0.10.0",
- "sha2",
- "thiserror 2.0.18",
- "zeroize",
-]
-
-[[package]]
 name = "cove-device"
 version = "0.1.0"
 dependencies = [
  "bdk_wallet",
  "bip39",
  "bitcoin",
- "cove-cspp",
  "cove-types",
  "cove-util",
  "hex",
@@ -1215,7 +1200,6 @@ version = "0.1.0"
 dependencies = [
  "bip39",
  "bitcoin",
- "cove-util",
  "eyre",
  "foundation-ur",
  "hex",
@@ -1951,15 +1935,6 @@ name = "hex_lit"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3011d1213f159867b13cfd6ac92d2cd5f1345762c63be3554e84092d85a50bbd"
-
-[[package]]
-name = "hkdf"
-version = "0.12.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7b5f8eb2ad728638ea2c7d47a21db23b7b58a72ed6a38256b8a1849f15fbbdf7"
-dependencies = [
- "hmac",
-]
 
 [[package]]
 name = "hmac"
