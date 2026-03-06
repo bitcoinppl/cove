@@ -275,6 +275,6 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
 
 extension WalletLoadState: @retroactive Equatable {
     public static func == (lhs: WalletLoadState, rhs: WalletLoadState) -> Bool {
-        walletStateIsEqual(lhs: lhs, rhs: rhs)
+        lhs.isEqual(other: rhs)
     }
 }

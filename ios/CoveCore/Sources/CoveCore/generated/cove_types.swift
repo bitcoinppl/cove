@@ -4478,6 +4478,39 @@ public struct Utxo: Equatable, Hashable {
     }
 
     
+public func date() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_types_fn_method_utxo_date(
+            FfiConverterTypeUtxo_lower(self),$0
+    )
+})
+}
+    
+public func hashToUint() -> UInt64  {
+    return try!  FfiConverterUInt64.lift(try! rustCall() {
+    uniffi_cove_types_fn_method_utxo_hash_to_uint(
+            FfiConverterTypeUtxo_lower(self),$0
+    )
+})
+}
+    
+public func isEqual(other: Utxo) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_types_fn_method_utxo_is_equal(
+            FfiConverterTypeUtxo_lower(self),
+        FfiConverterTypeUtxo_lower(other),$0
+    )
+})
+}
+    
+public func name() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_types_fn_method_utxo_name(
+            FfiConverterTypeUtxo_lower(self),$0
+    )
+})
+}
+    
 
     
 // The local Rust `Eq` implementation - only `eq` is used.
@@ -4750,6 +4783,14 @@ public enum ColorSchemeSelection: Equatable, Hashable {
     case system
 
 
+
+public func capitalizedString() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_types_fn_method_colorschemeselection_capitalized_string(
+            FfiConverterTypeColorSchemeSelection_lower(self),$0
+    )
+})
+}
 
 
 
@@ -5990,14 +6031,7 @@ public func addressStringSpacedOut(address: String) -> String  {
 }
 public func allColorSchemes() -> [ColorSchemeSelection]  {
     return try!  FfiConverterSequenceTypeColorSchemeSelection.lift(try! rustCall() {
-    uniffi_cove_types_fn_func_all_color_schemes($0
-    )
-})
-}
-public func colorSchemeSelectionCapitalizedString(colorScheme: ColorSchemeSelection) -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_cove_types_fn_func_color_scheme_selection_capitalized_string(
-        FfiConverterTypeColorSchemeSelection_lower(colorScheme),$0
+    uniffi_cove_types_fn_func_allcolorschemes($0
     )
 })
 }
@@ -6052,20 +6086,13 @@ public func feeSpeedToCircleColor(feeSpeed: FeeSpeed) -> FfiColor  {
 }
 public func allNetworks() -> [Network]  {
     return try!  FfiConverterSequenceTypeNetwork.lift(try! rustCall() {
-    uniffi_cove_types_fn_func_all_networks($0
+    uniffi_cove_types_fn_func_allnetworks($0
     )
 })
 }
-public func networkToString(network: Network) -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_cove_types_fn_func_network_to_string(
-        FfiConverterTypeNetwork_lower(network),$0
-    )
-})
-}
-public func allUnits() -> [BitcoinUnit]  {
+public func allBitcoinUnits() -> [BitcoinUnit]  {
     return try!  FfiConverterSequenceTypeBitcoinUnit.lift(try! rustCall() {
-    uniffi_cove_types_fn_func_all_units($0
+    uniffi_cove_types_fn_func_allbitcoinunits($0
     )
 })
 }
@@ -6074,35 +6101,6 @@ public func previewNewUtxoList(outputCount: UInt8, changeCount: UInt8) -> [Utxo]
     uniffi_cove_types_fn_func_previewnewutxolist(
         FfiConverterUInt8.lower(outputCount),
         FfiConverterUInt8.lower(changeCount),$0
-    )
-})
-}
-public func utxoDate(utxo: Utxo) -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_cove_types_fn_func_utxo_date(
-        FfiConverterTypeUtxo_lower(utxo),$0
-    )
-})
-}
-public func utxoHashToUint(utxo: Utxo) -> UInt64  {
-    return try!  FfiConverterUInt64.lift(try! rustCall() {
-    uniffi_cove_types_fn_func_utxo_hash_to_uint(
-        FfiConverterTypeUtxo_lower(utxo),$0
-    )
-})
-}
-public func utxoIsEqual(lhs: Utxo, rhs: Utxo) -> Bool  {
-    return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_cove_types_fn_func_utxo_is_equal(
-        FfiConverterTypeUtxo_lower(lhs),
-        FfiConverterTypeUtxo_lower(rhs),$0
-    )
-})
-}
-public func utxoName(utxo: Utxo) -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_cove_types_fn_func_utxo_name(
-        FfiConverterTypeUtxo_lower(utxo),$0
     )
 })
 }
@@ -6131,10 +6129,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_types_checksum_func_address_string_spaced_out() != 27769) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_func_all_color_schemes() != 49693) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_types_checksum_func_color_scheme_selection_capitalized_string() != 30731) {
+    if (uniffi_cove_types_checksum_func_allcolorschemes() != 14682) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_func_confirm_details_preview_new() != 41030) {
@@ -6155,28 +6150,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_types_checksum_func_fee_speed_to_circle_color() != 20193) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_func_all_networks() != 5848) {
+    if (uniffi_cove_types_checksum_func_allnetworks() != 25213) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_func_network_to_string() != 16428) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_types_checksum_func_all_units() != 35208) {
+    if (uniffi_cove_types_checksum_func_allbitcoinunits() != 63205) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_func_previewnewutxolist() != 31621) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_types_checksum_func_utxo_date() != 26239) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_types_checksum_func_utxo_hash_to_uint() != 33471) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_types_checksum_func_utxo_is_equal() != 34078) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_types_checksum_func_utxo_name() != 48729) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_address_hashtouint() != 25307) {

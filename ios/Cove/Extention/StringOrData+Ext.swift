@@ -26,6 +26,6 @@ extension StringOrData {
     }
 
     func toMultiFormat() throws -> MultiFormat {
-        try stringOrDataTryIntoMultiFormat(stringOrData: self)
+        try tryIntoMultiFormat()
     }
 }

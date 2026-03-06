@@ -129,8 +129,11 @@ impl WalletAddressType {
 }
 
 #[uniffi::export]
-const fn wallet_address_type_sort_order(address_type: WalletAddressType) -> u8 {
-    address_type.sort_order()
+impl WalletAddressType {
+    #[uniffi::method(name = "sortOrder")]
+    fn ffi_sort_order(&self) -> u8 {
+        self.sort_order()
+    }
 }
 
 impl Wallet {

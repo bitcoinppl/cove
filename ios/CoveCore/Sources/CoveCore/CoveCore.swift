@@ -131,7 +131,7 @@ public extension SetupCmdResponse {
 
 extension TapSignerRoute: Equatable, Hashable {
     public static func == (lhs: TapSignerRoute, rhs: TapSignerRoute) -> Bool {
-        isTapSignerRouteEqual(lhs: lhs, rhs: rhs)
+        lhs.isEqual(other: rhs)
     }
 
     public func hash(into hasher: inout Hasher) {
@@ -158,12 +158,6 @@ public extension TapSignerResponse {
 
     var isChangeResponse: Bool {
         tapSignerResponseChangeResponse(response: self)
-    }
-}
-
-public extension AfterPinAction {
-    var userMessage: String {
-        afterPinActionUserMessage(action: self)
     }
 }
 
@@ -211,15 +205,9 @@ public extension WalletMetadata {
     }
 }
 
-public extension HardwareWalletMetadata {
-    func isTapSigner() -> Bool {
-        hardwareWalletIsTapSigner(hardwareWallet: self)
-    }
-}
-
 extension SendFlowAlertState {
     init(_ addressError: AddressError, address: String) {
-        self = addressErrorToAlertState(error: addressError, address: address)
+        self = sendFlowAlertStateFromAddressError(error: addressError, address: address)
     }
 }
 
@@ -228,14 +216,6 @@ extension Utxo: @retroactive Identifiable {
 
     public var id: OutPoint {
         self.outpoint
-    }
-
-    public var name: String {
-        utxoName(utxo: self)
-    }
-
-    public var date: String {
-        utxoDate(utxo: self)
     }
 }
 
@@ -251,12 +231,6 @@ extension OutPoint: @retroactive Hashable, Equatable {
 
 public extension CoinControlListSortKey {
     var title: String {
-        coinControlListSortKeyToString(key: self)
-    }
-}
-
-public extension BootstrapStep {
-    var isMigrationInProgress: Bool {
-        bootstrapStepIsMigrationInProgress(step: self)
+        description
     }
 }

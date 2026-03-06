@@ -41,7 +41,6 @@ import org.bitcoinppl.cove.views.SectionHeader
 import org.bitcoinppl.cove_core.AppAction
 import org.bitcoinppl.cove_core.types.Network
 import org.bitcoinppl.cove_core.types.allNetworks
-import org.bitcoinppl.cove_core.types.networkToString
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -113,7 +112,7 @@ fun NetworkSettingsScreen(
         AlertDialog(
             onDismissRequest = { pendingNetworkChange = null },
             title = { Text("Warning: Network Changed") },
-            text = { Text("You've changed your network to ${networkToString(network)}") },
+            text = { Text("You've changed your network to ${network.toString()}") },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -153,7 +152,7 @@ private fun NetworkRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = networkToString(network),
+            text = network.toString(),
             style = MaterialTheme.typography.bodyLarge,
         )
 

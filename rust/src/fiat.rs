@@ -134,6 +134,24 @@ impl From<&FiatCurrency> for &'static str {
 }
 
 #[uniffi::export]
+impl FiatCurrency {
+    #[uniffi::method(name = "symbolString")]
+    fn ffi_symbol_string(&self) -> String {
+        self.symbol().to_string()
+    }
+
+    #[uniffi::method(name = "emojiString")]
+    fn ffi_emoji_string(&self) -> String {
+        self.emoji().to_string()
+    }
+
+    #[uniffi::method(name = "suffixString")]
+    fn ffi_suffix_string(&self) -> String {
+        self.suffix().to_string()
+    }
+}
+
+#[uniffi::export]
 fn all_fiat_currencies() -> Vec<FiatCurrency> {
     FiatCurrency::iter().collect()
 }
@@ -141,24 +159,4 @@ fn all_fiat_currencies() -> Vec<FiatCurrency> {
 #[uniffi::export]
 fn is_fiat_currency_symbol(symbol: &str) -> bool {
     FiatCurrency::is_symbol(symbol)
-}
-
-#[uniffi::export]
-fn fiat_currency_to_string(fiat_currency: FiatCurrency) -> String {
-    fiat_currency.to_string()
-}
-
-#[uniffi::export]
-fn fiat_currency_symbol(fiat_currency: FiatCurrency) -> String {
-    fiat_currency.symbol().to_string()
-}
-
-#[uniffi::export]
-fn fiat_currency_emoji(fiat_currency: FiatCurrency) -> String {
-    fiat_currency.emoji().to_string()
-}
-
-#[uniffi::export]
-fn fiat_currency_suffix(fiat_currency: FiatCurrency) -> String {
-    fiat_currency.suffix().to_string()
 }
