@@ -39,8 +39,11 @@ impl BootstrapStep {
 }
 
 #[uniffi::export]
-fn bootstrap_step_is_migration_in_progress(step: BootstrapStep) -> bool {
-    step.is_migration_in_progress()
+impl BootstrapStep {
+    #[uniffi::method(name = "isMigrationInProgress")]
+    fn ffi_is_migration_in_progress(&self) -> bool {
+        self.is_migration_in_progress()
+    }
 }
 
 static BOOTSTRAP_STEP: Mutex<BootstrapStep> = Mutex::new(BootstrapStep::NotStarted);

@@ -36,7 +36,6 @@ import org.bitcoinppl.cove.views.SectionHeader
 import org.bitcoinppl.cove_core.AppAction
 import org.bitcoinppl.cove_core.types.ColorSchemeSelection
 import org.bitcoinppl.cove_core.types.allColorSchemes
-import org.bitcoinppl.cove_core.types.colorSchemeSelectionCapitalizedString
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -118,7 +117,7 @@ private fun ColorSchemeRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = colorSchemeSelectionCapitalizedString(colorScheme),
+            text = colorScheme.capitalizedString(),
             style = MaterialTheme.typography.bodyLarge,
         )
 

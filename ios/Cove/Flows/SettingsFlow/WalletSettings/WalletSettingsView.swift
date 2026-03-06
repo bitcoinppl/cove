@@ -42,7 +42,7 @@ struct WalletSettingsView: View {
                 HStack {
                     Text("Network")
                     Spacer()
-                    Text(metadata.network.toString())
+                    Text(metadata.network.description)
                         .foregroundColor(.secondary)
                 }
                 .font(.subheadline)
@@ -111,7 +111,7 @@ struct WalletSettingsView: View {
                             .frame(width: 80, height: 80)
 
                         LazyVGrid(columns: colorColumns, spacing: 20) {
-                            ForEach(defaultWalletColors(), id: \.self) { color in
+                            ForEach(walletColorDefaults(), id: \.self) { color in
                                 ZStack {
                                     if color == metadata.color {
                                         Circle()

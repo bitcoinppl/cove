@@ -60,7 +60,6 @@ import org.bitcoinppl.cove_core.ApiType
 import org.bitcoinppl.cove_core.NodeSelection
 import org.bitcoinppl.cove_core.NodeSelector
 import org.bitcoinppl.cove_core.NodeSelectorException
-import org.bitcoinppl.cove_core.nodeSelectionToNode
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -75,7 +74,7 @@ fun NodeSettingsScreen(
     val nodeList = remember { nodeSelector.nodeList() }
     var selectedNodeSelection by remember { mutableStateOf(nodeSelector.selectedNode()) }
     var selectedNodeName by remember {
-        mutableStateOf(nodeSelectionToNode(selectedNodeSelection).name)
+        mutableStateOf(selectedNodeSelection.toNode().name)
     }
 
     var customUrl by remember { mutableStateOf("") }
@@ -109,7 +108,7 @@ fun NodeSettingsScreen(
         if (showCustomFields && customUrl.isEmpty()) {
             val savedNode = selectedNodeSelection
             if (savedNode is NodeSelection.Custom) {
-                val node = nodeSelectionToNode(savedNode)
+                val node = savedNode.toNode()
                 val matchesType =
                     when (selectedNodeName) {
                         customElectrum -> node.apiType == ApiType.ELECTRUM
@@ -266,7 +265,7 @@ fun NodeSettingsScreen(
                     Column {
                         // preset nodes
                         nodeList.forEachIndexed { index, nodeSelection ->
-                            val node = nodeSelectionToNode(nodeSelection)
+                            val node = nodeSelection.toNode()
                             NodeRow(
                                 nodeName = node.name,
                                 isSelected = selectedNodeName == node.name,

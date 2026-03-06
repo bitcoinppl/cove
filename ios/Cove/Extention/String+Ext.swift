@@ -35,7 +35,7 @@ extension String {
     }
 
     init(_ network: Network) {
-        self = network.toString()
+        self = network.description
     }
 
     func removingLeadingZeros() -> String {

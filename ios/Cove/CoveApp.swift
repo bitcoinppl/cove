@@ -110,7 +110,7 @@ extension CoveApp {
 
             if !migrationDetected {
                 let step = bootstrapProgress()
-                if step.isMigrationInProgress {
+                if step.isMigrationInProgress() {
                     migrationDetected = true
                 } else if let progress = activeMigration()?.progress(), progress.total > 0 {
                     migrationDetected = true

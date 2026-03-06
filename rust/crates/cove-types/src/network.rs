@@ -29,11 +29,6 @@ pub enum Network {
 use strum::IntoEnumIterator;
 
 #[uniffi::export]
-fn network_to_string(network: Network) -> String {
-    network.to_string()
-}
-
-#[uniffi::export]
 fn all_networks() -> Vec<Network> {
     Network::iter().collect()
 }
