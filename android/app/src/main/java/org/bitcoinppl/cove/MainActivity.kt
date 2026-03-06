@@ -82,7 +82,6 @@ import org.bitcoinppl.cove.views.TermsAndConditionsSheet
 import org.bitcoinppl.cove_core.bootstrap
 import org.bitcoinppl.cove_core.activeMigration
 import org.bitcoinppl.cove_core.bootstrapProgress
-import org.bitcoinppl.cove.utils.isMigrationInProgress
 import org.bitcoinppl.cove_core.cancelBootstrap
 import org.bitcoinppl.cove_core.AfterPinAction
 import org.bitcoinppl.cove_core.AppInitException
@@ -390,7 +389,7 @@ class MainActivity : FragmentActivity() {
             delay(66)
 
             val step = bootstrapProgress()
-            if (!migrationDetected && step.isMigrationInProgress) {
+            if (!migrationDetected && step.isMigrationInProgress()) {
                 migrationDetected = true
             }
 

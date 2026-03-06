@@ -164,24 +164,18 @@ impl SignedTransactionOrPsbt {
     }
 }
 
-// UniFFI standalone functions for fallible constructors
-// (UniFFI only supports fallible constructors for Objects, not Enums)
-
-/// Parse from string input (base64 or hex encoded)
-#[uniffi::export(name = "signedTransactionOrPsbtTryParse")]
-pub fn signed_transaction_or_psbt_try_parse(input: String) -> Result<SignedTransactionOrPsbt> {
+#[uniffi::export]
+fn signed_transaction_or_psbt_try_parse(input: String) -> Result<SignedTransactionOrPsbt> {
     SignedTransactionOrPsbt::try_parse(&input)
 }
 
-/// Parse from raw bytes
-#[uniffi::export(name = "signedTransactionOrPsbtTryFromBytes")]
-pub fn signed_transaction_or_psbt_try_from_bytes(data: Vec<u8>) -> Result<SignedTransactionOrPsbt> {
+#[uniffi::export]
+fn signed_transaction_or_psbt_try_from_bytes(data: Vec<u8>) -> Result<SignedTransactionOrPsbt> {
     SignedTransactionOrPsbt::try_from_bytes(&data)
 }
 
-/// Parse from an NFC message
-#[uniffi::export(name = "signedTransactionOrPsbtTryFromNfcMessage")]
-pub fn signed_transaction_or_psbt_try_from_nfc_message(
+#[uniffi::export]
+fn signed_transaction_or_psbt_try_from_nfc_message(
     nfc_message: Arc<NfcMessage>,
 ) -> Result<SignedTransactionOrPsbt> {
     SignedTransactionOrPsbt::try_from_nfc_message(&nfc_message)

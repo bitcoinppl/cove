@@ -644,8 +644,6 @@ external fun uniffi_cove_types_checksum_func_address_string_spaced_out(
 ): Short
 external fun uniffi_cove_types_checksum_func_all_color_schemes(
 ): Short
-external fun uniffi_cove_types_checksum_func_color_scheme_selection_capitalized_string(
-): Short
 external fun uniffi_cove_types_checksum_func_confirm_details_preview_new(
 ): Short
 external fun uniffi_cove_types_checksum_func_qr_density_is_equal(
@@ -660,19 +658,9 @@ external fun uniffi_cove_types_checksum_func_fee_speed_to_circle_color(
 ): Short
 external fun uniffi_cove_types_checksum_func_all_networks(
 ): Short
-external fun uniffi_cove_types_checksum_func_network_to_string(
-): Short
 external fun uniffi_cove_types_checksum_func_all_units(
 ): Short
 external fun uniffi_cove_types_checksum_func_previewnewutxolist(
-): Short
-external fun uniffi_cove_types_checksum_func_utxo_date(
-): Short
-external fun uniffi_cove_types_checksum_func_utxo_hash_to_uint(
-): Short
-external fun uniffi_cove_types_checksum_func_utxo_is_equal(
-): Short
-external fun uniffi_cove_types_checksum_func_utxo_name(
 ): Short
 external fun uniffi_cove_types_checksum_method_address_hashtouint(
 ): Short
@@ -1232,6 +1220,8 @@ external fun uniffi_cove_types_fn_clone_utxolist(`handle`: Long,uniffi_out_err: 
 ): Long
 external fun uniffi_cove_types_fn_free_utxolist(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
+external fun uniffi_cove_types_fn_method_colorschemeselection_capitalized_string(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
 external fun uniffi_cove_types_fn_method_qrexportformat_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_types_fn_method_feespeed_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -1239,6 +1229,14 @@ external fun uniffi_cove_types_fn_method_feespeed_uniffi_trait_display(`ptr`: Ru
 external fun uniffi_cove_types_fn_method_network_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_types_fn_method_bitcoinunit_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_types_fn_method_utxo_date(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_types_fn_method_utxo_hash_to_uint(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Long
+external fun uniffi_cove_types_fn_method_utxo_is_equal(`ptr`: RustBuffer.ByValue,`other`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Byte
+external fun uniffi_cove_types_fn_method_utxo_name(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_types_fn_method_utxo_uniffi_trait_eq_eq(`ptr`: RustBuffer.ByValue,`other`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
@@ -1254,8 +1252,6 @@ external fun uniffi_cove_types_fn_func_address_string_spaced_out(`address`: Rust
 ): RustBuffer.ByValue
 external fun uniffi_cove_types_fn_func_all_color_schemes(uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_func_color_scheme_selection_capitalized_string(`colorScheme`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
 external fun uniffi_cove_types_fn_func_confirm_details_preview_new(uniffi_out_err: UniffiRustCallStatus, 
 ): Long
 external fun uniffi_cove_types_fn_func_qr_density_is_equal(`lhs`: Long,`rhs`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -1270,19 +1266,9 @@ external fun uniffi_cove_types_fn_func_fee_speed_to_circle_color(`feeSpeed`: Rus
 ): RustBuffer.ByValue
 external fun uniffi_cove_types_fn_func_all_networks(uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_func_network_to_string(`network`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
 external fun uniffi_cove_types_fn_func_all_units(uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_types_fn_func_previewnewutxolist(`outputCount`: Byte,`changeCount`: Byte,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_func_utxo_date(`utxo`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_func_utxo_hash_to_uint(`utxo`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_func_utxo_is_equal(`lhs`: RustBuffer.ByValue,`rhs`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): Byte
-external fun uniffi_cove_types_fn_func_utxo_name(`utxo`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun ffi_cove_types_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
@@ -1415,9 +1401,6 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_types_checksum_func_all_color_schemes() != 49693.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_func_color_scheme_selection_capitalized_string() != 30731.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
     if (lib.uniffi_cove_types_checksum_func_confirm_details_preview_new() != 41030.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1439,25 +1422,10 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_types_checksum_func_all_networks() != 5848.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_func_network_to_string() != 16428.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
     if (lib.uniffi_cove_types_checksum_func_all_units() != 35208.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_func_previewnewutxolist() != 31621.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_types_checksum_func_utxo_date() != 26239.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_types_checksum_func_utxo_hash_to_uint() != 33471.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_types_checksum_func_utxo_is_equal() != 34078.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_types_checksum_func_utxo_name() != 48729.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_method_address_hashtouint() != 25307.toShort()) {
@@ -9225,6 +9193,46 @@ data class Utxo (
     var `type`: UtxoType
     
 ): Disposable{
+     fun `date`(): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_types_fn_method_utxo_date(FfiConverterTypeUtxo.lower(this),
+        _status)
+}
+    )
+    }
+    
+
+     fun `hashToUint`(): kotlin.ULong {
+            return FfiConverterULong.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_types_fn_method_utxo_hash_to_uint(FfiConverterTypeUtxo.lower(this),
+        _status)
+}
+    )
+    }
+    
+
+     fun `isEqual`(`other`: Utxo): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_types_fn_method_utxo_is_equal(FfiConverterTypeUtxo.lower(this),
+        FfiConverterTypeUtxo.lower(`other`),_status)
+}
+    )
+    }
+    
+
+     fun `name`(): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_types_fn_method_utxo_name(FfiConverterTypeUtxo.lower(this),
+        _status)
+}
+    )
+    }
+    
+
     
 
     
@@ -9506,6 +9514,16 @@ enum class ColorSchemeSelection {
     LIGHT,
     DARK,
     SYSTEM;
+
+     fun `capitalizedString`(): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_types_fn_method_colorschemeselection_capitalized_string(FfiConverterTypeColorSchemeSelection.lower(this),
+        _status)
+}
+    )
+    }
+    
 
     
 
@@ -10701,16 +10719,6 @@ public typealias FfiConverterTypeWalletId = FfiConverterString
     )
     }
     
- fun `colorSchemeSelectionCapitalizedString`(`colorScheme`: ColorSchemeSelection): kotlin.String {
-            return FfiConverterString.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_types_fn_func_color_scheme_selection_capitalized_string(
-    
-        FfiConverterTypeColorSchemeSelection.lower(`colorScheme`),_status)
-}
-    )
-    }
-    
 
         /**
          * Preview `ConfirmDetails` for `SwiftUI` previews
@@ -10787,16 +10795,6 @@ public typealias FfiConverterTypeWalletId = FfiConverterString
     )
     }
     
- fun `networkToString`(`network`: Network): kotlin.String {
-            return FfiConverterString.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_types_fn_func_network_to_string(
-    
-        FfiConverterTypeNetwork.lower(`network`),_status)
-}
-    )
-    }
-    
  fun `allUnits`(): List<BitcoinUnit> {
             return FfiConverterSequenceTypeBitcoinUnit.lift(
     uniffiRustCall() { _status ->
@@ -10813,46 +10811,6 @@ public typealias FfiConverterTypeWalletId = FfiConverterString
     UniffiLib.uniffi_cove_types_fn_func_previewnewutxolist(
     
         FfiConverterUByte.lower(`outputCount`),FfiConverterUByte.lower(`changeCount`),_status)
-}
-    )
-    }
-    
- fun `utxoDate`(`utxo`: Utxo): kotlin.String {
-            return FfiConverterString.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_types_fn_func_utxo_date(
-    
-        FfiConverterTypeUtxo.lower(`utxo`),_status)
-}
-    )
-    }
-    
- fun `utxoHashToUint`(`utxo`: Utxo): kotlin.ULong {
-            return FfiConverterULong.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_types_fn_func_utxo_hash_to_uint(
-    
-        FfiConverterTypeUtxo.lower(`utxo`),_status)
-}
-    )
-    }
-    
- fun `utxoIsEqual`(`lhs`: Utxo, `rhs`: Utxo): kotlin.Boolean {
-            return FfiConverterBoolean.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_types_fn_func_utxo_is_equal(
-    
-        FfiConverterTypeUtxo.lower(`lhs`),FfiConverterTypeUtxo.lower(`rhs`),_status)
-}
-    )
-    }
-    
- fun `utxoName`(`utxo`: Utxo): kotlin.String {
-            return FfiConverterString.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_types_fn_func_utxo_name(
-    
-        FfiConverterTypeUtxo.lower(`utxo`),_status)
 }
     )
     }

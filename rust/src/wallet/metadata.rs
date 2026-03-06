@@ -287,30 +287,34 @@ pub enum WalletColor {
     WLightPastelYellow,
 }
 
-#[uniffi::export]
-fn default_wallet_colors() -> Vec<WalletColor> {
-    vec![
-        WalletColor::WBeige,
-        WalletColor::WPastelBlue,
-        WalletColor::WPastelNavy,
-        WalletColor::WPastelRed,
-        WalletColor::WPastelYellow,
-        WalletColor::WPastelTeal,
-        WalletColor::Blue,
-        WalletColor::Green,
-        WalletColor::Orange,
-        WalletColor::Purple,
-    ]
-}
-
 impl WalletColor {
+    pub fn defaults() -> Vec<Self> {
+        vec![
+            Self::WBeige,
+            Self::WPastelBlue,
+            Self::WPastelNavy,
+            Self::WPastelRed,
+            Self::WPastelYellow,
+            Self::WPastelTeal,
+            Self::Blue,
+            Self::Green,
+            Self::Orange,
+            Self::Purple,
+        ]
+    }
+
     pub fn random() -> Self {
-        let options = default_wallet_colors();
+        let options = Self::defaults();
 
         use rand::RngExt;
         let random_index = rand::rng().random_range(0..options.len());
         options[random_index]
     }
+}
+
+#[uniffi::export]
+fn default_wallet_colors() -> Vec<WalletColor> {
+    WalletColor::defaults()
 }
 
 const fn default_true() -> bool {
@@ -325,17 +329,17 @@ fn default_address_type() -> WalletAddressType {
     Default::default()
 }
 
-// MARK: PREVIEW ONLY
 #[uniffi::export]
-fn wallet_metadata_is_equal(lhs: WalletMetadata, rhs: WalletMetadata) -> bool {
-    lhs == rhs
-}
+impl WalletMetadata {
+    fn is_equal(&self, other: WalletMetadata) -> bool {
+        self == &other
+    }
 
-#[uniffi::export]
-fn wallet_metadata_hash(metadata: WalletMetadata) -> u64 {
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    metadata.hash(&mut hasher);
-    hasher.finish()
+    fn hash_value(&self) -> u64 {
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        self.hash(&mut hasher);
+        hasher.finish()
+    }
 }
 
 #[uniffi::export]
@@ -348,6 +352,9 @@ const fn file_store_default() -> StoreType {
 }
 
 #[uniffi::export]
-fn hardware_wallet_is_tap_signer(hardware_wallet: HardwareWalletMetadata) -> bool {
-    hardware_wallet.is_tap_signer()
+impl HardwareWalletMetadata {
+    #[uniffi::method(name = "isTapSigner")]
+    fn ffi_is_tap_signer(&self) -> bool {
+        self.is_tap_signer()
+    }
 }

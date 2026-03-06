@@ -315,6 +315,6 @@ extension Color {
 
 extension WalletColor {
     var defaultColors: [Self] {
-        defaultWalletColors()
+        walletColorDefaults()
     }
 }
