@@ -53,6 +53,7 @@ fun AboutSettingsScreen(
     val context = LocalContext.current
     var buildTapCount by remember { mutableIntStateOf(0) }
     var showBetaDialog by remember { mutableStateOf(false) }
+    var showBetaEnabledDialog by remember { mutableStateOf(false) }
     var isBetaEnabled by remember {
         mutableStateOf(
             Database().globalFlag().getBoolConfig(GlobalFlagKey.BETA_FEATURES_ENABLED)
@@ -161,6 +162,7 @@ fun AboutSettingsScreen(
                         betaError = "Failed to update beta features: ${e.message}"
                     }
                     showBetaDialog = false
+                    if (newValue) showBetaEnabledDialog = true
                 }) {
                     Text(if (currentlyEnabled) "Disable" else "Enable")
                 }
@@ -180,6 +182,25 @@ fun AboutSettingsScreen(
             text = { Text(error) },
             confirmButton = {
                 TextButton(onClick = { betaError = null }) {
+                    Text("OK")
+                }
+            },
+        )
+    }
+
+    if (showBetaEnabledDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showBetaEnabledDialog = false
+                app.popRoute()
+            },
+            title = { Text("Beta Features Enabled") },
+            text = { Text("Beta features have been enabled") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showBetaEnabledDialog = false
+                    app.popRoute()
+                }) {
                     Text("OK")
                 }
             },

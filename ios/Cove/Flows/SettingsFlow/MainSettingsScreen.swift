@@ -28,6 +28,7 @@ private enum AlertState: Equatable {
     case noteNoFaceIdWhenDecoyPin
     case notePinRequired
     indirect case noteFaceIdDisabling(AlertState)
+    case confirmBetaImportExport
     case extraSetPinError(String)
 }
 
@@ -49,6 +50,7 @@ struct MainSettingsScreen: View {
 
     /// beta features
     @State private var isBetaEnabled = Database().globalFlag().getBoolConfig(key: .betaFeaturesEnabled)
+    @State private var isBetaImportExportEnabled = Database().globalFlag().getBoolConfig(key: .betaImportExportEnabled)
 
     let themes = allColorSchemes()
 
@@ -223,7 +225,7 @@ struct MainSettingsScreen: View {
 
     @ViewBuilder
     var BackupSection: some View {
-        if isBetaEnabled, !auth.isInDecoyMode() {
+        if isBetaEnabled, isBetaImportExportEnabled, !auth.isInDecoyMode() {
             Section(header: HStack(spacing: 6) {
                 Text("Backup")
                 Text("BETA")
@@ -259,6 +261,25 @@ struct MainSettingsScreen: View {
             set: { newValue in
                 try? Database().globalFlag().set(key: .betaFeaturesEnabled, value: newValue)
                 isBetaEnabled = newValue
+
+                if !newValue {
+                    try? Database().globalFlag().set(key: .betaImportExportEnabled, value: false)
+                    isBetaImportExportEnabled = false
+                }
+            }
+        )
+    }
+
+    var betaImportExportToggle: Binding<Bool> {
+        Binding(
+            get: { isBetaImportExportEnabled },
+            set: { newValue in
+                if newValue {
+                    alertState = .init(.confirmBetaImportExport)
+                } else {
+                    try? Database().globalFlag().set(key: .betaImportExportEnabled, value: false)
+                    isBetaImportExportEnabled = false
+                }
             }
         )
     }
@@ -268,6 +289,7 @@ struct MainSettingsScreen: View {
         if isBetaEnabled, !auth.isInDecoyMode() {
             Section {
                 Toggle("Beta Features", isOn: betaToggle)
+                Toggle("Enable Beta Import Export", isOn: betaImportExportToggle)
             } footer: {
                 Text("Disable to hide experimental features")
             }
@@ -289,6 +311,7 @@ struct MainSettingsScreen: View {
         .scrollContentBackground(.hidden)
         .onAppear {
             isBetaEnabled = Database().globalFlag().getBoolConfig(key: .betaFeaturesEnabled)
+            isBetaImportExportEnabled = Database().globalFlag().getBoolConfig(key: .betaImportExportEnabled)
         }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
@@ -469,6 +492,20 @@ struct MainSettingsScreen: View {
                             sheetState = .init(.removeDecoyPin(.none))
                         }
                     }
+                }
+            ).eraseToAny()
+
+        case .confirmBetaImportExport:
+            AlertBuilder(
+                title: "Experimental Feature",
+                message: "This is a very experimental feature. Use with caution. This is mostly used by developers for testing purposes.",
+                actions: {
+                    Button("Accept") {
+                        try? Database().globalFlag().set(key: .betaImportExportEnabled, value: true)
+                        isBetaImportExportEnabled = true
+                        alertState = .none
+                    }
+                    Button("Cancel", role: .cancel) { alertState = .none }
                 }
             ).eraseToAny()
 

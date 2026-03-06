@@ -16,6 +16,7 @@ pub enum GlobalFlagKey {
     CompletedOnboarding,
     AcceptedTerms,
     BetaFeaturesEnabled,
+    BetaImportExportEnabled,
 }
 
 #[derive(Debug, Clone, uniffi::Object)]

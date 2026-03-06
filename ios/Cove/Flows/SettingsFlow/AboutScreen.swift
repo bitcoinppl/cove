@@ -3,11 +3,13 @@ import SwiftUI
 private enum AlertState: Equatable {
     case confirmBetaEnable
     case confirmBetaDisable
+    case betaEnabled
     case betaError(String)
 }
 
 struct AboutScreen: View {
     @Environment(AppManager.self) private var app
+    @Environment(\.dismiss) private var dismiss
 
     @State private var buildTapCount = 0
     @State private var buildTapTimer: Timer? = nil
@@ -118,7 +120,7 @@ struct AboutScreen: View {
                             alertState = .init(.betaError("Failed to enable beta features: \(error.localizedDescription)"))
                             return
                         }
-                        alertState = .none
+                        alertState = .init(.betaEnabled)
                     }
                     Button("Cancel", role: .cancel) { alertState = .none }
                 }
@@ -141,6 +143,13 @@ struct AboutScreen: View {
                     }
                     Button("Cancel", role: .cancel) { alertState = .none }
                 }
+            ).eraseToAny()
+
+        case .betaEnabled:
+            AlertBuilder(
+                title: "Beta Features Enabled",
+                message: "Beta features have been enabled",
+                actions: { Button("OK") { dismiss() } }
             ).eraseToAny()
 
         case let .betaError(error):

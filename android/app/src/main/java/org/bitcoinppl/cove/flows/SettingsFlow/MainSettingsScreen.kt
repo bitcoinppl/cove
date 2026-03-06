@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Hub
+import androidx.compose.material.icons.filled.ImportExport
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
@@ -97,6 +98,10 @@ fun MainSettingsScreen(
     var isBetaEnabled by remember { mutableStateOf(
         Database().globalFlag().getBoolConfig(GlobalFlagKey.BETA_FEATURES_ENABLED)
     ) }
+    var isBetaImportExportEnabled by remember { mutableStateOf(
+        Database().globalFlag().getBoolConfig(GlobalFlagKey.BETA_IMPORT_EXPORT_ENABLED)
+    ) }
+    var showImportExportWarning by remember { mutableStateOf(false) }
     var showBackupExport by remember { mutableStateOf(false) }
     var showBackupImport by remember { mutableStateOf(false) }
     var showBackupVerify by remember { mutableStateOf(false) }
@@ -105,6 +110,7 @@ fun MainSettingsScreen(
     // refresh beta state when returning from About screen
     LaunchedEffect(Unit) {
         isBetaEnabled = Database().globalFlag().getBoolConfig(GlobalFlagKey.BETA_FEATURES_ENABLED)
+        isBetaImportExportEnabled = Database().globalFlag().getBoolConfig(GlobalFlagKey.BETA_IMPORT_EXPORT_ENABLED)
     }
 
     Scaffold(
@@ -193,6 +199,7 @@ fun MainSettingsScreen(
 
                 BackupSection(
                     isBetaEnabled = isBetaEnabled,
+                    isBetaImportExportEnabled = isBetaImportExportEnabled,
                     onExport = {
                         if (Auth.type != AuthType.NONE) {
                             showBackupExportAuth = true
@@ -210,6 +217,19 @@ fun MainSettingsScreen(
                         onToggle = { newValue ->
                             Database().globalFlag().set(GlobalFlagKey.BETA_FEATURES_ENABLED, newValue)
                             isBetaEnabled = newValue
+                            if (!newValue) {
+                                Database().globalFlag().set(GlobalFlagKey.BETA_IMPORT_EXPORT_ENABLED, false)
+                                isBetaImportExportEnabled = false
+                            }
+                        },
+                        isBetaImportExportEnabled = isBetaImportExportEnabled,
+                        onImportExportToggle = { newValue ->
+                            if (newValue) {
+                                showImportExportWarning = true
+                            } else {
+                                Database().globalFlag().set(GlobalFlagKey.BETA_IMPORT_EXPORT_ENABLED, false)
+                                isBetaImportExportEnabled = false
+                            }
                         },
                     )
                 }
@@ -270,6 +290,28 @@ fun MainSettingsScreen(
         ) {
             BackupVerifyScreen(onDismiss = { showBackupVerify = false })
         }
+    }
+
+    if (showImportExportWarning) {
+        AlertDialog(
+            onDismissRequest = { showImportExportWarning = false },
+            title = { Text("Experimental Feature") },
+            text = { Text("This is a very experimental feature. Use with caution. This is mostly used by developers for testing purposes.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    Database().globalFlag().set(GlobalFlagKey.BETA_IMPORT_EXPORT_ENABLED, true)
+                    isBetaImportExportEnabled = true
+                    showImportExportWarning = false
+                }) {
+                    Text("Accept")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showImportExportWarning = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
     }
 }
 
@@ -1182,11 +1224,12 @@ private fun BackupExportAuthDialog(
 @Composable
 private fun BackupSection(
     isBetaEnabled: Boolean,
+    isBetaImportExportEnabled: Boolean,
     onExport: () -> Unit,
     onImport: () -> Unit,
     onVerify: () -> Unit,
 ) {
-    if (!isBetaEnabled || Auth.isInDecoyMode()) return
+    if (!isBetaEnabled || !isBetaImportExportEnabled || Auth.isInDecoyMode()) return
 
     Column(modifier = Modifier.fillMaxWidth()) {
         Spacer(modifier = Modifier.height(MaterialSpacing.medium))
@@ -1241,16 +1284,28 @@ private fun BackupSection(
 private fun BetaToggleSection(
     isBetaEnabled: Boolean,
     onToggle: (Boolean) -> Unit,
+    isBetaImportExportEnabled: Boolean,
+    onImportExportToggle: (Boolean) -> Unit,
 ) {
     SectionHeader("Beta")
     MaterialSection {
-        MaterialSettingsItem(
-            title = "Beta Features",
-            subtitle = "Disable to hide experimental features",
-            icon = Icons.Default.Science,
-            isSwitch = true,
-            switchCheckedState = isBetaEnabled,
-            onCheckChanged = onToggle,
-        )
+        Column {
+            MaterialSettingsItem(
+                title = "Beta Features",
+                subtitle = "Disable to hide experimental features",
+                icon = Icons.Default.Science,
+                isSwitch = true,
+                switchCheckedState = isBetaEnabled,
+                onCheckChanged = onToggle,
+            )
+            MaterialDivider()
+            MaterialSettingsItem(
+                title = "Enable Beta Import Export",
+                icon = Icons.Default.ImportExport,
+                isSwitch = true,
+                switchCheckedState = isBetaImportExportEnabled,
+                onCheckChanged = onImportExportToggle,
+            )
+        }
     }
 }
