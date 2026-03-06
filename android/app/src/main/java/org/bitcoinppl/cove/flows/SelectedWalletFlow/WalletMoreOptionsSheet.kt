@@ -34,6 +34,7 @@ import org.bitcoinppl.cove.AppSheetState
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.flows.TapSignerFlow.rememberBackupExportLauncher
+import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.AfterPinAction
 import org.bitcoinppl.cove_core.CoinControlRoute
 import org.bitcoinppl.cove_core.HardwareWalletMetadata
@@ -168,7 +169,7 @@ fun WalletMoreOptionsSheet(
                 // launcher for creating backup file
                 val createBackupLauncher =
                     rememberBackupExportLauncher(app) {
-                        app.getTapSignerBackup(tapSigner)
+                        app.getTapSignerBackup(tapSigner) // throws KeychainException
                             ?: throw IllegalStateException("Backup not available")
                     }
 
@@ -195,19 +196,27 @@ fun WalletMoreOptionsSheet(
                     label = "Download Backup",
                     onClick = {
                         onDismiss()
-                        // check if backup already exists in cache
-                        val backup = app.getTapSignerBackup(tapSigner)
-                        if (backup != null) {
-                            val fileName = "${tapSigner.identFileNamePrefix()}_backup.txt"
-                            createBackupLauncher.launch(fileName)
-                        } else {
-                            // open TapSigner flow with Backup action
-                            val route =
-                                TapSignerRoute.EnterPin(
-                                    tapSigner = tapSigner,
-                                    action = AfterPinAction.Backup,
+                        try {
+                            val backup = app.getTapSignerBackup(tapSigner)
+                            if (backup != null) {
+                                val fileName = "${tapSigner.identFileNamePrefix()}_backup.txt"
+                                createBackupLauncher.launch(fileName)
+                            } else {
+                                val route =
+                                    TapSignerRoute.EnterPin(
+                                        tapSigner = tapSigner,
+                                        action = AfterPinAction.Backup,
+                                    )
+                                app.sheetState = TaggedItem(AppSheetState.TapSigner(route))
+                            }
+                        } catch (e: Exception) {
+                            android.util.Log.e("WalletMoreOptions", "Failed to retrieve tap signer backup", e)
+                            app.alertState = TaggedItem(
+                                AppAlertState.General(
+                                    title = "Error",
+                                    message = "Failed to retrieve backup: ${e.message ?: "Unknown error"}",
                                 )
-                            app.sheetState = TaggedItem(AppSheetState.TapSigner(route))
+                            )
                         }
                     },
                 )

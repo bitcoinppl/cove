@@ -1109,6 +1109,8 @@ external fun uniffi_cove_checksum_method_ffiapp_dangerous_wipe_all_data(
 ): Short
 external fun uniffi_cove_checksum_method_ffiapp_debug_or_release(
 ): Short
+external fun uniffi_cove_checksum_method_ffiapp_delete_corrupted_wallet(
+): Short
 external fun uniffi_cove_checksum_method_ffiapp_dispatch(
 ): Short
 external fun uniffi_cove_checksum_method_ffiapp_email_mailto(
@@ -1178,6 +1180,20 @@ external fun uniffi_cove_checksum_method_bip39wordspecificautocomplete_is_bip39_
 external fun uniffi_cove_checksum_method_bip39wordspecificautocomplete_is_valid_word(
 ): Short
 external fun uniffi_cove_checksum_method_bip39wordspecificautocomplete_next_field_number(
+): Short
+external fun uniffi_cove_checksum_method_backupmanager_backup_account_name(
+): Short
+external fun uniffi_cove_checksum_method_backupmanager_export(
+): Short
+external fun uniffi_cove_checksum_method_backupmanager_generate_password(
+): Short
+external fun uniffi_cove_checksum_method_backupmanager_importbackup(
+): Short
+external fun uniffi_cove_checksum_method_backupmanager_is_password_valid(
+): Short
+external fun uniffi_cove_checksum_method_backupmanager_validate_format(
+): Short
+external fun uniffi_cove_checksum_method_backupmanager_verifybackup(
 ): Short
 external fun uniffi_cove_checksum_method_migration_cancel(
 ): Short
@@ -1767,6 +1783,8 @@ external fun uniffi_cove_checksum_constructor_bip39autocomplete_new(
 ): Short
 external fun uniffi_cove_checksum_constructor_bip39wordspecificautocomplete_new(
 ): Short
+external fun uniffi_cove_checksum_constructor_backupmanager_new(
+): Short
 external fun uniffi_cove_checksum_constructor_converter_new(
 ): Short
 external fun uniffi_cove_checksum_constructor_database_new(
@@ -1929,6 +1947,8 @@ external fun uniffi_cove_fn_method_ffiapp_dangerous_wipe_all_data(`ptr`: Long,un
 ): Unit
 external fun uniffi_cove_fn_method_ffiapp_debug_or_release(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_ffiapp_delete_corrupted_wallet(`ptr`: Long,`id`: RustBufferWalletId.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
 external fun uniffi_cove_fn_method_ffiapp_dispatch(`ptr`: Long,`action`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
 external fun uniffi_cove_fn_method_ffiapp_email_mailto(`ptr`: Long,`ios`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -2023,6 +2043,26 @@ external fun uniffi_cove_fn_method_bip39wordspecificautocomplete_is_valid_word(`
 ): Byte
 external fun uniffi_cove_fn_method_bip39wordspecificautocomplete_next_field_number(`ptr`: Long,`currentFieldNumber`: Byte,`enteredWords`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
+external fun uniffi_cove_fn_clone_backupmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Long
+external fun uniffi_cove_fn_free_backupmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
+external fun uniffi_cove_fn_constructor_backupmanager_new(uniffi_out_err: UniffiRustCallStatus, 
+): Long
+external fun uniffi_cove_fn_method_backupmanager_backup_account_name(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_backupmanager_export(`ptr`: Long,`password`: RustBuffer.ByValue,
+): Long
+external fun uniffi_cove_fn_method_backupmanager_generate_password(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_backupmanager_importbackup(`ptr`: Long,`data`: RustBuffer.ByValue,`password`: RustBuffer.ByValue,
+): Long
+external fun uniffi_cove_fn_method_backupmanager_is_password_valid(`ptr`: Long,`password`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Byte
+external fun uniffi_cove_fn_method_backupmanager_validate_format(`ptr`: Long,`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
+external fun uniffi_cove_fn_method_backupmanager_verifybackup(`ptr`: Long,`data`: RustBuffer.ByValue,`password`: RustBuffer.ByValue,
+): Long
 external fun uniffi_cove_fn_clone_migration(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
 external fun uniffi_cove_fn_free_migration(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -2933,6 +2973,10 @@ external fun uniffi_cove_fn_method_appalertstate_title(`ptr`: RustBuffer.ByValue
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_autherror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_backuperror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_walletsecrettype_display_name(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_convertererror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_databaseerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -3029,6 +3073,8 @@ external fun uniffi_cove_fn_method_discoverystate_uniffi_trait_eq_ne(`ptr`: Rust
 ): Byte
 external fun uniffi_cove_fn_method_discoverystate_uniffi_trait_hash(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
+external fun uniffi_cove_fn_method_wallettype_display_name(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_wallettype_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_walletscannererror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -3464,6 +3510,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_ffiapp_debug_or_release() != 2224.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_method_ffiapp_delete_corrupted_wallet() != 27181.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_method_ffiapp_dispatch() != 37137.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -3476,7 +3525,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_ffiapp_find_tap_signer_wallet() != 57891.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_ffiapp_get_tap_signer_backup() != 58844.toShort()) {
+    if (lib.uniffi_cove_checksum_method_ffiapp_get_tap_signer_backup() != 37911.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_ffiapp_git_short_hash() != 52244.toShort()) {
@@ -3567,6 +3616,27 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_bip39wordspecificautocomplete_next_field_number() != 62639.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_backupmanager_backup_account_name() != 2715.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_backupmanager_export() != 27227.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_backupmanager_generate_password() != 46391.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_backupmanager_importbackup() != 62441.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_backupmanager_is_password_valid() != 20774.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_backupmanager_validate_format() != 196.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_backupmanager_verifybackup() != 12745.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_migration_cancel() != 11370.toShort()) {
@@ -4449,6 +4519,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_constructor_bip39wordspecificautocomplete_new() != 32688.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_constructor_backupmanager_new() != 10138.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_constructor_converter_new() != 60790.toShort()) {
@@ -5383,6 +5456,11 @@ open class AddressArgs: Disposable, AutoCloseable, AddressArgsInterface
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
 
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
     override fun destroy() {
         // Only allow a single call to this method.
         // TODO: maybe we should log a warning if called more than once?
@@ -5627,6 +5705,11 @@ open class AuthPin: Disposable, AutoCloseable, AuthPinInterface
 
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
 
     override fun destroy() {
         // Only allow a single call to this method.
@@ -5879,6 +5962,11 @@ open class AutoCompleteImpl: Disposable, AutoCloseable, AutoComplete
 
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
 
     override fun destroy() {
         // Only allow a single call to this method.
@@ -6174,6 +6262,417 @@ public object FfiConverterTypeAutoComplete: FfiConverter<AutoComplete, Long> {
 //
 
 
+public interface BackupManagerInterface {
+    
+    /**
+     * Account name for saving backup passwords to the system credential store
+     */
+    fun `backupAccountName`(): kotlin.String
+    
+    suspend fun `export`(`password`: kotlin.String): BackupResult
+    
+    /**
+     * Generate a 12-word BIP39 mnemonic to use as the backup password
+     *
+     * NOTE: the returned String is not zeroized — bip39::Mnemonic::to_string()
+     * allocates a plain String, and the value crosses FFI to Swift/Kotlin where
+     * we can't control deallocation. The entropy source is zeroized, limiting
+     * the exposure window
+     */
+    fun `generatePassword`(): kotlin.String
+    
+    suspend fun `importBackup`(`data`: kotlin.ByteArray, `password`: kotlin.String): BackupImportReport
+    
+    /**
+     * Check whether a password meets backup requirements
+     */
+    fun `isPasswordValid`(`password`: kotlin.String): kotlin.Boolean
+    
+    /**
+     * Validate the file format without decrypting
+     */
+    fun `validateFormat`(`data`: kotlin.ByteArray)
+    
+    suspend fun `verifyBackup`(`data`: kotlin.ByteArray, `password`: kotlin.String): BackupVerifyReport
+    
+    companion object
+}
+
+open class BackupManager: Disposable, AutoCloseable, BackupManagerInterface
+{
+
+    @Suppress("UNUSED_PARAMETER")
+    /**
+     * @suppress
+     */
+    constructor(withHandle: UniffiWithHandle, handle: Long) {
+        this.handle = handle
+        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
+    }
+
+    /**
+     * @suppress
+     *
+     * This constructor can be used to instantiate a fake object. Only used for tests. Any
+     * attempt to actually use an object constructed this way will fail as there is no
+     * connected Rust object.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    constructor(noHandle: NoHandle) {
+        this.handle = 0
+        this.cleanable = null
+    }
+    constructor() :
+        this(UniffiWithHandle, 
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_constructor_backupmanager_new(
+    
+        _status)
+}
+    )
+
+    protected val handle: Long
+    protected val cleanable: UniffiCleaner.Cleanable?
+
+    private val wasDestroyed = AtomicBoolean(false)
+    private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
+    override fun destroy() {
+        // Only allow a single call to this method.
+        // TODO: maybe we should log a warning if called more than once?
+        if (this.wasDestroyed.compareAndSet(false, true)) {
+            // This decrement always matches the initial count of 1 given at creation time.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    @Synchronized
+    override fun close() {
+        this.destroy()
+    }
+
+    internal inline fun <R> callWithHandle(block: (handle: Long) -> R): R {
+        // Check and increment the call counter, to keep the object alive.
+        // This needs a compare-and-set retry loop in case of concurrent updates.
+        do {
+            val c = this.callCounter.get()
+            if (c == 0L) {
+                throw IllegalStateException("${this.javaClass.simpleName} object has already been destroyed")
+            }
+            if (c == Long.MAX_VALUE) {
+                throw IllegalStateException("${this.javaClass.simpleName} call counter would overflow")
+            }
+        } while (! this.callCounter.compareAndSet(c, c + 1L))
+        // Now we can safely do the method call without the handle being freed concurrently.
+        try {
+            return block(this.uniffiCloneHandle())
+        } finally {
+            // This decrement always matches the increment we performed above.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    // Use a static inner class instead of a closure so as not to accidentally
+    // capture `this` as part of the cleanable's action.
+    private class UniffiCleanAction(private val handle: Long) : Runnable {
+        override fun run() {
+            if (handle == 0.toLong()) {
+                // Fake object created with `NoHandle`, don't try to free.
+                return;
+            }
+            uniffiRustCall { status ->
+                UniffiLib.uniffi_cove_fn_free_backupmanager(handle, status)
+            }
+        }
+    }
+
+    /**
+     * @suppress
+     */
+    fun uniffiCloneHandle(): Long {
+        if (handle == 0.toLong()) {
+            throw InternalException("uniffiCloneHandle() called on NoHandle object");
+        }
+        return uniffiRustCall() { status ->
+            UniffiLib.uniffi_cove_fn_clone_backupmanager(handle, status)
+        }
+    }
+
+    
+    /**
+     * Account name for saving backup passwords to the system credential store
+     */override fun `backupAccountName`(): kotlin.String {
+            return FfiConverterString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_backupmanager_backup_account_name(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    
+    @Throws(BackupException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `export`(`password`: kotlin.String) : BackupResult {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_backupmanager_export(
+                uniffiHandle,
+                FfiConverterString.lower(`password`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeBackupResult.lift(it) },
+        // Error FFI converter
+        BackupException.ErrorHandler,
+    )
+    }
+
+    
+    /**
+     * Generate a 12-word BIP39 mnemonic to use as the backup password
+     *
+     * NOTE: the returned String is not zeroized — bip39::Mnemonic::to_string()
+     * allocates a plain String, and the value crosses FFI to Swift/Kotlin where
+     * we can't control deallocation. The entropy source is zeroized, limiting
+     * the exposure window
+     */override fun `generatePassword`(): kotlin.String {
+            return FfiConverterString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_backupmanager_generate_password(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    
+    @Throws(BackupException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `importBackup`(`data`: kotlin.ByteArray, `password`: kotlin.String) : BackupImportReport {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_backupmanager_importbackup(
+                uniffiHandle,
+                FfiConverterByteArray.lower(`data`),FfiConverterString.lower(`password`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeBackupImportReport.lift(it) },
+        // Error FFI converter
+        BackupException.ErrorHandler,
+    )
+    }
+
+    
+    /**
+     * Check whether a password meets backup requirements
+     */override fun `isPasswordValid`(`password`: kotlin.String): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_backupmanager_is_password_valid(
+        it,
+        FfiConverterString.lower(`password`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Validate the file format without decrypting
+     */
+    @Throws(BackupException::class)override fun `validateFormat`(`data`: kotlin.ByteArray)
+        = 
+    callWithHandle {
+    uniffiRustCallWithError(BackupException) { _status ->
+    UniffiLib.uniffi_cove_fn_method_backupmanager_validate_format(
+        it,
+        FfiConverterByteArray.lower(`data`),_status)
+}
+    }
+    
+    
+
+    
+    @Throws(BackupException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `verifyBackup`(`data`: kotlin.ByteArray, `password`: kotlin.String) : BackupVerifyReport {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_backupmanager_verifybackup(
+                uniffiHandle,
+                FfiConverterByteArray.lower(`data`),FfiConverterString.lower(`password`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeBackupVerifyReport.lift(it) },
+        // Error FFI converter
+        BackupException.ErrorHandler,
+    )
+    }
+
+    
+
+    
+
+
+    
+    
+    /**
+     * @suppress
+     */
+    companion object
+    
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeBackupManager: FfiConverter<BackupManager, Long> {
+    override fun lower(value: BackupManager): Long {
+        return value.uniffiCloneHandle()
+    }
+
+    override fun lift(value: Long): BackupManager {
+        return BackupManager(UniffiWithHandle, value)
+    }
+
+    override fun read(buf: ByteBuffer): BackupManager {
+        return lift(buf.getLong())
+    }
+
+    override fun allocationSize(value: BackupManager) = 8UL
+
+    override fun write(value: BackupManager, buf: ByteBuffer) {
+        buf.putLong(lower(value))
+    }
+}
+
+
+// This template implements a class for working with a Rust struct via a handle
+// to the live Rust struct on the other side of the FFI.
+//
+// There's some subtlety here, because we have to be careful not to operate on a Rust
+// struct after it has been dropped, and because we must expose a public API for freeing
+// theq Kotlin wrapper object in lieu of reliable finalizers. The core requirements are:
+//
+//   * Each instance holds an opaque handle to the underlying Rust struct.
+//     Method calls need to read this handle from the object's state and pass it in to
+//     the Rust FFI.
+//
+//   * When an instance is no longer needed, its handle should be passed to a
+//     special destructor function provided by the Rust FFI, which will drop the
+//     underlying Rust struct.
+//
+//   * Given an instance, calling code is expected to call the special
+//     `destroy` method in order to free it after use, either by calling it explicitly
+//     or by using a higher-level helper like the `use` method. Failing to do so risks
+//     leaking the underlying Rust struct.
+//
+//   * We can't assume that calling code will do the right thing, and must be prepared
+//     to handle Kotlin method calls executing concurrently with or even after a call to
+//     `destroy`, and to handle multiple (possibly concurrent!) calls to `destroy`.
+//
+//   * We must never allow Rust code to operate on the underlying Rust struct after
+//     the destructor has been called, and must never call the destructor more than once.
+//     Doing so may trigger memory unsafety.
+//
+//   * To mitigate many of the risks of leaking memory and use-after-free unsafety, a `Cleaner`
+//     is implemented to call the destructor when the Kotlin object becomes unreachable.
+//     This is done in a background thread. This is not a panacea, and client code should be aware that
+//      1. the thread may starve if some there are objects that have poorly performing
+//     `drop` methods or do significant work in their `drop` methods.
+//      2. the thread is shared across the whole library. This can be tuned by using `android_cleaner = true`,
+//         or `android = true` in the [`kotlin` section of the `uniffi.toml` file](https://mozilla.github.io/uniffi-rs/kotlin/configuration.html).
+//
+// If we try to implement this with mutual exclusion on access to the handle, there is the
+// possibility of a race between a method call and a concurrent call to `destroy`:
+//
+//    * Thread A starts a method call, reads the value of the handle, but is interrupted
+//      before it can pass the handle over the FFI to Rust.
+//    * Thread B calls `destroy` and frees the underlying Rust struct.
+//    * Thread A resumes, passing the already-read handle value to Rust and triggering
+//      a use-after-free.
+//
+// One possible solution would be to use a `ReadWriteLock`, with each method call taking
+// a read lock (and thus allowed to run concurrently) and the special `destroy` method
+// taking a write lock (and thus blocking on live method calls). However, we aim not to
+// generate methods with any hidden blocking semantics, and a `destroy` method that might
+// block if called incorrectly seems to meet that bar.
+//
+// So, we achieve our goals by giving each instance an associated `AtomicLong` counter to track
+// the number of in-flight method calls, and an `AtomicBoolean` flag to indicate whether `destroy`
+// has been called. These are updated according to the following rules:
+//
+//    * The initial value of the counter is 1, indicating a live object with no in-flight calls.
+//      The initial value for the flag is false.
+//
+//    * At the start of each method call, we atomically check the counter.
+//      If it is 0 then the underlying Rust struct has already been destroyed and the call is aborted.
+//      If it is nonzero them we atomically increment it by 1 and proceed with the method call.
+//
+//    * At the end of each method call, we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+//    * When `destroy` is called, we atomically flip the flag from false to true.
+//      If the flag was already true we silently fail.
+//      Otherwise we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+// Astute readers may observe that this all sounds very similar to the way that Rust's `Arc<T>` works,
+// and indeed it is, with the addition of a flag to guard against multiple calls to `destroy`.
+//
+// The overall effect is that the underlying Rust struct is destroyed only when `destroy` has been
+// called *and* all in-flight method calls have completed, avoiding violating any of the expectations
+// of the underlying Rust code.
+//
+// This makes a cleaner a better alternative to _not_ calling `destroy()` as
+// and when the object is finished with, but the abstraction is not perfect: if the Rust object's `drop`
+// method is slow, and/or there are many objects to cleanup, and it's on a low end Android device, then the cleaner
+// thread may be starved, and the app will leak memory.
+//
+// In this case, `destroy`ing manually may be a better solution.
+//
+// The cleaner can live side by side with the manual calling of `destroy`. In the order of responsiveness, uniffi objects
+// with Rust peers are reclaimed:
+//
+// 1. By calling the `destroy` method of the object, which calls `rustObject.free()`. If that doesn't happen:
+// 2. When the object becomes unreachable, AND the Cleaner thread gets to call `rustObject.free()`. If the thread is starved then:
+// 3. The memory is reclaimed when the process terminates.
+//
+// [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
+//
+
+
 public interface BalanceInterface {
     
     fun `spendable`(): Amount
@@ -6211,6 +6710,11 @@ open class Balance: Disposable, AutoCloseable, BalanceInterface
 
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
 
     override fun destroy() {
         // Only allow a single call to this method.
@@ -6482,6 +6986,11 @@ open class Bip329Labels: Disposable, AutoCloseable, Bip329LabelsInterface
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
 
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
     override fun destroy() {
         // Only allow a single call to this method.
         // TODO: maybe we should log a warning if called more than once?
@@ -6735,6 +7244,11 @@ open class Bip39AutoComplete: Disposable, AutoCloseable, Bip39AutoCompleteInterf
 
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
 
     override fun destroy() {
         // Only allow a single call to this method.
@@ -7028,6 +7542,11 @@ open class Bip39WordSpecificAutocomplete: Disposable, AutoCloseable, Bip39WordSp
 
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
 
     override fun destroy() {
         // Only allow a single call to this method.
@@ -7329,6 +7848,11 @@ open class BitcoinTransaction: Disposable, AutoCloseable, BitcoinTransactionInte
 
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
 
     override fun destroy() {
         // Only allow a single call to this method.
@@ -7648,6 +8172,11 @@ open class BoxedRoute: Disposable, AutoCloseable, BoxedRouteInterface
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
 
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
     override fun destroy() {
         // Only allow a single call to this method.
         // TODO: maybe we should log a warning if called more than once?
@@ -7895,6 +8424,11 @@ open class CoinControlManagerState: Disposable, AutoCloseable, CoinControlManage
 
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
 
     override fun destroy() {
         // Only allow a single call to this method.
@@ -8159,6 +8693,11 @@ open class ConfirmedTransaction: Disposable, AutoCloseable, ConfirmedTransaction
 
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
 
     override fun destroy() {
         // Only allow a single call to this method.
@@ -8537,6 +9076,11 @@ open class Converter: Disposable, AutoCloseable, ConverterInterface
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
 
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
     override fun destroy() {
         // Only allow a single call to this method.
         // TODO: maybe we should log a warning if called more than once?
@@ -8818,6 +9362,11 @@ open class Database: Disposable, AutoCloseable, DatabaseInterface
 
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
 
     override fun destroy() {
         // Only allow a single call to this method.
@@ -9118,6 +9667,11 @@ public interface FfiAppInterface {
     fun `debugOrRelease`(): kotlin.String
     
     /**
+     * Delete a wallet with a corrupted database, cleaning up all associated data
+     */
+    fun `deleteCorruptedWallet`(`id`: WalletId)
+    
+    /**
      * Frontend calls this method to send events to the rust application logic
      */
     fun `dispatch`(`action`: AppAction)
@@ -9269,6 +9823,11 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
 
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
     override fun destroy() {
         // Only allow a single call to this method.
         // TODO: maybe we should log a warning if called more than once?
@@ -9396,6 +9955,21 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
 
     
     /**
+     * Delete a wallet with a corrupted database, cleaning up all associated data
+     */override fun `deleteCorruptedWallet`(`id`: WalletId)
+        = 
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_ffiapp_delete_corrupted_wallet(
+        it,
+        FfiConverterTypeWalletId.lower(`id`),_status)
+}
+    }
+    
+    
+
+    
+    /**
      * Frontend calls this method to send events to the rust application logic
      */override fun `dispatch`(`action`: AppAction)
         = 
@@ -9456,10 +10030,11 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
     
     /**
      * Get the backup for the tap signer
-     */override fun `getTapSignerBackup`(`tapSigner`: TapSigner): kotlin.ByteArray? {
+     */
+    @Throws(KeychainException::class)override fun `getTapSignerBackup`(`tapSigner`: TapSigner): kotlin.ByteArray? {
             return FfiConverterOptionalByteArray.lift(
     callWithHandle {
-    uniffiRustCall() { _status ->
+    uniffiRustCallWithError(KeychainExceptionExternalErrorHandler) { _status ->
     UniffiLib.uniffi_cove_fn_method_ffiapp_get_tap_signer_backup(
         it,
         FfiConverterTypeTapSigner.lower(`tapSigner`),_status)
@@ -9945,6 +10520,11 @@ open class FiatClient: Disposable, AutoCloseable, FiatClientInterface
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
 
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
     override fun destroy() {
         // Only allow a single call to this method.
         // TODO: maybe we should log a warning if called more than once?
@@ -10189,6 +10769,11 @@ open class FileHandler: Disposable, AutoCloseable, FileHandlerInterface
 
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
 
     override fun destroy() {
         // Only allow a single call to this method.
@@ -10439,6 +11024,11 @@ open class FilteredUtxos: Disposable, AutoCloseable, FilteredUtxosInterface
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
 
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
     override fun destroy() {
         // Only allow a single call to this method.
         // TODO: maybe we should log a warning if called more than once?
@@ -10685,6 +11275,11 @@ open class Fingerprint: Disposable, AutoCloseable, FingerprintInterface
 
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
 
     override fun destroy() {
         // Only allow a single call to this method.
@@ -10946,6 +11541,11 @@ open class FoundJson: Disposable, AutoCloseable, FoundJsonInterface
 
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
 
     override fun destroy() {
         // Only allow a single call to this method.
@@ -11227,6 +11827,11 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
 
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
 
     override fun destroy() {
         // Only allow a single call to this method.
@@ -11776,6 +12381,11 @@ open class GlobalFlagTable: Disposable, AutoCloseable, GlobalFlagTableInterface
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
 
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
     override fun destroy() {
         // Only allow a single call to this method.
         // TODO: maybe we should log a warning if called more than once?
@@ -12090,6 +12700,11 @@ open class HardwareExport: Disposable, AutoCloseable, HardwareExportInterface
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
 
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
     override fun destroy() {
         // Only allow a single call to this method.
         // TODO: maybe we should log a warning if called more than once?
@@ -12338,6 +12953,11 @@ open class HeaderIconPresenter: Disposable, AutoCloseable, HeaderIconPresenterIn
 
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
 
     override fun destroy() {
         // Only allow a single call to this method.
@@ -12613,6 +13233,11 @@ open class HistoricalPriceTable: Disposable, AutoCloseable, HistoricalPriceTable
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
 
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
     override fun destroy() {
         // Only allow a single call to this method.
         // TODO: maybe we should log a warning if called more than once?
@@ -12847,6 +13472,11 @@ open class HistoricalPricesResponse: Disposable, AutoCloseable, HistoricalPrices
 
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
 
     override fun destroy() {
         // Only allow a single call to this method.
@@ -13111,6 +13741,11 @@ open class LabelManager: Disposable, AutoCloseable, LabelManagerInterface
 
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
 
     override fun destroy() {
         // Only allow a single call to this method.
@@ -13483,6 +14118,11 @@ open class LabelsTable: Disposable, AutoCloseable, LabelsTableInterface
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
 
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
     override fun destroy() {
         // Only allow a single call to this method.
         // TODO: maybe we should log a warning if called more than once?
@@ -13724,6 +14364,11 @@ open class Migration: Disposable, AutoCloseable, MigrationInterface
 
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
 
     override fun destroy() {
         // Only allow a single call to this method.
@@ -14005,6 +14650,11 @@ open class Mnemonic: Disposable, AutoCloseable, MnemonicInterface
 
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
 
     override fun destroy() {
         // Only allow a single call to this method.
@@ -14319,6 +14969,11 @@ open class NodeSelector: Disposable, AutoCloseable, NodeSelectorInterface
 
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
 
     override fun destroy() {
         // Only allow a single call to this method.
@@ -14659,6 +15314,11 @@ open class PendingWallet: Disposable, AutoCloseable, PendingWalletInterface
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
 
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
     override fun destroy() {
         // Only allow a single call to this method.
         // TODO: maybe we should log a warning if called more than once?
@@ -14897,6 +15557,11 @@ open class PriceResponse: Disposable, AutoCloseable, PriceResponseInterface
 
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
 
     override fun destroy() {
         // Only allow a single call to this method.
@@ -15158,6 +15823,11 @@ open class PushTx: Disposable, AutoCloseable, PushTxInterface
 
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
 
     override fun destroy() {
         // Only allow a single call to this method.
@@ -15430,6 +16100,11 @@ open class QrScanner: Disposable, AutoCloseable, QrScannerInterface
 
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
 
     override fun destroy() {
         // Only allow a single call to this method.
@@ -15752,6 +16427,11 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
 
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
 
     override fun destroy() {
         // Only allow a single call to this method.
@@ -16346,6 +17026,11 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
 
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
     override fun destroy() {
         // Only allow a single call to this method.
         // TODO: maybe we should log a warning if called more than once?
@@ -16913,6 +17598,11 @@ open class RustCoinControlManager: Disposable, AutoCloseable, RustCoinControlMan
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
 
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
     override fun destroy() {
         // Only allow a single call to this method.
         // TODO: maybe we should log a warning if called more than once?
@@ -17290,6 +17980,11 @@ open class RustImportWalletManager: Disposable, AutoCloseable, RustImportWalletM
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
 
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
     override fun destroy() {
         // Only allow a single call to this method.
         // TODO: maybe we should log a warning if called more than once?
@@ -17595,6 +18290,11 @@ open class RustPendingWalletManager: Disposable, AutoCloseable, RustPendingWalle
 
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
 
     override fun destroy() {
         // Only allow a single call to this method.
@@ -17994,6 +18694,11 @@ open class RustSendFlowManager: Disposable, AutoCloseable, RustSendFlowManagerIn
 
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
 
     override fun destroy() {
         // Only allow a single call to this method.
@@ -18737,6 +19442,11 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
 
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
 
     override fun destroy() {
         // Only allow a single call to this method.
@@ -20018,6 +20728,11 @@ open class SeedQr: Disposable, AutoCloseable, SeedQrInterface
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
 
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
     override fun destroy() {
         // Only allow a single call to this method.
         // TODO: maybe we should log a warning if called more than once?
@@ -20301,6 +21016,11 @@ open class SendFlowManagerState: Disposable, AutoCloseable, SendFlowManagerState
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
 
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
     override fun destroy() {
         // Only allow a single call to this method.
         // TODO: maybe we should log a warning if called more than once?
@@ -20535,6 +21255,11 @@ open class SetupCmd: Disposable, AutoCloseable, SetupCmdInterface
 
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
 
     override fun destroy() {
         // Only allow a single call to this method.
@@ -20800,6 +21525,11 @@ open class TapSignerReader: Disposable, AutoCloseable, TapSignerReaderInterface
 
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
 
     override fun destroy() {
         // Only allow a single call to this method.
@@ -21195,6 +21925,11 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
 
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
 
     override fun destroy() {
         // Only allow a single call to this method.
@@ -21863,6 +22598,11 @@ open class UnconfirmedTransaction: Disposable, AutoCloseable, UnconfirmedTransac
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
 
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
     override fun destroy() {
         // Only allow a single call to this method.
         // TODO: maybe we should log a warning if called more than once?
@@ -22172,6 +22912,11 @@ open class UnsignedTransaction: Disposable, AutoCloseable, UnsignedTransactionIn
 
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
 
     override fun destroy() {
         // Only allow a single call to this method.
@@ -22490,6 +23235,11 @@ open class UnsignedTransactionRecord: Disposable, AutoCloseable, UnsignedTransac
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
 
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
     override fun destroy() {
         // Only allow a single call to this method.
         // TODO: maybe we should log a warning if called more than once?
@@ -22781,6 +23531,11 @@ open class UnsignedTransactionsTable: Disposable, AutoCloseable, UnsignedTransac
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
 
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
     override fun destroy() {
         // Only allow a single call to this method.
         // TODO: maybe we should log a warning if called more than once?
@@ -23066,6 +23821,11 @@ open class UrResult: Disposable, AutoCloseable, UrResultInterface
 
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
 
     override fun destroy() {
         // Only allow a single call to this method.
@@ -23369,6 +24129,11 @@ open class Wallet: Disposable, AutoCloseable, WalletInterface
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
 
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
     override fun destroy() {
         // Only allow a single call to this method.
         // TODO: maybe we should log a warning if called more than once?
@@ -23650,6 +24415,11 @@ open class WalletDataDb: Disposable, AutoCloseable, WalletDataDbInterface
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
 
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
     override fun destroy() {
         // Only allow a single call to this method.
         // TODO: maybe we should log a warning if called more than once?
@@ -23884,6 +24654,11 @@ open class WalletKey: Disposable, AutoCloseable, WalletKeyInterface
 
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
 
     override fun destroy() {
         // Only allow a single call to this method.
@@ -24127,6 +24902,11 @@ open class WalletsTable: Disposable, AutoCloseable, WalletsTableInterface
 
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
 
     override fun destroy() {
         // Only allow a single call to this method.
@@ -24424,6 +25204,11 @@ open class WordValidator: Disposable, AutoCloseable, WordValidatorInterface
 
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
 
     override fun destroy() {
         // Only allow a single call to this method.
@@ -24791,6 +25576,11 @@ open class WordVerifyStateMachine: Disposable, AutoCloseable, WordVerifyStateMac
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
 
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
     override fun destroy() {
         // Only allow a single call to this method.
         // TODO: maybe we should log a warning if called more than once?
@@ -25127,6 +25917,295 @@ public object FfiConverterTypeAuthManagerState: FfiConverterRustBuffer<AuthManag
     override fun allocationSize(value: AuthManagerState) = 0UL
 
     override fun write(value: AuthManagerState, buf: ByteBuffer) {
+    }
+}
+
+
+
+/**
+ * Report of what happened during a backup import
+ */
+data class BackupImportReport (
+    var `walletsImported`: kotlin.UInt
+    , 
+    var `importedWalletNames`: List<kotlin.String>
+    , 
+    var `walletsSkipped`: kotlin.UInt
+    , 
+    var `skippedWalletNames`: List<kotlin.String>
+    , 
+    var `walletsFailed`: kotlin.UInt
+    , 
+    var `failedWalletNames`: List<kotlin.String>
+    , 
+    var `failedWalletErrors`: List<kotlin.String>
+    , 
+    var `walletsWithLabelsImported`: kotlin.UInt
+    , 
+    var `labelsFailedWalletNames`: List<kotlin.String>
+    , 
+    var `labelsFailedErrors`: List<kotlin.String>
+    , 
+    var `settingsRestored`: kotlin.Boolean
+    , 
+    var `settingsError`: kotlin.String?
+    , 
+    /**
+     * Wallets imported with degraded functionality (e.g. unknown secret type)
+     */
+    var `degradedWalletNames`: List<kotlin.String>
+    , 
+    /**
+     * Warnings about partial cleanup failures (orphaned keychain entries, etc)
+     */
+    var `cleanupWarnings`: List<kotlin.String>
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeBackupImportReport: FfiConverterRustBuffer<BackupImportReport> {
+    override fun read(buf: ByteBuffer): BackupImportReport {
+        return BackupImportReport(
+            FfiConverterUInt.read(buf),
+            FfiConverterSequenceString.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterSequenceString.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterSequenceString.read(buf),
+            FfiConverterSequenceString.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterSequenceString.read(buf),
+            FfiConverterSequenceString.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterSequenceString.read(buf),
+            FfiConverterSequenceString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: BackupImportReport) = (
+            FfiConverterUInt.allocationSize(value.`walletsImported`) +
+            FfiConverterSequenceString.allocationSize(value.`importedWalletNames`) +
+            FfiConverterUInt.allocationSize(value.`walletsSkipped`) +
+            FfiConverterSequenceString.allocationSize(value.`skippedWalletNames`) +
+            FfiConverterUInt.allocationSize(value.`walletsFailed`) +
+            FfiConverterSequenceString.allocationSize(value.`failedWalletNames`) +
+            FfiConverterSequenceString.allocationSize(value.`failedWalletErrors`) +
+            FfiConverterUInt.allocationSize(value.`walletsWithLabelsImported`) +
+            FfiConverterSequenceString.allocationSize(value.`labelsFailedWalletNames`) +
+            FfiConverterSequenceString.allocationSize(value.`labelsFailedErrors`) +
+            FfiConverterBoolean.allocationSize(value.`settingsRestored`) +
+            FfiConverterOptionalString.allocationSize(value.`settingsError`) +
+            FfiConverterSequenceString.allocationSize(value.`degradedWalletNames`) +
+            FfiConverterSequenceString.allocationSize(value.`cleanupWarnings`)
+    )
+
+    override fun write(value: BackupImportReport, buf: ByteBuffer) {
+            FfiConverterUInt.write(value.`walletsImported`, buf)
+            FfiConverterSequenceString.write(value.`importedWalletNames`, buf)
+            FfiConverterUInt.write(value.`walletsSkipped`, buf)
+            FfiConverterSequenceString.write(value.`skippedWalletNames`, buf)
+            FfiConverterUInt.write(value.`walletsFailed`, buf)
+            FfiConverterSequenceString.write(value.`failedWalletNames`, buf)
+            FfiConverterSequenceString.write(value.`failedWalletErrors`, buf)
+            FfiConverterUInt.write(value.`walletsWithLabelsImported`, buf)
+            FfiConverterSequenceString.write(value.`labelsFailedWalletNames`, buf)
+            FfiConverterSequenceString.write(value.`labelsFailedErrors`, buf)
+            FfiConverterBoolean.write(value.`settingsRestored`, buf)
+            FfiConverterOptionalString.write(value.`settingsError`, buf)
+            FfiConverterSequenceString.write(value.`degradedWalletNames`, buf)
+            FfiConverterSequenceString.write(value.`cleanupWarnings`, buf)
+    }
+}
+
+
+
+/**
+ * Result of a successful backup export
+ */
+data class BackupResult (
+    var `data`: kotlin.ByteArray
+    , 
+    var `filename`: kotlin.String
+    , 
+    var `warnings`: List<kotlin.String>
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeBackupResult: FfiConverterRustBuffer<BackupResult> {
+    override fun read(buf: ByteBuffer): BackupResult {
+        return BackupResult(
+            FfiConverterByteArray.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterSequenceString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: BackupResult) = (
+            FfiConverterByteArray.allocationSize(value.`data`) +
+            FfiConverterString.allocationSize(value.`filename`) +
+            FfiConverterSequenceString.allocationSize(value.`warnings`)
+    )
+
+    override fun write(value: BackupResult, buf: ByteBuffer) {
+            FfiConverterByteArray.write(value.`data`, buf)
+            FfiConverterString.write(value.`filename`, buf)
+            FfiConverterSequenceString.write(value.`warnings`, buf)
+    }
+}
+
+
+
+data class BackupVerifyReport (
+    var `createdAt`: kotlin.ULong
+    , 
+    var `walletCount`: kotlin.UInt
+    , 
+    var `wallets`: List<BackupWalletSummary>
+    , 
+    var `fiatCurrency`: kotlin.String?
+    , 
+    var `colorScheme`: kotlin.String?
+    , 
+    var `nodeConfigCount`: kotlin.UInt
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeBackupVerifyReport: FfiConverterRustBuffer<BackupVerifyReport> {
+    override fun read(buf: ByteBuffer): BackupVerifyReport {
+        return BackupVerifyReport(
+            FfiConverterULong.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterSequenceTypeBackupWalletSummary.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterUInt.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: BackupVerifyReport) = (
+            FfiConverterULong.allocationSize(value.`createdAt`) +
+            FfiConverterUInt.allocationSize(value.`walletCount`) +
+            FfiConverterSequenceTypeBackupWalletSummary.allocationSize(value.`wallets`) +
+            FfiConverterOptionalString.allocationSize(value.`fiatCurrency`) +
+            FfiConverterOptionalString.allocationSize(value.`colorScheme`) +
+            FfiConverterUInt.allocationSize(value.`nodeConfigCount`)
+    )
+
+    override fun write(value: BackupVerifyReport, buf: ByteBuffer) {
+            FfiConverterULong.write(value.`createdAt`, buf)
+            FfiConverterUInt.write(value.`walletCount`, buf)
+            FfiConverterSequenceTypeBackupWalletSummary.write(value.`wallets`, buf)
+            FfiConverterOptionalString.write(value.`fiatCurrency`, buf)
+            FfiConverterOptionalString.write(value.`colorScheme`, buf)
+            FfiConverterUInt.write(value.`nodeConfigCount`, buf)
+    }
+}
+
+
+
+data class BackupWalletSummary (
+    var `name`: kotlin.String
+    , 
+    var `network`: Network
+    , 
+    var `walletType`: WalletType
+    , 
+    var `fingerprint`: kotlin.String?
+    , 
+    var `secretType`: WalletSecretType
+    , 
+    var `hasXpub`: kotlin.Boolean
+    , 
+    var `hasDescriptors`: kotlin.Boolean
+    , 
+    var `labelCount`: kotlin.UInt
+    , 
+    var `alreadyOnDevice`: kotlin.Boolean
+    , 
+    var `warning`: kotlin.String?
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeBackupWalletSummary: FfiConverterRustBuffer<BackupWalletSummary> {
+    override fun read(buf: ByteBuffer): BackupWalletSummary {
+        return BackupWalletSummary(
+            FfiConverterString.read(buf),
+            FfiConverterTypeNetwork.read(buf),
+            FfiConverterTypeWalletType.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterTypeWalletSecretType.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterOptionalString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: BackupWalletSummary) = (
+            FfiConverterString.allocationSize(value.`name`) +
+            FfiConverterTypeNetwork.allocationSize(value.`network`) +
+            FfiConverterTypeWalletType.allocationSize(value.`walletType`) +
+            FfiConverterOptionalString.allocationSize(value.`fingerprint`) +
+            FfiConverterTypeWalletSecretType.allocationSize(value.`secretType`) +
+            FfiConverterBoolean.allocationSize(value.`hasXpub`) +
+            FfiConverterBoolean.allocationSize(value.`hasDescriptors`) +
+            FfiConverterUInt.allocationSize(value.`labelCount`) +
+            FfiConverterBoolean.allocationSize(value.`alreadyOnDevice`) +
+            FfiConverterOptionalString.allocationSize(value.`warning`)
+    )
+
+    override fun write(value: BackupWalletSummary, buf: ByteBuffer) {
+            FfiConverterString.write(value.`name`, buf)
+            FfiConverterTypeNetwork.write(value.`network`, buf)
+            FfiConverterTypeWalletType.write(value.`walletType`, buf)
+            FfiConverterOptionalString.write(value.`fingerprint`, buf)
+            FfiConverterTypeWalletSecretType.write(value.`secretType`, buf)
+            FfiConverterBoolean.write(value.`hasXpub`, buf)
+            FfiConverterBoolean.write(value.`hasDescriptors`, buf)
+            FfiConverterUInt.write(value.`labelCount`, buf)
+            FfiConverterBoolean.write(value.`alreadyOnDevice`, buf)
+            FfiConverterOptionalString.write(value.`warning`, buf)
     }
 }
 
@@ -26979,6 +28058,9 @@ sealed class AppAction: Disposable  {
     object AcceptTerms : AppAction()
     
     
+    object RefreshAfterImport : AppAction()
+    
+    
 
     
     @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
@@ -27034,6 +28116,8 @@ sealed class AppAction: Disposable  {
             }
             is AppAction.AcceptTerms -> {// Nothing to destroy
             }
+            is AppAction.RefreshAfterImport -> {// Nothing to destroy
+            }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
     
@@ -27073,6 +28157,7 @@ public object FfiConverterTypeAppAction : FfiConverterRustBuffer<AppAction>{
             8 -> AppAction.UpdateFiatPrices
             9 -> AppAction.UpdateFees
             10 -> AppAction.AcceptTerms
+            11 -> AppAction.RefreshAfterImport
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -27144,6 +28229,12 @@ public object FfiConverterTypeAppAction : FfiConverterRustBuffer<AppAction>{
                 4UL
             )
         }
+        is AppAction.RefreshAfterImport -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
     }
 
     override fun write(value: AppAction, buf: ByteBuffer) {
@@ -27192,6 +28283,10 @@ public object FfiConverterTypeAppAction : FfiConverterRustBuffer<AppAction>{
             }
             is AppAction.AcceptTerms -> {
                 buf.putInt(10)
+                Unit
+            }
+            is AppAction.RefreshAfterImport -> {
+                buf.putInt(11)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -27366,6 +28461,16 @@ sealed class AppAlertState: Disposable  {
     data class TapSignerWrongPin(
         val `tapSigner`: org.bitcoinppl.cove_core.tapcard.TapSigner, 
         val `action`: org.bitcoinppl.cove_core.AfterPinAction) : AppAlertState()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class WalletDatabaseCorrupted(
+        val `walletId`: org.bitcoinppl.cove_core.types.WalletId, 
+        val `error`: kotlin.String) : AppAlertState()
         
     {
         
@@ -27557,6 +28662,14 @@ sealed class AppAlertState: Disposable  {
     )
                 
             }
+            is AppAlertState.WalletDatabaseCorrupted -> {
+                
+    Disposable.destroy(
+        this.`walletId`,
+        this.`error`
+    )
+                
+            }
             is AppAlertState.General -> {
                 
     Disposable.destroy(
@@ -27710,21 +28823,25 @@ public object FfiConverterTypeAppAlertState : FfiConverterRustBuffer<AppAlertSta
                 FfiConverterTypeTapSigner.read(buf),
                 FfiConverterTypeAfterPinAction.read(buf),
                 )
-            24 -> AppAlertState.General(
+            24 -> AppAlertState.WalletDatabaseCorrupted(
+                FfiConverterTypeWalletId.read(buf),
+                FfiConverterString.read(buf),
+                )
+            25 -> AppAlertState.General(
                 FfiConverterString.read(buf),
                 FfiConverterString.read(buf),
                 )
-            25 -> AppAlertState.Loading
-            26 -> AppAlertState.ConfirmWatchOnly
-            27 -> AppAlertState.WatchOnlyImportHardware
-            28 -> AppAlertState.WatchOnlyImportWords
-            29 -> AppAlertState.UninitializedTapSigner(
+            26 -> AppAlertState.Loading
+            27 -> AppAlertState.ConfirmWatchOnly
+            28 -> AppAlertState.WatchOnlyImportHardware
+            29 -> AppAlertState.WatchOnlyImportWords
+            30 -> AppAlertState.UninitializedTapSigner(
                 FfiConverterTypeTapSigner.read(buf),
                 )
-            30 -> AppAlertState.TapSignerWalletFound(
+            31 -> AppAlertState.TapSignerWalletFound(
                 FfiConverterTypeWalletId.read(buf),
                 )
-            31 -> AppAlertState.InitializedTapSigner(
+            32 -> AppAlertState.InitializedTapSigner(
                 FfiConverterTypeTapSigner.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -27888,6 +29005,14 @@ public object FfiConverterTypeAppAlertState : FfiConverterRustBuffer<AppAlertSta
                 4UL
                 + FfiConverterTypeTapSigner.allocationSize(value.`tapSigner`)
                 + FfiConverterTypeAfterPinAction.allocationSize(value.`action`)
+            )
+        }
+        is AppAlertState.WalletDatabaseCorrupted -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeWalletId.allocationSize(value.`walletId`)
+                + FfiConverterString.allocationSize(value.`error`)
             )
         }
         is AppAlertState.General -> {
@@ -28059,40 +29184,46 @@ public object FfiConverterTypeAppAlertState : FfiConverterRustBuffer<AppAlertSta
                 FfiConverterTypeAfterPinAction.write(value.`action`, buf)
                 Unit
             }
-            is AppAlertState.General -> {
+            is AppAlertState.WalletDatabaseCorrupted -> {
                 buf.putInt(24)
+                FfiConverterTypeWalletId.write(value.`walletId`, buf)
+                FfiConverterString.write(value.`error`, buf)
+                Unit
+            }
+            is AppAlertState.General -> {
+                buf.putInt(25)
                 FfiConverterString.write(value.`title`, buf)
                 FfiConverterString.write(value.`message`, buf)
                 Unit
             }
             is AppAlertState.Loading -> {
-                buf.putInt(25)
-                Unit
-            }
-            is AppAlertState.ConfirmWatchOnly -> {
                 buf.putInt(26)
                 Unit
             }
-            is AppAlertState.WatchOnlyImportHardware -> {
+            is AppAlertState.ConfirmWatchOnly -> {
                 buf.putInt(27)
                 Unit
             }
-            is AppAlertState.WatchOnlyImportWords -> {
+            is AppAlertState.WatchOnlyImportHardware -> {
                 buf.putInt(28)
                 Unit
             }
-            is AppAlertState.UninitializedTapSigner -> {
+            is AppAlertState.WatchOnlyImportWords -> {
                 buf.putInt(29)
+                Unit
+            }
+            is AppAlertState.UninitializedTapSigner -> {
+                buf.putInt(30)
                 FfiConverterTypeTapSigner.write(value.`tapSigner`, buf)
                 Unit
             }
             is AppAlertState.TapSignerWalletFound -> {
-                buf.putInt(30)
+                buf.putInt(31)
                 FfiConverterTypeWalletId.write(value.`walletId`, buf)
                 Unit
             }
             is AppAlertState.InitializedTapSigner -> {
-                buf.putInt(31)
+                buf.putInt(32)
                 FfiConverterTypeTapSigner.write(value.`tapSigner`, buf)
                 Unit
             }
@@ -29274,6 +30405,344 @@ public object FfiConverterTypeAuthType: FfiConverterRustBuffer<AuthType> {
 }
 
 
+
+
+
+
+
+sealed class BackupException: kotlin.Exception() {
+    
+    class PasswordTooShort(
+        ) : BackupException() {
+        override val message
+            get() = ""
+    }
+    
+    /**
+     * Inner error deliberately omitted to prevent oracle attacks
+     */
+    class DecryptionFailed(
+        ) : BackupException() {
+        override val message
+            get() = ""
+    }
+    
+    class InvalidFormat(
+        ) : BackupException() {
+        override val message
+            get() = ""
+    }
+    
+    class FileTooLarge(
+        ) : BackupException() {
+        override val message
+            get() = ""
+    }
+    
+    class UnsupportedVersion(
+        
+        val v1: kotlin.UInt
+        ) : BackupException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+    
+    class UnsupportedPayloadVersion(
+        
+        val v1: kotlin.UInt
+        ) : BackupException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+    
+    class Truncated(
+        ) : BackupException() {
+        override val message
+            get() = ""
+    }
+    
+    class Encryption(
+        
+        val v1: kotlin.String
+        ) : BackupException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+    
+    class Serialization(
+        
+        val v1: kotlin.String
+        ) : BackupException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+    
+    class Deserialization(
+        
+        val v1: kotlin.String
+        ) : BackupException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+    
+    class Gather(
+        
+        val v1: kotlin.String
+        ) : BackupException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+    
+    class Restore(
+        
+        val v1: kotlin.String
+        ) : BackupException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+    
+    class Keychain(
+        
+        val v1: kotlin.String
+        ) : BackupException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+    
+    class Database(
+        
+        val v1: kotlin.String
+        ) : BackupException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+    
+    class Decompression(
+        
+        val v1: kotlin.String
+        ) : BackupException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+    
+
+    
+
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_backuperror_uniffi_trait_display(FfiConverterTypeBackupError.lower(this),
+        _status)
+}
+    )
+    }
+
+    companion object ErrorHandler : UniffiRustCallStatusErrorHandler<BackupException> {
+        override fun lift(error_buf: RustBuffer.ByValue): BackupException = FfiConverterTypeBackupError.lift(error_buf)
+    }
+
+    
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeBackupError : FfiConverterRustBuffer<BackupException> {
+    override fun read(buf: ByteBuffer): BackupException {
+        
+
+        return when(buf.getInt()) {
+            1 -> BackupException.PasswordTooShort()
+            2 -> BackupException.DecryptionFailed()
+            3 -> BackupException.InvalidFormat()
+            4 -> BackupException.FileTooLarge()
+            5 -> BackupException.UnsupportedVersion(
+                FfiConverterUInt.read(buf),
+                )
+            6 -> BackupException.UnsupportedPayloadVersion(
+                FfiConverterUInt.read(buf),
+                )
+            7 -> BackupException.Truncated()
+            8 -> BackupException.Encryption(
+                FfiConverterString.read(buf),
+                )
+            9 -> BackupException.Serialization(
+                FfiConverterString.read(buf),
+                )
+            10 -> BackupException.Deserialization(
+                FfiConverterString.read(buf),
+                )
+            11 -> BackupException.Gather(
+                FfiConverterString.read(buf),
+                )
+            12 -> BackupException.Restore(
+                FfiConverterString.read(buf),
+                )
+            13 -> BackupException.Keychain(
+                FfiConverterString.read(buf),
+                )
+            14 -> BackupException.Database(
+                FfiConverterString.read(buf),
+                )
+            15 -> BackupException.Decompression(
+                FfiConverterString.read(buf),
+                )
+            else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: BackupException): ULong {
+        return when(value) {
+            is BackupException.PasswordTooShort -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is BackupException.DecryptionFailed -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is BackupException.InvalidFormat -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is BackupException.FileTooLarge -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is BackupException.UnsupportedVersion -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterUInt.allocationSize(value.v1)
+            )
+            is BackupException.UnsupportedPayloadVersion -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterUInt.allocationSize(value.v1)
+            )
+            is BackupException.Truncated -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is BackupException.Encryption -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+            is BackupException.Serialization -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+            is BackupException.Deserialization -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+            is BackupException.Gather -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+            is BackupException.Restore -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+            is BackupException.Keychain -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+            is BackupException.Database -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+            is BackupException.Decompression -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+        }
+    }
+
+    override fun write(value: BackupException, buf: ByteBuffer) {
+        when(value) {
+            is BackupException.PasswordTooShort -> {
+                buf.putInt(1)
+                Unit
+            }
+            is BackupException.DecryptionFailed -> {
+                buf.putInt(2)
+                Unit
+            }
+            is BackupException.InvalidFormat -> {
+                buf.putInt(3)
+                Unit
+            }
+            is BackupException.FileTooLarge -> {
+                buf.putInt(4)
+                Unit
+            }
+            is BackupException.UnsupportedVersion -> {
+                buf.putInt(5)
+                FfiConverterUInt.write(value.v1, buf)
+                Unit
+            }
+            is BackupException.UnsupportedPayloadVersion -> {
+                buf.putInt(6)
+                FfiConverterUInt.write(value.v1, buf)
+                Unit
+            }
+            is BackupException.Truncated -> {
+                buf.putInt(7)
+                Unit
+            }
+            is BackupException.Encryption -> {
+                buf.putInt(8)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is BackupException.Serialization -> {
+                buf.putInt(9)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is BackupException.Deserialization -> {
+                buf.putInt(10)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is BackupException.Gather -> {
+                buf.putInt(11)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is BackupException.Restore -> {
+                buf.putInt(12)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is BackupException.Keychain -> {
+                buf.putInt(13)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is BackupException.Database -> {
+                buf.putInt(14)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is BackupException.Decompression -> {
+                buf.putInt(15)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+
+}
 
 
 
@@ -32593,7 +34062,8 @@ public object FfiConverterTypeGlobalConfigTableError : FfiConverterRustBuffer<Gl
 enum class GlobalFlagKey {
     
     COMPLETED_ONBOARDING,
-    ACCEPTED_TERMS;
+    ACCEPTED_TERMS,
+    BETA_FEATURES_ENABLED;
 
     
 
@@ -38916,6 +40386,9 @@ sealed class SettingsRoute {
     object AllWallets : SettingsRoute()
     
     
+    object About : SettingsRoute()
+    
+    
 
     
 
@@ -38942,6 +40415,7 @@ public object FfiConverterTypeSettingsRoute : FfiConverterRustBuffer<SettingsRou
                 FfiConverterTypeWalletSettingsRoute.read(buf),
                 )
             7 -> SettingsRoute.AllWallets
+            8 -> SettingsRoute.About
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -38991,6 +40465,12 @@ public object FfiConverterTypeSettingsRoute : FfiConverterRustBuffer<SettingsRou
                 4UL
             )
         }
+        is SettingsRoute.About -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
     }
 
     override fun write(value: SettingsRoute, buf: ByteBuffer) {
@@ -39023,6 +40503,10 @@ public object FfiConverterTypeSettingsRoute : FfiConverterRustBuffer<SettingsRou
             }
             is SettingsRoute.AllWallets -> {
                 buf.putInt(7)
+                Unit
+            }
+            is SettingsRoute.About -> {
+                buf.putInt(8)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -43280,6 +44764,16 @@ sealed class WalletManagerException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
+    class DatabaseCorruption(
+        
+        val `id`: WalletId, 
+        
+        val `error`: kotlin.String
+        ) : WalletManagerException() {
+        override val message
+            get() = "id=${ `id` }, error=${ `error` }"
+    }
+    
 
     
 
@@ -43382,6 +44876,10 @@ public object FfiConverterTypeWalletManagerError : FfiConverterRustBuffer<Wallet
                 FfiConverterString.read(buf),
                 )
             27 -> WalletManagerException.AddUtxosException(
+                FfiConverterString.read(buf),
+                )
+            28 -> WalletManagerException.DatabaseCorruption(
+                FfiConverterTypeWalletId.read(buf),
                 FfiConverterString.read(buf),
                 )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
@@ -43523,6 +45021,12 @@ public object FfiConverterTypeWalletManagerError : FfiConverterRustBuffer<Wallet
                 4UL
                 + FfiConverterString.allocationSize(value.v1)
             )
+            is WalletManagerException.DatabaseCorruption -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterTypeWalletId.allocationSize(value.`id`)
+                + FfiConverterString.allocationSize(value.`error`)
+            )
         }
     }
 
@@ -43659,6 +45163,12 @@ public object FfiConverterTypeWalletManagerError : FfiConverterRustBuffer<Wallet
             is WalletManagerException.AddUtxosException -> {
                 buf.putInt(27)
                 FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is WalletManagerException.DatabaseCorruption -> {
+                buf.putInt(28)
+                FfiConverterTypeWalletId.write(value.`id`, buf)
+                FfiConverterString.write(value.`error`, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -44255,6 +45765,52 @@ public object FfiConverterTypeWalletScannerError : FfiConverterRustBuffer<Wallet
 
 
 
+enum class WalletSecretType {
+    
+    MNEMONIC,
+    TAP_SIGNER_BACKUP,
+    NONE,
+    UNKNOWN;
+
+     fun `displayName`(): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_walletsecrettype_display_name(FfiConverterTypeWalletSecretType.lower(this),
+        _status)
+}
+    )
+    }
+    
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeWalletSecretType: FfiConverterRustBuffer<WalletSecretType> {
+    override fun read(buf: ByteBuffer) = try {
+        WalletSecretType.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: WalletSecretType) = 4UL
+
+    override fun write(value: WalletSecretType, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
 enum class WalletSettingsRoute {
     
     MAIN,
@@ -44402,6 +45958,16 @@ enum class WalletType {
     COLD,
     XPUB_ONLY,
     WATCH_ONLY;
+
+     fun `displayName`(): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_wallettype_display_name(FfiConverterTypeWalletType.lower(this),
+        _status)
+}
+    )
+    }
+    
 
     
 
@@ -46424,6 +47990,34 @@ public object FfiConverterSequenceTypeOutPoint: FfiConverterRustBuffer<List<OutP
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypeOutPoint.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeBackupWalletSummary: FfiConverterRustBuffer<List<BackupWalletSummary>> {
+    override fun read(buf: ByteBuffer): List<BackupWalletSummary> {
+        val len = buf.getInt()
+        return List<BackupWalletSummary>(len) {
+            FfiConverterTypeBackupWalletSummary.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<BackupWalletSummary>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeBackupWalletSummary.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<BackupWalletSummary>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeBackupWalletSummary.write(it, buf)
         }
     }
 }
