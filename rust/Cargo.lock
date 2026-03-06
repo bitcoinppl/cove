@@ -1009,6 +1009,7 @@ dependencies = [
  "cove-common",
  "cove-cspp",
  "cove-device",
+ "cove-http",
  "cove-macros",
  "cove-nfc",
  "cove-tap-card",
@@ -1133,6 +1134,15 @@ dependencies = [
  "thiserror 2.0.18",
  "tracing",
  "uniffi 0.31.0",
+]
+
+[[package]]
+name = "cove-http"
+version = "0.1.0"
+dependencies = [
+ "reqwest 0.13.2",
+ "rustls",
+ "webpki-roots 1.0.6",
 ]
 
 [[package]]

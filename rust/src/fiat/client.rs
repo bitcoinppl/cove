@@ -80,12 +80,12 @@ impl_default_for!(FiatClient);
 
 impl FiatClient {
     fn new() -> Self {
-        Self { url: CURRENCY_URL.to_string(), client: reqwest::Client::new() }
+        Self { url: CURRENCY_URL.to_string(), client: cove_http::new_client() }
     }
 
     #[allow(dead_code)]
     fn new_with_url(url: String) -> Self {
-        Self { url, client: reqwest::Client::new() }
+        Self { url, client: cove_http::new_client() }
     }
 
     /// Sync method using cached prices only, returns None if no cache

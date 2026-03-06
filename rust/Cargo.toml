@@ -125,9 +125,7 @@ cove-cspp = { path = "./crates/cove-cspp" }
 cove-device = { path = "./crates/cove-device" }
 cove-bdk = { path = "./crates/cove-bdk" }
 cove-tokio = { path = "./crates/cove-tokio" }
-
-# tls
-rustls = { version = "0.23", default-features = false, features = ["ring"] }
+cove-http = { path = "./crates/cove-http" }
 
 # bitcoin
 bitcoin = { workspace = true }
@@ -245,6 +243,9 @@ ahash = { workspace = true }
 # http client
 reqwest = { workspace = true, features = ["json", "rustls-no-provider"], default-features = false }
 
+# tls (needed for crypto provider install in bootstrap)
+rustls = { version = "0.23", features = ["ring"], default-features = false }
+
 # parsing
 winnow = { workspace = true }
 memchr = { workspace = true }
@@ -286,7 +287,6 @@ minicbor = { workspace = true }
 
 tokio = { workspace = true, features = ["rt", "test-util", "macros"] }
 uniffi = { workspace = true, features = ["bindgen-tests"] }
-
 
 
 [profile.release]

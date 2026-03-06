@@ -1,0 +1,9 @@
+[package]
+name = "cove-http"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+reqwest = { workspace = true }
+rustls = { version = "0.23", features = ["ring"], default-features = false }
+webpki-roots = "1.0"
