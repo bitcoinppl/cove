@@ -978,9 +978,8 @@ fileprivate struct UniffiCallbackInterfaceAutoComplete {
     // Create the VTable using a series of closures.
     // Swift automatically converts these into C callback functions.
     //
-    // This creates 1-element array, since this seems to be the only way to construct a const
-    // pointer that we can pass to the Rust code.
-    static let vtable: [UniffiVTableCallbackInterfaceAutoComplete] = [UniffiVTableCallbackInterfaceAutoComplete(
+    // Store the vtable directly.
+    static let vtable: UniffiVTableCallbackInterfaceAutoComplete = UniffiVTableCallbackInterfaceAutoComplete(
         uniffiFree: { (uniffiHandle: UInt64) -> () in
             do {
                 try FfiConverterTypeAutoComplete.handleMap.remove(handle: uniffiHandle)
@@ -1043,11 +1042,19 @@ fileprivate struct UniffiCallbackInterfaceAutoComplete {
                 writeReturn: writeReturn
             )
         }
-    )]
+    )
+
+    // Rust stores this pointer for future callback invocations, so it must live
+    // for the process lifetime (not just for the init function call).
+    static let vtablePtr: UnsafePointer<UniffiVTableCallbackInterfaceAutoComplete> = {
+        let ptr = UnsafeMutablePointer<UniffiVTableCallbackInterfaceAutoComplete>.allocate(capacity: 1)
+        ptr.initialize(to: vtable)
+        return UnsafePointer(ptr)
+    }()
 }
 
 private func uniffiCallbackInitAutoComplete() {
-    uniffi_cove_fn_init_callback_vtable_autocomplete(UniffiCallbackInterfaceAutoComplete.vtable)
+    uniffi_cove_fn_init_callback_vtable_autocomplete(UniffiCallbackInterfaceAutoComplete.vtablePtr)
 }
 
 #if swift(>=5.8)
@@ -26472,9 +26479,8 @@ fileprivate struct UniffiCallbackInterfaceAuthManagerReconciler {
     // Create the VTable using a series of closures.
     // Swift automatically converts these into C callback functions.
     //
-    // This creates 1-element array, since this seems to be the only way to construct a const
-    // pointer that we can pass to the Rust code.
-    static let vtable: [UniffiVTableCallbackInterfaceAuthManagerReconciler] = [UniffiVTableCallbackInterfaceAuthManagerReconciler(
+    // Store the vtable directly.
+    static let vtable: UniffiVTableCallbackInterfaceAuthManagerReconciler = UniffiVTableCallbackInterfaceAuthManagerReconciler(
         uniffiFree: { (uniffiHandle: UInt64) -> () in
             do {
                 try FfiConverterCallbackInterfaceAuthManagerReconciler.handleMap.remove(handle: uniffiHandle)
@@ -26513,11 +26519,19 @@ fileprivate struct UniffiCallbackInterfaceAuthManagerReconciler {
                 writeReturn: writeReturn
             )
         }
-    )]
+    )
+
+    // Rust stores this pointer for future callback invocations, so it must live
+    // for the process lifetime (not just for the init function call).
+    static let vtablePtr: UnsafePointer<UniffiVTableCallbackInterfaceAuthManagerReconciler> = {
+        let ptr = UnsafeMutablePointer<UniffiVTableCallbackInterfaceAuthManagerReconciler>.allocate(capacity: 1)
+        ptr.initialize(to: vtable)
+        return UnsafePointer(ptr)
+    }()
 }
 
 private func uniffiCallbackInitAuthManagerReconciler() {
-    uniffi_cove_fn_init_callback_vtable_authmanagerreconciler(UniffiCallbackInterfaceAuthManagerReconciler.vtable)
+    uniffi_cove_fn_init_callback_vtable_authmanagerreconciler(UniffiCallbackInterfaceAuthManagerReconciler.vtablePtr)
 }
 
 // FfiConverter protocol for callback interfaces
@@ -26601,9 +26615,8 @@ fileprivate struct UniffiCallbackInterfaceCoinControlManagerReconciler {
     // Create the VTable using a series of closures.
     // Swift automatically converts these into C callback functions.
     //
-    // This creates 1-element array, since this seems to be the only way to construct a const
-    // pointer that we can pass to the Rust code.
-    static let vtable: [UniffiVTableCallbackInterfaceCoinControlManagerReconciler] = [UniffiVTableCallbackInterfaceCoinControlManagerReconciler(
+    // Store the vtable directly.
+    static let vtable: UniffiVTableCallbackInterfaceCoinControlManagerReconciler = UniffiVTableCallbackInterfaceCoinControlManagerReconciler(
         uniffiFree: { (uniffiHandle: UInt64) -> () in
             do {
                 try FfiConverterCallbackInterfaceCoinControlManagerReconciler.handleMap.remove(handle: uniffiHandle)
@@ -26666,11 +26679,19 @@ fileprivate struct UniffiCallbackInterfaceCoinControlManagerReconciler {
                 writeReturn: writeReturn
             )
         }
-    )]
+    )
+
+    // Rust stores this pointer for future callback invocations, so it must live
+    // for the process lifetime (not just for the init function call).
+    static let vtablePtr: UnsafePointer<UniffiVTableCallbackInterfaceCoinControlManagerReconciler> = {
+        let ptr = UnsafeMutablePointer<UniffiVTableCallbackInterfaceCoinControlManagerReconciler>.allocate(capacity: 1)
+        ptr.initialize(to: vtable)
+        return UnsafePointer(ptr)
+    }()
 }
 
 private func uniffiCallbackInitCoinControlManagerReconciler() {
-    uniffi_cove_fn_init_callback_vtable_coincontrolmanagerreconciler(UniffiCallbackInterfaceCoinControlManagerReconciler.vtable)
+    uniffi_cove_fn_init_callback_vtable_coincontrolmanagerreconciler(UniffiCallbackInterfaceCoinControlManagerReconciler.vtablePtr)
 }
 
 // FfiConverter protocol for callback interfaces
@@ -26752,9 +26773,8 @@ fileprivate struct UniffiCallbackInterfaceFfiReconcile {
     // Create the VTable using a series of closures.
     // Swift automatically converts these into C callback functions.
     //
-    // This creates 1-element array, since this seems to be the only way to construct a const
-    // pointer that we can pass to the Rust code.
-    static let vtable: [UniffiVTableCallbackInterfaceFfiReconcile] = [UniffiVTableCallbackInterfaceFfiReconcile(
+    // Store the vtable directly.
+    static let vtable: UniffiVTableCallbackInterfaceFfiReconcile = UniffiVTableCallbackInterfaceFfiReconcile(
         uniffiFree: { (uniffiHandle: UInt64) -> () in
             do {
                 try FfiConverterCallbackInterfaceFfiReconcile.handleMap.remove(handle: uniffiHandle)
@@ -26793,11 +26813,19 @@ fileprivate struct UniffiCallbackInterfaceFfiReconcile {
                 writeReturn: writeReturn
             )
         }
-    )]
+    )
+
+    // Rust stores this pointer for future callback invocations, so it must live
+    // for the process lifetime (not just for the init function call).
+    static let vtablePtr: UnsafePointer<UniffiVTableCallbackInterfaceFfiReconcile> = {
+        let ptr = UnsafeMutablePointer<UniffiVTableCallbackInterfaceFfiReconcile>.allocate(capacity: 1)
+        ptr.initialize(to: vtable)
+        return UnsafePointer(ptr)
+    }()
 }
 
 private func uniffiCallbackInitFfiReconcile() {
-    uniffi_cove_fn_init_callback_vtable_ffireconcile(UniffiCallbackInterfaceFfiReconcile.vtable)
+    uniffi_cove_fn_init_callback_vtable_ffireconcile(UniffiCallbackInterfaceFfiReconcile.vtablePtr)
 }
 
 // FfiConverter protocol for callback interfaces
@@ -26879,9 +26907,8 @@ fileprivate struct UniffiCallbackInterfaceImportWalletManagerReconciler {
     // Create the VTable using a series of closures.
     // Swift automatically converts these into C callback functions.
     //
-    // This creates 1-element array, since this seems to be the only way to construct a const
-    // pointer that we can pass to the Rust code.
-    static let vtable: [UniffiVTableCallbackInterfaceImportWalletManagerReconciler] = [UniffiVTableCallbackInterfaceImportWalletManagerReconciler(
+    // Store the vtable directly.
+    static let vtable: UniffiVTableCallbackInterfaceImportWalletManagerReconciler = UniffiVTableCallbackInterfaceImportWalletManagerReconciler(
         uniffiFree: { (uniffiHandle: UInt64) -> () in
             do {
                 try FfiConverterCallbackInterfaceImportWalletManagerReconciler.handleMap.remove(handle: uniffiHandle)
@@ -26920,11 +26947,19 @@ fileprivate struct UniffiCallbackInterfaceImportWalletManagerReconciler {
                 writeReturn: writeReturn
             )
         }
-    )]
+    )
+
+    // Rust stores this pointer for future callback invocations, so it must live
+    // for the process lifetime (not just for the init function call).
+    static let vtablePtr: UnsafePointer<UniffiVTableCallbackInterfaceImportWalletManagerReconciler> = {
+        let ptr = UnsafeMutablePointer<UniffiVTableCallbackInterfaceImportWalletManagerReconciler>.allocate(capacity: 1)
+        ptr.initialize(to: vtable)
+        return UnsafePointer(ptr)
+    }()
 }
 
 private func uniffiCallbackInitImportWalletManagerReconciler() {
-    uniffi_cove_fn_init_callback_vtable_importwalletmanagerreconciler(UniffiCallbackInterfaceImportWalletManagerReconciler.vtable)
+    uniffi_cove_fn_init_callback_vtable_importwalletmanagerreconciler(UniffiCallbackInterfaceImportWalletManagerReconciler.vtablePtr)
 }
 
 // FfiConverter protocol for callback interfaces
@@ -27006,9 +27041,8 @@ fileprivate struct UniffiCallbackInterfacePendingWalletManagerReconciler {
     // Create the VTable using a series of closures.
     // Swift automatically converts these into C callback functions.
     //
-    // This creates 1-element array, since this seems to be the only way to construct a const
-    // pointer that we can pass to the Rust code.
-    static let vtable: [UniffiVTableCallbackInterfacePendingWalletManagerReconciler] = [UniffiVTableCallbackInterfacePendingWalletManagerReconciler(
+    // Store the vtable directly.
+    static let vtable: UniffiVTableCallbackInterfacePendingWalletManagerReconciler = UniffiVTableCallbackInterfacePendingWalletManagerReconciler(
         uniffiFree: { (uniffiHandle: UInt64) -> () in
             do {
                 try FfiConverterCallbackInterfacePendingWalletManagerReconciler.handleMap.remove(handle: uniffiHandle)
@@ -27047,11 +27081,19 @@ fileprivate struct UniffiCallbackInterfacePendingWalletManagerReconciler {
                 writeReturn: writeReturn
             )
         }
-    )]
+    )
+
+    // Rust stores this pointer for future callback invocations, so it must live
+    // for the process lifetime (not just for the init function call).
+    static let vtablePtr: UnsafePointer<UniffiVTableCallbackInterfacePendingWalletManagerReconciler> = {
+        let ptr = UnsafeMutablePointer<UniffiVTableCallbackInterfacePendingWalletManagerReconciler>.allocate(capacity: 1)
+        ptr.initialize(to: vtable)
+        return UnsafePointer(ptr)
+    }()
 }
 
 private func uniffiCallbackInitPendingWalletManagerReconciler() {
-    uniffi_cove_fn_init_callback_vtable_pendingwalletmanagerreconciler(UniffiCallbackInterfacePendingWalletManagerReconciler.vtable)
+    uniffi_cove_fn_init_callback_vtable_pendingwalletmanagerreconciler(UniffiCallbackInterfacePendingWalletManagerReconciler.vtablePtr)
 }
 
 // FfiConverter protocol for callback interfaces
@@ -27135,9 +27177,8 @@ fileprivate struct UniffiCallbackInterfaceSendFlowManagerReconciler {
     // Create the VTable using a series of closures.
     // Swift automatically converts these into C callback functions.
     //
-    // This creates 1-element array, since this seems to be the only way to construct a const
-    // pointer that we can pass to the Rust code.
-    static let vtable: [UniffiVTableCallbackInterfaceSendFlowManagerReconciler] = [UniffiVTableCallbackInterfaceSendFlowManagerReconciler(
+    // Store the vtable directly.
+    static let vtable: UniffiVTableCallbackInterfaceSendFlowManagerReconciler = UniffiVTableCallbackInterfaceSendFlowManagerReconciler(
         uniffiFree: { (uniffiHandle: UInt64) -> () in
             do {
                 try FfiConverterCallbackInterfaceSendFlowManagerReconciler.handleMap.remove(handle: uniffiHandle)
@@ -27200,11 +27241,19 @@ fileprivate struct UniffiCallbackInterfaceSendFlowManagerReconciler {
                 writeReturn: writeReturn
             )
         }
-    )]
+    )
+
+    // Rust stores this pointer for future callback invocations, so it must live
+    // for the process lifetime (not just for the init function call).
+    static let vtablePtr: UnsafePointer<UniffiVTableCallbackInterfaceSendFlowManagerReconciler> = {
+        let ptr = UnsafeMutablePointer<UniffiVTableCallbackInterfaceSendFlowManagerReconciler>.allocate(capacity: 1)
+        ptr.initialize(to: vtable)
+        return UnsafePointer(ptr)
+    }()
 }
 
 private func uniffiCallbackInitSendFlowManagerReconciler() {
-    uniffi_cove_fn_init_callback_vtable_sendflowmanagerreconciler(UniffiCallbackInterfaceSendFlowManagerReconciler.vtable)
+    uniffi_cove_fn_init_callback_vtable_sendflowmanagerreconciler(UniffiCallbackInterfaceSendFlowManagerReconciler.vtablePtr)
 }
 
 // FfiConverter protocol for callback interfaces
@@ -27287,9 +27336,8 @@ fileprivate struct UniffiCallbackInterfaceTapcardTransportProtocol {
     // Create the VTable using a series of closures.
     // Swift automatically converts these into C callback functions.
     //
-    // This creates 1-element array, since this seems to be the only way to construct a const
-    // pointer that we can pass to the Rust code.
-    static let vtable: [UniffiVTableCallbackInterfaceTapcardTransportProtocol] = [UniffiVTableCallbackInterfaceTapcardTransportProtocol(
+    // Store the vtable directly.
+    static let vtable: UniffiVTableCallbackInterfaceTapcardTransportProtocol = UniffiVTableCallbackInterfaceTapcardTransportProtocol(
         uniffiFree: { (uniffiHandle: UInt64) -> () in
             do {
                 try FfiConverterCallbackInterfaceTapcardTransportProtocol.handleMap.remove(handle: uniffiHandle)
@@ -27395,11 +27443,19 @@ fileprivate struct UniffiCallbackInterfaceTapcardTransportProtocol {
                 droppedCallback: uniffiOutDroppedCallback
             )
         }
-    )]
+    )
+
+    // Rust stores this pointer for future callback invocations, so it must live
+    // for the process lifetime (not just for the init function call).
+    static let vtablePtr: UnsafePointer<UniffiVTableCallbackInterfaceTapcardTransportProtocol> = {
+        let ptr = UnsafeMutablePointer<UniffiVTableCallbackInterfaceTapcardTransportProtocol>.allocate(capacity: 1)
+        ptr.initialize(to: vtable)
+        return UnsafePointer(ptr)
+    }()
 }
 
 private func uniffiCallbackInitTapcardTransportProtocol() {
-    uniffi_cove_fn_init_callback_vtable_tapcardtransportprotocol(UniffiCallbackInterfaceTapcardTransportProtocol.vtable)
+    uniffi_cove_fn_init_callback_vtable_tapcardtransportprotocol(UniffiCallbackInterfaceTapcardTransportProtocol.vtablePtr)
 }
 
 // FfiConverter protocol for callback interfaces
@@ -27480,9 +27536,8 @@ fileprivate struct UniffiCallbackInterfaceWalletManagerReconciler {
     // Create the VTable using a series of closures.
     // Swift automatically converts these into C callback functions.
     //
-    // This creates 1-element array, since this seems to be the only way to construct a const
-    // pointer that we can pass to the Rust code.
-    static let vtable: [UniffiVTableCallbackInterfaceWalletManagerReconciler] = [UniffiVTableCallbackInterfaceWalletManagerReconciler(
+    // Store the vtable directly.
+    static let vtable: UniffiVTableCallbackInterfaceWalletManagerReconciler = UniffiVTableCallbackInterfaceWalletManagerReconciler(
         uniffiFree: { (uniffiHandle: UInt64) -> () in
             do {
                 try FfiConverterCallbackInterfaceWalletManagerReconciler.handleMap.remove(handle: uniffiHandle)
@@ -27545,11 +27600,19 @@ fileprivate struct UniffiCallbackInterfaceWalletManagerReconciler {
                 writeReturn: writeReturn
             )
         }
-    )]
+    )
+
+    // Rust stores this pointer for future callback invocations, so it must live
+    // for the process lifetime (not just for the init function call).
+    static let vtablePtr: UnsafePointer<UniffiVTableCallbackInterfaceWalletManagerReconciler> = {
+        let ptr = UnsafeMutablePointer<UniffiVTableCallbackInterfaceWalletManagerReconciler>.allocate(capacity: 1)
+        ptr.initialize(to: vtable)
+        return UnsafePointer(ptr)
+    }()
 }
 
 private func uniffiCallbackInitWalletManagerReconciler() {
-    uniffi_cove_fn_init_callback_vtable_walletmanagerreconciler(UniffiCallbackInterfaceWalletManagerReconciler.vtable)
+    uniffi_cove_fn_init_callback_vtable_walletmanagerreconciler(UniffiCallbackInterfaceWalletManagerReconciler.vtablePtr)
 }
 
 // FfiConverter protocol for callback interfaces

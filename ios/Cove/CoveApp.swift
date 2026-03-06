@@ -251,9 +251,7 @@ struct CoveApp: App {
              .tapSignerDeriveFailed,
              .general,
              .invalidFormat,
-             .loading,
-             .hotWalletKeyMissing,
-             .confirmWatchOnly:
+             .loading:
             Button("OK") {
                 app.alertState = .none
             }

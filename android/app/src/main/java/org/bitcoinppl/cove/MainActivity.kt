@@ -427,16 +427,12 @@ private fun GlobalAlertDialog(
                     Column(horizontalAlignment = Alignment.End) {
                         TextButton(onClick = {
                             onDismiss()
-                            app.pushRoute(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWELVE, ImportType.MANUAL))))
+                            app.loadAndReset(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWELVE, ImportType.MANUAL))))
                         }) { Text("Import 12 Words") }
                         TextButton(onClick = {
                             onDismiss()
-                            app.pushRoute(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWENTY_FOUR, ImportType.MANUAL))))
+                            app.loadAndReset(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWENTY_FOUR, ImportType.MANUAL))))
                         }) { Text("Import 24 Words") }
-                        TextButton(onClick = {
-                            onDismiss()
-                            app.alertState = TaggedItem(AppAlertState.ConfirmWatchOnly)
-                        }) { Text("Use as Watch Only") }
                         TextButton(onClick = {
                             onDismiss()
                             try {
@@ -452,6 +448,10 @@ private fun GlobalAlertDialog(
                                     )
                             }
                         }) { Text("Use with Hardware Wallet") }
+                        TextButton(onClick = {
+                            onDismiss()
+                            app.alertState = TaggedItem(AppAlertState.ConfirmWatchOnly)
+                        }) { Text("Use as Watch Only") }
                     }
                 },
             )
