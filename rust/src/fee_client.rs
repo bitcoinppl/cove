@@ -45,7 +45,7 @@ impl FeeClient {
     }
 
     pub fn new_with_url(url: String) -> Self {
-        Self { url, client: reqwest::Client::new() }
+        Self { url, client: crate::http_client::new_client() }
     }
 
     /// Get cached fees, will trigger background refresh if stale

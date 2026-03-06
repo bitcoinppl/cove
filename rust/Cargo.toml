@@ -76,6 +76,7 @@ reqwest = { version = "0.13", features = ["json", "rustls-no-provider"], default
 
 # tls
 rustls = { version = "0.23", features = ["ring"], default-features = false }
+webpki-roots = "1.0"
 
 # time
 jiff = { version = "0.2", features = [] }
@@ -240,6 +241,7 @@ reqwest = { workspace = true, features = ["json", "rustls-no-provider"], default
 
 # tls
 rustls = { workspace = true }
+webpki-roots = { workspace = true }
 
 # parsing
 winnow = { workspace = true }

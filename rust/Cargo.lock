@@ -1059,6 +1059,7 @@ dependencies = [
  "tracing-subscriber",
  "uniffi 0.31.0",
  "url",
+ "webpki-roots 1.0.6",
  "winnow",
  "zerocopy",
  "zeroize",

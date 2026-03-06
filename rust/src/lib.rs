@@ -44,6 +44,7 @@ mod fiat;
 mod file_handler;
 mod hardware_export;
 mod historical_price_service;
+mod http_client;
 mod keys;
 mod label_manager;
 mod loading_popup;
