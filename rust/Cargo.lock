@@ -1043,6 +1043,7 @@ dependencies = [
  "reqwest 0.13.2",
  "rusqlite",
  "rust-cktap",
+ "rustls",
  "serde",
  "serde_json",
  "serde_urlencoded",

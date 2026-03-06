@@ -530,6 +530,7 @@ impl FfiApp {
 
     /// run all initialization tasks here, only called once
     pub async fn init_on_start(&self) {
+        rustls::crypto::ring::default_provider().install_default().ok();
         cove_tokio::init();
 
         // get / update prices
