@@ -5,7 +5,7 @@ use derive_more::{
 };
 use jiff::ToSpan as _;
 use numfmt::Formatter;
-use rand::Rng as _;
+use rand::RngExt as _;
 
 use crate::{multi_format::StringOrData, push_tx::PushTx};
 

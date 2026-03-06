@@ -47,7 +47,7 @@ use cove_types::{
 use cove_util::result_ext::ResultExt as _;
 use eyre::Result;
 use flume::Sender;
-use rand::Rng as _;
+use rand::RngExt as _;
 use std::{
     sync::Arc,
     time::{Duration, UNIX_EPOCH},

@@ -1,7 +1,7 @@
 use super::TransactionDirection;
 use crate::{amount::Amount, unit::BitcoinUnit};
 use bitcoin::Amount as BdkAmount;
-use rand::Rng as _;
+use rand::RngExt as _;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Object)]
 pub struct SentAndReceived {
