@@ -5235,6 +5235,14 @@ public enum Network: Equatable, Hashable, CustomStringConvertible {
 
 
 
+public func displayName() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_types_fn_method_network_display_name(
+            FfiConverterTypeNetwork_lower(self),$0
+    )
+})
+}
+
 
 
 // The local Rust `Display` implementation.
