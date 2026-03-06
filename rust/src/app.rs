@@ -16,7 +16,7 @@ use crate::{
         FiatCurrency,
         client::{FIAT_CLIENT, PriceResponse},
     },
-    keychain::Keychain,
+    keychain::{Keychain, KeychainError},
     manager::deferred_dispatch::{DeferredDispatch, Dispatchable},
     network::Network,
     node::Node,
@@ -29,7 +29,7 @@ use flume::{Receiver, Sender};
 use once_cell::sync::OnceCell;
 use parking_lot::RwLock;
 use reconcile::{AppStateReconcileMessage as AppMessage, FfiReconcile, Updater};
-use tap::{TapFallible as _, TapOptional};
+use tap::TapFallible as _;
 use tracing::{debug, error, warn};
 
 pub static APP: OnceCell<App> = OnceCell::new();
@@ -64,6 +64,7 @@ pub enum AppAction {
     UpdateFiatPrices,
     UpdateFees,
     AcceptTerms,
+    RefreshAfterImport,
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
@@ -237,6 +238,29 @@ impl App {
 
                 Updater::send_update(AppMessage::AcceptedTerms);
             }
+
+            AppAction::RefreshAfterImport => {
+                debug!("refreshing state after backup import");
+                Updater::send_update(AppMessage::WalletsChanged);
+                Updater::send_update(AppMessage::DatabaseUpdated);
+
+                // reconcile restored settings so frontends update without restart
+                let config = &Database::global().global_config;
+
+                Updater::send_update(AppMessage::SelectedNetworkChanged(config.selected_network()));
+
+                match config.color_scheme() {
+                    Ok(scheme) => Updater::send_update(AppMessage::ColorSchemeChanged(scheme)),
+                    Err(e) => warn!("failed to read color scheme after import: {e}"),
+                }
+
+                match config.fiat_currency() {
+                    Ok(fiat) => Updater::send_update(AppMessage::FiatCurrencyChanged(fiat)),
+                    Err(e) => warn!("failed to read fiat currency after import: {e}"),
+                }
+
+                Updater::send_update(AppMessage::SelectedNodeChanged(config.selected_node()));
+            }
         }
     }
 
@@ -304,15 +328,25 @@ impl FfiApp {
         let network = Database::global().global_config.selected_network();
         let mode = Database::global().global_config.wallet_mode();
 
-        Database::global().wallets().find_by_tap_signer_ident(ident, network, mode).unwrap_or(None)
+        match Database::global().wallets().find_by_tap_signer_ident(ident, network, mode) {
+            Ok(result) => result,
+            Err(e) => {
+                error!("Failed to look up tap signer wallet by ident {ident}: {e}");
+                None
+            }
+        }
     }
 
     /// Get the backup for the tap signer
     #[uniffi::method]
-    pub fn get_tap_signer_backup(&self, tap_signer: &cove_tap_card::TapSigner) -> Option<Vec<u8>> {
-        let metadata = self.find_tap_signer_wallet(tap_signer).tap_none(|| {
+    pub fn get_tap_signer_backup(
+        &self,
+        tap_signer: &cove_tap_card::TapSigner,
+    ) -> Result<Option<Vec<u8>>, KeychainError> {
+        let Some(metadata) = self.find_tap_signer_wallet(tap_signer) else {
             debug!("Unable to find wallet with card ident {}", tap_signer.card_ident);
-        })?;
+            return Ok(None);
+        };
 
         let keychain = Keychain::global();
         keychain.get_tap_signer_backup(&metadata.id)
@@ -325,16 +359,19 @@ impl FfiApp {
         tap_signer: &cove_tap_card::TapSigner,
         backup: &[u8],
     ) -> bool {
-        let run = || {
-            let metadata = self.find_tap_signer_wallet(tap_signer).tap_none(|| {
-                debug!("Unable to find wallet with card ident {}", tap_signer.card_ident);
-            })?;
-
-            let keychain = Keychain::global();
-            keychain.save_tap_signer_backup(&metadata.id, backup).ok()
+        let Some(metadata) = self.find_tap_signer_wallet(tap_signer) else {
+            debug!("Unable to find wallet with card ident {}", tap_signer.card_ident);
+            return false;
         };
 
-        run().is_some()
+        let keychain = Keychain::global();
+        match keychain.save_tap_signer_backup(&metadata.id, backup) {
+            Ok(()) => true,
+            Err(e) => {
+                error!("Failed to save tap signer backup for {}: {e}", metadata.id);
+                false
+            }
+        }
     }
 
     pub fn version(&self) -> String {
@@ -493,6 +530,38 @@ impl FfiApp {
     #[uniffi::method]
     pub fn fees(&self) -> Result<FeeResponse, Error> {
         App::global().fees().ok_or_else(|| Error::FeesError("no fees saved".to_string()))
+    }
+
+    /// Delete a wallet with a corrupted database, cleaning up all associated data
+    pub fn delete_corrupted_wallet(&self, id: WalletId) {
+        let database = Database::global();
+        let keychain = Keychain::global();
+
+        if let Err(error) = database.wallets.delete(&id) {
+            error!("Unable to delete corrupted wallet from database: {error}");
+        }
+
+        keychain.delete_wallet_items(&id);
+
+        if let Err(error) = crate::wallet::delete_wallet_specific_data(&id) {
+            error!("Unable to delete wallet persisted data: {error}");
+        }
+
+        match database.global_config.selected_wallet() {
+            Some(selected_id) if selected_id == id => {
+                let _ = database.global_config.clear_selected_wallet().tap_err(|error| {
+                    error!("Unable to clear selected wallet: {error}");
+                });
+            }
+            _ => (),
+        }
+
+        let remaining_wallets = database.wallets().all().unwrap_or_default();
+        if let Some(next_wallet) = remaining_wallets.first() {
+            let _ = self.select_wallet(next_wallet.id.clone(), None);
+        } else {
+            self.load_and_reset_default_route(Route::NewWallet(Default::default()));
+        }
     }
 
     /// DANGER: This will wipe all wallet data on this device

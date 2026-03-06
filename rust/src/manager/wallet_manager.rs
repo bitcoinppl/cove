@@ -247,6 +247,9 @@ pub enum WalletManagerError {
 
     #[error("Unable to add UTXOs to PSBT: {0}")]
     AddUtxosError(String),
+
+    #[error("Wallet database corrupted for {id}: {error}")]
+    DatabaseCorruption { id: WalletId, error: String },
 }
 
 #[uniffi::export(async_runtime = "tokio")]
@@ -285,7 +288,9 @@ impl RustWalletManager {
         deferred.queue(Message::WalletBalanceChanged(cached_balance.into()));
         deferred.queue(Message::AvailableTransactions(cached_transactions));
 
-        let actor = task::spawn_actor(WalletActor::new(wallet, sender.clone()));
+        let wallet_actor = WalletActor::new(wallet, sender.clone())
+            .map_err(|e| Error::DatabaseCorruption { id: id.clone(), error: e.to_string() })?;
+        let actor = task::spawn_actor(wallet_actor);
 
         // will only create the scanner if its not already complete
         let scanner = WalletScanner::try_new(metadata.clone(), sender).ok().map(spawn_actor);
@@ -352,7 +357,9 @@ impl RustWalletManager {
         let scanner =
             WalletScanner::try_new(metadata.clone(), sender.clone()).ok().map(spawn_actor);
 
-        let actor = task::spawn_actor(WalletActor::new(wallet, sender.clone()));
+        let wallet_actor = WalletActor::new(wallet, sender.clone())
+            .map_err(|e| Error::DatabaseCorruption { id: id.clone(), error: e.to_string() })?;
+        let actor = task::spawn_actor(wallet_actor);
         let label_manager = LabelManager::new(id.clone()).into();
 
         Ok(Self {
@@ -379,7 +386,9 @@ impl RustWalletManager {
         let id = wallet.id.clone();
         let metadata = wallet.metadata.clone();
 
-        let actor = task::spawn_actor(WalletActor::new(wallet, sender.clone()));
+        let wallet_actor = WalletActor::new(wallet, sender.clone())
+            .map_err(|e| Error::DatabaseCorruption { id: id.clone(), error: e.to_string() })?;
+        let actor = task::spawn_actor(wallet_actor);
         let label_manager = LabelManager::new(id.clone()).into();
 
         Ok(Self {
@@ -1346,7 +1355,9 @@ impl RustWalletManager {
 
         let wallet = Wallet::preview_new_wallet();
         let label_manager = LabelManager::new(wallet.metadata.id.clone()).into();
-        let actor = task::spawn_actor(WalletActor::new(wallet, sender.clone()));
+        let wallet_actor = WalletActor::new(wallet, sender.clone())
+            .expect("failed to open wallet database for preview wallet");
+        let actor = task::spawn_actor(wallet_actor);
 
         Self {
             id: metadata.id.clone(),

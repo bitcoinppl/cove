@@ -157,12 +157,14 @@ impl Actor for WalletActor {
 }
 
 impl WalletActor {
-    pub fn new(wallet: Wallet, reconciler: Sender<SingleOrMany>) -> Self {
-        let db = WalletDataDb::new_or_existing(wallet.id.clone())
-            .expect("failed to open wallet database for wallet actor");
+    pub fn new(
+        wallet: Wallet,
+        reconciler: Sender<SingleOrMany>,
+    ) -> std::result::Result<Self, crate::database::wallet_data::WalletDataError> {
+        let db = WalletDataDb::new_or_existing(wallet.id.clone())?;
         let seed = rand::rng().random();
 
-        Self {
+        Ok(Self {
             addr: Default::default(),
             reconciler,
             seed,
@@ -173,7 +175,7 @@ impl WalletActor {
             state: ActorState::Initial,
             transaction_watchers: HashMap::default(),
             db,
-        }
+        })
     }
 
     pub async fn balance(&mut self) -> ActorResult<Balance> {
