@@ -292,6 +292,13 @@ impl LabelManager {
 }
 
 impl LabelManager {
+    pub fn try_new(
+        id: WalletId,
+    ) -> std::result::Result<Self, crate::database::wallet_data::WalletDataError> {
+        let db = WalletDataDb::new_or_existing(id.clone())?;
+        Ok(Self { id, db })
+    }
+
     pub fn import_labels(&self, labels: impl Into<Labels>) -> Result<(), LabelManagerError> {
         let labels = labels.into();
 

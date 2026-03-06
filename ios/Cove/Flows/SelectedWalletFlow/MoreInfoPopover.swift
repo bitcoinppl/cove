@@ -69,9 +69,12 @@ struct MoreInfoPopover: View {
         }
     }
 
+    @State private var tapSignerBackup: Data? = nil
+    @State private var tapSignerBackupError: Error? = nil
+
     @ViewBuilder
     func DownloadBackupButton(_ t: TapSigner) -> some View {
-        if let backup = app.getTapSignerBackup(t) {
+        if let backup = tapSignerBackup {
             let content = hexEncode(bytes: backup)
             let prefix = t.identFileNamePrefix()
             let filename = "\(prefix)_backup.txt"
@@ -82,6 +85,15 @@ struct MoreInfoPopover: View {
             ) {
                 Label("Download Backup", systemImage: "square.and.arrow.down")
             }
+        } else if let backupError = tapSignerBackupError {
+            Button(action: {
+                app.alertState = .init(.general(
+                    title: "Backup Error",
+                    message: "Failed to retrieve backup: \(backupError.localizedDescription)"
+                ))
+            }) {
+                Label("Download Backup", systemImage: "square.and.arrow.down")
+            }
         } else {
             Button(action: {
                 let route = TapSignerRoute.enterPin(tapSigner: t, action: .backup)
@@ -89,6 +101,14 @@ struct MoreInfoPopover: View {
             }) {
                 Label("Download Backup", systemImage: "square.and.arrow.down")
             }
+        }
+    }
+
+    func loadTapSignerBackup(_ t: TapSigner) {
+        do {
+            tapSignerBackup = try app.getTapSignerBackup(t)
+        } catch {
+            tapSignerBackupError = error
         }
     }
 
@@ -137,6 +157,11 @@ struct MoreInfoPopover: View {
             }
         }
         .tint(.primary)
+        .onAppear {
+            if case let .tapSigner(t) = metadata.hardwareMetadata {
+                loadTapSignerBackup(t)
+            }
+        }
     }
 }
 

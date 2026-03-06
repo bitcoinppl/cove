@@ -30,6 +30,7 @@ import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.RouteFactory
 import org.bitcoinppl.cove_core.SendRoute
 import org.bitcoinppl.cove_core.WalletManagerAction
+import org.bitcoinppl.cove_core.WalletManagerException
 import org.bitcoinppl.cove_core.WalletType
 import org.bitcoinppl.cove_core.types.WalletId
 
@@ -76,6 +77,11 @@ fun SelectedWalletContainer(
                 wm.close()
                 android.util.Log.d(tag, "discarding stale wallet load for $requestedId, now loading $id")
             }
+        } catch (e: WalletManagerException.DatabaseCorruption) {
+            android.util.Log.e(tag, "wallet database corrupted for ${e.`id`}: ${e.`error`}", e)
+            app.alertState = TaggedItem(
+                AppAlertState.WalletDatabaseCorrupted(walletId = e.`id`, error = e.`error`)
+            )
         } catch (e: Exception) {
             android.util.Log.e(tag, "something went very wrong", e)
 

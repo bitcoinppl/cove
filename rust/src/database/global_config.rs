@@ -325,7 +325,7 @@ impl GlobalConfigTable {
         self.set_priv_hashed_pin_code(hashed_pin_code)
     }
 
-    fn get(&self, key: GlobalConfigKey) -> Result<Option<String>> {
+    pub(crate) fn get(&self, key: GlobalConfigKey) -> Result<Option<String>> {
         let read_txn =
             self.db.begin_read().map_err(|error| Error::DatabaseAccess(error.to_string()))?;
 
@@ -341,7 +341,7 @@ impl GlobalConfigTable {
         Ok(value)
     }
 
-    fn set(&self, key: GlobalConfigKey, value: String) -> Result<()> {
+    pub(crate) fn set(&self, key: GlobalConfigKey, value: String) -> Result<()> {
         let write_txn =
             self.db.begin_write().map_err(|error| Error::DatabaseAccess(error.to_string()))?;
 

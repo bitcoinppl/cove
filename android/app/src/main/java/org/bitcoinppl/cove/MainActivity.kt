@@ -919,6 +919,28 @@ private fun GlobalAlertDialog(
             )
         }
 
+        is AppAlertState.WalletDatabaseCorrupted -> {
+            AlertDialog(
+                onDismissRequest = onDismiss,
+                title = { Text(state.title()) },
+                text = { Text(state.message()) },
+                confirmButton = {
+                    Column(horizontalAlignment = Alignment.End) {
+                        TextButton(onClick = {
+                            onDismiss()
+                            app.rust.deleteCorruptedWallet(state.walletId)
+                        }) {
+                            Text("Delete Wallet", color = MaterialTheme.colorScheme.error)
+                        }
+                        TextButton(onClick = {
+                            onDismiss()
+                            app.rust.selectLatestOrNewWallet()
+                        }) { Text("Cancel") }
+                    }
+                },
+            )
+        }
+
         else -> {
             AlertDialog(
                 onDismissRequest = onDismiss,

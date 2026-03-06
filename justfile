@@ -376,7 +376,13 @@ run-ios:
 # Show logcat for cove process
 [group('util')]
 logcat:
-    adb logcat --pid=$(adb shell pidof org.bitcoinppl.cove)
+    #!/usr/bin/env bash
+    pid=$(adb shell pidof org.bitcoinppl.cove.dev | tr -d '[:space:]')
+    if [ -z "$pid" ]; then
+        echo "error: org.bitcoinppl.cove.dev is not running" >&2
+        exit 1
+    fi
+    adb logcat --pid="$pid"
 
 # ------------------------------------------------------------------------------
 # helpers

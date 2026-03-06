@@ -94,6 +94,12 @@ fun SettingsContainer(
                         modifier = modifier,
                     )
                 }
+                is SettingsRoute.About -> {
+                    AboutSettingsScreen(
+                        app = app,
+                        modifier = modifier,
+                    )
+                }
             }
         }
     }

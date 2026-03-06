@@ -76,7 +76,7 @@ impl<S: CsppStore> Cspp<S> {
     /// keychain entries — it must be explicitly decrypted to be read
     fn save_master_key(&self, master_key: &MasterKey) -> Result<(), CsppError> {
         let hex = hex::encode(master_key.as_bytes());
-        let cryptor = Cryptor::new();
+        let mut cryptor = Cryptor::new();
 
         let encrypted = cryptor.encrypt_to_string(&hex).map_err_str(CsppError::Encrypt)?;
 

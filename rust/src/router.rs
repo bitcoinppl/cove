@@ -75,6 +75,7 @@ pub enum SettingsRoute {
     },
 
     AllWallets,
+    About,
 }
 
 #[derive(Debug, Clone, Default, Hash, From, Eq, PartialEq, uniffi::Enum)]

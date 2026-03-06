@@ -1045,6 +1045,7 @@ dependencies = [
  "rusqlite",
  "rust-cktap",
  "rustls",
+ "ruzstd",
  "serde",
  "serde_json",
  "serde_urlencoded",
@@ -1784,20 +1785,20 @@ dependencies = [
  "cfg-if",
  "js-sys",
  "libc",
- "r-efi",
+ "r-efi 5.3.0",
  "wasip2",
  "wasm-bindgen",
 ]
 
 [[package]]
 name = "getrandom"
-version = "0.4.1"
+version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "139ef39800118c7683f2fd3c98c1b23c09ae076556b435f8e9064ae108aaeeec"
+checksum = "0de51e6874e94e7bf76d726fc5d13ba782deca734ff60d5bb2fb2607c7406555"
 dependencies = [
  "cfg-if",
  "libc",
- "r-efi",
+ "r-efi 6.0.0",
  "rand_core 0.10.0",
  "wasip2",
  "wasip3",
@@ -2260,9 +2261,9 @@ dependencies = [
 
 [[package]]
 name = "ipnet"
-version = "2.11.0"
+version = "2.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "469fb0b9cefa57e3ef31275ee7cacb78f2fdca44e4765491884a2b119d4eb130"
+checksum = "d98f6fed1fde3f8c21bc40a1abb88dd75e67924f9cffc3ef95607bad8017f8e2"
 
 [[package]]
 name = "iri-string"
@@ -2306,9 +2307,9 @@ checksum = "92ecc6618181def0457392ccd0ee51198e065e016d1d527a7ac1b6dc7c1f09d2"
 
 [[package]]
 name = "jiff"
-version = "0.2.22"
+version = "0.2.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "819b44bc7c87d9117eb522f14d46e918add69ff12713c475946b0a29363ed1c2"
+checksum = "1a3546dc96b6d42c5f24902af9e2538e82e39ad350b0c766eb3fbf2d8f3d8359"
 dependencies = [
  "jiff-static",
  "jiff-tzdb-platform",
@@ -2321,9 +2322,9 @@ dependencies = [
 
 [[package]]
 name = "jiff-static"
-version = "0.2.22"
+version = "0.2.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "470252db18ecc35fd766c0891b1e3ec6cbbcd62507e85276c01bf75d8e94d4a1"
+checksum = "2a8c8b344124222efd714b73bb41f8b5120b27a7cc1c75593a6ff768d9d05aa4"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2332,9 +2333,9 @@ dependencies = [
 
 [[package]]
 name = "jiff-tzdb"
-version = "0.1.5"
+version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68971ebff725b9e2ca27a601c5eb38a4c5d64422c4cbab0c535f248087eda5c2"
+checksum = "c900ef84826f1338a557697dc8fc601df9ca9af4ac137c7fb61d4c6f2dfd3076"
 
 [[package]]
 name = "jiff-tzdb-platform"
@@ -3122,9 +3123,9 @@ dependencies = [
 
 [[package]]
 name = "quote"
-version = "1.0.44"
+version = "1.0.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "21b2ebcf727b7760c461f091f9f0f539b77b8e87f2fd88131e7f1b433b3cece4"
+checksum = "41f2619966050689382d2b44f664f4bc593e129785a36d6ee376ddf37259b924"
 dependencies = [
  "proc-macro2",
 ]
@@ -3134,6 +3135,12 @@ name = "r-efi"
 version = "5.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "69cdb34c158ceb288df11e18b4bd39de994f6657d83847bdffdbd7f346754b0f"
+
+[[package]]
+name = "r-efi"
+version = "6.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
 
 [[package]]
 name = "radium"
@@ -3175,7 +3182,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bc266eb313df6c5c09c1c7b1fbe2510961e5bcd3add930c1e31f7ed9da0feff8"
 dependencies = [
  "chacha20 0.10.0",
- "getrandom 0.4.1",
+ "getrandom 0.4.2",
  "rand_core 0.10.0",
 ]
 
@@ -3587,6 +3594,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b39cdef0fa800fc44525c84ccb54a029961a8215f9619753635a9c0d2538d46d"
 
 [[package]]
+name = "ruzstd"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e5ff0cc5e135c8870a775d3320910cd9b564ec036b4dc0b8741629020be63f01"
+dependencies = [
+ "twox-hash",
+]
+
+[[package]]
 name = "ryu"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3943,7 +3959,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "82a72c767771b47409d2345987fda8628641887d5466101319899796367354a0"
 dependencies = [
  "fastrand",
- "getrandom 0.4.1",
+ "getrandom 0.4.2",
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",
@@ -4048,9 +4064,9 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tokio"
-version = "1.49.0"
+version = "1.50.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72a2903cd7736441aac9df9d7688bd0ce48edccaadf181c3b90be801e81d3d86"
+checksum = "27ad5e34374e03cfffefc301becb44e9dc3c17584f414349ebe29ed26661822d"
 dependencies = [
  "bytes",
  "libc",
@@ -4063,9 +4079,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-macros"
-version = "2.6.0"
+version = "2.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "af407857209536a95c8e56f8231ef2c2e2aff839b22e07a1ffcbc617e9db9fa5"
+checksum = "5c55a2eff8b69ce66c84f85e1da1c233edc36ceb85a2058d11b0d6a3c7e7569c"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4253,6 +4269,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
+name = "twox-hash"
+version = "2.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9ea3136b675547379c4bd395ca6b938e5ad3c3d20fad76e7fe85f9e0d011419c"
+
+[[package]]
 name = "typenum"
 version = "1.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4303,7 +4325,7 @@ dependencies = [
 [[package]]
 name = "uniffi"
 version = "0.31.0"
-source = "git+https://github.com/mozilla/uniffi-rs?branch=main#16e9a9134743fb67386c360c518e225842fcacb6"
+source = "git+https://github.com/mozilla/uniffi-rs?branch=main#74de31f4302d28702df9f6378260c2f83c1fb86f"
 dependencies = [
  "anyhow",
  "camino",
@@ -4345,7 +4367,7 @@ dependencies = [
 [[package]]
 name = "uniffi_bindgen"
 version = "0.31.0"
-source = "git+https://github.com/mozilla/uniffi-rs?branch=main#16e9a9134743fb67386c360c518e225842fcacb6"
+source = "git+https://github.com/mozilla/uniffi-rs?branch=main#74de31f4302d28702df9f6378260c2f83c1fb86f"
 dependencies = [
  "anyhow",
  "askama 0.14.0",
@@ -4382,7 +4404,7 @@ dependencies = [
 [[package]]
 name = "uniffi_build"
 version = "0.31.0"
-source = "git+https://github.com/mozilla/uniffi-rs?branch=main#16e9a9134743fb67386c360c518e225842fcacb6"
+source = "git+https://github.com/mozilla/uniffi-rs?branch=main#74de31f4302d28702df9f6378260c2f83c1fb86f"
 dependencies = [
  "anyhow",
  "camino",
@@ -4411,7 +4433,7 @@ dependencies = [
 [[package]]
 name = "uniffi_core"
 version = "0.31.0"
-source = "git+https://github.com/mozilla/uniffi-rs?branch=main#16e9a9134743fb67386c360c518e225842fcacb6"
+source = "git+https://github.com/mozilla/uniffi-rs?branch=main#74de31f4302d28702df9f6378260c2f83c1fb86f"
 dependencies = [
  "anyhow",
  "async-compat",
@@ -4436,7 +4458,7 @@ dependencies = [
 [[package]]
 name = "uniffi_internal_macros"
 version = "0.31.0"
-source = "git+https://github.com/mozilla/uniffi-rs?branch=main#16e9a9134743fb67386c360c518e225842fcacb6"
+source = "git+https://github.com/mozilla/uniffi-rs?branch=main#74de31f4302d28702df9f6378260c2f83c1fb86f"
 dependencies = [
  "anyhow",
  "indexmap",
@@ -4465,7 +4487,7 @@ dependencies = [
 [[package]]
 name = "uniffi_macros"
 version = "0.31.0"
-source = "git+https://github.com/mozilla/uniffi-rs?branch=main#16e9a9134743fb67386c360c518e225842fcacb6"
+source = "git+https://github.com/mozilla/uniffi-rs?branch=main#74de31f4302d28702df9f6378260c2f83c1fb86f"
 dependencies = [
  "camino",
  "fs-err",
@@ -4493,7 +4515,7 @@ dependencies = [
 [[package]]
 name = "uniffi_meta"
 version = "0.31.0"
-source = "git+https://github.com/mozilla/uniffi-rs?branch=main#16e9a9134743fb67386c360c518e225842fcacb6"
+source = "git+https://github.com/mozilla/uniffi-rs?branch=main#74de31f4302d28702df9f6378260c2f83c1fb86f"
 dependencies = [
  "anyhow",
  "siphasher 1.0.2",
@@ -4517,7 +4539,7 @@ dependencies = [
 [[package]]
 name = "uniffi_pipeline"
 version = "0.31.0"
-source = "git+https://github.com/mozilla/uniffi-rs?branch=main#16e9a9134743fb67386c360c518e225842fcacb6"
+source = "git+https://github.com/mozilla/uniffi-rs?branch=main#74de31f4302d28702df9f6378260c2f83c1fb86f"
 dependencies = [
  "anyhow",
  "heck",
@@ -4529,7 +4551,7 @@ dependencies = [
 [[package]]
 name = "uniffi_testing"
 version = "0.31.0"
-source = "git+https://github.com/mozilla/uniffi-rs?branch=main#16e9a9134743fb67386c360c518e225842fcacb6"
+source = "git+https://github.com/mozilla/uniffi-rs?branch=main#74de31f4302d28702df9f6378260c2f83c1fb86f"
 dependencies = [
  "anyhow",
  "camino",
@@ -4553,7 +4575,7 @@ dependencies = [
 [[package]]
 name = "uniffi_udl"
 version = "0.31.0"
-source = "git+https://github.com/mozilla/uniffi-rs?branch=main#16e9a9134743fb67386c360c518e225842fcacb6"
+source = "git+https://github.com/mozilla/uniffi-rs?branch=main#74de31f4302d28702df9f6378260c2f83c1fb86f"
 dependencies = [
  "anyhow",
  "textwrap",
@@ -4822,7 +4844,7 @@ dependencies = [
 [[package]]
 name = "weedle2"
 version = "5.0.0"
-source = "git+https://github.com/mozilla/uniffi-rs?branch=main#16e9a9134743fb67386c360c518e225842fcacb6"
+source = "git+https://github.com/mozilla/uniffi-rs?branch=main#74de31f4302d28702df9f6378260c2f83c1fb86f"
 dependencies = [
  "nom 7.1.3",
 ]

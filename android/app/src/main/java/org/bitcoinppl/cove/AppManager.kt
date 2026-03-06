@@ -12,6 +12,7 @@ import org.bitcoinppl.cove.flows.SendFlow.SendFlowManager
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowPresenter
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.AppAlertState
+import org.bitcoinppl.cove_core.device.KeychainException
 import org.bitcoinppl.cove_core.tapcard.*
 import org.bitcoinppl.cove_core.types.*
 import java.util.UUID
@@ -180,6 +181,7 @@ class AppManager private constructor() : FfiReconcile {
 
     fun findTapSignerWallet(ts: TapSigner): WalletMetadata? = rust.findTapSignerWallet(ts)
 
+    @Throws(KeychainException::class)
     fun getTapSignerBackup(ts: TapSigner): ByteArray? = rust.getTapSignerBackup(ts)
 
     fun saveTapSignerBackup(ts: TapSigner, backup: ByteArray): Boolean =

@@ -207,6 +207,15 @@ struct CoveMainView: View {
             Button("Cancel", role: .cancel) {
                 app.alertState = .none
             }
+        case let .walletDatabaseCorrupted(walletId, _):
+            Button("Delete Wallet", role: .destructive) {
+                app.alertState = .none
+                app.rust.deleteCorruptedWallet(id: walletId)
+            }
+            Button("Cancel", role: .cancel) {
+                app.alertState = .none
+                app.rust.selectLatestOrNewWallet()
+            }
         case .invalidWordGroup,
              .errorImportingHotWallet,
              .importedSuccessfully,

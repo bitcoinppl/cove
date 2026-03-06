@@ -27,9 +27,9 @@ struct SettingsRow: View {
                 .font(.subheadline)
                 .padding(8)
 
-            if route != nil {
-                Spacer()
+            Spacer()
 
+            if route != nil {
                 Image(systemName: "chevron.right")
                     .foregroundColor(Color(UIColor.tertiaryLabel))
                     .font(.footnote)

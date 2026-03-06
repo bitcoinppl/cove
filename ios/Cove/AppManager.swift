@@ -123,8 +123,8 @@ private let walletModeChangeDelayMs = 250
         rust.findTapSignerWallet(tapSigner: ts)
     }
 
-    public func getTapSignerBackup(_ ts: TapSigner) -> Data? {
-        rust.getTapSignerBackup(tapSigner: ts)
+    public func getTapSignerBackup(_ ts: TapSigner) throws -> Data? {
+        try rust.getTapSignerBackup(tapSigner: ts)
     }
 
     public func saveTapSignerBackup(_ ts: TapSigner, _ backup: Data) -> Bool {

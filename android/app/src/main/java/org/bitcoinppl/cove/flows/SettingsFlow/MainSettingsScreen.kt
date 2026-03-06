@@ -5,6 +5,7 @@ import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -12,23 +13,31 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AttachMoney
+import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.FileUpload
+import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Hub
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.TheaterComedy
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -47,11 +56,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
+import org.bitcoinppl.cove.ui.theme.MaterialSpacing
 import org.bitcoinppl.cove.Auth
 import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.R
@@ -62,10 +73,12 @@ import org.bitcoinppl.cove.views.MaterialSettingsItem
 import org.bitcoinppl.cove.views.NumberPadPinView
 import org.bitcoinppl.cove.views.SectionHeader
 import org.bitcoinppl.cove.views.WalletIcon
+import org.bitcoinppl.cove_core.AppAction
 import org.bitcoinppl.cove_core.AuthManagerAction
 import org.bitcoinppl.cove_core.AuthManagerException
 import org.bitcoinppl.cove_core.AuthType
 import org.bitcoinppl.cove_core.Database
+import org.bitcoinppl.cove_core.GlobalFlagKey
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.SecurityAlertState
 import org.bitcoinppl.cove_core.SecuritySettingsAction
@@ -81,6 +94,19 @@ fun MainSettingsScreen(
     app: org.bitcoinppl.cove.AppManager,
     modifier: Modifier = Modifier,
 ) {
+    var isBetaEnabled by remember { mutableStateOf(
+        Database().globalFlag().getBoolConfig(GlobalFlagKey.BETA_FEATURES_ENABLED)
+    ) }
+    var showBackupExport by remember { mutableStateOf(false) }
+    var showBackupImport by remember { mutableStateOf(false) }
+    var showBackupVerify by remember { mutableStateOf(false) }
+    var showBackupExportAuth by remember { mutableStateOf(false) }
+
+    // refresh beta state when returning from About screen
+    LaunchedEffect(Unit) {
+        isBetaEnabled = Database().globalFlag().getBoolConfig(GlobalFlagKey.BETA_FEATURES_ENABLED)
+    }
+
     Scaffold(
         modifier =
             modifier
@@ -165,37 +191,86 @@ fun MainSettingsScreen(
 
                 SecuritySection(app = app)
 
-                Spacer(modifier = Modifier.height(32.dp))
+                BackupSection(
+                    isBetaEnabled = isBetaEnabled,
+                    onExport = {
+                        if (Auth.type != AuthType.NONE) {
+                            showBackupExportAuth = true
+                        } else {
+                            showBackupExport = true
+                        }
+                    },
+                    onImport = { showBackupImport = true },
+                    onVerify = { showBackupVerify = true },
+                )
 
-                Column(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    val debugOrRelease = app.rust.debugOrRelease()
-                    if (debugOrRelease.isNotEmpty()) {
-                        Text(
-                            text = debugOrRelease,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f),
-                        )
-                    }
-                    Text(
-                        text = app.fullVersionId,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f),
-                    )
-                    Text(
-                        text = "feedback@covebitcoinwallet.com",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f),
+                if (isBetaEnabled && !Auth.isInDecoyMode()) {
+                    BetaToggleSection(
+                        isBetaEnabled = isBetaEnabled,
+                        onToggle = { newValue ->
+                            Database().globalFlag().set(GlobalFlagKey.BETA_FEATURES_ENABLED, newValue)
+                            isBetaEnabled = newValue
+                        },
                     )
                 }
+
+                SectionHeader("About")
+                MaterialSection {
+                    Column {
+                        MaterialSettingsItem(
+                            title = "About",
+                            icon = Icons.Default.Info,
+                            onClick = {
+                                app.pushRoute(
+                                    org.bitcoinppl.cove_core.Route
+                                        .Settings(org.bitcoinppl.cove_core.SettingsRoute.About),
+                                )
+                            },
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
             }
         },
     )
+
+    if (showBackupExportAuth) {
+        BackupExportAuthDialog(
+            onDismiss = { showBackupExportAuth = false },
+            onUnlock = {
+                showBackupExportAuth = false
+                showBackupExport = true
+            },
+        )
+    }
+
+    if (showBackupExport) {
+        Dialog(
+            onDismissRequest = { showBackupExport = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            BackupExportScreen(onDismiss = { showBackupExport = false })
+        }
+    }
+
+    if (showBackupImport) {
+        Dialog(
+            onDismissRequest = { showBackupImport = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            BackupImportScreen(app = app, onDismiss = { showBackupImport = false })
+        }
+    }
+
+    if (showBackupVerify) {
+        Dialog(
+            onDismissRequest = { showBackupVerify = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            BackupVerifyScreen(onDismiss = { showBackupVerify = false })
+        }
+    }
 }
 
 @Composable
@@ -1008,5 +1083,174 @@ private fun SecuritySheetDialog(
                 else -> {}
             }
         }
+    }
+}
+
+@Composable
+private fun BackupExportAuthDialog(
+    onDismiss: () -> Unit,
+    onUnlock: () -> Unit,
+) {
+    val context = LocalContext.current
+    val activity = context.findFragmentActivity()
+    val authType = Auth.type
+
+    // for biometric-only auth, trigger biometric directly without showing a dialog
+    if (authType == AuthType.BIOMETRIC) {
+        LaunchedEffect(Unit) {
+            val act = activity ?: run { onDismiss(); return@LaunchedEffect }
+            val biometricPrompt = BiometricPrompt(
+                act,
+                ContextCompat.getMainExecutor(context),
+                object : BiometricPrompt.AuthenticationCallback() {
+                    override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                        super.onAuthenticationError(errorCode, errString)
+                        onDismiss()
+                    }
+                    override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                        super.onAuthenticationSucceeded(result)
+                        // reject biometric in decoy mode — no "decoy backup" concept
+                        if (Auth.isInDecoyMode()) { onDismiss(); return }
+                        onUnlock()
+                    }
+                },
+            )
+            biometricPrompt.authenticate(
+                BiometricPrompt.PromptInfo.Builder()
+                    .setTitle("Unlock Backup Export")
+                    .setSubtitle("Verify your identity to export")
+                    .setNegativeButtonText("Cancel")
+                    .build()
+            )
+        }
+        return
+    }
+
+    // for BOTH auth, try biometric first then fall back to PIN
+    var showPinFallback by remember { mutableStateOf(authType == AuthType.PIN) }
+
+    if (authType == AuthType.BOTH && !showPinFallback) {
+        LaunchedEffect(Unit) {
+            val act = activity ?: run { showPinFallback = true; return@LaunchedEffect }
+            val biometricPrompt = BiometricPrompt(
+                act,
+                ContextCompat.getMainExecutor(context),
+                object : BiometricPrompt.AuthenticationCallback() {
+                    override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                        super.onAuthenticationError(errorCode, errString)
+                        showPinFallback = true
+                    }
+                    override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                        super.onAuthenticationSucceeded(result)
+                        if (Auth.isInDecoyMode()) { onDismiss(); return }
+                        onUnlock()
+                    }
+                },
+            )
+            biometricPrompt.authenticate(
+                BiometricPrompt.PromptInfo.Builder()
+                    .setTitle("Unlock Backup Export")
+                    .setSubtitle("Verify your identity to export")
+                    .setNegativeButtonText("Use PIN")
+                    .build()
+            )
+        }
+    }
+
+    // PIN dialog (shown for PIN-only auth, or as fallback after biometric cancel/fail)
+    if (showPinFallback) {
+        Dialog(
+            onDismissRequest = onDismiss,
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black),
+            ) {
+                NumberPadPinView(
+                    title = "Enter PIN",
+                    isPinCorrect = { pin -> Auth.checkPin(pin) },
+                    backAction = onDismiss,
+                    onUnlock = { onUnlock() },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BackupSection(
+    isBetaEnabled: Boolean,
+    onExport: () -> Unit,
+    onImport: () -> Unit,
+    onVerify: () -> Unit,
+) {
+    if (!isBetaEnabled || Auth.isInDecoyMode()) return
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Spacer(modifier = Modifier.height(MaterialSpacing.medium))
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = MaterialSpacing.medium, end = MaterialSpacing.medium, top = 12.dp, bottom = 4.dp),
+        ) {
+            Text(
+                text = "Backup",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = "BETA",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = Color.White,
+                modifier = Modifier
+                    .background(color = Color(0xFFFF9800), shape = RoundedCornerShape(50))
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+            )
+        }
+    }
+    MaterialSection {
+        Column {
+            MaterialSettingsItem(
+                title = "Export All",
+                icon = Icons.Default.FileUpload,
+                onClick = onExport,
+            )
+            MaterialDivider()
+            MaterialSettingsItem(
+                title = "Import All",
+                icon = Icons.Default.FileDownload,
+                onClick = onImport,
+            )
+            MaterialDivider()
+            MaterialSettingsItem(
+                title = "Verify Backup",
+                icon = Icons.Default.VerifiedUser,
+                onClick = onVerify,
+            )
+        }
+    }
+}
+
+@Composable
+private fun BetaToggleSection(
+    isBetaEnabled: Boolean,
+    onToggle: (Boolean) -> Unit,
+) {
+    SectionHeader("Beta")
+    MaterialSection {
+        MaterialSettingsItem(
+            title = "Beta Features",
+            subtitle = "Disable to hide experimental features",
+            icon = Icons.Default.Science,
+            isSwitch = true,
+            switchCheckedState = isBetaEnabled,
+            onCheckChanged = onToggle,
+        )
     }
 }
