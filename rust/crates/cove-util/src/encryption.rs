@@ -21,10 +21,11 @@ const SPLITTER: &str = "::";
 ///
 /// Usage: create a fresh `Cryptor` (random key + nonce), encrypt the secret, then
 /// store both the ciphertext and the serialized Cryptor as separate keychain entries
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Cryptor {
     key: Key,
     nonce: Nonce,
+    used: bool,
 }
 
 #[derive(Debug, Clone, thiserror::Error)]
@@ -35,8 +36,17 @@ pub enum Error {
     #[error("key not in base64 format")]
     KeyInvalidFormat(base64::DecodeError),
 
+    #[error("key has invalid length")]
+    KeyInvalidLength,
+
     #[error("nonce not in base64 format")]
     NonceInvalidFormat(base64::DecodeError),
+
+    #[error("nonce has invalid length")]
+    NonceInvalidLength,
+
+    #[error("nonce already used, create a new Cryptor for each encryption")]
+    NonceAlreadyUsed,
 
     #[error("unable to encrypt: {0}")]
     UnableToEncrypt(chacha20poly1305::Error),
@@ -57,7 +67,7 @@ impl Cryptor {
         let key = ChaCha20Poly1305::generate_key(&mut OsRng);
         let nonce = ChaCha20Poly1305::generate_nonce(&mut OsRng);
 
-        Self { key, nonce }
+        Self { key, nonce, used: false }
     }
 
     /// Create a cryptor from a serialized string
@@ -71,17 +81,18 @@ impl Cryptor {
         let key_bytes =
             BASE64_STANDARD.decode(key_string.as_bytes()).map_err(Error::KeyInvalidFormat)?;
 
-        let key = Key::from_slice(&key_bytes);
+        let key_bytes: [u8; 32] = key_bytes.try_into().map_err(|_| Error::KeyInvalidLength)?;
 
         let nonce_bytes =
             BASE64_STANDARD.decode(nonce_string.as_bytes()).map_err(Error::NonceInvalidFormat)?;
 
-        let nonce = Nonce::from_slice(&nonce_bytes);
+        let nonce_bytes: [u8; 12] =
+            nonce_bytes.try_into().map_err(|_| Error::NonceInvalidLength)?;
 
-        Ok(Self { key: *key, nonce: *nonce })
+        Ok(Self { key: key_bytes.into(), nonce: nonce_bytes.into(), used: true })
     }
 
-    pub fn cipher(&self) -> ChaCha20Poly1305 {
+    pub(crate) fn cipher(&self) -> ChaCha20Poly1305 {
         ChaCha20Poly1305::new(&self.key)
     }
 
@@ -97,9 +108,16 @@ impl Cryptor {
 
     /// Encrypt plaintext bytes
     ///
+    /// Can only be called once per Cryptor to prevent nonce reuse
+    ///
     /// # Errors
-    /// Returns an error if encryption fails
-    pub fn encrypt(&self, plaintext: &[u8]) -> Result<Vec<u8>, Error> {
+    /// Returns an error if encryption fails or if the nonce was already used
+    pub fn encrypt(&mut self, plaintext: &[u8]) -> Result<Vec<u8>, Error> {
+        if self.used {
+            return Err(Error::NonceAlreadyUsed);
+        }
+        self.used = true;
+
         let encrypted =
             self.cipher().encrypt(&self.nonce, plaintext).map_err(Error::UnableToEncrypt)?;
 
@@ -108,9 +126,11 @@ impl Cryptor {
 
     /// Encrypt a string and return the result as base64
     ///
+    /// Can only be called once per Cryptor to prevent nonce reuse
+    ///
     /// # Errors
-    /// Returns an error if encryption fails
-    pub fn encrypt_to_string(&self, plaintext: &str) -> Result<String, Error> {
+    /// Returns an error if encryption fails or if the nonce was already used
+    pub fn encrypt_to_string(&mut self, plaintext: &str) -> Result<String, Error> {
         let plaintext = plaintext.as_bytes();
         let encrypted = self.encrypt(plaintext)?;
         let encrypted_string = BASE64_STANDARD.encode(&encrypted);
