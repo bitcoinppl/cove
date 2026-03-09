@@ -425,7 +425,7 @@ impl AfterPinAction {
             Self::Derive => "For security purposes, you need to enter your TAPSIGNER PIN before you can import your wallet".to_string(),
             Self::Change => "Please enter your current PIN".to_string(),
             Self::Backup => "For security purposes, you need to enter your TAPSIGNER PIN before you can backup your wallet".to_string(),
-            Self::Sign(_) => "For security purposes, you need must enter your TAPSIGNER PIN before you can sign a transaction".to_string(),
+            Self::Sign(_) => "For security purposes, you must enter your TAPSIGNER PIN before you can sign a transaction".to_string(),
         }
     }
 }
