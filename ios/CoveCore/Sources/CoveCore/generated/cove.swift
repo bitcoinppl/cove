@@ -18866,6 +18866,7 @@ public enum GlobalFlagKey: Equatable, Hashable {
     case completedOnboarding
     case acceptedTerms
     case betaFeaturesEnabled
+    case betaImportExportEnabled
 
 
 
@@ -18893,6 +18894,8 @@ public struct FfiConverterTypeGlobalFlagKey: FfiConverterRustBuffer {
         
         case 3: return .betaFeaturesEnabled
         
+        case 4: return .betaImportExportEnabled
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -18911,6 +18914,10 @@ public struct FfiConverterTypeGlobalFlagKey: FfiConverterRustBuffer {
         
         case .betaFeaturesEnabled:
             writeInt(&buf, Int32(3))
+        
+        
+        case .betaImportExportEnabled:
+            writeInt(&buf, Int32(4))
         
         }
     }
