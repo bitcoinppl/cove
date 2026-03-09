@@ -12,7 +12,7 @@ android {
         applicationId = "org.bitcoinppl.cove"
         minSdk = 33
         targetSdk = 36
-        versionCode = 15
+        versionCode = 16
         versionName = "1.2.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -109,7 +109,11 @@ dependencies {
     // lifecycle process for app-level lifecycle observation
     implementation("androidx.lifecycle:lifecycle-process:2.10.0")
 
+    implementation("androidx.credentials:credentials:1.5.0")
+    implementation("androidx.credentials:credentials-play-services-auth:1.5.0")
+
     implementation("androidx.biometric:biometric-ktx:1.4.0-alpha02")
+    implementation("androidx.documentfile:documentfile:1.1.0")
     implementation("androidx.security:security-crypto:1.1.0")
 
     // Camera and QR scanning

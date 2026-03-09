@@ -34,15 +34,22 @@ private class ShareableFile: NSObject, UIActivityItemSource {
 }
 
 enum ShareSheet {
-    /// shows share sheet for the given file URL
+    /// Shows share sheet for the given file URL
     @MainActor
     static func present(for url: URL) {
+        present(for: url) { _ in }
+    }
+
+    /// Shows share sheet for the given file URL with a completion handler
+    @MainActor
+    static func present(for url: URL, completion: @escaping (Bool) -> Void) {
         guard let windowScene = UIApplication.shared.connectedScenes
             .compactMap({ $0 as? UIWindowScene })
             .first,
             let rootViewController = windowScene.windows
             .first(where: { $0.isKeyWindow })?.rootViewController
         else {
+            completion(false)
             return
         }
 
@@ -66,7 +73,28 @@ enum ShareSheet {
             popover.permittedArrowDirections = []
         }
 
-        rootViewController.present(activityViewController, animated: true)
+        activityViewController.completionWithItemsHandler = { _, completed, _, error in
+            do {
+                try FileManager.default.removeItem(at: url)
+            } catch let removeError as NSError where removeError.domain == NSCocoaErrorDomain && removeError.code == NSFileNoSuchFileError {
+                // already cleaned up
+            } catch {
+                Log.error("Failed to remove temporary backup file: \(error)")
+            }
+
+            if let error {
+                Log.error("Share sheet error: \(error.localizedDescription)")
+                completion(false)
+            } else {
+                completion(completed)
+            }
+        }
+
+        var presenter = rootViewController
+        while let presented = presenter.presentedViewController {
+            presenter = presented
+        }
+        presenter.present(activityViewController, animated: true)
     }
 
     /// Presents share sheet with arbitrary data by writing to a temporary file
@@ -124,8 +152,13 @@ enum ShareSheet {
 
         // set completion handler
         activityViewController.completionWithItemsHandler = { _, completed, _, error in
-            // attempt to clean up temp file
-            try? FileManager.default.removeItem(at: fileURL)
+            do {
+                try FileManager.default.removeItem(at: fileURL)
+            } catch let removeError as NSError where removeError.domain == NSCocoaErrorDomain && removeError.code == NSFileNoSuchFileError {
+                // already cleaned up
+            } catch {
+                Log.error("Failed to remove temporary file: \(error)")
+            }
 
             if let error {
                 Log.error("Share sheet error: \(error.localizedDescription)")
@@ -135,6 +168,10 @@ enum ShareSheet {
             }
         }
 
-        rootViewController.present(activityViewController, animated: true)
+        var presenter = rootViewController
+        while let presented = presenter.presentedViewController {
+            presenter = presented
+        }
+        presenter.present(activityViewController, animated: true)
     }
 }

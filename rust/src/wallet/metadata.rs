@@ -135,6 +135,19 @@ pub enum WalletType {
     WatchOnly,
 }
 
+#[uniffi::export]
+impl WalletType {
+    pub fn display_name(&self) -> String {
+        match self {
+            Self::Hot => "Hot",
+            Self::Cold => "Cold",
+            Self::XpubOnly => "Xpub Only",
+            Self::WatchOnly => "Watch Only",
+        }
+        .to_string()
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum HardwareWalletMetadata {
     TapSigner(Arc<TapSigner>),
