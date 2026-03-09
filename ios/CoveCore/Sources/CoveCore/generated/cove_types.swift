@@ -6031,7 +6031,7 @@ public func addressStringSpacedOut(address: String) -> String  {
 }
 public func allColorSchemes() -> [ColorSchemeSelection]  {
     return try!  FfiConverterSequenceTypeColorSchemeSelection.lift(try! rustCall() {
-    uniffi_cove_types_fn_func_allcolorschemes($0
+    uniffi_cove_types_fn_func_all_color_schemes($0
     )
 })
 }
@@ -6086,13 +6086,13 @@ public func feeSpeedToCircleColor(feeSpeed: FeeSpeed) -> FfiColor  {
 }
 public func allNetworks() -> [Network]  {
     return try!  FfiConverterSequenceTypeNetwork.lift(try! rustCall() {
-    uniffi_cove_types_fn_func_allnetworks($0
+    uniffi_cove_types_fn_func_all_networks($0
     )
 })
 }
-public func allBitcoinUnits() -> [BitcoinUnit]  {
+public func allUnits() -> [BitcoinUnit]  {
     return try!  FfiConverterSequenceTypeBitcoinUnit.lift(try! rustCall() {
-    uniffi_cove_types_fn_func_allbitcoinunits($0
+    uniffi_cove_types_fn_func_all_units($0
     )
 })
 }
@@ -6129,7 +6129,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_types_checksum_func_address_string_spaced_out() != 27769) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_func_allcolorschemes() != 14682) {
+    if (uniffi_cove_types_checksum_func_all_color_schemes() != 49693) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_func_confirm_details_preview_new() != 41030) {
@@ -6150,10 +6150,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_types_checksum_func_fee_speed_to_circle_color() != 20193) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_func_allnetworks() != 25213) {
+    if (uniffi_cove_types_checksum_func_all_networks() != 5848) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_func_allbitcoinunits() != 63205) {
+    if (uniffi_cove_types_checksum_func_all_units() != 35208) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_func_previewnewutxolist() != 31621) {

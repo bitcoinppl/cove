@@ -30902,9 +30902,9 @@ public func updatePricesIfNeeded()async   {
             
         )
 }
-public func sendFlowAlertStateFromAddressError(error: AddressError, address: String) -> SendFlowAlertState  {
+public func addressErrorToAlertState(error: AddressError, address: String) -> SendFlowAlertState  {
     return try!  FfiConverterTypeSendFlowAlertState_lift(try! rustCall() {
-    uniffi_cove_fn_func_sendflowalertstatefromaddresserror(
+    uniffi_cove_fn_func_address_error_to_alert_state(
         FfiConverterTypeAddressError_lower(error),
         FfiConverterString.lower(address),$0
     )
@@ -30954,24 +30954,32 @@ public func tapSignerConfirmPinArgsNewFromNewPin(args: TapSignerNewPinArgs, newP
     )
 })
 }
-public func signedTransactionOrPsbtTryParseBytes(data: Data)throws  -> SignedTransactionOrPsbt  {
+public func signedTransactionOrPsbtTryFromBytes(data: Data)throws  -> SignedTransactionOrPsbt  {
     return try  FfiConverterTypeSignedTransactionOrPsbt_lift(try rustCallWithError(FfiConverterTypeSignedImportError_lift) {
-    uniffi_cove_fn_func_signedtransactionorpsbttryparsebytes(
+    uniffi_cove_fn_func_signed_transaction_or_psbt_try_from_bytes(
         FfiConverterData.lower(data),$0
     )
 })
 }
-public func signedTransactionOrPsbtTryParseNfcMessage(nfcMessage: NfcMessage)throws  -> SignedTransactionOrPsbt  {
+public func signedTransactionOrPsbtTryFromNfcMessage(nfcMessage: NfcMessage)throws  -> SignedTransactionOrPsbt  {
     return try  FfiConverterTypeSignedTransactionOrPsbt_lift(try rustCallWithError(FfiConverterTypeSignedImportError_lift) {
-    uniffi_cove_fn_func_signedtransactionorpsbttryparsenfcmessage(
+    uniffi_cove_fn_func_signed_transaction_or_psbt_try_from_nfc_message(
         FfiConverterTypeNfcMessage_lower(nfcMessage),$0
     )
 })
 }
-public func signedTransactionOrPsbtTryParseString(input: String)throws  -> SignedTransactionOrPsbt  {
+public func signedTransactionOrPsbtTryParse(input: String)throws  -> SignedTransactionOrPsbt  {
     return try  FfiConverterTypeSignedTransactionOrPsbt_lift(try rustCallWithError(FfiConverterTypeSignedImportError_lift) {
-    uniffi_cove_fn_func_signedtransactionorpsbttryparsestring(
+    uniffi_cove_fn_func_signed_transaction_or_psbt_try_parse(
         FfiConverterString.lower(input),$0
+    )
+})
+}
+public func createTransportErrorFromCode(code: UInt16, message: String) -> TransportError  {
+    return try!  FfiConverterTypeTransportError_lift(try! rustCall() {
+    uniffi_cove_fn_func_create_transport_error_from_code(
+        FfiConverterUInt16.lower(code),
+        FfiConverterString.lower(message),$0
     )
 })
 }
@@ -30979,14 +30987,6 @@ public func isValidChainCode(chainCode: String) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
     uniffi_cove_fn_func_is_valid_chain_code(
         FfiConverterString.lower(chainCode),$0
-    )
-})
-}
-public func transportErrorFromCode(code: UInt16, message: String) -> TransportError  {
-    return try!  FfiConverterTypeTransportError_lift(try! rustCall() {
-    uniffi_cove_fn_func_transporterrorfromcode(
-        FfiConverterUInt16.lower(code),
-        FfiConverterString.lower(message),$0
     )
 })
 }
@@ -31102,15 +31102,15 @@ public func previewNewWrappedFoundAddress() -> FoundAddress  {
     )
 })
 }
-public func walletColorDefaults() -> [WalletColor]  {
+public func defaultWalletColors() -> [WalletColor]  {
     return try!  FfiConverterSequenceTypeWalletColor.lift(try! rustCall() {
-    uniffi_cove_fn_func_walletcolordefaults($0
+    uniffi_cove_fn_func_default_wallet_colors($0
     )
 })
 }
 public func walletMetadataPreview() -> WalletMetadata  {
     return try!  FfiConverterTypeWalletMetadata_lift(try! rustCall() {
-    uniffi_cove_fn_func_walletmetadatapreview($0
+    uniffi_cove_fn_func_wallet_metadata_preview($0
     )
 })
 }
@@ -31160,7 +31160,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_func_updatepricesifneeded() != 5753) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_func_sendflowalertstatefromaddresserror() != 49901) {
+    if (uniffi_cove_checksum_func_address_error_to_alert_state() != 44369) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_grouped_plain_words_of() != 51957) {
@@ -31181,19 +31181,19 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_func_tap_signer_confirm_pin_args_new_from_new_pin() != 4888) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_func_signedtransactionorpsbttryparsebytes() != 37502) {
+    if (uniffi_cove_checksum_func_signed_transaction_or_psbt_try_from_bytes() != 29004) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_func_signedtransactionorpsbttryparsenfcmessage() != 60534) {
+    if (uniffi_cove_checksum_func_signed_transaction_or_psbt_try_from_nfc_message() != 64085) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_func_signedtransactionorpsbttryparsestring() != 59884) {
+    if (uniffi_cove_checksum_func_signed_transaction_or_psbt_try_parse() != 50770) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_create_transport_error_from_code() != 12205) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_is_valid_chain_code() != 38380) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_func_transporterrorfromcode() != 59771) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_create_tap_signer_reader() != 39823) {
@@ -31241,10 +31241,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_func_preview_new_wrapped_found_address() != 22709) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_func_walletcolordefaults() != 50818) {
+    if (uniffi_cove_checksum_func_default_wallet_colors() != 11354) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_func_walletmetadatapreview() != 40602) {
+    if (uniffi_cove_checksum_func_wallet_metadata_preview() != 44605) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_auth_type() != 36896) {
