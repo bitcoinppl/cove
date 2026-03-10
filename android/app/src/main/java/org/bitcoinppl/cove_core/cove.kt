@@ -29274,6 +29274,8 @@ sealed class AppInitException(message: String): kotlin.Exception(message) {
         
         class AlreadyCalled(message: String) : AppInitException(message)
         
+        class DatabaseKeyMismatch(message: String) : AppInitException(message)
+        
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<AppInitException> {
         override fun lift(error_buf: RustBuffer.ByValue): AppInitException = FfiConverterTypeAppInitError.lift(error_buf)
@@ -29292,6 +29294,7 @@ public object FfiConverterTypeAppInitError : FfiConverterRustBuffer<AppInitExcep
             3 -> AppInitException.WalletDatabaseMigration(FfiConverterString.read(buf))
             4 -> AppInitException.Cancelled(FfiConverterString.read(buf))
             5 -> AppInitException.AlreadyCalled(FfiConverterString.read(buf))
+            6 -> AppInitException.DatabaseKeyMismatch(FfiConverterString.read(buf))
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
         
@@ -29321,6 +29324,10 @@ public object FfiConverterTypeAppInitError : FfiConverterRustBuffer<AppInitExcep
             }
             is AppInitException.AlreadyCalled -> {
                 buf.putInt(5)
+                Unit
+            }
+            is AppInitException.DatabaseKeyMismatch -> {
+                buf.putInt(6)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }

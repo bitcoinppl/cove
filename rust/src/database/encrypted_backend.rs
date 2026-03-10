@@ -17,6 +17,7 @@ const TAG_LEN: usize = 16;
 const DISK_BLOCK_SIZE: usize = NONCE_LEN + BLOCK_SIZE + TAG_LEN; // 4136
 const HEADER_SIZE: usize = 64;
 const MAGIC: &[u8; 4] = b"COVE";
+const VERSION_V1: u8 = 1;
 const VERSION_V2: u8 = 2;
 const CURRENT_VERSION: u8 = VERSION_V2;
 
@@ -155,6 +156,16 @@ impl EncryptedBackend {
             VERSION_V2 => {
                 verify_header_tag(key, &header)?;
             }
+            VERSION_V1 => {
+                // upgrade V1 header in-place: add HMAC tag and bump version
+                let mut upgraded = header;
+                upgraded[VERSION_OFFSET] = VERSION_V2;
+                let tag = compute_header_tag(key, &upgraded);
+                upgraded[HEADER_TAG_OFFSET..HEADER_TAG_OFFSET + HEADER_TAG_LEN]
+                    .copy_from_slice(&tag);
+                file.write_all_at(&upgraded, 0)?;
+                file.sync_all()?;
+            }
             v => {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
@@ -206,6 +217,37 @@ impl EncryptedBackend {
 
         header[MAGIC_OFFSET..MAGIC_OFFSET + 4] == *MAGIC
     }
+}
+
+/// Verify the encryption key matches an existing database without fully opening it.
+/// Returns Ok(()) if the key is valid or the file doesn't exist.
+/// Returns Err(HeaderIntegrity) on key mismatch
+pub fn verify_database_key(path: &Path) -> Result<(), super::error::DatabaseError> {
+    use super::error::DatabaseError;
+
+    if !path.exists() {
+        return Ok(());
+    }
+
+    let path_str = path.display().to_string();
+    let key = encryption_key().ok_or(DatabaseError::EncryptionKeyNotSet)?;
+
+    let file = File::open(path)
+        .map_err(|e| DatabaseError::BackendOpen { path: path_str.clone(), error: e.to_string() })?;
+
+    let header = read_header(&file)
+        .map_err(|e| DatabaseError::BackendOpen { path: path_str.clone(), error: e.to_string() })?;
+
+    validate_header_magic(&header)
+        .map_err(|e| DatabaseError::BackendOpen { path: path_str.clone(), error: e.to_string() })?;
+
+    let version = header[VERSION_OFFSET];
+    if version == VERSION_V2 {
+        verify_header_tag(key, &header)
+            .map_err(|e| DatabaseError::HeaderIntegrity { path: path_str, error: e.to_string() })?;
+    }
+
+    Ok(())
 }
 
 /// Open or create a redb database at the given path, handling 3 cases:
@@ -501,8 +543,6 @@ mod tests {
 
     use redb::{ReadableTableMetadata as _, StorageBackend as _};
     use tempfile::TempDir;
-
-    const VERSION_V1: u8 = 1;
 
     fn test_key() -> [u8; 32] {
         [0xAB; 32]
@@ -950,9 +990,9 @@ mod tests {
     }
 
     #[test]
-    fn v1_rejected() {
+    fn v1_header_auto_upgraded_to_v2() {
         let dir = TempDir::new().unwrap();
-        let path = test_path(&dir, "v1_reject.enc");
+        let path = test_path(&dir, "v1_upgrade.enc");
         let key = test_key();
 
         // create a v1 header manually
@@ -967,9 +1007,60 @@ mod tests {
             file.sync_all().unwrap();
         }
 
-        let result = EncryptedBackend::open(&path, &key);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("unsupported"));
+        // open should succeed and upgrade in-place
+        {
+            let _backend = EncryptedBackend::open(&path, &key).unwrap();
+        }
+
+        // verify on-disk header is now V2 with valid HMAC
+        {
+            let file = File::open(&path).unwrap();
+            let header = read_header(&file).unwrap();
+            assert_eq!(header[VERSION_OFFSET], VERSION_V2);
+            verify_header_tag(&key, &header).unwrap();
+        }
+    }
+
+    #[test]
+    fn v1_header_with_data_survives_upgrade() {
+        let dir = TempDir::new().unwrap();
+        let path = test_path(&dir, "v1_data_upgrade.enc");
+        let key = test_key();
+
+        let table_def: redb::TableDefinition<&str, &str> = redb::TableDefinition::new("v1_data");
+
+        // create a V2 database with actual data, then downgrade header to V1
+        {
+            let backend = EncryptedBackend::create(&path, &key).unwrap();
+            let db = redb::Database::builder().create_with_backend(backend).unwrap();
+
+            let write_txn = db.begin_write().unwrap();
+            {
+                let mut table = write_txn.open_table(table_def).unwrap();
+                table.insert("alice", "bob").unwrap();
+                table.insert("num", "42").unwrap();
+            }
+            write_txn.commit().unwrap();
+        }
+
+        // downgrade header to V1: set version=1 and zero out the HMAC tag
+        {
+            let file = OpenOptions::new().read(true).write(true).open(&path).unwrap();
+            file.write_all_at(&[VERSION_V1], VERSION_OFFSET as u64).unwrap();
+            file.write_all_at(&[0u8; HEADER_TAG_LEN], HEADER_TAG_OFFSET as u64).unwrap();
+            file.sync_all().unwrap();
+        }
+
+        // open triggers V1→V2 migration, then verify data is intact
+        {
+            let backend = EncryptedBackend::open(&path, &key).unwrap();
+            let db = redb::Database::builder().create_with_backend(backend).unwrap();
+
+            let read_txn = db.begin_read().unwrap();
+            let table = read_txn.open_table(table_def).unwrap();
+            assert_eq!(table.get("alice").unwrap().unwrap().value(), "bob");
+            assert_eq!(table.get("num").unwrap().unwrap().value(), "42");
+        }
     }
 
     #[test]
@@ -1058,5 +1149,58 @@ mod tests {
             matches!(err, crate::database::error::DatabaseError::PlaintextNotAllowed { .. }),
             "expected PlaintextNotAllowed, got: {err}"
         );
+    }
+
+    #[test]
+    fn key_mismatch_detected_by_verify() {
+        // ensure global key is set to test_key ([0xAB; 32])
+        set_test_encryption_key();
+
+        let dir = TempDir::new().unwrap();
+        let path = test_path(&dir, "verify_mismatch.enc");
+
+        // create a database with a DIFFERENT key than the global one
+        let wrong_key = [0xFF; 32];
+        {
+            let backend = EncryptedBackend::create(&path, &wrong_key).unwrap();
+            backend.write(0, &[0x11u8; 64]).unwrap();
+        }
+
+        // verify_database_key uses the global key ([0xAB]) which won't match
+        let result = verify_database_key(&path);
+        assert!(result.is_err(), "expected key mismatch error");
+
+        let err = result.unwrap_err();
+        assert!(
+            matches!(err, crate::database::error::DatabaseError::HeaderIntegrity { .. }),
+            "expected HeaderIntegrity, got: {err}"
+        );
+    }
+
+    #[test]
+    fn verify_database_key_succeeds_with_correct_key() {
+        set_test_encryption_key();
+
+        let dir = TempDir::new().unwrap();
+        let path = test_path(&dir, "verify_ok.enc");
+
+        // create with the same key as the global one
+        let key = test_key();
+        {
+            let backend = EncryptedBackend::create(&path, &key).unwrap();
+            backend.write(0, &[0x11u8; 64]).unwrap();
+        }
+
+        assert!(verify_database_key(&path).is_ok());
+    }
+
+    #[test]
+    fn verify_database_key_nonexistent_file_is_ok() {
+        set_test_encryption_key();
+
+        let dir = TempDir::new().unwrap();
+        let path = test_path(&dir, "does_not_exist.enc");
+
+        assert!(verify_database_key(&path).is_ok());
     }
 }

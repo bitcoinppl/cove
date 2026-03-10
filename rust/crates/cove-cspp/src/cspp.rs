@@ -1,5 +1,6 @@
 use cove_util::ResultExt as _;
 use std::sync::{Arc, LazyLock, Mutex};
+use tracing::{info, warn};
 
 use arc_swap::ArcSwapOption;
 use cove_util::encryption::Cryptor;
@@ -43,11 +44,13 @@ impl<S: CsppStore> Cspp<S> {
 
         // try loading from store
         if let Some(key) = self.get_master_key()? {
+            info!("Master key loaded from keychain");
             MASTER_KEY_CACHE.store(Some(Arc::new(Zeroizing::new(*key.as_bytes()))));
             return Ok(key);
         }
 
         // generate and save new key
+        warn!("Master key not found in keychain, generating new key");
         let key = MasterKey::generate();
         self.save_master_key(&key)?;
         MASTER_KEY_CACHE.store(Some(Arc::new(Zeroizing::new(*key.as_bytes()))));
@@ -93,11 +96,20 @@ impl<S: CsppStore> Cspp<S> {
 
     /// Loads the master key, returns None if not found
     fn get_master_key(&self) -> Result<Option<MasterKey>, CsppError> {
-        let Some(encryption_secret) = self.0.get(MASTER_KEY_ENCRYPTION_KEY_AND_NONCE.into()) else {
+        let has_encryption_key = self.0.get(MASTER_KEY_ENCRYPTION_KEY_AND_NONCE.into());
+        let has_master_key = self.0.get(MASTER_KEY_NAME.into());
+
+        info!(
+            encryption_key_found = has_encryption_key.is_some(),
+            master_key_found = has_master_key.is_some(),
+            "Keychain master key lookup"
+        );
+
+        let Some(encryption_secret) = has_encryption_key else {
             return Ok(None);
         };
 
-        let Some(encrypted) = self.0.get(MASTER_KEY_NAME.into()) else {
+        let Some(encrypted) = has_master_key else {
             return Ok(None);
         };
 

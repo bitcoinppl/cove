@@ -188,6 +188,9 @@ pub enum AppInitError {
 
     #[error("Bootstrap already called: {0}")]
     AlreadyCalled(String),
+
+    #[error("Database encryption key mismatch (backup/restore?): {0}")]
+    DatabaseKeyMismatch(String),
 }
 
 /// Idempotent storage bootstrap: derives encryption key and runs all pending
@@ -237,6 +240,11 @@ fn do_bootstrap(track_progress: bool) -> Result<u32, AppInitError> {
         set_step(BootstrapStep::EncryptionKeySet);
     }
     info!("Encryption key derived and set");
+
+    // verify the key matches the existing database before proceeding
+    let db_path = cove_common::consts::ROOT_DATA_DIR.join("cove.db");
+    crate::database::encrypted_backend::verify_database_key(&db_path)
+        .map_err(|e| AppInitError::DatabaseKeyMismatch(e.to_string()))?;
 
     check_cancelled()?;
 

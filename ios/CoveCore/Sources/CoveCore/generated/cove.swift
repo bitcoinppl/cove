@@ -15102,6 +15102,8 @@ public enum AppInitError: Swift.Error, Equatable, Hashable, Foundation.Localized
     
     case AlreadyCalled(message: String)
     
+    case DatabaseKeyMismatch(message: String)
+    
 
     
 
@@ -15151,6 +15153,10 @@ public struct FfiConverterTypeAppInitError: FfiConverterRustBuffer {
             message: try FfiConverterString.read(from: &buf)
         )
         
+        case 6: return .DatabaseKeyMismatch(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -15172,6 +15178,8 @@ public struct FfiConverterTypeAppInitError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(4))
         case .AlreadyCalled(_ /* message is ignored*/):
             writeInt(&buf, Int32(5))
+        case .DatabaseKeyMismatch(_ /* message is ignored*/):
+            writeInt(&buf, Int32(6))
 
         
         }

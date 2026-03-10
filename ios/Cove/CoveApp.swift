@@ -147,6 +147,12 @@ extension CoveApp {
             if step == .complete {
                 Log.warn("[STARTUP] bootstrap completed despite error — treating as success")
                 completeBootstrap()
+            } else if case AppInitError.DatabaseKeyMismatch = error {
+                Log.error("[STARTUP] database encryption key mismatch")
+                bootstrapError =
+                    "Your app's encryption key doesn't match the database. "
+                        + "This can happen after restoring from a backup or reinstalling.\n\n"
+                        + "Please contact feedback@covebitcoinwallet.com for recovery assistance."
             } else if case AppInitError.AlreadyCalled = error {
                 Log.error("[STARTUP] bootstrap already called at step: \(step)")
                 bootstrapError =
