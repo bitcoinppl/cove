@@ -10,14 +10,14 @@ import Foundation
 
 extension SignedTransactionOrPsbt {
     static func tryFromNfcMessage(nfcMessage: NfcMessage) throws -> SignedTransactionOrPsbt {
-        try signedTransactionOrPsbtTryParseNfcMessage(nfcMessage: nfcMessage)
+        try signedTransactionOrPsbtTryFromNfcMessage(nfcMessage: nfcMessage)
     }
 
     static func tryParse(input: String) throws -> SignedTransactionOrPsbt {
-        try signedTransactionOrPsbtTryParseString(input: input)
+        try signedTransactionOrPsbtTryParse(input: input)
     }
 
     static func tryFromBytes(data: Data) throws -> SignedTransactionOrPsbt {
-        try signedTransactionOrPsbtTryParseBytes(data: data)
+        try signedTransactionOrPsbtTryFromBytes(data: data)
     }
 }

@@ -1005,7 +1005,7 @@ external fun uniffi_cove_checksum_func_prices_are_equal(
 ): Short
 external fun uniffi_cove_checksum_func_updatepricesifneeded(
 ): Short
-external fun uniffi_cove_checksum_func_address_error_to_alert_state(
+external fun uniffi_cove_checksum_func_send_flow_alert_state_from_address_error(
 ): Short
 external fun uniffi_cove_checksum_func_grouped_plain_words_of(
 ): Short
@@ -3107,7 +3107,7 @@ external fun uniffi_cove_fn_func_prices_are_equal(`lhs`: Long,`rhs`: Long,uniffi
 ): Byte
 external fun uniffi_cove_fn_func_updatepricesifneeded(
 ): Long
-external fun uniffi_cove_fn_func_address_error_to_alert_state(`error`: RustBufferAddressError.ByValue,`address`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+external fun uniffi_cove_fn_func_send_flow_alert_state_from_address_error(`error`: RustBufferAddressError.ByValue,`address`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_func_grouped_plain_words_of(`mnemonic`: RustBuffer.ByValue,`groups`: Byte,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
@@ -3314,7 +3314,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_func_updatepricesifneeded() != 5753.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_func_address_error_to_alert_state() != 44369.toShort()) {
+    if (lib.uniffi_cove_checksum_func_send_flow_alert_state_from_address_error() != 25696.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_grouped_plain_words_of() != 51957.toShort()) {
@@ -48848,10 +48848,10 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
         UniffiNullRustCallStatusErrorHandler,
     )
     }
- fun `addressErrorToAlertState`(`error`: AddressException, `address`: kotlin.String): SendFlowAlertState {
+ fun `sendFlowAlertStateFromAddressError`(`error`: AddressException, `address`: kotlin.String): SendFlowAlertState {
             return FfiConverterTypeSendFlowAlertState.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_func_address_error_to_alert_state(
+    UniffiLib.uniffi_cove_fn_func_send_flow_alert_state_from_address_error(
     
         FfiConverterTypeAddressError.lower(`error`),FfiConverterString.lower(`address`),_status)
 }

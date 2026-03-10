@@ -30909,9 +30909,9 @@ public func updatePricesIfNeeded()async   {
             
         )
 }
-public func addressErrorToAlertState(error: AddressError, address: String) -> SendFlowAlertState  {
+public func sendFlowAlertStateFromAddressError(error: AddressError, address: String) -> SendFlowAlertState  {
     return try!  FfiConverterTypeSendFlowAlertState_lift(try! rustCall() {
-    uniffi_cove_fn_func_address_error_to_alert_state(
+    uniffi_cove_fn_func_send_flow_alert_state_from_address_error(
         FfiConverterTypeAddressError_lower(error),
         FfiConverterString.lower(address),$0
     )
@@ -31167,7 +31167,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_func_updatepricesifneeded() != 5753) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_func_address_error_to_alert_state() != 44369) {
+    if (uniffi_cove_checksum_func_send_flow_alert_state_from_address_error() != 25696) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_grouped_plain_words_of() != 51957) {

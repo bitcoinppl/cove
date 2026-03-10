@@ -111,7 +111,7 @@ struct WalletSettingsView: View {
                             .frame(width: 80, height: 80)
 
                         LazyVGrid(columns: colorColumns, spacing: 20) {
-                            ForEach(walletColorDefaults(), id: \.self) { color in
+                            ForEach(defaultWalletColors(), id: \.self) { color in
                                 ZStack {
                                     if color == metadata.color {
                                         Circle()
