@@ -399,7 +399,8 @@ impl Route {
         self == &route_to_check
     }
 
-    fn hash_value(&self) -> u64 {
+    #[uniffi::method(name = "stableHash")]
+    fn stable_hash(&self) -> u64 {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         self.hash(&mut hasher);
         hasher.finish()

@@ -118,6 +118,78 @@ fn verify_header_tag(key: &[u8; 32], header: &[u8; HEADER_SIZE]) -> io::Result<(
     Ok(())
 }
 
+fn decrypt_disk_block(
+    cipher: &XChaCha20Poly1305,
+    block_index: u64,
+    disk_data: &[u8],
+) -> io::Result<Vec<u8>> {
+    if disk_data.len() < NONCE_LEN + TAG_LEN {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "disk block too small to contain nonce + tag",
+        ));
+    }
+
+    let nonce = XNonce::from_slice(&disk_data[..NONCE_LEN]);
+    let ciphertext_with_tag = &disk_data[NONCE_LEN..];
+    let aad = block_index.to_le_bytes();
+
+    cipher
+        .decrypt(nonce, Payload { msg: ciphertext_with_tag, aad: &aad })
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("decryption failed: {e}")))
+}
+
+fn verify_v1_database_key(
+    file: &File,
+    path: &str,
+    key: &[u8; 32],
+) -> Result<(), super::error::DatabaseError> {
+    use super::error::DatabaseError;
+
+    let file_len = file
+        .metadata()
+        .map_err(|e| DatabaseError::BackendOpen { path: path.to_string(), error: e.to_string() })?
+        .len();
+
+    if file_len <= HEADER_SIZE as u64 {
+        return Ok(());
+    }
+
+    let payload_len = file_len - HEADER_SIZE as u64;
+    let trailing_bytes = payload_len % DISK_BLOCK_SIZE as u64;
+    if trailing_bytes != 0 {
+        return Err(DatabaseError::CorruptBlock {
+            path: path.to_string(),
+            error: format!("encrypted database payload has partial block bytes: {trailing_bytes}"),
+        });
+    }
+
+    let cipher = XChaCha20Poly1305::new(key.into());
+
+    for block_index in 0..(payload_len / DISK_BLOCK_SIZE as u64) {
+        let physical_offset = HEADER_SIZE as u64 + block_index * DISK_BLOCK_SIZE as u64;
+        let mut disk_block = vec![0u8; DISK_BLOCK_SIZE];
+        file.read_exact_at(&mut disk_block, physical_offset).map_err(|e| {
+            DatabaseError::BackendOpen { path: path.to_string(), error: e.to_string() }
+        })?;
+
+        if disk_block.iter().all(|&b| b == 0) {
+            continue;
+        }
+
+        decrypt_disk_block(&cipher, block_index, &disk_block).map_err(|e| {
+            DatabaseError::HeaderIntegrity {
+                path: path.to_string(),
+                error: format!("v1 database key verification failed: {e}"),
+            }
+        })?;
+
+        return Ok(());
+    }
+
+    Ok(())
+}
+
 impl EncryptedBackend {
     /// Create a new encrypted database file at `path`
     pub fn create(path: impl AsRef<Path>, key: &[u8; 32]) -> io::Result<Self> {
@@ -242,9 +314,20 @@ pub fn verify_database_key(path: &Path) -> Result<(), super::error::DatabaseErro
         .map_err(|e| DatabaseError::BackendOpen { path: path_str.clone(), error: e.to_string() })?;
 
     let version = header[VERSION_OFFSET];
-    if version == VERSION_V2 {
-        verify_header_tag(key, &header)
-            .map_err(|e| DatabaseError::HeaderIntegrity { path: path_str, error: e.to_string() })?;
+    match version {
+        VERSION_V2 => {
+            verify_header_tag(key, &header).map_err(|e| DatabaseError::HeaderIntegrity {
+                path: path_str,
+                error: e.to_string(),
+            })?;
+        }
+        VERSION_V1 => verify_v1_database_key(&file, &path_str, key)?,
+        version => {
+            return Err(DatabaseError::HeaderIntegrity {
+                path: path_str,
+                error: format!("unsupported encrypted database version: {version}"),
+            });
+        }
     }
 
     Ok(())
@@ -312,20 +395,7 @@ impl EncryptedBackend {
     }
 
     fn decrypt_block(&self, block_index: u64, disk_data: &[u8]) -> io::Result<Vec<u8>> {
-        if disk_data.len() < NONCE_LEN + TAG_LEN {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "disk block too small to contain nonce + tag",
-            ));
-        }
-
-        let nonce = XNonce::from_slice(&disk_data[..NONCE_LEN]);
-        let ciphertext_with_tag = &disk_data[NONCE_LEN..];
-        let aad = block_index.to_le_bytes();
-
-        self.cipher.decrypt(nonce, Payload { msg: ciphertext_with_tag, aad: &aad }).map_err(|e| {
-            io::Error::new(io::ErrorKind::InvalidData, format!("decryption failed: {e}"))
-        })
+        decrypt_disk_block(&self.cipher, block_index, disk_data)
     }
 
     fn read_disk_block(&self, block_index: u64) -> io::Result<Vec<u8>> {
@@ -1202,5 +1272,55 @@ mod tests {
         let path = test_path(&dir, "does_not_exist.enc");
 
         assert!(verify_database_key(&path).is_ok());
+    }
+
+    #[test]
+    fn verify_database_key_rejects_v1_database_with_wrong_key_without_mutating_header() {
+        set_test_encryption_key();
+
+        let dir = TempDir::new().unwrap();
+        let path = test_path(&dir, "verify_v1_mismatch.enc");
+        let original_key = [0xFF; 32];
+        let table_def: redb::TableDefinition<&str, &str> = redb::TableDefinition::new("v1_verify");
+
+        {
+            let backend = EncryptedBackend::create(&path, &original_key).unwrap();
+            let db = redb::Database::builder().create_with_backend(backend).unwrap();
+
+            let write_txn = db.begin_write().unwrap();
+            {
+                let mut table = write_txn.open_table(table_def).unwrap();
+                table.insert("alice", "bob").unwrap();
+            }
+            write_txn.commit().unwrap();
+        }
+
+        let original_v1_header = {
+            let file = OpenOptions::new().read(true).write(true).open(&path).unwrap();
+            file.write_all_at(&[VERSION_V1], VERSION_OFFSET as u64).unwrap();
+            file.write_all_at(&[0u8; HEADER_TAG_LEN], HEADER_TAG_OFFSET as u64).unwrap();
+            file.sync_all().unwrap();
+
+            read_header(&file).unwrap()
+        };
+
+        let result = verify_database_key(&path);
+        assert!(result.is_err(), "expected V1 key mismatch error");
+
+        let err = result.unwrap_err();
+        assert!(
+            matches!(err, crate::database::error::DatabaseError::HeaderIntegrity { .. }),
+            "expected HeaderIntegrity, got: {err}"
+        );
+
+        let header_after_verify = {
+            let file = File::open(&path).unwrap();
+            read_header(&file).unwrap()
+        };
+        assert_eq!(header_after_verify, original_v1_header, "verify must not rewrite V1 headers");
+        assert_eq!(header_after_verify[VERSION_OFFSET], VERSION_V1);
+
+        let result = EncryptedBackend::open(&path, &original_key);
+        assert!(result.is_ok(), "the original key should still open the V1 database");
     }
 }

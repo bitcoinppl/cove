@@ -13908,19 +13908,19 @@ public struct WalletMetadata: Equatable, Hashable {
     }
 
     
-public func hashValue() -> UInt64  {
-    return try!  FfiConverterUInt64.lift(try! rustCall() {
-    uniffi_cove_fn_method_walletmetadata_hash_value(
-            FfiConverterTypeWalletMetadata_lower(self),$0
-    )
-})
-}
-    
 public func isEqual(other: WalletMetadata) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
     uniffi_cove_fn_method_walletmetadata_is_equal(
             FfiConverterTypeWalletMetadata_lower(self),
         FfiConverterTypeWalletMetadata_lower(other),$0
+    )
+})
+}
+    
+public func stableHash() -> UInt64  {
+    return try!  FfiConverterUInt64.lift(try! rustCall() {
+    uniffi_cove_fn_method_walletmetadata_stablehash(
+            FfiConverterTypeWalletMetadata_lower(self),$0
     )
 })
 }
@@ -15104,6 +15104,8 @@ public enum AppInitError: Swift.Error, Equatable, Hashable, Foundation.Localized
     
     case DatabaseKeyMismatch(message: String)
     
+    case DatabaseVerificationFailed(message: String)
+    
 
     
 
@@ -15157,6 +15159,10 @@ public struct FfiConverterTypeAppInitError: FfiConverterRustBuffer {
             message: try FfiConverterString.read(from: &buf)
         )
         
+        case 7: return .DatabaseVerificationFailed(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -15180,6 +15186,8 @@ public struct FfiConverterTypeAppInitError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(5))
         case .DatabaseKeyMismatch(_ /* message is ignored*/):
             writeInt(&buf, Int32(6))
+        case .DatabaseVerificationFailed(_ /* message is ignored*/):
+            writeInt(&buf, Int32(7))
 
         
         }
@@ -21522,19 +21530,19 @@ public enum Route {
 
 
 
-public func hashValue() -> UInt64  {
-    return try!  FfiConverterUInt64.lift(try! rustCall() {
-    uniffi_cove_fn_method_route_hash_value(
-            FfiConverterTypeRoute_lower(self),$0
-    )
-})
-}
-
 public func isEqual(routeToCheck: Route) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
     uniffi_cove_fn_method_route_is_equal(
             FfiConverterTypeRoute_lower(self),
         FfiConverterTypeRoute_lower(routeToCheck),$0
+    )
+})
+}
+
+public func stableHash() -> UInt64  {
+    return try!  FfiConverterUInt64.lift(try! rustCall() {
+    uniffi_cove_fn_method_route_stablehash(
+            FfiConverterTypeRoute_lower(self),$0
     )
 })
 }

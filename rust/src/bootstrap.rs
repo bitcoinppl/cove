@@ -191,6 +191,9 @@ pub enum AppInitError {
 
     #[error("Database encryption key mismatch (backup/restore?): {0}")]
     DatabaseKeyMismatch(String),
+
+    #[error("Database verification failed: {0}")]
+    DatabaseVerificationFailed(String),
 }
 
 /// Idempotent storage bootstrap: derives encryption key and runs all pending
@@ -244,7 +247,7 @@ fn do_bootstrap(track_progress: bool) -> Result<u32, AppInitError> {
     // verify the key matches the existing database before proceeding
     let db_path = cove_common::consts::ROOT_DATA_DIR.join("cove.db");
     crate::database::encrypted_backend::verify_database_key(&db_path)
-        .map_err(|e| AppInitError::DatabaseKeyMismatch(e.to_string()))?;
+        .map_err(map_database_key_verification_error)?;
 
     check_cancelled()?;
 
@@ -300,6 +303,17 @@ fn do_bootstrap(track_progress: bool) -> Result<u32, AppInitError> {
     Ok(bdk_count)
 }
 
+fn map_database_key_verification_error(
+    error: crate::database::error::DatabaseError,
+) -> AppInitError {
+    match error {
+        crate::database::error::DatabaseError::HeaderIntegrity { error, .. } => {
+            AppInitError::DatabaseKeyMismatch(error)
+        }
+        other => AppInitError::DatabaseVerificationFailed(other.to_string()),
+    }
+}
+
 /// Pre-seed the bootstrap OnceLock with a test encryption key, skipping
 /// keychain access and migrations
 #[cfg(test)]
@@ -323,4 +337,38 @@ fn set_step(step: BootstrapStep) {
 #[uniffi::export]
 pub fn bootstrap_progress() -> BootstrapStep {
     *BOOTSTRAP_STEP.lock()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::database::error::DatabaseError;
+
+    #[test]
+    fn database_key_verification_maps_header_integrity_to_key_mismatch() {
+        let error = DatabaseError::HeaderIntegrity {
+            path: "/tmp/cove.db".into(),
+            error: "wrong key".into(),
+        };
+
+        let mapped = map_database_key_verification_error(error);
+        assert!(
+            matches!(mapped, AppInitError::DatabaseKeyMismatch(message) if message == "wrong key")
+        );
+    }
+
+    #[test]
+    fn database_key_verification_preserves_non_mismatch_failures() {
+        let error = DatabaseError::BackendOpen {
+            path: "/tmp/cove.db".into(),
+            error: "permission denied".into(),
+        };
+
+        let mapped = map_database_key_verification_error(error);
+        assert!(matches!(
+            mapped,
+            AppInitError::DatabaseVerificationFailed(message)
+                if message == "failed to open encrypted backend at /tmp/cove.db: permission denied"
+        ));
+    }
 }

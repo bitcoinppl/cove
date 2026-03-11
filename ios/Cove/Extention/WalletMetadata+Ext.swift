@@ -11,7 +11,7 @@ extension WalletMetadata: Identifiable & Hashable & Equatable {
     }
 
     public func hash(into hasher: inout Hasher) {
-        hasher.combine(self.hashValue())
+        hasher.combine(self.stableHash())
     }
 
     #if DEBUG
