@@ -3019,10 +3019,10 @@ external fun uniffi_cove_fn_method_scanprogress_display_text(`ptr`: RustBuffer.B
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_afterpinaction_usermessage(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-external fun uniffi_cove_fn_method_route_hash_value(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): Long
 external fun uniffi_cove_fn_method_route_is_equal(`ptr`: RustBuffer.ByValue,`routeToCheck`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
+external fun uniffi_cove_fn_method_route_stablehash(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Long
 external fun uniffi_cove_fn_method_tapsignerroute_is_equal(`ptr`: RustBuffer.ByValue,`other`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
 external fun uniffi_cove_fn_method_bip39error_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -3077,10 +3077,10 @@ external fun uniffi_cove_fn_method_descriptorerror_uniffi_trait_display(`ptr`: R
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_xpuberror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-external fun uniffi_cove_fn_method_walletmetadata_hash_value(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): Long
 external fun uniffi_cove_fn_method_walletmetadata_is_equal(`ptr`: RustBuffer.ByValue,`other`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
+external fun uniffi_cove_fn_method_walletmetadata_stablehash(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Long
 external fun uniffi_cove_fn_method_walletmetadata_uniffi_trait_eq_eq(`ptr`: RustBuffer.ByValue,`other`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
 external fun uniffi_cove_fn_method_walletmetadata_uniffi_trait_eq_ne(`ptr`: RustBuffer.ByValue,`other`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -27391,21 +27391,21 @@ data class WalletMetadata (
     var `internal`: InternalOnlyMetadata
     
 ): Disposable{
-     fun `hashValue`(): kotlin.ULong {
-            return FfiConverterULong.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_method_walletmetadata_hash_value(FfiConverterTypeWalletMetadata.lower(this),
-        _status)
-}
-    )
-    }
-    
-
      fun `isEqual`(`other`: WalletMetadata): kotlin.Boolean {
             return FfiConverterBoolean.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_walletmetadata_is_equal(FfiConverterTypeWalletMetadata.lower(this),
         FfiConverterTypeWalletMetadata.lower(`other`),_status)
+}
+    )
+    }
+    
+
+     fun `stableHash`(): kotlin.ULong {
+            return FfiConverterULong.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_walletmetadata_stablehash(FfiConverterTypeWalletMetadata.lower(this),
+        _status)
 }
     )
     }
@@ -29276,6 +29276,8 @@ sealed class AppInitException(message: String): kotlin.Exception(message) {
         
         class DatabaseKeyMismatch(message: String) : AppInitException(message)
         
+        class DatabaseVerificationFailed(message: String) : AppInitException(message)
+        
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<AppInitException> {
         override fun lift(error_buf: RustBuffer.ByValue): AppInitException = FfiConverterTypeAppInitError.lift(error_buf)
@@ -29295,6 +29297,7 @@ public object FfiConverterTypeAppInitError : FfiConverterRustBuffer<AppInitExcep
             4 -> AppInitException.Cancelled(FfiConverterString.read(buf))
             5 -> AppInitException.AlreadyCalled(FfiConverterString.read(buf))
             6 -> AppInitException.DatabaseKeyMismatch(FfiConverterString.read(buf))
+            7 -> AppInitException.DatabaseVerificationFailed(FfiConverterString.read(buf))
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
         
@@ -29328,6 +29331,10 @@ public object FfiConverterTypeAppInitError : FfiConverterRustBuffer<AppInitExcep
             }
             is AppInitException.DatabaseKeyMismatch -> {
                 buf.putInt(6)
+                Unit
+            }
+            is AppInitException.DatabaseVerificationFailed -> {
+                buf.putInt(7)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -37077,21 +37084,21 @@ sealed class Route: Disposable  {
     
 
     
-     fun `hashValue`(): kotlin.ULong {
-            return FfiConverterULong.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_method_route_hash_value(FfiConverterTypeRoute.lower(this),
-        _status)
-}
-    )
-    }
-    
-
      fun `isEqual`(`routeToCheck`: Route): kotlin.Boolean {
             return FfiConverterBoolean.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_route_is_equal(FfiConverterTypeRoute.lower(this),
         FfiConverterTypeRoute.lower(`routeToCheck`),_status)
+}
+    )
+    }
+    
+
+     fun `stableHash`(): kotlin.ULong {
+            return FfiConverterULong.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_route_stablehash(FfiConverterTypeRoute.lower(this),
+        _status)
 }
     )
     }
