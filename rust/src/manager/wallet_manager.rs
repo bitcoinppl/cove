@@ -1440,6 +1440,8 @@ fn get_public_descriptor_content(id: &WalletId) -> Result<String, Error> {
 }
 
 #[uniffi::export]
-fn wallet_state_is_equal(lhs: WalletLoadState, rhs: WalletLoadState) -> bool {
-    lhs == rhs
+impl WalletLoadState {
+    fn is_equal(&self, other: WalletLoadState) -> bool {
+        self == &other
+    }
 }

@@ -23,7 +23,7 @@ struct UtxoRowPreview: View {
             Spacer()
 
             HStack(alignment: .center, spacing: 8) {
-                Text(utxo.name)
+                Text(utxo.name())
                     .foregroundColor(.primary)
                     .font(.body)
                     .fontWeight(.medium)
@@ -40,7 +40,7 @@ struct UtxoRowPreview: View {
             HStack {
                 Text(displayAmount(utxo.amount, true))
                 Spacer()
-                Text(utxo.date)
+                Text(utxo.date())
             }
             .foregroundColor(.secondary)
             .font(.footnote)

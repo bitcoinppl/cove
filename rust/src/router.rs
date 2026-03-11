@@ -394,15 +394,17 @@ impl TapSignerConfirmPinArgs {
 }
 
 #[uniffi::export]
-fn is_route_equal(route: Route, route_to_check: Route) -> bool {
-    route == route_to_check
-}
+impl Route {
+    fn is_equal(&self, route_to_check: Route) -> bool {
+        self == &route_to_check
+    }
 
-#[uniffi::export]
-fn hash_route(route: Route) -> u64 {
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    route.hash(&mut hasher);
-    hasher.finish()
+    #[uniffi::method(name = "stableHash")]
+    fn stable_hash(&self) -> u64 {
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        self.hash(&mut hasher);
+        hasher.finish()
+    }
 }
 
 impl From<SettingsRoute> for Route {
@@ -412,8 +414,10 @@ impl From<SettingsRoute> for Route {
 }
 
 #[uniffi::export]
-fn is_tap_signer_route_equal(lhs: TapSignerRoute, rhs: TapSignerRoute) -> bool {
-    lhs == rhs
+impl TapSignerRoute {
+    fn is_equal(&self, other: TapSignerRoute) -> bool {
+        self == &other
+    }
 }
 
 impl AfterPinAction {
@@ -422,14 +426,17 @@ impl AfterPinAction {
             Self::Derive => "For security purposes, you need to enter your TAPSIGNER PIN before you can import your wallet".to_string(),
             Self::Change => "Please enter your current PIN".to_string(),
             Self::Backup => "For security purposes, you need to enter your TAPSIGNER PIN before you can backup your wallet".to_string(),
-            Self::Sign(_) => "For security purposes, you need must enter your TAPSIGNER PIN before you can sign a transaction".to_string(),
+            Self::Sign(_) => "For security purposes, you must enter your TAPSIGNER PIN before you can sign a transaction".to_string(),
         }
     }
 }
 
 #[uniffi::export]
-fn after_pin_action_user_message(action: AfterPinAction) -> String {
-    action.user_message()
+impl AfterPinAction {
+    #[uniffi::method(name = "userMessage")]
+    fn ffi_user_message(&self) -> String {
+        self.user_message()
+    }
 }
 
 #[uniffi::export]

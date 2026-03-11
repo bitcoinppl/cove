@@ -13,3 +13,4 @@ rand = { workspace = true }
 zeroize = { workspace = true, features = ["derive"] }
 hex = { workspace = true }
 thiserror = { workspace = true }
+tracing = { workspace = true }

@@ -84,6 +84,8 @@ fn all_color_schemes() -> Vec<ColorSchemeSelection> {
 }
 
 #[uniffi::export]
-fn color_scheme_selection_capitalized_string(color_scheme: ColorSchemeSelection) -> String {
-    color_scheme.as_capitalized_string().to_string()
+impl ColorSchemeSelection {
+    fn capitalized_string(&self) -> String {
+        self.as_capitalized_string().to_string()
+    }
 }

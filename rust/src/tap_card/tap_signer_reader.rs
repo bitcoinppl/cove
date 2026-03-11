@@ -611,14 +611,17 @@ fn _ffi_tap_signer_setup_retry_continue_cmd(preview: bool) -> SetupCmdResponse {
     })
 }
 
-#[uniffi::export(name = "tapSignerErrorIsAuthError")]
-fn _ffi_tap_signer_error_is_auth_error(error: TapSignerReaderError) -> bool {
-    error.is_auth_error()
-}
+#[uniffi::export]
+impl TapSignerReaderError {
+    #[uniffi::method(name = "isAuthError")]
+    fn ffi_is_auth_error(&self) -> bool {
+        self.is_auth_error()
+    }
 
-#[uniffi::export(name = "tapSignerErrorIsNoBackupError")]
-fn _ffi_tap_signer_error_is_no_backup_error(error: TapSignerReaderError) -> bool {
-    error.is_no_backup_error()
+    #[uniffi::method(name = "isNoBackupError")]
+    fn ffi_is_no_backup_error(&self) -> bool {
+        self.is_no_backup_error()
+    }
 }
 
 // MARK: - FFI PREVIEW

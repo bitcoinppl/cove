@@ -13908,6 +13908,23 @@ public struct WalletMetadata: Equatable, Hashable {
     }
 
     
+public func isEqual(other: WalletMetadata) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_method_walletmetadata_is_equal(
+            FfiConverterTypeWalletMetadata_lower(self),
+        FfiConverterTypeWalletMetadata_lower(other),$0
+    )
+})
+}
+    
+public func stableHash() -> UInt64  {
+    return try!  FfiConverterUInt64.lift(try! rustCall() {
+    uniffi_cove_fn_method_walletmetadata_stablehash(
+            FfiConverterTypeWalletMetadata_lower(self),$0
+    )
+})
+}
+    
 
     
 // The local Rust `Eq` implementation - only `eq` is used.
@@ -14158,6 +14175,14 @@ public enum AfterPinAction {
     )
 
 
+
+public func userMessage() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_method_afterpinaction_usermessage(
+            FfiConverterTypeAfterPinAction_lower(self),$0
+    )
+})
+}
 
 
 
@@ -15077,6 +15102,10 @@ public enum AppInitError: Swift.Error, Equatable, Hashable, Foundation.Localized
     
     case AlreadyCalled(message: String)
     
+    case DatabaseKeyMismatch(message: String)
+    
+    case DatabaseVerificationFailed(message: String)
+    
 
     
 
@@ -15126,6 +15155,14 @@ public struct FfiConverterTypeAppInitError: FfiConverterRustBuffer {
             message: try FfiConverterString.read(from: &buf)
         )
         
+        case 6: return .DatabaseKeyMismatch(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 7: return .DatabaseVerificationFailed(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -15147,6 +15184,10 @@ public struct FfiConverterTypeAppInitError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(4))
         case .AlreadyCalled(_ /* message is ignored*/):
             writeInt(&buf, Int32(5))
+        case .DatabaseKeyMismatch(_ /* message is ignored*/):
+            writeInt(&buf, Int32(6))
+        case .DatabaseVerificationFailed(_ /* message is ignored*/):
+            writeInt(&buf, Int32(7))
 
         
         }
@@ -16297,6 +16338,14 @@ public enum BootstrapStep: Equatable, Hashable {
 
 
 
+public func isMigrationInProgress() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_method_bootstrapstep_ismigrationinprogress(
+            FfiConverterTypeBootstrapStep_lower(self),$0
+    )
+})
+}
+
 
 
 }
@@ -16854,7 +16903,7 @@ public func FfiConverterTypeCoinControlListSort_lower(_ value: CoinControlListSo
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum CoinControlListSortKey: Equatable, Hashable {
+public enum CoinControlListSortKey: Equatable, Hashable, CustomStringConvertible {
     
     case date
     case name
@@ -16865,6 +16914,16 @@ public enum CoinControlListSortKey: Equatable, Hashable {
 
 
 
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_coincontrollistsortkey_uniffi_trait_display(
+            FfiConverterTypeCoinControlListSortKey_lower(self),$0
+    )
+}
+    )
+}
 }
 
 #if compiler(>=6)
@@ -18089,6 +18148,30 @@ public enum FiatCurrency: Equatable, Hashable, CustomStringConvertible {
 
 
 
+public func emojiString() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_method_fiatcurrency_emojistring(
+            FfiConverterTypeFiatCurrency_lower(self),$0
+    )
+})
+}
+
+public func suffixString() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_method_fiatcurrency_suffixstring(
+            FfiConverterTypeFiatCurrency_lower(self),$0
+    )
+})
+}
+
+public func symbolString() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_method_fiatcurrency_symbolstring(
+            FfiConverterTypeFiatCurrency_lower(self),$0
+    )
+})
+}
+
 
 
 // The local Rust `Display` implementation.
@@ -18799,6 +18882,7 @@ public enum GlobalFlagKey: Equatable, Hashable {
     case completedOnboarding
     case acceptedTerms
     case betaFeaturesEnabled
+    case betaImportExportEnabled
 
 
 
@@ -18826,6 +18910,8 @@ public struct FfiConverterTypeGlobalFlagKey: FfiConverterRustBuffer {
         
         case 3: return .betaFeaturesEnabled
         
+        case 4: return .betaImportExportEnabled
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -18844,6 +18930,10 @@ public struct FfiConverterTypeGlobalFlagKey: FfiConverterRustBuffer {
         
         case .betaFeaturesEnabled:
             writeInt(&buf, Int32(3))
+        
+        
+        case .betaImportExportEnabled:
+            writeInt(&buf, Int32(4))
         
         }
     }
@@ -19054,6 +19144,14 @@ public enum HardwareWalletMetadata {
     )
 
 
+
+public func isTapSigner() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_method_hardwarewalletmetadata_istapsigner(
+            FfiConverterTypeHardwareWalletMetadata_lower(self),$0
+    )
+})
+}
 
 
 
@@ -20875,6 +20973,14 @@ public enum NodeSelection: Equatable, Hashable {
 
 
 
+public func toNode() -> Node  {
+    return try!  FfiConverterTypeNode_lift(try! rustCall() {
+    uniffi_cove_fn_method_nodeselection_to_node(
+            FfiConverterTypeNodeSelection_lower(self),$0
+    )
+})
+}
+
 
 
 }
@@ -21423,6 +21529,23 @@ public enum Route {
     )
 
 
+
+public func isEqual(routeToCheck: Route) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_method_route_is_equal(
+            FfiConverterTypeRoute_lower(self),
+        FfiConverterTypeRoute_lower(routeToCheck),$0
+    )
+})
+}
+
+public func stableHash() -> UInt64  {
+    return try!  FfiConverterUInt64.lift(try! rustCall() {
+    uniffi_cove_fn_method_route_stablehash(
+            FfiConverterTypeRoute_lower(self),$0
+    )
+})
+}
 
 
 
@@ -24198,7 +24321,7 @@ public func FfiConverterTypeStoreType_lower(_ value: StoreType) -> RustBuffer {
  * A string or data, could be a string or data (bytes)
  */
 
-public enum StringOrData: Equatable, Hashable {
+public enum StringOrData {
     
     case string(String
     )
@@ -24206,6 +24329,14 @@ public enum StringOrData: Equatable, Hashable {
     )
 
 
+
+public func tryIntoMultiFormat()throws  -> MultiFormat  {
+    return try  FfiConverterTypeMultiFormat_lift(try rustCallWithError(FfiConverterTypeMultiFormatError_lift) {
+    uniffi_cove_fn_method_stringordata_try_into_multi_format(
+            FfiConverterTypeStringOrData_lower(self),$0
+    )
+})
+}
 
 
 
@@ -24468,6 +24599,22 @@ public enum TapSignerReaderError: Swift.Error, Equatable, Hashable, Foundation.L
     case Unknown(String
     )
 
+    
+public func isAuthError() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_method_tapsignerreadererror_isautherror(
+            FfiConverterTypeTapSignerReaderError_lower(self),$0
+    )
+})
+}
+    
+public func isNoBackupError() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_method_tapsignerreadererror_isnobackuperror(
+            FfiConverterTypeTapSignerReaderError_lower(self),$0
+    )
+})
+}
     
 
     
@@ -24737,6 +24884,15 @@ public enum TapSignerRoute {
     )
 
 
+
+public func isEqual(other: TapSignerRoute) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_method_tapsignerroute_is_equal(
+            FfiConverterTypeTapSignerRoute_lower(self),
+        FfiConverterTypeTapSignerRoute_lower(other),$0
+    )
+})
+}
 
 
 
@@ -25622,6 +25778,14 @@ public enum WalletAddressType: Equatable, Hashable, CustomStringConvertible {
 
 
 
+public func sortOrder() -> UInt8  {
+    return try!  FfiConverterUInt8.lift(try! rustCall() {
+    uniffi_cove_fn_method_walletaddresstype_sortorder(
+            FfiConverterTypeWalletAddressType_lower(self),$0
+    )
+})
+}
+
 
 
 // The local Rust `Display` implementation.
@@ -26469,6 +26633,15 @@ public enum WalletLoadState {
     )
 
 
+
+public func isEqual(other: WalletLoadState) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_method_walletloadstate_is_equal(
+            FfiConverterTypeWalletLoadState_lower(self),
+        FfiConverterTypeWalletLoadState_lower(other),$0
+    )
+})
+}
 
 
 
@@ -30685,13 +30858,6 @@ public func bootstrapProgress() -> BootstrapStep  {
     )
 })
 }
-public func bootstrapStepIsMigrationInProgress(step: BootstrapStep) -> Bool  {
-    return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_cove_fn_func_bootstrap_step_is_migration_in_progress(
-        FfiConverterTypeBootstrapStep_lower(step),$0
-    )
-})
-}
 /**
  * Signal the bootstrap to stop at the next cancellation check point,
  * typically called from the frontend watchdog when a timeout fires
@@ -30720,34 +30886,6 @@ public func activeMigration() -> Migration?  {
 public func allFiatCurrencies() -> [FiatCurrency]  {
     return try!  FfiConverterSequenceTypeFiatCurrency.lift(try! rustCall() {
     uniffi_cove_fn_func_all_fiat_currencies($0
-    )
-})
-}
-public func fiatCurrencyEmoji(fiatCurrency: FiatCurrency) -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_cove_fn_func_fiat_currency_emoji(
-        FfiConverterTypeFiatCurrency_lower(fiatCurrency),$0
-    )
-})
-}
-public func fiatCurrencySuffix(fiatCurrency: FiatCurrency) -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_cove_fn_func_fiat_currency_suffix(
-        FfiConverterTypeFiatCurrency_lower(fiatCurrency),$0
-    )
-})
-}
-public func fiatCurrencySymbol(fiatCurrency: FiatCurrency) -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_cove_fn_func_fiat_currency_symbol(
-        FfiConverterTypeFiatCurrency_lower(fiatCurrency),$0
-    )
-})
-}
-public func fiatCurrencyToString(fiatCurrency: FiatCurrency) -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_cove_fn_func_fiat_currency_to_string(
-        FfiConverterTypeFiatCurrency_lower(fiatCurrency),$0
     )
 })
 }
@@ -30787,26 +30925,11 @@ public func updatePricesIfNeeded()async   {
             
         )
 }
-public func coinControlListSortKeyToString(key: CoinControlListSortKey) -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_cove_fn_func_coin_control_list_sort_key_to_string(
-        FfiConverterTypeCoinControlListSortKey_lower(key),$0
-    )
-})
-}
-public func addressErrorToAlertState(error: AddressError, address: String) -> SendFlowAlertState  {
+public func sendFlowAlertStateFromAddressError(error: AddressError, address: String) -> SendFlowAlertState  {
     return try!  FfiConverterTypeSendFlowAlertState_lift(try! rustCall() {
-    uniffi_cove_fn_func_address_error_to_alert_state(
+    uniffi_cove_fn_func_send_flow_alert_state_from_address_error(
         FfiConverterTypeAddressError_lower(error),
         FfiConverterString.lower(address),$0
-    )
-})
-}
-public func walletStateIsEqual(lhs: WalletLoadState, rhs: WalletLoadState) -> Bool  {
-    return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_cove_fn_func_wallet_state_is_equal(
-        FfiConverterTypeWalletLoadState_lower(lhs),
-        FfiConverterTypeWalletLoadState_lower(rhs),$0
     )
 })
 }
@@ -30840,53 +30963,9 @@ public func multiFormatTryFromNfcMessage(nfcMessage: NfcMessage)throws  -> Multi
     )
 })
 }
-public func stringOrDataTryIntoMultiFormat(stringOrData: StringOrData)throws  -> MultiFormat  {
-    return try  FfiConverterTypeMultiFormat_lift(try rustCallWithError(FfiConverterTypeMultiFormatError_lift) {
-    uniffi_cove_fn_func_string_or_data_try_into_multi_format(
-        FfiConverterTypeStringOrData_lower(stringOrData),$0
-    )
-})
-}
 public func defaultNodeSelection() -> NodeSelection  {
     return try!  FfiConverterTypeNodeSelection_lift(try! rustCall() {
     uniffi_cove_fn_func_default_node_selection($0
-    )
-})
-}
-public func nodeSelectionToNode(node: NodeSelection) -> Node  {
-    return try!  FfiConverterTypeNode_lift(try! rustCall() {
-    uniffi_cove_fn_func_node_selection_to_node(
-        FfiConverterTypeNodeSelection_lower(node),$0
-    )
-})
-}
-public func afterPinActionUserMessage(action: AfterPinAction) -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_cove_fn_func_after_pin_action_user_message(
-        FfiConverterTypeAfterPinAction_lower(action),$0
-    )
-})
-}
-public func hashRoute(route: Route) -> UInt64  {
-    return try!  FfiConverterUInt64.lift(try! rustCall() {
-    uniffi_cove_fn_func_hash_route(
-        FfiConverterTypeRoute_lower(route),$0
-    )
-})
-}
-public func isRouteEqual(route: Route, routeToCheck: Route) -> Bool  {
-    return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_cove_fn_func_is_route_equal(
-        FfiConverterTypeRoute_lower(route),
-        FfiConverterTypeRoute_lower(routeToCheck),$0
-    )
-})
-}
-public func isTapSignerRouteEqual(lhs: TapSignerRoute, rhs: TapSignerRoute) -> Bool  {
-    return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_cove_fn_func_is_tap_signer_route_equal(
-        FfiConverterTypeTapSignerRoute_lower(lhs),
-        FfiConverterTypeTapSignerRoute_lower(rhs),$0
     )
 })
 }
@@ -30898,32 +30977,23 @@ public func tapSignerConfirmPinArgsNewFromNewPin(args: TapSignerNewPinArgs, newP
     )
 })
 }
-/**
- * Parse from raw bytes
- */
 public func signedTransactionOrPsbtTryFromBytes(data: Data)throws  -> SignedTransactionOrPsbt  {
     return try  FfiConverterTypeSignedTransactionOrPsbt_lift(try rustCallWithError(FfiConverterTypeSignedImportError_lift) {
-    uniffi_cove_fn_func_signedtransactionorpsbttryfrombytes(
+    uniffi_cove_fn_func_signed_transaction_or_psbt_try_from_bytes(
         FfiConverterData.lower(data),$0
     )
 })
 }
-/**
- * Parse from an NFC message
- */
 public func signedTransactionOrPsbtTryFromNfcMessage(nfcMessage: NfcMessage)throws  -> SignedTransactionOrPsbt  {
     return try  FfiConverterTypeSignedTransactionOrPsbt_lift(try rustCallWithError(FfiConverterTypeSignedImportError_lift) {
-    uniffi_cove_fn_func_signedtransactionorpsbttryfromnfcmessage(
+    uniffi_cove_fn_func_signed_transaction_or_psbt_try_from_nfc_message(
         FfiConverterTypeNfcMessage_lower(nfcMessage),$0
     )
 })
 }
-/**
- * Parse from string input (base64 or hex encoded)
- */
 public func signedTransactionOrPsbtTryParse(input: String)throws  -> SignedTransactionOrPsbt  {
     return try  FfiConverterTypeSignedTransactionOrPsbt_lift(try rustCallWithError(FfiConverterTypeSignedImportError_lift) {
-    uniffi_cove_fn_func_signedtransactionorpsbttryparse(
+    uniffi_cove_fn_func_signed_transaction_or_psbt_try_parse(
         FfiConverterString.lower(input),$0
     )
 })
@@ -30961,20 +31031,6 @@ public func createTapSignerReader(transport: TapcardTransportProtocol, cmd: TapS
             liftFunc: FfiConverterTypeTapSignerReader_lift,
             errorHandler: FfiConverterTypeTapSignerReaderError_lift
         )
-}
-public func tapSignerErrorIsAuthError(error: TapSignerReaderError) -> Bool  {
-    return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_cove_fn_func_tapsignererrorisautherror(
-        FfiConverterTypeTapSignerReaderError_lower(error),$0
-    )
-})
-}
-public func tapSignerErrorIsNoBackupError(error: TapSignerReaderError) -> Bool  {
-    return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_cove_fn_func_tapsignererrorisnobackuperror(
-        FfiConverterTypeTapSignerReaderError_lower(error),$0
-    )
-})
 }
 public func tapSignerResponseBackupResponse(response: TapSignerResponse) -> Data?  {
     return try!  FfiConverterOptionData.lift(try! rustCall() {
@@ -31045,13 +31101,6 @@ public func transactionsPreviewNew(confirmed: UInt8, unconfirmed: UInt8) -> [Tra
     )
 })
 }
-public func walletAddressTypeSortOrder(addressType: WalletAddressType) -> UInt8  {
-    return try!  FfiConverterUInt8.lift(try! rustCall() {
-    uniffi_cove_fn_func_wallet_address_type_sort_order(
-        FfiConverterTypeWalletAddressType_lower(addressType),$0
-    )
-})
-}
 public func ffiMinSendAmount() -> Amount  {
     return try!  FfiConverterTypeAmount_lift(try! rustCall() {
     uniffi_cove_fn_func_ffi_min_send_amount($0
@@ -31079,28 +31128,6 @@ public func previewNewWrappedFoundAddress() -> FoundAddress  {
 public func defaultWalletColors() -> [WalletColor]  {
     return try!  FfiConverterSequenceTypeWalletColor.lift(try! rustCall() {
     uniffi_cove_fn_func_default_wallet_colors($0
-    )
-})
-}
-public func hardwareWalletIsTapSigner(hardwareWallet: HardwareWalletMetadata) -> Bool  {
-    return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_cove_fn_func_hardware_wallet_is_tap_signer(
-        FfiConverterTypeHardwareWalletMetadata_lower(hardwareWallet),$0
-    )
-})
-}
-public func walletMetadataHash(metadata: WalletMetadata) -> UInt64  {
-    return try!  FfiConverterUInt64.lift(try! rustCall() {
-    uniffi_cove_fn_func_wallet_metadata_hash(
-        FfiConverterTypeWalletMetadata_lower(metadata),$0
-    )
-})
-}
-public func walletMetadataIsEqual(lhs: WalletMetadata, rhs: WalletMetadata) -> Bool  {
-    return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_cove_fn_func_wallet_metadata_is_equal(
-        FfiConverterTypeWalletMetadata_lower(lhs),
-        FfiConverterTypeWalletMetadata_lower(rhs),$0
     )
 })
 }
@@ -31135,9 +31162,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_func_bootstrap_progress() != 47242) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_func_bootstrap_step_is_migration_in_progress() != 43717) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_cove_checksum_func_cancel_bootstrap() != 59164) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -31145,18 +31169,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_all_fiat_currencies() != 53482) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_func_fiat_currency_emoji() != 42864) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_func_fiat_currency_suffix() != 43766) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_func_fiat_currency_symbol() != 15961) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_func_fiat_currency_to_string() != 47206) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_is_fiat_currency_symbol() != 60129) {
@@ -31171,13 +31183,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_func_updatepricesifneeded() != 5753) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_func_coin_control_list_sort_key_to_string() != 15603) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_func_address_error_to_alert_state() != 44369) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_func_wallet_state_is_equal() != 22901) {
+    if (uniffi_cove_checksum_func_send_flow_alert_state_from_address_error() != 25696) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_grouped_plain_words_of() != 51957) {
@@ -31192,37 +31198,19 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_func_multi_format_try_from_nfc_message() != 63598) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_func_string_or_data_try_into_multi_format() != 10759) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_cove_checksum_func_default_node_selection() != 32212) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_func_node_selection_to_node() != 13406) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_func_after_pin_action_user_message() != 30105) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_func_hash_route() != 38756) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_func_is_route_equal() != 13176) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_func_is_tap_signer_route_equal() != 21746) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_tap_signer_confirm_pin_args_new_from_new_pin() != 4888) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_func_signedtransactionorpsbttryfrombytes() != 36882) {
+    if (uniffi_cove_checksum_func_signed_transaction_or_psbt_try_from_bytes() != 29004) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_func_signedtransactionorpsbttryfromnfcmessage() != 49359) {
+    if (uniffi_cove_checksum_func_signed_transaction_or_psbt_try_from_nfc_message() != 64085) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_func_signedtransactionorpsbttryparse() != 7350) {
+    if (uniffi_cove_checksum_func_signed_transaction_or_psbt_try_parse() != 50770) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_create_transport_error_from_code() != 12205) {
@@ -31232,12 +31220,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_create_tap_signer_reader() != 39823) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_func_tapsignererrorisautherror() != 54484) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_func_tapsignererrorisnobackuperror() != 36431) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_tapsignerresponsebackupresponse() != 56452) {
@@ -31270,9 +31252,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_func_transactions_preview_new() != 59467) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_func_wallet_address_type_sort_order() != 21818) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_cove_checksum_func_ffi_min_send_amount() != 61138) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -31286,15 +31265,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_default_wallet_colors() != 11354) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_func_hardware_wallet_is_tap_signer() != 49430) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_func_wallet_metadata_hash() != 36015) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_func_wallet_metadata_is_equal() != 16249) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_wallet_metadata_preview() != 44605) {

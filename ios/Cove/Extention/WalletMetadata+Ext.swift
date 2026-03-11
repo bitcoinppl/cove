@@ -7,11 +7,11 @@ extension WalletMetadata: Identifiable & Hashable & Equatable {
     }
 
     public static func == (lhs: WalletMetadata, rhs: WalletMetadata) -> Bool {
-        walletMetadataIsEqual(lhs: lhs, rhs: rhs)
+        lhs.isEqual(other: rhs)
     }
 
     public func hash(into hasher: inout Hasher) {
-        hasher.combine(walletMetadataHash(metadata: self))
+        hasher.combine(self.stableHash())
     }
 
     #if DEBUG

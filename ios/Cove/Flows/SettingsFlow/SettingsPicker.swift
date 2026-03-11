@@ -9,11 +9,16 @@ import SwiftUI
 
 protocol SettingsEnum: CustomStringConvertible & CaseIterable & Hashable {
     var symbol: String { get }
+    var displayName: String { get }
 }
 
 extension SettingsEnum {
     var symbol: String {
         ""
+    }
+
+    var displayName: String {
+        description
     }
 }
 
@@ -28,7 +33,7 @@ struct SettingsPicker<T: SettingsEnum>: View where T.AllCases: RandomAccessColle
                         Image(systemName: item.symbol)
                     }
 
-                    Text(item.description)
+                    Text(item.displayName)
                         .font(.subheadline)
 
                     Spacer()

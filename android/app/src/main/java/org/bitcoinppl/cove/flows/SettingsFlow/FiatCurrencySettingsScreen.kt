@@ -36,8 +36,6 @@ import org.bitcoinppl.cove.views.SectionHeader
 import org.bitcoinppl.cove_core.AppAction
 import org.bitcoinppl.cove_core.FiatCurrency
 import org.bitcoinppl.cove_core.allFiatCurrencies
-import org.bitcoinppl.cove_core.fiatCurrencyEmoji
-import org.bitcoinppl.cove_core.fiatCurrencyToString
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -119,7 +117,7 @@ private fun FiatCurrencyRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = "${fiatCurrencyEmoji(fiatCurrency)} ${fiatCurrencyToString(fiatCurrency)}",
+            text = "${fiatCurrency.emojiString()} ${fiatCurrency}",
             style = MaterialTheme.typography.bodyLarge,
         )
 
