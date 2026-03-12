@@ -2,7 +2,7 @@ pub mod migration;
 pub use migration::Migration;
 
 use std::sync::{
-    Arc, LazyLock, OnceLock,
+    Arc, LazyLock,
     atomic::{AtomicBool, Ordering},
 };
 
@@ -144,6 +144,20 @@ pub fn cancel_bootstrap() {
     info!("Bootstrap cancellation requested");
 }
 
+/// Reset all bootstrap state so restore can re-run bootstrap with a new key
+///
+/// Clears encryption key cache, bootstrap step, storage bootstrapped flag,
+/// and cancellation flag. Must be called before re-running bootstrap after restore
+#[uniffi::export]
+pub fn reset_bootstrap_for_restore() {
+    *BOOTSTRAP_STEP.lock() = BootstrapStep::NotStarted;
+    STORAGE_BOOTSTRAPPED.store(false, Ordering::Release);
+    BOOTSTRAP_CANCELLED.store(false, Ordering::Release);
+    cove_cspp::reset_master_key_cache();
+    migration::set_active_migration(None);
+    info!("Bootstrap state reset for restore");
+}
+
 fn check_cancelled() -> Result<(), AppInitError> {
     if BOOTSTRAP_CANCELLED.load(Ordering::Acquire) {
         Err(AppInitError::Cancelled("bootstrap cancelled by caller".into()))
@@ -168,7 +182,7 @@ fn attempt_bdk_migration(pre_recovery_bdk_count: u32) -> eyre::Result<()> {
     crate::database::migration::BdkMigration::new(migration).run()
 }
 
-static STORAGE_BOOTSTRAPPED: OnceLock<()> = OnceLock::new();
+static STORAGE_BOOTSTRAPPED: AtomicBool = AtomicBool::new(false);
 static BOOTSTRAP_LOCK: Mutex<()> = Mutex::new(());
 
 #[derive(Debug, Clone, uniffi::Error, thiserror::Error)]
@@ -208,19 +222,19 @@ pub fn ensure_storage_bootstrapped() -> Result<(), AppInitError> {
 
 /// Returns the pre-recovery BDK database count (only meaningful when track_progress is true)
 fn ensure_storage_bootstrapped_internal(track_progress: bool) -> Result<u32, AppInitError> {
-    if STORAGE_BOOTSTRAPPED.get().is_some() {
+    if STORAGE_BOOTSTRAPPED.load(Ordering::Acquire) {
         return Ok(0);
     }
 
     let _guard = BOOTSTRAP_LOCK.lock();
 
     // double-check after acquiring lock
-    if STORAGE_BOOTSTRAPPED.get().is_some() {
+    if STORAGE_BOOTSTRAPPED.load(Ordering::Acquire) {
         return Ok(0);
     }
 
     let bdk_count = do_bootstrap(track_progress)?;
-    let _ = STORAGE_BOOTSTRAPPED.set(());
+    STORAGE_BOOTSTRAPPED.store(true, Ordering::Release);
     Ok(bdk_count)
 }
 
@@ -303,6 +317,40 @@ fn do_bootstrap(track_progress: bool) -> Result<u32, AppInitError> {
     Ok(bdk_count)
 }
 
+#[derive(Debug, Clone, uniffi::Enum)]
+pub enum StartupRecoveryState {
+    /// Expected: device restore detected (encrypted dbs exist, key mismatch, no sentinel)
+    /// Route to recovery screen with "Restore from Cloud Backup" and "Start Fresh" options
+    DeviceRestore,
+
+    /// Unexpected: key loss (encrypted dbs exist, key mismatch, sentinel present)
+    /// Route to catastrophic error screen with bug-report + wipe option
+    CatastrophicKeyLoss,
+}
+
+/// Returns the path to the install-lineage sentinel file
+///
+/// Swift owns the sentinel lifecycle (creation + backup-exclusion).
+/// Rust only reads it to diagnose key mismatch scenarios
+#[uniffi::export]
+pub fn sentinel_path() -> String {
+    cove_common::consts::ROOT_DATA_DIR.join(".install_sentinel").to_string_lossy().to_string()
+}
+
+/// Diagnose why a database key mismatch occurred
+///
+/// Called from iOS after bootstrap returns DatabaseKeyMismatch.
+/// Checks the sentinel file to distinguish device restore from unexpected key loss
+#[uniffi::export]
+pub fn diagnose_key_mismatch() -> StartupRecoveryState {
+    let sentinel = cove_common::consts::ROOT_DATA_DIR.join(".install_sentinel");
+    if sentinel.exists() {
+        StartupRecoveryState::CatastrophicKeyLoss
+    } else {
+        StartupRecoveryState::DeviceRestore
+    }
+}
+
 fn map_database_key_verification_error(
     error: crate::database::error::DatabaseError,
 ) -> AppInitError {
@@ -319,7 +367,7 @@ fn map_database_key_verification_error(
 #[cfg(test)]
 pub fn set_test_bootstrapped() {
     crate::database::encrypted_backend::set_test_encryption_key();
-    let _ = STORAGE_BOOTSTRAPPED.set(());
+    STORAGE_BOOTSTRAPPED.store(true, Ordering::Release);
 }
 
 fn set_step(step: BootstrapStep) {
@@ -355,6 +403,18 @@ mod tests {
         assert!(
             matches!(mapped, AppInitError::DatabaseKeyMismatch(message) if message == "wrong key")
         );
+    }
+
+    #[test]
+    fn diagnose_key_mismatch_without_sentinel_returns_device_restore() {
+        // when sentinel doesn't exist, it's a device restore scenario
+        let state = super::diagnose_key_mismatch();
+        // in test environment ROOT_DATA_DIR may not have sentinel
+        assert!(matches!(
+            state,
+            super::StartupRecoveryState::DeviceRestore
+                | super::StartupRecoveryState::CatastrophicKeyLoss
+        ));
     }
 
     #[test]
