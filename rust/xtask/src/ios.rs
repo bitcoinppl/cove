@@ -9,7 +9,7 @@ const IOS_TARGET_SIMULATOR: &str = "aarch64-apple-ios-sim";
 const IOS_LIB_NAME: &str = "libcove.a";
 const BINDINGS_DIR: &str = "./bindings";
 // must match IPHONEOS_DEPLOYMENT_TARGET in ios/Cove.xcodeproj/project.pbxproj
-const IPHONEOS_DEPLOYMENT_TARGET: &str = "18.0";
+const IPHONEOS_DEPLOYMENT_TARGET: &str = "18.4";
 const UNIFFI_MODULE_NAME: &str = "cove_core_ffi";
 const MODULEMAP_FILENAME: &str = "module.modulemap";
 const SPM_PACKAGE_DIR: &str = "../ios/CoveCore/";
