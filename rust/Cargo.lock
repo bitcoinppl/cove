@@ -1110,10 +1110,14 @@ name = "cove-cspp"
 version = "0.1.0"
 dependencies = [
  "arc-swap",
+ "base64 0.22.1",
+ "chacha20poly1305",
  "cove-util",
  "hex",
  "hkdf",
  "rand 0.10.0",
+ "serde",
+ "serde_json",
  "sha2",
  "thiserror 2.0.18",
  "tracing",

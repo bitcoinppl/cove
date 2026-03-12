@@ -8,4 +8,10 @@ pub enum CsppError {
     Decrypt(String),
     #[error("invalid data: {0}")]
     InvalidData(String),
+    #[error("wrong key: decryption failed due to incorrect key")]
+    WrongKey,
+    #[error("serialization failed: {0}")]
+    Serialization(String),
+    #[error("deserialization failed: {0}")]
+    Deserialization(String),
 }

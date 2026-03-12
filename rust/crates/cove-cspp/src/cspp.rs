@@ -17,6 +17,11 @@ static INIT_LOCK: Mutex<()> = Mutex::new(());
 static MASTER_KEY_CACHE: LazyLock<ArcSwapOption<Zeroizing<[u8; 32]>>> =
     LazyLock::new(|| ArcSwapOption::new(None));
 
+/// Clear the cached master key so the next `get_or_create_master_key()` reloads from the store
+pub fn reset_master_key_cache() {
+    MASTER_KEY_CACHE.store(None);
+}
+
 pub struct Cspp<S: CsppStore>(S);
 
 impl<S: CsppStore> Cspp<S> {
@@ -77,7 +82,7 @@ impl<S: CsppStore> Cspp<S> {
     /// keychain already provides at-rest encryption, but this extra layer prevents
     /// the plaintext key from being accidentally exposed if other code enumerates
     /// keychain entries — it must be explicitly decrypted to be read
-    fn save_master_key(&self, master_key: &MasterKey) -> Result<(), CsppError> {
+    pub fn save_master_key(&self, master_key: &MasterKey) -> Result<(), CsppError> {
         let hex = hex::encode(master_key.as_bytes());
         let mut cryptor = Cryptor::new();
 
@@ -220,5 +225,30 @@ mod tests {
 
         let loaded = cspp.get_or_create_master_key().unwrap();
         assert_eq!(*loaded.as_bytes(), original_bytes);
+    }
+
+    #[test]
+    fn master_key_cache_cleared_on_reset() {
+        let _guard = CACHE_TEST_LOCK.lock().unwrap();
+        Cspp::<MockStore>::reset_cache();
+
+        let cspp = mock_cspp();
+
+        // populate cache
+        let first = cspp.get_or_create_master_key().unwrap();
+        let first_bytes = *first.as_bytes();
+
+        // verify cache is populated
+        assert!(MASTER_KEY_CACHE.load().is_some());
+
+        // reset cache via public API
+        reset_master_key_cache();
+
+        // verify cache is cleared
+        assert!(MASTER_KEY_CACHE.load().is_none());
+
+        // next call should reload from store (same key since store still has it)
+        let reloaded = cspp.get_or_create_master_key().unwrap();
+        assert_eq!(*reloaded.as_bytes(), first_bytes);
     }
 }
