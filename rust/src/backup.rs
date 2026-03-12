@@ -4,8 +4,8 @@ use zeroize::Zeroizing;
 mod crypto;
 mod error;
 mod export;
-mod import;
-mod model;
+pub(crate) mod import;
+pub(crate) mod model;
 mod verify;
 
 pub use error::BackupError;

@@ -133,7 +133,7 @@ enum RestoreResult {
 ///
 /// Matches import's exact behavior: fingerprint+network+mode first,
 /// falls back to wallet ID for wallets without fingerprints
-pub(super) fn is_wallet_duplicate(
+pub(crate) fn is_wallet_duplicate(
     metadata: &WalletMetadata,
     existing_fingerprints: &[(Fingerprint, Network, WalletMode)],
 ) -> Result<bool, BackupError> {
@@ -159,7 +159,7 @@ pub(super) fn is_wallet_duplicate(
     Ok(false)
 }
 
-pub(super) fn collect_existing_fingerprints()
+pub(crate) fn collect_existing_fingerprints()
 -> Result<Vec<(Fingerprint, Network, WalletMode)>, BackupError> {
     let db = Database::global();
     let mut fingerprints = Vec::new();
@@ -183,7 +183,7 @@ pub(super) fn collect_existing_fingerprints()
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub(super) enum WalletTypeSecretValidation {
+pub(crate) enum WalletTypeSecretValidation {
     Valid,
     Degraded,
 }
@@ -192,7 +192,7 @@ pub(super) enum WalletTypeSecretValidation {
 ///
 /// Returns Ok(Valid) for correct combos, Ok(Degraded) for importable-but-degraded,
 /// or Err for hard failures that would prevent import
-pub(super) fn validate_wallet_type_secret(
+pub(crate) fn validate_wallet_type_secret(
     wallet_type: &WalletType,
     secret: &WalletSecret,
     name: &str,
@@ -301,7 +301,7 @@ where
     })
 }
 
-fn restore_mnemonic_wallet(
+pub(crate) fn restore_mnemonic_wallet(
     metadata: &WalletMetadata,
     mnemonic: Mnemonic,
 ) -> Result<(), (BackupError, Vec<String>)> {
@@ -355,7 +355,7 @@ fn restore_mnemonic_wallet_inner(
     Ok(())
 }
 
-fn restore_descriptor_wallet(
+pub(crate) fn restore_descriptor_wallet(
     metadata: &WalletMetadata,
     backup: &WalletBackup,
 ) -> Result<(), (BackupError, Vec<String>)> {
@@ -427,7 +427,7 @@ fn restore_descriptor_wallet_inner(
 /// Clean up a partially-imported wallet on failure
 ///
 /// Returns a list of cleanup failures; empty means fully cleaned
-fn cleanup_failed_wallet(metadata: &WalletMetadata) -> Vec<String> {
+pub(crate) fn cleanup_failed_wallet(metadata: &WalletMetadata) -> Vec<String> {
     let wallet_id = &metadata.id;
     let name = &metadata.name;
     let mut failures = Vec::new();

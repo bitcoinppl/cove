@@ -156,7 +156,7 @@ fn verify_encrypted_redb_db(path: &Path) -> Result<bool> {
         eyre::eyre!("no encryption key available for verification of {path_display}")
     })?;
 
-    let backend = match EncryptedBackend::open(path, key) {
+    let backend = match EncryptedBackend::open(path, &key) {
         Ok(b) => b,
         Err(e) => {
             warn!("Verification failed for {path_display}: could not open encrypted backend: {e}");
@@ -335,7 +335,7 @@ fn create_encrypted_dst(tmp_path: &Path) -> Result<redb::Database> {
         .ok_or_else(|| eyre::eyre!("encryption key must be set before migration"))?;
 
     let backend =
-        EncryptedBackend::create(tmp_path, key).context("failed to create encrypted database")?;
+        EncryptedBackend::create(tmp_path, &key).context("failed to create encrypted database")?;
 
     redb::Database::builder()
         .create_with_file_format_v3(true)
@@ -347,7 +347,7 @@ fn create_encrypted_dst(tmp_path: &Path) -> Result<redb::Database> {
 fn verify_encrypted_dst(path: &Path) -> Result<()> {
     let key = crate::database::encrypted_backend::encryption_key()
         .ok_or_else(|| eyre::eyre!("encryption key must be set before migration"))?;
-    let verify_backend = EncryptedBackend::open(path, key)
+    let verify_backend = EncryptedBackend::open(path, &key)
         .context("verification: cannot reopen encrypted database")?;
     let verify_db = redb::Database::builder()
         .create_with_backend(verify_backend)
@@ -491,7 +491,7 @@ mod tests {
 
     fn create_encrypted_redb_at(path: &Path) {
         let key = encrypted_backend::encryption_key().unwrap();
-        let backend = EncryptedBackend::create(path, key).unwrap();
+        let backend = EncryptedBackend::create(path, &key).unwrap();
         let db = redb::Database::builder()
             .create_with_file_format_v3(true)
             .create_with_backend(backend)
@@ -608,7 +608,7 @@ mod tests {
 
         // verify data survived migration
         let key = encrypted_backend::encryption_key().unwrap();
-        let backend = EncryptedBackend::open(&db_path, key).unwrap();
+        let backend = EncryptedBackend::open(&db_path, &key).unwrap();
         let db = redb::Database::builder().create_with_backend(backend).unwrap();
 
         let read_txn = db.begin_read().unwrap();
@@ -637,7 +637,7 @@ mod tests {
 
         // verify data survived
         let key = encrypted_backend::encryption_key().unwrap();
-        let backend = EncryptedBackend::open(&db_path, key).unwrap();
+        let backend = EncryptedBackend::open(&db_path, &key).unwrap();
         let db = redb::Database::builder().create_with_backend(backend).unwrap();
 
         let read_txn = db.begin_read().unwrap();
@@ -933,7 +933,7 @@ mod tests {
         migrate_main_database(&db_path).unwrap();
 
         let key = encrypted_backend::encryption_key().unwrap();
-        let backend = EncryptedBackend::open(&db_path, key).unwrap();
+        let backend = EncryptedBackend::open(&db_path, &key).unwrap();
         let db = redb::Database::builder().create_with_backend(backend).unwrap();
         let read_txn = db.begin_read().unwrap();
 
@@ -978,7 +978,7 @@ mod tests {
         migrate_wallet_database(&db_path).unwrap();
 
         let key = encrypted_backend::encryption_key().unwrap();
-        let backend = EncryptedBackend::open(&db_path, key).unwrap();
+        let backend = EncryptedBackend::open(&db_path, &key).unwrap();
         let db = redb::Database::builder().create_with_backend(backend).unwrap();
         let read_txn = db.begin_read().unwrap();
 

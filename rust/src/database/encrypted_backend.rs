@@ -8,8 +8,10 @@ use std::fs::{File, OpenOptions};
 use std::io;
 use std::os::unix::fs::FileExt;
 use std::path::Path;
-use std::sync::OnceLock;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+
+use arc_swap::ArcSwapOption;
 
 const BLOCK_SIZE: usize = 4096;
 const NONCE_LEN: usize = 24;
@@ -35,24 +37,31 @@ const HEADER_TAG_LEN: usize = 32;
 
 type HmacSha256 = Hmac<Sha256>;
 
-static ENCRYPTION_KEY: OnceLock<[u8; 32]> = OnceLock::new();
+static ENCRYPTION_KEY: ArcSwapOption<[u8; 32]> = ArcSwapOption::const_empty();
 
-/// Set the global encryption key, must be called once before any database is opened.
+/// Set the global encryption key, must be called once before any database is opened
 ///
-/// Idempotent: no-op if already set. Debug builds assert the same key is provided
+/// First-set semantics: no-op if already set. Debug builds assert the same key is provided
 pub fn set_encryption_key(key: [u8; 32]) {
-    if let Err(attempted) = ENCRYPTION_KEY.set(key) {
+    let new = Arc::new(key);
+    let prev = ENCRYPTION_KEY.compare_and_swap(&None::<Arc<[u8; 32]>>, Some(Arc::clone(&new)));
+    if prev.is_some() {
         debug_assert_eq!(
-            ENCRYPTION_KEY.get().expect("just failed to set, must exist"),
-            &attempted,
+            prev.as_deref(),
+            Some(&key),
             "set_encryption_key called with a different key"
         );
     }
 }
 
+/// Replace the encryption key unconditionally — only for restore path
+pub fn replace_encryption_key(key: [u8; 32]) {
+    ENCRYPTION_KEY.store(Some(Arc::new(key)));
+}
+
 /// Get the global encryption key, returns None if not yet set
-pub fn encryption_key() -> Option<&'static [u8; 32]> {
-    ENCRYPTION_KEY.get()
+pub fn encryption_key() -> Option<[u8; 32]> {
+    ENCRYPTION_KEY.load_full().map(|arc| *arc)
 }
 
 pub struct EncryptedBackend {
@@ -316,12 +325,12 @@ pub fn verify_database_key(path: &Path) -> Result<(), super::error::DatabaseErro
     let version = header[VERSION_OFFSET];
     match version {
         VERSION_V2 => {
-            verify_header_tag(key, &header).map_err(|e| DatabaseError::HeaderIntegrity {
+            verify_header_tag(&key, &header).map_err(|e| DatabaseError::HeaderIntegrity {
                 path: path_str,
                 error: e.to_string(),
             })?;
         }
-        VERSION_V1 => verify_v1_database_key(&file, &path_str, key)?,
+        VERSION_V1 => verify_v1_database_key(&file, &path_str, &key)?,
         version => {
             return Err(DatabaseError::HeaderIntegrity {
                 path: path_str,
@@ -348,7 +357,7 @@ pub fn open_or_create_database(path: &Path) -> Result<redb::Database, super::err
         return Err(DatabaseError::PlaintextNotAllowed { path: path_str });
     }
 
-    let backend = EncryptedBackend::create_or_open(path, key)
+    let backend = EncryptedBackend::create_or_open(path, &key)
         .map_err(|e| io_err_to_db_error(&path_str, e))?;
 
     redb::Database::builder()
@@ -603,7 +612,7 @@ impl redb::StorageBackend for EncryptedBackend {
 
 #[cfg(test)]
 pub fn set_test_encryption_key() {
-    let _ = ENCRYPTION_KEY.set([0xAB; 32]);
+    ENCRYPTION_KEY.store(Some(Arc::new([0xAB; 32])));
 }
 
 #[cfg(test)]
@@ -827,7 +836,7 @@ mod tests {
         let table_def: redb::TableDefinition<&str, &str> = redb::TableDefinition::new("init_test");
 
         {
-            let backend = EncryptedBackend::create(&path, key).unwrap();
+            let backend = EncryptedBackend::create(&path, &key).unwrap();
             let db = redb::Database::builder().create_with_backend(backend).unwrap();
 
             let write_txn = db.begin_write().unwrap();
@@ -840,7 +849,7 @@ mod tests {
         }
 
         {
-            let backend = EncryptedBackend::open(&path, key).unwrap();
+            let backend = EncryptedBackend::open(&path, &key).unwrap();
             let db = redb::Database::builder().create_with_backend(backend).unwrap();
 
             let read_txn = db.begin_read().unwrap();
@@ -1322,5 +1331,46 @@ mod tests {
 
         let result = EncryptedBackend::open(&path, &original_key);
         assert!(result.is_ok(), "the original key should still open the V1 database");
+    }
+
+    #[test]
+    fn replace_encryption_key_overrides_existing() {
+        // use replace for both since the global may already have a value from other tests
+        let key_a = [0x11; 32];
+        let key_b = [0x22; 32];
+
+        replace_encryption_key(key_a);
+        assert_eq!(encryption_key(), Some(key_a));
+
+        replace_encryption_key(key_b);
+        assert_eq!(encryption_key(), Some(key_b));
+
+        // verify a DB created with key_b can be opened
+        let dir = TempDir::new().unwrap();
+        let path = test_path(&dir, "replace_key.enc");
+        let table_def: redb::TableDefinition<&str, &str> =
+            redb::TableDefinition::new("replace_test");
+
+        {
+            let backend = EncryptedBackend::create(&path, &key_b).unwrap();
+            let db = redb::Database::builder().create_with_backend(backend).unwrap();
+            let write_txn = db.begin_write().unwrap();
+            {
+                let mut table = write_txn.open_table(table_def).unwrap();
+                table.insert("k", "v").unwrap();
+            }
+            write_txn.commit().unwrap();
+        }
+
+        {
+            let backend = EncryptedBackend::open(&path, &key_b).unwrap();
+            let db = redb::Database::builder().create_with_backend(backend).unwrap();
+            let read_txn = db.begin_read().unwrap();
+            let table = read_txn.open_table(table_def).unwrap();
+            assert_eq!(table.get("k").unwrap().unwrap().value(), "v");
+        }
+
+        // restore test key so other tests aren't affected
+        set_test_encryption_key();
     }
 }

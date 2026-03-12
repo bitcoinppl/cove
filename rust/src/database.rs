@@ -88,6 +88,20 @@ impl Database {
 }
 
 impl Database {
+    /// Reinitialize the database after restore (wipe + new encryption key)
+    ///
+    /// Re-runs bootstrap and swaps the global DATABASE instance. If DATABASE
+    /// was never initialized, initializes it for the first time
+    pub fn reinitialize() -> Result<(), error::DatabaseError> {
+        let db = Self::init()?;
+        if let Some(arc_swap) = DATABASE.get() {
+            arc_swap.store(Arc::new(db));
+        } else {
+            let _ = DATABASE.set(ArcSwap::new(Arc::new(db)));
+        }
+        Ok(())
+    }
+
     pub fn global() -> Arc<Self> {
         let db = DATABASE
             .get_or_init(|| {
