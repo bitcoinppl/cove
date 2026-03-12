@@ -38,23 +38,44 @@ public extension EnvironmentValues {
 @main
 struct CoveApp: App {
     @UIApplicationDelegateAdaptor(CoveAppDelegate.self) var appDelegate
-    @State private var app: AppManager?
-    @State private var auth: AuthManager?
-    @State private var bootstrapError: String?
+    enum StartupState {
+        case loading
+        case ready(AppManager, AuthManager)
+        case recoveryNeeded(StartupRecoveryState)
+        case fatalError(String)
+    }
+
+    @State private var startupState: StartupState = .loading
     @State private var bdkMigrationWarning: String?
 
     init() {
         _ = Keychain(keychain: KeychainAccessor())
         _ = Device(device: DeviceAccesor())
+        _ = PasskeyAccess(provider: PasskeyProviderImpl())
+        _ = CloudStorage(cloudStorage: CloudStorageAccessImpl())
     }
 
     var body: some Scene {
         WindowGroup {
             Group {
-                if let app, let auth {
+                switch startupState {
+                case .loading:
+                    CoverView(errorMessage: nil)
+                case let .ready(app, auth):
                     CoveMainView(app: app, auth: auth)
-                } else {
-                    CoverView(errorMessage: bootstrapError)
+                case let .recoveryNeeded(state):
+                    switch state {
+                    case .deviceRestore:
+                        DeviceRestoreView {
+                            rebootstrap()
+                        }
+                    case .catastrophicKeyLoss:
+                        CatastrophicErrorView {
+                            rebootstrap()
+                        }
+                    }
+                case let .fatalError(message):
+                    CoverView(errorMessage: message)
                 }
             }
             .task {
@@ -137,8 +158,9 @@ extension CoveApp {
                 completeBootstrap()
             } else {
                 Log.error("[STARTUP] bootstrap timed out, last step: \(step)")
-                bootstrapError =
+                startupState = .fatalError(
                     "App startup timed out. Please force-quit and try again.\n\nPlease contact feedback@covebitcoinwallet.com"
+                )
             }
         } else if error is CancellationError {
             Log.info("[STARTUP] bootstrap task cancelled (app lifecycle)")
@@ -149,21 +171,21 @@ extension CoveApp {
                 completeBootstrap()
             } else if case AppInitError.DatabaseKeyMismatch = error {
                 Log.error("[STARTUP] database encryption key mismatch")
-                bootstrapError =
-                    "Your app's encryption key doesn't match the database. "
-                        + "This can happen after restoring from a backup or reinstalling.\n\n"
-                        + "Please contact feedback@covebitcoinwallet.com for recovery assistance."
+                let recovery = diagnoseKeyMismatch()
+                startupState = .recoveryNeeded(recovery)
             } else if case AppInitError.AlreadyCalled = error {
                 Log.error("[STARTUP] bootstrap already called at step: \(step)")
-                bootstrapError =
+                startupState = .fatalError(
                     "App initialization error. Please force-quit and restart."
+                )
             } else if case AppInitError.Cancelled = error {
                 Log.error("[STARTUP] bootstrap cancelled at step: \(step)")
-                bootstrapError =
+                startupState = .fatalError(
                     "App startup timed out. Please force-quit and try again.\n\nPlease contact feedback@covebitcoinwallet.com"
+                )
             } else {
                 Log.error("[STARTUP] bootstrap failed at step: \(step), error: \(error)")
-                bootstrapError = error.localizedDescription
+                startupState = .fatalError(error.localizedDescription)
             }
         }
     }
@@ -171,10 +193,26 @@ extension CoveApp {
     private func completeBootstrap(warning: String? = nil) {
         let appManager = AppManager.shared
         appManager.asyncRuntimeReady = true
-        self.app = appManager
-        self.auth = AuthManager.shared
+
+        // create sentinel after first successful bootstrap
+        createSentinelIfNeeded()
+
+        self.startupState = .ready(appManager, AuthManager.shared)
         self.bdkMigrationWarning = warning
         startInitData(appManager)
+    }
+
+    /// Re-bootstrap after recovery (Start Fresh / Wipe / Cloud Restore)
+    private func rebootstrap() {
+        resetBootstrapForRestore()
+        Task {
+            do {
+                let warning = try await bootstrapWithTimeout()
+                completeBootstrap(warning: warning)
+            } catch {
+                handleBootstrapError(error)
+            }
+        }
     }
 
     /// Non-blocking — initData preloads caches and prices but is not required for core functionality

@@ -255,6 +255,55 @@ struct MainSettingsScreen: View {
         }
     }
 
+    @ViewBuilder
+    var CloudBackupSection: some View {
+        if !auth.isInDecoyMode() {
+            Section(header: Text("Cloud Backup")) {
+                let manager = CloudBackupManager.shared
+
+                switch manager.state {
+                case .disabled:
+                    SettingsRow(title: "Enable Cloud Backup", symbol: "icloud.and.arrow.up") {
+                        manager.rust.enableCloudBackup()
+                    }
+                case .enabling:
+                    HStack {
+                        ProgressView()
+                            .padding(.trailing, 8)
+                        Text("Setting up cloud backup...")
+                    }
+                case .enabled:
+                    HStack {
+                        Image(systemName: "checkmark.icloud")
+                            .foregroundStyle(.green)
+                        Text("Cloud Backup Enabled")
+                    }
+                case .restoring:
+                    HStack {
+                        ProgressView()
+                            .padding(.trailing, 8)
+                        Text("Restoring from cloud backup...")
+                    }
+                case let .error(message):
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Image(systemName: "exclamationmark.icloud")
+                                .foregroundStyle(.red)
+                            Text("Cloud Backup Error")
+                        }
+                        Text(message)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    SettingsRow(title: "Retry", symbol: "arrow.clockwise") {
+                        manager.rust.enableCloudBackup()
+                    }
+                }
+            }
+        }
+    }
+
     var betaToggle: Binding<Bool> {
         Binding(
             get: { isBetaEnabled },
@@ -302,6 +351,7 @@ struct MainSettingsScreen: View {
             WalletSettingsSection()
             SecuritySection
             BackupSection
+            CloudBackupSection
             BetaToggleSection
 
             Section {
