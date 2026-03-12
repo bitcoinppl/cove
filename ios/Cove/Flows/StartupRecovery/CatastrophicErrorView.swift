@@ -72,7 +72,6 @@ struct CatastrophicErrorView: View {
 
     private func wipeAndRestart() {
         wipeLocalData()
-        createSentinelIfNeeded()
         onResolve()
     }
 }

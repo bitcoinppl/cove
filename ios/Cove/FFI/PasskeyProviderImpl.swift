@@ -1,4 +1,5 @@
 import AuthenticationServices
+import CryptoKit
 
 @_exported import CoveCore
 import Foundation
@@ -9,7 +10,7 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
         true
     }
 
-    func createPasskey(rpId: String, userId: [UInt8], challenge: [UInt8]) throws -> [UInt8] {
+    func createPasskey(rpId: String, userId: Data, challenge: Data) throws -> Data {
         precondition(!Thread.isMainThread, "createPasskey must not be called from the main thread")
 
         let delegate = PasskeyDelegate()
@@ -22,9 +23,9 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
             )
 
             let request = provider.createCredentialRegistrationRequest(
-                challenge: Data(challenge),
+                challenge: challenge,
                 name: "Cove Wallet",
-                userID: Data(userId)
+                userID: userId
             )
 
             let ctrl = ASAuthorizationController(authorizationRequests: [request])
@@ -42,15 +43,15 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
             let registration =
             credential as? ASAuthorizationPlatformPublicKeyCredentialRegistration
         else {
-            throw PasskeyError.creationFailed("unexpected credential type")
+            throw PasskeyError.CreationFailed("unexpected credential type")
         }
 
-        return Array(registration.credentialID)
+        return registration.credentialID
     }
 
     func authenticateWithPrf(
-        rpId: String, credentialId: [UInt8], prfSalt: [UInt8], challenge: [UInt8]
-    ) throws -> [UInt8] {
+        rpId: String, credentialId: Data, prfSalt: Data, challenge: Data
+    ) throws -> Data {
         precondition(
             !Thread.isMainThread,
             "authenticateWithPrf must not be called from the main thread"
@@ -65,21 +66,16 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
             )
 
             let request = provider.createCredentialAssertionRequest(
-                challenge: Data(challenge)
+                challenge: challenge
             )
 
             request.allowedCredentials = [
                 ASAuthorizationPlatformPublicKeyCredentialDescriptor(
-                    credentialID: Data(credentialId)
+                    credentialID: credentialId
                 ),
             ]
 
-            let prfInput = ASAuthorizationPublicKeyCredentialPRFAssertionInput(
-                inputValues: ASAuthorizationPublicKeyCredentialPRFValues(
-                    saltInput: Data(prfSalt)
-                )
-            )
-            request.prf = prfInput
+            request.prf = .inputValues(.init(saltInput1: prfSalt))
 
             let ctrl = ASAuthorizationController(authorizationRequests: [request])
             ctrl.delegate = delegate
@@ -95,24 +91,26 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
             let assertion =
             credential as? ASAuthorizationPlatformPublicKeyCredentialAssertion
         else {
-            throw PasskeyError.authenticationFailed("unexpected credential type")
+            throw PasskeyError.AuthenticationFailed("unexpected credential type")
         }
 
-        guard let prfOutput = assertion.prf?.first?.outputValue else {
-            throw PasskeyError.authenticationFailed("PRF output not available")
+        guard let prfKey = assertion.prf?.first else {
+            throw PasskeyError.AuthenticationFailed("PRF output not available")
         }
+
+        let prfOutput = prfKey.withUnsafeBytes { Data($0) }
 
         guard prfOutput.count >= 32 else {
-            throw PasskeyError.authenticationFailed(
+            throw PasskeyError.AuthenticationFailed(
                 "PRF output too short: \(prfOutput.count) bytes, need 32"
             )
         }
 
-        return Array(prfOutput.prefix(32))
+        return prfOutput.prefix(32)
     }
 
     func discoverAndAuthenticateWithPrf(
-        rpId: String, prfSalt: [UInt8], challenge: [UInt8]
+        rpId: String, prfSalt: Data, challenge: Data
     ) throws -> DiscoveredPasskeyResult {
         precondition(
             !Thread.isMainThread,
@@ -128,18 +126,13 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
             )
 
             let request = provider.createCredentialAssertionRequest(
-                challenge: Data(challenge)
+                challenge: challenge
             )
 
             // no allowedCredentials — discoverable credential
             request.allowedCredentials = []
 
-            let prfInput = ASAuthorizationPublicKeyCredentialPRFAssertionInput(
-                inputValues: ASAuthorizationPublicKeyCredentialPRFValues(
-                    saltInput: Data(prfSalt)
-                )
-            )
-            request.prf = prfInput
+            request.prf = .inputValues(.init(saltInput1: prfSalt))
 
             let ctrl = ASAuthorizationController(authorizationRequests: [request])
             ctrl.delegate = delegate
@@ -157,22 +150,24 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
             let assertion =
             credential as? ASAuthorizationPlatformPublicKeyCredentialAssertion
         else {
-            throw PasskeyError.noCredentialFound
+            throw PasskeyError.NoCredentialFound
         }
 
-        guard let prfOutput = assertion.prf?.first?.outputValue else {
-            throw PasskeyError.authenticationFailed("PRF output not available")
+        guard let prfKey = assertion.prf?.first else {
+            throw PasskeyError.AuthenticationFailed("PRF output not available")
         }
+
+        let prfOutput = prfKey.withUnsafeBytes { Data($0) }
 
         guard prfOutput.count >= 32 else {
-            throw PasskeyError.authenticationFailed(
+            throw PasskeyError.AuthenticationFailed(
                 "PRF output too short: \(prfOutput.count) bytes, need 32"
             )
         }
 
         return DiscoveredPasskeyResult(
-            prfOutput: Array(prfOutput.prefix(32)),
-            credentialId: Array(assertion.credentialID)
+            prfOutput: prfOutput.prefix(32),
+            credentialId: assertion.credentialID
         )
     }
 }
@@ -188,7 +183,7 @@ private class PasskeyDelegate: NSObject, ASAuthorizationControllerDelegate,
     func waitForResult() throws -> ASAuthorizationCredential {
         semaphore.wait()
         guard let result else {
-            throw PasskeyError.authenticationFailed("no result received from delegate")
+            throw PasskeyError.AuthenticationFailed("no result received from delegate")
         }
         return try result.get()
     }
@@ -214,15 +209,15 @@ private class PasskeyDelegate: NSObject, ASAuthorizationControllerDelegate,
         if let authError = error as? ASAuthorizationError {
             switch authError.code {
             case .canceled:
-                result = .failure(PasskeyError.userCancelled)
+                result = .failure(PasskeyError.UserCancelled)
             default:
                 result = .failure(
-                    PasskeyError.authenticationFailed(error.localizedDescription)
+                    PasskeyError.AuthenticationFailed(error.localizedDescription)
                 )
             }
         } else {
             result = .failure(
-                PasskeyError.authenticationFailed(error.localizedDescription)
+                PasskeyError.AuthenticationFailed(error.localizedDescription)
             )
         }
         semaphore.signal()

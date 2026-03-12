@@ -188,9 +188,14 @@ fn verify_encrypted_redb_db(path: &Path) -> Result<bool> {
     Ok(true)
 }
 
-/// Recover from interrupted migrations by checking for .bak/.enc.tmp files
+const LEGACY_MAIN_DB: &str = "cove.db";
+const LEGACY_WALLET_DB: &str = "wallet_data.json";
+const ENCRYPTED_MAIN_DB: &str = "cove.encrypted.db";
+const ENCRYPTED_WALLET_DB: &str = "wallet_data.encrypted.json.redb";
+
+/// Recover from interrupted migrations by checking for orphaned .tmp files
 pub fn recover_interrupted_migrations() -> Result<()> {
-    recover_at_path(&ROOT_DATA_DIR.join("cove.db"))?;
+    recover_main_migration(&ROOT_DATA_DIR)?;
 
     let entries = match std::fs::read_dir(&*WALLET_DATA_DIR) {
         Ok(entries) => entries,
@@ -208,82 +213,111 @@ pub fn recover_interrupted_migrations() -> Result<()> {
                 continue;
             }
         };
-        recover_at_path(&wallet_db_path(&entry.path()))?;
+        recover_wallet_migration(&entry.path())?;
     }
+
+    // also clean up old-style .bak/.enc.tmp files from previous migration code
+    recover_legacy_at_path(&ROOT_DATA_DIR.join(LEGACY_MAIN_DB))?;
 
     Ok(())
 }
 
-fn migration_paths(db_path: &Path) -> (PathBuf, PathBuf) {
-    let extension = db_path.extension().and_then(std::ffi::OsStr::to_str).unwrap_or_default();
-    (
-        db_path.with_extension(format!("{extension}.bak")),
-        db_path.with_extension(format!("{extension}.enc.tmp")),
-    )
-}
+fn recover_main_migration(root_dir: &Path) -> Result<()> {
+    let dest = root_dir.join(ENCRYPTED_MAIN_DB);
+    let tmp = dest.with_extension("db.tmp");
 
-fn recover_at_path(db_path: &Path) -> Result<()> {
-    let (bak_path, tmp_path) = migration_paths(db_path);
-
-    // only backup exists: migration completed but final rename didn't happen
-    if bak_path.exists() && !db_path.exists() && !tmp_path.exists() {
-        let bak = bak_path.display();
-        warn!("Only backup exists at {bak} -- restoring from backup");
-        std::fs::rename(&bak_path, db_path)
-            .context(format!("failed to restore from backup at {bak}"))?;
-        return Ok(());
-    }
-
-    if tmp_path.exists() && bak_path.exists() && !db_path.exists() {
-        // crash after old→.bak, before tmp→final: finish the rename
-        let path = db_path.display();
-        info!("Recovering interrupted migration at {path}");
-        std::fs::rename(&tmp_path, db_path)
-            .context(format!("failed to finish interrupted migration at {path}"))?;
-    }
-
-    // clean up leftover .enc.tmp (crash during copy)
-    if tmp_path.exists() {
-        log_remove_file(&tmp_path);
-    }
-
-    // clean up leftover .bak only after verifying the encrypted DB works
-    if bak_path.exists() && db_path.exists() {
-        match verify_encrypted_redb_db(db_path) {
+    if tmp.exists() && !dest.exists() {
+        // crash after copy, before rename — verify then finish
+        match verify_encrypted_redb_db(&tmp) {
             Ok(true) => {
-                log_remove_file(&bak_path);
+                std::fs::rename(&tmp, &dest)
+                    .context("failed to finish interrupted main DB migration")?;
             }
-            Ok(false) => {
-                let path = db_path.display();
-                warn!("Encrypted DB at {path} appears corrupt, restoring from backup");
-                log_remove_file(db_path);
-                std::fs::rename(&bak_path, db_path).context("failed to restore from backup")?;
+            _ => {
+                // corrupt tmp — remove it, migration retries next launch
+                log_remove_file(&tmp);
             }
-            Err(e) => {
-                // I/O error — preserve both files so nothing is lost
-                let path = db_path.display();
-                warn!("Cannot verify encrypted DB at {path}: {e:#} — preserving both files");
-            }
+        }
+    } else if tmp.exists() {
+        log_remove_file(&tmp);
+    }
+
+    // clean up leftover plaintext only after verifying encrypted version works
+    let source = root_dir.join(LEGACY_MAIN_DB);
+    if source.exists() && dest.exists() {
+        match verify_encrypted_redb_db(&dest) {
+            Ok(true) => log_remove_file(&source),
+            _ => warn!("Encrypted DB failed verification, preserving plaintext"),
         }
     }
 
     Ok(())
 }
 
-/// Check whether the main database needs migration (exists and is unencrypted)
+fn recover_wallet_migration(wallet_dir: &Path) -> Result<()> {
+    let dest = wallet_dir.join(ENCRYPTED_WALLET_DB);
+    let tmp = dest.with_extension("redb.tmp");
+
+    if tmp.exists() && !dest.exists() {
+        match verify_encrypted_redb_db(&tmp) {
+            Ok(true) => {
+                std::fs::rename(&tmp, &dest)
+                    .context("failed to finish interrupted wallet DB migration")?;
+            }
+            _ => {
+                log_remove_file(&tmp);
+            }
+        }
+    } else if tmp.exists() {
+        log_remove_file(&tmp);
+    }
+
+    // clean up leftover plaintext
+    let source = wallet_dir.join(LEGACY_WALLET_DB);
+    if source.exists() && dest.exists() {
+        match verify_encrypted_redb_db(&dest) {
+            Ok(true) => log_remove_file(&source),
+            _ => warn!("Encrypted wallet DB failed verification, preserving plaintext"),
+        }
+    }
+
+    Ok(())
+}
+
+/// Legacy recovery for old-style .bak/.enc.tmp files from the previous migration code
+fn recover_legacy_at_path(db_path: &Path) -> Result<()> {
+    let extension = db_path.extension().and_then(std::ffi::OsStr::to_str).unwrap_or_default();
+    let bak_path = db_path.with_extension(format!("{extension}.bak"));
+    let tmp_path = db_path.with_extension(format!("{extension}.enc.tmp"));
+
+    if bak_path.exists() && !db_path.exists() && !tmp_path.exists() {
+        let bak = bak_path.display();
+        warn!("Only legacy backup exists at {bak} -- restoring from backup");
+        std::fs::rename(&bak_path, db_path)
+            .context(format!("failed to restore from legacy backup at {bak}"))?;
+        return Ok(());
+    }
+
+    if tmp_path.exists() {
+        log_remove_file(&tmp_path);
+    }
+    if bak_path.exists() {
+        log_remove_file(&bak_path);
+    }
+
+    Ok(())
+}
+
+/// Check whether the main database needs migration (legacy plaintext exists, encrypted does not)
 pub fn main_database_needs_migration() -> bool {
-    let db_path = ROOT_DATA_DIR.join("cove.db");
-    db_path.exists() && !EncryptedBackend::is_encrypted(&db_path)
+    let source = ROOT_DATA_DIR.join(LEGACY_MAIN_DB);
+    let dest = ROOT_DATA_DIR.join(ENCRYPTED_MAIN_DB);
+    source.exists() && !dest.exists()
 }
 
-fn wallet_db_path(wallet_dir: &Path) -> PathBuf {
-    wallet_dir.join("wallet_data.json")
-}
-
-/// Check whether a wallet subdirectory has an unencrypted wallet_data.json
+/// Check whether a wallet subdirectory needs migration
 fn needs_redb_migration(wallet_dir: &Path) -> bool {
-    let wallet_db = wallet_db_path(wallet_dir);
-    wallet_db.exists() && !EncryptedBackend::is_encrypted(&wallet_db)
+    wallet_dir.join(LEGACY_WALLET_DB).exists() && !wallet_dir.join(ENCRYPTED_WALLET_DB).exists()
 }
 
 /// Count wallet subdirectories that have an unencrypted wallet_data.json
@@ -320,13 +354,15 @@ pub fn count_redb_wallets_needing_migration() -> u32 {
 ///
 /// Returns Ok(true) if migration was performed, Ok(false) if already encrypted or new
 pub fn migrate_main_database_if_needed() -> Result<bool> {
-    let db_path = ROOT_DATA_DIR.join("cove.db");
-    if !db_path.exists() || EncryptedBackend::is_encrypted(&db_path) {
+    let source = ROOT_DATA_DIR.join(LEGACY_MAIN_DB);
+    let dest = ROOT_DATA_DIR.join(ENCRYPTED_MAIN_DB);
+
+    if !source.exists() || dest.exists() {
         return Ok(false);
     }
 
     info!("Migrating main database to encrypted format");
-    migrate_main_database(&db_path)
+    migrate_main_database(&source)
 }
 
 /// Create a new encrypted redb database at `tmp_path` for migration
@@ -356,18 +392,12 @@ fn verify_encrypted_dst(path: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Two-phase swap: old → .bak, then tmp → original
-///
-/// The .bak is retained until the next recovery pass verifies the encrypted DB works
-fn two_phase_swap(db_path: &Path, bak_path: &Path, tmp_path: &Path) -> Result<()> {
-    std::fs::rename(db_path, bak_path).context("failed to rename old database to .bak")?;
-    std::fs::rename(tmp_path, db_path).context("failed to rename encrypted database into place")?;
-    Ok(())
-}
+fn migrate_main_database(source_path: &Path) -> Result<bool> {
+    let dest_path = source_path.parent().unwrap_or(source_path).join(ENCRYPTED_MAIN_DB);
+    let tmp_path = dest_path.with_extension("db.tmp");
 
-fn migrate_main_database(db_path: &Path) -> Result<bool> {
-    let src_db = redb::Database::open(db_path).context("failed to open plaintext main database")?;
-    let (bak_path, tmp_path) = migration_paths(db_path);
+    let src_db =
+        redb::Database::open(source_path).context("failed to open plaintext main database")?;
     let dst_db = create_encrypted_dst(&tmp_path)?;
 
     copy_table(&src_db, &dst_db, crate::database::global_flag::TABLE)?;
@@ -381,8 +411,13 @@ fn migrate_main_database(db_path: &Path) -> Result<bool> {
     drop(src_db);
     drop(dst_db);
 
+    // verify BEFORE making any irreversible changes
     verify_encrypted_dst(&tmp_path)?;
-    two_phase_swap(db_path, &bak_path, &tmp_path)?;
+    std::fs::rename(&tmp_path, &dest_path)
+        .context("failed to rename encrypted main database into place")?;
+
+    // only delete plaintext after encrypted is verified and in place
+    log_remove_file(source_path);
 
     info!("Main database migration complete");
     Ok(true)
@@ -417,10 +452,10 @@ impl WalletMigration {
 
             let entry = entry.context("failed to read directory entry during wallet migration")?;
             if needs_redb_migration(&entry.path()) {
-                let wallet_db = wallet_db_path(&entry.path());
-                let db_display = wallet_db.display();
+                let source_db = entry.path().join(LEGACY_WALLET_DB);
+                let db_display = source_db.display();
                 info!("Migrating wallet database at {db_display}");
-                match migrate_wallet_database(&wallet_db) {
+                match migrate_wallet_database(&source_db) {
                     Ok(()) => self.migration.tick(),
                     Err(e) => {
                         error!("Failed to migrate wallet database {db_display}: {e:#}");
@@ -442,10 +477,12 @@ impl WalletMigration {
     }
 }
 
-fn migrate_wallet_database(db_path: &Path) -> Result<()> {
+fn migrate_wallet_database(source_path: &Path) -> Result<()> {
+    let dest_path = source_path.with_file_name(ENCRYPTED_WALLET_DB);
+    let tmp_path = dest_path.with_extension("redb.tmp");
+
     let src_db =
-        redb::Database::open(db_path).context("failed to open plaintext wallet database")?;
-    let (bak_path, tmp_path) = migration_paths(db_path);
+        redb::Database::open(source_path).context("failed to open plaintext wallet database")?;
     let dst_db = create_encrypted_dst(&tmp_path)?;
 
     copy_table(&src_db, &dst_db, crate::database::wallet_data::TABLE)?;
@@ -457,10 +494,15 @@ fn migrate_wallet_database(db_path: &Path) -> Result<()> {
     drop(src_db);
     drop(dst_db);
 
+    // verify BEFORE making any irreversible changes
     verify_encrypted_dst(&tmp_path)?;
-    two_phase_swap(db_path, &bak_path, &tmp_path)?;
+    std::fs::rename(&tmp_path, &dest_path)
+        .context("failed to rename encrypted wallet database into place")?;
 
-    let path = db_path.display();
+    // only delete plaintext after encrypted is verified and in place
+    log_remove_file(source_path);
+
+    let path = dest_path.display();
     info!("Wallet database migration complete at {path}");
     Ok(())
 }
@@ -598,17 +640,21 @@ mod tests {
         setup_test_key();
 
         let dir = TempDir::new().unwrap();
-        let db_path = create_plaintext_main_db(&dir);
+        let source_path = create_plaintext_main_db(&dir);
+        let dest_path = dir.path().join(ENCRYPTED_MAIN_DB);
 
-        assert!(!EncryptedBackend::is_encrypted(&db_path));
+        assert!(!EncryptedBackend::is_encrypted(&source_path));
 
-        migrate_main_database(&db_path).unwrap();
+        migrate_main_database(&source_path).unwrap();
 
-        assert!(EncryptedBackend::is_encrypted(&db_path));
+        // source deleted, dest is encrypted
+        assert!(!source_path.exists());
+        assert!(dest_path.exists());
+        assert!(EncryptedBackend::is_encrypted(&dest_path));
 
         // verify data survived migration
         let key = encrypted_backend::encryption_key().unwrap();
-        let backend = EncryptedBackend::open(&db_path, &key).unwrap();
+        let backend = EncryptedBackend::open(&dest_path, &key).unwrap();
         let db = redb::Database::builder().create_with_backend(backend).unwrap();
 
         let read_txn = db.begin_read().unwrap();
@@ -627,17 +673,22 @@ mod tests {
         setup_test_key();
 
         let dir = TempDir::new().unwrap();
-        let db_path = create_plaintext_wallet_db(&dir);
+        let source_path = create_plaintext_wallet_db(&dir);
+        let wallet_dir = source_path.parent().unwrap();
+        let dest_path = wallet_dir.join(ENCRYPTED_WALLET_DB);
 
-        assert!(!EncryptedBackend::is_encrypted(&db_path));
+        assert!(!EncryptedBackend::is_encrypted(&source_path));
 
-        migrate_wallet_database(&db_path).unwrap();
+        migrate_wallet_database(&source_path).unwrap();
 
-        assert!(EncryptedBackend::is_encrypted(&db_path));
+        // source deleted, dest is encrypted
+        assert!(!source_path.exists());
+        assert!(dest_path.exists());
+        assert!(EncryptedBackend::is_encrypted(&dest_path));
 
         // verify data survived
         let key = encrypted_backend::encryption_key().unwrap();
-        let backend = EncryptedBackend::open(&db_path, &key).unwrap();
+        let backend = EncryptedBackend::open(&dest_path, &key).unwrap();
         let db = redb::Database::builder().create_with_backend(backend).unwrap();
 
         let read_txn = db.begin_read().unwrap();
@@ -646,133 +697,84 @@ mod tests {
     }
 
     #[test]
-    fn migrate_idempotent() {
+    fn recover_main_crash_during_copy() {
         setup_test_key();
 
         let dir = TempDir::new().unwrap();
-        let db_path = create_plaintext_main_db(&dir);
+        let source = dir.path().join(LEGACY_MAIN_DB);
+        let dest = dir.path().join(ENCRYPTED_MAIN_DB);
+        let tmp = dest.with_extension("db.tmp");
 
-        // first migration
-        migrate_main_database(&db_path).unwrap();
-        assert!(EncryptedBackend::is_encrypted(&db_path));
+        // simulate crash during copy: source exists, partial tmp exists, no dest
+        std::fs::write(&source, b"original").unwrap();
+        std::fs::write(&tmp, b"partial_corrupt").unwrap();
 
-        // second attempt should recognize it's already encrypted
-        // open_or_create_database handles this, but the migration check itself:
-        assert!(EncryptedBackend::is_encrypted(&db_path));
+        recover_main_migration(dir.path()).unwrap();
+
+        // corrupt tmp should be cleaned up, source untouched
+        assert!(source.exists());
+        assert!(!tmp.exists());
+        assert!(!dest.exists());
     }
 
     #[test]
-    fn recover_crash_during_copy() {
+    fn recover_main_crash_after_copy_before_rename() {
         setup_test_key();
 
         let dir = TempDir::new().unwrap();
-        let db_path = dir.path().join("cove.db");
-        let tmp_path = dir.path().join("cove.db.enc.tmp");
+        let source = dir.path().join(LEGACY_MAIN_DB);
+        let dest = dir.path().join(ENCRYPTED_MAIN_DB);
+        let tmp = dest.with_extension("db.tmp");
 
-        // simulate crash during copy: original exists, partial .enc.tmp exists
-        std::fs::write(&db_path, b"original").unwrap();
-        std::fs::write(&tmp_path, b"partial").unwrap();
+        // simulate crash after successful copy but before rename: valid encrypted tmp, no dest
+        std::fs::write(&source, b"old_plaintext").unwrap();
+        create_encrypted_redb_at(&tmp);
 
-        recover_at_path(&db_path).unwrap();
+        recover_main_migration(dir.path()).unwrap();
 
-        // .enc.tmp should be cleaned up, original untouched
-        assert!(db_path.exists());
-        assert!(!tmp_path.exists());
-        assert_eq!(std::fs::read(&db_path).unwrap(), b"original");
+        // should finish the rename
+        assert!(dest.exists());
+        assert!(!tmp.exists());
+        assert!(verify_encrypted_redb_db(&dest).unwrap());
+        // plaintext cleaned up since dest is now verified
+        assert!(!source.exists());
     }
 
     #[test]
-    fn recover_crash_after_bak_rename() {
+    fn recover_main_cleans_leftover_plaintext() {
         setup_test_key();
 
         let dir = TempDir::new().unwrap();
-        let db_path = dir.path().join("cove.db");
-        let (bak_path, tmp_path) = migration_paths(&db_path);
+        let source = dir.path().join(LEGACY_MAIN_DB);
+        let dest = dir.path().join(ENCRYPTED_MAIN_DB);
 
-        // simulate crash after old→.bak, before tmp→final
-        std::fs::write(&bak_path, b"old_data").unwrap();
-        create_encrypted_redb_at(&tmp_path);
+        // simulate: both source and dest exist (migration completed but plaintext not deleted)
+        std::fs::write(&source, b"old_plaintext").unwrap();
+        create_encrypted_redb_at(&dest);
 
-        recover_at_path(&db_path).unwrap();
+        recover_main_migration(dir.path()).unwrap();
 
-        // should finish the rename and verify, then clean up .bak
-        assert!(db_path.exists());
-        assert!(!tmp_path.exists());
-        assert!(!bak_path.exists());
-        assert!(verify_encrypted_redb_db(&db_path).unwrap());
+        assert!(dest.exists());
+        assert!(!source.exists(), "plaintext should be cleaned after verification");
     }
 
     #[test]
-    fn recover_leftover_bak() {
+    fn recover_main_preserves_plaintext_when_encrypted_corrupt() {
         setup_test_key();
 
         let dir = TempDir::new().unwrap();
-        let db_path = create_plaintext_main_db(&dir);
+        let source = dir.path().join(LEGACY_MAIN_DB);
+        let dest = dir.path().join(ENCRYPTED_MAIN_DB);
 
-        // migrate to create a real encrypted DB
-        migrate_main_database(&db_path).unwrap();
+        // both exist but dest is corrupt
+        std::fs::write(&source, b"old_plaintext").unwrap();
+        std::fs::write(&dest, b"corrupt_encrypted").unwrap();
 
-        // simulate leftover .bak from a completed migration
-        let (bak_path, _) = migration_paths(&db_path);
-        assert!(bak_path.exists(), ".bak should exist after migration");
+        recover_main_migration(dir.path()).unwrap();
 
-        recover_at_path(&db_path).unwrap();
-
-        assert!(db_path.exists());
-        assert!(!bak_path.exists(), ".bak should be cleaned after verification");
-    }
-
-    #[test]
-    fn recover_restores_bak_when_encrypted_db_invalid() {
-        setup_test_key();
-
-        let dir = TempDir::new().unwrap();
-        let db_path = dir.path().join("cove.db");
-        let (bak_path, _) = migration_paths(&db_path);
-
-        // write garbage to db_path (simulating corruption)
-        std::fs::write(&db_path, b"corrupt_encrypted_data").unwrap();
-        std::fs::write(&bak_path, b"old_plaintext").unwrap();
-
-        recover_at_path(&db_path).unwrap();
-
-        // should have restored from backup
-        assert!(db_path.exists());
-        assert!(!bak_path.exists());
-        assert_eq!(std::fs::read(&db_path).unwrap(), b"old_plaintext");
-    }
-
-    #[test]
-    fn bak_retained_after_migration() {
-        setup_test_key();
-
-        let dir = TempDir::new().unwrap();
-        let db_path = create_plaintext_main_db(&dir);
-        let (bak_path, _) = migration_paths(&db_path);
-
-        migrate_main_database(&db_path).unwrap();
-
-        assert!(db_path.exists(), "encrypted DB should exist");
-        assert!(bak_path.exists(), ".bak should be retained after migration");
-        assert!(EncryptedBackend::is_encrypted(&db_path));
-    }
-
-    #[test]
-    fn bak_cleaned_on_recovery_when_encrypted_db_valid() {
-        setup_test_key();
-
-        let dir = TempDir::new().unwrap();
-        let db_path = create_plaintext_main_db(&dir);
-        let (bak_path, _) = migration_paths(&db_path);
-
-        migrate_main_database(&db_path).unwrap();
-        assert!(bak_path.exists());
-
-        // simulate next launch recovery
-        recover_at_path(&db_path).unwrap();
-
-        assert!(db_path.exists(), "encrypted DB should still exist");
-        assert!(!bak_path.exists(), ".bak should be cleaned after verification");
+        // should preserve plaintext since encrypted is corrupt
+        assert!(source.exists());
+        assert!(dest.exists());
     }
 
     #[test]
@@ -783,39 +785,59 @@ mod tests {
         let wallet_dir = dir.path().join("wallet_id");
         std::fs::create_dir_all(&wallet_dir).unwrap();
 
-        let db_path = wallet_dir.join("wallet_data.json");
-        let tmp_path = wallet_dir.join("wallet_data.json.enc.tmp");
+        let source = wallet_dir.join(LEGACY_WALLET_DB);
+        let dest = wallet_dir.join(ENCRYPTED_WALLET_DB);
+        let tmp = dest.with_extension("redb.tmp");
 
-        std::fs::write(&db_path, b"original").unwrap();
-        std::fs::write(&tmp_path, b"partial").unwrap();
+        std::fs::write(&source, b"original").unwrap();
+        std::fs::write(&tmp, b"partial").unwrap();
 
-        recover_at_path(&db_path).unwrap();
+        recover_wallet_migration(&wallet_dir).unwrap();
 
-        assert!(db_path.exists());
-        assert!(!tmp_path.exists());
-        assert_eq!(std::fs::read(&db_path).unwrap(), b"original");
+        assert!(source.exists());
+        assert!(!tmp.exists());
+        assert!(!dest.exists());
     }
 
     #[test]
-    fn recover_wallet_crash_after_bak_rename() {
+    fn recover_wallet_crash_after_copy_before_rename() {
         setup_test_key();
 
         let dir = TempDir::new().unwrap();
         let wallet_dir = dir.path().join("wallet_id");
         std::fs::create_dir_all(&wallet_dir).unwrap();
 
-        let db_path = wallet_dir.join("wallet_data.json");
-        let (bak_path, tmp_path) = migration_paths(&db_path);
+        let source = wallet_dir.join(LEGACY_WALLET_DB);
+        let dest = wallet_dir.join(ENCRYPTED_WALLET_DB);
+        let tmp = dest.with_extension("redb.tmp");
 
-        std::fs::write(&bak_path, b"old_data").unwrap();
-        create_encrypted_redb_at(&tmp_path);
+        std::fs::write(&source, b"old_data").unwrap();
+        create_encrypted_redb_at(&tmp);
 
-        recover_at_path(&db_path).unwrap();
+        recover_wallet_migration(&wallet_dir).unwrap();
+
+        assert!(dest.exists());
+        assert!(!tmp.exists());
+        assert!(verify_encrypted_redb_db(&dest).unwrap());
+        assert!(!source.exists());
+    }
+
+    #[test]
+    fn recover_legacy_bak_only() {
+        setup_test_key();
+
+        let dir = TempDir::new().unwrap();
+        let db_path = dir.path().join("cove.db");
+        let bak_path = dir.path().join("cove.db.bak");
+
+        // only .bak exists from old migration code
+        std::fs::write(&bak_path, b"backup_data").unwrap();
+
+        recover_legacy_at_path(&db_path).unwrap();
 
         assert!(db_path.exists());
-        assert!(!tmp_path.exists());
         assert!(!bak_path.exists());
-        assert!(verify_encrypted_redb_db(&db_path).unwrap());
+        assert_eq!(std::fs::read(&db_path).unwrap(), b"backup_data");
     }
 
     #[test]
@@ -883,35 +905,18 @@ mod tests {
     }
 
     #[test]
-    fn recover_bak_only() {
-        setup_test_key();
-
-        let dir = TempDir::new().unwrap();
-        let db_path = dir.path().join("cove.db");
-        let bak_path = dir.path().join("cove.db.bak");
-
-        // only .bak exists, no db or tmp
-        std::fs::write(&bak_path, b"backup_data").unwrap();
-
-        recover_at_path(&db_path).unwrap();
-
-        assert!(db_path.exists());
-        assert!(!bak_path.exists());
-        assert_eq!(std::fs::read(&db_path).unwrap(), b"backup_data");
-    }
-
-    #[test]
     fn migrate_main_database_copies_all_tables() {
         use redb::TableHandle as _;
 
         setup_test_key();
 
         let dir = TempDir::new().unwrap();
-        let db_path = create_plaintext_main_db(&dir);
+        let source_path = create_plaintext_main_db(&dir);
+        let dest_path = dir.path().join(ENCRYPTED_MAIN_DB);
 
         // ensure all known main tables exist in source
         {
-            let db = redb::Database::open(&db_path).unwrap();
+            let db = redb::Database::open(&source_path).unwrap();
             let write_txn = db.begin_write().unwrap();
             write_txn.open_table(global_flag::TABLE).unwrap();
             write_txn.open_table(global_config::TABLE).unwrap();
@@ -924,16 +929,16 @@ mod tests {
         }
 
         let source_tables: std::collections::BTreeSet<String> = {
-            let db = redb::Database::open(&db_path).unwrap();
+            let db = redb::Database::open(&source_path).unwrap();
             let read_txn = db.begin_read().unwrap();
             read_txn.list_tables().unwrap().map(|handle| handle.name().to_string()).collect()
         };
         assert!(!source_tables.is_empty(), "source DB should have tables");
 
-        migrate_main_database(&db_path).unwrap();
+        migrate_main_database(&source_path).unwrap();
 
         let key = encrypted_backend::encryption_key().unwrap();
-        let backend = EncryptedBackend::open(&db_path, &key).unwrap();
+        let backend = EncryptedBackend::open(&dest_path, &key).unwrap();
         let db = redb::Database::builder().create_with_backend(backend).unwrap();
         let read_txn = db.begin_read().unwrap();
 
@@ -954,11 +959,13 @@ mod tests {
         setup_test_key();
 
         let dir = TempDir::new().unwrap();
-        let db_path = create_plaintext_wallet_db(&dir);
+        let source_path = create_plaintext_wallet_db(&dir);
+        let wallet_dir = source_path.parent().unwrap();
+        let dest_path = wallet_dir.join(ENCRYPTED_WALLET_DB);
 
         // ensure all known wallet tables exist in source
         {
-            let db = redb::Database::open(&db_path).unwrap();
+            let db = redb::Database::open(&source_path).unwrap();
             let write_txn = db.begin_write().unwrap();
             write_txn.open_table(wallet_data::TABLE).unwrap();
             write_txn.open_table(wallet_data::label::TXN_TABLE).unwrap();
@@ -969,16 +976,16 @@ mod tests {
         }
 
         let source_tables: std::collections::BTreeSet<String> = {
-            let db = redb::Database::open(&db_path).unwrap();
+            let db = redb::Database::open(&source_path).unwrap();
             let read_txn = db.begin_read().unwrap();
             read_txn.list_tables().unwrap().map(|handle| handle.name().to_string()).collect()
         };
         assert!(!source_tables.is_empty(), "source DB should have tables");
 
-        migrate_wallet_database(&db_path).unwrap();
+        migrate_wallet_database(&source_path).unwrap();
 
         let key = encrypted_backend::encryption_key().unwrap();
-        let backend = EncryptedBackend::open(&db_path, &key).unwrap();
+        let backend = EncryptedBackend::open(&dest_path, &key).unwrap();
         let db = redb::Database::builder().create_with_backend(backend).unwrap();
         let read_txn = db.begin_read().unwrap();
 
@@ -1071,33 +1078,8 @@ mod tests {
         assert_eq!(migration.progress().current, 2, "should tick for both success and failure");
 
         // good wallet should still have been migrated
-        assert!(EncryptedBackend::is_encrypted(&good_db), "good wallet should be encrypted");
-    }
-
-    #[test]
-    fn recover_restores_backup_when_encrypted_db_corrupt() {
-        setup_test_key();
-
-        let dir = TempDir::new().unwrap();
-        let db_path = dir.path().join("cove.db");
-        let bak_path = db_path.with_extension("db.bak");
-
-        // corrupt encrypted DB
-        std::fs::write(&db_path, b"corrupt_data").unwrap();
-        // valid plaintext backup
-        let backup_content = b"valid_backup_data";
-        std::fs::write(&bak_path, backup_content).unwrap();
-
-        // verify_encrypted_redb_db returns Ok(false) for corrupt data,
-        // triggering the restore-from-backup path
-        recover_at_path(&db_path).unwrap();
-
-        assert!(db_path.exists(), "db should exist after restore");
-        assert!(!bak_path.exists(), "bak should be removed after restore");
-        assert_eq!(
-            std::fs::read(&db_path).unwrap(),
-            backup_content,
-            "db should contain backup data"
-        );
+        let good_encrypted = good_dir.join(ENCRYPTED_WALLET_DB);
+        assert!(good_encrypted.exists(), "good wallet should have encrypted DB");
+        assert!(EncryptedBackend::is_encrypted(&good_encrypted), "good wallet should be encrypted");
     }
 }

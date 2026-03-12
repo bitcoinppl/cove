@@ -320,23 +320,13 @@ impl RustCloudBackupManager {
             .save(PRF_SALT_KEY.to_string(), hex::encode(prf_salt))
             .map_err(|e| CloudBackupError::Internal(format!("save prf_salt: {e}")))?;
 
-        // save master key to keychain and set encryption key
+        // save master key to keychain for cloud backup decryption
         let cspp = cove_cspp::Cspp::new(keychain.clone());
         cspp.save_master_key(&master_key)
             .map_err(|e| CloudBackupError::Internal(format!("save master key: {e}")))?;
-
-        let sensitive_key = Zeroizing::new(master_key.sensitive_data_key());
-        crate::database::encrypted_backend::replace_encryption_key(*sensitive_key);
-
-        // clear stale master key cache so reinitialize loads the correct key
         cove_cspp::reset_master_key_cache();
 
-        // wipe existing encrypted databases (undecryptable with old key)
-        wipe_local_data();
-
-        // reinitialize database with the new encryption key
-        Database::reinitialize()
-            .map_err(|e| CloudBackupError::Internal(format!("reinitialize database: {e}")))?;
+        // local encryption key unchanged, DB already open — just import cloud wallets
 
         // download manifest
         let manifest_json =
@@ -570,20 +560,20 @@ fn build_wallet_entry(
 
 /// Wipe all local encrypted databases (main db + per-wallet databases)
 ///
-/// Used during restore (old databases are undecryptable with the new key)
-/// and during "Start Fresh" flows. Shared across platforms via FFI
+/// Used during "Start Fresh" flows. Shared across platforms via FFI.
+/// Removes both current encrypted filenames and legacy plaintext filenames
 #[uniffi::export]
 pub fn wipe_local_data() {
+    use crate::database::migration::log_remove_file;
+
     let root = &*cove_common::consts::ROOT_DATA_DIR;
-    let db_path = root.join("cove.db");
 
-    if db_path.exists()
-        && let Err(e) = std::fs::remove_file(&db_path)
-    {
-        error!("Failed to remove cove.db: {e}");
-    }
+    // current encrypted DB
+    log_remove_file(&root.join("cove.encrypted.db"));
+    // legacy plaintext (if leftover)
+    log_remove_file(&root.join("cove.db"));
 
-    // also remove per-wallet databases
+    // per-wallet databases
     let wallet_dir = &*cove_common::consts::WALLET_DATA_DIR;
     if wallet_dir.exists()
         && let Err(e) = std::fs::remove_dir_all(wallet_dir)

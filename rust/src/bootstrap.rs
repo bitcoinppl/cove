@@ -246,21 +246,34 @@ fn do_bootstrap(track_progress: bool) -> Result<u32, AppInitError> {
     }
     info!("Starting storage bootstrap");
 
-    // derive encryption key from master key before any database access
-    let cspp = cove_cspp::Cspp::new(cove_device::keychain::Keychain::global().clone());
-    let master_key = cspp.get_or_create_master_key().map_err_str(AppInitError::KeyDerivation)?;
-
-    let key = master_key.sensitive_data_key();
+    // load or create local DB encryption key from keychain
+    let keychain = cove_device::keychain::Keychain::global();
+    let encrypted_db = cove_common::consts::ROOT_DATA_DIR.join("cove.encrypted.db");
+    let key = match keychain
+        .get_local_encryption_key()
+        .map_err(|e| AppInitError::KeyDerivation(e.to_string()))?
+    {
+        Some(key) => key,
+        None => {
+            if encrypted_db.exists() {
+                return Err(AppInitError::DatabaseKeyMismatch(
+                    "local encryption key not found but encrypted databases exist".into(),
+                ));
+            }
+            keychain
+                .create_local_encryption_key()
+                .map_err(|e| AppInitError::KeyDerivation(e.to_string()))?
+        }
+    };
     crate::database::encrypted_backend::set_encryption_key(key);
 
     if track_progress {
         set_step(BootstrapStep::EncryptionKeySet);
     }
-    info!("Encryption key derived and set");
+    info!("Local encryption key loaded and set");
 
     // verify the key matches the existing database before proceeding
-    let db_path = cove_common::consts::ROOT_DATA_DIR.join("cove.db");
-    crate::database::encrypted_backend::verify_database_key(&db_path)
+    crate::database::encrypted_backend::verify_database_key(&encrypted_db)
         .map_err(map_database_key_verification_error)?;
 
     check_cancelled()?;
@@ -317,38 +330,13 @@ fn do_bootstrap(track_progress: bool) -> Result<u32, AppInitError> {
     Ok(bdk_count)
 }
 
-#[derive(Debug, Clone, uniffi::Enum)]
-pub enum StartupRecoveryState {
-    /// Expected: device restore detected (encrypted dbs exist, key mismatch, no sentinel)
-    /// Route to recovery screen with "Restore from Cloud Backup" and "Start Fresh" options
-    DeviceRestore,
-
-    /// Unexpected: key loss (encrypted dbs exist, key mismatch, sentinel present)
-    /// Route to catastrophic error screen with bug-report + wipe option
-    CatastrophicKeyLoss,
-}
-
-/// Returns the path to the install-lineage sentinel file
+/// Returns the absolute path to the root data directory
 ///
-/// Swift owns the sentinel lifecycle (creation + backup-exclusion).
-/// Rust only reads it to diagnose key mismatch scenarios
+/// Used by iOS to set isExcludedFromBackup on the data directory,
+/// preventing encrypted database files from being included in device backups
 #[uniffi::export]
-pub fn sentinel_path() -> String {
-    cove_common::consts::ROOT_DATA_DIR.join(".install_sentinel").to_string_lossy().to_string()
-}
-
-/// Diagnose why a database key mismatch occurred
-///
-/// Called from iOS after bootstrap returns DatabaseKeyMismatch.
-/// Checks the sentinel file to distinguish device restore from unexpected key loss
-#[uniffi::export]
-pub fn diagnose_key_mismatch() -> StartupRecoveryState {
-    let sentinel = cove_common::consts::ROOT_DATA_DIR.join(".install_sentinel");
-    if sentinel.exists() {
-        StartupRecoveryState::CatastrophicKeyLoss
-    } else {
-        StartupRecoveryState::DeviceRestore
-    }
+pub fn root_data_dir_path() -> String {
+    cove_common::consts::ROOT_DATA_DIR.to_string_lossy().to_string()
 }
 
 fn map_database_key_verification_error(
@@ -403,18 +391,6 @@ mod tests {
         assert!(
             matches!(mapped, AppInitError::DatabaseKeyMismatch(message) if message == "wrong key")
         );
-    }
-
-    #[test]
-    fn diagnose_key_mismatch_without_sentinel_returns_device_restore() {
-        // when sentinel doesn't exist, it's a device restore scenario
-        let state = super::diagnose_key_mismatch();
-        // in test environment ROOT_DATA_DIR may not have sentinel
-        assert!(matches!(
-            state,
-            super::StartupRecoveryState::DeviceRestore
-                | super::StartupRecoveryState::CatastrophicKeyLoss
-        ));
     }
 
     #[test]

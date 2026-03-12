@@ -63,19 +63,6 @@ impl<S: CsppStore> Cspp<S> {
         Ok(key)
     }
 
-    /// Deletes the master key from the store
-    pub fn delete_master_key(&self) -> bool {
-        let _guard = INIT_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        MASTER_KEY_CACHE.store(None);
-
-        // delete encrypted data before its encryption key (reverse of save order)
-        // so a partial failure never leaves orphaned data without a decryption key,
-        // and code that checks for the key's existence won't see stale encrypted
-        // data after the decryption key has already been removed
-        self.0.delete(MASTER_KEY_NAME.into());
-        self.0.delete(MASTER_KEY_ENCRYPTION_KEY_AND_NONCE.into())
-    }
-
     /// Saves the master key encrypted via the underlying store
     ///
     /// The master key is encrypted with a random [`Cryptor`] before storage. The

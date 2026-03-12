@@ -54,11 +54,6 @@ pub fn set_encryption_key(key: [u8; 32]) {
     }
 }
 
-/// Replace the encryption key unconditionally — only for restore path
-pub fn replace_encryption_key(key: [u8; 32]) {
-    ENCRYPTION_KEY.store(Some(Arc::new(key)));
-}
-
 /// Get the global encryption key, returns None if not yet set
 pub fn encryption_key() -> Option<[u8; 32]> {
     ENCRYPTION_KEY.load_full().map(|arc| *arc)
@@ -1331,46 +1326,5 @@ mod tests {
 
         let result = EncryptedBackend::open(&path, &original_key);
         assert!(result.is_ok(), "the original key should still open the V1 database");
-    }
-
-    #[test]
-    fn replace_encryption_key_overrides_existing() {
-        // use replace for both since the global may already have a value from other tests
-        let key_a = [0x11; 32];
-        let key_b = [0x22; 32];
-
-        replace_encryption_key(key_a);
-        assert_eq!(encryption_key(), Some(key_a));
-
-        replace_encryption_key(key_b);
-        assert_eq!(encryption_key(), Some(key_b));
-
-        // verify a DB created with key_b can be opened
-        let dir = TempDir::new().unwrap();
-        let path = test_path(&dir, "replace_key.enc");
-        let table_def: redb::TableDefinition<&str, &str> =
-            redb::TableDefinition::new("replace_test");
-
-        {
-            let backend = EncryptedBackend::create(&path, &key_b).unwrap();
-            let db = redb::Database::builder().create_with_backend(backend).unwrap();
-            let write_txn = db.begin_write().unwrap();
-            {
-                let mut table = write_txn.open_table(table_def).unwrap();
-                table.insert("k", "v").unwrap();
-            }
-            write_txn.commit().unwrap();
-        }
-
-        {
-            let backend = EncryptedBackend::open(&path, &key_b).unwrap();
-            let db = redb::Database::builder().create_with_backend(backend).unwrap();
-            let read_txn = db.begin_read().unwrap();
-            let table = read_txn.open_table(table_def).unwrap();
-            assert_eq!(table.get("k").unwrap().unwrap().value(), "v");
-        }
-
-        // restore test key so other tests aren't affected
-        set_test_encryption_key();
     }
 }

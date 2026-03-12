@@ -1136,6 +1136,7 @@ dependencies = [
  "cove-util",
  "hex",
  "once_cell",
+ "rand 0.10.0",
  "thiserror 2.0.18",
  "tracing",
  "uniffi 0.31.0",

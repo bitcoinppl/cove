@@ -41,7 +41,7 @@ struct CoveApp: App {
     enum StartupState {
         case loading
         case ready(AppManager, AuthManager)
-        case recoveryNeeded(StartupRecoveryState)
+        case catastrophicError
         case fatalError(String)
     }
 
@@ -53,6 +53,19 @@ struct CoveApp: App {
         _ = Device(device: DeviceAccesor())
         _ = PasskeyAccess(provider: PasskeyProviderImpl())
         _ = CloudStorage(cloudStorage: CloudStorageAccessImpl())
+        Self.excludeDataDirFromBackup()
+    }
+
+    private static func excludeDataDirFromBackup() {
+        let path = rootDataDirPath()
+        var url = URL(fileURLWithPath: path, isDirectory: true)
+        do {
+            var values = URLResourceValues()
+            values.isExcludedFromBackup = true
+            try url.setResourceValues(values)
+        } catch {
+            Log.error("Failed to set isExcludedFromBackup on data dir: \(error)")
+        }
     }
 
     var body: some Scene {
@@ -63,16 +76,9 @@ struct CoveApp: App {
                     CoverView(errorMessage: nil)
                 case let .ready(app, auth):
                     CoveMainView(app: app, auth: auth)
-                case let .recoveryNeeded(state):
-                    switch state {
-                    case .deviceRestore:
-                        DeviceRestoreView {
-                            rebootstrap()
-                        }
-                    case .catastrophicKeyLoss:
-                        CatastrophicErrorView {
-                            rebootstrap()
-                        }
+                case .catastrophicError:
+                    CatastrophicErrorView {
+                        rebootstrap()
                     }
                 case let .fatalError(message):
                     CoverView(errorMessage: message)
@@ -171,8 +177,7 @@ extension CoveApp {
                 completeBootstrap()
             } else if case AppInitError.DatabaseKeyMismatch = error {
                 Log.error("[STARTUP] database encryption key mismatch")
-                let recovery = diagnoseKeyMismatch()
-                startupState = .recoveryNeeded(recovery)
+                startupState = .catastrophicError
             } else if case AppInitError.AlreadyCalled = error {
                 Log.error("[STARTUP] bootstrap already called at step: \(step)")
                 startupState = .fatalError(
@@ -193,9 +198,6 @@ extension CoveApp {
     private func completeBootstrap(warning: String? = nil) {
         let appManager = AppManager.shared
         appManager.asyncRuntimeReady = true
-
-        // create sentinel after first successful bootstrap
-        createSentinelIfNeeded()
 
         self.startupState = .ready(appManager, AuthManager.shared)
         self.bdkMigrationWarning = warning

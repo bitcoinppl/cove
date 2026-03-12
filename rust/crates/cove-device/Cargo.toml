@@ -27,3 +27,6 @@ uniffi = { workspace = true }
 
 # hex
 hex = { workspace = true }
+
+# crypto
+rand = { workspace = true }

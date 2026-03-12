@@ -4,7 +4,7 @@ mod v1_redb;
 use std::path::Path;
 use tracing::warn;
 
-pub(super) fn log_remove_file(path: &Path) {
+pub fn log_remove_file(path: &Path) {
     match std::fs::remove_file(path) {
         Ok(()) => {}
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}

@@ -7070,6 +7070,179 @@ public func FfiConverterTypeRustAuthManager_lower(_ value: RustAuthManager) -> U
 
 
 
+public protocol RustCloudBackupManagerProtocol: AnyObject, Sendable {
+    
+    func currentState()  -> CloudBackupState
+    
+    /**
+     * Enable cloud backup — idempotent, safe to retry
+     *
+     * Creates passkey (or reuses existing), encrypts master key + all wallets,
+     * uploads to CloudKit, marks enabled only after manifest upload succeeds
+     */
+    func enableCloudBackup() 
+    
+    func listenForUpdates(reconciler: CloudBackupManagerReconciler) 
+    
+    /**
+     * Restore from cloud backup — called after device restore
+     *
+     * Uses discoverable credential assertion (no local keychain state required)
+     */
+    func restoreFromCloudBackup() 
+    
+}
+open class RustCloudBackupManager: RustCloudBackupManagerProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_cove_fn_clone_rustcloudbackupmanager(self.handle, $0) }
+    }
+public convenience init() {
+    let handle =
+        try! rustCall() {
+    uniffi_cove_fn_constructor_rustcloudbackupmanager_new($0
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_rustcloudbackupmanager(handle, $0) }
+    }
+
+    
+
+    
+open func currentState() -> CloudBackupState  {
+    return try!  FfiConverterTypeCloudBackupState_lift(try! rustCall() {
+    uniffi_cove_fn_method_rustcloudbackupmanager_current_state(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+    /**
+     * Enable cloud backup — idempotent, safe to retry
+     *
+     * Creates passkey (or reuses existing), encrypts master key + all wallets,
+     * uploads to CloudKit, marks enabled only after manifest upload succeeds
+     */
+open func enableCloudBackup()  {try! rustCall() {
+    uniffi_cove_fn_method_rustcloudbackupmanager_enable_cloud_backup(
+            self.uniffiCloneHandle(),$0
+    )
+}
+}
+    
+open func listenForUpdates(reconciler: CloudBackupManagerReconciler)  {try! rustCall() {
+    uniffi_cove_fn_method_rustcloudbackupmanager_listen_for_updates(
+            self.uniffiCloneHandle(),
+        FfiConverterCallbackInterfaceCloudBackupManagerReconciler_lower(reconciler),$0
+    )
+}
+}
+    
+    /**
+     * Restore from cloud backup — called after device restore
+     *
+     * Uses discoverable credential assertion (no local keychain state required)
+     */
+open func restoreFromCloudBackup()  {try! rustCall() {
+    uniffi_cove_fn_method_rustcloudbackupmanager_restore_from_cloud_backup(
+            self.uniffiCloneHandle(),$0
+    )
+}
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRustCloudBackupManager: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = RustCloudBackupManager
+
+    public static func lift(_ handle: UInt64) throws -> RustCloudBackupManager {
+        return RustCloudBackupManager(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: RustCloudBackupManager) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RustCloudBackupManager {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: RustCloudBackupManager, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRustCloudBackupManager_lift(_ handle: UInt64) throws -> RustCloudBackupManager {
+    return try FfiConverterTypeRustCloudBackupManager.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRustCloudBackupManager_lower(_ value: RustCloudBackupManager) -> UInt64 {
+    return FfiConverterTypeRustCloudBackupManager.lower(value)
+}
+
+
+
+
+
+
 public protocol RustCoinControlManagerProtocol: AnyObject, Sendable {
     
     func buttonPresentation(button: CoinControlListSortKey)  -> ButtonPresentation
@@ -12306,6 +12479,64 @@ public func FfiConverterTypeBackupWalletSummary_lower(_ value: BackupWalletSumma
 }
 
 
+public struct CloudBackupRestoreReport: Equatable, Hashable {
+    public var walletsRestored: UInt32
+    public var walletsFailed: UInt32
+    public var failedWalletErrors: [String]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(walletsRestored: UInt32, walletsFailed: UInt32, failedWalletErrors: [String]) {
+        self.walletsRestored = walletsRestored
+        self.walletsFailed = walletsFailed
+        self.failedWalletErrors = failedWalletErrors
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension CloudBackupRestoreReport: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCloudBackupRestoreReport: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackupRestoreReport {
+        return
+            try CloudBackupRestoreReport(
+                walletsRestored: FfiConverterUInt32.read(from: &buf), 
+                walletsFailed: FfiConverterUInt32.read(from: &buf), 
+                failedWalletErrors: FfiConverterSequenceString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CloudBackupRestoreReport, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.walletsRestored, into: &buf)
+        FfiConverterUInt32.write(value.walletsFailed, into: &buf)
+        FfiConverterSequenceString.write(value.failedWalletErrors, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupRestoreReport_lift(_ buf: RustBuffer) throws -> CloudBackupRestoreReport {
+    return try FfiConverterTypeCloudBackupRestoreReport.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupRestoreReport_lower(_ value: CloudBackupRestoreReport) -> RustBuffer {
+    return FfiConverterTypeCloudBackupRestoreReport.lower(value)
+}
+
+
 public struct ConfirmedDetails: Equatable, Hashable {
     public var blockNumber: UInt32
     public var confirmationTime: UInt64
@@ -16804,6 +17035,188 @@ public func FfiConverterTypeCloudBackup_lift(_ buf: RustBuffer) throws -> CloudB
 #endif
 public func FfiConverterTypeCloudBackup_lower(_ value: CloudBackup) -> RustBuffer {
     return FfiConverterTypeCloudBackup.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum CloudBackupReconcileMessage: Equatable, Hashable {
+    
+    case stateChanged(CloudBackupState
+    )
+    case progressUpdated(completed: UInt32, total: UInt32
+    )
+    case enableComplete
+    case restoreComplete(CloudBackupRestoreReport
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension CloudBackupReconcileMessage: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCloudBackupReconcileMessage: FfiConverterRustBuffer {
+    typealias SwiftType = CloudBackupReconcileMessage
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackupReconcileMessage {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .stateChanged(try FfiConverterTypeCloudBackupState.read(from: &buf)
+        )
+        
+        case 2: return .progressUpdated(completed: try FfiConverterUInt32.read(from: &buf), total: try FfiConverterUInt32.read(from: &buf)
+        )
+        
+        case 3: return .enableComplete
+        
+        case 4: return .restoreComplete(try FfiConverterTypeCloudBackupRestoreReport.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CloudBackupReconcileMessage, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .stateChanged(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeCloudBackupState.write(v1, into: &buf)
+            
+        
+        case let .progressUpdated(completed,total):
+            writeInt(&buf, Int32(2))
+            FfiConverterUInt32.write(completed, into: &buf)
+            FfiConverterUInt32.write(total, into: &buf)
+            
+        
+        case .enableComplete:
+            writeInt(&buf, Int32(3))
+        
+        
+        case let .restoreComplete(v1):
+            writeInt(&buf, Int32(4))
+            FfiConverterTypeCloudBackupRestoreReport.write(v1, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupReconcileMessage_lift(_ buf: RustBuffer) throws -> CloudBackupReconcileMessage {
+    return try FfiConverterTypeCloudBackupReconcileMessage.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupReconcileMessage_lower(_ value: CloudBackupReconcileMessage) -> RustBuffer {
+    return FfiConverterTypeCloudBackupReconcileMessage.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum CloudBackupState: Equatable, Hashable {
+    
+    case disabled
+    case enabling
+    case restoring
+    case enabled
+    case error(String
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension CloudBackupState: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCloudBackupState: FfiConverterRustBuffer {
+    typealias SwiftType = CloudBackupState
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackupState {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .disabled
+        
+        case 2: return .enabling
+        
+        case 3: return .restoring
+        
+        case 4: return .enabled
+        
+        case 5: return .error(try FfiConverterString.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CloudBackupState, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .disabled:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .enabling:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .restoring:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .enabled:
+            writeInt(&buf, Int32(4))
+        
+        
+        case let .error(v1):
+            writeInt(&buf, Int32(5))
+            FfiConverterString.write(v1, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupState_lift(_ buf: RustBuffer) throws -> CloudBackupState {
+    return try FfiConverterTypeCloudBackupState.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupState_lower(_ value: CloudBackupState) -> RustBuffer {
+    return FfiConverterTypeCloudBackupState.lower(value)
 }
 
 
@@ -28308,6 +28721,137 @@ public func FfiConverterCallbackInterfaceAuthManagerReconciler_lower(_ v: AuthMa
 
 
 
+public protocol CloudBackupManagerReconciler: AnyObject, Sendable {
+    
+    func reconcile(message: CloudBackupReconcileMessage) 
+    
+}
+
+
+// Put the implementation in a struct so we don't pollute the top-level namespace
+fileprivate struct UniffiCallbackInterfaceCloudBackupManagerReconciler {
+
+    // Create the VTable using a series of closures.
+    // Swift automatically converts these into C callback functions.
+    //
+    // Store the vtable directly.
+    static let vtable: UniffiVTableCallbackInterfaceCloudBackupManagerReconciler = UniffiVTableCallbackInterfaceCloudBackupManagerReconciler(
+        uniffiFree: { (uniffiHandle: UInt64) -> () in
+            do {
+                try FfiConverterCallbackInterfaceCloudBackupManagerReconciler.handleMap.remove(handle: uniffiHandle)
+            } catch {
+                print("Uniffi callback interface CloudBackupManagerReconciler: handle missing in uniffiFree")
+            }
+        },
+        uniffiClone: { (uniffiHandle: UInt64) -> UInt64 in
+            do {
+                return try FfiConverterCallbackInterfaceCloudBackupManagerReconciler.handleMap.clone(handle: uniffiHandle)
+            } catch {
+                fatalError("Uniffi callback interface CloudBackupManagerReconciler: handle missing in uniffiClone")
+            }
+        },
+        reconcile: { (
+            uniffiHandle: UInt64,
+            message: RustBuffer,
+            uniffiOutReturn: UnsafeMutableRawPointer,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> () in
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceCloudBackupManagerReconciler.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.reconcile(
+                     message: try FfiConverterTypeCloudBackupReconcileMessage_lift(message)
+                )
+            }
+
+            
+            let writeReturn = { () }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        }
+    )
+
+    // Rust stores this pointer for future callback invocations, so it must live
+    // for the process lifetime (not just for the init function call).
+    static let vtablePtr: UnsafePointer<UniffiVTableCallbackInterfaceCloudBackupManagerReconciler> = {
+        let ptr = UnsafeMutablePointer<UniffiVTableCallbackInterfaceCloudBackupManagerReconciler>.allocate(capacity: 1)
+        ptr.initialize(to: vtable)
+        return UnsafePointer(ptr)
+    }()
+}
+
+private func uniffiCallbackInitCloudBackupManagerReconciler() {
+    uniffi_cove_fn_init_callback_vtable_cloudbackupmanagerreconciler(UniffiCallbackInterfaceCloudBackupManagerReconciler.vtablePtr)
+}
+
+// FfiConverter protocol for callback interfaces
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterCallbackInterfaceCloudBackupManagerReconciler {
+    fileprivate static let handleMap = UniffiHandleMap<CloudBackupManagerReconciler>()
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+extension FfiConverterCallbackInterfaceCloudBackupManagerReconciler : FfiConverter {
+    typealias SwiftType = CloudBackupManagerReconciler
+    typealias FfiType = UInt64
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func lift(_ handle: UInt64) throws -> SwiftType {
+        try handleMap.get(handle: handle)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func lower(_ v: SwiftType) -> UInt64 {
+        return handleMap.insert(obj: v)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func write(_ v: SwiftType, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(v))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterCallbackInterfaceCloudBackupManagerReconciler_lift(_ handle: UInt64) throws -> CloudBackupManagerReconciler {
+    return try FfiConverterCallbackInterfaceCloudBackupManagerReconciler.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterCallbackInterfaceCloudBackupManagerReconciler_lower(_ v: CloudBackupManagerReconciler) -> UInt64 {
+    return FfiConverterCallbackInterfaceCloudBackupManagerReconciler.lower(v)
+}
+
+
+
+
 public protocol CoinControlManagerReconciler: AnyObject, Sendable {
     
     /**
@@ -30874,6 +31418,29 @@ public func cancelBootstrap()  {try! rustCall() {
 }
 }
 /**
+ * Reset all bootstrap state so restore can re-run bootstrap with a new key
+ *
+ * Clears encryption key cache, bootstrap step, storage bootstrapped flag,
+ * and cancellation flag. Must be called before re-running bootstrap after restore
+ */
+public func resetBootstrapForRestore()  {try! rustCall() {
+    uniffi_cove_fn_func_reset_bootstrap_for_restore($0
+    )
+}
+}
+/**
+ * Returns the absolute path to the root data directory
+ *
+ * Used by iOS to set isExcludedFromBackup on the data directory,
+ * preventing encrypted database files from being included in device backups
+ */
+public func rootDataDirPath() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_func_root_data_dir_path($0
+    )
+})
+}
+/**
  * Returns the active migration object if one has been registered,
  * used by the frontend to poll progress
  */
@@ -30924,6 +31491,17 @@ public func updatePricesIfNeeded()async   {
             errorHandler: nil
             
         )
+}
+/**
+ * Wipe all local encrypted databases (main db + per-wallet databases)
+ *
+ * Used during restore (old databases are undecryptable with the new key)
+ * and during "Start Fresh" flows. Shared across platforms via FFI
+ */
+public func wipeLocalData()  {try! rustCall() {
+    uniffi_cove_fn_func_wipe_local_data($0
+    )
+}
 }
 public func sendFlowAlertStateFromAddressError(error: AddressError, address: String) -> SendFlowAlertState  {
     return try!  FfiConverterTypeSendFlowAlertState_lift(try! rustCall() {
@@ -31165,6 +31743,12 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_func_cancel_bootstrap() != 59164) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_func_reset_bootstrap_for_restore() != 29473) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_root_data_dir_path() != 42460) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_func_active_migration() != 29388) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -31181,6 +31765,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_updatepricesifneeded() != 5753) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_wipe_local_data() != 18165) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_send_flow_alert_state_from_address_error() != 25696) {
@@ -31655,6 +32242,18 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustauthmanager_validate_security_action() != 4302) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustcloudbackupmanager_current_state() != 41818) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustcloudbackupmanager_enable_cloud_backup() != 10837) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustcloudbackupmanager_listen_for_updates() != 57718) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustcloudbackupmanager_restore_from_cloud_backup() != 40792) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustcoincontrolmanager_button_presentation() != 24764) {
@@ -32314,6 +32913,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_constructor_rustauthmanager_new() != 54478) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_constructor_rustcloudbackupmanager_new() != 6990) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_constructor_rustcoincontrolmanager_preview_new() != 19053) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -32437,6 +33039,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_authmanagerreconciler_reconcile() != 565) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_cloudbackupmanagerreconciler_reconcile() != 23183) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_coincontrolmanagerreconciler_reconcile() != 28640) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -32473,6 +33078,7 @@ private let initializationResult: InitializationResult = {
 
     uniffiCallbackInitAutoComplete()
     uniffiCallbackInitAuthManagerReconciler()
+    uniffiCallbackInitCloudBackupManagerReconciler()
     uniffiCallbackInitCoinControlManagerReconciler()
     uniffiCallbackInitFfiReconcile()
     uniffiCallbackInitImportWalletManagerReconciler()

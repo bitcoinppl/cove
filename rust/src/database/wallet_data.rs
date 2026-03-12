@@ -21,14 +21,14 @@ use ahash::AHashMap as HashMap;
 pub static DATABASE_CONNECTIONS: Lazy<RwLock<HashMap<WalletId, Arc<redb::Database>>>> =
     Lazy::new(|| RwLock::new(HashMap::new()));
 
-fn database_location(id: &WalletId, location: &Path) -> PathBuf {
+fn database_location(id: &WalletId, location: &Path) -> Result<PathBuf, std::io::Error> {
     let dir = location.join(id.as_str());
 
     if !dir.exists() {
-        std::fs::create_dir_all(&dir).expect("always work to create dir");
+        std::fs::create_dir_all(&dir)?;
     }
 
-    dir.join("wallet_data.json")
+    Ok(dir.join("wallet_data.encrypted.json.redb"))
 }
 
 pub(crate) const TABLE: TableDefinition<&'static str, Json<WalletData>> =
@@ -188,7 +188,8 @@ impl WalletDataDb {
 
 /// Get an existing database or create a new one
 pub fn get_or_create_database(id: &WalletId, location: &Path) -> Result<Arc<redb::Database>> {
-    let path = database_location(id, location);
+    let path = database_location(id, location)
+        .map_err(|e| WalletDataError::DatabaseAccess { id: id.clone(), error: e.to_string() })?;
 
     // check if we already have a database connection for this id and return it
     {
@@ -218,7 +219,7 @@ fn delete_database_at_location(id: &WalletId, location: &Path) -> Result<(), std
         db_connections.remove(id);
     }
 
-    std::fs::remove_file(database_location(id, location))
+    std::fs::remove_file(database_location(id, location)?)
 }
 
 impl WalletDataKey {

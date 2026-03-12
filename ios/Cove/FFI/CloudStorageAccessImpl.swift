@@ -14,29 +14,29 @@ final class CloudStorageAccessImpl: CloudStorageAccess, @unchecked Sendable {
 
     // MARK: - Upload
 
-    func uploadMasterKeyBackup(data: [UInt8]) throws {
-        try uploadRecord(recordId: "cspp-master-key-v1", data: Data(data))
+    func uploadMasterKeyBackup(data: Data) throws {
+        try uploadRecord(recordId: "cspp-master-key-v1", data: data)
     }
 
-    func uploadWalletBackup(recordId: String, data: [UInt8]) throws {
-        try uploadRecord(recordId: recordId, data: Data(data))
+    func uploadWalletBackup(recordId: String, data: Data) throws {
+        try uploadRecord(recordId: recordId, data: data)
     }
 
-    func uploadManifest(data: [UInt8]) throws {
-        try uploadRecord(recordId: "cspp-manifest-v1", data: Data(data))
+    func uploadManifest(data: Data) throws {
+        try uploadRecord(recordId: "cspp-manifest-v1", data: data)
     }
 
     // MARK: - Download
 
-    func downloadMasterKeyBackup() throws -> [UInt8] {
+    func downloadMasterKeyBackup() throws -> Data {
         try downloadRecord(recordId: "cspp-master-key-v1")
     }
 
-    func downloadWalletBackup(recordId: String) throws -> [UInt8] {
+    func downloadWalletBackup(recordId: String) throws -> Data {
         try downloadRecord(recordId: recordId)
     }
 
-    func downloadManifest() throws -> [UInt8] {
+    func downloadManifest() throws -> Data {
         try downloadRecord(recordId: "cspp-manifest-v1")
     }
 
@@ -57,15 +57,15 @@ final class CloudStorageAccessImpl: CloudStorageAccess, @unchecked Sendable {
                     fetchResult = .success(false)
                 case .networkUnavailable, .networkFailure, .serviceUnavailable:
                     fetchResult = .failure(
-                        .notAvailable(ckError.localizedDescription)
+                        .NotAvailable(ckError.localizedDescription)
                     )
                 default:
                     fetchResult = .failure(
-                        .downloadFailed(ckError.localizedDescription)
+                        .DownloadFailed(ckError.localizedDescription)
                     )
                 }
             } else if let error {
-                fetchResult = .failure(.notAvailable(error.localizedDescription))
+                fetchResult = .failure(.NotAvailable(error.localizedDescription))
             } else {
                 fetchResult = .success(false)
             }
@@ -96,9 +96,9 @@ final class CloudStorageAccessImpl: CloudStorageAccess, @unchecked Sendable {
         operation.modifyRecordsResultBlock = { result in
             if case let .failure(error) = result {
                 if let ckError = error as? CKError, ckError.code == .quotaExceeded {
-                    uploadError = .quotaExceeded
+                    uploadError = .QuotaExceeded
                 } else {
-                    uploadError = .uploadFailed(error.localizedDescription)
+                    uploadError = .UploadFailed(error.localizedDescription)
                 }
             }
             semaphore.signal()
@@ -112,31 +112,31 @@ final class CloudStorageAccessImpl: CloudStorageAccess, @unchecked Sendable {
         }
     }
 
-    private func downloadRecord(recordId: String) throws -> [UInt8] {
+    private func downloadRecord(recordId: String) throws -> Data {
         let recordID = CKRecord.ID(recordName: recordId)
         let semaphore = DispatchSemaphore(value: 0)
-        var fetchResult: Result<[UInt8], CloudStorageError>!
+        var fetchResult: Result<Data, CloudStorageError>!
 
         db.fetch(withRecordID: recordID) { record, error in
             if let record, let data = record[Self.dataField] as? Data {
-                fetchResult = .success(Array(data))
+                fetchResult = .success(data)
             } else if let ckError = error as? CKError {
                 switch ckError.code {
                 case .unknownItem:
-                    fetchResult = .failure(.notFound(recordId))
+                    fetchResult = .failure(.NotFound(recordId))
                 case .networkUnavailable, .networkFailure, .serviceUnavailable:
                     fetchResult = .failure(
-                        .notAvailable(ckError.localizedDescription)
+                        .NotAvailable(ckError.localizedDescription)
                     )
                 default:
                     fetchResult = .failure(
-                        .downloadFailed(ckError.localizedDescription)
+                        .DownloadFailed(ckError.localizedDescription)
                     )
                 }
             } else if let error {
-                fetchResult = .failure(.downloadFailed(error.localizedDescription))
+                fetchResult = .failure(.DownloadFailed(error.localizedDescription))
             } else {
-                fetchResult = .failure(.notFound(recordId))
+                fetchResult = .failure(.NotFound(recordId))
             }
             semaphore.signal()
         }

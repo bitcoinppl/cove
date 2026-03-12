@@ -11,6 +11,10 @@ use tracing::warn;
 use cove_cspp::CsppStore;
 use cove_types::WalletId;
 use cove_util::encryption::Cryptor;
+use rand::RngExt as _;
+
+const LOCAL_DB_KEY_NAME: &str = "local::v1::db_encryption_key";
+const LOCAL_DB_KEY_CRYPTOR: &str = "local::v1::db_encryption_key_cryptor";
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
 #[uniffi::export(Display)]
@@ -77,6 +81,48 @@ impl Keychain {
     /// Panics if the keychain has not been initialized
     pub fn global() -> &'static Self {
         REF.get().expect("keychain is not initialized")
+    }
+
+    /// Load existing local DB encryption key, returns None if not found
+    pub fn get_local_encryption_key(&self) -> Result<Option<[u8; 32]>, KeychainError> {
+        let Some(cryptor_str) = self.0.get(LOCAL_DB_KEY_CRYPTOR.into()) else {
+            return Ok(None);
+        };
+        let Some(encrypted) = self.0.get(LOCAL_DB_KEY_NAME.into()) else {
+            return Ok(None);
+        };
+
+        let cryptor = Cryptor::try_from_string(&cryptor_str)
+            .map_err(|e| KeychainError::Decrypt(e.to_string()))?;
+        let hex = cryptor
+            .decrypt_from_string(&encrypted)
+            .map_err(|e| KeychainError::Decrypt(e.to_string()))?;
+        let bytes: [u8; 32] = hex::decode(hex)
+            .map_err(|e| KeychainError::ParseSavedValue(e.to_string()))?
+            .try_into()
+            .map_err(|_| KeychainError::ParseSavedValue("not 32 bytes".into()))?;
+
+        Ok(Some(bytes))
+    }
+
+    /// Generate, persist, and return a new random local DB encryption key
+    ///
+    /// Write-once: refuses if a key already exists in keychain
+    pub fn create_local_encryption_key(&self) -> Result<[u8; 32], KeychainError> {
+        if self.0.get(LOCAL_DB_KEY_NAME.into()).is_some() {
+            return Err(KeychainError::Save);
+        }
+
+        let key: [u8; 32] = rand::rng().random();
+        let hex = hex::encode(key);
+        let mut cryptor = Cryptor::new();
+        let encrypted =
+            cryptor.encrypt_to_string(&hex).map_err(|e| KeychainError::Encrypt(e.to_string()))?;
+
+        self.0.save(LOCAL_DB_KEY_CRYPTOR.into(), cryptor.serialize_to_string())?;
+        self.0.save(LOCAL_DB_KEY_NAME.into(), encrypted)?;
+
+        Ok(key)
     }
 
     /// Saves a wallet's mnemonic seed encrypted in the keychain
