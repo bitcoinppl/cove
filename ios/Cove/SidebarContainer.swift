@@ -26,6 +26,14 @@ struct SidebarContainer<Content: View>: View {
     }
 
     private func onDragEnded(value: DragGesture.Value) {
+        // if sidebar was closed programmatically during this gesture
+        // (onChange already reset offset and dragTranslation to 0),
+        // don't let stale gesture data reopen it
+        if !app.isSidebarVisible, offset == 0, dragTranslation == 0 {
+            isDragging = false
+            return
+        }
+
         let threshold = sideBarWidth * 0.3
         let predictedEnd = value.predictedEndTranslation.width
         let currentOffset = totalOffset
@@ -183,6 +191,13 @@ struct SidebarContainer<Content: View>: View {
         .onChange(of: app.isSidebarVisible) { _, isVisible in
             if isVisible {
                 app.loadWallets()
+            }
+
+            // when closing programmatically (e.g. button tap in sidebar),
+            // a simultaneousGesture may have set isDragging from a slight
+            // finger movement — reset it so the close animation runs
+            if !isVisible {
+                isDragging = false
             }
 
             guard !isDragging else { return }
