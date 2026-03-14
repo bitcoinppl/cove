@@ -310,6 +310,20 @@ struct SelectedWalletScreen: View {
                 showReceiveSheet: showReceiveSheet
             )
             .clipped()
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.frame(in: .global).maxY
+            } action: { _, headerBottom in
+                let navBarThreshold = safeAreaInsets.top + 50
+                let hysteresis: CGFloat = 10
+
+                if !shouldShowNavBar, headerBottom < navBarThreshold - hysteresis {
+                    shouldShowNavBar = true
+                    app.isPastHeader = true
+                } else if shouldShowNavBar, headerBottom > navBarThreshold + hysteresis {
+                    shouldShowNavBar = false
+                    app.isPastHeader = false
+                }
+            }
 
             VerifyReminder(
                 walletId: manager.walletMetadata.id, isVerified: manager.walletMetadata.verified
@@ -474,12 +488,6 @@ struct SelectedWalletScreen: View {
             }
             .scrollIndicators(.hidden)
             .modifier(SoftScrollEdgeModifier())
-            .onScrollGeometryChange(for: Bool.self) { geometry in
-                geometry.contentOffset.y > (geometry.contentInsets.top + safeAreaInsets.top - 5)
-            } action: { _, pastTop in
-                shouldShowNavBar = pastTop
-                app.isPastHeader = pastTop
-            }
         }
         .modifier(OuterBackgroundModifier(iOS26OrLater: iOS26OrLater))
         .onChange(of: manager.walletMetadata.discoveryState) { _, newValue in
@@ -496,6 +504,9 @@ struct SelectedWalletScreen: View {
             }
         }
         .onAppear(perform: manager.validateMetadata)
+        .onAppear {
+            shouldShowNavBar = false
+        }
         .onDisappear {
             // reset scroll state when leaving this screen
             app.isPastHeader = false
