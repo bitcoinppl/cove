@@ -610,7 +610,11 @@ struct CoveApp: App {
     }
 
     func onChangeRoute(_ old: [Route], _ new: [Route]) {
-        if !old.isEmpty, new.isEmpty { id = UUID() }
+        // defer view identity reset to avoid ChildEnvironment propagation loop
+        // during UIKit's parallax transition animation
+        if !old.isEmpty, new.isEmpty {
+            DispatchQueue.main.async { id = UUID() }
+        }
 
         app.dispatch(action: AppAction.updateRoute(routes: new))
     }

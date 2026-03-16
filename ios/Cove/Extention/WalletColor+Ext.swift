@@ -146,5 +146,5 @@ extension Color {
 }
 
 func customToColor(r: UInt8, g: UInt8, b: UInt8) -> Color {
-    Color(red: Double(r), green: Double(g), blue: Double(b))
+    Color(red: Double(r) / 255, green: Double(g) / 255, blue: Double(b) / 255)
 }
