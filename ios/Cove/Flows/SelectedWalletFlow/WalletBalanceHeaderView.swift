@@ -164,7 +164,7 @@ struct WalletBalanceHeaderView: View {
         }
         .padding()
         .padding(.vertical, 22)
-        .padding(.top, safeAreaInsets.top + 35)
+        .padding(.top, safeAreaInsets.top + 75)
         .background(
             Image(.headerPattern)
                 .resizable()

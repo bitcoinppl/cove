@@ -220,33 +220,35 @@ struct SelectedWalletScreen: View {
         return .white
     }
 
-    @ToolbarContentBuilder
-    var MainToolBar: some ToolbarContent {
-        ToolbarItem(placement: .principal) {
-            HStack(spacing: 10) {
-                if case .cold = metadata.walletType {
-                    BitcoinShieldIcon(width: 13, color: toolbarTextColor)
-                }
-
-                Text(metadata.name)
-                    .foregroundStyle(toolbarTextColor)
-                    .font(.callout)
-                    .fontWeight(.semibold)
+    var titleContent: some View {
+        HStack(spacing: 10) {
+            if case .cold = metadata.walletType {
+                BitcoinShieldIcon(width: 13, color: toolbarTextColor)
             }
-            .padding(.vertical, 20)
-            .padding(.horizontal, 28)
-            .contentShape(Rectangle())
-            .contentShape(
-                .contextMenuPreview,
-                RoundedRectangle(cornerRadius: 8)
-            )
-            .contextMenu {
-                Button("Change Name") {
-                    app.pushRoute(Route.settings(.wallet(id: metadata.id, route: .changeName)))
-                }
+
+            Text(metadata.name)
+                .foregroundStyle(toolbarTextColor)
+                .font(.callout)
+                .fontWeight(.semibold)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .padding(.vertical, 20)
+        .padding(.horizontal, 28)
+        .contentShape(Rectangle())
+        .contentShape(
+            .contextMenuPreview,
+            RoundedRectangle(cornerRadius: 8)
+        )
+        .contextMenu {
+            Button("Change Name") {
+                app.pushRoute(Route.settings(.wallet(id: metadata.id, route: .changeName)))
             }
         }
+    }
 
+    @ToolbarContentBuilder
+    var MainToolBar: some ToolbarContent {
         ToolbarItemGroup(placement: .navigationBarTrailing) {
             HStack(spacing: 5) {
                 Button(action: {
@@ -334,6 +336,7 @@ struct SelectedWalletScreen: View {
         }
         .background(Color.coveBg)
         .toolbar { MainToolBar }
+        .modifier(NavigationTitleViewModifier { titleContent })
         .adaptiveToolbarStyle(showNavBar: shouldShowNavBar)
         .sheet(item: $sheetState, content: SheetContent)
         .fileImporter(
