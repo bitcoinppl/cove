@@ -1,15 +1,41 @@
 import SwiftUI
 
-/// Sets the navigation bar title via UIKit's navigationItem.titleView,
-/// bypassing SwiftUI's ToolbarPlacementEnvironment which has an infinite
-/// loop bug with .principal placement during parallax transitions at
-/// large accessibility font sizes on iOS 26.
-///
-/// DO NOT use ToolbarItem(placement: .principal) anywhere in this app.
-/// Use this modifier instead. The SwiftUI bug causes 100% CPU freeze
-/// when pressing back at accessibilityExtraExtraLarge dynamic type.
-/// See: SelectedWalletScreen for usage example
-struct NavigationTitleViewModifier<TitleContent: View>: ViewModifier {
+// MARK: - iOS 26 Workaround: UIKit Navigation Title
+
+//
+// SwiftUI has a bug on iOS 26 where ToolbarPlacementEnvironment.updateValue()
+// enters an infinite loop during _UINavigationParallaxTransition when a
+// .principal toolbar item exists at large accessibility font sizes
+// (specifically accessibilityExtraExtraLarge). This causes 100% CPU freeze
+// when pressing the back button.
+//
+// This file provides .navigationTitleView { } as a drop-in replacement for
+// ToolbarItem(placement: .principal). It hosts SwiftUI content inside a
+// UIHostingController assigned to UIKit's navigationItem.titleView, which
+// bypasses SwiftUI's toolbar placement system entirely while keeping the
+// centered title appearance.
+//
+// Usage:
+//   .navigationTitleView {
+//       Text("My Title")
+//           .font(.callout)
+//           .fontWeight(.semibold)
+//           .foregroundStyle(.white)
+//   }
+//
+// DO NOT use ToolbarItem(placement: .principal) anywhere in this app
+
+extension View {
+    /// Sets a centered navigation bar title via UIKit, bypassing the SwiftUI
+    /// .principal toolbar placement bug on iOS 26
+    func navigationTitleView(
+        @ViewBuilder _ content: @escaping () -> some View
+    ) -> some View {
+        modifier(NavigationTitleViewModifier(titleContent: content))
+    }
+}
+
+private struct NavigationTitleViewModifier<TitleContent: View>: ViewModifier {
     @ViewBuilder let titleContent: () -> TitleContent
 
     func body(content: Content) -> some View {

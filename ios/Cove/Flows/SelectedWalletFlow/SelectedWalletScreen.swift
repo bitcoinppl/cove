@@ -336,7 +336,7 @@ struct SelectedWalletScreen: View {
         }
         .background(Color.coveBg)
         .toolbar { MainToolBar }
-        .modifier(NavigationTitleViewModifier { titleContent })
+        .navigationTitleView { titleContent }
         .adaptiveToolbarStyle(showNavBar: shouldShowNavBar)
         .sheet(item: $sheetState, content: SheetContent)
         .fileImporter(

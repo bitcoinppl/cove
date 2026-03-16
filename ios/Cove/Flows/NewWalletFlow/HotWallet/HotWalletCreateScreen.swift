@@ -173,6 +173,9 @@ struct WordsView: View {
                 .opacity(0.5)
         )
         .background(Color.midnightBlue)
+        .navigationTitle("Backup your wallet")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
                 Button(action: {
@@ -183,12 +186,6 @@ struct WordsView: View {
                     }
                     .foregroundStyle(.white)
                 }
-            }
-
-            ToolbarItem(placement: .principal) {
-                Text("Backup your wallet")
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.white)
             }
         }
         .alert(isPresented: $showConfirmationAlert) {

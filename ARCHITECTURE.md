@@ -182,3 +182,13 @@ This pattern keeps business logic and validation centralized in Rust while givin
 - Swift bindings land in `ios/CoveCore/Sources/CoveCore/generated/`; Kotlin bindings live (after copy) under `android/app/src/main/java/org/bitcoinppl/cove_core/`.
 - Database file defaults to `$ROOT_DATA_DIR/cove.db` (see `cove_common::consts::ROOT_DATA_DIR`).
 - Hardware / NFC helpers: `rust/crates/cove-device`, `rust/src/tap_card/`, and platform shims in `ios/Cove/FFI/` plus Android's `org.bitcoinppl.cove_core` package.
+
+---
+
+## iOS 26 SwiftUI Bugs & Workarounds
+
+### ToolbarItem(placement: .principal) — DO NOT USE
+
+SwiftUI has a bug on iOS 26 where `ToolbarPlacementEnvironment.updateValue()` enters an infinite loop during `_UINavigationParallaxTransition` (back button / swipe back) when a `.principal` toolbar item exists at large accessibility font sizes (specifically `accessibilityExtraExtraLarge`). This causes 100% CPU freeze.
+
+**Workaround:** For screens that need custom title content (icons, context menus, dynamic colors), use `.navigationTitleView { }` from `ios/Cove/Views/NavigationTitleView.swift`. This hosts SwiftUI content inside UIKit's `navigationItem.titleView`, bypassing SwiftUI's toolbar placement system entirely. For screens with plain static text titles, use `.navigationTitle("Title").navigationBarTitleDisplayMode(.inline)` instead.

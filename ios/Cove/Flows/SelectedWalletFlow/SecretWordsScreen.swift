@@ -107,14 +107,10 @@ struct SecretWordsScreen: View {
             do { words = try Mnemonic(id: id) } catch { errorMessage = error.localizedDescription }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .navigationTitle("Recovery Words")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbar {
-            ToolbarItem(placement: .principal) {
-                Text("Recovery Words")
-                    .foregroundStyle(.white)
-                    .font(.callout)
-                    .fontWeight(.semibold)
-            }
-
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button(action: { showSeedQrAlert = true }) {
                     Image(systemName: "qrcode")

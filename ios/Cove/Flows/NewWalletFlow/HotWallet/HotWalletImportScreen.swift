@@ -306,13 +306,6 @@ struct HotWalletImportScreen: View {
 
     @ToolbarContentBuilder
     var ToolbarContent: some ToolbarContent {
-        ToolbarItem(placement: .principal) {
-            Text("Import Wallet")
-                .font(.callout)
-                .fontWeight(.semibold)
-                .foregroundStyle(.white)
-        }
-
         ToolbarItemGroup(placement: .topBarTrailing) {
             HStack(spacing: 5) {
                 Button(action: nfcReader.scan) {
@@ -407,6 +400,9 @@ struct HotWalletImportScreen: View {
         .padding()
         .padding(.bottom, 24)
         .toolbar { ToolbarContent }
+        .navigationTitle("Import Wallet")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarColorScheme(.dark, for: .navigationBar)
         .sheet(item: $sheetState, content: SheetContent)
         .alert(
             alertTitle,

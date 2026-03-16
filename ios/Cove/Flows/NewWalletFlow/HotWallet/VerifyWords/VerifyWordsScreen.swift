@@ -78,18 +78,9 @@ struct VerifyWordsContainer: View {
                     .onAppear(perform: initOnAppear)
             }
         }
-        .toolbar {
-            if sizeCategory < .extraExtraLarge || sizeCategory > .extraExtraExtraLarge,
-               !isMiniDevice
-            {
-                ToolbarItem(placement: .principal) {
-                    Text("Verify Recovery Words")
-                        .foregroundStyle(.white)
-                        .font(.callout)
-                        .fontWeight(.semibold)
-                }
-            }
-        }
+        .navigationTitle("Verify Recovery Words")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarColorScheme(.dark, for: .navigationBar)
     }
 }
 
