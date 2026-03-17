@@ -27,6 +27,9 @@
     volatile <fields>;
 }
 
+# ML Kit bundled variant: keep registrar constructors used via reflection by ComponentDiscovery
+-keep class com.google.mlkit.** { *; }
+
 # Preserve line numbers for debugging crash reports
 -keepattributes SourceFile,LineNumberTable
 -renamesourcefileattribute SourceFile
