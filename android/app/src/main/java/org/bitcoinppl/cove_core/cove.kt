@@ -1471,6 +1471,8 @@ external fun uniffi_cove_checksum_method_rustwalletmanager_get_transactions(
 ): Short
 external fun uniffi_cove_checksum_method_rustwalletmanager_get_unsigned_transactions(
 ): Short
+external fun uniffi_cove_checksum_method_rustwalletmanager_initial_load_state(
+): Short
 external fun uniffi_cove_checksum_method_rustwalletmanager_label_manager(
 ): Short
 external fun uniffi_cove_checksum_method_rustwalletmanager_listen_for_updates(
@@ -2442,6 +2444,8 @@ external fun uniffi_cove_fn_method_rustwalletmanager_get_fee_options(`ptr`: Long
 external fun uniffi_cove_fn_method_rustwalletmanager_get_transactions(`ptr`: Long,
 ): Long
 external fun uniffi_cove_fn_method_rustwalletmanager_get_unsigned_transactions(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_fn_method_rustwalletmanager_initial_load_state(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_fn_method_rustwalletmanager_label_manager(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
@@ -3961,6 +3965,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_get_unsigned_transactions() != 35895.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_initial_load_state() != 32246.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_label_manager() != 23571.toShort()) {
@@ -18253,6 +18260,8 @@ public interface RustWalletManagerInterface {
     
     fun `getUnsignedTransactions`(): List<UnsignedTransaction>
     
+    fun `initialLoadState`(): WalletLoadState
+    
     fun `labelManager`(): LabelManager
     
     fun `listenForUpdates`(`reconciler`: WalletManagerReconciler)
@@ -19016,6 +19025,19 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     callWithHandle {
     uniffiRustCallWithError(WalletManagerException) { _status ->
     UniffiLib.uniffi_cove_fn_method_rustwalletmanager_get_unsigned_transactions(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    override fun `initialLoadState`(): WalletLoadState {
+            return FfiConverterTypeWalletLoadState.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_initial_load_state(
         it,
         _status)
 }

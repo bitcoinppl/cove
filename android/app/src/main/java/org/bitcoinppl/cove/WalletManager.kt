@@ -102,6 +102,13 @@ class WalletManager :
         this.unsignedTransactions = runCatching { rustManager.getUnsignedTransactions() }.getOrElse { emptyList() }
 
         rustManager.listenForUpdates(this)
+
+        // set initial load state from Rust cached data
+        loadState = when (val rustLoadState = rustManager.initialLoadState()) {
+            is org.bitcoinppl.cove_core.WalletLoadState.Loading -> WalletLoadState.LOADING
+            is org.bitcoinppl.cove_core.WalletLoadState.Scanning -> WalletLoadState.SCANNING(rustLoadState.v1)
+            is org.bitcoinppl.cove_core.WalletLoadState.Loaded -> WalletLoadState.LOADED(rustLoadState.v1)
+        }
     }
 
     companion object {
@@ -202,7 +209,11 @@ class WalletManager :
     private fun apply(message: WalletManagerReconcileMessage) {
         when (message) {
             is WalletManagerReconcileMessage.StartedInitialFullScan -> {
-                loadState = WalletLoadState.LOADING
+                when (val current = loadState) {
+                    is WalletLoadState.SCANNING -> if (current.txns.isEmpty()) loadState = WalletLoadState.LOADING
+                    is WalletLoadState.LOADED -> loadState = WalletLoadState.SCANNING(current.txns)
+                    else -> loadState = WalletLoadState.LOADING
+                }
             }
 
             is WalletManagerReconcileMessage.StartedExpandedFullScan -> {

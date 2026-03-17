@@ -13,7 +13,7 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
     let rust: RustWalletManager
 
     var walletMetadata: WalletMetadata
-    var loadState: WalletLoadState = .loading
+    var loadState: WalletLoadState
     var balance: Balance = .zero()
     var foundAddresses: [FoundAddress] = []
     var unsignedTransactions: [UnsignedTransaction] = []
@@ -35,6 +35,7 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
         let rust = try RustWalletManager(id: id)
 
         self.rust = rust
+        self.loadState = rust.initialLoadState()
 
         walletMetadata = rust.walletMetadata()
         unsignedTransactions = (try? rust.getUnsignedTransactions()) ?? []
@@ -47,6 +48,7 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
         let metadata = rust.walletMetadata()
 
         self.rust = rust
+        self.loadState = .loading
         walletMetadata = metadata
         id = metadata.id
 
@@ -61,6 +63,7 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
         let metadata = rust.walletMetadata()
 
         self.rust = rust
+        self.loadState = .loading
         walletMetadata = metadata
         id = metadata.id
 
@@ -147,7 +150,14 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
     func apply(_ message: Message) {
         switch message {
         case .startedInitialFullScan:
-            self.loadState = .loading
+            switch self.loadState {
+            case let .scanning(txns) where !txns.isEmpty:
+                break
+            case let .loaded(txns):
+                self.loadState = .scanning(txns)
+            default:
+                self.loadState = .loading
+            }
 
         case let .startedExpandedFullScan(txns):
             self.loadState = .scanning(txns)
@@ -263,6 +273,7 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
             }
 
         self.rust = rust
+        self.loadState = .loading
         self.walletMetadata = rust.walletMetadata()
 
         rust.listenForUpdates(reconciler: WeakReconciler(self))

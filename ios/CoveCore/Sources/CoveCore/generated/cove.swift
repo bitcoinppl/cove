@@ -7729,6 +7729,8 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
     
     func getUnsignedTransactions() throws  -> [UnsignedTransaction]
     
+    func initialLoadState()  -> WalletLoadState
+    
     func labelManager()  -> LabelManager
     
     func listenForUpdates(reconciler: WalletManagerReconciler) 
@@ -8360,6 +8362,14 @@ open func getTransactions()async   {
 open func getUnsignedTransactions()throws  -> [UnsignedTransaction]  {
     return try  FfiConverterSequenceTypeUnsignedTransaction.lift(try rustCallWithError(FfiConverterTypeWalletManagerError_lift) {
     uniffi_cove_fn_method_rustwalletmanager_get_unsigned_transactions(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+open func initialLoadState() -> WalletLoadState  {
+    return try!  FfiConverterTypeWalletLoadState_lift(try! rustCall() {
+    uniffi_cove_fn_method_rustwalletmanager_initial_load_state(
             self.uniffiCloneHandle(),$0
     )
 })
@@ -30199,6 +30209,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_get_unsigned_transactions() != 35895) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustwalletmanager_initial_load_state() != 32246) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_label_manager() != 23571) {
