@@ -136,7 +136,7 @@ struct MoreInfoPopover: View {
                 Label("Wallet Settings", systemImage: "gear")
             }
         }
-        .tint(.primary)
+        .tint(Color(uiColor: .label))
     }
 }
 
