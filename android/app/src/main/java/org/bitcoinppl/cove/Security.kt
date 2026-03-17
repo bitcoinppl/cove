@@ -2,6 +2,8 @@ package org.bitcoinppl.cove
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.content.pm.PackageManager
+import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import org.bitcoinppl.cove_core.device.DeviceAccess
@@ -15,23 +17,15 @@ class KeychainAccessor(
     private val sharedPreferences: SharedPreferences
 
     init {
-        // create or retrieve the master key for encryption
-        val masterKey =
-            MasterKey
-                .Builder(context)
-                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-                .setRequestStrongBoxBacked(true)
-                .build()
-
-        // create encrypted shared preferences
+        val useStrongBox = hasStrongBox(context)
         sharedPreferences =
-            EncryptedSharedPreferences.create(
-                context,
-                "cove_secure_storage",
-                masterKey,
-                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
-            )
+            try {
+                createEncryptedPrefs(context, requestStrongBox = useStrongBox)
+            } catch (e: Exception) {
+                if (!useStrongBox) throw e // not a StrongBox issue, no fallback available
+                Log.w("KeychainAccessor", "StrongBox-backed prefs failed, falling back to TEE", e)
+                createEncryptedPrefs(context, requestStrongBox = false)
+            }
     }
 
     override fun save(key: String, value: String) {
@@ -53,6 +47,26 @@ class KeychainAccessor(
             .edit()
             .remove(key)
             .commit()
+}
+
+private fun hasStrongBox(context: Context): Boolean =
+    context.packageManager.hasSystemFeature(PackageManager.FEATURE_STRONGBOX_KEYSTORE)
+
+private fun createEncryptedPrefs(context: Context, requestStrongBox: Boolean): SharedPreferences {
+    val masterKey =
+        MasterKey
+            .Builder(context)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .setRequestStrongBoxBacked(requestStrongBox)
+            .build()
+
+    return EncryptedSharedPreferences.create(
+        context,
+        "cove_secure_storage",
+        masterKey,
+        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
+    )
 }
 
 class DeviceAccessor : DeviceAccess {
