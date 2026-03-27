@@ -1,3 +1,5 @@
+_docs/
+_plans
 
 *~.swift
 **/**/UserInterfaceState.xcuserstate
@@ -19,3 +21,4 @@ android/.kotlin/
 cove-signing-key.zip
 upload_certificate.pem
 /.jjconflict-base-*
+*.o

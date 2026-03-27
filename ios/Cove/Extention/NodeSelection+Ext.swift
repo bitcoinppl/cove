@@ -8,15 +8,11 @@
 import Foundation
 
 extension NodeSelection {
-    var node: Node {
-        nodeSelectionToNode(node: self)
-    }
-
     var url: String {
-        node.url
+        toNode().url
     }
 
     var name: String {
-        node.name
+        toNode().name
     }
 }

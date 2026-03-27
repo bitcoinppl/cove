@@ -23,16 +23,18 @@ pub enum LabelDbError {
     UnsupportedLabelType(String),
 }
 
-const TXN_TABLE: TableDefinition<TxId, SerdeRecord<TransactionRecord>> =
+pub(crate) const TXN_TABLE: TableDefinition<TxId, SerdeRecord<TransactionRecord>> =
     TableDefinition::new("transaction_labels.cbor");
 
-const ADDRESS_TABLE: TableDefinition<Cbor<Address<NetworkUnchecked>>, SerdeRecord<AddressRecord>> =
-    TableDefinition::new("address_labels.cbor");
+pub(crate) const ADDRESS_TABLE: TableDefinition<
+    Cbor<Address<NetworkUnchecked>>,
+    SerdeRecord<AddressRecord>,
+> = TableDefinition::new("address_labels.cbor");
 
-const INPUT_TABLE: TableDefinition<OutPointKey, SerdeRecord<InputRecord>> =
+pub(crate) const INPUT_TABLE: TableDefinition<OutPointKey, SerdeRecord<InputRecord>> =
     TableDefinition::new("input_records_v2.cbor");
 
-const OUTPUT_TABLE: TableDefinition<OutPointKey, SerdeRecord<OutputRecord>> =
+pub(crate) const OUTPUT_TABLE: TableDefinition<OutPointKey, SerdeRecord<OutputRecord>> =
     TableDefinition::new("output_records_v2.cbor");
 
 #[derive(Debug, Clone, uniffi::Object)]
@@ -455,7 +457,7 @@ mod tests {
         "#;
 
         let labels = Labels::try_from_str(jsonl).expect("failed to parse labels");
-        let wallet_db = WalletDataDb::new_test(WalletId::preview_new());
+        let (wallet_db, _tmp) = WalletDataDb::new_test(WalletId::preview_new());
         let db = &wallet_db.labels;
 
         db.insert_labels(labels).expect("failed to insert labels");

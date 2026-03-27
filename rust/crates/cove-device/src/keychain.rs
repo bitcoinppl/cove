@@ -8,6 +8,7 @@ use bip39::Mnemonic;
 use once_cell::sync::OnceCell;
 use tracing::warn;
 
+use cove_cspp::CsppStore;
 use cove_types::WalletId;
 use cove_util::encryption::Cryptor;
 
@@ -80,17 +81,22 @@ impl Keychain {
 
     /// Saves a wallet's mnemonic seed encrypted in the keychain
     ///
+    /// The mnemonic is encrypted with a random [`Cryptor`] before storage. The
+    /// keychain itself provides at-rest encryption, but this extra layer prevents
+    /// the plaintext mnemonic from being accidentally exposed if other code
+    /// enumerates keychain entries — it must be explicitly decrypted to be read
+    ///
     /// # Errors
     ///
     /// Returns a `KeychainError` if encryption or saving fails
-    #[allow(clippy::needless_pass_by_value)]
     pub fn save_wallet_key(
         &self,
         id: &WalletId,
         secret_key: Mnemonic,
     ) -> Result<(), KeychainError> {
+        // save encryption key first — orphaned key is harmless, but orphaned data without its key would be unrecoverable
         let encryption_key_key = wallet_mnemonic_encryption_and_nonce_key_name(id);
-        let cryptor = Cryptor::new();
+        let mut cryptor = Cryptor::new();
 
         let key = wallet_mnemonic_key_name(id);
         let encrypted_secret_key = cryptor
@@ -119,7 +125,9 @@ impl Keychain {
 
         let Some(encryption_key) = self.0.get(wallet_mnemonic_encryption_and_nonce_key_name(id))
         else {
-            return Ok(None);
+            return Err(KeychainError::Decrypt(
+                "encrypted mnemonic found but encryption key is missing".into(),
+            ));
         };
 
         let cryptor = Cryptor::try_from_string(&encryption_key)
@@ -139,8 +147,19 @@ impl Keychain {
         let encryption_key_key = wallet_mnemonic_encryption_and_nonce_key_name(id);
         let key = wallet_mnemonic_key_name(id);
 
-        self.0.delete(encryption_key_key);
-        self.0.delete(key)
+        let has_data = self.0.get(key.clone()).is_some();
+        let has_key = self.0.get(encryption_key_key.clone()).is_some();
+
+        // nothing to delete = success
+        if !has_data && !has_key {
+            return true;
+        }
+
+        // delete encrypted data before its encryption key (reverse of save order)
+        // so a partial failure never leaves orphaned data without a decryption key
+        let data_ok = if has_data { self.0.delete(key) } else { true };
+        let key_ok = if has_key { self.0.delete(encryption_key_key) } else { true };
+        data_ok && key_ok
     }
 
     /// Saves a wallet's extended public key in the keychain
@@ -182,6 +201,9 @@ impl Keychain {
 
     fn delete_wallet_xpub(&self, id: &WalletId) -> bool {
         let key = wallet_xpub_key_name(id);
+        if self.0.get(key.clone()).is_none() {
+            return true;
+        }
         self.0.delete(key)
     }
 
@@ -237,10 +259,17 @@ impl Keychain {
 
     fn delete_public_descriptor(&self, id: &WalletId) -> bool {
         let key = wallet_public_descriptor_key_name(id);
+        if self.0.get(key.clone()).is_none() {
+            return true;
+        }
         self.0.delete(key)
     }
 
     /// Saves a Tap Signer backup encrypted in the keychain
+    ///
+    /// Encrypted with a random [`Cryptor`] before storage for the same reason as
+    /// [`save_wallet_key`](Self::save_wallet_key) — prevents accidental plaintext
+    /// exposure when keychain entries are enumerated
     ///
     /// # Errors
     ///
@@ -255,54 +284,96 @@ impl Keychain {
         let backup_hex = hex::encode(backup);
 
         let encryption_key_key = wallet_tap_signer_encryption_key_and_nonce_key_name(id);
-        let cryptor = Cryptor::new();
+        let mut cryptor = Cryptor::new();
 
-        // encrypt the backup
         let encrypted_backup = cryptor
             .encrypt_to_string(&backup_hex)
             .map_err(|error| KeychainError::Encrypt(error.to_string()))?;
 
-        // get the encryption key as a string
         let encryption_key = cryptor.serialize_to_string();
 
-        // save the backup and encryption key
-        self.0.save(backup_key, encrypted_backup)?;
+        // save encryption key first — orphaned key is harmless, but orphaned data without its key would be unrecoverable
         self.0.save(encryption_key_key, encryption_key)?;
+        self.0.save(backup_key, encrypted_backup)?;
 
         Ok(())
     }
 
-    #[must_use]
-    pub fn get_tap_signer_backup(&self, id: &WalletId) -> Option<Vec<u8>> {
-        let cryptor = {
-            let encryption_key_key = wallet_tap_signer_encryption_key_and_nonce_key_name(id);
-            let encryption_secret_key = self.0.get(encryption_key_key)?;
-            Cryptor::try_from_string(&encryption_secret_key).ok()?
+    pub fn get_tap_signer_backup(&self, id: &WalletId) -> Result<Option<Vec<u8>>, KeychainError> {
+        let encryption_key_key = wallet_tap_signer_encryption_key_and_nonce_key_name(id);
+        let Some(encryption_secret_key) = self.0.get(encryption_key_key) else {
+            // check for orphaned encrypted data without its encryption key
+            let backup_key = wallet_tap_signer_backup_key_name(id);
+            if self.0.get(backup_key).is_some() {
+                return Err(KeychainError::Decrypt(
+                    "encrypted tap signer backup found but encryption key is missing".into(),
+                ));
+            }
+            return Ok(None);
         };
 
+        let cryptor = Cryptor::try_from_string(&encryption_secret_key)
+            .map_err(|e| KeychainError::Decrypt(format!("tap signer encryption key: {e}")))?;
+
         let backup_key = wallet_tap_signer_backup_key_name(id);
-        let encrypted_backup = self.0.get(backup_key)?;
+        let Some(encrypted_backup) = self.0.get(backup_key) else {
+            return Err(KeychainError::Decrypt(
+                "tap signer encryption key found but backup data is missing".to_string(),
+            ));
+        };
 
-        let backup_hex = cryptor.decrypt_from_string(&encrypted_backup).ok()?;
-        let backup = hex::decode(backup_hex).ok()?;
+        let backup_hex = cryptor
+            .decrypt_from_string(&encrypted_backup)
+            .map_err(|e| KeychainError::Decrypt(format!("tap signer backup: {e}")))?;
 
-        Some(backup)
+        let backup = hex::decode(backup_hex)
+            .map_err(|e| KeychainError::ParseSavedValue(format!("tap signer backup hex: {e}")))?;
+
+        Ok(Some(backup))
     }
 
     pub fn delete_tap_signer_backup(&self, id: &WalletId) -> bool {
         let encryption_key_key = wallet_tap_signer_encryption_key_and_nonce_key_name(id);
         let backup_key = wallet_tap_signer_backup_key_name(id);
 
-        self.0.delete(encryption_key_key);
-        self.0.delete(backup_key)
+        let has_data = self.0.get(backup_key.clone()).is_some();
+        let has_key = self.0.get(encryption_key_key.clone()).is_some();
+
+        // nothing to delete = success
+        if !has_data && !has_key {
+            return true;
+        }
+
+        // delete encrypted data before its encryption key (reverse of save order)
+        // so a partial failure never leaves orphaned data without a decryption key
+        let data_ok = self.0.delete(backup_key);
+        let key_ok = self.0.delete(encryption_key_key);
+        data_ok && key_ok
     }
 
     /// Deletes all items saved in the keychain for the given wallet id
     pub fn delete_wallet_items(&self, id: &WalletId) -> bool {
-        self.delete_wallet_key(id)
-            && self.delete_wallet_xpub(id)
-            && self.delete_public_descriptor(id)
-            && self.delete_tap_signer_backup(id)
+        let key_ok = self.delete_wallet_key(id);
+        let xpub_ok = self.delete_wallet_xpub(id);
+        let desc_ok = self.delete_public_descriptor(id);
+        let tap_ok = self.delete_tap_signer_backup(id);
+        key_ok && xpub_ok && desc_ok && tap_ok
+    }
+}
+
+impl CsppStore for Keychain {
+    type Error = KeychainError;
+
+    fn save(&self, key: String, value: String) -> Result<(), KeychainError> {
+        self.0.save(key, value)
+    }
+
+    fn get(&self, key: String) -> Option<String> {
+        self.0.get(key)
+    }
+
+    fn delete(&self, key: String) -> bool {
+        self.0.delete(key)
     }
 }
 

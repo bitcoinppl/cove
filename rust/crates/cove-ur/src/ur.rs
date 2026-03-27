@@ -1,5 +1,7 @@
 //! UR (Uniform Resource) wrapper with case-insensitive parsing
 //! per BCR-2020-005 spec
+use cove_util::ResultExt as _;
+
 use crate::error::{Result, UrError};
 use foundation_ur::UR as FoundationUr;
 
@@ -19,8 +21,7 @@ impl<'a> Ur<'a> {
     pub fn parse(ur_string: &'a str) -> Result<Self> {
         if ur_string.starts_with("ur:") {
             // already lowercase, use directly
-            let ur =
-                FoundationUr::parse(ur_string).map_err(|e| UrError::UrParseError(e.to_string()))?;
+            let ur = FoundationUr::parse(ur_string).map_err_str(UrError::UrParseError)?;
 
             return Ok(Self::Direct(ur));
         }
@@ -90,7 +91,7 @@ impl UrNormalized {
     /// Returns error if UR parsing fails or type is missing
     pub fn parse(ur_string: &str) -> Result<Self> {
         let normalized = ur_string.to_ascii_lowercase();
-        FoundationUr::parse(&normalized).map_err(|e| UrError::UrParseError(e.to_string()))?;
+        FoundationUr::parse(&normalized).map_err_str(UrError::UrParseError)?;
 
         // extract type at parse time - fail here if malformed
         let ur_type = normalized
@@ -113,7 +114,7 @@ impl UrNormalized {
     /// # Errors
     /// Returns error if UR parsing fails
     pub fn to_foundation_ur(&self) -> Result<FoundationUr<'_>> {
-        FoundationUr::parse(&self.normalized).map_err(|e| UrError::UrParseError(e.to_string()))
+        FoundationUr::parse(&self.normalized).map_err_str(UrError::UrParseError)
     }
 
     /// Get message/fragment bytes (decoded from bytewords)

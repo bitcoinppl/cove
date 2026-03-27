@@ -712,8 +712,7 @@ public func FfiConverterTypeSatsCard_lower(_ value: SatsCard) -> RustBuffer {
     return FfiConverterTypeSatsCard.lower(value)
 }
 
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 
 public enum Field: Equatable, Hashable {
     
@@ -807,8 +806,7 @@ public func FfiConverterTypeField_lower(_ value: Field) -> RustBuffer {
 }
 
 
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 
 public enum SatsCardState: Equatable, Hashable {
     
@@ -881,8 +879,7 @@ public func FfiConverterTypeSatsCardState_lower(_ value: SatsCardState) -> RustB
 }
 
 
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 
 public enum TapCard {
     
@@ -955,7 +952,8 @@ public func FfiConverterTypeTapCard_lower(_ value: TapCard) -> RustBuffer {
 
 
 
-public enum TapCardParseError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
+public 
+enum TapCardParseError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -1090,8 +1088,7 @@ public func FfiConverterTypeTapCardParseError_lower(_ value: TapCardParseError) 
     return FfiConverterTypeTapCardParseError.lower(value)
 }
 
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 
 public enum TapSignerState: Equatable, Hashable {
     

@@ -164,7 +164,7 @@ impl From<CkTapError> for rust_cktap::apdu::CkTapError {
 }
 
 #[uniffi::export]
-pub fn create_transport_error_from_code(code: u16, message: String) -> TransportError {
+fn create_transport_error_from_code(code: u16, message: String) -> TransportError {
     use rust_cktap::apdu::CkTapError as CTE;
     let error = CTE::error_from_code(code);
 

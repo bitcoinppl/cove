@@ -1104,7 +1104,8 @@ public func FfiConverterTypeCryptoSeed_lower(_ value: CryptoSeed) -> UInt64 {
 
 
 
-public enum UrError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
+public 
+enum UrError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     

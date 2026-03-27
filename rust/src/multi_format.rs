@@ -323,10 +323,13 @@ fn multi_format_try_from_nfc_message(
 }
 
 #[uniffi::export]
-fn string_or_data_try_into_multi_format(
-    string_or_data: StringOrData,
-) -> Result<MultiFormat, MultiFormatError> {
-    string_or_data.try_into()
+impl StringOrData {
+    fn try_into_multi_format(&self) -> Result<MultiFormat, MultiFormatError> {
+        match self {
+            Self::String(string) => MultiFormat::try_from_string(string),
+            Self::Data(data) => MultiFormat::try_from_data(data),
+        }
+    }
 }
 
 #[derive(

@@ -65,6 +65,8 @@ struct SettingsContainer: View {
                 WalletSettingsContainer(id: walletId, route: route)
             case .allWallets:
                 SettingsListAllWallets()
+            case .about:
+                AboutScreen()
             }
         }
         .navigationBarTitleDisplayMode(.inline)

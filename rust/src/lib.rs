@@ -32,10 +32,12 @@
 mod database;
 
 mod app;
+mod bootstrap;
 mod router;
 
 mod auth;
 mod autocomplete;
+mod backup;
 mod bdk_store;
 mod build;
 mod converter;
@@ -44,7 +46,6 @@ mod fiat;
 mod file_handler;
 mod hardware_export;
 mod historical_price_service;
-mod http_client;
 mod keys;
 mod label_manager;
 mod loading_popup;

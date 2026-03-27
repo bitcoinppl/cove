@@ -360,16 +360,12 @@ pub enum CoinControlListSort {
 #[derive(
     Debug, Clone, Copy, Hash, Eq, PartialEq, PartialOrd, Ord, uniffi::Enum, derive_more::Display,
 )]
+#[uniffi::export(Display)]
 pub enum CoinControlListSortKey {
     Date,
     Name,
     Amount,
     Change,
-}
-
-#[uniffi::export]
-fn coin_control_list_sort_key_to_string(key: CoinControlListSortKey) -> String {
-    key.to_string()
 }
 
 impl Default for CoinControlListSort {

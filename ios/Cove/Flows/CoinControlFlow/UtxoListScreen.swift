@@ -315,7 +315,7 @@ private struct UtxoRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 // Name
                 HStack(spacing: 4) {
-                    Text(utxo.name)
+                    Text(utxo.name())
                         .font(.footnote)
                         .truncationMode(.middle)
                         .lineLimit(1)
@@ -346,7 +346,7 @@ private struct UtxoRow: View {
                     .font(.footnote)
                     .fontWeight(.regular)
 
-                Text(utxo.date)
+                Text(utxo.date())
                     .font(.caption)
                     .foregroundColor(.secondary)
             }

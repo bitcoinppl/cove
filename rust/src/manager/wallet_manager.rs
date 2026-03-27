@@ -248,6 +248,9 @@ pub enum WalletManagerError {
 
     #[error("Unable to add UTXOs to PSBT: {0}")]
     AddUtxosError(String),
+
+    #[error("Wallet database corrupted for {id}: {error}")]
+    DatabaseCorruption { id: WalletId, error: String },
 }
 
 #[uniffi::export(async_runtime = "tokio")]
@@ -292,7 +295,9 @@ impl RustWalletManager {
             WalletLoadState::Scanning(cached_transactions)
         };
 
-        let actor = task::spawn_actor(WalletActor::new(wallet, sender.clone()));
+        let wallet_actor = WalletActor::new(wallet, sender.clone())
+            .map_err(|e| Error::DatabaseCorruption { id: id.clone(), error: e.to_string() })?;
+        let actor = task::spawn_actor(wallet_actor);
 
         // will only create the scanner if its not already complete
         let scanner = WalletScanner::try_new(metadata.clone(), sender).ok().map(spawn_actor);
@@ -365,7 +370,9 @@ impl RustWalletManager {
         let scanner =
             WalletScanner::try_new(metadata.clone(), sender.clone()).ok().map(spawn_actor);
 
-        let actor = task::spawn_actor(WalletActor::new(wallet, sender.clone()));
+        let wallet_actor = WalletActor::new(wallet, sender.clone())
+            .map_err(|e| Error::DatabaseCorruption { id: id.clone(), error: e.to_string() })?;
+        let actor = task::spawn_actor(wallet_actor);
         let label_manager = LabelManager::new(id.clone()).into();
 
         Ok(Self {
@@ -393,7 +400,9 @@ impl RustWalletManager {
         let id = wallet.id.clone();
         let metadata = wallet.metadata.clone();
 
-        let actor = task::spawn_actor(WalletActor::new(wallet, sender.clone()));
+        let wallet_actor = WalletActor::new(wallet, sender.clone())
+            .map_err(|e| Error::DatabaseCorruption { id: id.clone(), error: e.to_string() })?;
+        let actor = task::spawn_actor(wallet_actor);
         let label_manager = LabelManager::new(id.clone()).into();
 
         Ok(Self {
@@ -513,12 +522,12 @@ impl RustWalletManager {
                         max_version: version,
                     },
                 )
-                .map_err(|e| Error::UnknownError(format!("BBQr encoding failed: {e}")))?;
+                .map_err_prefix("BBQr encoding failed", Error::UnknownError)?;
 
                 Ok(split.parts)
             })
             .await
-            .map_err(|e| Error::UnknownError(e.to_string()))?
+            .map_err_str(Error::UnknownError)?
         })
         .await
     }
@@ -532,8 +541,8 @@ impl RustWalletManager {
         with_loading_popup(async move {
             let txns_with_prices = call!(actor.txns_with_prices())
                 .await
-                .map_err(|e| Error::TransactionsRetrievalError(e.to_string()))?
-                .map_err(|e| Error::GetHistoricalPricesError(e.to_string()))?;
+                .map_err_str(Error::TransactionsRetrievalError)?
+                .map_err_str(Error::GetHistoricalPricesError)?;
 
             cove_tokio::task::spawn_blocking(move || {
                 let fiat_currency =
@@ -553,7 +562,7 @@ impl RustWalletManager {
                 Ok(TransactionExportResult { content: csv.into_string(), filename })
             })
             .await
-            .map_err(|e| Error::CsvCreationError(e.to_string()))?
+            .map_err_str(Error::CsvCreationError)?
         })
         .await
     }
@@ -844,7 +853,7 @@ impl RustWalletManager {
                     .map_err_str(Error::TransactionDetailsError)
             })
             .await
-            .map_err(|e| Error::TransactionDetailsError(e.to_string()))??;
+            .map_err_str(Error::TransactionDetailsError)??;
 
             // for unconfirmed transactions, trigger a background sync to update status
             // this uses SyncRequest with just this txid so it's fast
@@ -937,7 +946,7 @@ impl RustWalletManager {
         Database::global()
             .wallets
             .update_wallet_metadata(metadata.clone())
-            .map_err(|e| Error::SetWalletTypeError(format!("{e:?}")))?;
+            .map_err_debug(Error::SetWalletTypeError)?;
 
         *self.metadata.write() = metadata.clone();
         self.reconciler.send(Message::WalletMetadataChanged(metadata));
@@ -1361,7 +1370,9 @@ impl RustWalletManager {
 
         let wallet = Wallet::preview_new_wallet();
         let label_manager = LabelManager::new(wallet.metadata.id.clone()).into();
-        let actor = task::spawn_actor(WalletActor::new(wallet, sender.clone()));
+        let wallet_actor = WalletActor::new(wallet, sender.clone())
+            .expect("failed to open wallet database for preview wallet");
+        let actor = task::spawn_actor(wallet_actor);
 
         Self {
             id: metadata.id.clone(),
@@ -1436,7 +1447,7 @@ fn get_public_descriptor_content(id: &WalletId) -> Result<String, Error> {
 
     // fallback to loading from BDK wallet
     let wallet = Wallet::try_load_persisted(id.clone())
-        .map_err(|e| Error::UnknownError(format!("failed to load wallet: {e}")))?;
+        .map_err_prefix("failed to load wallet", Error::UnknownError)?;
 
     let external = wallet.bdk.public_descriptor(bdk_wallet::KeychainKind::External);
     let internal = wallet.bdk.public_descriptor(bdk_wallet::KeychainKind::Internal);
@@ -1445,6 +1456,8 @@ fn get_public_descriptor_content(id: &WalletId) -> Result<String, Error> {
 }
 
 #[uniffi::export]
-fn wallet_state_is_equal(lhs: WalletLoadState, rhs: WalletLoadState) -> bool {
-    lhs == rhs
+impl WalletLoadState {
+    fn is_equal(&self, other: WalletLoadState) -> bool {
+        self == &other
+    }
 }

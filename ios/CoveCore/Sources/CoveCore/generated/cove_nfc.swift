@@ -1553,8 +1553,7 @@ public func FfiConverterTypeTextPayload_lower(_ value: TextPayload) -> RustBuffe
     return FfiConverterTypeTextPayload.lower(value)
 }
 
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 
 public enum NdefPayload: Equatable, Hashable {
     
@@ -1636,8 +1635,7 @@ public func FfiConverterTypeNdefPayload_lower(_ value: NdefPayload) -> RustBuffe
 }
 
 
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 
 public enum NdefType: Equatable, Hashable {
     
@@ -1746,7 +1744,8 @@ public func FfiConverterTypeNdefType_lower(_ value: NdefType) -> RustBuffer {
 
 
 
-public enum NfcMessageError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
+public 
+enum NfcMessageError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -1816,7 +1815,8 @@ public func FfiConverterTypeNfcMessageError_lower(_ value: NfcMessageError) -> R
 }
 
 
-public enum NfcReaderError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
+public 
+enum NfcReaderError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -1901,8 +1901,7 @@ public func FfiConverterTypeNfcReaderError_lower(_ value: NfcReaderError) -> Rus
     return FfiConverterTypeNfcReaderError.lower(value)
 }
 
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 
 public enum ParseResult: Equatable, Hashable {
     
@@ -1981,8 +1980,7 @@ public func FfiConverterTypeParseResult_lower(_ value: ParseResult) -> RustBuffe
 }
 
 
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 
 public enum ParserState: Equatable, Hashable {
     
@@ -2059,7 +2057,8 @@ public func FfiConverterTypeParserState_lower(_ value: ParserState) -> RustBuffe
 
 
 
-public enum ResumeError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
+public 
+enum ResumeError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -2172,8 +2171,7 @@ public func FfiConverterTypeResumeError_lower(_ value: ResumeError) -> RustBuffe
     return FfiConverterTypeResumeError.lower(value)
 }
 
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 
 public enum TextPayloadFormat: Equatable, Hashable {
     

@@ -280,8 +280,10 @@ fn parse_node_url(url: &str) -> eyre::Result<Url> {
 }
 
 #[uniffi::export]
-fn node_selection_to_node(node: NodeSelection) -> Node {
-    node.into()
+impl NodeSelection {
+    fn to_node(&self) -> Node {
+        self.clone().into()
+    }
 }
 
 #[uniffi::export]

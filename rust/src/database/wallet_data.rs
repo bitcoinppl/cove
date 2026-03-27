@@ -10,7 +10,7 @@ use once_cell::sync::Lazy;
 use parking_lot::RwLock;
 use redb::{ReadOnlyTable, TableDefinition};
 use serde::{Deserialize, Serialize};
-use tracing::{debug, error, info};
+use tracing::debug;
 
 use crate::wallet::{WalletAddressType, metadata::WalletId};
 use cove_common::consts::WALLET_DATA_DIR;
@@ -31,7 +31,7 @@ fn database_location(id: &WalletId, location: &Path) -> PathBuf {
     dir.join("wallet_data.json")
 }
 
-const TABLE: TableDefinition<&'static str, Json<WalletData>> =
+pub(crate) const TABLE: TableDefinition<&'static str, Json<WalletData>> =
     TableDefinition::new("wallet_data.json");
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -86,28 +86,30 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 impl WalletDataDb {
     /// Gets an existing database or creates a new one
-    pub fn new_or_existing(id: WalletId) -> Self {
+    pub fn new_or_existing(id: WalletId) -> Result<Self> {
         Self::new_with_db_location(id, &WALLET_DATA_DIR)
     }
 
-    #[cfg(test)]
-    pub fn new_test(id: WalletId) -> Self {
-        let tmp = tempfile::tempdir().expect("failed to create temp dir");
-        Self::new_with_db_location(id, tmp.path())
-    }
-
-    fn new_with_db_location(id: WalletId, db_location: &Path) -> Self {
-        let db = get_or_create_database(&id, db_location);
-        let write_txn = db.begin_write().expect("failed to begin write transaction");
+    fn new_with_db_location(id: WalletId, db_location: &Path) -> Result<Self> {
+        let db = get_or_create_database(&id, db_location)?;
+        let write_txn = db.begin_write().map_err(|e| WalletDataError::DatabaseAccess {
+            id: id.clone(),
+            error: e.to_string(),
+        })?;
 
         // create table if it doesn't exist
-        write_txn.open_table(TABLE).expect("failed to create table");
+        write_txn
+            .open_table(TABLE)
+            .map_err(|e| WalletDataError::TableAccess { id: id.clone(), error: e.to_string() })?;
         let labels = LabelsTable::new(db.clone(), &write_txn);
 
         // commit the write transaction
-        write_txn.commit().expect("failed to commit write transaction");
+        write_txn.commit().map_err(|e| WalletDataError::DatabaseAccess {
+            id: id.clone(),
+            error: e.to_string(),
+        })?;
 
-        Self { id, db, labels }
+        Ok(Self { id, db, labels })
     }
 
     pub fn get_scan_state(&self, address_type: WalletAddressType) -> Result<Option<ScanState>> {
@@ -185,41 +187,25 @@ impl WalletDataDb {
 }
 
 /// Get an existing database or create a new one
-pub fn get_or_create_database(id: &WalletId, location: &Path) -> Arc<redb::Database> {
-    let database_location = database_location(id, location);
+pub fn get_or_create_database(id: &WalletId, location: &Path) -> Result<Arc<redb::Database>> {
+    let path = database_location(id, location);
 
     // check if we already have a database connection for this id and return it
     {
         let db_connections = DATABASE_CONNECTIONS.read();
         if let Some(db) = db_connections.get(id) {
-            return db.clone();
+            return Ok(db.clone());
         }
     }
 
-    if database_location.exists() {
-        let db = redb::Database::open(&database_location);
-        match db {
-            Ok(db) => {
-                let mut db_connections = DATABASE_CONNECTIONS.write();
-                let db = Arc::new(db);
-                db_connections.insert(id.clone(), db.clone());
+    let db = super::encrypted_backend::open_or_create_database(&path)
+        .map_err(|e| WalletDataError::DatabaseAccess { id: id.clone(), error: e.to_string() })?;
 
-                return db;
-            }
-            Err(error) => {
-                error!("failed to open database for {id}, error: {error:?}, creating a new one");
-            }
-        }
-    }
-
-    info!("Creating a new database for wallet {id}, at {}", database_location.display());
-
-    let db = redb::Database::create(&database_location).expect("failed to create database");
     let mut db_connections = DATABASE_CONNECTIONS.write();
     let db = Arc::new(db);
     db_connections.insert(id.clone(), db.clone());
 
-    db
+    Ok(db)
 }
 
 pub fn delete_database(id: &WalletId) -> Result<(), std::io::Error> {
@@ -254,5 +240,16 @@ impl ScanningInfo {
 impl From<ScanningInfo> for ScanState {
     fn from(info: ScanningInfo) -> Self {
         Self::Scanning(info)
+    }
+}
+
+#[cfg(test)]
+impl WalletDataDb {
+    pub fn new_test(id: WalletId) -> (Self, tempfile::TempDir) {
+        super::encrypted_backend::set_test_encryption_key();
+        DATABASE_CONNECTIONS.write().remove(&id);
+        let tmp = tempfile::tempdir().expect("failed to create temp dir");
+        let db = Self::new_with_db_location(id, tmp.path()).expect("failed to create test db");
+        (db, tmp)
     }
 }

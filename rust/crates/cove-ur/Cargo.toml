@@ -17,6 +17,7 @@ foundation-ur = { workspace = true }
 pubport = { workspace = true }
 hex = { workspace = true }
 tracing = { workspace = true }
+cove-util = { path = "../cove-util" }
 
 [dev-dependencies]
 serde_json = { workspace = true }

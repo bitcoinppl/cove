@@ -42,7 +42,7 @@ struct WalletSettingsView: View {
                 HStack {
                     Text("Network")
                     Spacer()
-                    Text(metadata.network.toString())
+                    Text(metadata.network.description)
                         .foregroundColor(.secondary)
                 }
                 .font(.subheadline)

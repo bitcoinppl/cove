@@ -80,12 +80,12 @@ impl_default_for!(FiatClient);
 
 impl FiatClient {
     fn new() -> Self {
-        Self { url: CURRENCY_URL.to_string(), client: crate::http_client::new_client() }
+        Self { url: CURRENCY_URL.to_string(), client: cove_http::new_client() }
     }
 
     #[allow(dead_code)]
     fn new_with_url(url: String) -> Self {
-        Self { url, client: crate::http_client::new_client() }
+        Self { url, client: cove_http::new_client() }
     }
 
     /// Sync method using cached prices only, returns None if no cache
@@ -295,6 +295,7 @@ mod tests {
 
     #[tokio::test]
     async fn run_all_tests() {
+        let _ = rustls::crypto::ring::default_provider().install_default();
         test_get_prices().await;
         test_get_price_for().await;
         test_get_value_in_usd().await;

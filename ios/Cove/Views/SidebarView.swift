@@ -109,30 +109,26 @@ struct SidebarView: View {
                         .overlay(.coveLightGray)
                         .opacity(0.50)
 
-                    HStack {
-                        Button(action: { goTo(RouteFactory().newWalletSelect()) }) {
-                            HStack(spacing: 20) {
-                                Image(systemName: "wallet.bifold")
-                                Text("Add Wallet")
-                                    .font(.callout)
-                            }
-                            .foregroundColor(.white)
+                    Button(action: { goTo(RouteFactory().newWalletSelect()) }) {
+                        HStack(spacing: 20) {
+                            Image(systemName: "wallet.bifold")
+                            Text("Add Wallet")
+                                .font(.callout)
+                            Spacer()
                         }
-
-                        Spacer()
+                        .foregroundColor(.white)
+                        .contentShape(Rectangle())
                     }
 
-                    HStack {
-                        Button(action: { goTo(Route.settings(.main)) }) {
-                            HStack(spacing: 22) {
-                                Image(systemName: "gear")
-                                Text("Settings")
-                                    .font(.callout)
-                            }
-                            .foregroundColor(.white)
+                    Button(action: { goTo(Route.settings(.main)) }) {
+                        HStack(spacing: 22) {
+                            Image(systemName: "gear")
+                            Text("Settings")
+                                .font(.callout)
+                            Spacer()
                         }
-
-                        Spacer()
+                        .foregroundColor(.white)
+                        .contentShape(Rectangle())
                     }
                 }
             }

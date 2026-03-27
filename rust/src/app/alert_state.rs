@@ -42,6 +42,9 @@ pub enum AppAlertState {
     TapSignerNoBackup { tap_signer: Arc<TapSigner> },
     TapSignerWrongPin { tap_signer: Arc<TapSigner>, action: AfterPinAction },
 
+    // database corruption
+    WalletDatabaseCorrupted { wallet_id: WalletId, error: String },
+
     // generic message or error
     General { title: String, message: String },
 
@@ -91,6 +94,7 @@ impl AppAlertState {
             Self::TapSignerWalletFound { .. } => "Wallet Found",
             Self::InitializedTapSigner { .. } => "Import TAPSIGNER?",
             Self::TapSignerNoBackup { .. } => "No Backup Found",
+            Self::WalletDatabaseCorrupted { .. } => "Wallet Database Error",
             Self::General { title, .. } => title,
             Self::Loading => "Working on it...",
         }
@@ -199,6 +203,9 @@ impl AppAlertState {
             Self::TapSignerNoBackup { .. } => {
                 "Can't change the PIN without taking a backup of the wallet. Would you like to take a backup now?"
                     .to_string()
+            }
+            Self::WalletDatabaseCorrupted { error, .. } => {
+                format!("The wallet database is corrupted and cannot be opened. You can delete this wallet and re-import it to fix the issue.\n\nError: {error}")
             }
             Self::General { message, .. } => message.clone(),
             Self::Loading => String::new(),

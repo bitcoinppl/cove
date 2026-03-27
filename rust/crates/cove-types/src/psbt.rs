@@ -1,5 +1,6 @@
 use bdk_wallet::psbt::PsbtUtils as _;
 use bitcoin::{Amount as BdkAmount, TxIn, TxOut};
+use cove_util::ResultExt as _;
 use derive_more::{AsRef, Deref, From, Into};
 use std::fmt::Debug;
 
@@ -48,7 +49,7 @@ impl Psbt {
     #[uniffi::constructor(name = "new")]
     #[allow(clippy::needless_pass_by_value)] // uniffi requires Vec by value
     pub fn try_new(data: Vec<u8>) -> Result<Self> {
-        let psbt = BdkPsbt::deserialize(&data).map_err(|e| PsbtError::Other(e.to_string()))?;
+        let psbt = BdkPsbt::deserialize(&data).map_err_str(PsbtError::Other)?;
         Ok(psbt.into())
     }
 

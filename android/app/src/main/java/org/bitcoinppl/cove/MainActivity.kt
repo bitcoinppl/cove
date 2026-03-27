@@ -37,6 +37,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -65,6 +66,11 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.flows.TapSignerFlow.TapSignerContainer
 import org.bitcoinppl.cove.navigation.CoveNavDisplay
 import org.bitcoinppl.cove.nfc.NfcScanSheet
@@ -73,7 +79,13 @@ import org.bitcoinppl.cove.sidebar.SidebarContainer
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove.views.LockView
 import org.bitcoinppl.cove.views.TermsAndConditionsSheet
+import org.bitcoinppl.cove_core.bootstrap
+import org.bitcoinppl.cove_core.activeMigration
+import org.bitcoinppl.cove_core.bootstrapProgress
+import org.bitcoinppl.cove_core.cancelBootstrap
 import org.bitcoinppl.cove_core.AfterPinAction
+import org.bitcoinppl.cove_core.AppInitException
+import org.bitcoinppl.cove_core.BootstrapStep
 import org.bitcoinppl.cove_core.AlertDisplayType
 import org.bitcoinppl.cove_core.AppAction
 import org.bitcoinppl.cove_core.AppAlertState
@@ -93,9 +105,11 @@ import org.bitcoinppl.cove_core.types.ColorSchemeSelection
 class MainActivity : FragmentActivity() {
     // view-based privacy cover - updates synchronously (unlike Compose state)
     private var privacyCoverView: View? = null
+    private var isBootstrapped = false
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
+        if (!isBootstrapped) return
         // only toggle FLAG_SECURE here (invisible to user)
         // privacy cover is handled in onPause/onResume to avoid false positives from internal popups
         if (!hasFocus && Auth.isAuthEnabled) {
@@ -110,6 +124,7 @@ class MainActivity : FragmentActivity() {
 
     override fun onPause() {
         super.onPause()
+        if (!isBootstrapped) return
         // show cover only on actual app transitions (not internal popups like DropdownMenu)
         if (Auth.isAuthEnabled) {
             privacyCoverView?.visibility = View.VISIBLE
@@ -122,6 +137,7 @@ class MainActivity : FragmentActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (!isBootstrapped) return
         privacyCoverView?.visibility = View.GONE
         window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
 
@@ -153,6 +169,112 @@ class MainActivity : FragmentActivity() {
         TapCardNfcManager.getInstance().initialize(this)
 
         setContent {
+            var bootstrapped by remember { mutableStateOf(false) }
+            var bootstrapError by remember { mutableStateOf<String?>(null) }
+            var bdkMigrationWarning by remember { mutableStateOf<String?>(null) }
+
+            if (!bootstrapped) {
+                if (bootstrapError != null) {
+                    BootstrapErrorView(errorMessage = bootstrapError!!)
+                } else {
+                    var showSpinner by remember { mutableStateOf(false) }
+                    var splashStatus by remember { mutableStateOf<String?>(null) }
+                    var encryptionProgress by remember { mutableStateOf<Float?>(null) }
+
+                    SplashLoadingView(
+                        showSpinner = showSpinner,
+                        statusMessage = splashStatus,
+                        progress = encryptionProgress,
+                    )
+
+                    LaunchedEffect(Unit) {
+                        delay(SPINNER_DELAY_MS)
+                        showSpinner = true
+                    }
+
+                    LaunchedEffect(Unit) {
+                        fun completeBootstrap(warning: String? = null) {
+                            splashStatus = null
+                            encryptionProgress = null
+                            (application as CoveApplication).onBootstrapComplete()
+                            val appInstance = AppManager.getInstance()
+                            appInstance.asyncRuntimeReady = true
+                            isBootstrapped = true
+                            bootstrapped = true
+                            bdkMigrationWarning = warning
+
+                            // non-blocking — initData preloads caches and prices but is not
+                            // required for core functionality, failures are logged but not surfaced to the user
+                            this@MainActivity.lifecycleScope.launch {
+                                appInstance.rust.initData()
+                                Log.d(TAG, "[STARTUP] initData completed")
+                            }
+                        }
+
+                        val warning: String?
+
+                        try {
+                            warning = runBootstrapWithWatchdog { status, progress ->
+                                splashStatus = status
+                                encryptionProgress = progress
+                            }
+                        } catch (e: BootstrapTimeoutException) {
+                            val step = bootstrapProgress()
+
+                            if (step == BootstrapStep.COMPLETE) {
+                                // BDK migration retries every launch, so any lost warning will surface next time
+                                Log.w(TAG, "[STARTUP] bootstrap completed despite timeout — migration warning (if any) was lost and will retry on next launch")
+                                completeBootstrap()
+                            } else {
+                                Log.e(TAG, "[STARTUP] bootstrap timed out, last step: $step")
+                                bootstrapError =
+                                    "App startup timed out. Please force-quit and try again.\n\nPlease contact feedback@covebitcoinwallet.com"
+                            }
+
+                            return@LaunchedEffect
+                        } catch (e: kotlinx.coroutines.CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            val step = bootstrapProgress()
+                            if (step == BootstrapStep.COMPLETE) {
+                                Log.w(TAG, "[STARTUP] bootstrap completed despite error — treating as success", e)
+                                completeBootstrap()
+                            } else if (e is AppInitException.AlreadyCalled) {
+                                Log.e(TAG, "[STARTUP] bootstrap already called at step: $step", e)
+                                bootstrapError =
+                                    "App initialization error. Please force-quit and restart."
+                            } else if (e is AppInitException.Cancelled) {
+                                Log.e(TAG, "[STARTUP] bootstrap cancelled at step: $step", e)
+                                bootstrapError =
+                                    "App startup timed out. Please force-quit and try again.\n\nPlease contact feedback@covebitcoinwallet.com"
+                            } else {
+                                Log.e(TAG, "[STARTUP] bootstrap failed at step: $step", e)
+                                bootstrapError = e.message ?: "Unknown error"
+                            }
+                            return@LaunchedEffect
+                        }
+
+                        completeBootstrap(warning)
+                    }
+                }
+                return@setContent
+            }
+
+            if (bdkMigrationWarning != null) {
+                AlertDialog(
+                    onDismissRequest = { bdkMigrationWarning = null },
+                    title = { Text("Encryption Migration Issue") },
+                    text = {
+                        Text(
+                            "Some wallet databases couldn't be encrypted. Your wallets still work and encryption will retry on next launch.\n\nIf this persists, please contact feedback@covebitcoinwallet.com"
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { bdkMigrationWarning = null }) { Text("OK") }
+                    },
+                )
+            }
+
             val app = remember { AppManager.getInstance() }
 
             // compute dark theme based on user preference
@@ -165,100 +287,47 @@ class MainActivity : FragmentActivity() {
                 }
 
             CoveTheme(darkTheme = darkTheme) {
-                var initError by remember { mutableStateOf<String?>(null) }
+                if (!app.isTermsAccepted) {
+                    // fullscreen blocking terms view (matches iOS behavior)
+                    FullScreenTermsView(app = app)
+                } else {
+                    val snackbarHostState = remember { SnackbarHostState() }
 
-                // initialize async runtime on start
-                LaunchedEffect(Unit) {
-                    try {
-                        app.rust.initOnStart()
-                        app.asyncRuntimeReady = true
-                        Log.d(TAG, "Async runtime initialized successfully")
-                        // dispatch initial updates now that runtime is ready
-                        app.dispatch(AppAction.UpdateFees)
-                        app.dispatch(AppAction.UpdateFiatPrices)
-                    } catch (e: Exception) {
-                        val errorMsg = "Failed to initialize async runtime: ${e.message}"
-                        Log.e(TAG, errorMsg, e)
-                        initError = errorMsg
-                    }
-                }
-
-                // show error, loading, or main UI
-                when {
-                    initError != null -> {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier.padding(16.dp),
-                            ) {
-                                Text(
-                                    text = "Initialization Error",
-                                    style = MaterialTheme.typography.headlineSmall,
-                                    color = MaterialTheme.colorScheme.error,
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    text = initError!!,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                )
-                            }
-                        }
-                    }
-                    app.asyncRuntimeReady -> {
-                        if (!app.isTermsAccepted) {
-                            // fullscreen blocking terms view (matches iOS behavior)
-                            FullScreenTermsView(app = app)
-                        } else {
-                            val snackbarHostState = remember { SnackbarHostState() }
-
-                            Scaffold(
-                                containerColor = Color.Transparent,
-                                contentWindowInsets = WindowInsets(0),
-                                snackbarHost = {
-                                    SnackbarHost(
-                                        hostState = snackbarHostState,
-                                        modifier = Modifier.padding(WindowInsets.navigationBars.asPaddingValues()),
-                                    )
-                                },
-                            ) { _ ->
-                                Box(modifier = Modifier.fillMaxSize()) {
-                                    LockView {
-                                        SidebarContainer(app = app) {
-                                            // NavDisplay handles transitions and back gestures
-                                            // key resets view when network/routeId changes
-                                            key(app.selectedNetwork, app.routeId) {
-                                                CoveNavDisplay(app = app)
-                                            }
-                                        }
+                    Scaffold(
+                        containerColor = Color.Transparent,
+                        contentWindowInsets = WindowInsets(0),
+                        snackbarHost = {
+                            SnackbarHost(
+                                hostState = snackbarHostState,
+                                modifier = Modifier.padding(WindowInsets.navigationBars.asPaddingValues()),
+                            )
+                        },
+                    ) { _ ->
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            LockView {
+                                SidebarContainer(app = app) {
+                                    // NavDisplay handles transitions and back gestures
+                                    // key resets view when network/routeId changes
+                                    key(app.selectedNetwork, app.routeId) {
+                                        CoveNavDisplay(app = app)
                                     }
-
-                                    // global sheet rendering
-                                    app.sheetState?.let { taggedState ->
-                                        SheetContent(
-                                            state = taggedState,
-                                            app = app,
-                                            onDismiss = { app.sheetState = null },
-                                        )
-                                    }
-
-                                    // global alert rendering
-                                    GlobalAlertHandler(
-                                        app = app,
-                                        snackbarHostState = snackbarHostState,
-                                    )
                                 }
                             }
-                        }
-                    }
-                    else -> {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            CircularProgressIndicator()
+
+                            // global sheet rendering
+                            app.sheetState?.let { taggedState ->
+                                SheetContent(
+                                    state = taggedState,
+                                    app = app,
+                                    onDismiss = { app.sheetState = null },
+                                )
+                            }
+
+                            // global alert rendering
+                            GlobalAlertHandler(
+                                app = app,
+                                snackbarHostState = snackbarHostState,
+                            )
                         }
                     }
                 }
@@ -300,7 +369,57 @@ class MainActivity : FragmentActivity() {
         privacyCoverView = container
     }
 
+    private suspend fun runBootstrapWithWatchdog(
+        onMigrationProgress: (status: String?, progress: Float?) -> Unit,
+    ): String? = coroutineScope {
+        val bootstrapDeferred = async { bootstrap() }
+        launch { watchBootstrap(bootstrapDeferred, onMigrationProgress) }
+        bootstrapDeferred.await()
+    }
+
+    private suspend fun watchBootstrap(
+        bootstrapDeferred: kotlinx.coroutines.Deferred<*>,
+        onMigrationProgress: (status: String?, progress: Float?) -> Unit,
+    ) {
+        val startTime = System.currentTimeMillis()
+        var migrationDetected = false
+        var progressCleared = true
+
+        while (bootstrapDeferred.isActive) {
+            delay(66)
+
+            val step = bootstrapProgress()
+            if (!migrationDetected && step.isMigrationInProgress()) {
+                migrationDetected = true
+            }
+
+            val progress = activeMigration()?.progress()
+            if (progress != null && progress.total > 0u) {
+                migrationDetected = true
+                progressCleared = false
+                onMigrationProgress("Encrypting data...", progress.current.toFloat() / progress.total.toFloat())
+            } else if (!progressCleared) {
+                progressCleared = true
+                onMigrationProgress(null, null)
+            }
+
+            val elapsed = System.currentTimeMillis() - startTime
+            // longer timeout to accommodate low-end Android hardware
+            val timeoutMs = if (migrationDetected) 60_000L else 20_000L
+            if (elapsed >= timeoutMs && bootstrapDeferred.isActive) {
+                Log.w(TAG, "[STARTUP] watchdog firing after ${elapsed}ms (timeout=${timeoutMs}ms, migration=$migrationDetected)")
+                cancelBootstrap()
+                throw BootstrapTimeoutException()
+            }
+        }
+    }
+
+    private class BootstrapTimeoutException : Exception("bootstrap timed out")
+
     companion object {
+        /** Delay before showing the loading spinner, in milliseconds.
+         *  Prevents a distracting spinner flash when bootstrap completes quickly */
+        const val SPINNER_DELAY_MS = 100L
         private const val TAG = "MainActivity"
     }
 }
@@ -799,6 +918,28 @@ private fun GlobalAlertDialog(
             )
         }
 
+        is AppAlertState.WalletDatabaseCorrupted -> {
+            AlertDialog(
+                onDismissRequest = onDismiss,
+                title = { Text(state.title()) },
+                text = { Text(state.message()) },
+                confirmButton = {
+                    Column(horizontalAlignment = Alignment.End) {
+                        TextButton(onClick = {
+                            onDismiss()
+                            app.rust.deleteCorruptedWallet(state.walletId)
+                        }) {
+                            Text("Delete Wallet", color = MaterialTheme.colorScheme.error)
+                        }
+                        TextButton(onClick = {
+                            onDismiss()
+                            app.rust.selectLatestOrNewWallet()
+                        }) { Text("Cancel") }
+                    }
+                },
+            )
+        }
+
         else -> {
             AlertDialog(
                 onDismissRequest = onDismiss,
@@ -808,6 +949,80 @@ private fun GlobalAlertDialog(
                     TextButton(onClick = onDismiss) { Text("OK") }
                 },
             )
+        }
+    }
+}
+
+@Composable
+private fun BootstrapErrorView(errorMessage: String) {
+    Box(
+        modifier = Modifier.fillMaxSize().background(Color.Black),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(16.dp),
+        ) {
+            Text(
+                "Storage Error",
+                style = MaterialTheme.typography.headlineSmall,
+                color = Color.White,
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                errorMessage,
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.White.copy(alpha = 0.7f),
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                "Please contact feedback@covebitcoinwallet.com for help",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(alpha = 0.5f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun SplashLoadingView(
+    showSpinner: Boolean,
+    statusMessage: String? = null,
+    progress: Float? = null,
+) {
+    Box(
+        modifier = Modifier.fillMaxSize().background(Color.Black),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Image(
+                painter = painterResource(id = R.drawable.cove_logo),
+                contentDescription = null,
+                modifier = Modifier.size(144.dp).clip(RoundedCornerShape(25.dp)),
+            )
+            if (showSpinner) {
+                Spacer(modifier = Modifier.height(24.dp))
+                CircularProgressIndicator(color = Color.White)
+            }
+
+            if (statusMessage != null) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    statusMessage,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White.copy(alpha = 0.7f),
+                )
+            }
+
+            if (progress != null) {
+                Spacer(modifier = Modifier.height(12.dp))
+                LinearProgressIndicator(
+                    progress = { progress },
+                    modifier = Modifier.fillMaxWidth(0.6f),
+                    color = Color.White,
+                    trackColor = Color.White.copy(alpha = 0.2f),
+                )
+            }
         }
     }
 }

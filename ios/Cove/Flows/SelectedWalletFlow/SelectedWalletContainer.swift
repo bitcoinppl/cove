@@ -21,6 +21,11 @@ struct SelectedWalletContainer: View {
         do {
             Log.debug("Getting wallet \(id)")
             manager = try app.getWalletManager(id: id)
+        } catch let WalletManagerError.DatabaseCorruption(walletId, errorMessage) {
+            Log.error("Wallet database corrupted for \(walletId): \(errorMessage)")
+            app.alertState = TaggedItem(
+                .walletDatabaseCorrupted(walletId: walletId, error: errorMessage)
+            )
         } catch {
             Log.error("Something went very wrong: \(error)")
             do {

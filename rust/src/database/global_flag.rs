@@ -15,6 +15,8 @@ pub const TABLE: TableDefinition<&'static str, bool> = TableDefinition::new("glo
 pub enum GlobalFlagKey {
     CompletedOnboarding,
     AcceptedTerms,
+    BetaFeaturesEnabled,
+    BetaImportExportEnabled,
 }
 
 #[derive(Debug, Clone, uniffi::Object)]

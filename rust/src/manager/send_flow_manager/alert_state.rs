@@ -15,7 +15,10 @@ impl SendFlowAlertState {
 }
 
 #[uniffi::export]
-fn address_error_to_alert_state(error: AddressError, address: String) -> SendFlowAlertState {
+fn send_flow_alert_state_from_address_error(
+    error: AddressError,
+    address: String,
+) -> SendFlowAlertState {
     SendFlowAlertState::from_address_error(error, address)
 }
 

@@ -730,7 +730,8 @@ public func FfiConverterTypeKeychain_lower(_ value: Keychain) -> UInt64 {
 
 
 
-public enum KeychainError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
+public 
+enum KeychainError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     

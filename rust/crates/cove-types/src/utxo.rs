@@ -162,30 +162,30 @@ impl From<KeychainKind> for UtxoType {
 
 // MARK: FFI
 #[uniffi::export]
-fn utxo_name(utxo: &Utxo) -> String {
-    utxo.name().to_string()
-}
+impl Utxo {
+    #[uniffi::method(name = "name")]
+    fn ffi_name(&self) -> String {
+        self.name().to_string()
+    }
 
-#[uniffi::export]
-#[allow(clippy::cast_possible_wrap)] // datetime is always valid timestamp
-fn utxo_date(utxo: &Utxo) -> String {
-    let Ok(timestamp) = jiff::Timestamp::from_second(utxo.datetime as i64) else {
-        return String::new();
-    };
+    #[allow(clippy::cast_possible_wrap)]
+    fn date(&self) -> String {
+        let Ok(timestamp) = jiff::Timestamp::from_second(self.datetime as i64) else {
+            return String::new();
+        };
 
-    timestamp.strftime("%b %d, %Y").to_string()
-}
+        timestamp.strftime("%b %d, %Y").to_string()
+    }
 
-#[uniffi::export]
-fn utxo_hash_to_uint(utxo: &Utxo) -> u64 {
-    let mut hasher = std::hash::DefaultHasher::new();
-    utxo.hash(&mut hasher);
-    hasher.finish()
-}
+    fn hash_to_uint(&self) -> u64 {
+        let mut hasher = std::hash::DefaultHasher::new();
+        self.hash(&mut hasher);
+        hasher.finish()
+    }
 
-#[uniffi::export]
-fn utxo_is_equal(lhs: &Utxo, rhs: &Utxo) -> bool {
-    lhs == rhs
+    fn is_equal(&self, other: &Utxo) -> bool {
+        self == other
+    }
 }
 
 // MARK: FFI PREVIEW

@@ -1,3 +1,4 @@
+use cove_util::ResultExt as _;
 use std::hash::Hash;
 use std::str::FromStr as _;
 use std::{hash::Hasher, sync::Arc};
@@ -147,7 +148,7 @@ impl Address {
         let script = output.script_pubkey.clone().into_boxed_script();
 
         let address = BdkAddress::from_script(&script, Params::from(network))
-            .map_err(|e| Error::ScriptError(e.to_string()))?;
+            .map_err_str(Error::ScriptError)?;
 
         Ok(Self::new(address))
     }

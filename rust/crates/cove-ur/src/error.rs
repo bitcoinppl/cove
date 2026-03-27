@@ -1,3 +1,4 @@
+use cove_util::ResultExt as _;
 use thiserror::Error;
 
 #[derive(Debug, Error, Clone, PartialEq, Eq, uniffi::Error)]
@@ -59,10 +60,10 @@ pub trait ToUrError<T> {
 
 impl<T, E: std::fmt::Display> ToUrError<T> for std::result::Result<T, E> {
     fn map_err_cbor_encode(self) -> Result<T> {
-        self.map_err(|e| UrError::CborEncodeError(e.to_string()))
+        self.map_err_str(UrError::CborEncodeError)
     }
 
     fn map_err_cbor_decode(self) -> Result<T> {
-        self.map_err(|e| UrError::CborDecodeError(e.to_string()))
+        self.map_err_str(UrError::CborDecodeError)
     }
 }

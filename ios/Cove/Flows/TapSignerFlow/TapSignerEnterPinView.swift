@@ -15,7 +15,7 @@ struct TapSignerEnterPin: View {
     let action: AfterPinAction
 
     var message: String {
-        action.userMessage
+        action.userMessage()
     }
 
     // private
@@ -51,7 +51,7 @@ struct TapSignerEnterPin: View {
             case let .success(deriveInfo):
                 manager.resetRoute(to: .importSuccess(tapSigner, deriveInfo))
             case let .failure(error):
-                if error.isAuthError {
+                if error.isAuthError() {
                     app.sheetState = nil
                     app.alertState = .init(.tapSignerWrongPin(tapSigner: tapSigner, action: .derive))
                 } else {
@@ -80,7 +80,7 @@ struct TapSignerEnterPin: View {
                 }
 
             case let .failure(error):
-                if error.isAuthError {
+                if error.isAuthError() {
                     app.sheetState = nil
                     app.alertState = .init(.tapSignerWrongPin(tapSigner: tapSigner, action: .backup))
                 } else {
@@ -125,7 +125,7 @@ struct TapSignerEnterPin: View {
                     }
                 }
             case let .failure(error):
-                if error.isAuthError {
+                if error.isAuthError() {
                     app.sheetState = nil
                     app.alertState = .init(.tapSignerWrongPin(tapSigner: tapSigner, action: .sign(psbt)))
                 } else {

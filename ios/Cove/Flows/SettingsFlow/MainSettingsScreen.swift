@@ -13,6 +13,10 @@ private enum SheetState: Equatable {
     case enableBiometric
     case enableWipeDataPin
     case enableDecoyPin
+    case backupExport
+    case backupImport
+    case backupVerify
+    case backupExportAuth
 }
 
 private enum AlertState: Equatable {
@@ -24,6 +28,7 @@ private enum AlertState: Equatable {
     case noteNoFaceIdWhenDecoyPin
     case notePinRequired
     indirect case noteFaceIdDisabling(AlertState)
+    case confirmBetaImportExport
     case extraSetPinError(String)
 }
 
@@ -42,6 +47,10 @@ struct MainSettingsScreen: View {
     @State private var isDecoyPinEnabled: Bool = false
     @State private var isFaceIdEnabled: Bool = false
     @State private var isWipeDataPinEnabled: Bool = false
+
+    /// beta features
+    @State private var isBetaEnabled = Database().globalFlag().getBoolConfig(key: .betaFeaturesEnabled)
+    @State private var isBetaImportExportEnabled = Database().globalFlag().getBoolConfig(key: .betaImportExportEnabled)
 
     let themes = allColorSchemes()
 
@@ -214,24 +223,96 @@ struct MainSettingsScreen: View {
         }
     }
 
-    var body: some View {
-        ZStack(alignment: .bottom) {
-            VStack {
-                HStack { Text(app.rust.debugOrRelease()) }
-                HStack { Text(app.fullVersionId) }
-                HStack { Text("feedback@covebitcoinwallet.com") }
-            }
-            .foregroundStyle(Color(UIColor.tertiaryLabel))
-            .font(.caption2)
-            .tint(Color(UIColor.tertiaryLabel))
+    @ViewBuilder
+    var BackupSection: some View {
+        if isBetaEnabled, isBetaImportExportEnabled, !auth.isInDecoyMode() {
+            Section(header: HStack(spacing: 6) {
+                Text("Backup")
+                Text("BETA")
+                    .font(.caption2)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(.orange, in: Capsule())
+            }) {
+                SettingsRow(title: "Export All", symbol: "square.and.arrow.up") {
+                    if auth.type != .none {
+                        sheetState = .init(.backupExportAuth)
+                    } else {
+                        sheetState = .init(.backupExport)
+                    }
+                }
 
-            Form {
-                GeneralSection
-                WalletSettingsSection()
-                SecuritySection
+                SettingsRow(title: "Import All", symbol: "square.and.arrow.down") {
+                    sheetState = .init(.backupImport)
+                }
+
+                SettingsRow(title: "Verify Backup", symbol: "checkmark.shield") {
+                    sheetState = .init(.backupVerify)
+                }
+            }
+        }
+    }
+
+    var betaToggle: Binding<Bool> {
+        Binding(
+            get: { isBetaEnabled },
+            set: { newValue in
+                try? Database().globalFlag().set(key: .betaFeaturesEnabled, value: newValue)
+                isBetaEnabled = newValue
+
+                if !newValue {
+                    try? Database().globalFlag().set(key: .betaImportExportEnabled, value: false)
+                    isBetaImportExportEnabled = false
+                }
+            }
+        )
+    }
+
+    var betaImportExportToggle: Binding<Bool> {
+        Binding(
+            get: { isBetaImportExportEnabled },
+            set: { newValue in
+                if newValue {
+                    alertState = .init(.confirmBetaImportExport)
+                } else {
+                    try? Database().globalFlag().set(key: .betaImportExportEnabled, value: false)
+                    isBetaImportExportEnabled = false
+                }
+            }
+        )
+    }
+
+    @ViewBuilder
+    var BetaToggleSection: some View {
+        if isBetaEnabled, !auth.isInDecoyMode() {
+            Section {
+                Toggle("Beta Features", isOn: betaToggle)
+                Toggle("Enable Beta Import Export", isOn: betaImportExportToggle)
+            } footer: {
+                Text("Disable to hide experimental features")
+            }
+        }
+    }
+
+    var body: some View {
+        Form {
+            GeneralSection
+            WalletSettingsSection()
+            SecuritySection
+            BackupSection
+            BetaToggleSection
+
+            Section {
+                SettingsRow(title: "About", route: .about, symbol: "info.circle")
             }
         }
         .scrollContentBackground(.hidden)
+        .onAppear {
+            isBetaEnabled = Database().globalFlag().getBoolConfig(key: .betaFeaturesEnabled)
+            isBetaImportExportEnabled = Database().globalFlag().getBoolConfig(key: .betaImportExportEnabled)
+        }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
         .fullScreenCover(item: $sheetState, content: SheetContent)
@@ -414,6 +495,20 @@ struct MainSettingsScreen: View {
                 }
             ).eraseToAny()
 
+        case .confirmBetaImportExport:
+            AlertBuilder(
+                title: "Experimental Feature",
+                message: "This is a very experimental feature. Use with caution. This is mostly used by developers for testing purposes.",
+                actions: {
+                    Button("Accept") {
+                        try? Database().globalFlag().set(key: .betaImportExportEnabled, value: true)
+                        isBetaImportExportEnabled = true
+                        alertState = .none
+                    }
+                    Button("Cancel", role: .cancel) { alertState = .none }
+                }
+            ).eraseToAny()
+
         case let .extraSetPinError(error):
             AlertBuilder(
                 title: "Something went wrong!",
@@ -578,6 +673,57 @@ struct MainSettingsScreen: View {
                     sheetState = .none
                 }
             )
+
+        case .backupExportAuth:
+            LockView(
+                lockType: auth.type,
+                isPinCorrect: { pin in
+                    if auth.isInDecoyMode() { return auth.checkDecoyPin(pin) }
+                    return auth.checkPin(pin)
+                },
+                onUnlock: { _ in
+                    if auth.isInDecoyMode() { sheetState = .none; return }
+                    sheetState = .init(.backupExport)
+                },
+                backAction: { sheetState = .none },
+                content: { EmptyView() }
+            )
+
+        case .backupExport:
+            NavigationStack {
+                BackupExportView()
+                    .navigationTitle("Export Backup")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Cancel") { sheetState = .none }
+                        }
+                    }
+            }
+
+        case .backupImport:
+            NavigationStack {
+                BackupImportView()
+                    .navigationTitle("Import Backup")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Cancel") { sheetState = .none }
+                        }
+                    }
+            }
+
+        case .backupVerify:
+            NavigationStack {
+                BackupVerifyView()
+                    .navigationTitle("Verify Backup")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Cancel") { sheetState = .none }
+                        }
+                    }
+            }
         }
     }
 

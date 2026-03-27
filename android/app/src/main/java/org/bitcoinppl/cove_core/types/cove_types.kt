@@ -644,8 +644,6 @@ external fun uniffi_cove_types_checksum_func_address_string_spaced_out(
 ): Short
 external fun uniffi_cove_types_checksum_func_all_color_schemes(
 ): Short
-external fun uniffi_cove_types_checksum_func_color_scheme_selection_capitalized_string(
-): Short
 external fun uniffi_cove_types_checksum_func_confirm_details_preview_new(
 ): Short
 external fun uniffi_cove_types_checksum_func_qr_density_is_equal(
@@ -665,14 +663,6 @@ external fun uniffi_cove_types_checksum_func_network_to_string(
 external fun uniffi_cove_types_checksum_func_all_units(
 ): Short
 external fun uniffi_cove_types_checksum_func_previewnewutxolist(
-): Short
-external fun uniffi_cove_types_checksum_func_utxo_date(
-): Short
-external fun uniffi_cove_types_checksum_func_utxo_hash_to_uint(
-): Short
-external fun uniffi_cove_types_checksum_func_utxo_is_equal(
-): Short
-external fun uniffi_cove_types_checksum_func_utxo_name(
 ): Short
 external fun uniffi_cove_types_checksum_method_address_hashtouint(
 ): Short
@@ -1232,13 +1222,25 @@ external fun uniffi_cove_types_fn_clone_utxolist(`handle`: Long,uniffi_out_err: 
 ): Long
 external fun uniffi_cove_types_fn_free_utxolist(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
+external fun uniffi_cove_types_fn_method_colorschemeselection_capitalized_string(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
 external fun uniffi_cove_types_fn_method_qrexportformat_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_types_fn_method_feespeed_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
+external fun uniffi_cove_types_fn_method_network_display_name(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
 external fun uniffi_cove_types_fn_method_network_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_types_fn_method_bitcoinunit_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_types_fn_method_utxo_date(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_cove_types_fn_method_utxo_hash_to_uint(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Long
+external fun uniffi_cove_types_fn_method_utxo_is_equal(`ptr`: RustBuffer.ByValue,`other`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Byte
+external fun uniffi_cove_types_fn_method_utxo_name(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_types_fn_method_utxo_uniffi_trait_eq_eq(`ptr`: RustBuffer.ByValue,`other`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
@@ -1253,8 +1255,6 @@ external fun uniffi_cove_types_fn_func_address_is_valid_for_network(`address`: R
 external fun uniffi_cove_types_fn_func_address_string_spaced_out(`address`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_types_fn_func_all_color_schemes(uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_func_color_scheme_selection_capitalized_string(`colorScheme`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_types_fn_func_confirm_details_preview_new(uniffi_out_err: UniffiRustCallStatus, 
 ): Long
@@ -1275,14 +1275,6 @@ external fun uniffi_cove_types_fn_func_network_to_string(`network`: RustBuffer.B
 external fun uniffi_cove_types_fn_func_all_units(uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_cove_types_fn_func_previewnewutxolist(`outputCount`: Byte,`changeCount`: Byte,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_func_utxo_date(`utxo`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_func_utxo_hash_to_uint(`utxo`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_func_utxo_is_equal(`lhs`: RustBuffer.ByValue,`rhs`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): Byte
-external fun uniffi_cove_types_fn_func_utxo_name(`utxo`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun ffi_cove_types_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
@@ -1415,9 +1407,6 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_types_checksum_func_all_color_schemes() != 49693.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_func_color_scheme_selection_capitalized_string() != 30731.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
     if (lib.uniffi_cove_types_checksum_func_confirm_details_preview_new() != 41030.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1446,18 +1435,6 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_func_previewnewutxolist() != 31621.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_types_checksum_func_utxo_date() != 26239.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_types_checksum_func_utxo_hash_to_uint() != 33471.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_types_checksum_func_utxo_is_equal() != 34078.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_types_checksum_func_utxo_name() != 48729.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_method_address_hashtouint() != 25307.toShort()) {
@@ -2363,6 +2340,11 @@ open class Address: Disposable, AutoCloseable, AddressInterface
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
 
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
     override fun destroy() {
         // Only allow a single call to this method.
         // TODO: maybe we should log a warning if called more than once?
@@ -2723,6 +2705,11 @@ open class AddressInfo: Disposable, AutoCloseable, AddressInfoInterface
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
 
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
     override fun destroy() {
         // Only allow a single call to this method.
         // TODO: maybe we should log a warning if called more than once?
@@ -3006,6 +2993,11 @@ open class AddressInfoWithDerivation: Disposable, AutoCloseable, AddressInfoWith
 
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
 
     override fun destroy() {
         // Only allow a single call to this method.
@@ -3329,6 +3321,11 @@ open class AddressWithNetwork: Disposable, AutoCloseable, AddressWithNetworkInte
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
 
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
     override fun destroy() {
         // Only allow a single call to this method.
         // TODO: maybe we should log a warning if called more than once?
@@ -3643,6 +3640,11 @@ open class Amount: Disposable, AutoCloseable, AmountInterface
 
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
 
     override fun destroy() {
         // Only allow a single call to this method.
@@ -4026,6 +4028,11 @@ open class ChainPosition: Disposable, AutoCloseable, ChainPositionInterface
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
 
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
     override fun destroy() {
         // Only allow a single call to this method.
         // TODO: maybe we should log a warning if called more than once?
@@ -4322,6 +4329,11 @@ open class ConfirmDetails: Disposable, AutoCloseable, ConfirmDetailsInterface
 
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
 
     override fun destroy() {
         // Only allow a single call to this method.
@@ -4836,6 +4848,11 @@ open class FeeRate: Disposable, AutoCloseable, FeeRateInterface
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
 
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
     override fun destroy() {
         // Only allow a single call to this method.
         // TODO: maybe we should log a warning if called more than once?
@@ -5110,6 +5127,11 @@ open class FeeRateOption: Disposable, AutoCloseable, FeeRateOptionInterface
 
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
 
     override fun destroy() {
         // Only allow a single call to this method.
@@ -5434,6 +5456,11 @@ open class FeeRateOptionWithTotalFee: Disposable, AutoCloseable, FeeRateOptionWi
 
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
 
     override fun destroy() {
         // Only allow a single call to this method.
@@ -5780,6 +5807,11 @@ open class FeeRateOptions: Disposable, AutoCloseable, FeeRateOptionsInterface
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
 
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
     override fun destroy() {
         // Only allow a single call to this method.
         // TODO: maybe we should log a warning if called more than once?
@@ -6082,6 +6114,11 @@ open class FeeRateOptionsWithTotalFee: Disposable, AutoCloseable, FeeRateOptions
 
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
 
     override fun destroy() {
         // Only allow a single call to this method.
@@ -6457,6 +6494,11 @@ open class InputOutputDetails: Disposable, AutoCloseable, InputOutputDetailsInte
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
 
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
     override fun destroy() {
         // Only allow a single call to this method.
         // TODO: maybe we should log a warning if called more than once?
@@ -6701,6 +6743,11 @@ open class OutPoint: Disposable, AutoCloseable, OutPointInterface
 
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
 
     override fun destroy() {
         // Only allow a single call to this method.
@@ -7059,6 +7106,11 @@ open class Psbt: Disposable, AutoCloseable, PsbtInterface
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
 
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
     override fun destroy() {
         // Only allow a single call to this method.
         // TODO: maybe we should log a warning if called more than once?
@@ -7413,6 +7465,11 @@ open class QrDensity: Disposable, AutoCloseable, QrDensityInterface
 
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
 
     override fun destroy() {
         // Only allow a single call to this method.
@@ -7781,6 +7838,11 @@ open class SentAndReceived: Disposable, AutoCloseable, SentAndReceivedInterface
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
 
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
     override fun destroy() {
         // Only allow a single call to this method.
         // TODO: maybe we should log a warning if called more than once?
@@ -8110,6 +8172,11 @@ open class TxId: Disposable, AutoCloseable, TxIdInterface
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
 
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
     override fun destroy() {
         // Only allow a single call to this method.
         // TODO: maybe we should log a warning if called more than once?
@@ -8407,6 +8474,11 @@ open class TxIn: Disposable, AutoCloseable, TxInInterface
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
 
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
     override fun destroy() {
         // Only allow a single call to this method.
         // TODO: maybe we should log a warning if called more than once?
@@ -8642,6 +8714,11 @@ open class TxOut: Disposable, AutoCloseable, TxOutInterface
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
 
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
     override fun destroy() {
         // Only allow a single call to this method.
         // TODO: maybe we should log a warning if called more than once?
@@ -8876,6 +8953,11 @@ open class UtxoList: Disposable, AutoCloseable, UtxoListInterface
 
     private val wasDestroyed = AtomicBoolean(false)
     private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
 
     override fun destroy() {
         // Only allow a single call to this method.
@@ -9225,6 +9307,46 @@ data class Utxo (
     var `type`: UtxoType
     
 ): Disposable{
+     fun `date`(): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_types_fn_method_utxo_date(FfiConverterTypeUtxo.lower(this),
+        _status)
+}
+    )
+    }
+    
+
+     fun `hashToUint`(): kotlin.ULong {
+            return FfiConverterULong.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_types_fn_method_utxo_hash_to_uint(FfiConverterTypeUtxo.lower(this),
+        _status)
+}
+    )
+    }
+    
+
+     fun `isEqual`(`other`: Utxo): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_types_fn_method_utxo_is_equal(FfiConverterTypeUtxo.lower(this),
+        FfiConverterTypeUtxo.lower(`other`),_status)
+}
+    )
+    }
+    
+
+     fun `name`(): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_types_fn_method_utxo_name(FfiConverterTypeUtxo.lower(this),
+        _status)
+}
+    )
+    }
+    
+
     
 
     
@@ -9506,6 +9628,16 @@ enum class ColorSchemeSelection {
     LIGHT,
     DARK,
     SYSTEM;
+
+     fun `capitalizedString`(): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_types_fn_method_colorschemeselection_capitalized_string(FfiConverterTypeColorSchemeSelection.lower(this),
+        _status)
+}
+    )
+    }
+    
 
     
 
@@ -10084,6 +10216,16 @@ enum class Network {
     TESTNET,
     TESTNET4,
     SIGNET;
+
+     fun `displayName`(): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_types_fn_method_network_display_name(FfiConverterTypeNetwork.lower(this),
+        _status)
+}
+    )
+    }
+    
 
     
 
@@ -10701,16 +10843,6 @@ public typealias FfiConverterTypeWalletId = FfiConverterString
     )
     }
     
- fun `colorSchemeSelectionCapitalizedString`(`colorScheme`: ColorSchemeSelection): kotlin.String {
-            return FfiConverterString.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_types_fn_func_color_scheme_selection_capitalized_string(
-    
-        FfiConverterTypeColorSchemeSelection.lower(`colorScheme`),_status)
-}
-    )
-    }
-    
 
         /**
          * Preview `ConfirmDetails` for `SwiftUI` previews
@@ -10813,46 +10945,6 @@ public typealias FfiConverterTypeWalletId = FfiConverterString
     UniffiLib.uniffi_cove_types_fn_func_previewnewutxolist(
     
         FfiConverterUByte.lower(`outputCount`),FfiConverterUByte.lower(`changeCount`),_status)
-}
-    )
-    }
-    
- fun `utxoDate`(`utxo`: Utxo): kotlin.String {
-            return FfiConverterString.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_types_fn_func_utxo_date(
-    
-        FfiConverterTypeUtxo.lower(`utxo`),_status)
-}
-    )
-    }
-    
- fun `utxoHashToUint`(`utxo`: Utxo): kotlin.ULong {
-            return FfiConverterULong.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_types_fn_func_utxo_hash_to_uint(
-    
-        FfiConverterTypeUtxo.lower(`utxo`),_status)
-}
-    )
-    }
-    
- fun `utxoIsEqual`(`lhs`: Utxo, `rhs`: Utxo): kotlin.Boolean {
-            return FfiConverterBoolean.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_types_fn_func_utxo_is_equal(
-    
-        FfiConverterTypeUtxo.lower(`lhs`),FfiConverterTypeUtxo.lower(`rhs`),_status)
-}
-    )
-    }
-    
- fun `utxoName`(`utxo`: Utxo): kotlin.String {
-            return FfiConverterString.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_types_fn_func_utxo_name(
-    
-        FfiConverterTypeUtxo.lower(`utxo`),_status)
 }
     )
     }

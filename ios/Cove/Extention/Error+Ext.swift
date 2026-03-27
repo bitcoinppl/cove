@@ -10,13 +10,3 @@ extension TransportError {
         self = createTransportErrorFromCode(code: UInt16(code), message: message)
     }
 }
-
-extension TapSignerReaderError {
-    var isAuthError: Bool {
-        tapSignerErrorIsAuthError(error: self)
-    }
-
-    var isNoBackupError: Bool {
-        tapSignerErrorIsNoBackupError(error: self)
-    }
-}

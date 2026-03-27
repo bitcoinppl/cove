@@ -1,3 +1,4 @@
+use cove_util::result_ext::ResultExt as _;
 use tap::TapFallible as _;
 
 use crate::{
@@ -80,9 +81,8 @@ impl Converter {
             return Ok(0.0);
         }
 
-        let fiat_value = fiat_amount
-            .parse::<f64>()
-            .map_err(|e| Error::FiatAmountFromStringError(e.to_string()))?;
+        let fiat_value =
+            fiat_amount.parse::<f64>().map_err_str(Error::FiatAmountFromStringError)?;
 
         let fiat_value = (fiat_value * 100.0).floor() / 100.0;
         Ok(fiat_value)

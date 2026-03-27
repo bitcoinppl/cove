@@ -22,10 +22,24 @@ pub struct BdkStore {
 
 impl BdkStore {
     pub fn try_new(id: &WalletId, network: impl Into<Network>) -> Result<Self> {
+        crate::bootstrap::ensure_storage_bootstrapped()
+            .map_err(|e| eyre::eyre!("storage bootstrap failed: {e}"))?;
+
         let sqlite_data_path = sqlite_data_path(id);
+
+        // detect plaintext before opening so we can skip the encryption key
+        // (plaintext DBs remain when migration fails — they still work unencrypted)
+        let is_existing_plaintext = sqlite_data_path.exists()
+            && crate::database::migration::is_plaintext_sqlite(&sqlite_data_path);
 
         let conn = bdk_wallet::rusqlite::Connection::open(&sqlite_data_path)
             .context("unable to open rusqlite connection")?;
+
+        if !is_existing_plaintext {
+            let key = crate::database::encrypted_backend::encryption_key()
+                .expect("encryption key must be set");
+            conn.pragma_update(None, "key", format!("x'{}'", hex::encode(key)))?;
+        }
 
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "synchronous", "FULL")?;
@@ -154,7 +168,7 @@ fn remove_sqlite_auxiliary_files(db_path: &Path) {
     }
 }
 
-fn sqlite_auxiliary_path(db_path: &Path, suffix: &str) -> PathBuf {
+pub(crate) fn sqlite_auxiliary_path(db_path: &Path, suffix: &str) -> PathBuf {
     if let Some(ext) = db_path.extension() {
         let mut ext_string = ext.to_os_string();
         ext_string.push("-");

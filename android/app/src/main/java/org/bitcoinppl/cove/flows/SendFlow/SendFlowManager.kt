@@ -140,8 +140,8 @@ class SendFlowManager(
     fun validate(displayAlert: Boolean = false): Boolean {
         if (isClosed.get()) return false
         return validateAmount(displayAlert) &&
-            validateAddress(displayAlert) &&
-            validateFeePercentage(displayAlert)
+                validateAddress(displayAlert) &&
+                validateFeePercentage(displayAlert)
     }
 
     fun validateAddress(displayAlert: Boolean = false): Boolean = rust.validateAddress(displayAlert)
@@ -230,7 +230,7 @@ class SendFlowManager(
                     presenter.alertState = null
                     presenter.sheetState = null
                     mainScope.launch {
-                        delay(600)
+                        delay(ALERT_PRESENTATION_DELAY_MS)
                         presenter.alertState = TaggedItem(message.v1)
                     }
                 }
@@ -275,7 +275,7 @@ class SendFlowManager(
      */
     fun debouncedDispatch(
         action: SendFlowManagerAction,
-        debounceDelayMs: Long = 66,
+        debounceDelayMs: Long = DEFAULT_DEBOUNCE_MS,
     ) {
         debouncedTask?.cancel()
         debouncedTask = null
@@ -300,5 +300,23 @@ class SendFlowManager(
         debouncedTask = null
         mainScope.cancel()
         rust.close()
+    }
+
+    companion object {
+
+        /**
+         * delay before showing alert when another modal (sheet/alert) was visible
+         *
+         * allows previous modal dismiss animation to complete before presenting a new alert
+         * material3 bottom sheet dismiss animation ≈ 500ms → extra buffer prevents flicker
+         */
+        private const val ALERT_PRESENTATION_DELAY_MS = 600L
+
+        /**
+         * default debounce for amount input
+         * ~60fps target = 16.67ms per frame, 66ms = ~4 frames
+         * balances responsiveness vs rust bridge overhead
+         */
+        private const val DEFAULT_DEBOUNCE_MS = 66L
     }
 }

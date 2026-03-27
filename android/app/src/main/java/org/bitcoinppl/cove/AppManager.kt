@@ -12,6 +12,7 @@ import org.bitcoinppl.cove.flows.SendFlow.SendFlowManager
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowPresenter
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.AppAlertState
+import org.bitcoinppl.cove_core.device.KeychainException
 import org.bitcoinppl.cove_core.tapcard.*
 import org.bitcoinppl.cove_core.types.*
 import java.util.UUID
@@ -92,16 +93,6 @@ class AppManager private constructor() : FfiReconcile {
         Log.d(tag, "Initializing AppManager")
         rust.listenForUpdates(this)
         wallets = runCatching { Database().wallets().all() }.getOrElse { emptyList() }
-    }
-
-    companion object {
-        @Volatile
-        private var instance: AppManager? = null
-
-        fun getInstance(): AppManager =
-            instance ?: synchronized(this) {
-                instance ?: AppManager().also { instance = it }
-            }
     }
 
     /**
@@ -185,9 +176,11 @@ class AppManager private constructor() : FfiReconcile {
 
     fun findTapSignerWallet(ts: TapSigner): WalletMetadata? = rust.findTapSignerWallet(ts)
 
+    @Throws(KeychainException::class)
     fun getTapSignerBackup(ts: TapSigner): ByteArray? = rust.getTapSignerBackup(ts)
 
-    fun saveTapSignerBackup(ts: TapSigner, backup: ByteArray): Boolean = rust.saveTapSignerBackup(ts, backup)
+    fun saveTapSignerBackup(ts: TapSigner, backup: ByteArray): Boolean =
+        rust.saveTapSignerBackup(ts, backup)
 
     /**
      * reset the manager state
@@ -238,7 +231,7 @@ class AppManager private constructor() : FfiReconcile {
     fun closeSidebarAndNavigate(action: suspend () -> Unit) {
         isSidebarVisible = false
         mainScope.launch {
-            kotlinx.coroutines.delay(300)
+            kotlinx.coroutines.delay(SIDEBAR_NAVIGATION_DELAY_MS)
             action()
         }
     }
@@ -310,21 +303,27 @@ class AppManager private constructor() : FfiReconcile {
                         importHotWallet(mnemonic.words())
                     }
                 }
+
                 is MultiFormat.HardwareExport -> {
                     importColdWallet(multiFormat.v1)
                 }
+
                 is MultiFormat.Address -> {
                     handleAddress(multiFormat.v1)
                 }
+
                 is MultiFormat.Transaction -> {
                     handleTransaction(multiFormat.v1)
                 }
+
                 is MultiFormat.SignedPsbt -> {
                     handleSignedPsbt(multiFormat.v1)
                 }
+
                 is MultiFormat.TapSignerUnused -> {
                     alertState = TaggedItem(AppAlertState.UninitializedTapSigner(multiFormat.v1))
                 }
+
                 is MultiFormat.TapSignerReady -> {
                     val wallet = findTapSignerWallet(multiFormat.v1)
                     if (wallet != null) {
@@ -333,6 +332,7 @@ class AppManager private constructor() : FfiReconcile {
                         alertState = TaggedItem(AppAlertState.InitializedTapSigner(multiFormat.v1))
                     }
                 }
+
                 is MultiFormat.Bip329Labels -> {
                     val selectedWallet = database.globalConfig().selectedWallet()
                     if (selectedWallet == null) {
@@ -616,7 +616,7 @@ class AppManager private constructor() : FfiReconcile {
                     isLoading = true
                     loadWallets()
                     launch {
-                        kotlinx.coroutines.delay(200)
+                        kotlinx.coroutines.delay(MIN_LOADING_VISIBILITY_MS)
                         isLoading = false
                     }
                 }
@@ -645,6 +645,30 @@ class AppManager private constructor() : FfiReconcile {
     fun dispatch(action: AppAction) {
         Log.d(tag, "dispatch $action")
         rust.dispatch(action)
+    }
+
+    companion object {
+        @Volatile
+        private var instance: AppManager? = null
+
+        /**
+         * delay after closing sidebar before navigation action executes
+         *
+         * allows sidebar dismiss animation to complete to avoid visual jump
+         */
+        private const val SIDEBAR_NAVIGATION_DELAY_MS = 300L
+
+        /**
+         * minimum loading indicator visibility duration
+         *
+         * prevents loading flicker when wallet mode switches quickly
+         */
+        private const val MIN_LOADING_VISIBILITY_MS = 200L
+
+        fun getInstance(): AppManager =
+            instance ?: synchronized(this) {
+                instance ?: AppManager().also { instance = it }
+            }
     }
 }
 

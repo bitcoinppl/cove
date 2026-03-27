@@ -1,3 +1,4 @@
+use cove_util::ResultExt as _;
 use std::sync::Arc;
 
 use ahash::AHashMap as HashMap;
@@ -23,6 +24,7 @@ pub struct ConfirmDetails {
     pub sending_amount: Amount,
     pub fee_total: Amount,
     pub fee_rate: FeeRate,
+    #[serde(default)]
     pub fee_percentage: u64,
     pub sending_to: Address,
     pub psbt: Psbt,
@@ -310,7 +312,7 @@ impl ConfirmDetails {
                 max_version: version,
             },
         )
-        .map_err(|e| ConfirmDetailsError::QrCodeCreation(e.to_string()))?;
+        .map_err_str(ConfirmDetailsError::QrCodeCreation)?;
 
         Ok(split.parts)
     }

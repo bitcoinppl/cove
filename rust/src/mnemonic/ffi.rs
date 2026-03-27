@@ -2,13 +2,15 @@ use super::{Error, GroupedWord, Mnemonic, NumberOfBip39Words, WordAccess as _};
 use crate::wallet::metadata::WalletId;
 
 #[uniffi::export]
-pub fn number_of_words_in_groups(me: NumberOfBip39Words, of: u8) -> Vec<Vec<String>> {
-    me.in_groups_of(of as usize)
-}
+impl NumberOfBip39Words {
+    fn in_groups(&self, of: u8) -> Vec<Vec<String>> {
+        self.in_groups_of(of as usize)
+    }
 
-#[uniffi::export]
-pub fn number_of_words_to_word_count(me: NumberOfBip39Words) -> u8 {
-    me.to_word_count() as u8
+    #[uniffi::method(name = "toWordCount")]
+    fn ffi_to_word_count(&self) -> u8 {
+        self.to_word_count() as u8
+    }
 }
 
 #[uniffi::export]

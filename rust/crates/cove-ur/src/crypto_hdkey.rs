@@ -9,6 +9,7 @@
 //! 5. Derive macros cannot express this embedded CBOR pattern cleanly
 
 use bitcoin::bip32::{Xpriv, Xpub};
+use cove_util::ResultExt as _;
 use minicbor::{Decoder, Encoder, data::Tag};
 
 use crate::{
@@ -389,8 +390,8 @@ impl CryptoHdkey {
             return Err(UrError::MasterKeyNotAllowed);
         }
 
-        let public_key = PublicKey::from_slice(&self.key_data)
-            .map_err(|e| UrError::InvalidKeyData(e.to_string()))?;
+        let public_key =
+            PublicKey::from_slice(&self.key_data).map_err_str(UrError::InvalidKeyData)?;
 
         let chain_code = self
             .chain_code

@@ -10,7 +10,7 @@ list:
 # Run an xtask command
 [group('utils')]
 xtask *args:
-    cd rust && cargo xtask {{args}}
+    cd rust && test -f target/debug/xtask || cargo build --package xtask -q && ./target/debug/xtask {{args}}
 
 # Sign a PSBT and output all formats (base64, hex, binary, bbqr-gif, ur-gif)
 # Requires MNEMONIC env var (set in .envrc or pass directly)
@@ -372,6 +372,17 @@ alias iac := install-android-clean
 [group('util')]
 run-ios:
     just xtask run-ios && just notf "done run ios"
+
+# Show logcat for cove process
+[group('util')]
+logcat:
+    #!/usr/bin/env bash
+    pid=$(adb shell pidof org.bitcoinppl.cove.dev | tr -d '[:space:]')
+    if [ -z "$pid" ]; then
+        echo "error: org.bitcoinppl.cove.dev is not running" >&2
+        exit 1
+    fi
+    adb logcat --pid="$pid"
 
 # ------------------------------------------------------------------------------
 # helpers
