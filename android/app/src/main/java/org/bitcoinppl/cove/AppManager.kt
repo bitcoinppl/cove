@@ -153,6 +153,11 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     fun clearWalletManager() {
+        try {
+            walletManager?.close()
+        } catch (e: Exception) {
+            Log.w(tag, "Error closing WalletManager: ${e.message}")
+        }
         walletManager = null
     }
 

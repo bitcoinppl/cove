@@ -287,7 +287,6 @@ impl RustWalletManager {
         let cached_balance: Balance = wallet.balance();
         let cached_transactions: Vec<Transaction> = wallet.transactions();
         deferred.queue(Message::WalletBalanceChanged(cached_balance.into()));
-        deferred.queue(Message::AvailableTransactions(cached_transactions.clone()));
 
         let initial_load_state = if cached_transactions.is_empty() {
             WalletLoadState::Loading
