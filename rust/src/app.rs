@@ -85,7 +85,9 @@ impl App {
         set_env();
 
         // one time init
-        rustls::crypto::ring::default_provider().install_default().ok();
+        rustls::crypto::ring::default_provider()
+            .install_default()
+            .expect("failed to install default crypto provider");
         crate::logging::init();
 
         // storage must be bootstrapped before any database access

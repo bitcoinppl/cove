@@ -92,7 +92,6 @@ struct HotWalletSelectScreen: View {
             }
         }
         .padding()
-        .navigationBarTitleDisplayMode(.inline)
         .frame(maxHeight: .infinity)
         .background(
             Image(.newWalletPattern)

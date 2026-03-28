@@ -112,7 +112,6 @@ struct NewWalletSelectScreen: View {
             }
         }
         .padding()
-        .navigationBarTitleDisplayMode(.inline)
         .fileImporter(
             isPresented: $isImporting,
             allowedContentTypes: [.plainText, .json]

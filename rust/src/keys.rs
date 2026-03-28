@@ -336,11 +336,13 @@ impl From<pubport::descriptor::Descriptors> for Descriptors {
 impl From<cove_bdk::descriptor_ext::Error> for DescriptorKeyParseError {
     fn from(error: cove_bdk::descriptor_ext::Error) -> Self {
         use cove_bdk::descriptor_ext::Error as E;
-        match error {
+        match &error {
             E::NoOrigin => Self::NoOrigin,
-            E::UnsupportedDescriptor(s) => Self::UnsupportedDescriptor(s),
-            E::UnsupportedDescriptorType(s) => Self::UnsupportedDescriptorType(s),
-            E::NotMatchingPair => Self::UnsupportedDescriptor(error.to_string()),
+            E::UnsupportedDescriptor(s) => Self::UnsupportedDescriptor(s.clone()),
+            E::UnsupportedDescriptorType(s) => Self::UnsupportedDescriptorType(*s),
+            E::NotMatchingPair => Self::UnsupportedDescriptor(
+                "descriptors are not a matching external/internal pair".to_string(),
+            ),
         }
     }
 }

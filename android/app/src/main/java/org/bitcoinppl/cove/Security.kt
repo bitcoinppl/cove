@@ -9,6 +9,7 @@ import androidx.security.crypto.MasterKey
 import org.bitcoinppl.cove_core.device.DeviceAccess
 import org.bitcoinppl.cove_core.device.KeychainAccess
 import org.bitcoinppl.cove_core.device.KeychainException
+import java.security.GeneralSecurityException
 import java.util.TimeZone
 
 class KeychainAccessor(
@@ -21,7 +22,7 @@ class KeychainAccessor(
         sharedPreferences =
             try {
                 createEncryptedPrefs(context, requestStrongBox = useStrongBox)
-            } catch (e: Exception) {
+            } catch (e: GeneralSecurityException) {
                 if (!useStrongBox) throw e // not a StrongBox issue, no fallback available
                 Log.w("KeychainAccessor", "StrongBox-backed prefs failed, falling back to TEE", e)
                 createEncryptedPrefs(context, requestStrongBox = false)

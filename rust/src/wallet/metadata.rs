@@ -48,7 +48,7 @@ pub struct WalletMetadata {
     #[serde(default)]
     pub hardware_metadata: Option<HardwareWalletMetadata>,
 
-    /// Show labels for transactions i the transaction list
+    /// Show labels for transactions in the transaction list
     /// If false, we only show either `Sent` or `Received` labels
     #[serde(default = "default_true")]
     pub show_labels: bool,

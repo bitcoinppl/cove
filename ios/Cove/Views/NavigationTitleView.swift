@@ -61,7 +61,7 @@ private struct NavigationTitleHelper<TitleContent: View>: UIViewControllerRepres
     static func dismantleUIViewController(
         _ vc: NavigationTitleViewController<TitleContent>, coordinator _: Coordinator
     ) {
-        vc.clearTitle()
+        vc.clearOwnedTitle()
     }
 
     typealias UIViewControllerType = NavigationTitleViewController<TitleContent>
@@ -104,8 +104,13 @@ final class NavigationTitleViewController<TitleContent: View>: UIViewController 
         hostingController?.view.sizeToFit()
     }
 
-    func clearTitle() {
-        targetNavigationItem?.titleView = nil
+    func clearOwnedTitle() {
+        guard let navigationItem = targetNavigationItem else { return }
+
+        if navigationItem.titleView === hostingController?.view {
+            navigationItem.titleView = nil
+        }
+
         targetNavigationItem = nil
     }
 

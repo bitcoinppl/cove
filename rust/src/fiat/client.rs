@@ -7,6 +7,7 @@ use arc_swap::ArcSwap;
 use backon::{ExponentialBuilder, Retryable as _};
 use eyre::{Context as _, Result};
 use jiff::Timestamp;
+use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error, trace, warn};
 
@@ -33,7 +34,7 @@ pub static PRICES: LazyLock<ArcSwap<Option<PriceResponse>>> =
 #[derive(Debug, Clone, uniffi::Object)]
 pub struct FiatClient {
     url: String,
-    client: reqwest::Client,
+    client: OnceCell<reqwest::Client>,
 }
 
 #[derive(
@@ -80,12 +81,12 @@ impl_default_for!(FiatClient);
 
 impl FiatClient {
     fn new() -> Self {
-        Self { url: CURRENCY_URL.to_string(), client: cove_http::new_client() }
+        Self { url: CURRENCY_URL.to_string(), client: OnceCell::new() }
     }
 
     #[allow(dead_code)]
     fn new_with_url(url: String) -> Self {
-        Self { url, client: cove_http::new_client() }
+        Self { url, client: OnceCell::new() }
     }
 
     /// Sync method using cached prices only, returns None if no cache
@@ -110,7 +111,7 @@ impl FiatClient {
     ) -> Result<HistoricalPricesResponse, reqwest::Error> {
         let url = format!("{HISTORICAL_PRICES_URL}?timestamp={timestamp}");
 
-        let response = self.client.get(&url).send().await?;
+        let response = self.client()?.get(&url).send().await?;
         let historical_prices: HistoricalPricesResponse = response.json().await?;
 
         Ok(historical_prices)
@@ -151,7 +152,7 @@ impl FiatClient {
         }
 
         debug!("fetching prices");
-        let response = self.client.get(&self.url).send().await?;
+        let response = self.client()?.get(&self.url).send().await?;
         let prices: PriceResponse = response.json().await?;
 
         // saved prices are the same as the new ones don't need to update
@@ -197,6 +198,10 @@ impl FiatClient {
         let value_in_currency = btc * price as f64;
 
         Ok(value_in_currency)
+    }
+
+    fn client(&self) -> Result<&reqwest::Client, reqwest::Error> {
+        self.client.get_or_try_init(cove_http::new_client)
     }
 }
 

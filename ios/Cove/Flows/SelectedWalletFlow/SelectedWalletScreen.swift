@@ -509,6 +509,7 @@ struct SelectedWalletScreen: View {
         .onAppear(perform: manager.validateMetadata)
         .onAppear {
             shouldShowNavBar = false
+            app.isPastHeader = false
         }
         .onDisappear {
             // reset scroll state when leaving this screen
