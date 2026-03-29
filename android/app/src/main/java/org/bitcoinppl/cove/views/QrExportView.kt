@@ -43,6 +43,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
@@ -223,12 +224,22 @@ fun QrExportView(
                             QrCodeGenerator.generate(qrString, size = 512)
                         }
 
-                    Image(
-                        bitmap = bitmap.asImageBitmap(),
-                        contentDescription = "QR code for transaction signing",
-                        modifier = Modifier.size(qrSize),
-                        contentScale = ContentScale.FillBounds,
-                    )
+                    Box(
+                        modifier =
+                            Modifier
+                                .size(qrSize)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color.White)
+                                .padding(12.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Image(
+                            bitmap = bitmap.asImageBitmap(),
+                            contentDescription = "QR code for transaction signing",
+                            modifier = Modifier.fillMaxWidth().aspectRatio(1f),
+                            contentScale = ContentScale.FillBounds,
+                        )
+                    }
                 }
 
                 // density buttons and progress indicator
