@@ -84,10 +84,6 @@ impl App {
     fn new() -> Self {
         set_env();
 
-        // one time init
-        rustls::crypto::ring::default_provider()
-            .install_default()
-            .expect("failed to install default crypto provider");
         crate::logging::init();
 
         // storage must be bootstrapped before any database access

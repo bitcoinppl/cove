@@ -670,9 +670,19 @@ class AppManager private constructor() : FfiReconcile {
          */
         private const val MIN_LOADING_VISIBILITY_MS = 200L
 
+        private fun requireBootstrapComplete(owner: String) {
+            val step = bootstrapProgress()
+            check(step == BootstrapStep.COMPLETE) {
+                "$owner initialized before bootstrap completed: $step"
+            }
+        }
+
         fun getInstance(): AppManager =
             instance ?: synchronized(this) {
-                instance ?: AppManager().also { instance = it }
+                instance ?: run {
+                    requireBootstrapComplete("AppManager")
+                    AppManager().also { instance = it }
+                }
             }
     }
 }

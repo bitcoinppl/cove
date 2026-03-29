@@ -61,9 +61,19 @@ class AuthManager private constructor() : AuthManagerReconciler {
         @Volatile
         private var instance: AuthManager? = null
 
+        private fun requireBootstrapComplete(owner: String) {
+            val step = bootstrapProgress()
+            check(step == BootstrapStep.COMPLETE) {
+                "$owner initialized before bootstrap completed: $step"
+            }
+        }
+
         fun getInstance(): AuthManager =
             instance ?: synchronized(this) {
-                instance ?: AuthManager().also { instance = it }
+                instance ?: run {
+                    requireBootstrapComplete("AuthManager")
+                    AuthManager().also { instance = it }
+                }
             }
     }
 

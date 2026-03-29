@@ -5,7 +5,7 @@ import SwiftUI
 private let walletModeChangeDelayMs = 250
 
 @Observable final class AppManager: FfiReconcile {
-    static let shared = AppManager()
+    static let shared = makeShared()
 
     private let logger = Log(id: "AppManager")
 
@@ -58,6 +58,22 @@ private let walletModeChangeDelayMs = 250
             .dark
         case .system:
             nil
+        }
+    }
+
+    private static func makeShared() -> AppManager {
+        requireBootstrapComplete()
+        return AppManager()
+    }
+
+    private static func requireBootstrapComplete() {
+        if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1" {
+            return
+        }
+
+        let step = bootstrapProgress()
+        guard step == .complete else {
+            fatalError("AppManager initialized before bootstrap completed: \(step)")
         }
     }
 

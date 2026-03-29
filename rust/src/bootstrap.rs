@@ -79,9 +79,7 @@ pub async fn bootstrap() -> Result<Option<String>, AppInitError> {
     }
 
     crate::logging::init();
-    rustls::crypto::ring::default_provider()
-        .install_default()
-        .expect("failed to install rustls ring crypto provider");
+    ensure_rustls_provider_installed();
 
     cove_tokio::init();
     set_step(BootstrapStep::TokioInitialized);
@@ -166,6 +164,12 @@ fn attempt_bdk_migration(pre_recovery_bdk_count: u32) -> eyre::Result<()> {
     }
 
     crate::database::migration::BdkMigration::new(migration).run()
+}
+
+fn ensure_rustls_provider_installed() {
+    if rustls::crypto::CryptoProvider::get_default().is_none() {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+    }
 }
 
 static STORAGE_BOOTSTRAPPED: OnceLock<()> = OnceLock::new();
@@ -370,5 +374,13 @@ mod tests {
             AppInitError::DatabaseVerificationFailed(message)
                 if message == "failed to open encrypted backend at /tmp/cove.db: permission denied"
         ));
+    }
+
+    #[test]
+    fn rustls_provider_install_is_idempotent() {
+        ensure_rustls_provider_installed();
+        ensure_rustls_provider_installed();
+
+        assert!(rustls::crypto::CryptoProvider::get_default().is_some());
     }
 }

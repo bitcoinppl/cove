@@ -5,7 +5,7 @@ enum UnlockMode {
 }
 
 @Observable final class AuthManager: AuthManagerReconciler {
-    static let shared = AuthManager()
+    static let shared = makeShared()
 
     private let logger = Log(id: "AuthManager")
     var rust: RustAuthManager
@@ -22,6 +22,22 @@ enum UnlockMode {
 
     @MainActor
     var isUsingBiometrics: Bool = false
+
+    private static func makeShared() -> AuthManager {
+        requireBootstrapComplete()
+        return AuthManager()
+    }
+
+    private static func requireBootstrapComplete() {
+        if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1" {
+            return
+        }
+
+        let step = bootstrapProgress()
+        guard step == .complete else {
+            fatalError("AuthManager initialized before bootstrap completed: \(step)")
+        }
+    }
 
     private init() {
         Log.debug("Initializing AuthManager")
