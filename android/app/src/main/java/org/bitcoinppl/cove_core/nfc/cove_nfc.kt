@@ -2816,7 +2816,7 @@ public object FfiConverterTypeNdefPayload : FfiConverterRustBuffer<NdefPayload>{
         }
     }
 
-    override fun allocationSize(value: NdefPayload) = when(value) {
+    override fun allocationSize(value: NdefPayload): ULong = when(value) {
         is NdefPayload.Text -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
@@ -3107,7 +3107,7 @@ public object FfiConverterTypeParseResult : FfiConverterRustBuffer<ParseResult>{
         }
     }
 
-    override fun allocationSize(value: ParseResult) = when(value) {
+    override fun allocationSize(value: ParseResult): ULong = when(value) {
         is ParseResult.Complete -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
@@ -3188,7 +3188,7 @@ public object FfiConverterTypeParserState : FfiConverterRustBuffer<ParserState>{
         }
     }
 
-    override fun allocationSize(value: ParserState) = when(value) {
+    override fun allocationSize(value: ParserState): ULong = when(value) {
         is ParserState.NotStarted -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (

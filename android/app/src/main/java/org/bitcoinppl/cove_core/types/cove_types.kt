@@ -637,257 +637,257 @@ internal object IntegrityCheckingUniffiLib {
         uniffiCheckApiChecksums(this)
     }
     external fun uniffi_cove_types_checksum_func_address_is_valid(
-): Short
-external fun uniffi_cove_types_checksum_func_address_is_valid_for_network(
-): Short
-external fun uniffi_cove_types_checksum_func_address_string_spaced_out(
-): Short
-external fun uniffi_cove_types_checksum_func_all_color_schemes(
-): Short
-external fun uniffi_cove_types_checksum_func_confirm_details_preview_new(
-): Short
-external fun uniffi_cove_types_checksum_func_qr_density_is_equal(
-): Short
-external fun uniffi_cove_types_checksum_func_fee_rate_options_with_total_fee_is_equal(
-): Short
-external fun uniffi_cove_types_checksum_func_fee_speed_duration(
-): Short
-external fun uniffi_cove_types_checksum_func_fee_speed_is_custom(
-): Short
-external fun uniffi_cove_types_checksum_func_fee_speed_to_circle_color(
-): Short
-external fun uniffi_cove_types_checksum_func_all_networks(
-): Short
-external fun uniffi_cove_types_checksum_func_network_to_string(
-): Short
-external fun uniffi_cove_types_checksum_func_all_units(
-): Short
-external fun uniffi_cove_types_checksum_func_previewnewutxolist(
-): Short
-external fun uniffi_cove_types_checksum_method_address_hashtouint(
-): Short
-external fun uniffi_cove_types_checksum_method_address_spaced_out(
-): Short
-external fun uniffi_cove_types_checksum_method_address_unformatted(
-): Short
-external fun uniffi_cove_types_checksum_method_addressinfo_address(
-): Short
-external fun uniffi_cove_types_checksum_method_addressinfo_address_unformatted(
-): Short
-external fun uniffi_cove_types_checksum_method_addressinfo_index(
-): Short
-external fun uniffi_cove_types_checksum_method_addressinfowithderivation_address(
-): Short
-external fun uniffi_cove_types_checksum_method_addressinfowithderivation_address_spaced_out(
-): Short
-external fun uniffi_cove_types_checksum_method_addressinfowithderivation_address_unformatted(
-): Short
-external fun uniffi_cove_types_checksum_method_addressinfowithderivation_derivation_path(
-): Short
-external fun uniffi_cove_types_checksum_method_addressinfowithderivation_index(
-): Short
-external fun uniffi_cove_types_checksum_method_addresswithnetwork_address(
-): Short
-external fun uniffi_cove_types_checksum_method_addresswithnetwork_amount(
-): Short
-external fun uniffi_cove_types_checksum_method_addresswithnetwork_isvalidfornetwork(
-): Short
-external fun uniffi_cove_types_checksum_method_addresswithnetwork_network(
-): Short
-external fun uniffi_cove_types_checksum_method_amount_as_btc(
-): Short
-external fun uniffi_cove_types_checksum_method_amount_as_sats(
-): Short
-external fun uniffi_cove_types_checksum_method_amount_btc_string(
-): Short
-external fun uniffi_cove_types_checksum_method_amount_btc_string_with_unit(
-): Short
-external fun uniffi_cove_types_checksum_method_amount_fmt_string(
-): Short
-external fun uniffi_cove_types_checksum_method_amount_fmt_string_with_unit(
-): Short
-external fun uniffi_cove_types_checksum_method_amount_sats_string(
-): Short
-external fun uniffi_cove_types_checksum_method_amount_sats_string_with_unit(
-): Short
-external fun uniffi_cove_types_checksum_method_confirmdetails_fee_percentage(
-): Short
-external fun uniffi_cove_types_checksum_method_confirmdetails_fee_rate(
-): Short
-external fun uniffi_cove_types_checksum_method_confirmdetails_fee_total(
-): Short
-external fun uniffi_cove_types_checksum_method_confirmdetails_id(
-): Short
-external fun uniffi_cove_types_checksum_method_confirmdetails_id_hash(
-): Short
-external fun uniffi_cove_types_checksum_method_confirmdetails_inputs(
-): Short
-external fun uniffi_cove_types_checksum_method_confirmdetails_normalized_id(
-): Short
-external fun uniffi_cove_types_checksum_method_confirmdetails_outputs(
-): Short
-external fun uniffi_cove_types_checksum_method_confirmdetails_psbt(
-): Short
-external fun uniffi_cove_types_checksum_method_confirmdetails_psbt_bytes(
-): Short
-external fun uniffi_cove_types_checksum_method_confirmdetails_psbt_to_bbqr(
-): Short
-external fun uniffi_cove_types_checksum_method_confirmdetails_psbt_to_bbqr_with_density(
-): Short
-external fun uniffi_cove_types_checksum_method_confirmdetails_psbt_to_bbqr_with_max_version(
-): Short
-external fun uniffi_cove_types_checksum_method_confirmdetails_psbt_to_hex(
-): Short
-external fun uniffi_cove_types_checksum_method_confirmdetails_psbt_to_ur(
-): Short
-external fun uniffi_cove_types_checksum_method_confirmdetails_psbt_to_ur_with_density(
-): Short
-external fun uniffi_cove_types_checksum_method_confirmdetails_sending_amount(
-): Short
-external fun uniffi_cove_types_checksum_method_confirmdetails_sending_to(
-): Short
-external fun uniffi_cove_types_checksum_method_confirmdetails_spending_amount(
-): Short
-external fun uniffi_cove_types_checksum_method_qrdensity_bbqr_animation_interval_ms(
-): Short
-external fun uniffi_cove_types_checksum_method_qrdensity_bbqr_max_version(
-): Short
-external fun uniffi_cove_types_checksum_method_qrdensity_can_decrease(
-): Short
-external fun uniffi_cove_types_checksum_method_qrdensity_can_increase(
-): Short
-external fun uniffi_cove_types_checksum_method_qrdensity_decrease(
-): Short
-external fun uniffi_cove_types_checksum_method_qrdensity_increase(
-): Short
-external fun uniffi_cove_types_checksum_method_qrdensity_ur_animation_interval_ms(
-): Short
-external fun uniffi_cove_types_checksum_method_qrdensity_ur_fragment_len(
-): Short
-external fun uniffi_cove_types_checksum_method_feerate_sat_per_vb(
-): Short
-external fun uniffi_cove_types_checksum_method_feerateoption_duration(
-): Short
-external fun uniffi_cove_types_checksum_method_feerateoption_fee_rate(
-): Short
-external fun uniffi_cove_types_checksum_method_feerateoption_fee_speed(
-): Short
-external fun uniffi_cove_types_checksum_method_feerateoption_is_equal(
-): Short
-external fun uniffi_cove_types_checksum_method_feerateoption_sat_per_vb(
-): Short
-external fun uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_duration(
-): Short
-external fun uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_fee_rate(
-): Short
-external fun uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_fee_rate_options(
-): Short
-external fun uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_fee_speed(
-): Short
-external fun uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_is_custom(
-): Short
-external fun uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_is_equal(
-): Short
-external fun uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_sat_per_vb(
-): Short
-external fun uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_total_fee(
-): Short
-external fun uniffi_cove_types_checksum_method_feerateoptions_fast(
-): Short
-external fun uniffi_cove_types_checksum_method_feerateoptions_medium(
-): Short
-external fun uniffi_cove_types_checksum_method_feerateoptions_slow(
-): Short
-external fun uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_add_custom_fee_rate(
-): Short
-external fun uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_calculate_custom_fee_speed(
-): Short
-external fun uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_custom(
-): Short
-external fun uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_fast(
-): Short
-external fun uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_fee_rate_options(
-): Short
-external fun uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_get_fee_rate_with(
-): Short
-external fun uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_medium(
-): Short
-external fun uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_remove_custom_fee(
-): Short
-external fun uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_slow(
-): Short
-external fun uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_transaction_size(
-): Short
-external fun uniffi_cove_types_checksum_method_psbt_fee(
-): Short
-external fun uniffi_cove_types_checksum_method_psbt_output_total_amount(
-): Short
-external fun uniffi_cove_types_checksum_method_psbt_tx_id(
-): Short
-external fun uniffi_cove_types_checksum_method_psbt_weight(
-): Short
-external fun uniffi_cove_types_checksum_method_outpoint_eq(
-): Short
-external fun uniffi_cove_types_checksum_method_outpoint_hashtouint(
-): Short
-external fun uniffi_cove_types_checksum_method_outpoint_txid(
-): Short
-external fun uniffi_cove_types_checksum_method_outpoint_txid_str(
-): Short
-external fun uniffi_cove_types_checksum_method_outpoint_txn_link(
-): Short
-external fun uniffi_cove_types_checksum_method_sentandreceived_amount(
-): Short
-external fun uniffi_cove_types_checksum_method_sentandreceived_amount_fmt(
-): Short
-external fun uniffi_cove_types_checksum_method_sentandreceived_direction(
-): Short
-external fun uniffi_cove_types_checksum_method_sentandreceived_external_sent(
-): Short
-external fun uniffi_cove_types_checksum_method_sentandreceived_label(
-): Short
-external fun uniffi_cove_types_checksum_method_sentandreceived_received(
-): Short
-external fun uniffi_cove_types_checksum_method_sentandreceived_sent(
-): Short
-external fun uniffi_cove_types_checksum_method_txid_as_hash_string(
-): Short
-external fun uniffi_cove_types_checksum_constructor_address_from_string(
-): Short
-external fun uniffi_cove_types_checksum_constructor_address_preview_new(
-): Short
-external fun uniffi_cove_types_checksum_constructor_address_random(
-): Short
-external fun uniffi_cove_types_checksum_constructor_addresswithnetwork_new(
-): Short
-external fun uniffi_cove_types_checksum_constructor_amount_from_sat(
-): Short
-external fun uniffi_cove_types_checksum_constructor_amount_one_btc(
-): Short
-external fun uniffi_cove_types_checksum_constructor_amount_one_sat(
-): Short
-external fun uniffi_cove_types_checksum_constructor_qrdensity_new(
-): Short
-external fun uniffi_cove_types_checksum_constructor_feerate_from_sat_per_vb(
-): Short
-external fun uniffi_cove_types_checksum_constructor_feerateoption_new(
-): Short
-external fun uniffi_cove_types_checksum_constructor_feerateoptionwithtotalfee_new(
-): Short
-external fun uniffi_cove_types_checksum_constructor_feerateoptions_previewnew(
-): Short
-external fun uniffi_cove_types_checksum_constructor_feerateoptionswithtotalfee_previewnew(
-): Short
-external fun uniffi_cove_types_checksum_constructor_psbt_new(
-): Short
-external fun uniffi_cove_types_checksum_constructor_outpoint_previewnew(
-): Short
-external fun uniffi_cove_types_checksum_constructor_outpoint_withvout(
-): Short
-external fun ffi_cove_types_uniffi_contract_version(
-): Int
+    ): Short
+    external fun uniffi_cove_types_checksum_func_address_is_valid_for_network(
+    ): Short
+    external fun uniffi_cove_types_checksum_func_address_string_spaced_out(
+    ): Short
+    external fun uniffi_cove_types_checksum_func_all_color_schemes(
+    ): Short
+    external fun uniffi_cove_types_checksum_func_confirm_details_preview_new(
+    ): Short
+    external fun uniffi_cove_types_checksum_func_qr_density_is_equal(
+    ): Short
+    external fun uniffi_cove_types_checksum_func_fee_rate_options_with_total_fee_is_equal(
+    ): Short
+    external fun uniffi_cove_types_checksum_func_fee_speed_duration(
+    ): Short
+    external fun uniffi_cove_types_checksum_func_fee_speed_is_custom(
+    ): Short
+    external fun uniffi_cove_types_checksum_func_fee_speed_to_circle_color(
+    ): Short
+    external fun uniffi_cove_types_checksum_func_all_networks(
+    ): Short
+    external fun uniffi_cove_types_checksum_func_network_to_string(
+    ): Short
+    external fun uniffi_cove_types_checksum_func_all_units(
+    ): Short
+    external fun uniffi_cove_types_checksum_func_previewnewutxolist(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_address_hashtouint(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_address_spaced_out(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_address_unformatted(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_addressinfo_address(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_addressinfo_address_unformatted(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_addressinfo_index(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_addressinfowithderivation_address(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_addressinfowithderivation_address_spaced_out(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_addressinfowithderivation_address_unformatted(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_addressinfowithderivation_derivation_path(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_addressinfowithderivation_index(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_addresswithnetwork_address(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_addresswithnetwork_amount(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_addresswithnetwork_isvalidfornetwork(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_addresswithnetwork_network(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_amount_as_btc(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_amount_as_sats(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_amount_btc_string(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_amount_btc_string_with_unit(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_amount_fmt_string(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_amount_fmt_string_with_unit(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_amount_sats_string(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_amount_sats_string_with_unit(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_confirmdetails_fee_percentage(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_confirmdetails_fee_rate(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_confirmdetails_fee_total(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_confirmdetails_id(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_confirmdetails_id_hash(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_confirmdetails_inputs(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_confirmdetails_normalized_id(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_confirmdetails_outputs(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_confirmdetails_psbt(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_confirmdetails_psbt_bytes(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_confirmdetails_psbt_to_bbqr(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_confirmdetails_psbt_to_bbqr_with_density(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_confirmdetails_psbt_to_bbqr_with_max_version(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_confirmdetails_psbt_to_hex(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_confirmdetails_psbt_to_ur(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_confirmdetails_psbt_to_ur_with_density(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_confirmdetails_sending_amount(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_confirmdetails_sending_to(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_confirmdetails_spending_amount(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_qrdensity_bbqr_animation_interval_ms(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_qrdensity_bbqr_max_version(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_qrdensity_can_decrease(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_qrdensity_can_increase(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_qrdensity_decrease(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_qrdensity_increase(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_qrdensity_ur_animation_interval_ms(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_qrdensity_ur_fragment_len(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerate_sat_per_vb(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoption_duration(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoption_fee_rate(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoption_fee_speed(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoption_is_equal(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoption_sat_per_vb(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_duration(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_fee_rate(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_fee_rate_options(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_fee_speed(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_is_custom(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_is_equal(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_sat_per_vb(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_total_fee(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoptions_fast(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoptions_medium(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoptions_slow(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_add_custom_fee_rate(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_calculate_custom_fee_speed(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_custom(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_fast(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_fee_rate_options(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_get_fee_rate_with(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_medium(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_remove_custom_fee(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_slow(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_transaction_size(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_psbt_fee(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_psbt_output_total_amount(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_psbt_tx_id(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_psbt_weight(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_outpoint_eq(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_outpoint_hashtouint(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_outpoint_txid(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_outpoint_txid_str(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_outpoint_txn_link(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_sentandreceived_amount(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_sentandreceived_amount_fmt(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_sentandreceived_direction(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_sentandreceived_external_sent(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_sentandreceived_label(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_sentandreceived_received(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_sentandreceived_sent(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_txid_as_hash_string(
+    ): Short
+    external fun uniffi_cove_types_checksum_constructor_address_from_string(
+    ): Short
+    external fun uniffi_cove_types_checksum_constructor_address_preview_new(
+    ): Short
+    external fun uniffi_cove_types_checksum_constructor_address_random(
+    ): Short
+    external fun uniffi_cove_types_checksum_constructor_addresswithnetwork_new(
+    ): Short
+    external fun uniffi_cove_types_checksum_constructor_amount_from_sat(
+    ): Short
+    external fun uniffi_cove_types_checksum_constructor_amount_one_btc(
+    ): Short
+    external fun uniffi_cove_types_checksum_constructor_amount_one_sat(
+    ): Short
+    external fun uniffi_cove_types_checksum_constructor_qrdensity_new(
+    ): Short
+    external fun uniffi_cove_types_checksum_constructor_feerate_from_sat_per_vb(
+    ): Short
+    external fun uniffi_cove_types_checksum_constructor_feerateoption_new(
+    ): Short
+    external fun uniffi_cove_types_checksum_constructor_feerateoptionwithtotalfee_new(
+    ): Short
+    external fun uniffi_cove_types_checksum_constructor_feerateoptions_previewnew(
+    ): Short
+    external fun uniffi_cove_types_checksum_constructor_feerateoptionswithtotalfee_previewnew(
+    ): Short
+    external fun uniffi_cove_types_checksum_constructor_psbt_new(
+    ): Short
+    external fun uniffi_cove_types_checksum_constructor_outpoint_previewnew(
+    ): Short
+    external fun uniffi_cove_types_checksum_constructor_outpoint_withvout(
+    ): Short
+    external fun ffi_cove_types_uniffi_contract_version(
+    ): Int
 
-    
+        
 }
 
 internal object UniffiLib {
@@ -903,485 +903,485 @@ internal object UniffiLib {
         
     }
     external fun uniffi_cove_types_fn_clone_address(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_free_address(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Unit
-external fun uniffi_cove_types_fn_constructor_address_from_string(`address`: RustBuffer.ByValue,`network`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_constructor_address_preview_new(uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_constructor_address_random(uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_address_hashtouint(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_address_spaced_out(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_method_address_unformatted(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_method_address_uniffi_trait_eq_eq(`ptr`: Long,`other`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Byte
-external fun uniffi_cove_types_fn_method_address_uniffi_trait_eq_ne(`ptr`: Long,`other`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Byte
-external fun uniffi_cove_types_fn_method_address_uniffi_trait_hash(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_clone_addressinfo(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_free_addressinfo(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Unit
-external fun uniffi_cove_types_fn_method_addressinfo_address(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_addressinfo_address_unformatted(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_method_addressinfo_index(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Int
-external fun uniffi_cove_types_fn_clone_addressinfowithderivation(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_free_addressinfowithderivation(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Unit
-external fun uniffi_cove_types_fn_method_addressinfowithderivation_address(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_addressinfowithderivation_address_spaced_out(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_method_addressinfowithderivation_address_unformatted(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_method_addressinfowithderivation_derivation_path(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_method_addressinfowithderivation_index(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Int
-external fun uniffi_cove_types_fn_clone_addresswithnetwork(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_free_addresswithnetwork(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Unit
-external fun uniffi_cove_types_fn_constructor_addresswithnetwork_new(`address`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_addresswithnetwork_address(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_addresswithnetwork_amount(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_method_addresswithnetwork_isvalidfornetwork(`ptr`: Long,`network`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): Byte
-external fun uniffi_cove_types_fn_method_addresswithnetwork_network(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_clone_amount(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_free_amount(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Unit
-external fun uniffi_cove_types_fn_constructor_amount_from_sat(`sats`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_constructor_amount_one_btc(uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_constructor_amount_one_sat(uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_amount_as_btc(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Double
-external fun uniffi_cove_types_fn_method_amount_as_sats(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_amount_btc_string(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_method_amount_btc_string_with_unit(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_method_amount_fmt_string(`ptr`: Long,`unit`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_method_amount_fmt_string_with_unit(`ptr`: Long,`unit`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_method_amount_sats_string(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_method_amount_sats_string_with_unit(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_clone_chainposition(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_free_chainposition(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Unit
-external fun uniffi_cove_types_fn_clone_confirmdetails(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_free_confirmdetails(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Unit
-external fun uniffi_cove_types_fn_method_confirmdetails_fee_percentage(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_confirmdetails_fee_rate(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_confirmdetails_fee_total(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_confirmdetails_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_confirmdetails_id_hash(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_method_confirmdetails_inputs(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_method_confirmdetails_normalized_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_method_confirmdetails_outputs(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_method_confirmdetails_psbt(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_confirmdetails_psbt_bytes(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_method_confirmdetails_psbt_to_bbqr(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_method_confirmdetails_psbt_to_bbqr_with_density(`ptr`: Long,`density`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_method_confirmdetails_psbt_to_bbqr_with_max_version(`ptr`: Long,`maxVersion`: Byte,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_method_confirmdetails_psbt_to_hex(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_method_confirmdetails_psbt_to_ur(`ptr`: Long,`maxFragmentLen`: Int,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_method_confirmdetails_psbt_to_ur_with_density(`ptr`: Long,`density`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_method_confirmdetails_sending_amount(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_confirmdetails_sending_to(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_confirmdetails_spending_amount(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_clone_inputoutputdetails(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_free_inputoutputdetails(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Unit
-external fun uniffi_cove_types_fn_clone_qrdensity(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_free_qrdensity(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Unit
-external fun uniffi_cove_types_fn_constructor_qrdensity_new(uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_qrdensity_bbqr_animation_interval_ms(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Int
-external fun uniffi_cove_types_fn_method_qrdensity_bbqr_max_version(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Byte
-external fun uniffi_cove_types_fn_method_qrdensity_can_decrease(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Byte
-external fun uniffi_cove_types_fn_method_qrdensity_can_increase(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Byte
-external fun uniffi_cove_types_fn_method_qrdensity_decrease(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_qrdensity_increase(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_qrdensity_ur_animation_interval_ms(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Int
-external fun uniffi_cove_types_fn_method_qrdensity_ur_fragment_len(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Int
-external fun uniffi_cove_types_fn_clone_feerate(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_free_feerate(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Unit
-external fun uniffi_cove_types_fn_constructor_feerate_from_sat_per_vb(`satPerVb`: Float,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_feerate_sat_per_vb(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Float
-external fun uniffi_cove_types_fn_clone_feerateoption(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_free_feerateoption(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Unit
-external fun uniffi_cove_types_fn_constructor_feerateoption_new(`feeSpeed`: RustBuffer.ByValue,`feeRate`: Float,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_feerateoption_duration(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_method_feerateoption_fee_rate(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_feerateoption_fee_speed(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_method_feerateoption_is_equal(`ptr`: Long,`rhs`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Byte
-external fun uniffi_cove_types_fn_method_feerateoption_sat_per_vb(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Float
-external fun uniffi_cove_types_fn_clone_feerateoptionwithtotalfee(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_free_feerateoptionwithtotalfee(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Unit
-external fun uniffi_cove_types_fn_constructor_feerateoptionwithtotalfee_new(`feeSpeed`: RustBuffer.ByValue,`feeRate`: Long,`totalFee`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_feerateoptionwithtotalfee_duration(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_method_feerateoptionwithtotalfee_fee_rate(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_feerateoptionwithtotalfee_fee_rate_options(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_feerateoptionwithtotalfee_fee_speed(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_method_feerateoptionwithtotalfee_is_custom(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Byte
-external fun uniffi_cove_types_fn_method_feerateoptionwithtotalfee_is_equal(`ptr`: Long,`rhs`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Byte
-external fun uniffi_cove_types_fn_method_feerateoptionwithtotalfee_sat_per_vb(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Float
-external fun uniffi_cove_types_fn_method_feerateoptionwithtotalfee_total_fee(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_clone_feerateoptions(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_free_feerateoptions(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Unit
-external fun uniffi_cove_types_fn_constructor_feerateoptions_previewnew(uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_feerateoptions_fast(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_feerateoptions_medium(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_feerateoptions_slow(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_clone_feerateoptionswithtotalfee(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_free_feerateoptionswithtotalfee(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Unit
-external fun uniffi_cove_types_fn_constructor_feerateoptionswithtotalfee_previewnew(uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_feerateoptionswithtotalfee_add_custom_fee_rate(`ptr`: Long,`feeRate`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_feerateoptionswithtotalfee_calculate_custom_fee_speed(`ptr`: Long,`feeRate`: Float,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_method_feerateoptionswithtotalfee_custom(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_method_feerateoptionswithtotalfee_fast(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_feerateoptionswithtotalfee_fee_rate_options(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_feerateoptionswithtotalfee_get_fee_rate_with(`ptr`: Long,`feeRate`: Float,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_method_feerateoptionswithtotalfee_medium(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_feerateoptionswithtotalfee_remove_custom_fee(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_feerateoptionswithtotalfee_slow(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_feerateoptionswithtotalfee_transaction_size(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_clone_psbt(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_free_psbt(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Unit
-external fun uniffi_cove_types_fn_constructor_psbt_new(`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_psbt_fee(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_psbt_output_total_amount(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_psbt_tx_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_psbt_weight(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_clone_outpoint(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_free_outpoint(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Unit
-external fun uniffi_cove_types_fn_constructor_outpoint_previewnew(uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_constructor_outpoint_withvout(`vout`: Int,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_outpoint_eq(`ptr`: Long,`rhs`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Byte
-external fun uniffi_cove_types_fn_method_outpoint_hashtouint(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_outpoint_txid(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_outpoint_txid_str(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_method_outpoint_txn_link(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_clone_sentandreceived(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_free_sentandreceived(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Unit
-external fun uniffi_cove_types_fn_method_sentandreceived_amount(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_sentandreceived_amount_fmt(`ptr`: Long,`unit`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_method_sentandreceived_direction(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_method_sentandreceived_external_sent(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_sentandreceived_label(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_method_sentandreceived_received(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_sentandreceived_sent(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_clone_txid(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_free_txid(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Unit
-external fun uniffi_cove_types_fn_method_txid_as_hash_string(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_method_txid_uniffi_trait_display(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_method_txid_uniffi_trait_eq_eq(`ptr`: Long,`other`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Byte
-external fun uniffi_cove_types_fn_method_txid_uniffi_trait_eq_ne(`ptr`: Long,`other`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Byte
-external fun uniffi_cove_types_fn_method_txid_uniffi_trait_hash(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_txid_uniffi_trait_ord_cmp(`ptr`: Long,`other`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Byte
-external fun uniffi_cove_types_fn_clone_txin(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_free_txin(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Unit
-external fun uniffi_cove_types_fn_clone_txout(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_free_txout(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Unit
-external fun uniffi_cove_types_fn_clone_utxolist(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_free_utxolist(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Unit
-external fun uniffi_cove_types_fn_method_colorschemeselection_capitalized_string(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_method_qrexportformat_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_method_feespeed_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_method_network_display_name(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_method_network_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_method_bitcoinunit_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_method_utxo_date(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_method_utxo_hash_to_uint(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_method_utxo_is_equal(`ptr`: RustBuffer.ByValue,`other`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): Byte
-external fun uniffi_cove_types_fn_method_utxo_name(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_method_utxo_uniffi_trait_eq_eq(`ptr`: RustBuffer.ByValue,`other`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): Byte
-external fun uniffi_cove_types_fn_method_utxo_uniffi_trait_eq_ne(`ptr`: RustBuffer.ByValue,`other`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): Byte
-external fun uniffi_cove_types_fn_method_utxo_uniffi_trait_hash(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_func_address_is_valid(`address`: RustBuffer.ByValue,`network`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): Unit
-external fun uniffi_cove_types_fn_func_address_is_valid_for_network(`address`: RustBuffer.ByValue,`network`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): Unit
-external fun uniffi_cove_types_fn_func_address_string_spaced_out(`address`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_func_all_color_schemes(uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_func_confirm_details_preview_new(uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun uniffi_cove_types_fn_func_qr_density_is_equal(`lhs`: Long,`rhs`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Byte
-external fun uniffi_cove_types_fn_func_fee_rate_options_with_total_fee_is_equal(`lhs`: Long,`rhs`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Byte
-external fun uniffi_cove_types_fn_func_fee_speed_duration(`feeSpeed`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_func_fee_speed_is_custom(`feeSpeed`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): Byte
-external fun uniffi_cove_types_fn_func_fee_speed_to_circle_color(`feeSpeed`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_func_all_networks(uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_func_network_to_string(`network`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_func_all_units(uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun uniffi_cove_types_fn_func_previewnewutxolist(`outputCount`: Byte,`changeCount`: Byte,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun ffi_cove_types_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun ffi_cove_types_rustbuffer_from_bytes(`bytes`: ForeignBytes.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun ffi_cove_types_rustbuffer_free(`buf`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-): Unit
-external fun ffi_cove_types_rustbuffer_reserve(`buf`: RustBuffer.ByValue,`additional`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun ffi_cove_types_rust_future_poll_u8(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
-): Unit
-external fun ffi_cove_types_rust_future_cancel_u8(`handle`: Long,
-): Unit
-external fun ffi_cove_types_rust_future_free_u8(`handle`: Long,
-): Unit
-external fun ffi_cove_types_rust_future_complete_u8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Byte
-external fun ffi_cove_types_rust_future_poll_i8(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
-): Unit
-external fun ffi_cove_types_rust_future_cancel_i8(`handle`: Long,
-): Unit
-external fun ffi_cove_types_rust_future_free_i8(`handle`: Long,
-): Unit
-external fun ffi_cove_types_rust_future_complete_i8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Byte
-external fun ffi_cove_types_rust_future_poll_u16(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
-): Unit
-external fun ffi_cove_types_rust_future_cancel_u16(`handle`: Long,
-): Unit
-external fun ffi_cove_types_rust_future_free_u16(`handle`: Long,
-): Unit
-external fun ffi_cove_types_rust_future_complete_u16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Short
-external fun ffi_cove_types_rust_future_poll_i16(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
-): Unit
-external fun ffi_cove_types_rust_future_cancel_i16(`handle`: Long,
-): Unit
-external fun ffi_cove_types_rust_future_free_i16(`handle`: Long,
-): Unit
-external fun ffi_cove_types_rust_future_complete_i16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Short
-external fun ffi_cove_types_rust_future_poll_u32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
-): Unit
-external fun ffi_cove_types_rust_future_cancel_u32(`handle`: Long,
-): Unit
-external fun ffi_cove_types_rust_future_free_u32(`handle`: Long,
-): Unit
-external fun ffi_cove_types_rust_future_complete_u32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Int
-external fun ffi_cove_types_rust_future_poll_i32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
-): Unit
-external fun ffi_cove_types_rust_future_cancel_i32(`handle`: Long,
-): Unit
-external fun ffi_cove_types_rust_future_free_i32(`handle`: Long,
-): Unit
-external fun ffi_cove_types_rust_future_complete_i32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Int
-external fun ffi_cove_types_rust_future_poll_u64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
-): Unit
-external fun ffi_cove_types_rust_future_cancel_u64(`handle`: Long,
-): Unit
-external fun ffi_cove_types_rust_future_free_u64(`handle`: Long,
-): Unit
-external fun ffi_cove_types_rust_future_complete_u64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun ffi_cove_types_rust_future_poll_i64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
-): Unit
-external fun ffi_cove_types_rust_future_cancel_i64(`handle`: Long,
-): Unit
-external fun ffi_cove_types_rust_future_free_i64(`handle`: Long,
-): Unit
-external fun ffi_cove_types_rust_future_complete_i64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Long
-external fun ffi_cove_types_rust_future_poll_f32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
-): Unit
-external fun ffi_cove_types_rust_future_cancel_f32(`handle`: Long,
-): Unit
-external fun ffi_cove_types_rust_future_free_f32(`handle`: Long,
-): Unit
-external fun ffi_cove_types_rust_future_complete_f32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Float
-external fun ffi_cove_types_rust_future_poll_f64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
-): Unit
-external fun ffi_cove_types_rust_future_cancel_f64(`handle`: Long,
-): Unit
-external fun ffi_cove_types_rust_future_free_f64(`handle`: Long,
-): Unit
-external fun ffi_cove_types_rust_future_complete_f64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Double
-external fun ffi_cove_types_rust_future_poll_rust_buffer(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
-): Unit
-external fun ffi_cove_types_rust_future_cancel_rust_buffer(`handle`: Long,
-): Unit
-external fun ffi_cove_types_rust_future_free_rust_buffer(`handle`: Long,
-): Unit
-external fun ffi_cove_types_rust_future_complete_rust_buffer(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBuffer.ByValue
-external fun ffi_cove_types_rust_future_poll_void(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
-): Unit
-external fun ffi_cove_types_rust_future_cancel_void(`handle`: Long,
-): Unit
-external fun ffi_cove_types_rust_future_free_void(`handle`: Long,
-): Unit
-external fun ffi_cove_types_rust_future_complete_void(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): Unit
+    ): Long
+    external fun uniffi_cove_types_fn_free_address(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_cove_types_fn_constructor_address_from_string(`address`: RustBuffer.ByValue,`network`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_constructor_address_preview_new(uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_constructor_address_random(uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_method_address_hashtouint(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_method_address_spaced_out(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_method_address_unformatted(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_method_address_uniffi_trait_eq_eq(`ptr`: Long,`other`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
+    external fun uniffi_cove_types_fn_method_address_uniffi_trait_eq_ne(`ptr`: Long,`other`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
+    external fun uniffi_cove_types_fn_method_address_uniffi_trait_hash(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_clone_addressinfo(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_free_addressinfo(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_cove_types_fn_method_addressinfo_address(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_method_addressinfo_address_unformatted(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_method_addressinfo_index(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Int
+    external fun uniffi_cove_types_fn_clone_addressinfowithderivation(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_free_addressinfowithderivation(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_cove_types_fn_method_addressinfowithderivation_address(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_method_addressinfowithderivation_address_spaced_out(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_method_addressinfowithderivation_address_unformatted(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_method_addressinfowithderivation_derivation_path(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_method_addressinfowithderivation_index(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Int
+    external fun uniffi_cove_types_fn_clone_addresswithnetwork(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_free_addresswithnetwork(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_cove_types_fn_constructor_addresswithnetwork_new(`address`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_method_addresswithnetwork_address(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_method_addresswithnetwork_amount(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_method_addresswithnetwork_isvalidfornetwork(`ptr`: Long,`network`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
+    external fun uniffi_cove_types_fn_method_addresswithnetwork_network(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_clone_amount(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_free_amount(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_cove_types_fn_constructor_amount_from_sat(`sats`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_constructor_amount_one_btc(uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_constructor_amount_one_sat(uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_method_amount_as_btc(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Double
+    external fun uniffi_cove_types_fn_method_amount_as_sats(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_method_amount_btc_string(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_method_amount_btc_string_with_unit(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_method_amount_fmt_string(`ptr`: Long,`unit`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_method_amount_fmt_string_with_unit(`ptr`: Long,`unit`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_method_amount_sats_string(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_method_amount_sats_string_with_unit(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_clone_chainposition(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_free_chainposition(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_cove_types_fn_clone_confirmdetails(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_free_confirmdetails(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_cove_types_fn_method_confirmdetails_fee_percentage(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_method_confirmdetails_fee_rate(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_method_confirmdetails_fee_total(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_method_confirmdetails_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_method_confirmdetails_id_hash(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_method_confirmdetails_inputs(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_method_confirmdetails_normalized_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_method_confirmdetails_outputs(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_method_confirmdetails_psbt(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_method_confirmdetails_psbt_bytes(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_method_confirmdetails_psbt_to_bbqr(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_method_confirmdetails_psbt_to_bbqr_with_density(`ptr`: Long,`density`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_method_confirmdetails_psbt_to_bbqr_with_max_version(`ptr`: Long,`maxVersion`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_method_confirmdetails_psbt_to_hex(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_method_confirmdetails_psbt_to_ur(`ptr`: Long,`maxFragmentLen`: Int,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_method_confirmdetails_psbt_to_ur_with_density(`ptr`: Long,`density`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_method_confirmdetails_sending_amount(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_method_confirmdetails_sending_to(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_method_confirmdetails_spending_amount(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_clone_inputoutputdetails(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_free_inputoutputdetails(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_cove_types_fn_clone_qrdensity(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_free_qrdensity(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_cove_types_fn_constructor_qrdensity_new(uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_method_qrdensity_bbqr_animation_interval_ms(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Int
+    external fun uniffi_cove_types_fn_method_qrdensity_bbqr_max_version(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
+    external fun uniffi_cove_types_fn_method_qrdensity_can_decrease(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
+    external fun uniffi_cove_types_fn_method_qrdensity_can_increase(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
+    external fun uniffi_cove_types_fn_method_qrdensity_decrease(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_method_qrdensity_increase(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_method_qrdensity_ur_animation_interval_ms(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Int
+    external fun uniffi_cove_types_fn_method_qrdensity_ur_fragment_len(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Int
+    external fun uniffi_cove_types_fn_clone_feerate(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_free_feerate(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_cove_types_fn_constructor_feerate_from_sat_per_vb(`satPerVb`: Float,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_method_feerate_sat_per_vb(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Float
+    external fun uniffi_cove_types_fn_clone_feerateoption(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_free_feerateoption(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_cove_types_fn_constructor_feerateoption_new(`feeSpeed`: RustBuffer.ByValue,`feeRate`: Float,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_method_feerateoption_duration(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_method_feerateoption_fee_rate(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_method_feerateoption_fee_speed(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_method_feerateoption_is_equal(`ptr`: Long,`rhs`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
+    external fun uniffi_cove_types_fn_method_feerateoption_sat_per_vb(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Float
+    external fun uniffi_cove_types_fn_clone_feerateoptionwithtotalfee(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_free_feerateoptionwithtotalfee(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_cove_types_fn_constructor_feerateoptionwithtotalfee_new(`feeSpeed`: RustBuffer.ByValue,`feeRate`: Long,`totalFee`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_method_feerateoptionwithtotalfee_duration(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_method_feerateoptionwithtotalfee_fee_rate(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_method_feerateoptionwithtotalfee_fee_rate_options(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_method_feerateoptionwithtotalfee_fee_speed(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_method_feerateoptionwithtotalfee_is_custom(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
+    external fun uniffi_cove_types_fn_method_feerateoptionwithtotalfee_is_equal(`ptr`: Long,`rhs`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
+    external fun uniffi_cove_types_fn_method_feerateoptionwithtotalfee_sat_per_vb(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Float
+    external fun uniffi_cove_types_fn_method_feerateoptionwithtotalfee_total_fee(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_clone_feerateoptions(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_free_feerateoptions(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_cove_types_fn_constructor_feerateoptions_previewnew(uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_method_feerateoptions_fast(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_method_feerateoptions_medium(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_method_feerateoptions_slow(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_clone_feerateoptionswithtotalfee(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_free_feerateoptionswithtotalfee(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_cove_types_fn_constructor_feerateoptionswithtotalfee_previewnew(uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_method_feerateoptionswithtotalfee_add_custom_fee_rate(`ptr`: Long,`feeRate`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_method_feerateoptionswithtotalfee_calculate_custom_fee_speed(`ptr`: Long,`feeRate`: Float,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_method_feerateoptionswithtotalfee_custom(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_method_feerateoptionswithtotalfee_fast(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_method_feerateoptionswithtotalfee_fee_rate_options(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_method_feerateoptionswithtotalfee_get_fee_rate_with(`ptr`: Long,`feeRate`: Float,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_method_feerateoptionswithtotalfee_medium(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_method_feerateoptionswithtotalfee_remove_custom_fee(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_method_feerateoptionswithtotalfee_slow(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_method_feerateoptionswithtotalfee_transaction_size(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_clone_psbt(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_free_psbt(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_cove_types_fn_constructor_psbt_new(`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_method_psbt_fee(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_method_psbt_output_total_amount(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_method_psbt_tx_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_method_psbt_weight(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_clone_outpoint(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_free_outpoint(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_cove_types_fn_constructor_outpoint_previewnew(uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_constructor_outpoint_withvout(`vout`: Int,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_method_outpoint_eq(`ptr`: Long,`rhs`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
+    external fun uniffi_cove_types_fn_method_outpoint_hashtouint(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_method_outpoint_txid(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_method_outpoint_txid_str(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_method_outpoint_txn_link(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_clone_sentandreceived(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_free_sentandreceived(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_cove_types_fn_method_sentandreceived_amount(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_method_sentandreceived_amount_fmt(`ptr`: Long,`unit`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_method_sentandreceived_direction(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_method_sentandreceived_external_sent(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_method_sentandreceived_label(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_method_sentandreceived_received(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_method_sentandreceived_sent(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_clone_txid(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_free_txid(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_cove_types_fn_method_txid_as_hash_string(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_method_txid_uniffi_trait_display(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_method_txid_uniffi_trait_eq_eq(`ptr`: Long,`other`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
+    external fun uniffi_cove_types_fn_method_txid_uniffi_trait_eq_ne(`ptr`: Long,`other`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
+    external fun uniffi_cove_types_fn_method_txid_uniffi_trait_hash(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_method_txid_uniffi_trait_ord_cmp(`ptr`: Long,`other`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
+    external fun uniffi_cove_types_fn_clone_txin(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_free_txin(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_cove_types_fn_clone_txout(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_free_txout(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_cove_types_fn_clone_utxolist(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_free_utxolist(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_cove_types_fn_method_colorschemeselection_capitalized_string(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_method_qrexportformat_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_method_feespeed_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_method_network_display_name(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_method_network_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_method_bitcoinunit_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_method_utxo_date(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_method_utxo_hash_to_uint(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_method_utxo_is_equal(`ptr`: RustBuffer.ByValue,`other`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
+    external fun uniffi_cove_types_fn_method_utxo_name(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_method_utxo_uniffi_trait_eq_eq(`ptr`: RustBuffer.ByValue,`other`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
+    external fun uniffi_cove_types_fn_method_utxo_uniffi_trait_eq_ne(`ptr`: RustBuffer.ByValue,`other`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
+    external fun uniffi_cove_types_fn_method_utxo_uniffi_trait_hash(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_func_address_is_valid(`address`: RustBuffer.ByValue,`network`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_cove_types_fn_func_address_is_valid_for_network(`address`: RustBuffer.ByValue,`network`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_cove_types_fn_func_address_string_spaced_out(`address`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_func_all_color_schemes(uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_func_confirm_details_preview_new(uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_types_fn_func_qr_density_is_equal(`lhs`: Long,`rhs`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
+    external fun uniffi_cove_types_fn_func_fee_rate_options_with_total_fee_is_equal(`lhs`: Long,`rhs`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
+    external fun uniffi_cove_types_fn_func_fee_speed_duration(`feeSpeed`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_func_fee_speed_is_custom(`feeSpeed`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
+    external fun uniffi_cove_types_fn_func_fee_speed_to_circle_color(`feeSpeed`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_func_all_networks(uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_func_network_to_string(`network`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_func_all_units(uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_func_previewnewutxolist(`outputCount`: Byte,`changeCount`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun ffi_cove_types_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun ffi_cove_types_rustbuffer_from_bytes(`bytes`: ForeignBytes.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun ffi_cove_types_rustbuffer_free(`buf`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun ffi_cove_types_rustbuffer_reserve(`buf`: RustBuffer.ByValue,`additional`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun ffi_cove_types_rust_future_poll_u8(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+    ): Unit
+    external fun ffi_cove_types_rust_future_cancel_u8(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_types_rust_future_free_u8(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_types_rust_future_complete_u8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
+    external fun ffi_cove_types_rust_future_poll_i8(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+    ): Unit
+    external fun ffi_cove_types_rust_future_cancel_i8(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_types_rust_future_free_i8(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_types_rust_future_complete_i8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
+    external fun ffi_cove_types_rust_future_poll_u16(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+    ): Unit
+    external fun ffi_cove_types_rust_future_cancel_u16(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_types_rust_future_free_u16(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_types_rust_future_complete_u16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Short
+    external fun ffi_cove_types_rust_future_poll_i16(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+    ): Unit
+    external fun ffi_cove_types_rust_future_cancel_i16(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_types_rust_future_free_i16(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_types_rust_future_complete_i16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Short
+    external fun ffi_cove_types_rust_future_poll_u32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+    ): Unit
+    external fun ffi_cove_types_rust_future_cancel_u32(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_types_rust_future_free_u32(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_types_rust_future_complete_u32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Int
+    external fun ffi_cove_types_rust_future_poll_i32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+    ): Unit
+    external fun ffi_cove_types_rust_future_cancel_i32(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_types_rust_future_free_i32(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_types_rust_future_complete_i32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Int
+    external fun ffi_cove_types_rust_future_poll_u64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+    ): Unit
+    external fun ffi_cove_types_rust_future_cancel_u64(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_types_rust_future_free_u64(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_types_rust_future_complete_u64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun ffi_cove_types_rust_future_poll_i64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+    ): Unit
+    external fun ffi_cove_types_rust_future_cancel_i64(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_types_rust_future_free_i64(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_types_rust_future_complete_i64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun ffi_cove_types_rust_future_poll_f32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+    ): Unit
+    external fun ffi_cove_types_rust_future_cancel_f32(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_types_rust_future_free_f32(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_types_rust_future_complete_f32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Float
+    external fun ffi_cove_types_rust_future_poll_f64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+    ): Unit
+    external fun ffi_cove_types_rust_future_cancel_f64(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_types_rust_future_free_f64(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_types_rust_future_complete_f64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Double
+    external fun ffi_cove_types_rust_future_poll_rust_buffer(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+    ): Unit
+    external fun ffi_cove_types_rust_future_cancel_rust_buffer(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_types_rust_future_free_rust_buffer(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_types_rust_future_complete_rust_buffer(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun ffi_cove_types_rust_future_poll_void(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+    ): Unit
+    external fun ffi_cove_types_rust_future_cancel_void(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_types_rust_future_free_void(`handle`: Long,
+    ): Unit
+    external fun ffi_cove_types_rust_future_complete_void(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
 
-    
+        
 }
 
 private fun uniffiCheckContractApiVersion(lib: IntegrityCheckingUniffiLib) {
@@ -9793,7 +9793,7 @@ public object FfiConverterTypeFeeSpeed : FfiConverterRustBuffer<FeeSpeed>{
         }
     }
 
-    override fun allocationSize(value: FeeSpeed) = when(value) {
+    override fun allocationSize(value: FeeSpeed): ULong = when(value) {
         is FeeSpeed.Fast -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
@@ -10016,7 +10016,7 @@ public object FfiConverterTypeFfiColor : FfiConverterRustBuffer<FfiColor>{
         }
     }
 
-    override fun allocationSize(value: FfiColor) = when(value) {
+    override fun allocationSize(value: FfiColor): ULong = when(value) {
         is FfiColor.Red -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (

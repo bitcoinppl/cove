@@ -1556,7 +1556,7 @@ public object FfiConverterTypeTapCard : FfiConverterRustBuffer<TapCard>{
         }
     }
 
-    override fun allocationSize(value: TapCard) = when(value) {
+    override fun allocationSize(value: TapCard): ULong = when(value) {
         is TapCard.SatsCard -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (

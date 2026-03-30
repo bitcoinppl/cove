@@ -139,10 +139,8 @@ pub struct DeriveInfo {
     pub network: Network,
 }
 
-#[uniffi::export]
 impl TapSignerReader {
-    #[uniffi::constructor(name = "new", default(cmd = None))]
-    pub async fn new(
+    async fn new(
         transport: Box<dyn TapcardTransportProtocol>,
         cmd: Option<TapSignerCmd>,
     ) -> Result<Self> {
@@ -178,7 +176,10 @@ impl TapSignerReader {
 
         Ok(me)
     }
+}
 
+#[uniffi::export]
+impl TapSignerReader {
     #[uniffi::method]
     pub async fn run(&self) -> Result<TapSignerResponse> {
         let cmd = self.cmd.write().take().ok_or(TapSignerReaderError::NoCommand)?;
@@ -399,9 +400,8 @@ impl TapSignerReader {
     }
 }
 
-/// Factory function to create a TapSignerReader instance
-/// This is a workaround for UniFFI not generating async constructors for Kotlin
-/// While iOS can use the async constructor directly, Android needs this factory function
+/// Create a TapSignerReader instance for FFI callers
+/// UniFFI's Kotlin bindings do not support async primary constructors
 #[uniffi::export]
 pub async fn create_tap_signer_reader(
     transport: Box<dyn TapcardTransportProtocol>,

@@ -349,7 +349,7 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
                 )
 
             case .tapSigner:
-                let tapSignerReader = try await TapSignerReader(
+                let tapSignerReader = try await createTapSignerReader(
                     transport: transport, cmd: tapSignerCmd
                 )
 

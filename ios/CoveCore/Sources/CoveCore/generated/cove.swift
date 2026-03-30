@@ -9554,23 +9554,7 @@ open class TapSignerReader: TapSignerReaderProtocol, @unchecked Sendable {
     public func uniffiCloneHandle() -> UInt64 {
         return try! rustCall { uniffi_cove_fn_clone_tapsignerreader(self.handle, $0) }
     }
-public convenience init(transport: TapcardTransportProtocol, cmd: TapSignerCmd? = nil)async throws  {
-    let handle =
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_cove_fn_constructor_tapsignerreader_new(FfiConverterCallbackInterfaceTapcardTransportProtocol_lower(transport),FfiConverterOptionTypeTapSignerCmd.lower(cmd)
-                )
-            },
-            pollFunc: ffi_cove_rust_future_poll_u64,
-            completeFunc: ffi_cove_rust_future_complete_u64,
-            freeFunc: ffi_cove_rust_future_free_u64,
-            liftFunc: FfiConverterTypeTapSignerReader_lift,
-            errorHandler: FfiConverterTypeTapSignerReaderError_lift
-        )
-        
-        .uniffiCloneHandle()
-    self.init(unsafeFromHandle: handle)
-}
+    // No primary constructor declared for this class.
 
     deinit {
         if handle == 0 {
@@ -13881,7 +13865,7 @@ public struct WalletMetadata: Equatable, Hashable {
      */
     public var hardwareMetadata: HardwareWalletMetadata?
     /**
-     * Show labels for transactions i the transaction list
+     * Show labels for transactions in the transaction list
      * If false, we only show either `Sent` or `Received` labels
      */
     public var showLabels: Bool
@@ -13894,7 +13878,7 @@ public struct WalletMetadata: Equatable, Hashable {
          * Metadata data specific to different hardware wallets
          */hardwareMetadata: HardwareWalletMetadata?, 
         /**
-         * Show labels for transactions i the transaction list
+         * Show labels for transactions in the transaction list
          * If false, we only show either `Sent` or `Received` labels
          */showLabels: Bool, `internal`: InternalOnlyMetadata) {
         self.id = id
@@ -30991,9 +30975,8 @@ public func isValidChainCode(chainCode: String) -> Bool  {
 })
 }
 /**
- * Factory function to create a TapSignerReader instance
- * This is a workaround for UniFFI not generating async constructors for Kotlin
- * While iOS can use the async constructor directly, Android needs this factory function
+ * Create a TapSignerReader instance for FFI callers
+ * UniFFI's Kotlin bindings do not support async primary constructors
  */
 public func createTapSignerReader(transport: TapcardTransportProtocol, cmd: TapSignerCmd?)async throws  -> TapSignerReader  {
     return
@@ -31196,7 +31179,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_func_is_valid_chain_code() != 38380) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_func_create_tap_signer_reader() != 39823) {
+    if (uniffi_cove_checksum_func_create_tap_signer_reader() != 37635) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_tapsignerresponsebackupresponse() != 56452) {
@@ -32349,9 +32332,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_setupcmd_try_new() != 28305) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_constructor_tapsignerreader_new() != 47410) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_bitcointransaction_new() != 54413) {
