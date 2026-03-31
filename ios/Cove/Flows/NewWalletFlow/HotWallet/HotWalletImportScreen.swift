@@ -71,6 +71,17 @@ struct HotWalletImportScreen: View {
     let autocomplete = Bip39AutoComplete()
     @State var numberOfWords: NumberOfBip39Words
     @State var importType: ImportType = .manual
+    let onImported: ((WalletId) -> Void)?
+
+    init(
+        numberOfWords: NumberOfBip39Words,
+        importType: ImportType = .manual,
+        onImported: ((WalletId) -> Void)? = nil
+    ) {
+        _numberOfWords = State(initialValue: numberOfWords)
+        _importType = State(initialValue: importType)
+        self.onImported = onImported
+    }
 
     // private
     @Environment(\.navigate) private var navigate
@@ -208,6 +219,11 @@ struct HotWalletImportScreen: View {
     func importWallet() {
         do {
             let walletMetadata = try manager.rust.importWallet(enteredWords: enteredWords)
+            if let onImported {
+                onImported(walletMetadata.id)
+                return
+            }
+
             try app.rust.selectWallet(id: walletMetadata.id)
             app.walletManager = nil
             app.resetRoute(to: .selectedWallet(walletMetadata.id))
@@ -492,6 +508,11 @@ struct HotWalletImportScreen: View {
                 actions: {
                     Button("OK", role: .cancel) {
                         alertState = .none
+                        if let onImported {
+                            onImported(walletId)
+                            return
+                        }
+
                         try? app.rust.selectWallet(id: walletId)
                         app.resetRoute(to: .selectedWallet(walletId))
                     }

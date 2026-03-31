@@ -14,10 +14,16 @@ struct VerifyWordsContainer: View {
     @Environment(\.sizeCategory) var sizeCategory
 
     let id: WalletId
+    let onVerified: (() -> Void)?
 
     @State var verificationComplete = false
     @State private var manager: WalletManager? = nil
     @State private var stateMachine: WordVerifyStateMachine? = nil
+
+    init(id: WalletId, onVerified: (() -> Void)? = nil) {
+        self.id = id
+        self.onVerified = onVerified
+    }
 
     func initOnAppear() {
         do {
@@ -35,7 +41,7 @@ struct VerifyWordsContainer: View {
     @ViewBuilder
     func LoadedScreen(manager: WalletManager, stateMachine: WordVerifyStateMachine) -> some View {
         if verificationComplete {
-            VerificationCompleteScreen(manager: manager)
+            VerificationCompleteScreen(manager: manager, onVerified: onVerified)
                 .transition(
                     .asymmetric(
                         insertion: .move(edge: .trailing),

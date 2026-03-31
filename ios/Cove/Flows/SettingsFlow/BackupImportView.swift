@@ -5,6 +5,11 @@ import UniformTypeIdentifiers
 struct BackupImportView: View {
     @Environment(AppManager.self) private var app
     @Environment(\.dismiss) private var dismiss
+    let onImported: (() -> Void)?
+
+    init(onImported: (() -> Void)? = nil) {
+        self.onImported = onImported
+    }
 
     @State private var fileData: Data? = nil
     @State private var fileName: String? = nil
@@ -153,15 +158,11 @@ struct BackupImportView: View {
         .alert("Import Complete", isPresented: .init(
             get: { importReport != nil },
             set: { if !$0 {
-                importReport = nil
-                app.dispatch(action: .refreshAfterImport)
-                dismiss()
+                handleImportCompletionDismissal()
             }}
         )) {
             Button("OK") {
-                importReport = nil
-                app.dispatch(action: .refreshAfterImport)
-                dismiss()
+                handleImportCompletionDismissal()
             }
         } message: {
             if let report = importReport {
@@ -239,6 +240,16 @@ struct BackupImportView: View {
                     errorMessage = (error as? BackupError)?.description ?? error.localizedDescription
                 }
             }
+        }
+    }
+
+    private func handleImportCompletionDismissal() {
+        importReport = nil
+        app.dispatch(action: .refreshAfterImport)
+        if let onImported {
+            onImported()
+        } else {
+            dismiss()
         }
     }
 

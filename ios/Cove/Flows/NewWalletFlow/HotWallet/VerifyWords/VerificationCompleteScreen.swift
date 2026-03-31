@@ -13,6 +13,12 @@ struct VerificationCompleteScreen: View {
 
     /// args
     let manager: WalletManager
+    let onVerified: (() -> Void)?
+
+    init(manager: WalletManager, onVerified: (() -> Void)? = nil) {
+        self.manager = manager
+        self.onVerified = onVerified
+    }
 
     var body: some View {
         VStack(spacing: 24) {
@@ -60,7 +66,11 @@ struct VerificationCompleteScreen: View {
             Button("Go To Wallet") {
                 do {
                     try manager.rust.markWalletAsVerified()
-                    app.resetRoute(to: Route.selectedWallet(manager.id))
+                    if let onVerified {
+                        onVerified()
+                    } else {
+                        app.resetRoute(to: Route.selectedWallet(manager.id))
+                    }
                 } catch {
                     Log.error("Error marking wallet as verified: \(error)")
                 }

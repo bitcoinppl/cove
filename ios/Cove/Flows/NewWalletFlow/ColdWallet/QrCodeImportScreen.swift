@@ -65,6 +65,11 @@ struct QrCodeImportScreen: View {
     @State private var showingHelp = false
     @Environment(AppManager.self) var app
     @Environment(\.dismiss) private var dismiss
+    let onImported: ((WalletId) -> Void)?
+
+    init(onImported: ((WalletId) -> Void)? = nil) {
+        self.onImported = onImported
+    }
 
     // private
     @State private var scanComplete = false
@@ -148,16 +153,24 @@ struct QrCodeImportScreen: View {
                 }
                 let id = wallet.id()
                 Log.debug("Imported Wallet: \(id)")
-                app.alertState = TaggedItem(.importedSuccessfully)
-                try app.rust.selectWallet(id: id)
+                if let onImported {
+                    onImported(id)
+                } else {
+                    app.alertState = TaggedItem(.importedSuccessfully)
+                    try app.rust.selectWallet(id: id)
+                }
             } catch let WalletError.MultiFormat(error) {
                 app.popRoute()
                 self.alert = AlertItem(type: .error(error.description, "Invalid Format"))
             } catch let WalletError.WalletAlreadyExists(id) {
-                self.alert = AlertItem(type: .success("Wallet already exists: \(id)"))
-                if (try? app.rust.selectWallet(id: id)) == nil {
-                    app.popRoute()
-                    self.alert = AlertItem(type: .error("Unable to select wallet"))
+                if let onImported {
+                    onImported(id)
+                } else {
+                    self.alert = AlertItem(type: .success("Wallet already exists: \(id)"))
+                    if (try? app.rust.selectWallet(id: id)) == nil {
+                        app.popRoute()
+                        self.alert = AlertItem(type: .error("Unable to select wallet"))
+                    }
                 }
             } catch {
                 Log.warn("Error importing hardware wallet: \(error)")
