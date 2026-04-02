@@ -4,13 +4,6 @@ import SwiftUI
 
 private let walletModeChangeDelayMs = 250
 
-enum CloudBackupRootPromptBlocker: Hashable {
-    case settingsLocalModal
-    case settingsCloudBackupDialog
-    case cloudBackupDetailBusy
-    case cloudBackupDetailDialog
-}
-
 @Observable final class AppManager: FfiReconcile {
     static let shared = makeShared()
 
@@ -25,7 +18,6 @@ enum CloudBackupRootPromptBlocker: Hashable {
 
     var alertState: TaggedItem<AppAlertState>? = .none
     var sheetState: TaggedItem<AppSheetState>? = .none
-    var cloudBackupRootPromptBlockers: Set<CloudBackupRootPromptBlocker> = []
 
     /// tracks if current screen is scrolled past header for adaptive nav styling
     var isPastHeader = false
@@ -57,10 +49,6 @@ enum CloudBackupRootPromptBlocker: Hashable {
 
     @ObservationIgnored
     var sendFlowManager: SendFlowManager?
-
-    var isCloudBackupRootPromptBlocked: Bool {
-        !cloudBackupRootPromptBlockers.isEmpty
-    }
 
     public var colorScheme: ColorScheme? {
         switch colorSchemeSelection {
@@ -223,23 +211,6 @@ enum CloudBackupRootPromptBlocker: Hashable {
 
     func scanQr() {
         sheetState = TaggedItem(.qr)
-    }
-
-    func setCloudBackupRootPromptBlocker(
-        _ blocker: CloudBackupRootPromptBlocker,
-        isActive: Bool
-    ) {
-        if isActive {
-            cloudBackupRootPromptBlockers.insert(blocker)
-        } else {
-            cloudBackupRootPromptBlockers.remove(blocker)
-        }
-    }
-
-    func clearCloudBackupRootPromptBlockers(_ blockers: [CloudBackupRootPromptBlocker]) {
-        for blocker in blockers {
-            cloudBackupRootPromptBlockers.remove(blocker)
-        }
     }
 
     @MainActor

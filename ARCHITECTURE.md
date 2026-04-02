@@ -62,7 +62,7 @@ Actors are ideal for components that need to process messages sequentially, main
 
 This pattern is used throughout the codebase for shared resources and is safe to use from any thread. Platform code mirrors this with `AppManager.shared` (iOS) and `AppManager.getInstance()` (Android).
 
-**Concurrency primitives.** The codebase uses `parking_lot::Mutex` and `parking_lot::RwLock` everywhere — use these instead of `std::sync` equivalents to keep things consistent.
+**Concurrency primitives.** The codebase uses `parking_lot::Mutex` and `parking_lot::RwLock` everywhere — use these instead of `std::sync` equivalents to keep things consistent. Prefer scoped blocks to release locks or borrows instead of explicit `drop(...)` unless explicit `drop` is actually needed.
 
 **State reconciliation.** Each manager module owns a `flume` channel pair. Rust emits typed `…ReconcileMessage` enums through the channel, and the generated FFI surface forwards them to the platform reconcilers. Platform managers should call `listen_for_updates` immediately after instantiating their Rust counterpart (e.g. `AppManager` in `ios/Cove/AppManager.swift`) so no reconciliation messages are missed. Long-lived managers (wallet, send flow, auth) also keep shared state in `Arc<RwLock<_>>` structures so the reconciler can request snapshots. When a manager exposes `state()`, treat it as an initial snapshot/bootstrap read. Ongoing reconciliation should use typed delta messages for individual fields or events rather than re-sending the whole state after each mutation. If one action updates several fields, compute the changes under the lock, then send the delta messages after releasing the lock.
 

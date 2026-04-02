@@ -35,6 +35,7 @@ impl PendingUploadVerifier {
             }
         };
 
+        let mut had_pending = false;
         for sync_state in &states {
             let PersistedCloudBlobState::UploadedPendingConfirmation(state) = &sync_state.state
             else {
@@ -42,6 +43,7 @@ impl PendingUploadVerifier {
             };
             let current_state = state.clone();
 
+            had_pending = true;
             let result = self.check_blob(sync_state, &current_state);
             let next_state = Self::apply_blob_result(sync_state, &current_state, &result);
             let persisted = match table.set_if_current(sync_state, &next_state) {
@@ -62,7 +64,7 @@ impl PendingUploadVerifier {
         self.0.finalize_pending_verification_if_ready();
         let has_pending = self.0.has_pending_cloud_upload_verification();
         self.send_pending_state(has_pending);
-        if has_pending {
+        if had_pending && has_pending {
             info!("Pending upload verification: still pending");
         } else {
             info!("Pending upload verification: all blobs confirmed");

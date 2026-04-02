@@ -112,7 +112,7 @@ extension CoveApp {
         case let .ready(app, auth):
             CoveMainView(app: app, auth: auth)
         case let .onboarding(app, auth):
-            OnboardingContainer(manager: OnboardingManager(app: app)) {
+            OnboardingContainer(manager: OnboardingManager(app: app), auth: auth) {
                 startupState = .ready(app, auth)
                 startBackupIntegrityCheck()
             }

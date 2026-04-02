@@ -16,7 +16,7 @@ use super::wallets::{
 };
 
 use super::{
-    CloudBackupError, CloudBackupReconcileMessage as Message, CloudBackupRestoreProgress,
+    CloudBackupError, CloudBackupPasskeyChoiceFlow, CloudBackupRestoreProgress,
     CloudBackupRestoreReport, CloudBackupRestoreStage, CloudBackupStatus, CloudBackupWalletItem,
     CloudBackupWalletStatus, PendingEnableSession, RestoreOperation, RustCloudBackupManager,
 };
@@ -349,14 +349,14 @@ impl RustCloudBackupManager {
 
             NamespaceMatchOutcome::UserDeclined => {
                 info!("Enable: user cancelled passkey picker during namespace matching");
-                self.send(Message::PasskeyDiscoveryCancelled);
+                self.set_passkey_choice_prompt(CloudBackupPasskeyChoiceFlow::Enable);
                 self.clear_enable_progress(CloudBackupStatus::Disabled);
                 Ok(())
             }
 
             NamespaceMatchOutcome::NoMatch => {
                 info!("Enable: passkey didn't match existing backups, asking user to confirm");
-                self.send(Message::ExistingBackupFound);
+                self.set_existing_backup_found_prompt();
                 self.clear_enable_progress(CloudBackupStatus::Disabled);
                 Ok(())
             }
@@ -441,7 +441,7 @@ impl RustCloudBackupManager {
                     had_local_master_key,
                     "Enable cancelled before passkey setup finished",
                 );
-                self.send(Message::PasskeyDiscoveryCancelled);
+                self.set_passkey_choice_prompt(CloudBackupPasskeyChoiceFlow::Enable);
                 self.clear_enable_progress(CloudBackupStatus::Disabled);
                 return Ok(());
             }
@@ -513,7 +513,7 @@ impl RustCloudBackupManager {
                     has_local_master_key,
                     "Enable (no discovery) cancelled before passkey setup finished",
                 );
-                self.send(Message::PasskeyDiscoveryCancelled);
+                self.set_passkey_choice_prompt(CloudBackupPasskeyChoiceFlow::Enable);
                 self.clear_enable_progress(CloudBackupStatus::Disabled);
                 return Ok(());
             }
@@ -533,7 +533,7 @@ impl RustCloudBackupManager {
                 existing_namespaces.len()
             );
             self.replace_pending_enable_session(PendingEnableSession::new(master_key, passkey));
-            self.send(Message::ExistingBackupFound);
+            self.set_existing_backup_found_prompt();
             self.clear_enable_progress(CloudBackupStatus::Disabled);
             return Ok(());
         }

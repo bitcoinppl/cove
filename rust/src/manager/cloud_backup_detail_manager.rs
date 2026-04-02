@@ -2,7 +2,7 @@ use act_zero::send;
 use tracing::error;
 
 use super::cloud_backup_manager::{
-    CLOUD_BACKUP_MANAGER, CloudBackupError, CloudBackupManagerAction, CloudBackupReconcileMessage,
+    CLOUD_BACKUP_MANAGER, CloudBackupError, CloudBackupManagerAction, CloudBackupPasskeyChoiceFlow,
     CloudBackupWalletItem, DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
     RustCloudBackupManager, runtime_actor::CloudBackupOperation,
 };
@@ -61,12 +61,24 @@ impl RustCloudBackupManager {
     #[uniffi::method]
     pub fn dispatch(&self, action: Action) {
         match action {
-            Action::EnableCloudBackup => self.enable_cloud_backup(),
-            Action::EnableCloudBackupForceNew => self.enable_cloud_backup_force_new(),
-            Action::EnableCloudBackupNoDiscovery => self.enable_cloud_backup_no_discovery(),
+            Action::EnableCloudBackup => {
+                self.clear_passkey_choice_prompt();
+                self.enable_cloud_backup();
+            }
+            Action::EnableCloudBackupForceNew => {
+                self.clear_existing_backup_found_prompt();
+                self.enable_cloud_backup_force_new();
+            }
+            Action::EnableCloudBackupNoDiscovery => {
+                self.clear_existing_backup_found_prompt();
+                self.clear_passkey_choice_prompt();
+                self.enable_cloud_backup_no_discovery();
+            }
             Action::DiscardPendingEnableCloudBackup => {
                 self.discard_pending_enable_cloud_backup();
             }
+            Action::DismissPasskeyChoicePrompt => self.clear_passkey_choice_prompt(),
+            Action::DismissMissingPasskeyReminder => self.dismiss_missing_passkey_prompt(),
             Action::RestoreFromCloudBackup => self.restore_from_cloud_backup(),
             Action::CancelRestore => self.cancel_restore(),
             Action::StartVerification => self.start_verification(),
@@ -79,9 +91,11 @@ impl RustCloudBackupManager {
                 CLOUD_BACKUP_MANAGER.clone().spawn_recovery(RecoveryAction::ReinitializeBackup);
             }
             Action::RepairPasskey => {
+                self.clear_passkey_choice_prompt();
                 CLOUD_BACKUP_MANAGER.clone().spawn_repair_passkey(false);
             }
             Action::RepairPasskeyNoDiscovery => {
+                self.clear_passkey_choice_prompt();
                 CLOUD_BACKUP_MANAGER.clone().spawn_repair_passkey(true);
             }
             Action::SyncUnsynced => CLOUD_BACKUP_MANAGER.clone().spawn_sync(),
@@ -204,14 +218,25 @@ impl RustCloudBackupManager {
 
         let result = match &action {
             RecoveryAction::RecreateManifest => self.do_reupload_all_wallets(),
-            RecoveryAction::ReinitializeBackup => self.do_enable_cloud_backup(),
+            RecoveryAction::ReinitializeBackup => self.run_reinitialize_backup(),
             RecoveryAction::RepairPasskey => self.do_repair_passkey_wrapper(),
+        };
+        let should_auto_verify = match action {
+            RecoveryAction::ReinitializeBackup => {
+                matches!(
+                    self.current_status(),
+                    super::cloud_backup_manager::CloudBackupStatus::Enabled
+                )
+            }
+            RecoveryAction::RecreateManifest | RecoveryAction::RepairPasskey => true,
         };
 
         match result {
             Ok(()) => {
                 self.set_recovery(RecoveryState::Idle);
-                self.handle_start_verification(false);
+                if should_auto_verify {
+                    self.handle_start_verification(false);
+                }
             }
             Err(CloudBackupError::UnsupportedPasskeyProvider) => {
                 self.set_recovery(RecoveryState::Idle);
@@ -249,7 +274,7 @@ impl RustCloudBackupManager {
             }
             Err(CloudBackupError::PasskeyDiscoveryCancelled) => {
                 self.set_recovery(RecoveryState::Idle);
-                self.send(CloudBackupReconcileMessage::PasskeyDiscoveryCancelled);
+                self.set_passkey_choice_prompt(CloudBackupPasskeyChoiceFlow::RepairPasskey);
             }
             Err(CloudBackupError::UnsupportedPasskeyProvider) => {
                 self.set_recovery(RecoveryState::Idle);
@@ -262,6 +287,28 @@ impl RustCloudBackupManager {
                     action: RecoveryAction::RepairPasskey,
                     error: error.to_string(),
                 });
+            }
+        }
+    }
+
+    fn run_reinitialize_backup(&self) -> Result<(), CloudBackupError> {
+        if !self.begin_background_operation(
+            "reinitialize_cloud_backup",
+            Some(super::cloud_backup_manager::CloudBackupStatus::Enabling),
+        ) {
+            return Err(CloudBackupError::RecoveryRequired(
+                "cloud backup operation already running".into(),
+            ));
+        }
+
+        let result = self.do_enable_cloud_backup();
+        match result {
+            Ok(()) => Ok(()),
+            Err(error) => {
+                self.set_status(RustCloudBackupManager::runtime_status_for(
+                    &RustCloudBackupManager::load_persisted_state(),
+                ));
+                Err(error)
             }
         }
     }

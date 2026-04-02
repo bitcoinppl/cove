@@ -2,20 +2,28 @@ import SwiftUI
 
 struct OnboardingContainer: View {
     @State private var manager: OnboardingManager
+    let auth: AuthManager
     let onComplete: () -> Void
 
-    init(manager: OnboardingManager, onComplete: @escaping () -> Void) {
+    init(manager: OnboardingManager, auth: AuthManager, onComplete: @escaping () -> Void) {
         _manager = State(initialValue: manager)
+        self.auth = auth
         self.onComplete = onComplete
     }
 
     var body: some View {
-        stepView(for: manager.state.step)
-            .onChange(of: manager.isComplete) { _, complete in
-                guard complete else { return }
-                manager.app.reloadWallets()
-                onComplete()
-            }
+        CloudBackupPresentationHost(
+            app: manager.app,
+            auth: auth,
+            isCoverPresented: false
+        ) {
+            stepView(for: manager.state.step)
+                .onChange(of: manager.isComplete) { _, complete in
+                    guard complete else { return }
+                    manager.app.reloadWallets()
+                    onComplete()
+                }
+        }
     }
 
     @ViewBuilder

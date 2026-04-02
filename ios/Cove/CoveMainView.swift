@@ -18,10 +18,6 @@ struct CoveMainView: View {
     @State var showCover: Bool = true
     @State var scannedCode: TaggedItem<MultiFormat>? = .none
     @State var coverClearTask: Task<Void, Never>?
-    @State private var showMissingPasskeyAlert = false
-    @State private var showCloudBackupVerificationPrompt = false
-    @State private var pendingMissingPasskeyAlert = false
-    @State private var keepShowingCloudBackupVerificationPrompt = false
 
     @ViewBuilder
     private func alertMessage(alert: TaggedItem<AppAlertState>) -> some View {
@@ -256,43 +252,6 @@ struct CoveMainView: View {
                 if !newValue { app.alertState = .none }
             }
         )
-    }
-
-    private var canPresentMissingPasskeyAlert: Bool {
-        phase == .active &&
-            auth.lockState == .unlocked &&
-            !showCover &&
-            app.alertState == nil &&
-            app.sheetState == nil &&
-            !app.isCloudBackupRootPromptBlocked
-    }
-
-    private var canPresentCloudBackupVerificationPrompt: Bool {
-        phase == .active &&
-            auth.lockState == .unlocked &&
-            !showCover &&
-            app.alertState == nil &&
-            app.sheetState == nil &&
-            !showMissingPasskeyAlert &&
-            !app.isCloudBackupRootPromptBlocked
-    }
-
-    private var isCloudBackupPasskeyMissing: Bool {
-        if case .passkeyMissing = CloudBackupManager.shared.status { return true }
-        return false
-    }
-
-    private var isRepairingCloudBackupPasskey: Bool {
-        if case .recovering(.repairPasskey) = CloudBackupManager.shared.recovery { return true }
-        return false
-    }
-
-    private var isViewingCloudBackup: Bool {
-        app.currentRoute.isEqual(routeToCheck: .settings(.cloudBackup))
-    }
-
-    private var shouldSuppressMissingPasskeyAlert: Bool {
-        isRepairingCloudBackupPasskey || isViewingCloudBackup
     }
 
     var navBarColor: Color {
@@ -606,15 +565,6 @@ struct CoveMainView: View {
         }
         .onChange(of: auth.lockState) { old, new in
             Log.warn("AUTH LOCK STATE CHANGED: \(old) --> \(new)")
-
-            if new == .unlocked {
-                scheduleMissingPasskeyAlert()
-                scheduleCloudBackupVerificationPrompt()
-                return
-            }
-
-            showMissingPasskeyAlert = false
-            showCloudBackupVerificationPrompt = false
         }
         .environment(app)
         .environment(auth)
@@ -675,8 +625,6 @@ struct CoveMainView: View {
             guard app.asyncRuntimeReady else { return }
             app.dispatch(action: AppAction.updateFees)
             app.dispatch(action: AppAction.updateFiatPrices)
-            scheduleMissingPasskeyAlert()
-            scheduleCloudBackupVerificationPrompt()
         }
 
         // PIN auth active, no biometrics, leaving app
@@ -763,401 +711,29 @@ struct CoveMainView: View {
         }
     }
 
-    private func scheduleMissingPasskeyAlert() {
-        // this blocker-based coordination is an intentional bridge until the
-        // Rust-owned cloud-backup presentation refactor in issue #619 replaces it
-        guard isCloudBackupPasskeyMissing else {
-            pendingMissingPasskeyAlert = false
-            showMissingPasskeyAlert = false
-            return
-        }
-
-        if shouldSuppressMissingPasskeyAlert {
-            pendingMissingPasskeyAlert = false
-            showMissingPasskeyAlert = false
-            return
-        }
-
-        guard canPresentMissingPasskeyAlert else {
-            pendingMissingPasskeyAlert = true
-            return
-        }
-
-        pendingMissingPasskeyAlert = false
-        showMissingPasskeyAlert = true
-    }
-
-    private func dismissMissingPasskeyAlert() {
-        pendingMissingPasskeyAlert = false
-        showMissingPasskeyAlert = false
-    }
-
-    private func scheduleCloudBackupVerificationPrompt() {
-        if CloudBackupManager.shared.isBackgroundVerifying {
-            keepShowingCloudBackupVerificationPrompt = false
-            showCloudBackupVerificationPrompt = false
-            return
-        }
-
-        if keepShowingCloudBackupVerificationPrompt {
-            guard canPresentCloudBackupVerificationPrompt else {
-                showCloudBackupVerificationPrompt = false
-                return
-            }
-
-            showCloudBackupVerificationPrompt = true
-            return
-        }
-
-        guard CloudBackupManager.shared.shouldPromptVerification else {
-            showCloudBackupVerificationPrompt = false
-            return
-        }
-
-        guard canPresentCloudBackupVerificationPrompt else {
-            showCloudBackupVerificationPrompt = false
-            return
-        }
-
-        showCloudBackupVerificationPrompt = true
-    }
-
-    private func dismissCloudBackupVerificationPrompt() {
-        keepShowingCloudBackupVerificationPrompt = false
-        showCloudBackupVerificationPrompt = false
-        CloudBackupManager.shared.dispatch(action: .dismissVerificationPrompt)
-    }
-
-    private func startCloudBackupVerification() {
-        keepShowingCloudBackupVerificationPrompt = true
-        CloudBackupManager.shared.dispatch(action: .startVerification)
-    }
-
-    private func handleCloudBackupVerificationChange(_ verification: VerificationState) {
-        switch verification {
-        case .verified, .passkeyConfirmed, .cancelled:
-            keepShowingCloudBackupVerificationPrompt = false
-            showCloudBackupVerificationPrompt = false
-        case .verifying where CloudBackupManager.shared.isBackgroundVerifying:
-            keepShowingCloudBackupVerificationPrompt = false
-            showCloudBackupVerificationPrompt = false
-        case .failed:
-            keepShowingCloudBackupVerificationPrompt = true
-            scheduleCloudBackupVerificationPrompt()
-        case .verifying:
-            keepShowingCloudBackupVerificationPrompt = true
-            scheduleCloudBackupVerificationPrompt()
-        case .idle:
-            if !CloudBackupManager.shared.shouldPromptVerification { keepShowingCloudBackupVerificationPrompt = false }
-        }
-    }
-
-    private func openCloudBackupScreen() {
-        dismissMissingPasskeyAlert()
-
-        let route = Route.settings(.cloudBackup)
-        if app.currentRoute.isEqual(routeToCheck: route) {
-            return
-        }
-
-        app.pushRoute(route)
-    }
-
     var body: some View {
-        BodyView
-            .id(id)
-            .environment(\.navigate) { route in
-                app.pushRoute(route)
-            }
-            .environment(app)
-            .preferredColorScheme(app.colorScheme)
-            .onChange(of: app.router.routes, onChangeRoute)
-            .onChange(of: app.selectedNetwork) { id = UUID() }
-            // QR code scanning
-            .onChange(of: scannedCode, onChangeQr)
-            // NFC scanning
-            .onChange(of: app.nfcReader.scannedMessage, onChangeNfc)
-            .alert(
-                app.alertState?.item.title() ?? "Alert",
-                isPresented: showingAlert,
-                presenting: app.alertState,
-                actions: alertButtons,
-                message: alertMessage
-            )
-            .alert(
-                "Cloud Backup Passkey Missing",
-                isPresented: $showMissingPasskeyAlert
-            ) {
-                Button("Open Cloud Backup") {
-                    openCloudBackupScreen()
+        CloudBackupPresentationHost(app: app, auth: auth, isCoverPresented: showCover) {
+            BodyView
+                .id(id)
+                .environment(\.navigate) { route in
+                    app.pushRoute(route)
                 }
-                Button("Not Now", role: .cancel) {
-                    dismissMissingPasskeyAlert()
-                }
-            } message: {
-                Text(
-                    "Add a new passkey to restore access to your cloud backup. Until you do, your backups can't be restored."
+                .environment(app)
+                .preferredColorScheme(app.colorScheme)
+                .onChange(of: app.router.routes, onChangeRoute)
+                .onChange(of: app.selectedNetwork) { id = UUID() }
+                .onChange(of: scannedCode, onChangeQr)
+                .onChange(of: app.nfcReader.scannedMessage, onChangeNfc)
+                .alert(
+                    app.alertState?.item.title() ?? "Alert",
+                    isPresented: showingAlert,
+                    presenting: app.alertState,
+                    actions: alertButtons,
+                    message: alertMessage
                 )
-            }
-            .fullScreenCover(isPresented: $showCloudBackupVerificationPrompt) {
-                CloudBackupVerificationPromptView(
-                    onDismiss: dismissCloudBackupVerificationPrompt,
-                    onVerify: startCloudBackupVerification
-                )
-                .interactiveDismissDisabled(true)
-            }
-            .sheet(item: $app.sheetState, content: SheetContent)
-            .onOpenURL(perform: handleFileOpen)
-            .onChange(of: phase, initial: true, handleScenePhaseChange)
-            .onChange(of: CloudBackupManager.shared.status) { _, status in
-                if case .passkeyMissing = status {
-                    keepShowingCloudBackupVerificationPrompt = false
-                    scheduleMissingPasskeyAlert()
-                    showCloudBackupVerificationPrompt = false
-                } else {
-                    dismissMissingPasskeyAlert()
-                    scheduleCloudBackupVerificationPrompt()
-                }
-            }
-            .onChange(of: CloudBackupManager.shared.recovery) { _, recovery in
-                if case .recovering(.repairPasskey) = recovery {
-                    dismissMissingPasskeyAlert()
-                } else if isCloudBackupPasskeyMissing {
-                    scheduleMissingPasskeyAlert()
-                }
-            }
-            .onChange(of: CloudBackupManager.shared.verification) { _, verification in
-                handleCloudBackupVerificationChange(verification)
-            }
-            .onChange(of: app.isCloudBackupRootPromptBlocked) { _, isBlocked in
-                if isBlocked {
-                    if isCloudBackupPasskeyMissing {
-                        pendingMissingPasskeyAlert = true
-                    }
-                    showMissingPasskeyAlert = false
-                    showCloudBackupVerificationPrompt = false
-                    return
-                }
-
-                if pendingMissingPasskeyAlert {
-                    scheduleMissingPasskeyAlert()
-                } else {
-                    scheduleCloudBackupVerificationPrompt()
-                }
-            }
-            .onChange(of: app.router.routes) { _, _ in
-                if isViewingCloudBackup {
-                    dismissMissingPasskeyAlert()
-                } else if isCloudBackupPasskeyMissing {
-                    scheduleMissingPasskeyAlert()
-                }
-
-                scheduleCloudBackupVerificationPrompt()
-            }
-            .onChange(of: showCover) { _, isShowing in
-                if !isShowing, pendingMissingPasskeyAlert {
-                    scheduleMissingPasskeyAlert()
-                }
-                if isShowing {
-                    showCloudBackupVerificationPrompt = false
-                } else {
-                    scheduleCloudBackupVerificationPrompt()
-                }
-            }
-            .onChange(of: app.alertState) { _, alertState in
-                if alertState == nil, pendingMissingPasskeyAlert {
-                    scheduleMissingPasskeyAlert()
-                }
-                if alertState == nil {
-                    scheduleCloudBackupVerificationPrompt()
-                } else {
-                    showCloudBackupVerificationPrompt = false
-                }
-            }
-            .onChange(of: app.sheetState) { _, sheetState in
-                if sheetState == nil, pendingMissingPasskeyAlert {
-                    scheduleMissingPasskeyAlert()
-                }
-                if sheetState == nil {
-                    scheduleCloudBackupVerificationPrompt()
-                } else {
-                    showCloudBackupVerificationPrompt = false
-                }
-            }
-            .onChange(of: showMissingPasskeyAlert) { _, isShowing in
-                if isShowing {
-                    showCloudBackupVerificationPrompt = false
-                } else {
-                    scheduleCloudBackupVerificationPrompt()
-                }
-            }
-            .onChange(of: CloudBackupManager.shared.shouldPromptVerification) { _, shouldPrompt in
-                if shouldPrompt {
-                    scheduleCloudBackupVerificationPrompt()
-                    return
-                }
-
-                if CloudBackupManager.shared.isBackgroundVerifying {
-                    keepShowingCloudBackupVerificationPrompt = false
-                    showCloudBackupVerificationPrompt = false
-                    return
-                }
-
-                if !keepShowingCloudBackupVerificationPrompt {
-                    showCloudBackupVerificationPrompt = false
-                }
-            }
-    }
-}
-
-private struct CloudBackupVerificationPromptView: View {
-    @State private var manager = CloudBackupManager.shared
-
-    let onDismiss: () -> Void
-    let onVerify: () -> Void
-
-    private var isVerifying: Bool {
-        if case .verifying = manager.verification { return true }
-        return false
-    }
-
-    private var failure: DeepVerificationFailure? {
-        guard !manager.shouldPromptVerification else { return nil }
-        if case let .failed(failure) = manager.verification { return failure }
-        return nil
-    }
-
-    private var title: String {
-        if isVerifying {
-            return "Verifying Cloud Backup"
-        }
-
-        if failure != nil {
-            return "Verification Failed"
-        }
-
-        return "Verify"
-    }
-
-    private var message: String {
-        if let failure {
-            return failure.message
-        }
-
-        if isVerifying {
-            return "Confirming your updated cloud backup can be decrypted and restored. Continuing may ask for your passkey."
-        }
-
-        return "Verify your updated cloud backup now to confirm it is accessible. Continuing may ask for your passkey."
-    }
-
-    private var primaryButtonTitle: String {
-        failure == nil ? "Verify" : "Try Again"
-    }
-
-    private var heroIconName: String {
-        failure == nil ? "checkmark.shield.fill" : "exclamationmark.triangle.fill"
-    }
-
-    private var heroTint: Color {
-        failure == nil ? .btnGradientLight : .orange
-    }
-
-    private var heroFillColor: Color {
-        failure == nil ? Color.duskBlue.opacity(0.42) : Color.orange.opacity(0.12)
-    }
-
-    var body: some View {
-        ScrollView(.vertical) {
-            VStack(spacing: 0) {
-                HStack {
-                    Spacer()
-
-                    if !isVerifying {
-                        Button(action: onDismiss) {
-                            Image(systemName: "xmark")
-                                .font(.headline)
-                                .foregroundStyle(.white.opacity(0.85))
-                                .frame(width: 44, height: 44)
-                        }
-                    }
-                }
-                .padding(.top, 4)
-
-                Spacer()
-                    .frame(height: 20)
-
-                heroView
-
-                Spacer()
-                    .frame(height: 36)
-
-                VStack(spacing: 12) {
-                    HStack {
-                        Text(title)
-                            .font(.system(size: 38, weight: .semibold))
-                            .foregroundStyle(.white)
-
-                        Spacer()
-                    }
-
-                    HStack {
-                        Text(message)
-                            .font(OnboardingRecoveryTypography.body)
-                            .foregroundStyle(.coveLightGray.opacity(0.76))
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        Spacer()
-                    }
-                }
-
-                Spacer()
-                    .frame(height: 28)
-
-                Divider()
-                    .overlay(Color.coveLightGray.opacity(0.14))
-
-                Spacer(minLength: 24)
-
-                if !isVerifying {
-                    VStack(spacing: 14) {
-                        Button(primaryButtonTitle, action: onVerify)
-                            .buttonStyle(OnboardingPrimaryButtonStyle())
-
-                        Button("Later", action: onDismiss)
-                            .buttonStyle(OnboardingSecondaryButtonStyle())
-                    }
-                }
-
-                Spacer(minLength: 0)
-            }
-            .frame(maxWidth: .infinity, alignment: .top)
-        }
-        .padding(.horizontal, 28)
-        .padding(.bottom, 28)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .onboardingRecoveryBackground()
-        .animation(.easeInOut(duration: 0.25), value: isVerifying)
-        .animation(.easeInOut(duration: 0.25), value: failure != nil)
-    }
-
-    @ViewBuilder
-    private var heroView: some View {
-        if isVerifying {
-            OnboardingStatusHero(
-                systemImage: heroIconName,
-                tint: heroTint,
-                fillColor: heroFillColor,
-                pulse: true,
-                iconSize: 22
-            )
-        } else {
-            OnboardingStatusHero(
-                systemImage: heroIconName,
-                tint: heroTint,
-                fillColor: heroFillColor,
-                iconSize: failure == nil ? 22 : 24
-            )
+                .sheet(item: $app.sheetState, content: SheetContent)
+                .onOpenURL(perform: handleFileOpen)
+                .onChange(of: phase, initial: true, handleScenePhaseChange)
         }
     }
 }
