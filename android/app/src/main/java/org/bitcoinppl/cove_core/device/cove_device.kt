@@ -2491,6 +2491,14 @@ sealed class CloudStorageException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
+    class Offline(
+        
+        val v1: kotlin.String
+        ) : CloudStorageException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+    
     class UploadFailed(
         
         val v1: kotlin.String
@@ -2552,16 +2560,19 @@ public object FfiConverterTypeCloudStorageError : FfiConverterRustBuffer<CloudSt
             1 -> CloudStorageException.NotAvailable(
                 FfiConverterString.read(buf),
                 )
-            2 -> CloudStorageException.UploadFailed(
+            2 -> CloudStorageException.Offline(
                 FfiConverterString.read(buf),
                 )
-            3 -> CloudStorageException.DownloadFailed(
+            3 -> CloudStorageException.UploadFailed(
                 FfiConverterString.read(buf),
                 )
-            4 -> CloudStorageException.NotFound(
+            4 -> CloudStorageException.DownloadFailed(
                 FfiConverterString.read(buf),
                 )
-            5 -> CloudStorageException.QuotaExceeded()
+            5 -> CloudStorageException.NotFound(
+                FfiConverterString.read(buf),
+                )
+            6 -> CloudStorageException.QuotaExceeded()
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
@@ -2569,6 +2580,11 @@ public object FfiConverterTypeCloudStorageError : FfiConverterRustBuffer<CloudSt
     override fun allocationSize(value: CloudStorageException): ULong {
         return when(value) {
             is CloudStorageException.NotAvailable -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+            is CloudStorageException.Offline -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
                 + FfiConverterString.allocationSize(value.v1)
@@ -2602,23 +2618,28 @@ public object FfiConverterTypeCloudStorageError : FfiConverterRustBuffer<CloudSt
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is CloudStorageException.UploadFailed -> {
+            is CloudStorageException.Offline -> {
                 buf.putInt(2)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is CloudStorageException.DownloadFailed -> {
+            is CloudStorageException.UploadFailed -> {
                 buf.putInt(3)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is CloudStorageException.NotFound -> {
+            is CloudStorageException.DownloadFailed -> {
                 buf.putInt(4)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is CloudStorageException.QuotaExceeded -> {
+            is CloudStorageException.NotFound -> {
                 buf.putInt(5)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is CloudStorageException.QuotaExceeded -> {
+                buf.putInt(6)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }

@@ -35,6 +35,10 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
         state.promptIntent
     }
 
+    var connectivityHint: CloudConnectivityHint {
+        state.connectivityHint
+    }
+
     var progress: (completed: UInt32, total: UInt32)? {
         state.progress.map { ($0.completed, $0.total) }
     }
@@ -131,6 +135,8 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
         switch message {
         case let .statusChanged(status):
             state.status = status
+        case let .connectivityHintChanged(connectivityHint):
+            state.connectivityHint = connectivityHint
         case let .promptIntentChanged(promptIntent):
             state.promptIntent = promptIntent
         case let .progressChanged(progress):

@@ -153,6 +153,12 @@ impl RustCloudBackupManager {
         &self,
         wallet_id: &crate::wallet::metadata::WalletId,
     ) -> Result<(), CloudBackupError> {
+        if self.is_definitely_offline() {
+            return Err(CloudBackupError::Deferred(
+                "wallet backup upload is waiting for a connection".into(),
+            ));
+        }
+
         let namespace = self.current_namespace_id()?;
         let record_id = wallet_record_id(wallet_id.as_ref());
         let Some(current_state) = Database::global()
@@ -185,13 +191,11 @@ impl RustCloudBackupManager {
         let prepared_upload = match self.prepare_dirty_wallet_upload(&namespace, &metadata) {
             Ok(prepared_upload) => prepared_upload,
             Err(error) => {
-                self.mark_blob_failed_if_current(
+                return self.handle_dirty_wallet_upload_error(
                     &current_state,
                     error.revision_hash,
-                    is_upload_preparation_failure_retryable(&error.source),
-                    error.source.to_string(),
-                )?;
-                return Err(error.source);
+                    error.source,
+                );
             }
         };
 
@@ -216,13 +220,11 @@ impl RustCloudBackupManager {
         if let Err(error) =
             cloud.upload_wallet_backup(namespace.clone(), record_id.clone(), wallet_json)
         {
-            self.mark_blob_failed_if_current(
+            return self.handle_dirty_wallet_upload_cloud_error(
                 &uploading_state,
                 Some(prepared.revision_hash.clone()),
-                is_upload_failure_retryable(&error),
-                error.to_string(),
-            )?;
-            return Err(CloudBackupError::Cloud(error.to_string()));
+                error,
+            );
         }
 
         let uploaded_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
@@ -233,6 +235,52 @@ impl RustCloudBackupManager {
         )?;
 
         Ok(())
+    }
+
+    fn handle_dirty_wallet_upload_cloud_error(
+        &self,
+        current_state: &PersistedCloudBlobSyncState,
+        revision_hash: Option<String>,
+        error: CloudStorageError,
+    ) -> Result<(), CloudBackupError> {
+        let issue = Self::cloud_storage_issue(&error);
+        let cloud_error = CloudBackupError::Cloud(error.to_string());
+        if Self::is_connectivity_related_issue(issue) {
+            self.mark_blob_dirty_state(current_state)?;
+            return Err(CloudBackupError::Deferred(
+                "wallet backup upload is waiting for a connection".into(),
+            ));
+        }
+
+        self.mark_blob_failed_if_current(
+            current_state,
+            revision_hash,
+            is_upload_failure_retryable(&error),
+            cloud_error.to_string(),
+        )?;
+        Err(cloud_error)
+    }
+
+    fn handle_dirty_wallet_upload_error(
+        &self,
+        current_state: &PersistedCloudBlobSyncState,
+        revision_hash: Option<String>,
+        error: CloudBackupError,
+    ) -> Result<(), CloudBackupError> {
+        if Self::is_connectivity_related_issue(self.cloud_backup_issue(&error)) {
+            self.mark_blob_dirty_state(current_state)?;
+            return Err(CloudBackupError::Deferred(
+                "wallet backup upload is waiting for a connection".into(),
+            ));
+        }
+
+        self.mark_blob_failed_if_current(
+            current_state,
+            revision_hash,
+            is_upload_preparation_failure_retryable(&error),
+            error.to_string(),
+        )?;
+        Err(error)
     }
 
     fn recover_uploadable_blob_state(
@@ -380,7 +428,9 @@ pub fn upload_all_wallets(
 
 fn is_upload_preparation_failure_retryable(error: &CloudBackupError) -> bool {
     match error {
-        CloudBackupError::Cloud(_) => true,
+        CloudBackupError::Cloud(_)
+        | CloudBackupError::Offline(_)
+        | CloudBackupError::Deferred(_) => true,
         CloudBackupError::NotSupported(_)
         | CloudBackupError::UnsupportedPasskeyProvider
         | CloudBackupError::RecoveryRequired(_)
@@ -396,7 +446,8 @@ fn is_upload_preparation_failure_retryable(error: &CloudBackupError) -> bool {
 fn is_upload_failure_retryable(error: &CloudStorageError) -> bool {
     matches!(
         error,
-        CloudStorageError::NotAvailable(_)
+        CloudStorageError::Offline(_)
+            | CloudStorageError::NotAvailable(_)
             | CloudStorageError::UploadFailed(_)
             | CloudStorageError::DownloadFailed(_)
     )

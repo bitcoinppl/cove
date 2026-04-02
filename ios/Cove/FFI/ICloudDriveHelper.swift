@@ -85,6 +85,43 @@ final class ICloudDriveHelper: @unchecked Sendable {
         }
     }
 
+    private static func isConnectivityError(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain {
+            return [
+                NSURLErrorNotConnectedToInternet,
+                NSURLErrorNetworkConnectionLost,
+                NSURLErrorTimedOut,
+                NSURLErrorCannotFindHost,
+                NSURLErrorCannotConnectToHost,
+                NSURLErrorDNSLookupFailed,
+                NSURLErrorInternationalRoamingOff,
+                NSURLErrorDataNotAllowed,
+            ].contains(nsError.code)
+        }
+
+        let message = error.localizedDescription.lowercased()
+        return message.contains("offline")
+            || message.contains("network")
+            || message.contains("timed out")
+    }
+
+    private static func uploadError(_ context: String, error: Error) -> CloudStorageError {
+        if isConnectivityError(error) {
+            return .Offline("\(context): \(error.localizedDescription)")
+        }
+
+        return .UploadFailed("\(context): \(error.localizedDescription)")
+    }
+
+    private static func downloadError(_ context: String, error: Error) -> CloudStorageError {
+        if isConnectivityError(error) {
+            return .Offline("\(context): \(error.localizedDescription)")
+        }
+
+        return .DownloadFailed("\(context): \(error.localizedDescription)")
+    }
+
     // MARK: - Path mapping
 
     func containerURL() throws -> URL {
@@ -189,9 +226,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
         }
 
         if let error = coordinatorError ?? createError {
-            throw CloudStorageError.UploadFailed(
-                "create directory failed: \(error.localizedDescription)"
-            )
+            throw Self.uploadError("create directory failed", error: error)
         }
     }
 
@@ -211,7 +246,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
         }
 
         if let error = coordinatorError ?? writeError {
-            throw CloudStorageError.UploadFailed("write failed: \(error.localizedDescription)")
+            throw Self.uploadError("write failed", error: error)
         }
     }
 
@@ -261,9 +296,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
         }
 
         if let error = coordinatorError ?? moveError {
-            throw CloudStorageError.UploadFailed(
-                "setUbiquitous failed: \(error.localizedDescription)"
-            )
+            throw Self.uploadError("setUbiquitous failed", error: error)
         }
     }
 
@@ -284,7 +317,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
 
         if let error = coordinatorError ?? deleteError {
             if Self.isNoSuchFileError(error) { throw CloudStorageError.NotFound(missingItemID) }
-            throw CloudStorageError.UploadFailed("delete failed: \(error.localizedDescription)")
+            throw Self.uploadError("delete failed", error: error)
         }
     }
 
@@ -303,9 +336,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
         }
 
         if let error = coordinatorError {
-            throw CloudStorageError.DownloadFailed(
-                "file coordination error: \(error.localizedDescription)"
-            )
+            throw Self.downloadError("file coordination error", error: error)
         }
 
         guard let readResult else {
@@ -315,7 +346,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
         switch readResult {
         case let .success(data): return data
         case let .failure(error):
-            throw CloudStorageError.DownloadFailed(error.localizedDescription)
+            throw Self.downloadError("read failed", error: error)
         }
     }
 
@@ -364,9 +395,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
                 )
             }
         } catch {
-            throw CloudStorageError.UploadFailed(
-                "iCloud metadata lookup failed for \(filename): \(error.localizedDescription)"
-            )
+            throw Self.uploadError("iCloud metadata lookup failed for \(filename)", error: error)
         }
     }
 
@@ -389,9 +418,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
                 deadline: deadline
             )
         } catch {
-            throw CloudStorageError.UploadFailed(
-                "iCloud metadata lookup failed for \(filename): \(error.localizedDescription)"
-            )
+            throw Self.uploadError("iCloud metadata lookup failed for \(filename)", error: error)
         }
 
         if resolvedItem.url != url {
@@ -419,9 +446,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
             }
 
             if case let .failed(error) = state {
-                throw CloudStorageError.UploadFailed(
-                    "iCloud upload failed for \(filename): \(error.localizedDescription)"
-                )
+                throw Self.uploadError("iCloud upload failed for \(filename)", error: error)
             }
 
             Thread.sleep(forTimeInterval: pollInterval)
@@ -436,7 +461,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
             focusName: filename
         )
 
-        throw CloudStorageError.UploadFailed(
+        throw CloudStorageError.Offline(
             "iCloud upload timed out for \(filename) after \(defaultTimeout)s"
         )
     }
@@ -461,9 +486,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
                 deadline: deadline
             )
         } catch {
-            throw CloudStorageError.DownloadFailed(
-                "iCloud metadata lookup failed for \(filename): \(error.localizedDescription)"
-            )
+            throw Self.downloadError("iCloud metadata lookup failed for \(filename)", error: error)
         }
 
         if resolvedItem.url != url {
@@ -511,9 +534,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
             if case .current = state { return }
 
             if case let .failed(error) = state {
-                throw CloudStorageError.DownloadFailed(
-                    "iCloud download failed: \(error.localizedDescription)"
-                )
+                throw Self.downloadError("iCloud download failed", error: error)
             }
 
             Thread.sleep(forTimeInterval: pollInterval)
@@ -525,7 +546,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
             _ = try coordinatedRead(from: resolvedItem.url)
             return
         } catch {
-            throw CloudStorageError.DownloadFailed(
+            throw CloudStorageError.Offline(
                 "iCloud download timed out after \(defaultTimeout)s (coordinated read also failed: \(error.localizedDescription))"
             )
         }

@@ -10,6 +10,9 @@ pub enum CloudStorageError {
     #[error("not available: {0}")]
     NotAvailable(String),
 
+    #[error("offline: {0}")]
+    Offline(String),
+
     #[error("upload failed: {0}")]
     UploadFailed(String),
 

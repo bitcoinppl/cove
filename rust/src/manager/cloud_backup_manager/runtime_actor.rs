@@ -420,8 +420,14 @@ impl CloudBackupRuntimeActor {
 
         cove_tokio::task::spawn_blocking(move || {
             let upload_result = manager.do_upload_wallet_if_dirty(&wallet_id);
+            let deferred = matches!(upload_result, Err(super::CloudBackupError::Deferred(_)));
             let error_message = upload_result.as_ref().err().map(ToString::to_string);
-            send!(addr.complete_wallet_upload(wallet_id, upload_result.is_ok(), error_message));
+            send!(addr.complete_wallet_upload(
+                wallet_id,
+                upload_result.is_ok(),
+                error_message,
+                deferred
+            ));
         });
 
         Produces::ok(())
@@ -432,14 +438,19 @@ impl CloudBackupRuntimeActor {
         wallet_id: WalletId,
         succeeded: bool,
         error_message: Option<String>,
+        deferred: bool,
     ) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
 
         self.active_wallet_uploads.remove(&wallet_id);
 
         if let Some(error_message) = error_message {
-            error!("Cloud backup upload failed for wallet_id={wallet_id}: {error_message}");
-            manager.set_sync_error(Some(error_message));
+            if deferred {
+                info!("Cloud backup upload deferred for wallet_id={wallet_id}: {error_message}");
+            } else {
+                error!("Cloud backup upload failed for wallet_id={wallet_id}: {error_message}");
+                manager.set_sync_error(Some(error_message));
+            }
         } else if succeeded {
             self.reset_wallet_upload_retry_count(&wallet_id);
             manager.clear_sync_error_if_no_failed_wallet_uploads();
@@ -465,8 +476,12 @@ impl CloudBackupRuntimeActor {
 
         let upload_result = manager.do_upload_wallet_if_dirty(&wallet_id);
         if let Err(error) = &upload_result {
-            error!("Cloud backup upload failed for wallet_id={wallet_id}: {error}");
-            manager.set_sync_error(Some(error.to_string()));
+            if matches!(error, super::CloudBackupError::Deferred(_)) {
+                info!("Cloud backup upload deferred for wallet_id={wallet_id}: {error}");
+            } else {
+                error!("Cloud backup upload failed for wallet_id={wallet_id}: {error}");
+                manager.set_sync_error(Some(error.to_string()));
+            }
         }
 
         self.active_wallet_uploads.remove(&wallet_id);

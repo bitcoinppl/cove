@@ -2,7 +2,7 @@ use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
 use tracing::{info, warn};
 
 use super::super::{
-    CloudBackupDetailResult, CloudBackupStatus, RustCloudBackupManager,
+    BlockingCloudStep, CloudBackupDetailResult, CloudBackupStatus, RustCloudBackupManager,
     cloud_inventory::RemoteWalletTruth,
 };
 use crate::database::Database;
@@ -25,6 +25,12 @@ impl RustCloudBackupManager {
             Err(error) => return Some(CloudBackupDetailResult::AccessError(error.to_string())),
         };
 
+        if self.is_definitely_offline() {
+            return Some(CloudBackupDetailResult::AccessError(
+                self.offline_error_for_step(BlockingCloudStep::DetailRefresh).to_string(),
+            ));
+        }
+
         info!("refresh_cloud_backup_detail: listing wallets for namespace {namespace}");
         let cloud = CloudStorage::global();
         let wallet_record_ids = match cloud.list_wallet_backups(namespace) {
@@ -44,7 +50,16 @@ impl RustCloudBackupManager {
                     }
                 }
             }
-            Err(error) => return Some(CloudBackupDetailResult::AccessError(error.to_string())),
+            Err(error) => {
+                if RustCloudBackupManager::is_connectivity_related_issue(
+                    RustCloudBackupManager::cloud_storage_issue(&error),
+                ) {
+                    return Some(CloudBackupDetailResult::AccessError(
+                        self.offline_error_for_step(BlockingCloudStep::DetailRefresh).to_string(),
+                    ));
+                }
+                return Some(CloudBackupDetailResult::AccessError(error.to_string()));
+            }
         };
 
         let remote_wallet_truth = match self.load_remote_wallet_truth(&wallet_record_ids) {
@@ -61,10 +76,7 @@ impl RustCloudBackupManager {
         }
     }
 
-    pub(in crate::manager::cloud_backup_manager) fn cleanup_confirmed_pending_blobs(
-        &self,
-        remote_wallet_truth: &RemoteWalletTruth,
-    ) {
+    pub(crate) fn cleanup_confirmed_pending_blobs(&self, remote_wallet_truth: &RemoteWalletTruth) {
         let namespace_id = match self.current_namespace_id() {
             Ok(namespace_id) => namespace_id,
             Err(_) => return,

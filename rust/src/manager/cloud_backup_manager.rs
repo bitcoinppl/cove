@@ -81,6 +81,14 @@ pub enum CloudBackupPromptIntent {
     VerificationPrompt,
 }
 
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, Default, uniffi::Enum)]
+pub enum CloudConnectivityHint {
+    Online,
+    Offline,
+    #[default]
+    Unknown,
+}
+
 #[derive(Debug, Clone, uniffi::Enum)]
 pub enum CloudBackupManagerAction {
     EnableCloudBackup,
@@ -108,6 +116,7 @@ pub enum CloudBackupManagerAction {
 #[derive(Debug, Clone, uniffi::Enum)]
 pub enum CloudBackupReconcileMessage {
     StatusChanged(CloudBackupStatus),
+    ConnectivityHintChanged(CloudConnectivityHint),
     ProgressChanged(Option<CloudBackupProgress>),
     RestoreProgressChanged(Option<CloudBackupRestoreProgress>),
     RestoreReportChanged(Option<CloudBackupRestoreReport>),
@@ -251,6 +260,7 @@ pub enum VerificationFailureKind {
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct CloudBackupState {
     pub status: CloudBackupStatus,
+    pub connectivity_hint: CloudConnectivityHint,
     pub prompt_intent: CloudBackupPromptIntent,
     pub progress: Option<CloudBackupProgress>,
     pub restore_progress: Option<CloudBackupRestoreProgress>,
@@ -271,6 +281,7 @@ impl Default for CloudBackupState {
     fn default() -> Self {
         Self {
             status: CloudBackupStatus::Disabled,
+            connectivity_hint: CloudConnectivityHint::Unknown,
             prompt_intent: CloudBackupPromptIntent::None,
             progress: None,
             restore_progress: None,
@@ -289,7 +300,37 @@ impl Default for CloudBackupState {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CloudStorageIssue {
+    Offline,
+    Unavailable,
+    NotFound,
+    QuotaExceeded,
+    Other,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum BlockingCloudStep {
+    Enable,
+    Restore,
+    Verify,
+    Sync,
+    FetchCloudOnly,
+    RestoreCloudWallet,
+    DeleteCloudWallet,
+    RecreateManifest,
+    RepairPasskey,
+    DetailRefresh,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PendingEnableSessionKind {
+    AwaitingForceNewConfirmation,
+    RetryUpload,
+}
+
 pub(crate) struct PendingEnableSession {
+    kind: PendingEnableSessionKind,
     master_key: Zeroizing<cove_cspp::master_key::MasterKey>,
     passkey: Zeroizing<UnpersistedPrfKey>,
 }
@@ -314,14 +355,41 @@ impl std::fmt::Debug for PendingEnableSession {
 }
 
 impl PendingEnableSession {
+    #[cfg(test)]
     fn new(master_key: cove_cspp::master_key::MasterKey, passkey: UnpersistedPrfKey) -> Self {
-        Self { master_key: Zeroizing::new(master_key), passkey: Zeroizing::new(passkey) }
+        Self::awaiting_confirmation(master_key, passkey)
+    }
+
+    fn awaiting_confirmation(
+        master_key: cove_cspp::master_key::MasterKey,
+        passkey: UnpersistedPrfKey,
+    ) -> Self {
+        Self {
+            kind: PendingEnableSessionKind::AwaitingForceNewConfirmation,
+            master_key: Zeroizing::new(master_key),
+            passkey: Zeroizing::new(passkey),
+        }
+    }
+
+    fn retry_upload(
+        master_key: cove_cspp::master_key::MasterKey,
+        passkey: UnpersistedPrfKey,
+    ) -> Self {
+        Self {
+            kind: PendingEnableSessionKind::RetryUpload,
+            master_key: Zeroizing::new(master_key),
+            passkey: Zeroizing::new(passkey),
+        }
     }
 
     fn into_parts(
         self,
     ) -> (Zeroizing<cove_cspp::master_key::MasterKey>, Zeroizing<UnpersistedPrfKey>) {
         (self.master_key, self.passkey)
+    }
+
+    fn is_retry_upload(&self) -> bool {
+        matches!(self.kind, PendingEnableSessionKind::RetryUpload)
     }
 }
 
@@ -460,6 +528,12 @@ pub(crate) enum CloudBackupError {
     #[error("cloud storage error: {0}")]
     Cloud(String),
 
+    #[error("offline: {0}")]
+    Offline(String),
+
+    #[error("deferred until connected: {0}")]
+    Deferred(String),
+
     #[error("internal error: {0}")]
     Internal(String),
 
@@ -519,6 +593,143 @@ impl RustCloudBackupManager {
             }
             other => CloudBackupStatus::Error(other.to_string()),
         }
+    }
+
+    pub(crate) fn cloud_storage_issue(
+        error: &cove_device::cloud_storage::CloudStorageError,
+    ) -> CloudStorageIssue {
+        use cove_device::cloud_storage::CloudStorageError;
+
+        match error {
+            CloudStorageError::Offline(_) => CloudStorageIssue::Offline,
+            CloudStorageError::NotAvailable(_) => CloudStorageIssue::Unavailable,
+            CloudStorageError::NotFound(_) => CloudStorageIssue::NotFound,
+            CloudStorageError::QuotaExceeded => CloudStorageIssue::QuotaExceeded,
+            CloudStorageError::UploadFailed(message)
+            | CloudStorageError::DownloadFailed(message) => {
+                Self::cloud_storage_issue_from_message(message)
+            }
+        }
+    }
+
+    pub(crate) fn cloud_storage_issue_from_message(message: &str) -> CloudStorageIssue {
+        let normalized = message.to_ascii_lowercase();
+
+        if normalized.contains("offline")
+            || normalized.contains("network")
+            || normalized.contains("timed out")
+        {
+            return CloudStorageIssue::Offline;
+        }
+
+        if normalized.contains("not available")
+            || normalized.contains("ubiquity")
+            || normalized.contains("icloud drive is not available")
+        {
+            return CloudStorageIssue::Unavailable;
+        }
+
+        if normalized.contains("quota exceeded") {
+            return CloudStorageIssue::QuotaExceeded;
+        }
+
+        if normalized.contains("not found") {
+            return CloudStorageIssue::NotFound;
+        }
+
+        CloudStorageIssue::Other
+    }
+
+    pub(crate) fn cloud_backup_issue(&self, error: &CloudBackupError) -> CloudStorageIssue {
+        match error {
+            CloudBackupError::Offline(_) | CloudBackupError::Deferred(_) => {
+                CloudStorageIssue::Offline
+            }
+            CloudBackupError::Cloud(message) => Self::cloud_storage_issue_from_message(message),
+            CloudBackupError::NotSupported(_)
+            | CloudBackupError::UnsupportedPasskeyProvider
+            | CloudBackupError::RecoveryRequired(_)
+            | CloudBackupError::Passkey(_)
+            | CloudBackupError::Crypto(_)
+            | CloudBackupError::Internal(_)
+            | CloudBackupError::PasskeyMismatch
+            | CloudBackupError::PasskeyDiscoveryCancelled
+            | CloudBackupError::Cancelled => CloudStorageIssue::Other,
+        }
+    }
+
+    pub(crate) fn is_connectivity_related_issue(issue: CloudStorageIssue) -> bool {
+        matches!(issue, CloudStorageIssue::Offline | CloudStorageIssue::Unavailable)
+    }
+
+    pub(crate) fn current_connectivity_hint(&self) -> CloudConnectivityHint {
+        self.state.read().connectivity_hint
+    }
+
+    pub(crate) fn is_definitely_offline(&self) -> bool {
+        matches!(self.current_connectivity_hint(), CloudConnectivityHint::Offline)
+    }
+
+    fn offline_message_for_step(step: BlockingCloudStep) -> &'static str {
+        match step {
+            BlockingCloudStep::Enable => {
+                "Reconnect to the internet, then try enabling cloud backup again"
+            }
+            BlockingCloudStep::Restore => {
+                "Reconnect to the internet, then try restoring from cloud backup again"
+            }
+            BlockingCloudStep::Verify => {
+                "Reconnect to the internet, then try verifying cloud backup again"
+            }
+            BlockingCloudStep::Sync => {
+                "Reconnect to the internet, then try syncing cloud backup again"
+            }
+            BlockingCloudStep::FetchCloudOnly => {
+                "Reconnect to the internet, then try loading cloud-only wallets again"
+            }
+            BlockingCloudStep::RestoreCloudWallet => {
+                "Reconnect to the internet, then try restoring this cloud wallet again"
+            }
+            BlockingCloudStep::DeleteCloudWallet => {
+                "Reconnect to the internet, then try deleting this cloud wallet again"
+            }
+            BlockingCloudStep::RecreateManifest => {
+                "Reconnect to the internet, then try recreating the cloud backup manifest again"
+            }
+            BlockingCloudStep::RepairPasskey => {
+                "Reconnect to the internet, then try repairing cloud backup again"
+            }
+            BlockingCloudStep::DetailRefresh => {
+                "Reconnect to the internet, then try refreshing cloud backup details again"
+            }
+        }
+    }
+
+    pub(crate) fn offline_error_for_step(&self, step: BlockingCloudStep) -> CloudBackupError {
+        CloudBackupError::Offline(Self::offline_message_for_step(step).into())
+    }
+
+    pub(crate) fn ensure_cloud_connectivity(
+        &self,
+        step: BlockingCloudStep,
+    ) -> Result<(), CloudBackupError> {
+        if self.is_definitely_offline() {
+            return Err(self.offline_error_for_step(step));
+        }
+
+        Ok(())
+    }
+
+    pub(crate) fn blocking_cloud_error(
+        &self,
+        step: BlockingCloudStep,
+        error: CloudBackupError,
+    ) -> CloudBackupError {
+        if self.cloud_backup_issue(&error) == CloudStorageIssue::Offline {
+            return self.offline_error_for_step(step);
+        }
+
+        error
     }
 
     fn init() -> Arc<Self> {
@@ -604,6 +815,16 @@ impl RustCloudBackupManager {
 
         self.send(Message::StatusChanged(status));
         self.refresh_prompt_intent();
+    }
+
+    fn set_connectivity_hint(&self, connectivity_hint: CloudConnectivityHint) -> bool {
+        let changed = self.current_connectivity_hint() != connectivity_hint;
+        self.set_and_notify_field(
+            connectivity_hint,
+            |state| &mut state.connectivity_hint,
+            Message::ConnectivityHintChanged,
+        );
+        changed
     }
 
     pub(super) fn set_prompt_intent(&self, prompt_intent: CloudBackupPromptIntent) {
@@ -874,6 +1095,10 @@ impl RustCloudBackupManager {
             return;
         }
 
+        if self.is_definitely_offline() {
+            return;
+        }
+
         self.schedule_wallet_upload(wallet_id, false);
     }
 
@@ -928,6 +1153,19 @@ impl RustCloudBackupManager {
             .unwrap_or_else(|error| {
                 error!("Failed to cache pending enable session: {error}");
             });
+    }
+
+    pub(crate) fn take_retry_pending_enable_session(&self) -> Option<PendingEnableSession> {
+        let pending = self.take_pending_enable_session();
+        if pending.as_ref().is_some_and(PendingEnableSession::is_retry_upload) {
+            return pending;
+        }
+
+        if let Some(pending) = pending {
+            self.replace_pending_enable_session(pending);
+        }
+
+        None
     }
 
     pub(crate) fn take_pending_enable_session(&self) -> Option<PendingEnableSession> {
@@ -1215,6 +1453,19 @@ impl RustCloudBackupManager {
         self.sync_persisted_state();
         send!(self.runtime.resume_wallet_uploads_from_persisted_state());
         self.start_pending_upload_verification_loop();
+    }
+
+    pub fn update_connectivity_hint(&self, hint: CloudConnectivityHint) {
+        if !self.set_connectivity_hint(hint) {
+            return;
+        }
+
+        if matches!(hint, CloudConnectivityHint::Online) {
+            self.set_sync_error(None);
+            send!(self.runtime.resume_wallet_uploads_from_persisted_state());
+            send!(self.runtime.wake_pending_upload_verifier());
+            self.start_pending_upload_verification_loop();
+        }
     }
 
     /// Reset local cloud backup state (keychain + DB) without touching iCloud

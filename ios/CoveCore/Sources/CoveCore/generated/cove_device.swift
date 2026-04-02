@@ -1078,6 +1078,8 @@ enum CloudStorageError: Swift.Error, Equatable, Hashable, Foundation.LocalizedEr
     
     case NotAvailable(String
     )
+    case Offline(String
+    )
     case UploadFailed(String
     )
     case DownloadFailed(String
@@ -1127,16 +1129,19 @@ public struct FfiConverterTypeCloudStorageError: FfiConverterRustBuffer {
         case 1: return .NotAvailable(
             try FfiConverterString.read(from: &buf)
             )
-        case 2: return .UploadFailed(
+        case 2: return .Offline(
             try FfiConverterString.read(from: &buf)
             )
-        case 3: return .DownloadFailed(
+        case 3: return .UploadFailed(
             try FfiConverterString.read(from: &buf)
             )
-        case 4: return .NotFound(
+        case 4: return .DownloadFailed(
             try FfiConverterString.read(from: &buf)
             )
-        case 5: return .QuotaExceeded
+        case 5: return .NotFound(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 6: return .QuotaExceeded
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -1154,23 +1159,28 @@ public struct FfiConverterTypeCloudStorageError: FfiConverterRustBuffer {
             FfiConverterString.write(v1, into: &buf)
             
         
-        case let .UploadFailed(v1):
+        case let .Offline(v1):
             writeInt(&buf, Int32(2))
             FfiConverterString.write(v1, into: &buf)
             
         
-        case let .DownloadFailed(v1):
+        case let .UploadFailed(v1):
             writeInt(&buf, Int32(3))
             FfiConverterString.write(v1, into: &buf)
             
         
-        case let .NotFound(v1):
+        case let .DownloadFailed(v1):
             writeInt(&buf, Int32(4))
             FfiConverterString.write(v1, into: &buf)
             
         
-        case .QuotaExceeded:
+        case let .NotFound(v1):
             writeInt(&buf, Int32(5))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case .QuotaExceeded:
+            writeInt(&buf, Int32(6))
         
         }
     }

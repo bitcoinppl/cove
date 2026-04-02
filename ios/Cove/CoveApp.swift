@@ -7,6 +7,7 @@
 
 @_exported import CoveCore
 import MijickPopups
+import Network
 import SwiftUI
 
 extension EnvironmentValues {
@@ -232,6 +233,7 @@ extension CoveApp {
         Self.excludeDataDirFromBackup(logFailure: true)
         let appManager = AppManager.shared
         appManager.asyncRuntimeReady = true
+        CloudConnectivityMonitor.shared.start()
         CloudBackupManager.shared.rust.syncPersistedState()
         self.bdkMigrationWarning = warning
         startInitData(appManager)
@@ -300,5 +302,38 @@ private enum BootstrapResult {
 private struct BootstrapTimeoutError: LocalizedError {
     var errorDescription: String? {
         "bootstrap timed out"
+    }
+}
+
+final class CloudConnectivityMonitor: @unchecked Sendable {
+    static let shared = CloudConnectivityMonitor()
+
+    private let monitor = NWPathMonitor()
+    private let queue = DispatchQueue(label: "cove.CloudConnectivityMonitor")
+    private let lock = NSLock()
+    private var started = false
+
+    private init() {}
+
+    func start() {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !started else { return }
+        started = true
+
+        monitor.pathUpdateHandler = { path in
+            let hint: CloudConnectivityHint =
+                if path.status == .satisfied {
+                    .online
+                } else if path.status == .unsatisfied {
+                    .offline
+                } else {
+                    .unknown
+                }
+
+            CloudBackupManager.shared.rust.updateConnectivityHint(hint: hint)
+        }
+
+        monitor.start(queue: queue)
     }
 }

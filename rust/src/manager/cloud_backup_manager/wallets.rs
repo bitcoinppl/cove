@@ -17,8 +17,7 @@ use crate::wallet::metadata::WalletMetadata;
 const UPLOAD_WALLET_RECOVERY_MESSAGE: &str =
     "Cloud backup needs verification before wallets can be uploaded";
 const MAX_CLOUD_LABELS_SIZE: usize = 10 * 1024 * 1024;
-
-#[derive(Zeroize)]
+#[derive(Clone, Zeroize)]
 pub(super) struct UnpersistedPrfKey {
     pub(super) prf_key: [u8; 32],
     pub(super) prf_salt: [u8; 32],

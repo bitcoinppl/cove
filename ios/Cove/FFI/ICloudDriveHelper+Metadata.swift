@@ -166,7 +166,7 @@ extension ICloudDriveHelper {
                 session.finish(.failure(.NotAvailable("failed to start iCloud metadata query")))
             },
             onTimeout: { session in
-                session.finishOnMain(.failure(.NotAvailable("iCloud metadata query timed out")))
+                session.finishOnMain(.failure(.Offline("iCloud metadata query timed out")))
             },
             onFinishGathering: {
                 (session: MetadataQuerySession<Result<[NSMetadataItem], CloudStorageError>>) in
@@ -184,7 +184,7 @@ extension ICloudDriveHelper {
             }
         )
 
-        guard let result else { throw CloudStorageError.NotAvailable("iCloud metadata query timed out") }
+        guard let result else { throw CloudStorageError.Offline("iCloud metadata query timed out") }
 
         switch result {
         case let .success(results):
