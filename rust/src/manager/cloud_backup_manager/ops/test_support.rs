@@ -317,17 +317,25 @@ impl CloudStorageAccess for MockCloudStorage {
 #[derive(Debug, Clone)]
 pub(crate) struct MockPasskeyProviderImpl {
     discover_result: Arc<Mutex<MockDiscoverResult>>,
+    create_result: Arc<Mutex<Option<Result<Vec<u8>, PasskeyError>>>>,
+    authenticate_result: Arc<Mutex<Option<Result<Vec<u8>, PasskeyError>>>>,
 }
 
 impl Default for MockPasskeyProviderImpl {
     fn default() -> Self {
-        Self { discover_result: Arc::new(Mutex::new(Err(PasskeyError::NoCredentialFound))) }
+        Self {
+            discover_result: Arc::new(Mutex::new(Err(PasskeyError::NoCredentialFound))),
+            create_result: Arc::new(Mutex::new(None)),
+            authenticate_result: Arc::new(Mutex::new(None)),
+        }
     }
 }
 
 impl MockPasskeyProviderImpl {
     pub(crate) fn reset(&self) {
         *self.discover_result.lock() = Err(PasskeyError::NoCredentialFound);
+        *self.create_result.lock() = None;
+        *self.authenticate_result.lock() = None;
     }
 
     pub(crate) fn set_discover_result(
@@ -335,6 +343,14 @@ impl MockPasskeyProviderImpl {
         result: Result<DiscoveredPasskeyResult, PasskeyError>,
     ) {
         *self.discover_result.lock() = result.map(|value| (value.prf_output, value.credential_id));
+    }
+
+    pub(crate) fn set_create_result(&self, result: Result<Vec<u8>, PasskeyError>) {
+        *self.create_result.lock() = Some(result);
+    }
+
+    pub(crate) fn set_authenticate_result(&self, result: Result<Vec<u8>, PasskeyError>) {
+        *self.authenticate_result.lock() = Some(result);
     }
 }
 
@@ -345,7 +361,9 @@ impl PasskeyProvider for MockPasskeyProviderImpl {
         _user_id: Vec<u8>,
         _challenge: Vec<u8>,
     ) -> Result<Vec<u8>, PasskeyError> {
-        Err(PasskeyError::CreationFailed("unexpected create_passkey call".into()))
+        self.create_result.lock().clone().unwrap_or_else(|| {
+            Err(PasskeyError::CreationFailed("unexpected create_passkey call".into()))
+        })
     }
 
     fn authenticate_with_prf(
@@ -355,7 +373,9 @@ impl PasskeyProvider for MockPasskeyProviderImpl {
         _prf_salt: Vec<u8>,
         _challenge: Vec<u8>,
     ) -> Result<Vec<u8>, PasskeyError> {
-        Err(PasskeyError::AuthenticationFailed("unexpected authenticate_with_prf call".into()))
+        self.authenticate_result.lock().clone().unwrap_or_else(|| {
+            Err(PasskeyError::AuthenticationFailed("unexpected authenticate_with_prf call".into()))
+        })
     }
 
     fn discover_and_authenticate_with_prf(
