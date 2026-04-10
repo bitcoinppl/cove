@@ -7091,8 +7091,6 @@ public protocol RustCloudBackupManagerProtocol: AnyObject, Sendable {
     
     func resumePendingCloudUploadVerification() 
     
-    func scheduleWalletUploadFollowUp(walletId: WalletId) 
-    
     func state()  -> CloudBackupState
     
     /**
@@ -7288,14 +7286,6 @@ open func listenForUpdates(reconciler: CloudBackupManagerReconciler)  {try! rust
 open func resumePendingCloudUploadVerification()  {try! rustCall() {
     uniffi_cove_fn_method_rustcloudbackupmanager_resume_pending_cloud_upload_verification(
             self.uniffiCloneHandle(),$0
-    )
-}
-}
-    
-open func scheduleWalletUploadFollowUp(walletId: WalletId)  {try! rustCall() {
-    uniffi_cove_fn_method_rustcloudbackupmanager_schedule_wallet_upload_follow_up(
-            self.uniffiCloneHandle(),
-        FfiConverterTypeWalletId_lower(walletId),$0
     )
 }
 }
@@ -35935,9 +35925,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustcloudbackupmanager_resume_pending_cloud_upload_verification() != 24590) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_rustcloudbackupmanager_schedule_wallet_upload_follow_up() != 63751) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustcloudbackupmanager_state() != 8780) {
