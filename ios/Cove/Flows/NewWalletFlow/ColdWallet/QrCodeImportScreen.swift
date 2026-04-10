@@ -163,15 +163,7 @@ struct QrCodeImportScreen: View {
                 app.popRoute()
                 self.alert = AlertItem(type: .error(error.description, "Invalid Format"))
             } catch let WalletError.WalletAlreadyExists(id) {
-                if let onImported {
-                    onImported(id)
-                } else {
-                    self.alert = AlertItem(type: .success("Wallet already exists: \(id)"))
-                    if (try? app.rust.selectWallet(id: id)) == nil {
-                        app.popRoute()
-                        self.alert = AlertItem(type: .error("Unable to select wallet"))
-                    }
-                }
+                handleWalletAlreadyExists(id)
             } catch {
                 Log.warn("Error importing hardware wallet: \(error)")
                 alert = AlertItem(type: .error(error.localizedDescription))
@@ -251,6 +243,19 @@ struct QrCodeImportScreen: View {
                     alert = AlertItem(type: .init(customAlert))
                 }
             }
+        }
+    }
+
+    private func handleWalletAlreadyExists(_ id: WalletId) {
+        if let onImported {
+            onImported(id)
+            return
+        }
+
+        self.alert = AlertItem(type: .success("Wallet already exists: \(id)"))
+        if (try? app.rust.selectWallet(id: id)) == nil {
+            app.popRoute()
+            self.alert = AlertItem(type: .error("Unable to select wallet"))
         }
     }
 }
