@@ -9,6 +9,7 @@ import SwiftUI
 import UIKit
 
 struct TermsAndConditionsView: View {
+    let errorMessage: String?
     let onAgree: () -> Void
 
     @State private var checks: [Bool] = Array(repeating: false, count: 5)
@@ -75,6 +76,11 @@ struct TermsAndConditionsView: View {
 
             Spacer()
                 .frame(height: footerTopSpacing)
+
+            if let errorMessage {
+                OnboardingInlineMessage(text: errorMessage)
+                    .padding(.bottom, 8)
+            }
 
             Text("By checking these boxes, you accept and agree to the above terms.")
                 .font(OnboardingRecoveryTypography.subheadline)
@@ -280,5 +286,5 @@ private final class LinkOnlyTextView: UITextView {
 }
 
 #Preview {
-    TermsAndConditionsView(onAgree: {})
+    TermsAndConditionsView(errorMessage: nil, onAgree: {})
 }

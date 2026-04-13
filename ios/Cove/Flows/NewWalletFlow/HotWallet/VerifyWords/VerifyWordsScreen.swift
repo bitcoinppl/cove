@@ -16,7 +16,7 @@ struct VerifyWordsContainer: View {
     let id: WalletId
     let onVerified: (() -> Void)?
 
-    @State var verificationComplete = false
+    @State private var verificationComplete = false
     @State private var manager: WalletManager? = nil
     @State private var stateMachine: WordVerifyStateMachine? = nil
 

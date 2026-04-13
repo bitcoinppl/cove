@@ -1,21 +1,24 @@
 use std::{sync::Arc, thread, time::Duration};
 
 use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
+use cove_util::ResultExt as _;
 use flume::Receiver;
 use parking_lot::RwLock;
+use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 
 use crate::{
     app::{App, AppAction, FfiApp},
-    database::Database,
+    database::{Database, global_config::GlobalConfigKey},
     manager::cloud_backup_manager::CLOUD_BACKUP_MANAGER,
-    mnemonic::{MnemonicExt, NumberOfBip39Words},
+    mnemonic::{Mnemonic as StoredMnemonic, MnemonicExt, NumberOfBip39Words},
+    network::Network,
     pending_wallet::PendingWallet,
     router::{NewWalletRoute, Route},
     wallet::{
         Wallet,
         fingerprint::Fingerprint,
-        metadata::{WalletId, WalletMetadata},
+        metadata::{WalletId, WalletMetadata, WalletMode},
     },
     word_validator::WordValidator,
 };
@@ -44,7 +47,7 @@ pub enum OnboardingStep {
     Terms,
 }
 
-#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Enum)]
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, Serialize, Deserialize, uniffi::Enum)]
 pub enum OnboardingBranch {
     NewUser,
     Exchange,
@@ -138,6 +141,12 @@ enum CompletionTarget {
     SelectWallet(WalletId),
 }
 
+#[derive(Debug, Clone)]
+struct InitialFlowResolution {
+    flow: FlowState,
+    clear_persisted_progress: bool,
+}
+
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 enum CloudCheckOutcome {
     BackupFound,
@@ -156,6 +165,8 @@ enum CloudCheckIssue {
 struct CreatedWalletFlow {
     branch: OnboardingBranch,
     wallet_id: WalletId,
+    network: Network,
+    wallet_mode: WalletMode,
     created_words: Vec<String>,
     word_validator: Arc<WordValidator>,
     cloud_backup_enabled: bool,
@@ -171,9 +182,13 @@ enum CloudBackupFlow {
 #[derive(Debug, Clone)]
 enum FlowState {
     CloudCheck,
-    RestoreOffer { error_message: Option<String> },
+    RestoreOffer {
+        error_message: Option<String>,
+    },
     Restoring,
-    Welcome { error_message: Option<String> },
+    Welcome {
+        error_message: Option<String>,
+    },
     BitcoinChoice,
     StorageChoice,
     SoftwareChoice,
@@ -183,10 +198,18 @@ enum FlowState {
     SecretWords(CreatedWalletFlow),
     VerifyWords(CreatedWalletFlow),
     ExchangeFunding(CreatedWalletFlow),
-    HardwareDeviceSelection { selected_device: Option<OnboardingHardwareDevice> },
-    HardwareImport { device: OnboardingHardwareDevice },
+    HardwareDeviceSelection {
+        selected_device: Option<OnboardingHardwareDevice>,
+    },
+    HardwareImport {
+        device: OnboardingHardwareDevice,
+    },
     SoftwareImport,
-    Terms(CompletionTarget),
+    Terms {
+        target: CompletionTarget,
+        error_message: Option<String>,
+        progress: Option<OnboardingProgress>,
+    },
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -201,6 +224,19 @@ enum InternalEvent {
     CloudCheckFinished(CloudCheckOutcome),
     WalletCreated { flow: CreatedWalletFlow },
     WalletCreationFailed { branch: OnboardingBranch, error: String },
+    CompletionFailed { error: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+enum OnboardingProgress {
+    CreatedWallet {
+        wallet_id: WalletId,
+        branch: OnboardingBranch,
+        network: Network,
+        wallet_mode: WalletMode,
+        secret_words_saved: bool,
+        cloud_backup_enabled: bool,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -222,19 +258,37 @@ impl RustOnboardingManager {
     pub fn new() -> Arc<Self> {
         let (sender, receiver) = flume::bounded(100);
         let has_wallets = !Database::global().wallets.all().unwrap_or_default().is_empty();
-        let initial_flow = if has_wallets {
-            FlowState::Terms(CompletionTarget::SelectLatestOrNew)
-        } else {
-            FlowState::CloudCheck
-        };
+        let resolution = resolve_initial_flow(
+            Self::load_onboarding_progress(),
+            has_wallets,
+            |wallet_id, network, wallet_mode| {
+                let wallet_exists = Database::global()
+                    .wallets
+                    .get(wallet_id, network, wallet_mode)
+                    .ok()
+                    .flatten()
+                    .is_some();
+                if !wallet_exists {
+                    return None;
+                }
+
+                let mnemonic: bip39::Mnemonic = StoredMnemonic::try_from_id(wallet_id).ok()?.into();
+                Some(mnemonic)
+            },
+        );
+        let should_start_cloud_check = matches!(&resolution.flow, FlowState::CloudCheck);
+
+        if resolution.clear_persisted_progress {
+            Self::sync_onboarding_progress(None);
+        }
 
         let manager = Arc::new(Self {
-            state: Arc::new(RwLock::new(InternalState::new(initial_flow))),
+            state: Arc::new(RwLock::new(InternalState::new(resolution.flow))),
             reconciler: MessageSender::new(sender),
             reconcile_receiver: Arc::new(receiver),
         });
 
-        if !has_wallets {
+        if should_start_cloud_check {
             manager.start_cloud_check();
         }
 
@@ -288,36 +342,11 @@ impl RustOnboardingManager {
         thread::spawn(move || {
             let retry_delays = [1u64, 2, 2, 3, 5, 10];
             let cloud = CloudStorage::global().clone();
-
-            for (attempt, delay) in retry_delays.iter().enumerate() {
-                info!(
-                    "Onboarding: checking cloud backup attempt={}/{}",
-                    attempt + 1,
-                    retry_delays.len() + 1
-                );
-
-                match cloud.has_any_cloud_backup() {
-                    Ok(true) => {
-                        me.finish_cloud_check(CloudCheckOutcome::BackupFound);
-                        return;
-                    }
-                    Ok(false) => {}
-                    Err(error) => {
-                        warn!("Onboarding: cloud backup check failed: {error}");
-                    }
-                }
-
-                thread::sleep(Duration::from_secs(*delay));
-            }
-
-            let outcome = match cloud.has_any_cloud_backup() {
-                Ok(true) => CloudCheckOutcome::BackupFound,
-                Ok(false) => CloudCheckOutcome::NoBackupConfirmed,
-                Err(error) => {
-                    warn!("Onboarding: final cloud backup check failed: {error}");
-                    CloudCheckOutcome::Inconclusive(classify_cloud_check_error(&error))
-                }
-            };
+            let outcome = determine_cloud_check_outcome(
+                &retry_delays,
+                || cloud.has_any_cloud_backup(),
+                thread::sleep,
+            );
             me.finish_cloud_check(outcome);
         });
     }
@@ -350,22 +379,29 @@ impl RustOnboardingManager {
     }
 
     fn complete_onboarding(&self, target: CompletionTarget) {
-        App::global().handle_action(AppAction::AcceptTerms);
-
-        match target {
+        let result = match target {
             CompletionTarget::SelectLatestOrNew => {
                 FfiApp::global().select_latest_or_new_wallet();
+                Ok(())
             }
             CompletionTarget::NewWalletSelect => {
                 FfiApp::global()
                     .load_and_reset_default_route(Route::NewWallet(NewWalletRoute::default()));
+                Ok(())
             }
             CompletionTarget::SelectWallet(wallet_id) => {
-                let _ = FfiApp::global().select_wallet(wallet_id, None);
+                FfiApp::global().select_wallet(wallet_id, None).map_err(|error| error.to_string())
             }
-        }
+        };
 
-        self.send(Message::Complete);
+        match result {
+            Ok(()) => {
+                App::global().handle_action(AppAction::AcceptTerms);
+                Self::sync_onboarding_progress(None);
+                self.send(Message::Complete);
+            }
+            Err(error) => self.apply_event(InternalEvent::CompletionFailed { error }),
+        }
     }
 
     fn mutate_state<F, R>(&self, mutate: F) -> R
@@ -373,10 +409,14 @@ impl RustOnboardingManager {
         F: FnOnce(&mut InternalState, &mut DeferredSender<Message>) -> R,
     {
         let mut deferred = DeferredSender::new(self.reconciler.clone());
-        {
+        let (result, progress) = {
             let mut state = self.state.write();
-            mutate(&mut state, &mut deferred)
-        }
+            let result = mutate(&mut state, &mut deferred);
+            let progress = state.flow.persisted_progress();
+            (result, progress)
+        };
+        Self::sync_onboarding_progress(progress);
+        result
     }
 
     fn send(&self, message: Message) {
@@ -396,17 +436,72 @@ impl RustOnboardingManager {
         let wallet_metadata = WalletMetadata::new(name, Some(fingerprint));
         let wallet =
             Wallet::try_new_persisted_and_selected(wallet_metadata, mnemonic.clone(), None)
-                .map_err(|error| error.to_string())?;
+                .map_err_str(std::convert::identity)?;
         CLOUD_BACKUP_MANAGER.mark_verification_required_after_wallet_change();
 
         Ok(CreatedWalletFlow {
             branch,
             wallet_id: wallet.metadata.id,
+            network,
+            wallet_mode: mode,
             created_words: words,
             word_validator: Arc::new(WordValidator::new(mnemonic)),
             cloud_backup_enabled: false,
             secret_words_saved: false,
         })
+    }
+
+    fn load_onboarding_progress() -> Option<OnboardingProgress> {
+        let config = &Database::global().global_config;
+        let raw = match config.get(GlobalConfigKey::OnboardingProgress) {
+            Ok(Some(raw)) => raw,
+            Ok(None) => return None,
+            Err(error) => {
+                warn!("Onboarding: failed to load persisted onboarding progress: {error}");
+                return None;
+            }
+        };
+
+        match serde_json::from_str(&raw) {
+            Ok(progress) => Some(progress),
+            Err(error) => {
+                warn!("Onboarding: invalid persisted onboarding progress: {error}");
+                if let Err(delete_error) = config.delete(GlobalConfigKey::OnboardingProgress) {
+                    warn!(
+                        "Onboarding: failed to clear invalid onboarding progress: {delete_error}"
+                    );
+                }
+                None
+            }
+        }
+    }
+
+    fn sync_onboarding_progress(progress: Option<OnboardingProgress>) {
+        let config = &Database::global().global_config;
+        let current = config.get(GlobalConfigKey::OnboardingProgress).ok().flatten();
+
+        match progress {
+            Some(progress) => match serde_json::to_string(&progress) {
+                Ok(serialized) => {
+                    if current.as_deref() == Some(serialized.as_str()) {
+                        return;
+                    }
+                    if let Err(error) = config.set(GlobalConfigKey::OnboardingProgress, serialized)
+                    {
+                        warn!("Onboarding: failed to persist onboarding progress: {error}");
+                    }
+                }
+                Err(error) => warn!("Onboarding: failed to encode onboarding progress: {error}"),
+            },
+            None => {
+                if current.is_none() {
+                    return;
+                }
+                if let Err(error) = config.delete(GlobalConfigKey::OnboardingProgress) {
+                    warn!("Onboarding: failed to clear onboarding progress: {error}");
+                }
+            }
+        }
     }
 }
 
@@ -513,7 +608,14 @@ impl FlowState {
             (
                 Self::CloudBackup(CloudBackupFlow::SoftwareImport { wallet_id }),
                 OnboardingAction::CloudBackupEnabled,
-            ) => (Self::Terms(CompletionTarget::SelectWallet(wallet_id)), TransitionCommand::None),
+            ) => (
+                Self::Terms {
+                    target: CompletionTarget::SelectWallet(wallet_id),
+                    error_message: None,
+                    progress: None,
+                },
+                TransitionCommand::None,
+            ),
             (
                 Self::CloudBackup(CloudBackupFlow::CreatedWallet(flow)),
                 OnboardingAction::SkipCloudBackup,
@@ -521,7 +623,14 @@ impl FlowState {
             (
                 Self::CloudBackup(CloudBackupFlow::SoftwareImport { wallet_id }),
                 OnboardingAction::SkipCloudBackup,
-            ) => (Self::Terms(CompletionTarget::SelectWallet(wallet_id)), TransitionCommand::None),
+            ) => (
+                Self::Terms {
+                    target: CompletionTarget::SelectWallet(wallet_id),
+                    error_message: None,
+                    progress: None,
+                },
+                TransitionCommand::None,
+            ),
             (Self::BackupWallet(flow), OnboardingAction::ContinueFromBackup)
                 if flow.secret_words_saved || flow.cloud_backup_enabled =>
             {
@@ -529,7 +638,11 @@ impl FlowState {
                     (Self::ExchangeFunding(flow), TransitionCommand::None)
                 } else if flow.cloud_backup_enabled {
                     (
-                        Self::Terms(CompletionTarget::SelectWallet(flow.wallet_id.clone())),
+                        Self::Terms {
+                            target: CompletionTarget::SelectWallet(flow.wallet_id.clone()),
+                            error_message: None,
+                            progress: Some(OnboardingProgress::from(&flow)),
+                        },
                         TransitionCommand::None,
                     )
                 } else {
@@ -539,7 +652,11 @@ impl FlowState {
             (Self::ExchangeFunding(flow), OnboardingAction::ContinueFromExchangeFunding) => {
                 if flow.cloud_backup_enabled {
                     (
-                        Self::Terms(CompletionTarget::SelectWallet(flow.wallet_id.clone())),
+                        Self::Terms {
+                            target: CompletionTarget::SelectWallet(flow.wallet_id.clone()),
+                            error_message: None,
+                            progress: Some(OnboardingProgress::from(&flow)),
+                        },
                         TransitionCommand::None,
                     )
                 } else {
@@ -557,29 +674,55 @@ impl FlowState {
             (
                 Self::HardwareImport { .. },
                 OnboardingAction::HardwareImportCompleted { wallet_id },
-            ) => (Self::Terms(CompletionTarget::SelectWallet(wallet_id)), TransitionCommand::None),
-            (Self::SoftwareImport, OnboardingAction::BackupImportCompleted) => {
-                (Self::Terms(CompletionTarget::SelectLatestOrNew), TransitionCommand::None)
-            }
+            ) => (
+                Self::Terms {
+                    target: CompletionTarget::SelectWallet(wallet_id),
+                    error_message: None,
+                    progress: None,
+                },
+                TransitionCommand::None,
+            ),
+            (Self::SoftwareImport, OnboardingAction::BackupImportCompleted) => (
+                Self::Terms {
+                    target: CompletionTarget::SelectLatestOrNew,
+                    error_message: None,
+                    progress: None,
+                },
+                TransitionCommand::None,
+            ),
             (Self::RestoreOffer { .. }, OnboardingAction::StartRestore) => {
                 (Self::Restoring, TransitionCommand::None)
             }
-            (Self::RestoreOffer { .. }, OnboardingAction::SkipRestore) => {
-                (Self::Terms(CompletionTarget::NewWalletSelect), TransitionCommand::None)
-            }
-            (Self::Restoring, OnboardingAction::RestoreComplete) => {
-                (Self::Terms(CompletionTarget::SelectLatestOrNew), TransitionCommand::None)
-            }
+            (Self::RestoreOffer { .. }, OnboardingAction::SkipRestore) => (
+                Self::Terms {
+                    target: CompletionTarget::NewWalletSelect,
+                    error_message: None,
+                    progress: None,
+                },
+                TransitionCommand::None,
+            ),
+            (Self::Restoring, OnboardingAction::RestoreComplete) => (
+                Self::Terms {
+                    target: CompletionTarget::SelectLatestOrNew,
+                    error_message: None,
+                    progress: None,
+                },
+                TransitionCommand::None,
+            ),
             (Self::Restoring, OnboardingAction::RestoreFailed { error }) => {
                 (Self::RestoreOffer { error_message: Some(error) }, TransitionCommand::None)
             }
             (Self::VerifyWords(flow), OnboardingAction::VerifyWordsCompleted) => (
-                Self::Terms(CompletionTarget::SelectWallet(flow.wallet_id.clone())),
+                Self::Terms {
+                    target: CompletionTarget::SelectWallet(flow.wallet_id.clone()),
+                    error_message: None,
+                    progress: Some(OnboardingProgress::from(&flow)),
+                },
                 TransitionCommand::None,
             ),
-            (Self::Terms(target), OnboardingAction::AcceptTerms) => {
+            (Self::Terms { target, progress, .. }, OnboardingAction::AcceptTerms) => {
                 let command = TransitionCommand::CompleteOnboarding(target.clone());
-                (Self::Terms(target), command)
+                (Self::Terms { target, error_message: None, progress }, command)
             }
             (Self::BitcoinChoice, OnboardingAction::Back) => {
                 (Self::Welcome { error_message: None }, TransitionCommand::None)
@@ -664,6 +807,9 @@ impl FlowState {
                     error,
                 },
             ) => Self::Welcome { error_message: Some(error) },
+            (Self::Terms { target, progress, .. }, InternalEvent::CompletionFailed { error }) => {
+                Self::Terms { target, error_message: Some(error), progress }
+            }
             (state, event) => {
                 warn!("Onboarding: invalid event={event:?} flow={state:?}");
                 state
@@ -743,9 +889,11 @@ impl FlowState {
                 branch: Some(OnboardingBranch::SoftwareImport),
                 ..OnboardingState::default()
             },
-            Self::Terms(_) => {
-                OnboardingState { step: OnboardingStep::Terms, ..OnboardingState::default() }
-            }
+            Self::Terms { error_message, .. } => OnboardingState {
+                step: OnboardingStep::Terms,
+                error_message: error_message.clone(),
+                ..OnboardingState::default()
+            },
         }
     }
 
@@ -758,7 +906,9 @@ impl FlowState {
             | Self::ExchangeFunding(flow) => Some(flow.wallet_id.clone()),
             Self::CloudBackup(CloudBackupFlow::CreatedWallet(flow)) => Some(flow.wallet_id.clone()),
             Self::CloudBackup(CloudBackupFlow::SoftwareImport { wallet_id })
-            | Self::Terms(CompletionTarget::SelectWallet(wallet_id)) => Some(wallet_id.clone()),
+            | Self::Terms { target: CompletionTarget::SelectWallet(wallet_id), .. } => {
+                Some(wallet_id.clone())
+            }
             _ => None,
         }
     }
@@ -785,6 +935,101 @@ impl FlowState {
             secret_words_saved: flow.secret_words_saved,
             error_message: None,
         }
+    }
+
+    fn persisted_progress(&self) -> Option<OnboardingProgress> {
+        match self {
+            Self::CreatingWallet(flow)
+            | Self::BackupWallet(flow)
+            | Self::CloudBackup(CloudBackupFlow::CreatedWallet(flow))
+            | Self::SecretWords(flow)
+            | Self::VerifyWords(flow)
+            | Self::ExchangeFunding(flow) => Some(OnboardingProgress::from(flow)),
+            Self::Terms { target: CompletionTarget::SelectWallet(_), progress, .. } => {
+                progress.clone()
+            }
+            _ => None,
+        }
+    }
+}
+
+impl From<&CreatedWalletFlow> for OnboardingProgress {
+    fn from(flow: &CreatedWalletFlow) -> Self {
+        Self::CreatedWallet {
+            wallet_id: flow.wallet_id.clone(),
+            branch: flow.branch,
+            network: flow.network,
+            wallet_mode: flow.wallet_mode,
+            secret_words_saved: flow.secret_words_saved,
+            cloud_backup_enabled: flow.cloud_backup_enabled,
+        }
+    }
+}
+
+impl OnboardingProgress {
+    fn restore_flow<F>(&self, load_mnemonic: F) -> Option<FlowState>
+    where
+        F: FnOnce(&WalletId, Network, WalletMode) -> Option<bip39::Mnemonic>,
+    {
+        match self {
+            Self::CreatedWallet {
+                wallet_id,
+                branch,
+                network,
+                wallet_mode,
+                secret_words_saved,
+                cloud_backup_enabled,
+            } => {
+                let mnemonic = load_mnemonic(wallet_id, *network, *wallet_mode)?;
+                let created_words = mnemonic.words().map(str::to_string).collect();
+
+                Some(FlowState::BackupWallet(CreatedWalletFlow {
+                    branch: *branch,
+                    wallet_id: wallet_id.clone(),
+                    network: *network,
+                    wallet_mode: *wallet_mode,
+                    created_words,
+                    word_validator: Arc::new(WordValidator::new(mnemonic)),
+                    cloud_backup_enabled: *cloud_backup_enabled,
+                    secret_words_saved: *secret_words_saved,
+                }))
+            }
+        }
+    }
+}
+
+fn default_initial_flow(has_wallets: bool) -> FlowState {
+    if has_wallets {
+        FlowState::Terms {
+            target: CompletionTarget::SelectLatestOrNew,
+            error_message: None,
+            progress: None,
+        }
+    } else {
+        FlowState::CloudCheck
+    }
+}
+
+fn resolve_initial_flow<F>(
+    progress: Option<OnboardingProgress>,
+    has_wallets: bool,
+    load_mnemonic: F,
+) -> InitialFlowResolution
+where
+    F: FnOnce(&WalletId, Network, WalletMode) -> Option<bip39::Mnemonic>,
+{
+    match progress {
+        Some(progress) => match progress.restore_flow(load_mnemonic) {
+            Some(flow) => InitialFlowResolution { flow, clear_persisted_progress: false },
+            None => InitialFlowResolution {
+                flow: default_initial_flow(has_wallets),
+                clear_persisted_progress: true,
+            },
+        },
+        None => InitialFlowResolution {
+            flow: default_initial_flow(has_wallets),
+            clear_persisted_progress: false,
+        },
     }
 }
 
@@ -818,6 +1063,41 @@ fn cloud_check_inconclusive_message(issue: CloudCheckIssue) -> String {
     }
 }
 
+fn determine_cloud_check_outcome<F, S>(
+    retry_delays: &[u64],
+    mut has_any_cloud_backup: F,
+    mut sleep: S,
+) -> CloudCheckOutcome
+where
+    F: FnMut() -> Result<bool, CloudStorageError>,
+    S: FnMut(Duration),
+{
+    for (attempt, delay) in retry_delays.iter().enumerate() {
+        info!(
+            "Onboarding: checking cloud backup attempt={}/{}",
+            attempt + 1,
+            retry_delays.len() + 1
+        );
+
+        match has_any_cloud_backup() {
+            Ok(true) => return CloudCheckOutcome::BackupFound,
+            Ok(false) => return CloudCheckOutcome::NoBackupConfirmed,
+            Err(error) => warn!("Onboarding: cloud backup check failed: {error}"),
+        }
+
+        sleep(Duration::from_secs(*delay));
+    }
+
+    match has_any_cloud_backup() {
+        Ok(true) => CloudCheckOutcome::BackupFound,
+        Ok(false) => CloudCheckOutcome::NoBackupConfirmed,
+        Err(error) => {
+            warn!("Onboarding: final cloud backup check failed: {error}");
+            CloudCheckOutcome::Inconclusive(classify_cloud_check_error(&error))
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use bip39::Mnemonic;
@@ -846,7 +1126,9 @@ mod tests {
 
         assert_eq!(command, TransitionCommand::None);
         match flow {
-            FlowState::Terms(CompletionTarget::SelectWallet(id)) => assert_eq!(id, wallet_id),
+            FlowState::Terms { target: CompletionTarget::SelectWallet(id), .. } => {
+                assert_eq!(id, wallet_id)
+            }
             other => panic!("unexpected flow state: {other:?}"),
         }
     }
@@ -879,6 +1161,110 @@ mod tests {
         assert_eq!(classify_cloud_check_error(&error), CloudCheckIssue::CloudUnavailable);
     }
 
+    #[test]
+    fn cloud_check_false_short_circuits_without_sleeping() {
+        let mut slept = Vec::new();
+        let outcome = determine_cloud_check_outcome(
+            &[1, 2, 3],
+            || Ok(false),
+            |duration| slept.push(duration),
+        );
+
+        assert_eq!(outcome, CloudCheckOutcome::NoBackupConfirmed);
+        assert!(slept.is_empty());
+    }
+
+    #[test]
+    fn cloud_check_retries_errors_and_returns_inconclusive() {
+        let mut slept = Vec::new();
+        let outcome = determine_cloud_check_outcome(
+            &[1, 2],
+            || Err(CloudStorageError::NotAvailable("network timed out".into())),
+            |duration| slept.push(duration),
+        );
+
+        assert_eq!(outcome, CloudCheckOutcome::Inconclusive(CloudCheckIssue::Offline));
+        assert_eq!(slept, vec![Duration::from_secs(1), Duration::from_secs(2)]);
+    }
+
+    #[test]
+    fn persisted_created_wallet_progress_resumes_to_backup_wallet() {
+        let wallet_id = WalletId::new();
+        let mnemonic = Mnemonic::parse(
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+        )
+        .expect("should parse mnemonic");
+        let progress = OnboardingProgress::CreatedWallet {
+            wallet_id: wallet_id.clone(),
+            branch: OnboardingBranch::Exchange,
+            network: Network::Bitcoin,
+            wallet_mode: WalletMode::Main,
+            secret_words_saved: true,
+            cloud_backup_enabled: false,
+        };
+
+        let flow = progress
+            .restore_flow(|requested_wallet_id, _, _| {
+                assert_eq!(requested_wallet_id, &wallet_id);
+                Some(mnemonic.clone())
+            })
+            .expect("should restore backup flow");
+
+        match flow {
+            FlowState::BackupWallet(flow) => {
+                assert_eq!(flow.wallet_id, wallet_id);
+                assert_eq!(flow.branch, OnboardingBranch::Exchange);
+                assert!(flow.secret_words_saved);
+                assert!(!flow.cloud_backup_enabled);
+            }
+            other => panic!("unexpected flow state: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn stale_persisted_progress_falls_back_and_requests_clear() {
+        let resolution = resolve_initial_flow(
+            Some(OnboardingProgress::CreatedWallet {
+                wallet_id: WalletId::new(),
+                branch: OnboardingBranch::NewUser,
+                network: Network::Bitcoin,
+                wallet_mode: WalletMode::Main,
+                secret_words_saved: false,
+                cloud_backup_enabled: false,
+            }),
+            true,
+            |_, _, _| None,
+        );
+
+        assert!(resolution.clear_persisted_progress);
+        assert!(matches!(
+            resolution.flow,
+            FlowState::Terms {
+                target: CompletionTarget::SelectLatestOrNew,
+                error_message: None,
+                progress: None,
+            }
+        ));
+    }
+
+    #[test]
+    fn completion_failure_sets_terms_error_without_completing() {
+        let mut flow = FlowState::Terms {
+            target: CompletionTarget::SelectWallet(WalletId::new()),
+            error_message: None,
+            progress: None,
+        };
+
+        flow.apply_event(InternalEvent::CompletionFailed { error: "selection failed".into() });
+
+        match flow {
+            FlowState::Terms { error_message: Some(error), .. } => {
+                assert_eq!(error, "selection failed")
+            }
+            other => panic!("unexpected flow state: {other:?}"),
+        }
+    }
+
     fn preview_created_wallet_flow(branch: OnboardingBranch) -> CreatedWalletFlow {
         let mnemonic = Mnemonic::parse(
             "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
@@ -888,6 +1274,8 @@ mod tests {
         CreatedWalletFlow {
             branch,
             wallet_id: WalletId::new(),
+            network: Network::Bitcoin,
+            wallet_mode: WalletMode::Main,
             created_words: mnemonic.words().map(str::to_string).collect(),
             word_validator: Arc::new(WordValidator::new(mnemonic)),
             cloud_backup_enabled: false,

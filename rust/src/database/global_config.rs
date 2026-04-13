@@ -36,6 +36,7 @@ pub enum GlobalConfigKey {
     MainSelectedWalletId,
     DecoySelectedWalletId,
     LockedAt,
+    OnboardingProgress,
 }
 
 impl From<GlobalConfigKey> for &'static str {
@@ -57,6 +58,7 @@ impl From<GlobalConfigKey> for &'static str {
             GlobalConfigKey::MainSelectedWalletId => "main_selected_wallet_id",
             GlobalConfigKey::DecoySelectedWalletId => "decoy_selected_wallet_id",
             GlobalConfigKey::LockedAt => "locked_at",
+            GlobalConfigKey::OnboardingProgress => "onboarding_progress",
         }
     }
 }

@@ -95,7 +95,7 @@ struct OnboardingContainer: View {
     private func stepView(for step: OnboardingStep) -> some View {
         switch step {
         case .terms:
-            TermsAndConditionsView {
+            TermsAndConditionsView(errorMessage: manager.state.errorMessage) {
                 manager.dispatch(.acceptTerms)
             }
 
@@ -123,7 +123,7 @@ struct OnboardingContainer: View {
             )
 
         case .welcome:
-            OnboardingWelcomeScreen {
+            OnboardingWelcomeScreen(errorMessage: manager.state.errorMessage) {
                 manager.dispatch(.continueFromWelcome)
             }
 
@@ -276,6 +276,7 @@ private struct CloudCheckContent: View {
 }
 
 private struct OnboardingWelcomeScreen: View {
+    let errorMessage: String?
     let onContinue: () -> Void
 
     var body: some View {
@@ -284,6 +285,10 @@ private struct OnboardingWelcomeScreen: View {
             title: "Welcome to Cove",
             subtitle: "A self-custody Bitcoin wallet focused on secure backups, clear flows, and hardware wallet support."
         ) {
+            if let errorMessage {
+                OnboardingInlineMessage(text: errorMessage)
+            }
+
             Button("Get Started", action: onContinue)
                 .buttonStyle(OnboardingPrimaryButtonStyle())
         }
@@ -439,8 +444,17 @@ private struct OnboardingCreatingWalletView: View {
         .onboardingRecoveryBackground()
         .task {
             guard !didAdvance else { return }
+
+            do {
+                try await Task.sleep(for: .milliseconds(900))
+            } catch is CancellationError {
+                return
+            } catch {
+                return
+            }
+
+            guard !didAdvance else { return }
             didAdvance = true
-            try? await Task.sleep(for: .milliseconds(900))
             onContinue()
         }
     }
@@ -974,11 +988,19 @@ private struct OnboardingHardwareFileImportView: View {
     }
 
     private func importFile(_ url: URL) {
+        errorMessage = nil
         isImporting = true
         defer { isImporting = false }
 
+        let didAccess = url.startAccessingSecurityScopedResource()
+        defer {
+            if didAccess {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+
         do {
-            let multiFormat = try FileHandler(filePath: url.absoluteString).read()
+            let multiFormat = try FileHandler(filePath: url.path).read()
             guard case let .hardwareExport(export) = multiFormat else {
                 errorMessage = "That file doesn’t contain a hardware wallet export."
                 return
@@ -1226,7 +1248,7 @@ private struct OnboardingStatusCard: View {
     }
 }
 
-private struct OnboardingInlineMessage: View {
+struct OnboardingInlineMessage: View {
     let text: String
 
     var body: some View {
