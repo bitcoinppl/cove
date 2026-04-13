@@ -671,37 +671,18 @@ impl RustCloudBackupManager {
     }
 
     fn offline_message_for_step(step: BlockingCloudStep) -> &'static str {
+        use BlockingCloudStep as B;
         match step {
-            BlockingCloudStep::Enable => {
-                "Reconnect to the internet, then try enabling cloud backup again"
-            }
-            BlockingCloudStep::Restore => {
-                "Reconnect to the internet, then try restoring from cloud backup again"
-            }
-            BlockingCloudStep::Verify => {
-                "Reconnect to the internet, then try verifying cloud backup again"
-            }
-            BlockingCloudStep::Sync => {
-                "Reconnect to the internet, then try syncing cloud backup again"
-            }
-            BlockingCloudStep::FetchCloudOnly => {
-                "Reconnect to the internet, then try loading cloud-only wallets again"
-            }
-            BlockingCloudStep::RestoreCloudWallet => {
-                "Reconnect to the internet, then try restoring this cloud wallet again"
-            }
-            BlockingCloudStep::DeleteCloudWallet => {
-                "Reconnect to the internet, then try deleting this cloud wallet again"
-            }
-            BlockingCloudStep::RecreateManifest => {
-                "Reconnect to the internet, then try recreating the cloud backup manifest again"
-            }
-            BlockingCloudStep::RepairPasskey => {
-                "Reconnect to the internet, then try repairing cloud backup again"
-            }
-            BlockingCloudStep::DetailRefresh => {
-                "Reconnect to the internet, then try refreshing cloud backup details again"
-            }
+            B::Enable => "Reconnect to the internet, then try enabling cloud backup again",
+            B::Restore => "Reconnect to the internet, then try restoring from cloud backup again",
+            B::Verify => "Reconnect to the internet, then try verifying cloud backup again",
+            B::Sync => "Reconnect to the internet, then try syncing cloud backup again",
+            B::FetchCloudOnly => "Reconnect to the internet, then try loading cloud-only wallets again",
+            B::RestoreCloudWallet => "Reconnect to the internet, then try restoring this cloud wallet again",
+            B::DeleteCloudWallet => "Reconnect to the internet, then try deleting this cloud wallet again",
+            B::RecreateManifest => "Reconnect to the internet, then try recreating the cloud backup manifest again",
+            B::RepairPasskey => "Reconnect to the internet, then try repairing cloud backup again",
+            B::DetailRefresh => "Reconnect to the internet, then try refreshing cloud backup details again",
         }
     }
 

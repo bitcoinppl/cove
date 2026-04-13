@@ -81,13 +81,6 @@ impl CloudBackupOperationGate {
         )
     }
 
-    #[cfg(test)]
-    pub(crate) fn active_kind(&self) -> Option<CloudBackupOperationKind> {
-        match self {
-            Self::Idle => None,
-            Self::Running { kind, .. } => Some(*kind),
-        }
-    }
 }
 
 #[derive(Debug, Default)]
@@ -129,17 +122,29 @@ impl CloudBackupOperationController {
         self.gate.is_current(operation_id)
     }
 
-    #[cfg(test)]
-    pub(crate) fn active_kind(&self) -> Option<CloudBackupOperationKind> {
-        self.gate.active_kind()
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        CloudBackupOperationController, CloudBackupOperationDecision, CloudBackupOperationKind,
+        CloudBackupOperationController, CloudBackupOperationDecision, CloudBackupOperationGate,
+        CloudBackupOperationKind,
     };
+
+    impl CloudBackupOperationGate {
+        fn active_kind(&self) -> Option<CloudBackupOperationKind> {
+            match self {
+                Self::Idle => None,
+                Self::Running { kind, .. } => Some(*kind),
+            }
+        }
+    }
+
+    impl CloudBackupOperationController {
+        fn active_kind(&self) -> Option<CloudBackupOperationKind> {
+            self.gate.active_kind()
+        }
+    }
 
     #[test]
     fn gate_starts_when_idle() {

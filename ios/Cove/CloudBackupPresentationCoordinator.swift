@@ -415,25 +415,15 @@ private struct CloudBackupVerificationPromptView: View {
     }
 
     private var title: String {
-        if isVerifying {
-            return "Verifying Cloud Backup"
-        }
-
-        if failure != nil {
-            return "Verification Failed"
-        }
+        if isVerifying { return "Verifying Cloud Backup" }
+        if failure != nil { return "Verification Failed" }
 
         return "Verify"
     }
 
     private var message: String {
-        if let failure {
-            return failure.message
-        }
-
-        if isVerifying {
-            return "Confirming your updated cloud backup can be decrypted and restored. Continuing may ask for your passkey."
-        }
+        if let failure { return failure.message }
+        if isVerifying { return "Confirming your updated cloud backup can be decrypted and restored. Continuing may ask for your passkey." }
 
         return "Verify your updated cloud backup now to confirm it is accessible. Continuing may ask for your passkey."
     }
