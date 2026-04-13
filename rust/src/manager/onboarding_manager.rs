@@ -1535,10 +1535,10 @@ mod tests {
     }
 
     #[test]
-    fn cloud_check_timeout_is_treated_as_offline() {
+    fn cloud_check_timeout_is_treated_as_cloud_unavailable() {
         let error = CloudStorageError::NotAvailable("iCloud metadata query timed out".into());
 
-        assert_eq!(classify_cloud_check_error(&error), CloudCheckIssue::Offline);
+        assert_eq!(classify_cloud_check_error(&error), CloudCheckIssue::CloudUnavailable);
     }
 
     #[test]
@@ -1570,7 +1570,7 @@ mod tests {
             |duration| slept.push(duration),
         );
 
-        assert_eq!(outcome, CloudCheckOutcome::Inconclusive(CloudCheckIssue::Offline));
+        assert_eq!(outcome, CloudCheckOutcome::Inconclusive(CloudCheckIssue::CloudUnavailable));
         assert_eq!(slept, vec![Duration::from_secs(1), Duration::from_secs(2)]);
     }
 

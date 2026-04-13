@@ -14301,17 +14301,23 @@ public struct OnboardingState: Equatable, Hashable {
     public var createdWords: [String]
     public var cloudBackupEnabled: Bool
     public var secretWordsSaved: Bool
+    public var cloudRestoreState: OnboardingCloudRestoreState
+    public var cloudRestoreMessage: String?
+    public var shouldOfferCloudRestore: Bool
     public var errorMessage: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(step: OnboardingStep, branch: OnboardingBranch?, hardwareDevice: OnboardingHardwareDevice?, createdWords: [String], cloudBackupEnabled: Bool, secretWordsSaved: Bool, errorMessage: String?) {
+    public init(step: OnboardingStep, branch: OnboardingBranch?, hardwareDevice: OnboardingHardwareDevice?, createdWords: [String], cloudBackupEnabled: Bool, secretWordsSaved: Bool, cloudRestoreState: OnboardingCloudRestoreState, cloudRestoreMessage: String?, shouldOfferCloudRestore: Bool, errorMessage: String?) {
         self.step = step
         self.branch = branch
         self.hardwareDevice = hardwareDevice
         self.createdWords = createdWords
         self.cloudBackupEnabled = cloudBackupEnabled
         self.secretWordsSaved = secretWordsSaved
+        self.cloudRestoreState = cloudRestoreState
+        self.cloudRestoreMessage = cloudRestoreMessage
+        self.shouldOfferCloudRestore = shouldOfferCloudRestore
         self.errorMessage = errorMessage
     }
 
@@ -14337,6 +14343,9 @@ public struct FfiConverterTypeOnboardingState: FfiConverterRustBuffer {
                 createdWords: FfiConverterSequenceString.read(from: &buf), 
                 cloudBackupEnabled: FfiConverterBool.read(from: &buf), 
                 secretWordsSaved: FfiConverterBool.read(from: &buf), 
+                cloudRestoreState: FfiConverterTypeOnboardingCloudRestoreState.read(from: &buf), 
+                cloudRestoreMessage: FfiConverterOptionString.read(from: &buf), 
+                shouldOfferCloudRestore: FfiConverterBool.read(from: &buf), 
                 errorMessage: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -14348,6 +14357,9 @@ public struct FfiConverterTypeOnboardingState: FfiConverterRustBuffer {
         FfiConverterSequenceString.write(value.createdWords, into: &buf)
         FfiConverterBool.write(value.cloudBackupEnabled, into: &buf)
         FfiConverterBool.write(value.secretWordsSaved, into: &buf)
+        FfiConverterTypeOnboardingCloudRestoreState.write(value.cloudRestoreState, into: &buf)
+        FfiConverterOptionString.write(value.cloudRestoreMessage, into: &buf)
+        FfiConverterBool.write(value.shouldOfferCloudRestore, into: &buf)
         FfiConverterOptionString.write(value.errorMessage, into: &buf)
     }
 }
@@ -21250,6 +21262,7 @@ public enum GlobalConfigKey: Equatable, Hashable {
     case mainSelectedWalletId
     case decoySelectedWalletId
     case lockedAt
+    case onboardingProgress
 
 
 
@@ -21297,6 +21310,8 @@ public struct FfiConverterTypeGlobalConfigKey: FfiConverterRustBuffer {
         case 12: return .decoySelectedWalletId
         
         case 13: return .lockedAt
+        
+        case 14: return .onboardingProgress
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -21357,6 +21372,10 @@ public struct FfiConverterTypeGlobalConfigKey: FfiConverterRustBuffer {
         
         case .lockedAt:
             writeInt(&buf, Int32(13))
+        
+        
+        case .onboardingProgress:
+            writeInt(&buf, Int32(14))
         
         }
     }
@@ -23824,6 +23843,8 @@ public enum OnboardingAction: Equatable, Hashable {
     case continueFromWelcome
     case selectHasBitcoin(hasBitcoin: Bool
     )
+    case selectReturningUserFlow(selection: OnboardingReturningUserSelection
+    )
     case selectStorage(selection: OnboardingStorageSelection
     )
     case selectSoftwareAction(selection: OnboardingSoftwareSelection
@@ -23843,8 +23864,10 @@ public enum OnboardingAction: Equatable, Hashable {
     case hardwareImportCompleted(walletId: WalletId
     )
     case backupImportCompleted
+    case openCloudRestore
     case startRestore
     case skipRestore
+    case continueWithoutCloudRestore
     case restoreComplete
     case restoreFailed(error: String
     )
@@ -23877,53 +23900,60 @@ public struct FfiConverterTypeOnboardingAction: FfiConverterRustBuffer {
         case 2: return .selectHasBitcoin(hasBitcoin: try FfiConverterBool.read(from: &buf)
         )
         
-        case 3: return .selectStorage(selection: try FfiConverterTypeOnboardingStorageSelection.read(from: &buf)
+        case 3: return .selectReturningUserFlow(selection: try FfiConverterTypeOnboardingReturningUserSelection.read(from: &buf)
         )
         
-        case 4: return .selectSoftwareAction(selection: try FfiConverterTypeOnboardingSoftwareSelection.read(from: &buf)
+        case 4: return .selectStorage(selection: try FfiConverterTypeOnboardingStorageSelection.read(from: &buf)
         )
         
-        case 5: return .continueWalletCreation
-        
-        case 6: return .showSecretWords
-        
-        case 7: return .secretWordsSaved
-        
-        case 8: return .openCloudBackup
-        
-        case 9: return .cloudBackupEnabled
-        
-        case 10: return .skipCloudBackup
-        
-        case 11: return .continueFromBackup
-        
-        case 12: return .continueFromExchangeFunding
-        
-        case 13: return .selectHardwareDevice(device: try FfiConverterTypeOnboardingHardwareDevice.read(from: &buf)
+        case 5: return .selectSoftwareAction(selection: try FfiConverterTypeOnboardingSoftwareSelection.read(from: &buf)
         )
         
-        case 14: return .softwareImportCompleted(walletId: try FfiConverterTypeWalletId.read(from: &buf)
+        case 6: return .continueWalletCreation
+        
+        case 7: return .showSecretWords
+        
+        case 8: return .secretWordsSaved
+        
+        case 9: return .openCloudBackup
+        
+        case 10: return .cloudBackupEnabled
+        
+        case 11: return .skipCloudBackup
+        
+        case 12: return .continueFromBackup
+        
+        case 13: return .continueFromExchangeFunding
+        
+        case 14: return .selectHardwareDevice(device: try FfiConverterTypeOnboardingHardwareDevice.read(from: &buf)
         )
         
-        case 15: return .hardwareImportCompleted(walletId: try FfiConverterTypeWalletId.read(from: &buf)
+        case 15: return .softwareImportCompleted(walletId: try FfiConverterTypeWalletId.read(from: &buf)
         )
         
-        case 16: return .backupImportCompleted
-        
-        case 17: return .startRestore
-        
-        case 18: return .skipRestore
-        
-        case 19: return .restoreComplete
-        
-        case 20: return .restoreFailed(error: try FfiConverterString.read(from: &buf)
+        case 16: return .hardwareImportCompleted(walletId: try FfiConverterTypeWalletId.read(from: &buf)
         )
         
-        case 21: return .verifyWordsCompleted
+        case 17: return .backupImportCompleted
         
-        case 22: return .acceptTerms
+        case 18: return .openCloudRestore
         
-        case 23: return .back
+        case 19: return .startRestore
+        
+        case 20: return .skipRestore
+        
+        case 21: return .continueWithoutCloudRestore
+        
+        case 22: return .restoreComplete
+        
+        case 23: return .restoreFailed(error: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 24: return .verifyWordsCompleted
+        
+        case 25: return .acceptTerms
+        
+        case 26: return .back
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -23942,94 +23972,107 @@ public struct FfiConverterTypeOnboardingAction: FfiConverterRustBuffer {
             FfiConverterBool.write(hasBitcoin, into: &buf)
             
         
-        case let .selectStorage(selection):
+        case let .selectReturningUserFlow(selection):
             writeInt(&buf, Int32(3))
+            FfiConverterTypeOnboardingReturningUserSelection.write(selection, into: &buf)
+            
+        
+        case let .selectStorage(selection):
+            writeInt(&buf, Int32(4))
             FfiConverterTypeOnboardingStorageSelection.write(selection, into: &buf)
             
         
         case let .selectSoftwareAction(selection):
-            writeInt(&buf, Int32(4))
+            writeInt(&buf, Int32(5))
             FfiConverterTypeOnboardingSoftwareSelection.write(selection, into: &buf)
             
         
         case .continueWalletCreation:
-            writeInt(&buf, Int32(5))
-        
-        
-        case .showSecretWords:
             writeInt(&buf, Int32(6))
         
         
-        case .secretWordsSaved:
+        case .showSecretWords:
             writeInt(&buf, Int32(7))
         
         
-        case .openCloudBackup:
+        case .secretWordsSaved:
             writeInt(&buf, Int32(8))
         
         
-        case .cloudBackupEnabled:
+        case .openCloudBackup:
             writeInt(&buf, Int32(9))
         
         
-        case .skipCloudBackup:
+        case .cloudBackupEnabled:
             writeInt(&buf, Int32(10))
         
         
-        case .continueFromBackup:
+        case .skipCloudBackup:
             writeInt(&buf, Int32(11))
         
         
-        case .continueFromExchangeFunding:
+        case .continueFromBackup:
             writeInt(&buf, Int32(12))
         
         
-        case let .selectHardwareDevice(device):
+        case .continueFromExchangeFunding:
             writeInt(&buf, Int32(13))
+        
+        
+        case let .selectHardwareDevice(device):
+            writeInt(&buf, Int32(14))
             FfiConverterTypeOnboardingHardwareDevice.write(device, into: &buf)
             
         
         case let .softwareImportCompleted(walletId):
-            writeInt(&buf, Int32(14))
-            FfiConverterTypeWalletId.write(walletId, into: &buf)
-            
-        
-        case let .hardwareImportCompleted(walletId):
             writeInt(&buf, Int32(15))
             FfiConverterTypeWalletId.write(walletId, into: &buf)
             
         
-        case .backupImportCompleted:
+        case let .hardwareImportCompleted(walletId):
             writeInt(&buf, Int32(16))
+            FfiConverterTypeWalletId.write(walletId, into: &buf)
+            
         
-        
-        case .startRestore:
+        case .backupImportCompleted:
             writeInt(&buf, Int32(17))
         
         
-        case .skipRestore:
+        case .openCloudRestore:
             writeInt(&buf, Int32(18))
         
         
-        case .restoreComplete:
+        case .startRestore:
             writeInt(&buf, Int32(19))
         
         
-        case let .restoreFailed(error):
+        case .skipRestore:
             writeInt(&buf, Int32(20))
+        
+        
+        case .continueWithoutCloudRestore:
+            writeInt(&buf, Int32(21))
+        
+        
+        case .restoreComplete:
+            writeInt(&buf, Int32(22))
+        
+        
+        case let .restoreFailed(error):
+            writeInt(&buf, Int32(23))
             FfiConverterString.write(error, into: &buf)
             
         
         case .verifyWordsCompleted:
-            writeInt(&buf, Int32(21))
+            writeInt(&buf, Int32(24))
         
         
         case .acceptTerms:
-            writeInt(&buf, Int32(22))
+            writeInt(&buf, Int32(25))
         
         
         case .back:
-            writeInt(&buf, Int32(23))
+            writeInt(&buf, Int32(26))
         
         }
     }
@@ -24140,6 +24183,86 @@ public func FfiConverterTypeOnboardingBranch_lower(_ value: OnboardingBranch) ->
 
 
 
+public enum OnboardingCloudRestoreState: Equatable, Hashable {
+    
+    case checking
+    case backupFound
+    case noBackupFound
+    case inconclusive
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension OnboardingCloudRestoreState: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeOnboardingCloudRestoreState: FfiConverterRustBuffer {
+    typealias SwiftType = OnboardingCloudRestoreState
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OnboardingCloudRestoreState {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .checking
+        
+        case 2: return .backupFound
+        
+        case 3: return .noBackupFound
+        
+        case 4: return .inconclusive
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: OnboardingCloudRestoreState, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .checking:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .backupFound:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .noBackupFound:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .inconclusive:
+            writeInt(&buf, Int32(4))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOnboardingCloudRestoreState_lift(_ buf: RustBuffer) throws -> OnboardingCloudRestoreState {
+    return try FfiConverterTypeOnboardingCloudRestoreState.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOnboardingCloudRestoreState_lower(_ value: OnboardingCloudRestoreState) -> RustBuffer {
+    return FfiConverterTypeOnboardingCloudRestoreState.lower(value)
+}
+
+
+
+
 public enum OnboardingHardwareDevice: Equatable, Hashable {
     
     case coldcard
@@ -24234,6 +24357,12 @@ public enum OnboardingReconcileMessage: Equatable, Hashable {
     )
     case secretWordsSaved(Bool
     )
+    case cloudRestoreState(OnboardingCloudRestoreState
+    )
+    case cloudRestoreMessageChanged(String?
+    )
+    case shouldOfferCloudRestore(Bool
+    )
     case errorMessageChanged(String?
     )
     case complete
@@ -24276,10 +24405,19 @@ public struct FfiConverterTypeOnboardingReconcileMessage: FfiConverterRustBuffer
         case 6: return .secretWordsSaved(try FfiConverterBool.read(from: &buf)
         )
         
-        case 7: return .errorMessageChanged(try FfiConverterOptionString.read(from: &buf)
+        case 7: return .cloudRestoreState(try FfiConverterTypeOnboardingCloudRestoreState.read(from: &buf)
         )
         
-        case 8: return .complete
+        case 8: return .cloudRestoreMessageChanged(try FfiConverterOptionString.read(from: &buf)
+        )
+        
+        case 9: return .shouldOfferCloudRestore(try FfiConverterBool.read(from: &buf)
+        )
+        
+        case 10: return .errorMessageChanged(try FfiConverterOptionString.read(from: &buf)
+        )
+        
+        case 11: return .complete
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -24319,13 +24457,28 @@ public struct FfiConverterTypeOnboardingReconcileMessage: FfiConverterRustBuffer
             FfiConverterBool.write(v1, into: &buf)
             
         
-        case let .errorMessageChanged(v1):
+        case let .cloudRestoreState(v1):
             writeInt(&buf, Int32(7))
+            FfiConverterTypeOnboardingCloudRestoreState.write(v1, into: &buf)
+            
+        
+        case let .cloudRestoreMessageChanged(v1):
+            writeInt(&buf, Int32(8))
+            FfiConverterOptionString.write(v1, into: &buf)
+            
+        
+        case let .shouldOfferCloudRestore(v1):
+            writeInt(&buf, Int32(9))
+            FfiConverterBool.write(v1, into: &buf)
+            
+        
+        case let .errorMessageChanged(v1):
+            writeInt(&buf, Int32(10))
             FfiConverterOptionString.write(v1, into: &buf)
             
         
         case .complete:
-            writeInt(&buf, Int32(8))
+            writeInt(&buf, Int32(11))
         
         }
     }
@@ -24344,6 +24497,72 @@ public func FfiConverterTypeOnboardingReconcileMessage_lift(_ buf: RustBuffer) t
 #endif
 public func FfiConverterTypeOnboardingReconcileMessage_lower(_ value: OnboardingReconcileMessage) -> RustBuffer {
     return FfiConverterTypeOnboardingReconcileMessage.lower(value)
+}
+
+
+
+
+public enum OnboardingReturningUserSelection: Equatable, Hashable {
+    
+    case restoreFromCoveBackup
+    case useAnotherWallet
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension OnboardingReturningUserSelection: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeOnboardingReturningUserSelection: FfiConverterRustBuffer {
+    typealias SwiftType = OnboardingReturningUserSelection
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OnboardingReturningUserSelection {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .restoreFromCoveBackup
+        
+        case 2: return .useAnotherWallet
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: OnboardingReturningUserSelection, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .restoreFromCoveBackup:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .useAnotherWallet:
+            writeInt(&buf, Int32(2))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOnboardingReturningUserSelection_lift(_ buf: RustBuffer) throws -> OnboardingReturningUserSelection {
+    return try FfiConverterTypeOnboardingReturningUserSelection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOnboardingReturningUserSelection_lower(_ value: OnboardingReturningUserSelection) -> RustBuffer {
+    return FfiConverterTypeOnboardingReturningUserSelection.lower(value)
 }
 
 
@@ -24419,9 +24638,11 @@ public enum OnboardingStep: Equatable, Hashable {
     
     case cloudCheck
     case restoreOffer
+    case restoreUnavailable
     case restoring
     case welcome
     case bitcoinChoice
+    case returningUserChoice
     case storageChoice
     case softwareChoice
     case creatingWallet
@@ -24459,35 +24680,39 @@ public struct FfiConverterTypeOnboardingStep: FfiConverterRustBuffer {
         
         case 2: return .restoreOffer
         
-        case 3: return .restoring
+        case 3: return .restoreUnavailable
         
-        case 4: return .welcome
+        case 4: return .restoring
         
-        case 5: return .bitcoinChoice
+        case 5: return .welcome
         
-        case 6: return .storageChoice
+        case 6: return .bitcoinChoice
         
-        case 7: return .softwareChoice
+        case 7: return .returningUserChoice
         
-        case 8: return .creatingWallet
+        case 8: return .storageChoice
         
-        case 9: return .backupWallet
+        case 9: return .softwareChoice
         
-        case 10: return .cloudBackup
+        case 10: return .creatingWallet
         
-        case 11: return .secretWords
+        case 11: return .backupWallet
         
-        case 12: return .verifyWords
+        case 12: return .cloudBackup
         
-        case 13: return .exchangeFunding
+        case 13: return .secretWords
         
-        case 14: return .hardwareDeviceSelection
+        case 14: return .verifyWords
         
-        case 15: return .hardwareImport
+        case 15: return .exchangeFunding
         
-        case 16: return .softwareImport
+        case 16: return .hardwareDeviceSelection
         
-        case 17: return .terms
+        case 17: return .hardwareImport
+        
+        case 18: return .softwareImport
+        
+        case 19: return .terms
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -24505,64 +24730,72 @@ public struct FfiConverterTypeOnboardingStep: FfiConverterRustBuffer {
             writeInt(&buf, Int32(2))
         
         
-        case .restoring:
+        case .restoreUnavailable:
             writeInt(&buf, Int32(3))
         
         
-        case .welcome:
+        case .restoring:
             writeInt(&buf, Int32(4))
         
         
-        case .bitcoinChoice:
+        case .welcome:
             writeInt(&buf, Int32(5))
         
         
-        case .storageChoice:
+        case .bitcoinChoice:
             writeInt(&buf, Int32(6))
         
         
-        case .softwareChoice:
+        case .returningUserChoice:
             writeInt(&buf, Int32(7))
         
         
-        case .creatingWallet:
+        case .storageChoice:
             writeInt(&buf, Int32(8))
         
         
-        case .backupWallet:
+        case .softwareChoice:
             writeInt(&buf, Int32(9))
         
         
-        case .cloudBackup:
+        case .creatingWallet:
             writeInt(&buf, Int32(10))
         
         
-        case .secretWords:
+        case .backupWallet:
             writeInt(&buf, Int32(11))
         
         
-        case .verifyWords:
+        case .cloudBackup:
             writeInt(&buf, Int32(12))
         
         
-        case .exchangeFunding:
+        case .secretWords:
             writeInt(&buf, Int32(13))
         
         
-        case .hardwareDeviceSelection:
+        case .verifyWords:
             writeInt(&buf, Int32(14))
         
         
-        case .hardwareImport:
+        case .exchangeFunding:
             writeInt(&buf, Int32(15))
         
         
-        case .softwareImport:
+        case .hardwareDeviceSelection:
             writeInt(&buf, Int32(16))
         
         
-        case .terms:
+        case .hardwareImport:
             writeInt(&buf, Int32(17))
+        
+        
+        case .softwareImport:
+            writeInt(&buf, Int32(18))
+        
+        
+        case .terms:
+            writeInt(&buf, Int32(19))
         
         }
     }

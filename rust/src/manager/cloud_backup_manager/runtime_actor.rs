@@ -630,14 +630,6 @@ impl CloudBackupRuntimeActor {
         self.active_wallet_uploads.clear();
         Produces::ok(())
     }
-
-    #[cfg(test)]
-    pub async fn has_upload_debouncer_for_test(
-        &mut self,
-        wallet_id: WalletId,
-    ) -> ActorResult<bool> {
-        Produces::ok(self.wallet_upload_debouncers.contains_key(&wallet_id))
-    }
 }
 
 struct PendingUploadRetryBackoff(backon::FibonacciBackoff);

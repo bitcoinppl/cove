@@ -1777,16 +1777,6 @@ impl RustCloudBackupManager {
     pub(crate) fn verify_pending_uploads_once_for_test(&self) -> bool {
         self.verify_pending_uploads_once()
     }
-
-    pub(crate) fn has_wallet_upload_debouncer_for_test(&self, wallet_id: WalletId) -> bool {
-        let runtime = self.runtime.clone();
-        std::thread::spawn(move || {
-            cove_tokio::task::block_on(call!(runtime.has_upload_debouncer_for_test(wallet_id)))
-                .expect("check upload debouncer")
-        })
-        .join()
-        .expect("check upload debouncer thread")
-    }
 }
 
 #[cfg(test)]

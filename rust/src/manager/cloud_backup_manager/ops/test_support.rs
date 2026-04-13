@@ -713,21 +713,6 @@ pub(crate) fn encrypted_wallet_backup_bytes_for_entry(
     serde_json::to_vec(&encrypted).unwrap()
 }
 
-pub(crate) fn restore_from_local_master_key_fallback<S>(
-    cloud: &CloudStorage,
-    store: &S,
-    cspp: &cove_cspp::Cspp<S>,
-) -> Result<(cove_cspp::master_key::MasterKey, String), CloudBackupError>
-where
-    S: cove_cspp::CsppStore,
-    S::Error: std::fmt::Display,
-{
-    let (master_key, namespace_id) =
-        try_restore_from_local_master_key(cloud, cspp).ok_or(CloudBackupError::PasskeyMismatch)?;
-    persist_namespace_id(store, &namespace_id)?;
-    Ok((master_key, namespace_id))
-}
-
 pub(crate) fn sample_labels_jsonl() -> &'static str {
     r#"{"type":"tx","ref":"d97bf8892657980426c879e4ab2001f09342f1ab61cfa602741a7715a3d60290","label":"last txn received","origin":"pkh([73c5da0a/44h/0h/0h])"}"#
 }

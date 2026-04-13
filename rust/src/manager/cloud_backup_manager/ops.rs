@@ -1429,9 +1429,12 @@ mod tests {
         cspp.save_master_key(&expected).unwrap();
         globals.cloud.set_wallet_files(namespace_id.clone(), vec!["wallet-test.json".into()]);
 
-        let (restored, restored_namespace) =
-            restore_from_local_master_key_fallback(CloudStorage::global(), &store_handle, &cspp)
-                .unwrap();
+        let (restored, restored_namespace) = super::restore_from_local_master_key_fallback(
+            CloudStorage::global(),
+            &store_handle,
+            &cspp,
+        )
+        .unwrap();
 
         assert_eq!(restored.as_bytes(), expected.as_bytes());
         assert_eq!(restored_namespace, namespace_id.clone());
@@ -1655,7 +1658,7 @@ mod tests {
         reason = "tests serialize shared cloud backup globals across awaits"
     )]
     #[tokio::test(flavor = "current_thread")]
-    async fn failed_live_wallet_upload_retries_without_restart() {
+    async fn deferred_live_wallet_upload_retries_without_restart() {
         let _guard = test_lock().lock();
         cove_tokio::init();
         let globals = test_globals();
@@ -1672,32 +1675,30 @@ mod tests {
         run_wallet_upload_for_test_async(&manager, metadata.id.clone()).await;
 
         assert_eq!(globals.cloud.uploaded_wallet_backup_count(), 0);
-        assert!(manager.state().sync_error.is_some());
-        assert!(matches!(
-            Database::global().cloud_blob_sync_states.get(&record_id).unwrap(),
-            Some(PersistedCloudBlobSyncState {
-                state: PersistedCloudBlobState::Failed(CloudBlobFailedState {
-                    retryable: true,
-                    ..
-                }),
-                ..
-            })
-        ));
-        assert!(manager.has_wallet_upload_debouncer_for_test(metadata.id.clone()));
-
-        clear_wallet_upload_runtime_for_test_async(&manager).await;
-        run_wallet_upload_for_test_async(&manager, metadata.id.clone()).await;
-
-        assert!(globals.cloud.uploaded_wallet_backup_count() >= 1);
         assert!(manager.state().sync_error.is_none());
         assert!(matches!(
             Database::global().cloud_blob_sync_states.get(&record_id).unwrap(),
-            Some(PersistedCloudBlobSyncState {
-                state: PersistedCloudBlobState::UploadedPendingConfirmation(_)
-                    | PersistedCloudBlobState::Confirmed(_),
-                ..
-            })
+            Some(PersistedCloudBlobSyncState { state: PersistedCloudBlobState::Dirty(_), .. })
         ));
+        manager.do_upload_wallet_if_dirty(&metadata.id).unwrap();
+
+        assert!(globals.cloud.uploaded_wallet_backup_count() >= 1);
+        assert!(manager.state().sync_error.is_none());
+        wait_for_test_condition(
+            Duration::from_millis(250),
+            "deferred live upload should eventually reach an uploaded state",
+            || {
+                matches!(
+                    Database::global().cloud_blob_sync_states.get(&record_id).unwrap(),
+                    Some(PersistedCloudBlobSyncState {
+                        state: PersistedCloudBlobState::UploadedPendingConfirmation(_)
+                            | PersistedCloudBlobState::Confirmed(_),
+                        ..
+                    })
+                )
+            },
+        )
+        .await;
 
         clear_wallet_upload_runtime_for_test_async(&manager).await;
     }
@@ -1767,7 +1768,7 @@ mod tests {
         persist_xpub_wallets(vec![first_wallet.clone(), second_wallet.clone()]);
         persist_dirty_blob_state(first_wallet.id.clone());
         persist_dirty_blob_state(second_wallet.id.clone());
-        globals.cloud.fail_wallet_backup_upload("offline");
+        globals.cloud.fail_wallet_backup_upload("upload failed");
 
         run_wallet_upload_for_test_async(&manager, first_wallet.id.clone()).await;
         run_wallet_upload_for_test_async(&manager, second_wallet.id.clone()).await;
