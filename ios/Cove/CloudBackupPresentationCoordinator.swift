@@ -24,52 +24,46 @@ private enum CloudBackupRootPresentation: Equatable {
     }
 }
 
+struct CloudBackupPresentationContext: Equatable {
+    var scenePhase: ScenePhase = .background
+    var isUnlocked = false
+    var isCoverPresented = true
+    var appHasAlert = false
+    var appHasSheet = false
+    var isViewingCloudBackup = false
+}
+
+enum CloudBackupPresentationBlocker: Hashable {
+    case settingsLocalModal
+    case cloudBackupDetailDialog
+}
+
 @MainActor
 @Observable
 final class CloudBackupPresentationCoordinator {
-    static let shared = CloudBackupPresentationCoordinator()
     private static let presentationDelayNs: UInt64 = 800_000_000
 
     @ObservationIgnored private var transitionTask: Task<Void, Never>?
     @ObservationIgnored private var ignoreNextDismissEvent = false
     @ObservationIgnored private var requiresPresentationDelay = false
+    @ObservationIgnored private var context = CloudBackupPresentationContext()
+    @ObservationIgnored private var blockers: Set<CloudBackupPresentationBlocker> = []
 
     fileprivate var currentPresentation: CloudBackupRootPresentation?
     private var queuedPresentation: CloudBackupRootPresentation?
 
-    private var scenePhase: ScenePhase = .background
-    private var isUnlocked = false
-    private var isCoverPresented = true
-    private var appHasAlert = false
-    private var appHasSheet = false
-    private var isViewingCloudBackup = false
-    private var settingsLocalModalPresented = false
-    private var cloudBackupDetailDialogPresented = false
-
-    private init() {}
-
-    func updateRootContext(
-        app: AppManager,
-        auth: AuthManager,
-        scenePhase: ScenePhase,
-        isCoverPresented: Bool
-    ) {
-        self.scenePhase = scenePhase
-        isUnlocked = auth.lockState == .unlocked
-        self.isCoverPresented = isCoverPresented
-        appHasAlert = app.alertState != nil
-        appHasSheet = app.sheetState != nil
-        isViewingCloudBackup = app.currentRoute.isEqual(routeToCheck: .settings(.cloudBackup))
+    func update(context: CloudBackupPresentationContext) {
+        self.context = context
         reconcile()
     }
 
-    func setSettingsLocalModalPresented(_ isPresented: Bool) {
-        settingsLocalModalPresented = isPresented
-        reconcile()
-    }
+    func setBlocker(_ blocker: CloudBackupPresentationBlocker, active: Bool) {
+        if active {
+            blockers.insert(blocker)
+        } else {
+            blockers.remove(blocker)
+        }
 
-    func setCloudBackupDetailDialogPresented(_ isPresented: Bool) {
-        cloudBackupDetailDialogPresented = isPresented
         reconcile()
     }
 
@@ -161,19 +155,18 @@ final class CloudBackupPresentationCoordinator {
     }
 
     private func isPromptPresentable(_ presentation: CloudBackupRootPresentation) -> Bool {
-        guard scenePhase == .active else { return false }
-        guard isUnlocked else { return false }
-        guard !isCoverPresented else { return false }
-        guard !appHasAlert else { return false }
-        guard !appHasSheet else { return false }
-        guard !settingsLocalModalPresented else { return false }
-        guard !cloudBackupDetailDialogPresented else { return false }
+        guard context.scenePhase == .active else { return false }
+        guard context.isUnlocked else { return false }
+        guard !context.isCoverPresented else { return false }
+        guard !context.appHasAlert else { return false }
+        guard !context.appHasSheet else { return false }
+        guard blockers.isEmpty else { return false }
 
         switch presentation {
         case .existingBackupFound, .passkeyChoice:
             return true
         case .missingPasskeyReminder, .verificationPrompt:
-            return !isViewingCloudBackup
+            return !context.isViewingCloudBackup
         }
     }
 
@@ -205,7 +198,7 @@ struct CloudBackupPresentationHost<Content: View>: View {
     let content: Content
 
     @State private var manager = CloudBackupManager.shared
-    @State private var coordinator = CloudBackupPresentationCoordinator.shared
+    @State private var coordinator = CloudBackupPresentationCoordinator()
 
     init(
         app: AppManager,
@@ -274,12 +267,14 @@ struct CloudBackupPresentationHost<Content: View>: View {
         return nil
     }
 
-    private func syncRootContext() {
-        coordinator.updateRootContext(
-            app: app,
-            auth: auth,
+    private var presentationContext: CloudBackupPresentationContext {
+        CloudBackupPresentationContext(
             scenePhase: scenePhase,
-            isCoverPresented: isCoverPresented
+            isUnlocked: auth.lockState == .unlocked,
+            isCoverPresented: isCoverPresented,
+            appHasAlert: app.alertState != nil,
+            appHasSheet: app.sheetState != nil,
+            isViewingCloudBackup: app.currentRoute.isEqual(routeToCheck: .settings(.cloudBackup))
         )
     }
 
@@ -312,24 +307,9 @@ struct CloudBackupPresentationHost<Content: View>: View {
 
     var body: some View {
         content
-            .onAppear(perform: syncRootContext)
-            .onChange(of: scenePhase) { _, _ in
-                syncRootContext()
-            }
-            .onChange(of: auth.lockState) { _, _ in
-                syncRootContext()
-            }
-            .onChange(of: isCoverPresented) { _, _ in
-                syncRootContext()
-            }
-            .onChange(of: app.alertState) { _, _ in
-                syncRootContext()
-            }
-            .onChange(of: app.sheetState) { _, _ in
-                syncRootContext()
-            }
-            .onChange(of: app.router.routes) { _, _ in
-                syncRootContext()
+            .environment(coordinator)
+            .onChange(of: presentationContext, initial: true) { _, context in
+                coordinator.update(context: context)
             }
             .onChange(of: manager.promptIntent) { _, _ in
                 coordinator.reconcile()

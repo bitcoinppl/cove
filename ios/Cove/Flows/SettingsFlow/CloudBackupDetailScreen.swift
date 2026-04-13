@@ -1,8 +1,9 @@
 import SwiftUI
 
 struct CloudBackupDetailScreen: View {
+    @Environment(CloudBackupPresentationCoordinator.self)
+    private var cloudBackupPresentationCoordinator
     @State private var manager = CloudBackupManager.shared
-    @State private var cloudBackupPresentationCoordinator = CloudBackupPresentationCoordinator.shared
     @State private var syncHealth: ICloudDriveHelper.SyncHealth = .noFiles
     @State private var showRecreateConfirmation = false
     @State private var showReinitializeConfirmation = false
@@ -39,6 +40,10 @@ struct CloudBackupDetailScreen: View {
         manager.detail == nil && !isVerifying && !hasVerificationResult && !isCancelled
     }
 
+    private var hasCloudBackupPresentationBlocker: Bool {
+        showRecreateConfirmation || showReinitializeConfirmation
+    }
+
     var body: some View {
         Form {
             formContent
@@ -56,11 +61,8 @@ struct CloudBackupDetailScreen: View {
                 manager.dispatch(action: .startVerificationDiscoverable)
             }
         }
-        .onAppear {
-            syncCloudBackupPresentationContext()
-        }
         .onDisappear {
-            cloudBackupPresentationCoordinator.setCloudBackupDetailDialogPresented(false)
+            cloudBackupPresentationCoordinator.setBlocker(.cloudBackupDetailDialog, active: false)
         }
         .onChange(of: manager.detail) { _, _ in
             refreshSyncHealth()
@@ -68,11 +70,8 @@ struct CloudBackupDetailScreen: View {
         .onChange(of: manager.verification) { _, _ in
             refreshSyncHealth()
         }
-        .onChange(of: showRecreateConfirmation) { _, _ in
-            syncCloudBackupPresentationContext()
-        }
-        .onChange(of: showReinitializeConfirmation) { _, _ in
-            syncCloudBackupPresentationContext()
+        .onChange(of: hasCloudBackupPresentationBlocker, initial: true) { _, active in
+            cloudBackupPresentationCoordinator.setBlocker(.cloudBackupDetailDialog, active: active)
         }
         .confirmationDialog(
             "Recreate Backup Index",
@@ -102,12 +101,6 @@ struct CloudBackupDetailScreen: View {
                 "This will replace your entire cloud backup. Wallets that only exist in the current cloud backup will be lost."
             )
         }
-    }
-
-    private func syncCloudBackupPresentationContext() {
-        cloudBackupPresentationCoordinator.setCloudBackupDetailDialogPresented(
-            showRecreateConfirmation || showReinitializeConfirmation
-        )
     }
 
     private func refreshSyncHealth() {
