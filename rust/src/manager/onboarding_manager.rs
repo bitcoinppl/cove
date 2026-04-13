@@ -667,10 +667,9 @@ impl FlowState {
                 Self::HardwareDeviceSelection { .. },
                 OnboardingAction::SelectHardwareDevice { device },
             ) => (Self::HardwareImport { device }, TransitionCommand::None),
-            (Self::SoftwareImport, OnboardingAction::SoftwareImportCompleted { wallet_id }) => (
-                Self::CloudBackup(CloudBackupFlow::SoftwareImport { wallet_id }),
-                TransitionCommand::None,
-            ),
+            (Self::SoftwareImport, OnboardingAction::SoftwareImportCompleted { wallet_id }) => {
+                Self::software_import_completed(wallet_id)
+            }
             (
                 Self::HardwareImport { .. },
                 OnboardingAction::HardwareImportCompleted { wallet_id },
@@ -693,22 +692,15 @@ impl FlowState {
             (Self::RestoreOffer { .. }, OnboardingAction::StartRestore) => {
                 (Self::Restoring, TransitionCommand::None)
             }
-            (Self::RestoreOffer { .. }, OnboardingAction::SkipRestore) => (
-                Self::Terms {
-                    target: CompletionTarget::NewWalletSelect,
-                    error_message: None,
-                    progress: None,
-                },
-                TransitionCommand::None,
-            ),
-            (Self::Restoring, OnboardingAction::RestoreComplete) => (
-                Self::Terms {
-                    target: CompletionTarget::SelectLatestOrNew,
-                    error_message: None,
-                    progress: None,
-                },
-                TransitionCommand::None,
-            ),
+            (Self::RestoreOffer { error_message }, OnboardingAction::SkipRestore) => {
+                Self::restore_check_exit(
+                    Self::RestoreOffer { error_message },
+                    CompletionTarget::NewWalletSelect,
+                )
+            }
+            (Self::Restoring, OnboardingAction::RestoreComplete) => {
+                Self::restore_check_exit(Self::Restoring, CompletionTarget::SelectLatestOrNew)
+            }
             (Self::Restoring, OnboardingAction::RestoreFailed { error }) => {
                 (Self::RestoreOffer { error_message: Some(error) }, TransitionCommand::None)
             }
@@ -757,6 +749,17 @@ impl FlowState {
 
         *self = next;
         command
+    }
+
+    fn software_import_completed(wallet_id: WalletId) -> (Self, TransitionCommand) {
+        software_import_transition(wallet_id, cloud_backup_is_configured_for_import())
+    }
+
+    fn restore_check_exit(
+        fallback_state: Self,
+        target: CompletionTarget,
+    ) -> (Self, TransitionCommand) {
+        restore_check_transition(fallback_state, target, terms_are_accepted_for_restore_check())
     }
 
     fn apply_event(&mut self, event: InternalEvent) {
@@ -998,6 +1001,53 @@ impl OnboardingProgress {
     }
 }
 
+fn software_import_transition(
+    wallet_id: WalletId,
+    cloud_backup_configured: bool,
+) -> (FlowState, TransitionCommand) {
+    if cloud_backup_configured {
+        (
+            FlowState::Terms {
+                target: CompletionTarget::SelectWallet(wallet_id),
+                error_message: None,
+                progress: None,
+            },
+            TransitionCommand::None,
+        )
+    } else {
+        (
+            FlowState::CloudBackup(CloudBackupFlow::SoftwareImport { wallet_id }),
+            TransitionCommand::None,
+        )
+    }
+}
+
+fn restore_check_transition(
+    fallback_state: FlowState,
+    target: CompletionTarget,
+    terms_accepted: bool,
+) -> (FlowState, TransitionCommand) {
+    if terms_accepted {
+        (fallback_state, TransitionCommand::CompleteOnboarding(target))
+    } else {
+        (FlowState::Terms { target, error_message: None, progress: None }, TransitionCommand::None)
+    }
+}
+
+fn cloud_backup_is_configured_for_import() -> bool {
+    match Database::global().cloud_backup_state.get() {
+        Ok(state) => state.is_configured(),
+        Err(error) => {
+            warn!("Onboarding: failed to load cloud backup state after software import: {error}");
+            false
+        }
+    }
+}
+
+fn terms_are_accepted_for_restore_check() -> bool {
+    Database::global().global_flag.is_terms_accepted()
+}
+
 fn default_initial_flow(has_wallets: bool) -> FlowState {
     if has_wallets {
         FlowState::Terms {
@@ -1131,6 +1181,104 @@ mod tests {
             }
             other => panic!("unexpected flow state: {other:?}"),
         }
+    }
+
+    #[test]
+    fn software_import_with_disabled_cloud_backup_enters_enable_step() {
+        let wallet_id = WalletId::new();
+
+        let (flow, command) = software_import_transition(wallet_id.clone(), false);
+
+        assert_eq!(command, TransitionCommand::None);
+        match flow {
+            FlowState::CloudBackup(CloudBackupFlow::SoftwareImport { wallet_id: id }) => {
+                assert_eq!(id, wallet_id);
+            }
+            other => panic!("unexpected flow state: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn software_import_with_configured_cloud_backup_bypasses_enable_step() {
+        let wallet_id = WalletId::new();
+
+        let (flow, command) = software_import_transition(wallet_id.clone(), true);
+
+        assert_eq!(command, TransitionCommand::None);
+        match flow {
+            FlowState::Terms { target: CompletionTarget::SelectWallet(id), .. } => {
+                assert_eq!(id, wallet_id);
+            }
+            other => panic!("unexpected flow state: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn restore_complete_with_accepted_terms_completes_immediately() {
+        let (flow, command) = restore_check_transition(
+            FlowState::Restoring,
+            CompletionTarget::SelectLatestOrNew,
+            true,
+        );
+
+        assert_eq!(
+            command,
+            TransitionCommand::CompleteOnboarding(CompletionTarget::SelectLatestOrNew)
+        );
+        assert!(matches!(flow, FlowState::Restoring));
+    }
+
+    #[test]
+    fn skip_restore_with_accepted_terms_completes_immediately() {
+        let (flow, command) = restore_check_transition(
+            FlowState::RestoreOffer { error_message: None },
+            CompletionTarget::NewWalletSelect,
+            true,
+        );
+
+        assert_eq!(
+            command,
+            TransitionCommand::CompleteOnboarding(CompletionTarget::NewWalletSelect)
+        );
+        assert!(matches!(flow, FlowState::RestoreOffer { error_message: None }));
+    }
+
+    #[test]
+    fn restore_complete_without_accepted_terms_shows_terms() {
+        let (flow, command) = restore_check_transition(
+            FlowState::Restoring,
+            CompletionTarget::SelectLatestOrNew,
+            false,
+        );
+
+        assert_eq!(command, TransitionCommand::None);
+        assert!(matches!(
+            flow,
+            FlowState::Terms {
+                target: CompletionTarget::SelectLatestOrNew,
+                error_message: None,
+                progress: None,
+            }
+        ));
+    }
+
+    #[test]
+    fn skip_restore_without_accepted_terms_shows_terms() {
+        let (flow, command) = restore_check_transition(
+            FlowState::RestoreOffer { error_message: None },
+            CompletionTarget::NewWalletSelect,
+            false,
+        );
+
+        assert_eq!(command, TransitionCommand::None);
+        assert!(matches!(
+            flow,
+            FlowState::Terms {
+                target: CompletionTarget::NewWalletSelect,
+                error_message: None,
+                progress: None,
+            }
+        ));
     }
 
     #[test]
