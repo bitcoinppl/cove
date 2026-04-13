@@ -69,8 +69,8 @@ struct HotWalletImportScreen: View {
 
     // public
     let autocomplete = Bip39AutoComplete()
-    @State var numberOfWords: NumberOfBip39Words
-    @State var importType: ImportType = .manual
+    @State private var numberOfWords: NumberOfBip39Words
+    let importType: ImportType
     let onImported: ((WalletId) -> Void)?
 
     init(
@@ -79,7 +79,7 @@ struct HotWalletImportScreen: View {
         onImported: ((WalletId) -> Void)? = nil
     ) {
         _numberOfWords = State(initialValue: numberOfWords)
-        _importType = State(initialValue: importType)
+        self.importType = importType
         self.onImported = onImported
     }
 
