@@ -115,22 +115,22 @@ pub enum CloudBackupManagerAction {
 
 #[derive(Debug, Clone, uniffi::Enum)]
 pub enum CloudBackupReconcileMessage {
-    StatusChanged(CloudBackupStatus),
-    ConnectivityHintChanged(CloudConnectivityHint),
-    ProgressChanged(Option<CloudBackupProgress>),
-    RestoreProgressChanged(Option<CloudBackupRestoreProgress>),
-    RestoreReportChanged(Option<CloudBackupRestoreReport>),
-    SyncErrorChanged(Option<String>),
-    VerificationPromptChanged(bool),
-    VerificationMetadataChanged(CloudBackupVerificationMetadata),
-    PendingUploadVerificationChanged(bool),
-    DetailChanged(Option<CloudBackupDetail>),
-    VerificationChanged(VerificationState),
-    SyncChanged(SyncState),
-    RecoveryChanged(RecoveryState),
-    CloudOnlyChanged(CloudOnlyState),
-    CloudOnlyOperationChanged(CloudOnlyOperation),
-    PromptIntentChanged(CloudBackupPromptIntent),
+    Status(CloudBackupStatus),
+    ConnectivityHint(CloudConnectivityHint),
+    Progress(Option<CloudBackupProgress>),
+    RestoreProgress(Option<CloudBackupRestoreProgress>),
+    RestoreReport(Option<CloudBackupRestoreReport>),
+    SyncError(Option<String>),
+    VerificationPrompt(bool),
+    VerificationMetadata(CloudBackupVerificationMetadata),
+    PendingUploadVerification(bool),
+    Detail(Option<CloudBackupDetail>),
+    Verification(VerificationState),
+    Sync(SyncState),
+    Recovery(RecoveryState),
+    CloudOnly(CloudOnlyState),
+    CloudOnlyOperation(CloudOnlyOperation),
+    PromptIntent(CloudBackupPromptIntent),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -813,7 +813,7 @@ impl RustCloudBackupManager {
 
         self.prompt_state.lock().clear_missing_passkey_dismissal();
 
-        self.send(Message::StatusChanged(status));
+        self.send(Message::Status(status));
         self.refresh_prompt_intent();
     }
 
@@ -822,7 +822,7 @@ impl RustCloudBackupManager {
         self.set_and_notify_field(
             connectivity_hint,
             |state| &mut state.connectivity_hint,
-            Message::ConnectivityHintChanged,
+            Message::ConnectivityHint,
         );
         changed
     }
@@ -831,7 +831,7 @@ impl RustCloudBackupManager {
         self.set_and_notify_field(
             prompt_intent,
             |state| &mut state.prompt_intent,
-            Message::PromptIntentChanged,
+            Message::PromptIntent,
         );
     }
 
@@ -871,14 +871,14 @@ impl RustCloudBackupManager {
     }
 
     pub(super) fn set_progress(&self, progress: Option<CloudBackupProgress>) {
-        self.set_and_notify_field(progress, |state| &mut state.progress, Message::ProgressChanged);
+        self.set_and_notify_field(progress, |state| &mut state.progress, Message::Progress);
     }
 
     pub(super) fn set_restore_progress(&self, progress: Option<CloudBackupRestoreProgress>) {
         self.set_and_notify_field(
             progress,
             |state| &mut state.restore_progress,
-            Message::RestoreProgressChanged,
+            Message::RestoreProgress,
         );
     }
 
@@ -886,16 +886,12 @@ impl RustCloudBackupManager {
         self.set_and_notify_field(
             report,
             |state| &mut state.restore_report,
-            Message::RestoreReportChanged,
+            Message::RestoreReport,
         );
     }
 
     pub(super) fn set_sync_error(&self, sync_error: Option<String>) {
-        self.set_and_notify_field(
-            sync_error,
-            |state| &mut state.sync_error,
-            Message::SyncErrorChanged,
-        );
+        self.set_and_notify_field(sync_error, |state| &mut state.sync_error, Message::SyncError);
     }
 
     pub(super) fn refresh_persisted_flags(&self) {
@@ -918,11 +914,11 @@ impl RustCloudBackupManager {
         };
 
         if metadata_changed {
-            self.send(Message::VerificationMetadataChanged(verification_metadata));
+            self.send(Message::VerificationMetadata(verification_metadata));
         }
 
         if prompt_changed {
-            self.send(Message::VerificationPromptChanged(should_prompt_verification));
+            self.send(Message::VerificationPrompt(should_prompt_verification));
         }
 
         self.refresh_prompt_intent();
@@ -932,46 +928,42 @@ impl RustCloudBackupManager {
         self.set_and_notify_field(
             pending,
             |state| &mut state.has_pending_upload_verification,
-            Message::PendingUploadVerificationChanged,
+            Message::PendingUploadVerification,
         );
         self.refresh_prompt_intent();
     }
 
     pub(super) fn set_detail(&self, detail: Option<CloudBackupDetail>) {
-        self.set_and_notify_field(detail, |state| &mut state.detail, Message::DetailChanged);
+        self.set_and_notify_field(detail, |state| &mut state.detail, Message::Detail);
     }
 
     pub(super) fn set_verification(&self, verification: VerificationState) {
         self.set_and_notify_field(
             verification,
             |state| &mut state.verification,
-            Message::VerificationChanged,
+            Message::Verification,
         );
         self.refresh_prompt_intent();
     }
 
     pub(super) fn set_sync(&self, sync: SyncState) {
-        self.set_and_notify_field(sync, |state| &mut state.sync, Message::SyncChanged);
+        self.set_and_notify_field(sync, |state| &mut state.sync, Message::Sync);
     }
 
     pub(super) fn set_recovery(&self, recovery: RecoveryState) {
-        self.set_and_notify_field(recovery, |state| &mut state.recovery, Message::RecoveryChanged);
+        self.set_and_notify_field(recovery, |state| &mut state.recovery, Message::Recovery);
         self.refresh_prompt_intent();
     }
 
     pub(super) fn set_cloud_only(&self, cloud_only: CloudOnlyState) {
-        self.set_and_notify_field(
-            cloud_only,
-            |state| &mut state.cloud_only,
-            Message::CloudOnlyChanged,
-        );
+        self.set_and_notify_field(cloud_only, |state| &mut state.cloud_only, Message::CloudOnly);
     }
 
     pub(super) fn set_cloud_only_operation(&self, cloud_only_operation: CloudOnlyOperation) {
         self.set_and_notify_field(
             cloud_only_operation,
             |state| &mut state.cloud_only_operation,
-            Message::CloudOnlyOperationChanged,
+            Message::CloudOnlyOperation,
         );
     }
 
@@ -1311,16 +1303,16 @@ impl RustCloudBackupManager {
             };
 
             if progress_changed {
-                self.send(Message::ProgressChanged(None));
+                self.send(Message::Progress(None));
             }
             if restore_progress_changed {
-                self.send(Message::RestoreProgressChanged(None));
+                self.send(Message::RestoreProgress(None));
             }
             if restore_report_changed {
-                self.send(Message::RestoreReportChanged(None));
+                self.send(Message::RestoreReport(None));
             }
             if status_changed {
-                self.send(Message::StatusChanged(status));
+                self.send(Message::Status(status));
             }
         } else {
             let status = self.state.read().status.clone();

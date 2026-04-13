@@ -133,37 +133,37 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
 
     private func apply(_ message: Message) {
         switch message {
-        case let .statusChanged(status):
+        case let .status(status):
             state.status = status
-        case let .connectivityHintChanged(connectivityHint):
+        case let .connectivityHint(connectivityHint):
             state.connectivityHint = connectivityHint
-        case let .promptIntentChanged(promptIntent):
+        case let .promptIntent(promptIntent):
             state.promptIntent = promptIntent
-        case let .progressChanged(progress):
+        case let .progress(progress):
             state.progress = progress
-        case let .restoreProgressChanged(progress):
+        case let .restoreProgress(progress):
             state.restoreProgress = progress
-        case let .restoreReportChanged(report):
+        case let .restoreReport(report):
             state.restoreReport = report
-        case let .syncErrorChanged(syncError):
+        case let .syncError(syncError):
             state.syncError = syncError
-        case let .verificationPromptChanged(pending):
+        case let .verificationPrompt(pending):
             state.shouldPromptVerification = pending
-        case let .verificationMetadataChanged(verificationMetadata):
+        case let .verificationMetadata(verificationMetadata):
             state.verificationMetadata = verificationMetadata
-        case let .pendingUploadVerificationChanged(pending):
+        case let .pendingUploadVerification(pending):
             state.hasPendingUploadVerification = pending
-        case let .detailChanged(detail):
+        case let .detail(detail):
             state.detail = detail
-        case let .verificationChanged(verification):
+        case let .verification(verification):
             state.verification = verification
-        case let .syncChanged(sync):
+        case let .sync(sync):
             state.sync = sync
-        case let .recoveryChanged(recovery):
+        case let .recovery(recovery):
             state.recovery = recovery
-        case let .cloudOnlyChanged(cloudOnly):
+        case let .cloudOnly(cloudOnly):
             state.cloudOnly = cloudOnly
-        case let .cloudOnlyOperationChanged(cloudOnlyOperation):
+        case let .cloudOnlyOperation(cloudOnlyOperation):
             state.cloudOnlyOperation = cloudOnlyOperation
         }
     }

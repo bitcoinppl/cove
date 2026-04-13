@@ -33727,7 +33727,7 @@ public object FfiConverterTypeCloudBackupPromptIntent : FfiConverterRustBuffer<C
 
 sealed class CloudBackupReconcileMessage {
     
-    data class StatusChanged(
+    data class Status(
         val v1: org.bitcoinppl.cove_core.CloudBackupStatus) : CloudBackupReconcileMessage()
         
     {
@@ -33736,7 +33736,7 @@ sealed class CloudBackupReconcileMessage {
         companion object
     }
     
-    data class ConnectivityHintChanged(
+    data class ConnectivityHint(
         val v1: org.bitcoinppl.cove_core.CloudConnectivityHint) : CloudBackupReconcileMessage()
         
     {
@@ -33745,7 +33745,7 @@ sealed class CloudBackupReconcileMessage {
         companion object
     }
     
-    data class ProgressChanged(
+    data class Progress(
         val v1: org.bitcoinppl.cove_core.CloudBackupProgress?) : CloudBackupReconcileMessage()
         
     {
@@ -33754,7 +33754,7 @@ sealed class CloudBackupReconcileMessage {
         companion object
     }
     
-    data class RestoreProgressChanged(
+    data class RestoreProgress(
         val v1: org.bitcoinppl.cove_core.CloudBackupRestoreProgress?) : CloudBackupReconcileMessage()
         
     {
@@ -33763,7 +33763,7 @@ sealed class CloudBackupReconcileMessage {
         companion object
     }
     
-    data class RestoreReportChanged(
+    data class RestoreReport(
         val v1: org.bitcoinppl.cove_core.CloudBackupRestoreReport?) : CloudBackupReconcileMessage()
         
     {
@@ -33772,7 +33772,7 @@ sealed class CloudBackupReconcileMessage {
         companion object
     }
     
-    data class SyncErrorChanged(
+    data class SyncError(
         val v1: kotlin.String?) : CloudBackupReconcileMessage()
         
     {
@@ -33781,7 +33781,7 @@ sealed class CloudBackupReconcileMessage {
         companion object
     }
     
-    data class VerificationPromptChanged(
+    data class VerificationPrompt(
         val v1: kotlin.Boolean) : CloudBackupReconcileMessage()
         
     {
@@ -33790,7 +33790,7 @@ sealed class CloudBackupReconcileMessage {
         companion object
     }
     
-    data class VerificationMetadataChanged(
+    data class VerificationMetadata(
         val v1: org.bitcoinppl.cove_core.CloudBackupVerificationMetadata) : CloudBackupReconcileMessage()
         
     {
@@ -33799,7 +33799,7 @@ sealed class CloudBackupReconcileMessage {
         companion object
     }
     
-    data class PendingUploadVerificationChanged(
+    data class PendingUploadVerification(
         val v1: kotlin.Boolean) : CloudBackupReconcileMessage()
         
     {
@@ -33808,7 +33808,7 @@ sealed class CloudBackupReconcileMessage {
         companion object
     }
     
-    data class DetailChanged(
+    data class Detail(
         val v1: org.bitcoinppl.cove_core.CloudBackupDetail?) : CloudBackupReconcileMessage()
         
     {
@@ -33817,7 +33817,7 @@ sealed class CloudBackupReconcileMessage {
         companion object
     }
     
-    data class VerificationChanged(
+    data class Verification(
         val v1: org.bitcoinppl.cove_core.VerificationState) : CloudBackupReconcileMessage()
         
     {
@@ -33826,7 +33826,7 @@ sealed class CloudBackupReconcileMessage {
         companion object
     }
     
-    data class SyncChanged(
+    data class Sync(
         val v1: org.bitcoinppl.cove_core.SyncState) : CloudBackupReconcileMessage()
         
     {
@@ -33835,7 +33835,7 @@ sealed class CloudBackupReconcileMessage {
         companion object
     }
     
-    data class RecoveryChanged(
+    data class Recovery(
         val v1: org.bitcoinppl.cove_core.RecoveryState) : CloudBackupReconcileMessage()
         
     {
@@ -33844,7 +33844,7 @@ sealed class CloudBackupReconcileMessage {
         companion object
     }
     
-    data class CloudOnlyChanged(
+    data class CloudOnly(
         val v1: org.bitcoinppl.cove_core.CloudOnlyState) : CloudBackupReconcileMessage()
         
     {
@@ -33853,7 +33853,7 @@ sealed class CloudBackupReconcileMessage {
         companion object
     }
     
-    data class CloudOnlyOperationChanged(
+    data class CloudOnlyOperation(
         val v1: org.bitcoinppl.cove_core.CloudOnlyOperation) : CloudBackupReconcileMessage()
         
     {
@@ -33862,7 +33862,7 @@ sealed class CloudBackupReconcileMessage {
         companion object
     }
     
-    data class PromptIntentChanged(
+    data class PromptIntent(
         val v1: org.bitcoinppl.cove_core.CloudBackupPromptIntent) : CloudBackupReconcileMessage()
         
     {
@@ -33887,52 +33887,52 @@ sealed class CloudBackupReconcileMessage {
 public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuffer<CloudBackupReconcileMessage>{
     override fun read(buf: ByteBuffer): CloudBackupReconcileMessage {
         return when(buf.getInt()) {
-            1 -> CloudBackupReconcileMessage.StatusChanged(
+            1 -> CloudBackupReconcileMessage.Status(
                 FfiConverterTypeCloudBackupStatus.read(buf),
                 )
-            2 -> CloudBackupReconcileMessage.ConnectivityHintChanged(
+            2 -> CloudBackupReconcileMessage.ConnectivityHint(
                 FfiConverterTypeCloudConnectivityHint.read(buf),
                 )
-            3 -> CloudBackupReconcileMessage.ProgressChanged(
+            3 -> CloudBackupReconcileMessage.Progress(
                 FfiConverterOptionalTypeCloudBackupProgress.read(buf),
                 )
-            4 -> CloudBackupReconcileMessage.RestoreProgressChanged(
+            4 -> CloudBackupReconcileMessage.RestoreProgress(
                 FfiConverterOptionalTypeCloudBackupRestoreProgress.read(buf),
                 )
-            5 -> CloudBackupReconcileMessage.RestoreReportChanged(
+            5 -> CloudBackupReconcileMessage.RestoreReport(
                 FfiConverterOptionalTypeCloudBackupRestoreReport.read(buf),
                 )
-            6 -> CloudBackupReconcileMessage.SyncErrorChanged(
+            6 -> CloudBackupReconcileMessage.SyncError(
                 FfiConverterOptionalString.read(buf),
                 )
-            7 -> CloudBackupReconcileMessage.VerificationPromptChanged(
+            7 -> CloudBackupReconcileMessage.VerificationPrompt(
                 FfiConverterBoolean.read(buf),
                 )
-            8 -> CloudBackupReconcileMessage.VerificationMetadataChanged(
+            8 -> CloudBackupReconcileMessage.VerificationMetadata(
                 FfiConverterTypeCloudBackupVerificationMetadata.read(buf),
                 )
-            9 -> CloudBackupReconcileMessage.PendingUploadVerificationChanged(
+            9 -> CloudBackupReconcileMessage.PendingUploadVerification(
                 FfiConverterBoolean.read(buf),
                 )
-            10 -> CloudBackupReconcileMessage.DetailChanged(
+            10 -> CloudBackupReconcileMessage.Detail(
                 FfiConverterOptionalTypeCloudBackupDetail.read(buf),
                 )
-            11 -> CloudBackupReconcileMessage.VerificationChanged(
+            11 -> CloudBackupReconcileMessage.Verification(
                 FfiConverterTypeVerificationState.read(buf),
                 )
-            12 -> CloudBackupReconcileMessage.SyncChanged(
+            12 -> CloudBackupReconcileMessage.Sync(
                 FfiConverterTypeSyncState.read(buf),
                 )
-            13 -> CloudBackupReconcileMessage.RecoveryChanged(
+            13 -> CloudBackupReconcileMessage.Recovery(
                 FfiConverterTypeRecoveryState.read(buf),
                 )
-            14 -> CloudBackupReconcileMessage.CloudOnlyChanged(
+            14 -> CloudBackupReconcileMessage.CloudOnly(
                 FfiConverterTypeCloudOnlyState.read(buf),
                 )
-            15 -> CloudBackupReconcileMessage.CloudOnlyOperationChanged(
+            15 -> CloudBackupReconcileMessage.CloudOnlyOperation(
                 FfiConverterTypeCloudOnlyOperation.read(buf),
                 )
-            16 -> CloudBackupReconcileMessage.PromptIntentChanged(
+            16 -> CloudBackupReconcileMessage.PromptIntent(
                 FfiConverterTypeCloudBackupPromptIntent.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -33940,112 +33940,112 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
     }
 
     override fun allocationSize(value: CloudBackupReconcileMessage): ULong = when(value) {
-        is CloudBackupReconcileMessage.StatusChanged -> {
+        is CloudBackupReconcileMessage.Status -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
                 + FfiConverterTypeCloudBackupStatus.allocationSize(value.v1)
             )
         }
-        is CloudBackupReconcileMessage.ConnectivityHintChanged -> {
+        is CloudBackupReconcileMessage.ConnectivityHint -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
                 + FfiConverterTypeCloudConnectivityHint.allocationSize(value.v1)
             )
         }
-        is CloudBackupReconcileMessage.ProgressChanged -> {
+        is CloudBackupReconcileMessage.Progress -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
                 + FfiConverterOptionalTypeCloudBackupProgress.allocationSize(value.v1)
             )
         }
-        is CloudBackupReconcileMessage.RestoreProgressChanged -> {
+        is CloudBackupReconcileMessage.RestoreProgress -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
                 + FfiConverterOptionalTypeCloudBackupRestoreProgress.allocationSize(value.v1)
             )
         }
-        is CloudBackupReconcileMessage.RestoreReportChanged -> {
+        is CloudBackupReconcileMessage.RestoreReport -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
                 + FfiConverterOptionalTypeCloudBackupRestoreReport.allocationSize(value.v1)
             )
         }
-        is CloudBackupReconcileMessage.SyncErrorChanged -> {
+        is CloudBackupReconcileMessage.SyncError -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
                 + FfiConverterOptionalString.allocationSize(value.v1)
             )
         }
-        is CloudBackupReconcileMessage.VerificationPromptChanged -> {
+        is CloudBackupReconcileMessage.VerificationPrompt -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
                 + FfiConverterBoolean.allocationSize(value.v1)
             )
         }
-        is CloudBackupReconcileMessage.VerificationMetadataChanged -> {
+        is CloudBackupReconcileMessage.VerificationMetadata -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
                 + FfiConverterTypeCloudBackupVerificationMetadata.allocationSize(value.v1)
             )
         }
-        is CloudBackupReconcileMessage.PendingUploadVerificationChanged -> {
+        is CloudBackupReconcileMessage.PendingUploadVerification -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
                 + FfiConverterBoolean.allocationSize(value.v1)
             )
         }
-        is CloudBackupReconcileMessage.DetailChanged -> {
+        is CloudBackupReconcileMessage.Detail -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
                 + FfiConverterOptionalTypeCloudBackupDetail.allocationSize(value.v1)
             )
         }
-        is CloudBackupReconcileMessage.VerificationChanged -> {
+        is CloudBackupReconcileMessage.Verification -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
                 + FfiConverterTypeVerificationState.allocationSize(value.v1)
             )
         }
-        is CloudBackupReconcileMessage.SyncChanged -> {
+        is CloudBackupReconcileMessage.Sync -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
                 + FfiConverterTypeSyncState.allocationSize(value.v1)
             )
         }
-        is CloudBackupReconcileMessage.RecoveryChanged -> {
+        is CloudBackupReconcileMessage.Recovery -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
                 + FfiConverterTypeRecoveryState.allocationSize(value.v1)
             )
         }
-        is CloudBackupReconcileMessage.CloudOnlyChanged -> {
+        is CloudBackupReconcileMessage.CloudOnly -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
                 + FfiConverterTypeCloudOnlyState.allocationSize(value.v1)
             )
         }
-        is CloudBackupReconcileMessage.CloudOnlyOperationChanged -> {
+        is CloudBackupReconcileMessage.CloudOnlyOperation -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
                 + FfiConverterTypeCloudOnlyOperation.allocationSize(value.v1)
             )
         }
-        is CloudBackupReconcileMessage.PromptIntentChanged -> {
+        is CloudBackupReconcileMessage.PromptIntent -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
@@ -34056,82 +34056,82 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
 
     override fun write(value: CloudBackupReconcileMessage, buf: ByteBuffer) {
         when(value) {
-            is CloudBackupReconcileMessage.StatusChanged -> {
+            is CloudBackupReconcileMessage.Status -> {
                 buf.putInt(1)
                 FfiConverterTypeCloudBackupStatus.write(value.v1, buf)
                 Unit
             }
-            is CloudBackupReconcileMessage.ConnectivityHintChanged -> {
+            is CloudBackupReconcileMessage.ConnectivityHint -> {
                 buf.putInt(2)
                 FfiConverterTypeCloudConnectivityHint.write(value.v1, buf)
                 Unit
             }
-            is CloudBackupReconcileMessage.ProgressChanged -> {
+            is CloudBackupReconcileMessage.Progress -> {
                 buf.putInt(3)
                 FfiConverterOptionalTypeCloudBackupProgress.write(value.v1, buf)
                 Unit
             }
-            is CloudBackupReconcileMessage.RestoreProgressChanged -> {
+            is CloudBackupReconcileMessage.RestoreProgress -> {
                 buf.putInt(4)
                 FfiConverterOptionalTypeCloudBackupRestoreProgress.write(value.v1, buf)
                 Unit
             }
-            is CloudBackupReconcileMessage.RestoreReportChanged -> {
+            is CloudBackupReconcileMessage.RestoreReport -> {
                 buf.putInt(5)
                 FfiConverterOptionalTypeCloudBackupRestoreReport.write(value.v1, buf)
                 Unit
             }
-            is CloudBackupReconcileMessage.SyncErrorChanged -> {
+            is CloudBackupReconcileMessage.SyncError -> {
                 buf.putInt(6)
                 FfiConverterOptionalString.write(value.v1, buf)
                 Unit
             }
-            is CloudBackupReconcileMessage.VerificationPromptChanged -> {
+            is CloudBackupReconcileMessage.VerificationPrompt -> {
                 buf.putInt(7)
                 FfiConverterBoolean.write(value.v1, buf)
                 Unit
             }
-            is CloudBackupReconcileMessage.VerificationMetadataChanged -> {
+            is CloudBackupReconcileMessage.VerificationMetadata -> {
                 buf.putInt(8)
                 FfiConverterTypeCloudBackupVerificationMetadata.write(value.v1, buf)
                 Unit
             }
-            is CloudBackupReconcileMessage.PendingUploadVerificationChanged -> {
+            is CloudBackupReconcileMessage.PendingUploadVerification -> {
                 buf.putInt(9)
                 FfiConverterBoolean.write(value.v1, buf)
                 Unit
             }
-            is CloudBackupReconcileMessage.DetailChanged -> {
+            is CloudBackupReconcileMessage.Detail -> {
                 buf.putInt(10)
                 FfiConverterOptionalTypeCloudBackupDetail.write(value.v1, buf)
                 Unit
             }
-            is CloudBackupReconcileMessage.VerificationChanged -> {
+            is CloudBackupReconcileMessage.Verification -> {
                 buf.putInt(11)
                 FfiConverterTypeVerificationState.write(value.v1, buf)
                 Unit
             }
-            is CloudBackupReconcileMessage.SyncChanged -> {
+            is CloudBackupReconcileMessage.Sync -> {
                 buf.putInt(12)
                 FfiConverterTypeSyncState.write(value.v1, buf)
                 Unit
             }
-            is CloudBackupReconcileMessage.RecoveryChanged -> {
+            is CloudBackupReconcileMessage.Recovery -> {
                 buf.putInt(13)
                 FfiConverterTypeRecoveryState.write(value.v1, buf)
                 Unit
             }
-            is CloudBackupReconcileMessage.CloudOnlyChanged -> {
+            is CloudBackupReconcileMessage.CloudOnly -> {
                 buf.putInt(14)
                 FfiConverterTypeCloudOnlyState.write(value.v1, buf)
                 Unit
             }
-            is CloudBackupReconcileMessage.CloudOnlyOperationChanged -> {
+            is CloudBackupReconcileMessage.CloudOnlyOperation -> {
                 buf.putInt(15)
                 FfiConverterTypeCloudOnlyOperation.write(value.v1, buf)
                 Unit
             }
-            is CloudBackupReconcileMessage.PromptIntentChanged -> {
+            is CloudBackupReconcileMessage.PromptIntent -> {
                 buf.putInt(16)
                 FfiConverterTypeCloudBackupPromptIntent.write(value.v1, buf)
                 Unit
