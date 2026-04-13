@@ -194,12 +194,16 @@ struct OnboardingCloudBackupStepView: View {
                 }
             }
         }
-        .onChange(of: backupManager.status) { _, status in
-            guard !didComplete else { return }
-            guard case .enabled = status else { return }
-            didComplete = true
-            onEnabled()
+        .onChange(of: backupManager.status, initial: true) { _, status in
+            completeIfEnabled(status)
         }
+    }
+
+    private func completeIfEnabled(_ status: CloudBackupStatus) {
+        guard !didComplete else { return }
+        guard case .enabled = status else { return }
+        didComplete = true
+        onEnabled()
     }
 }
 
