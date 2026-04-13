@@ -51,6 +51,12 @@ struct OnboardingContainer: View {
                 errorMessage: manager.cloudCheckWarning == nil ? manager.state.errorMessage : nil
             )
 
+        case .restoreUnavailable:
+            OnboardingRestoreUnavailableScreen(
+                onContinue: { manager.dispatch(.continueWithoutCloudRestore) },
+                onBack: { manager.dispatch(.back) }
+            )
+
         case .restoring:
             DeviceRestoreView(
                 onComplete: { manager.dispatch(.restoreComplete) },
@@ -66,6 +72,19 @@ struct OnboardingContainer: View {
             OnboardingBitcoinChoiceScreen(
                 onNewHere: { manager.dispatch(.selectHasBitcoin(hasBitcoin: false)) },
                 onHasBitcoin: { manager.dispatch(.selectHasBitcoin(hasBitcoin: true)) }
+            )
+
+        case .returningUserChoice:
+            OnboardingReturningUserChoiceScreen(
+                onRestoreFromCoveBackup: {
+                    manager.dispatch(
+                        .selectReturningUserFlow(selection: .restoreFromCoveBackup)
+                    )
+                },
+                onUseAnotherWallet: {
+                    manager.dispatch(.selectReturningUserFlow(selection: .useAnotherWallet))
+                },
+                onBack: { manager.dispatch(.back) }
             )
 
         case .storageChoice:

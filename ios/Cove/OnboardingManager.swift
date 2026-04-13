@@ -46,6 +46,12 @@ final class OnboardingManager: AnyReconciler, OnboardingManagerReconciler, @unch
                 state.cloudBackupEnabled = enabled
             case let .secretWordsSaved(saved):
                 state.secretWordsSaved = saved
+            case let .cloudRestoreState(cloudRestoreState):
+                state.cloudRestoreState = cloudRestoreState
+            case let .cloudRestoreMessageChanged(cloudRestoreMessage):
+                state.cloudRestoreMessage = cloudRestoreMessage
+            case let .shouldOfferCloudRestore(shouldOfferCloudRestore):
+                state.shouldOfferCloudRestore = shouldOfferCloudRestore
             case let .errorMessageChanged(errorMessage):
                 state.errorMessage = errorMessage
             case .complete:

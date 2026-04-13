@@ -88,6 +88,60 @@ struct OnboardingBitcoinChoiceScreen: View {
     }
 }
 
+struct OnboardingReturningUserChoiceScreen: View {
+    let onRestoreFromCoveBackup: () -> Void
+    let onUseAnotherWallet: () -> Void
+    let onBack: () -> Void
+
+    var body: some View {
+        OnboardingPromptScreen(
+            icon: "arrow.trianglehead.branch",
+            title: "How would you like to continue?",
+            subtitle: "Restore from an existing Cove backup or connect another wallet you already use."
+        ) {
+            VStack(spacing: 14) {
+                OnboardingChoiceCard(
+                    title: "Restore from Cove backup",
+                    subtitle: "Use your passkey to restore from iCloud",
+                    systemImage: "icloud.and.arrow.down"
+                ) {
+                    onRestoreFromCoveBackup()
+                }
+
+                OnboardingChoiceCard(
+                    title: "Use another wallet",
+                    subtitle: "Import or connect a wallet from somewhere else",
+                    systemImage: "wallet.pass"
+                ) {
+                    onUseAnotherWallet()
+                }
+            }
+
+            Button("Back", action: onBack)
+                .buttonStyle(OnboardingSecondaryButtonStyle())
+        }
+    }
+}
+
+struct OnboardingRestoreUnavailableScreen: View {
+    let onContinue: () -> Void
+    let onBack: () -> Void
+
+    var body: some View {
+        OnboardingPromptScreen(
+            icon: "icloud.slash",
+            title: "No iCloud Backup Found",
+            subtitle: "We couldn't find a Cove backup in iCloud for this account. You can continue without cloud restore or go back."
+        ) {
+            Button("Continue Without Cloud Restore", action: onContinue)
+                .buttonStyle(OnboardingPrimaryButtonStyle())
+
+            Button("Back", action: onBack)
+                .buttonStyle(OnboardingSecondaryButtonStyle())
+        }
+    }
+}
+
 struct OnboardingStorageChoiceScreen: View {
     let onExchange: () -> Void
     let onHardwareWallet: () -> Void
