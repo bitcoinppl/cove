@@ -86,6 +86,19 @@ final class ICloudDriveHelper: @unchecked Sendable {
     }
 
     private static func isConnectivityError(_ error: Error) -> Bool {
+        if let urlError = error as? URLError {
+            return [
+                .notConnectedToInternet,
+                .networkConnectionLost,
+                .timedOut,
+                .cannotFindHost,
+                .cannotConnectToHost,
+                .dnsLookupFailed,
+                .internationalRoamingOff,
+                .dataNotAllowed,
+            ].contains(urlError.code)
+        }
+
         let nsError = error as NSError
         if nsError.domain == NSURLErrorDomain {
             return [
@@ -100,10 +113,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
             ].contains(nsError.code)
         }
 
-        let message = error.localizedDescription.lowercased()
-        return message.contains("offline")
-            || message.contains("network")
-            || message.contains("timed out")
+        return false
     }
 
     private static func uploadError(_ context: String, error: Error) -> CloudStorageError {

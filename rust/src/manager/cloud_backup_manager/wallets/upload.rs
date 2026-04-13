@@ -153,13 +153,6 @@ impl RustCloudBackupManager {
         &self,
         wallet_id: &crate::wallet::metadata::WalletId,
     ) -> Result<(), CloudBackupError> {
-        if self.is_definitely_offline() {
-            return Err(CloudBackupError::Deferred(
-                "wallet backup upload is waiting for a connection".into(),
-            ));
-        }
-
-        let namespace = self.current_namespace_id()?;
         let record_id = wallet_record_id(wallet_id.as_ref());
         let Some(current_state) = Database::global()
             .cloud_blob_sync_states
@@ -187,6 +180,14 @@ impl RustCloudBackupManager {
             self.remove_blob_sync_states(std::iter::once(record_id))?;
             return Ok(());
         };
+
+        if self.is_definitely_offline() {
+            return Err(CloudBackupError::Deferred(
+                "wallet backup upload is waiting for a connection".into(),
+            ));
+        }
+
+        let namespace = self.current_namespace_id()?;
 
         let prepared_upload = match self.prepare_dirty_wallet_upload(&namespace, &metadata) {
             Ok(prepared_upload) => prepared_upload,

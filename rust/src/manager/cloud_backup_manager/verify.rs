@@ -165,14 +165,20 @@ impl RustCloudBackupManager {
         self.ensure_cloud_connectivity(BlockingCloudStep::RepairPasskey)?;
         let namespace = self.current_namespace_id()?;
         let cloud = CloudStorage::global();
-        let wallet_record_ids = cloud.list_wallet_backups(namespace).map_err(|error| {
-            self.blocking_cloud_error(
-                BlockingCloudStep::RepairPasskey,
-                CloudBackupError::Cloud(error.to_string()),
-            )
-        })?;
+        let wallet_count = match cloud.list_wallet_backups(namespace) {
+            Ok(wallet_record_ids) => wallet_record_ids.len() as u32,
+            Err(error) => {
+                warn!("Repair passkey: failed to refresh wallet backups after repair: {error}");
+                Database::global()
+                    .cloud_backup_state
+                    .get()
+                    .ok()
+                    .and_then(|state| state.wallet_count)
+                    .unwrap_or(0)
+            }
+        };
 
-        persist_enabled_cloud_backup_state(&Database::global(), wallet_record_ids.len() as u32)?;
+        persist_enabled_cloud_backup_state(&Database::global(), wallet_count)?;
         self.set_status(CloudBackupStatus::Enabled);
 
         match self.refresh_cloud_backup_detail() {

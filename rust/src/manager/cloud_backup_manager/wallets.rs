@@ -7,7 +7,7 @@ use cove_cspp::backup_data::WalletEntry;
 use cove_types::network::Network;
 use cove_util::ResultExt as _;
 use strum::IntoEnumIterator as _;
-use zeroize::Zeroize;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use super::{CloudBackupError, LocalWalletMode};
 use crate::database::Database;
@@ -17,11 +17,21 @@ use crate::wallet::metadata::WalletMetadata;
 const UPLOAD_WALLET_RECOVERY_MESSAGE: &str =
     "Cloud backup needs verification before wallets can be uploaded";
 const MAX_CLOUD_LABELS_SIZE: usize = 10 * 1024 * 1024;
-#[derive(Clone, Zeroize)]
+#[derive(Zeroize, ZeroizeOnDrop)]
 pub(super) struct UnpersistedPrfKey {
     pub(super) prf_key: [u8; 32],
     pub(super) prf_salt: [u8; 32],
     pub(super) credential_id: Vec<u8>,
+}
+
+impl UnpersistedPrfKey {
+    pub(super) fn copy_for_retry(&self) -> Self {
+        Self {
+            prf_key: self.prf_key,
+            prf_salt: self.prf_salt,
+            credential_id: self.credential_id.clone(),
+        }
+    }
 }
 
 pub(super) struct DownloadedWalletBackup {
@@ -98,7 +108,8 @@ fn persist_enabled_cloud_backup_state_with_last_verified_at(
     db.cloud_backup_state
         .set(&PersistedCloudBackupState {
             status: match current.status {
-                PersistedCloudBackupStatus::Disabled => PersistedCloudBackupStatus::Enabled,
+                PersistedCloudBackupStatus::Disabled
+                | PersistedCloudBackupStatus::PasskeyMissing => PersistedCloudBackupStatus::Enabled,
                 status => status,
             },
             last_sync: Some(now),
@@ -187,6 +198,35 @@ mod tests {
         assert_eq!(state.last_verified_at, None);
         assert_eq!(state.last_verification_requested_at, None);
         assert_eq!(state.last_verification_dismissed_at, None);
+        let _ = db.cloud_backup_state.delete();
+    }
+
+    #[test]
+    fn persist_enabled_state_clears_passkey_missing() {
+        let _guard = crate::manager::cloud_backup_manager::cloud_backup_test_lock().lock();
+        let db = Database::global();
+        let _ = db.cloud_backup_state.delete();
+        db.cloud_backup_state
+            .set(&PersistedCloudBackupState {
+                status: PersistedCloudBackupStatus::PasskeyMissing,
+                last_sync: Some(10),
+                wallet_count: Some(2),
+                last_verified_at: Some(11),
+                last_verification_requested_at: Some(12),
+                last_verification_dismissed_at: Some(13),
+                pending_verification_completion: None,
+            })
+            .unwrap();
+
+        persist_enabled_cloud_backup_state(&db, 7).unwrap();
+
+        let state = db.cloud_backup_state.get().unwrap();
+        assert_eq!(state.status, PersistedCloudBackupStatus::Enabled);
+        assert_eq!(state.wallet_count, Some(7));
+        assert!(state.last_sync.is_some());
+        assert_eq!(state.last_verified_at, Some(11));
+        assert_eq!(state.last_verification_requested_at, Some(12));
+        assert_eq!(state.last_verification_dismissed_at, Some(13));
         let _ = db.cloud_backup_state.delete();
     }
 }

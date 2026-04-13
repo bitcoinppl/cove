@@ -129,7 +129,7 @@ impl RustCloudBackupManager {
         )
     }
 
-    pub(super) fn mark_blob_dirty_state(
+    pub(crate) fn mark_blob_dirty_state(
         &self,
         current_state: &PersistedCloudBlobSyncState,
     ) -> Result<(), CloudBackupError> {

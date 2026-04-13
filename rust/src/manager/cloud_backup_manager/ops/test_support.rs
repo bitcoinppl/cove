@@ -362,7 +362,7 @@ impl PasskeyProvider for MockPasskeyProviderImpl {
         _user_id: Vec<u8>,
         _challenge: Vec<u8>,
     ) -> Result<Vec<u8>, PasskeyError> {
-        self.create_result.lock().clone().unwrap_or_else(|| {
+        self.create_result.lock().take().unwrap_or_else(|| {
             Err(PasskeyError::CreationFailed("unexpected create_passkey call".into()))
         })
     }
@@ -374,7 +374,7 @@ impl PasskeyProvider for MockPasskeyProviderImpl {
         _prf_salt: Vec<u8>,
         _challenge: Vec<u8>,
     ) -> Result<Vec<u8>, PasskeyError> {
-        self.authenticate_result.lock().clone().unwrap_or_else(|| {
+        self.authenticate_result.lock().take().unwrap_or_else(|| {
             Err(PasskeyError::AuthenticationFailed("unexpected authenticate_with_prf call".into()))
         })
     }
@@ -787,4 +787,44 @@ pub(crate) fn new_restore_operation_for_test(
     })
     .join()
     .expect("restore operation thread")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn passkey_create_result_is_consumed_after_first_use() {
+        let provider = MockPasskeyProviderImpl::default();
+        provider.set_create_result(Ok(vec![1, 2, 3]));
+
+        assert_eq!(
+            provider
+                .create_passkey("rp".into(), vec![1], vec![2])
+                .expect("configured create result"),
+            vec![1, 2, 3]
+        );
+        assert!(matches!(
+            provider.create_passkey("rp".into(), vec![1], vec![2]),
+            Err(PasskeyError::CreationFailed(message)) if message == "unexpected create_passkey call"
+        ));
+    }
+
+    #[test]
+    fn passkey_authenticate_result_is_consumed_after_first_use() {
+        let provider = MockPasskeyProviderImpl::default();
+        provider.set_authenticate_result(Ok(vec![4, 5, 6]));
+
+        assert_eq!(
+            provider
+                .authenticate_with_prf("rp".into(), vec![1], vec![2], vec![3])
+                .expect("configured authenticate result"),
+            vec![4, 5, 6]
+        );
+        assert!(matches!(
+            provider.authenticate_with_prf("rp".into(), vec![1], vec![2], vec![3]),
+            Err(PasskeyError::AuthenticationFailed(message))
+                if message == "unexpected authenticate_with_prf call"
+        ));
+    }
 }

@@ -862,7 +862,7 @@ impl RustCloudBackupManager {
         let cloud = CloudStorage::global();
         self.replace_pending_enable_session(PendingEnableSession::retry_upload(
             cove_cspp::master_key::MasterKey::from_bytes(*master_key.as_bytes()),
-            (*passkey).clone(),
+            passkey.copy_for_retry(),
         ));
 
         let encrypted_master =
@@ -974,7 +974,10 @@ where
     S: cove_cspp::CsppStore,
     S::Error: std::fmt::Display,
 {
-    let Some(master_key) = cspp.load_master_key_from_store().ok().flatten() else {
+    let Some(master_key) = cspp
+        .load_master_key_from_store()
+        .map_err_prefix("loading master key from store", CloudBackupError::Internal)?
+    else {
         return Ok(None);
     };
     let namespace_id = master_key.namespace_id();
@@ -1058,8 +1061,8 @@ mod tests {
     };
     use crate::label_manager::LabelManager;
     use crate::manager::cloud_backup_manager::{
-        CLOUD_BACKUP_MANAGER, CloudBackupDetailResult, DeepVerificationResult,
-        VerificationFailureKind, VerificationState,
+        CLOUD_BACKUP_MANAGER, CloudBackupDetailResult, CloudConnectivityHint,
+        DeepVerificationResult, VerificationFailureKind, VerificationState,
     };
     use crate::manager::wallet_manager::RustWalletManager;
     use crate::network::Network;
@@ -1445,6 +1448,45 @@ mod tests {
     }
 
     #[test]
+    fn restore_from_local_master_key_propagates_store_read_errors() {
+        let _guard = test_lock().lock();
+        let globals = test_globals();
+        globals.reset();
+
+        let store = Arc::new(MockStore::default());
+        let store_handle = MockStoreHandle(store.clone());
+        let cspp = cove_cspp::Cspp::new(store_handle);
+        let expected = cove_cspp::master_key::MasterKey::generate();
+        cspp.save_master_key(&expected).unwrap();
+        let key_to_corrupt =
+            store.entries.lock().keys().next().cloned().expect("saved master key entry");
+        store.entries.lock().insert(key_to_corrupt, "not-a-valid-master-key".into());
+
+        let error = match try_restore_from_local_master_key(CloudStorage::global(), &cspp) {
+            Ok(_) => panic!("expected local master key read failure"),
+            Err(error) => error,
+        };
+
+        assert!(matches!(
+            error,
+            CloudBackupError::Internal(message)
+                if message.starts_with("loading master key from store:")
+        ));
+    }
+
+    #[test]
+    fn blocking_cloud_error_rewrites_unavailable_messages_to_offline() {
+        let manager = RustCloudBackupManager::init();
+
+        let error = manager.blocking_cloud_error(
+            BlockingCloudStep::Enable,
+            CloudBackupError::Cloud("iCloud Drive is not available".into()),
+        );
+
+        assert!(matches!(error, CloudBackupError::Offline(_)));
+    }
+
+    #[test]
     fn failed_create_new_enable_does_not_persist_passkey_metadata() {
         let _guard = test_lock().lock();
         let globals = test_globals();
@@ -1491,6 +1533,32 @@ mod tests {
         assert!(keychain.get(CSPP_CREDENTIAL_ID_KEY.into()).is_none());
         assert!(keychain.get(CSPP_PRF_SALT_KEY.into()).is_none());
         assert!(keychain.get(CSPP_NAMESPACE_ID_KEY.into()).is_none());
+    }
+
+    #[test]
+    fn finalize_passkey_repair_keeps_existing_count_when_wallet_refresh_fails() {
+        let _guard = test_lock().lock();
+        let globals = test_globals();
+        let manager = RustCloudBackupManager::init();
+        configure_enabled_cloud_backup(&manager, globals, 2);
+
+        Database::global()
+            .cloud_backup_state
+            .set(&PersistedCloudBackupState {
+                status: PersistedCloudBackupStatus::PasskeyMissing,
+                wallet_count: Some(7),
+                ..PersistedCloudBackupState::default()
+            })
+            .unwrap();
+        manager.sync_persisted_state();
+        globals.cloud.fail_list_wallet_files("timed out");
+
+        manager.finalize_passkey_repair().unwrap();
+
+        let state = Database::global().cloud_backup_state.get().unwrap();
+        assert_eq!(state.status, PersistedCloudBackupStatus::Enabled);
+        assert_eq!(state.wallet_count, Some(7));
+        assert_eq!(manager.state().status, CloudBackupStatus::Enabled);
     }
 
     #[test]
@@ -1680,6 +1748,8 @@ mod tests {
             Database::global().cloud_blob_sync_states.get(&record_id).unwrap(),
             Some(PersistedCloudBlobSyncState { state: PersistedCloudBlobState::Dirty(_), .. })
         ));
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert_eq!(globals.cloud.uploaded_wallet_backup_count(), 0);
         manager.do_upload_wallet_if_dirty(&metadata.id).unwrap();
 
         assert!(globals.cloud.uploaded_wallet_backup_count() >= 1);
@@ -2305,6 +2375,29 @@ mod tests {
             })
         ));
         manager.clear_wallet_upload_debouncers_for_test();
+    }
+
+    #[test]
+    fn upload_wallet_if_dirty_recovers_stale_uploading_state_while_offline() {
+        let _guard = test_lock().lock();
+        let globals = test_globals();
+        let manager = RustCloudBackupManager::init();
+        configure_enabled_cloud_backup(&manager, globals, 0);
+
+        let metadata = xpub_only_wallet_metadata();
+        persist_xpub_wallets(vec![metadata.clone()]);
+        let record_id = cove_cspp::backup_data::wallet_record_id(metadata.id.as_ref());
+        persist_uploading_blob_state(metadata.id.clone(), 1);
+        manager.update_connectivity_hint(CloudConnectivityHint::Offline);
+
+        let error = manager.do_upload_wallet_if_dirty(&metadata.id).unwrap_err();
+
+        assert!(matches!(error, CloudBackupError::Deferred(_)));
+        assert_eq!(globals.cloud.uploaded_wallet_backup_count(), 0);
+        assert!(matches!(
+            Database::global().cloud_blob_sync_states.get(&record_id).unwrap(),
+            Some(PersistedCloudBlobSyncState { state: PersistedCloudBlobState::Dirty(_), .. })
+        ));
     }
 
     #[test]

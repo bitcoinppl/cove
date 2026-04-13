@@ -205,7 +205,7 @@ impl WrapperRepairOperation {
                 Ok(WrapperRepairCredentials {
                     prf_key: new_prf.prf_key,
                     prf_salt: new_prf.prf_salt,
-                    credential_id: new_prf.credential_id,
+                    credential_id: new_prf.credential_id.clone(),
                 })
             }
             WrapperRepairStrategy::DiscoverOrCreate => {
@@ -215,7 +215,7 @@ impl WrapperRepairOperation {
                 Ok(WrapperRepairCredentials {
                     prf_key: passkey.prf_key,
                     prf_salt: passkey.prf_salt,
-                    credential_id: passkey.credential_id,
+                    credential_id: passkey.credential_id.clone(),
                 })
             }
             WrapperRepairStrategy::ReuseExisting(credential_id) => {

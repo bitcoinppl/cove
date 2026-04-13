@@ -447,6 +447,10 @@ impl CloudBackupRuntimeActor {
         if let Some(error_message) = error_message {
             if deferred {
                 info!("Cloud backup upload deferred for wallet_id={wallet_id}: {error_message}");
+                manager.set_pending_upload_verification(
+                    manager.has_pending_cloud_upload_verification(),
+                );
+                return Produces::ok(());
             } else {
                 error!("Cloud backup upload failed for wallet_id={wallet_id}: {error_message}");
                 manager.set_sync_error(Some(error_message));
@@ -485,6 +489,12 @@ impl CloudBackupRuntimeActor {
         }
 
         self.active_wallet_uploads.remove(&wallet_id);
+
+        if matches!(upload_result, Err(super::CloudBackupError::Deferred(_))) {
+            manager
+                .set_pending_upload_verification(manager.has_pending_cloud_upload_verification());
+            return Produces::ok(());
+        }
 
         if upload_result.is_ok() {
             self.reset_wallet_upload_retry_count(&wallet_id);

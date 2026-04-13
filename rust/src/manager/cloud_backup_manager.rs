@@ -645,7 +645,12 @@ impl RustCloudBackupManager {
             CloudBackupError::Offline(_) | CloudBackupError::Deferred(_) => {
                 CloudStorageIssue::Offline
             }
-            CloudBackupError::Cloud(message) => Self::cloud_storage_issue_from_message(message),
+            CloudBackupError::Cloud(message) => {
+                match Self::cloud_storage_issue_from_message(message) {
+                    CloudStorageIssue::Unavailable => CloudStorageIssue::Offline,
+                    issue => issue,
+                }
+            }
             CloudBackupError::NotSupported(_)
             | CloudBackupError::UnsupportedPasskeyProvider
             | CloudBackupError::RecoveryRequired(_)
@@ -677,12 +682,22 @@ impl RustCloudBackupManager {
             B::Restore => "Reconnect to the internet, then try restoring from cloud backup again",
             B::Verify => "Reconnect to the internet, then try verifying cloud backup again",
             B::Sync => "Reconnect to the internet, then try syncing cloud backup again",
-            B::FetchCloudOnly => "Reconnect to the internet, then try loading cloud-only wallets again",
-            B::RestoreCloudWallet => "Reconnect to the internet, then try restoring this cloud wallet again",
-            B::DeleteCloudWallet => "Reconnect to the internet, then try deleting this cloud wallet again",
-            B::RecreateManifest => "Reconnect to the internet, then try recreating the cloud backup manifest again",
+            B::FetchCloudOnly => {
+                "Reconnect to the internet, then try loading cloud-only wallets again"
+            }
+            B::RestoreCloudWallet => {
+                "Reconnect to the internet, then try restoring this cloud wallet again"
+            }
+            B::DeleteCloudWallet => {
+                "Reconnect to the internet, then try deleting this cloud wallet again"
+            }
+            B::RecreateManifest => {
+                "Reconnect to the internet, then try recreating the cloud backup manifest again"
+            }
             B::RepairPasskey => "Reconnect to the internet, then try repairing cloud backup again",
-            B::DetailRefresh => "Reconnect to the internet, then try refreshing cloud backup details again",
+            B::DetailRefresh => {
+                "Reconnect to the internet, then try refreshing cloud backup details again"
+            }
         }
     }
 
@@ -706,7 +721,7 @@ impl RustCloudBackupManager {
         step: BlockingCloudStep,
         error: CloudBackupError,
     ) -> CloudBackupError {
-        if self.cloud_backup_issue(&error) == CloudStorageIssue::Offline {
+        if Self::is_connectivity_related_issue(self.cloud_backup_issue(&error)) {
             return self.offline_error_for_step(step);
         }
 
@@ -777,7 +792,7 @@ impl RustCloudBackupManager {
         self.send(notify(value));
     }
 
-    pub(super) fn set_status(&self, status: CloudBackupStatus) {
+    pub(crate) fn set_status(&self, status: CloudBackupStatus) {
         let status_changed = {
             let mut state = self.state.write();
             if state.status == status {
@@ -808,7 +823,7 @@ impl RustCloudBackupManager {
         changed
     }
 
-    pub(super) fn set_prompt_intent(&self, prompt_intent: CloudBackupPromptIntent) {
+    pub(crate) fn set_prompt_intent(&self, prompt_intent: CloudBackupPromptIntent) {
         self.set_and_notify_field(
             prompt_intent,
             |state| &mut state.prompt_intent,
@@ -816,7 +831,7 @@ impl RustCloudBackupManager {
         );
     }
 
-    pub(super) fn refresh_prompt_intent(&self) {
+    pub(crate) fn refresh_prompt_intent(&self) {
         let prompt_intent = {
             let prompt_state = self.prompt_state.lock().clone();
             let state = self.state.read().clone();
@@ -826,27 +841,27 @@ impl RustCloudBackupManager {
         self.set_prompt_intent(prompt_intent);
     }
 
-    pub(super) fn set_existing_backup_found_prompt(&self) {
+    pub(crate) fn set_existing_backup_found_prompt(&self) {
         self.prompt_state.lock().set_existing_backup_found();
         self.refresh_prompt_intent();
     }
 
-    pub(super) fn clear_existing_backup_found_prompt(&self) {
+    pub(crate) fn clear_existing_backup_found_prompt(&self) {
         self.prompt_state.lock().clear_existing_backup_found();
         self.refresh_prompt_intent();
     }
 
-    pub(super) fn set_passkey_choice_prompt(&self, flow: CloudBackupPasskeyChoiceFlow) {
+    pub(crate) fn set_passkey_choice_prompt(&self, flow: CloudBackupPasskeyChoiceFlow) {
         self.prompt_state.lock().set_passkey_choice(flow);
         self.refresh_prompt_intent();
     }
 
-    pub(super) fn clear_passkey_choice_prompt(&self) {
+    pub(crate) fn clear_passkey_choice_prompt(&self) {
         self.prompt_state.lock().clear_passkey_choice();
         self.refresh_prompt_intent();
     }
 
-    pub(super) fn dismiss_missing_passkey_prompt(&self) {
+    pub(crate) fn dismiss_missing_passkey_prompt(&self) {
         self.prompt_state.lock().dismiss_missing_passkey();
         self.refresh_prompt_intent();
     }
