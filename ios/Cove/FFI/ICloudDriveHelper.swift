@@ -497,85 +497,43 @@ final class ICloudDriveHelper: @unchecked Sendable {
 
         try triggerDownload(url: resolvedItem.url, recordId: recordId, filename: filename)
 
-        // poll with periodic re-triggers while racing one coordinated read on
-        // each retry window because some restored-device placeholders never
-        // transition out of not-downloaded even though they can be materialized
+        // poll with periodic re-triggers and inline coordinated reads because
+        // some restored-device placeholders never transition out of
+        // not-downloaded even though they can be materialized
         let retriggerInterval: TimeInterval = 5
         var lastRetrigger = Date()
         var lastProgressLog = Date.distantPast
         var coordinatedReadAttempt = 0
-        let raceStateQueue = DispatchQueue(label: "cove.icloud.download.race.\(filename)")
-        var coordinatedReadInFlight = false
-        var coordinatedReadResult: Result<Data, Error>?
         var lastCoordinatedReadError: Error?
-        var coordinatedReadCancelled = false
-
-        let cancelCoordinatedReadRace = {
-            raceStateQueue.sync {
-                coordinatedReadCancelled = true
-            }
-        }
-
-        defer {
-            cancelCoordinatedReadRace()
-        }
-
-        let startCoordinatedReadRace = { [self] (reason: String) in
-            let attempt: Int? = raceStateQueue.sync {
-                guard !coordinatedReadCancelled, !coordinatedReadInFlight else { return nil }
-                coordinatedReadInFlight = true
-                coordinatedReadAttempt += 1
-                return coordinatedReadAttempt
-            }
-            guard let attempt else { return }
-
-            Log.info("downloadFile: starting coordinated read race attempt=\(attempt) reason=\(reason) file=\(filename)")
-
-            DispatchQueue.global(qos: .userInitiated).async {
-                let isCancelled = raceStateQueue.sync { coordinatedReadCancelled }
-                guard !isCancelled else { return }
-
-                let result = Result { try self.coordinatedRead(from: resolvedItem.url) }
-                raceStateQueue.async {
-                    coordinatedReadInFlight = false
-                    guard !coordinatedReadCancelled else { return }
-
-                    switch result {
-                    case let .success(data):
-                        if coordinatedReadResult == nil {
-                            coordinatedReadResult = .success(data)
-                        }
-                    case let .failure(error):
-                        lastCoordinatedReadError = error
-                        Log.warn(
-                            "downloadFile: coordinated read race failed attempt=\(attempt) file=\(filename): \(error.localizedDescription)"
-                        )
-                    }
-                }
-            }
-        }
 
         while Date() < deadline {
             let now = Date()
             let state = downloadState(for: resolvedItem.url)
 
-            if case let .success(data)? = raceStateQueue.sync(execute: { coordinatedReadResult }) {
-                Log.info("downloadFile: coordinated read race won for \(filename)")
-                return data
-            }
-
             if now.timeIntervalSince(lastRetrigger) >= retriggerInterval {
                 try? triggerDownload(url: resolvedItem.url, recordId: recordId, filename: filename)
                 lastRetrigger = now
-                startCoordinatedReadRace("retry")
+                coordinatedReadAttempt += 1
+
+                Log.info(
+                    "downloadFile: trying coordinated read attempt=\(coordinatedReadAttempt) reason=retry file=\(filename)"
+                )
+
+                do {
+                    let data = try coordinatedRead(from: resolvedItem.url)
+                    Log.info("downloadFile: coordinated read succeeded for \(filename)")
+                    return data
+                } catch {
+                    lastCoordinatedReadError = error
+                    Log.warn(
+                        "downloadFile: coordinated read failed attempt=\(coordinatedReadAttempt) file=\(filename): \(error.localizedDescription)"
+                    )
+                }
             }
 
             if now.timeIntervalSince(lastProgressLog) >= progressLogInterval {
-                let coordinatedReadStatus = raceStateQueue.sync {
-                    coordinatedReadInFlight ? "in-flight" : "idle"
-                }
                 Log.info(
-                    "downloadFile: \(filename) state=\(state) coordinatedRead=\(coordinatedReadStatus) metadataPath=\(resolvedItem.metadataPath ?? "<unknown>")"
+                    "downloadFile: \(filename) state=\(state) metadataPath=\(resolvedItem.metadataPath ?? "<unknown>")"
                 )
                 lastProgressLog = now
             }
@@ -592,18 +550,11 @@ final class ICloudDriveHelper: @unchecked Sendable {
             Thread.sleep(forTimeInterval: pollInterval)
         }
 
-        if case let .success(data)? = raceStateQueue.sync(execute: { coordinatedReadResult }) {
-            Log.info("downloadFile: coordinated read race completed at timeout for \(filename)")
-            return data
-        }
-
-        let lastError = raceStateQueue.sync { lastCoordinatedReadError }
-
         Log.info("downloadFile: polling timed out, trying final coordinated read for \(filename)")
         do {
             return try coordinatedRead(from: resolvedItem.url)
         } catch {
-            let diagnosticError = lastError?.localizedDescription ?? "none"
+            let diagnosticError = lastCoordinatedReadError?.localizedDescription ?? "none"
             throw CloudStorageError.Offline(
                 "iCloud download timed out after \(defaultTimeout)s (last coordinated read error: \(diagnosticError), final coordinated read failed: \(error.localizedDescription))"
             )
@@ -616,9 +567,9 @@ final class ICloudDriveHelper: @unchecked Sendable {
         } catch {
             let nsError = error as NSError
             if nsError.domain == NSCocoaErrorDomain,
-               (nsError.code == NSFileReadNoSuchFileError
-                   // some iCloud missing-file cases surface as legacy Cocoa code 4
-                   || nsError.code == legacyFileReadNoSuchFileError)
+               nsError.code == NSFileReadNoSuchFileError
+               // some iCloud missing-file cases surface as legacy Cocoa code 4
+               || nsError.code == legacyFileReadNoSuchFileError
             {
                 throw CloudStorageError.NotFound(recordId)
             }
