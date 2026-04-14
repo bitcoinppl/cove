@@ -24,6 +24,7 @@ struct OnboardingContainer: View {
                     onComplete()
                 }
         }
+        .environment(manager.app)
     }
 
     private var onOpenCloudRestore: (() -> Void)? {

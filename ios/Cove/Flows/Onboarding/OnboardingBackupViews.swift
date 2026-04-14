@@ -172,13 +172,25 @@ struct OnboardingCloudBackupStepView: View {
     let onEnabled: () -> Void
     let onSkip: () -> Void
 
+    private var onboardingMessage: String? {
+        switch backupManager.status {
+        case .unsupportedPasskeyProvider:
+            "This passkey provider did not confirm PRF support for Cloud Backup. Try Apple Passwords (iCloud Keychain) or another supported provider such as 1Password"
+        case .error:
+            "We couldn't finish enabling Cloud Backup with this passkey. Try again"
+        default:
+            nil
+        }
+    }
+
     var body: some View {
         ZStack {
             CloudBackupEnableOnboardingView(
                 onEnable: {
                     backupManager.dispatch(action: .enableCloudBackupNoDiscovery)
                 },
-                onCancel: onSkip
+                onCancel: onSkip,
+                message: onboardingMessage
             )
 
             if case .enabling = backupManager.status {
@@ -194,14 +206,26 @@ struct OnboardingCloudBackupStepView: View {
                 }
             }
         }
+        .task {
+            completeIfEnabled()
+        }
         .onChange(of: backupManager.status, initial: true) { _, status in
-            completeIfEnabled(status)
+            completeIfEnabled(status: status)
+        }
+        .onChange(of: backupManager.isConfigured) { _, _ in
+            completeIfEnabled()
         }
     }
 
-    private func completeIfEnabled(_ status: CloudBackupStatus) {
+    private func completeIfEnabled(status: CloudBackupStatus? = nil) {
         guard !didComplete else { return }
-        guard case .enabled = status else { return }
+        let currentStatus = status ?? backupManager.status
+        let isEnabled = if case .enabled = currentStatus {
+            true
+        } else {
+            backupManager.isCloudBackupEnabled
+        }
+        guard isEnabled else { return }
         didComplete = true
         onEnabled()
     }

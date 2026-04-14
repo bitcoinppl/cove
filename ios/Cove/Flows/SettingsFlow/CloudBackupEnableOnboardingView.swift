@@ -3,6 +3,7 @@ import SwiftUI
 struct CloudBackupEnableOnboardingView: View {
     let onEnable: () -> Void
     let onCancel: () -> Void
+    let message: String?
 
     @State private var checks: [Bool] = Array(repeating: false, count: 3)
 
@@ -22,6 +23,9 @@ struct CloudBackupEnableOnboardingView: View {
 
                     Divider().overlay(Color.coveLightGray.opacity(0.50))
                     infoCard
+                    if let message {
+                        OnboardingInlineMessage(text: message)
+                    }
                     checkboxSection
                     enableButton
 
@@ -226,6 +230,7 @@ struct DarkCheckboxToggleStyle: ToggleStyle {
 #Preview {
     CloudBackupEnableOnboardingView(
         onEnable: {},
-        onCancel: {}
+        onCancel: {},
+        message: nil
     )
 }
