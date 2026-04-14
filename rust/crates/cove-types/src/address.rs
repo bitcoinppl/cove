@@ -60,6 +60,16 @@ pub struct AddressWithNetwork {
     pub address: Address,
     pub network: Network,
     pub amount: Option<Amount>,
+    pub pj: Option<String>,
+    pub pjos: Option<bool>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ParsedBitcoinUri {
+    address: String,
+    amount: Option<Amount>,
+    pj: Option<String>,
+    pjos: Option<bool>,
 }
 
 type Error = AddressError;
@@ -167,24 +177,21 @@ impl AddressWithNetwork {
     /// Returns `AddressError::EmptyAddress` if the address is empty
     /// Returns `AddressError::UnsupportedNetwork` if the network is not supported
     pub fn try_new(str: &str) -> Result<Self, Error> {
-        let (address_str, amount) = parse_bitcoin_uri(str)?;
+        let parsed = parse_bitcoin_uri(str)?;
 
         let address: BdkAddress<NetworkUnchecked> =
-            address_str.parse().map_err(|_| Error::InvalidAddress)?;
+            parsed.address.parse().map_err(|_| Error::InvalidAddress)?;
 
-        let network = Network::Bitcoin;
-        if let Ok(address) = address.clone().require_network(network.into()) {
-            return Ok(Self { address: address.into(), network, amount });
-        }
-
-        let network = Network::Testnet;
-        if let Ok(address) = address.clone().require_network(network.into()) {
-            return Ok(Self { address: address.into(), network, amount });
-        }
-
-        let network = Network::Signet;
-        if let Ok(address) = address.require_network(network.into()) {
-            return Ok(Self { address: address.into(), network, amount });
+        for network in Network::iter() {
+            if let Ok(checked) = address.clone().require_network(network.into()) {
+                return Ok(Self {
+                    address: checked.into(),
+                    network,
+                    amount: parsed.amount,
+                    pj: parsed.pj,
+                    pjos: parsed.pjos,
+                });
+            }
         }
 
         Err(Error::UnsupportedNetwork)
@@ -198,7 +205,7 @@ impl AddressWithNetwork {
     }
 }
 
-fn parse_bitcoin_uri(input: &str) -> Result<(String, Option<Amount>), Error> {
+fn parse_bitcoin_uri(input: &str) -> Result<ParsedBitcoinUri, Error> {
     let input = input.trim();
     if input.is_empty() {
         return Err(Error::EmptyAddress);
@@ -227,7 +234,32 @@ fn parse_bitcoin_uri(input: &str) -> Result<(String, Option<Amount>), Error> {
         value.parse::<f64>().ok().and_then(|btc| Amount::from_btc(btc).ok())
     });
 
-    Ok((address, amount))
+    // payjoin endpoint
+    let pj = url
+        .query_pairs()
+        .find(|(key, _)| key == "pj")
+        .map(|(_, value)| value.to_string())
+        .filter(|v| !v.is_empty())
+        .and_then(|v| Url::parse(&v).ok().map(|_| v));
+
+    // payjoin output substitution — per PDK/rust-payjoin:
+    // pjos=0 -> Some(false), pjos=1 -> Some(true), other values -> error, omitted -> None
+    let pjos = url
+        .query_pairs()
+        .find(|(key, _)| key == "pjos")
+        .map(|(_, value)| match value.trim() {
+            "0" => Ok(false),
+            "1" => Ok(true),
+            _ => Err(Error::InvalidAddress),
+        })
+        .transpose()?;
+
+    // pjos without pj is a malformed URI
+    if pjos.is_some() && pj.is_none() {
+        return Err(Error::InvalidAddress);
+    }
+
+    Ok(ParsedBitcoinUri { address, amount, pj, pjos })
 }
 
 #[uniffi::export]
@@ -252,6 +284,14 @@ impl AddressWithNetwork {
 
     fn amount(&self) -> Option<Arc<Amount>> {
         self.amount.map(Arc::new)
+    }
+
+    fn pj(&self) -> Option<String> {
+        self.pj.clone()
+    }
+
+    fn pjos(&self) -> Option<bool> {
+        self.pjos
     }
 
     #[uniffi::method(name = "isValidForNetwork")]
@@ -455,41 +495,41 @@ mod tests {
     #[test]
     fn test_parse_bitcoin_uri_no_amount() {
         let a = "bc1q0g0vn4yqyk0zjwxw0zv5pltyy9jm89vclxgsv3f";
-        let (a, amount) = parse_bitcoin_uri(a).unwrap();
-        assert_eq!(a, "bc1q0g0vn4yqyk0zjwxw0zv5pltyy9jm89vclxgsv3f");
-        assert_eq!(amount, None);
+        let parsed = parse_bitcoin_uri(a).unwrap();
+        assert_eq!(parsed.address, "bc1q0g0vn4yqyk0zjwxw0zv5pltyy9jm89vclxgsv3f");
+        assert_eq!(parsed.amount, None);
     }
 
     #[test]
     fn test_parse_bitcoin_uri_with_amount() {
         let a = "bc1q0g0vn4yqyk0zjwxw0zv5pltyy9jm89vclxgsv3f?amount=0.001";
-        let (a, amount) = parse_bitcoin_uri(a).unwrap();
-        assert_eq!(a, "bc1q0g0vn4yqyk0zjwxw0zv5pltyy9jm89vclxgsv3f");
-        assert_eq!(amount, Some(Amount::from_btc(0.001).unwrap()));
+        let parsed = parse_bitcoin_uri(a).unwrap();
+        assert_eq!(parsed.address, "bc1q0g0vn4yqyk0zjwxw0zv5pltyy9jm89vclxgsv3f");
+        assert_eq!(parsed.amount, Some(Amount::from_btc(0.001).unwrap()));
     }
 
     #[test]
     fn test_parse_bitcoin_uri_with_amount_and_spaces() {
         let a = "bc1q0g0vn4yqyk0zjwxw0zv5pltyy9jm89vclxgsv3f?amount=0.001  ";
-        let (a, amount) = parse_bitcoin_uri(a).unwrap();
-        assert_eq!(a, "bc1q0g0vn4yqyk0zjwxw0zv5pltyy9jm89vclxgsv3f");
-        assert_eq!(amount, Some(Amount::from_btc(0.001).unwrap()));
+        let parsed = parse_bitcoin_uri(a).unwrap();
+        assert_eq!(parsed.address, "bc1q0g0vn4yqyk0zjwxw0zv5pltyy9jm89vclxgsv3f");
+        assert_eq!(parsed.amount, Some(Amount::from_btc(0.001).unwrap()));
     }
 
     #[test]
     fn test_parse_bitcoin_uri_with_amount_and_other_query_params() {
         let a = "bc1q0g0vn4yqyk0zjwxw0zv5pltyy9jm89vclxgsv3f?amount=0.002&foo=bar";
-        let (a, amount) = parse_bitcoin_uri(a).unwrap();
-        assert_eq!(a, "bc1q0g0vn4yqyk0zjwxw0zv5pltyy9jm89vclxgsv3f");
-        assert_eq!(amount, Some(Amount::from_btc(0.002).unwrap()));
+        let parsed = parse_bitcoin_uri(a).unwrap();
+        assert_eq!(parsed.address, "bc1q0g0vn4yqyk0zjwxw0zv5pltyy9jm89vclxgsv3f");
+        assert_eq!(parsed.amount, Some(Amount::from_btc(0.002).unwrap()));
     }
 
     #[test]
     fn test_parse_bitcoin_uri_with_scheme_and_unused_params() {
         let a = "bitcoin://bc1q0g0vn4yqyk0zjwxw0zv5pltyy9jm89vclxgsv3f?label=Donation&foo=bar";
-        let (a, amount) = parse_bitcoin_uri(a).unwrap();
-        assert_eq!(a, "bc1q0g0vn4yqyk0zjwxw0zv5pltyy9jm89vclxgsv3f");
-        assert_eq!(amount, None);
+        let parsed = parse_bitcoin_uri(a).unwrap();
+        assert_eq!(parsed.address, "bc1q0g0vn4yqyk0zjwxw0zv5pltyy9jm89vclxgsv3f");
+        assert_eq!(parsed.amount, None);
     }
 
     #[test]
@@ -589,5 +629,78 @@ mod tests {
                 "bitcoin://bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm?amount=0.002&foo=bar",
             )
         )
+    }
+
+    #[test]
+    fn test_parse_bitcoin_uri_with_pj() {
+        let a = "bitcoin:bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm?amount=0.001&pj=https://example.com/payjoin";
+        let parsed = parse_bitcoin_uri(a).unwrap();
+        assert_eq!(parsed.address, "bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm");
+        assert_eq!(parsed.amount, Some(Amount::from_btc(0.001).unwrap()));
+        assert_eq!(parsed.pj.as_deref(), Some("https://example.com/payjoin"));
+        assert_eq!(parsed.pjos, None);
+    }
+
+    #[test]
+    fn test_parse_bitcoin_uri_with_pj_and_pjos_disabled() {
+        let a = "bitcoin:bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm?amount=0.001&pj=https://example.com/payjoin&pjos=0";
+        let parsed = parse_bitcoin_uri(a).unwrap();
+        assert_eq!(parsed.pj.as_deref(), Some("https://example.com/payjoin"));
+        assert_eq!(parsed.pjos, Some(false));
+    }
+
+    #[test]
+    fn test_parse_bitcoin_uri_with_pjos_only() {
+        // pjos without pj is a malformed URI
+        let a = "bitcoin:bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm?pjos=0";
+        assert_eq!(parse_bitcoin_uri(a), Err(AddressError::InvalidAddress));
+    }
+
+    #[test]
+    fn test_parse_bitcoin_uri_with_invalid_pj_url() {
+        // malformed pj URL should be treated as absent
+        let a = "bitcoin:bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm?pj=not-a-url";
+        let parsed = parse_bitcoin_uri(a).unwrap();
+        assert_eq!(parsed.pj, None);
+    }
+
+    #[test]
+    fn test_parse_bitcoin_uri_pjos_enabled() {
+        // pjos=1 means output substitution is enabled
+        let a = "bitcoin:bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm?pj=https://example.com/payjoin&pjos=1";
+        let parsed = parse_bitcoin_uri(a).unwrap();
+        assert_eq!(parsed.pjos, Some(true));
+    }
+
+    #[test]
+    fn test_parse_bitcoin_uri_pjos_invalid_value() {
+        let a = "bitcoin:bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm?pj=https://example.com/payjoin&pjos=garbage";
+        assert_eq!(parse_bitcoin_uri(a), Err(AddressError::InvalidAddress));
+    }
+
+    #[test]
+    fn test_parse_bitcoin_uri_pjos_without_pj_is_error() {
+        let a = "bitcoin:bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm?pjos=1";
+        assert_eq!(parse_bitcoin_uri(a), Err(AddressError::InvalidAddress));
+    }
+
+    #[test]
+    fn test_parse_bitcoin_uri_no_pj() {
+        let a = "bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm?amount=0.001";
+        let parsed = parse_bitcoin_uri(a).unwrap();
+        assert_eq!(parsed.pj, None);
+        assert_eq!(parsed.pjos, None);
+    }
+
+    #[test]
+    fn test_address_with_network_carries_pj() {
+        let address_with_network = AddressWithNetwork::try_new(
+            "bitcoin:bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm?amount=0.001&pj=https://example.com/payjoin&pjos=0",
+        )
+        .unwrap();
+
+        assert_eq!(address_with_network.pj.as_deref(), Some("https://example.com/payjoin"));
+        assert_eq!(address_with_network.pjos, Some(false));
+        assert_eq!(address_with_network.amount, Some(Amount::from_btc(0.001).unwrap()));
     }
 }

@@ -1132,6 +1132,10 @@ public protocol AddressWithNetworkProtocol: AnyObject, Sendable {
     
     func network()  -> Network
     
+    func pj()  -> String?
+    
+    func pjos()  -> Bool?
+    
 }
 open class AddressWithNetwork: AddressWithNetworkProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -1228,6 +1232,22 @@ open func isValidForNetwork(network: Network) -> Bool  {
 open func network() -> Network  {
     return try!  FfiConverterTypeNetwork_lift(try! rustCall() {
     uniffi_cove_types_fn_method_addresswithnetwork_network(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+open func pj() -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+    uniffi_cove_types_fn_method_addresswithnetwork_pj(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+open func pjos() -> Bool?  {
+    return try!  FfiConverterOptionBool.lift(try! rustCall() {
+    uniffi_cove_types_fn_method_addresswithnetwork_pjos(
             self.uniffiCloneHandle(),$0
     )
 })
@@ -5672,6 +5692,30 @@ public func FfiConverterTypeUtxoType_lower(_ value: UtxoType) -> RustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionBool: FfiConverterRustBuffer {
+    typealias SwiftType = Bool?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterBool.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterBool.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionString: FfiConverterRustBuffer {
     typealias SwiftType = String?
 
@@ -6206,6 +6250,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_addresswithnetwork_network() != 25441) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_types_checksum_method_addresswithnetwork_pj() != 25366) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_types_checksum_method_addresswithnetwork_pjos() != 29355) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_amount_as_btc() != 12153) {
