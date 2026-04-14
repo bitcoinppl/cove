@@ -948,4 +948,5 @@ struct MainSettingsScreen: View {
     SettingsContainer(route: .main)
         .environment(AppManager.shared)
         .environment(AuthManager.shared)
+        .environment(CloudBackupPresentationCoordinator())
 }

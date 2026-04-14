@@ -50,6 +50,9 @@ final class OnboardingManager: AnyReconciler, OnboardingManagerReconciler, @unch
                 state.cloudRestoreState = cloudRestoreState
             case let .cloudRestoreMessageChanged(cloudRestoreMessage):
                 state.cloudRestoreMessage = cloudRestoreMessage
+                if state.step == .restoreOffer {
+                    cloudCheckWarning = cloudRestoreMessage
+                }
             case let .shouldOfferCloudRestore(shouldOfferCloudRestore):
                 state.shouldOfferCloudRestore = shouldOfferCloudRestore
             case let .errorMessageChanged(errorMessage):
@@ -66,7 +69,7 @@ final class OnboardingManager: AnyReconciler, OnboardingManagerReconciler, @unch
 
     private func applyStep(_ step: OnboardingStep) {
         if state.step == .cloudCheck, step == .restoreOffer {
-            cloudCheckWarning = state.errorMessage
+            cloudCheckWarning = state.cloudRestoreMessage
         } else if step != .restoreOffer {
             cloudCheckWarning = nil
         }
