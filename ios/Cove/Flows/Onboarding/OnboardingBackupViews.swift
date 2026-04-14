@@ -152,16 +152,22 @@ struct OnboardingSecretWordsView: View {
                             OnboardingWordCard(index: index + 1, word: word)
                         }
                     }
-
-                    Button("I Saved These Words", action: onSaved)
-                        .buttonStyle(OnboardingPrimaryButtonStyle())
                 }
                 .padding(.horizontal, 24)
-                .padding(.bottom, 28)
+                .padding(.top, 32)
+                .padding(.bottom, 120)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onboardingRecoveryBackground()
+        .safeAreaInset(edge: .bottom) {
+            Button("I Saved These Words", action: onSaved)
+                .buttonStyle(OnboardingPrimaryButtonStyle())
+                .padding(.horizontal, 24)
+                .padding(.top, 12)
+                .padding(.bottom, 24)
+                .background(.clear)
+        }
     }
 }
 
@@ -386,7 +392,7 @@ struct OnboardingWordCard: View {
                 .frame(width: 24)
 
             Text(word)
-                .font(.system(.body, design: .monospaced).weight(.medium))
+                .font(.system(.callout, design: .monospaced).weight(.medium))
                 .foregroundStyle(.white)
 
             Spacer()
