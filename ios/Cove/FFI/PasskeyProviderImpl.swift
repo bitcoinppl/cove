@@ -1,10 +1,14 @@
 import AuthenticationServices
-import CryptoKit
 
 @_exported import CoveCore
 import Foundation
 
 final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
+    private static let prfRetryableFailureMessages = [
+        "PRF output not available",
+        "PRF output too short",
+    ]
+
     private func credentialSummary(_ credentialId: Data) -> String {
         let prefix = credentialId.prefix(4).map { String(format: "%02x", $0) }.joined()
         return "len=\(credentialId.count) prefix=\(prefix)"
@@ -18,52 +22,12 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
     func createPasskey(rpId: String, userId: Data, challenge: Data) throws -> Data {
         precondition(!Thread.isMainThread, "createPasskey must not be called from the main thread")
 
-        let delegate = PasskeyDelegate()
-        let controller: ASAuthorizationController
-
-        // setup + performRequests must happen on main (UI requirement)
-        controller = DispatchQueue.main.sync {
-            let provider = ASAuthorizationPlatformPublicKeyCredentialProvider(
-                relyingPartyIdentifier: rpId
-            )
-
-            let request = provider.createCredentialRegistrationRequest(
-                challenge: challenge,
-                name: "Cove Wallet",
-                userID: userId
-            )
-            request.prf = .checkForSupport
-
-            let ctrl = ASAuthorizationController(authorizationRequests: [request])
-            ctrl.delegate = delegate
-            ctrl.presentationContextProvider = delegate
-            ctrl.performRequests()
-            return ctrl
-        }
-
-        // wait on calling thread (Rust worker) — main is free for delegate callbacks
-        _ = controller
-        let credential = try delegate.waitForResult()
-
-        guard
-            let registration =
-            credential as? ASAuthorizationPlatformPublicKeyCredentialRegistration
-        else {
-            throw PasskeyError.CreationFailed("unexpected credential type")
-        }
-
-        guard let prfOutput = registration.prf else {
-            Log.warn("[PASSKEY] registration PRF output is nil")
-            throw PasskeyError.PrfUnsupportedProvider
-        }
-
-        Log.info("[PASSKEY] registration PRF supported: \(prfOutput.isSupported)")
-
-        guard prfOutput.isSupported else {
-            Log.warn("[PASSKEY] registration PRF is unsupported by this passkey provider")
-            throw PasskeyError.PrfUnsupportedProvider
-        }
-
+        let registration = try performRegistrationRequest(
+            rpId: rpId,
+            userId: userId,
+            challenge: challenge
+        )
+        try validateRegistrationPrfMetadata(registration)
         return registration.credentialID
     }
 
@@ -75,58 +39,14 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
             "authenticateWithPrf must not be called from the main thread"
         )
 
-        let delegate = PasskeyDelegate()
-        let controller: ASAuthorizationController
-
-        controller = DispatchQueue.main.sync {
-            let provider = ASAuthorizationPlatformPublicKeyCredentialProvider(
-                relyingPartyIdentifier: rpId
-            )
-
-            let request = provider.createCredentialAssertionRequest(
-                challenge: challenge
-            )
-
-            request.allowedCredentials = [
-                ASAuthorizationPlatformPublicKeyCredentialDescriptor(
-                    credentialID: credentialId
-                ),
-            ]
-
-            request.prf = .inputValues(.init(saltInput1: prfSalt))
-
-            let ctrl = ASAuthorizationController(authorizationRequests: [request])
-            ctrl.delegate = delegate
-            ctrl.presentationContextProvider = delegate
-            ctrl.performRequests()
-            return ctrl
-        }
-
-        _ = controller
-        let credential = try delegate.waitForResult()
-
-        guard
-            let assertion =
-            credential as? ASAuthorizationPlatformPublicKeyCredentialAssertion
-        else {
-            throw PasskeyError.AuthenticationFailed("unexpected credential type")
-        }
-
-        if assertion.prf == nil {
-            Log.error("[PASSKEY] assertion.prf is nil — authenticator did not return PRF output")
-        }
-
-        guard let prfKey = assertion.prf?.first else { throw PasskeyError.AuthenticationFailed("PRF output not available") }
-
-        let prfOutput = prfKey.withUnsafeBytes { Data($0) }
-
-        guard prfOutput.count >= 32 else {
-            throw PasskeyError.AuthenticationFailed(
-                "PRF output too short: \(prfOutput.count) bytes, need 32"
-            )
-        }
-
-        return prfOutput.prefix(32)
+        let (prfOutput, _) = try performPrfAssertion(
+            rpId: rpId,
+            credentialId: credentialId,
+            prfSalt: prfSalt,
+            challenge: challenge,
+            context: "authenticate"
+        )
+        return prfOutput
     }
 
     func checkPasskeyPresence(rpId: String, credentialId: Data) -> PasskeyCredentialPresence {
@@ -190,6 +110,110 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
             "discoverAndAuthenticateWithPrf must not be called from the main thread"
         )
 
+        let (prfOutput, assertion) = try performPrfAssertion(
+            rpId: rpId,
+            credentialId: nil,
+            prfSalt: prfSalt,
+            challenge: challenge,
+            context: "discover"
+        )
+        return DiscoveredPasskeyResult(
+            prfOutput: prfOutput,
+            credentialId: assertion.credentialID
+        )
+    }
+
+    private func performRegistrationRequest(
+        rpId: String,
+        userId: Data,
+        challenge: Data
+    ) throws -> ASAuthorizationPlatformPublicKeyCredentialRegistration {
+        let delegate = PasskeyDelegate()
+        let controller: ASAuthorizationController
+
+        controller = DispatchQueue.main.sync {
+            let provider = ASAuthorizationPlatformPublicKeyCredentialProvider(
+                relyingPartyIdentifier: rpId
+            )
+
+            let request = provider.createCredentialRegistrationRequest(
+                challenge: challenge,
+                name: "Cove Wallet",
+                userID: userId
+            )
+            request.prf = .checkForSupport
+
+            let ctrl = ASAuthorizationController(authorizationRequests: [request])
+            ctrl.delegate = delegate
+            ctrl.presentationContextProvider = delegate
+            ctrl.performRequests()
+            return ctrl
+        }
+
+        _ = controller
+        let credential = try delegate.waitForResult()
+
+        guard
+            let registration =
+            credential as? ASAuthorizationPlatformPublicKeyCredentialRegistration
+        else {
+            throw PasskeyError.CreationFailed("unexpected credential type")
+        }
+
+        return registration
+    }
+
+    private func validateRegistrationPrfMetadata(
+        _ registration: ASAuthorizationPlatformPublicKeyCredentialRegistration
+    ) throws {
+        guard let prfOutput = registration.prf else {
+            Log.warn("[PASSKEY] registration PRF metadata is missing, deferring support check to assertion")
+            return
+        }
+
+        Log.info("[PASSKEY] registration PRF supported: \(prfOutput.isSupported)")
+
+        guard prfOutput.isSupported else {
+            Log.warn("[PASSKEY] registration PRF is unsupported by this passkey provider")
+            throw PasskeyError.PrfUnsupportedProvider
+        }
+    }
+
+    private func performPrfAssertion(
+        rpId: String,
+        credentialId: Data?,
+        prfSalt: Data,
+        challenge: Data,
+        context: String
+    ) throws -> (Data, ASAuthorizationPlatformPublicKeyCredentialAssertion) {
+        for attempt in 1 ... 2 {
+            let assertion = try performAssertionRequest(
+                rpId: rpId,
+                credentialId: credentialId,
+                prfSalt: prfSalt,
+                challenge: challenge,
+                context: context
+            )
+
+            do {
+                let prfOutput = try extractPrfOutput(from: assertion, context: context)
+                return (prfOutput, assertion)
+            } catch let error as PasskeyError {
+                guard shouldRetryAssertion(error, attempt: attempt) else { throw error }
+                Log.warn("[PASSKEY] \(context) missing PRF output on attempt \(attempt), retrying once")
+            }
+        }
+
+        throw PasskeyError.AuthenticationFailed("PRF output not available")
+    }
+
+    private func performAssertionRequest(
+        rpId: String,
+        credentialId: Data?,
+        prfSalt: Data,
+        challenge: Data,
+        context _: String
+    ) throws -> ASAuthorizationPlatformPublicKeyCredentialAssertion {
         let delegate = PasskeyDelegate()
         let controller: ASAuthorizationController
 
@@ -202,8 +226,15 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
                 challenge: challenge
             )
 
-            // no allowedCredentials — discoverable credential
-            request.allowedCredentials = []
+            if let credentialId {
+                request.allowedCredentials = [
+                    ASAuthorizationPlatformPublicKeyCredentialDescriptor(
+                        credentialID: credentialId
+                    ),
+                ]
+            } else {
+                request.allowedCredentials = []
+            }
 
             request.prf = .inputValues(.init(saltInput1: prfSalt))
 
@@ -221,10 +252,26 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
             let assertion =
             credential as? ASAuthorizationPlatformPublicKeyCredentialAssertion
         else {
-            throw PasskeyError.NoCredentialFound
+            if credentialId == nil {
+                throw PasskeyError.NoCredentialFound
+            }
+            throw PasskeyError.AuthenticationFailed("unexpected credential type")
         }
 
-        guard let prfKey = assertion.prf?.first else { throw PasskeyError.AuthenticationFailed("PRF output not available") }
+        return assertion
+    }
+
+    private func extractPrfOutput(
+        from assertion: ASAuthorizationPlatformPublicKeyCredentialAssertion,
+        context: String
+    ) throws -> Data {
+        if assertion.prf == nil {
+            Log.error("[PASSKEY] \(context) assertion PRF output is missing")
+        }
+
+        guard let prfKey = assertion.prf?.first else {
+            throw PasskeyError.AuthenticationFailed("PRF output not available")
+        }
 
         let prfOutput = prfKey.withUnsafeBytes { Data($0) }
 
@@ -234,10 +281,14 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
             )
         }
 
-        return DiscoveredPasskeyResult(
-            prfOutput: prfOutput.prefix(32),
-            credentialId: assertion.credentialID
-        )
+        return prfOutput.prefix(32)
+    }
+
+    private func shouldRetryAssertion(_ error: PasskeyError, attempt: Int) -> Bool {
+        guard attempt == 1 else { return false }
+
+        guard case let .AuthenticationFailed(message) = error else { return false }
+        return Self.prfRetryableFailureMessages.contains { message.hasPrefix($0) }
     }
 }
 
