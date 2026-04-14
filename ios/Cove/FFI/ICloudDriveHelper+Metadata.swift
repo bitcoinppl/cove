@@ -50,43 +50,46 @@ final class SyncHealthObserver {
     }
 
     func start() {
-        DispatchQueue.main.async {
-            guard !self.query.isStarted else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            guard !query.isStarted else { return }
 
-            self.query.searchScopes = [NSMetadataQueryUbiquitousDataScope]
-            self.query.predicate = NSPredicate(value: true)
+            query.searchScopes = [NSMetadataQueryUbiquitousDataScope]
+            query.predicate = NSPredicate(value: true)
 
-            self.box.add(
+            box.add(
                 NotificationCenter.default.addObserver(
                     forName: .NSMetadataQueryDidFinishGathering,
-                    object: self.query,
+                    object: query,
                     queue: .main
-                ) { _ in
-                    self.scheduleNotify()
+                ) { [weak self] _ in
+                    self?.scheduleNotify()
                 }
             )
-            self.box.add(
+            box.add(
                 NotificationCenter.default.addObserver(
                     forName: .NSMetadataQueryDidUpdate,
-                    object: self.query,
+                    object: query,
                     queue: .main
-                ) { _ in
-                    self.scheduleNotify()
+                ) { [weak self] _ in
+                    self?.scheduleNotify()
                 }
             )
 
-            if !self.query.start() {
-                self.box.removeAll()
+            if !query.start() {
+                box.removeAll()
             }
         }
     }
 
     func stop() {
-        DispatchQueue.main.async {
-            self.notifyWorkItem?.cancel()
-            self.notifyWorkItem = nil
-            self.query.stop()
-            self.box.removeAll()
+        if Thread.isMainThread {
+            stopOnMain()
+            return
+        }
+
+        DispatchQueue.main.async { [weak self] in
+            self?.stopOnMain()
         }
     }
 
@@ -99,8 +102,11 @@ final class SyncHealthObserver {
         DispatchQueue.main.asyncAfter(deadline: .now() + settleInterval, execute: workItem)
     }
 
-    deinit {
-        stop()
+    private func stopOnMain() {
+        notifyWorkItem?.cancel()
+        notifyWorkItem = nil
+        query.stop()
+        box.removeAll()
     }
 }
 

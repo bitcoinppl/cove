@@ -26,9 +26,7 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
         self.rustBridge = rustBridge
         self.state = rust.state()
         self.syncHealthObserver = ICloudDriveHelper.shared.makeSyncHealthObserver {
-            rustBridge.async {
-                rust.cloudStorageDidChange()
-            }
+            rustBridge.async { rust.cloudStorageDidChange() }
         }
         rust.listenForUpdates(reconciler: WeakReconciler(self))
         syncHealthObserver.start()

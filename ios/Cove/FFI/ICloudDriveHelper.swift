@@ -777,7 +777,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
     }
 
     /// Checks sync health of all files in namespace directories
-    func overallSyncHealth() -> SyncHealth {
+    func overallSyncHealth() -> CloudSyncHealth {
         guard let namespacesRoot = try? namespacesRootURL() else { return .unavailable }
 
         guard
@@ -821,13 +821,5 @@ final class ICloudDriveHelper: @unchecked Sendable {
         if anyFailed { return .failed(failureMessage ?? "upload error") }
         if allUploaded { return .allUploaded }
         return .uploading
-    }
-
-    enum SyncHealth {
-        case allUploaded
-        case uploading
-        case failed(String)
-        case noFiles
-        case unavailable
     }
 }

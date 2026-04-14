@@ -67,17 +67,6 @@ final class CloudStorageAccessImpl: CloudStorageAccess, @unchecked Sendable {
     }
 
     func overallSyncHealth() -> CloudSyncHealth {
-        switch helper.overallSyncHealth() {
-        case .allUploaded:
-            .allUploaded
-        case .uploading:
-            .uploading
-        case let .failed(message):
-            .failed(message)
-        case .noFiles:
-            .noFiles
-        case .unavailable:
-            .unavailable
-        }
+        helper.overallSyncHealth()
     }
 }
