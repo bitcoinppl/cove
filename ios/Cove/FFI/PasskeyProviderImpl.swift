@@ -4,10 +4,24 @@ import AuthenticationServices
 import Foundation
 
 final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
-    private static let prfRetryableFailureMessages = [
-        "PRF output not available",
-        "PRF output too short",
-    ]
+    private enum RegistrationPrfSupportState {
+        case confirmedSupported
+        case unknown
+    }
+
+    private enum PrfExtractionError: Error {
+        case outputUnavailable
+        case outputTooShort(Int)
+
+        var logDescription: String {
+            switch self {
+            case .outputUnavailable:
+                "PRF output not available"
+            case let .outputTooShort(count):
+                "PRF output too short: \(count) bytes, need 32"
+            }
+        }
+    }
 
     private func credentialSummary(_ credentialId: Data) -> String {
         let prefix = credentialId.prefix(4).map { String(format: "%02x", $0) }.joined()
@@ -27,7 +41,7 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
             userId: userId,
             challenge: challenge
         )
-        try validateRegistrationPrfMetadata(registration)
+        _ = try validateRegistrationPrfMetadata(registration)
         return registration.credentialID
     }
 
@@ -165,10 +179,10 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
 
     private func validateRegistrationPrfMetadata(
         _ registration: ASAuthorizationPlatformPublicKeyCredentialRegistration
-    ) throws {
+    ) throws -> RegistrationPrfSupportState {
         guard let prfOutput = registration.prf else {
             Log.warn("[PASSKEY] registration PRF metadata is missing, deferring support check to assertion")
-            return
+            return .unknown
         }
 
         Log.info("[PASSKEY] registration PRF supported: \(prfOutput.isSupported)")
@@ -177,6 +191,8 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
             Log.warn("[PASSKEY] registration PRF is unsupported by this passkey provider")
             throw PasskeyError.PrfUnsupportedProvider
         }
+
+        return .confirmedSupported
     }
 
     private func performPrfAssertion(
@@ -186,7 +202,11 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
         challenge: Data,
         context: String
     ) throws -> (Data, ASAuthorizationPlatformPublicKeyCredentialAssertion) {
+        var lastExtractionError: PrfExtractionError?
+
         for attempt in 1 ... 2 {
+            // this retry reuses the original challenge because this callback
+            // boundary currently receives one challenge per operation
             let assertion = try performAssertionRequest(
                 rpId: rpId,
                 credentialId: credentialId,
@@ -198,13 +218,20 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
             do {
                 let prfOutput = try extractPrfOutput(from: assertion, context: context)
                 return (prfOutput, assertion)
-            } catch let error as PasskeyError {
-                guard shouldRetryAssertion(error, attempt: attempt) else { throw error }
-                Log.warn("[PASSKEY] \(context) missing PRF output on attempt \(attempt), retrying once")
+            } catch let error as PrfExtractionError {
+                lastExtractionError = error
+                guard shouldRetryAssertion(error, attempt: attempt) else { break }
+                Log.warn("[PASSKEY] \(context) \(error.logDescription) on attempt \(attempt), retrying once")
             }
         }
 
-        throw PasskeyError.AuthenticationFailed("PRF output not available")
+        if let lastExtractionError {
+            Log.warn(
+                "[PASSKEY] \(context) could not obtain usable PRF output after retry: \(lastExtractionError.logDescription)"
+            )
+        }
+
+        throw PasskeyError.PrfUnsupportedProvider
     }
 
     private func performAssertionRequest(
@@ -270,25 +297,20 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
         }
 
         guard let prfKey = assertion.prf?.first else {
-            throw PasskeyError.AuthenticationFailed("PRF output not available")
+            throw PrfExtractionError.outputUnavailable
         }
 
         let prfOutput = prfKey.withUnsafeBytes { Data($0) }
 
         guard prfOutput.count >= 32 else {
-            throw PasskeyError.AuthenticationFailed(
-                "PRF output too short: \(prfOutput.count) bytes, need 32"
-            )
+            throw PrfExtractionError.outputTooShort(prfOutput.count)
         }
 
         return prfOutput.prefix(32)
     }
 
-    private func shouldRetryAssertion(_ error: PasskeyError, attempt: Int) -> Bool {
-        guard attempt == 1 else { return false }
-
-        guard case let .AuthenticationFailed(message) = error else { return false }
-        return Self.prfRetryableFailureMessages.contains { message.hasPrefix($0) }
+    private func shouldRetryAssertion(_ error: PrfExtractionError, attempt: Int) -> Bool {
+        attempt == 1
     }
 }
 

@@ -176,8 +176,8 @@ struct OnboardingCloudBackupStepView: View {
         switch backupManager.status {
         case .unsupportedPasskeyProvider:
             "This passkey provider did not confirm PRF support for Cloud Backup. Try Apple Passwords (iCloud Keychain) or another supported provider such as 1Password"
-        case .error:
-            "We couldn't finish enabling Cloud Backup with this passkey. Try again"
+        case let .error(message):
+            message
         default:
             nil
         }

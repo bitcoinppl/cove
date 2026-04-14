@@ -11,6 +11,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
     private let pollInterval: TimeInterval = 0.1
     let metadataSettleInterval: TimeInterval = 0.5
     private let progressLogInterval: TimeInterval = 1
+    private let legacyFileReadNoSuchFileError = 4
 
     final class ObserverBox {
         private var observers: [NSObjectProtocol] = []
@@ -507,10 +508,21 @@ final class ICloudDriveHelper: @unchecked Sendable {
         var coordinatedReadInFlight = false
         var coordinatedReadResult: Result<Data, Error>?
         var lastCoordinatedReadError: Error?
+        var coordinatedReadCancelled = false
+
+        let cancelCoordinatedReadRace = {
+            raceStateQueue.sync {
+                coordinatedReadCancelled = true
+            }
+        }
+
+        defer {
+            cancelCoordinatedReadRace()
+        }
 
         let startCoordinatedReadRace = { [self] (reason: String) in
             let attempt: Int? = raceStateQueue.sync {
-                guard !coordinatedReadInFlight else { return nil }
+                guard !coordinatedReadCancelled, !coordinatedReadInFlight else { return nil }
                 coordinatedReadInFlight = true
                 coordinatedReadAttempt += 1
                 return coordinatedReadAttempt
@@ -520,9 +532,13 @@ final class ICloudDriveHelper: @unchecked Sendable {
             Log.info("downloadFile: starting coordinated read race attempt=\(attempt) reason=\(reason) file=\(filename)")
 
             DispatchQueue.global(qos: .userInitiated).async {
+                let isCancelled = raceStateQueue.sync { coordinatedReadCancelled }
+                guard !isCancelled else { return }
+
                 let result = Result { try self.coordinatedRead(from: resolvedItem.url) }
                 raceStateQueue.async {
                     coordinatedReadInFlight = false
+                    guard !coordinatedReadCancelled else { return }
 
                     switch result {
                     case let .success(data):
@@ -600,7 +616,9 @@ final class ICloudDriveHelper: @unchecked Sendable {
         } catch {
             let nsError = error as NSError
             if nsError.domain == NSCocoaErrorDomain,
-               nsError.code == NSFileReadNoSuchFileError || nsError.code == 4
+               (nsError.code == NSFileReadNoSuchFileError
+                   // some iCloud missing-file cases surface as legacy Cocoa code 4
+                   || nsError.code == legacyFileReadNoSuchFileError)
             {
                 throw CloudStorageError.NotFound(recordId)
             }
