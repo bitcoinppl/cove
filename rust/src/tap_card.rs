@@ -25,6 +25,9 @@ pub enum TransportError {
     #[error("CvcChangeError: {0}")]
     CvcChangeError(String),
 
+    #[error("ConnectionLost: {0}")]
+    ConnectionLost(String),
+
     #[error("UnknownError: {0}")]
     UnknownError(String),
 }
@@ -108,6 +111,7 @@ impl From<TransportError> for ApduError {
             TransportError::IncorrectSignature(msg) => Self::IncorrectSignature(msg),
             TransportError::UnknownCardType(msg) => Self::UnknownCardType(msg),
             TransportError::CvcChangeError(_) => Self::CkTap(CkTapError::BadArguments.into()),
+            TransportError::ConnectionLost(_) => Self::CkTap(CkTapError::BadArguments.into()),
             TransportError::UnknownError(_) => Self::CkTap(CkTapError::BadArguments.into()),
         }
     }

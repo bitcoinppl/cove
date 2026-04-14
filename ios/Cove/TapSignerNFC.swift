@@ -394,7 +394,7 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
         case let .some(error):
             switch error.code {
             case .readerTransceiveErrorTagConnectionLost:
-                tapSignerError = .Unknown("Tag connection lost, please hold your phone still")
+                tapSignerError = .ConnectionLost("Tag connection lost, please hold your phone still")
                 session.invalidate(
                     errorMessage: "Tag connection lost, please hold your phone still"
                 )
