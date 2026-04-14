@@ -235,10 +235,9 @@ struct OnboardingCloudRestoreChoiceCard: View {
         OnboardingChoiceCard(
             title: "Restore from Cove backup",
             subtitle: "Use your passkey to restore from iCloud",
-            systemImage: "icloud.and.arrow.down"
-        ) {
-            action()
-        }
+            systemImage: "icloud.and.arrow.down",
+            action: action
+        )
     }
 }
 
