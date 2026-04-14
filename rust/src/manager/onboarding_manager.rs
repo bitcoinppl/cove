@@ -169,6 +169,7 @@ enum CompletionTarget {
 struct InitialFlowResolution {
     flow: FlowState,
     clear_persisted_progress: bool,
+    start_cloud_check: bool,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -282,6 +283,7 @@ enum CloudRestoreDiscovery {
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 enum RestoreOrigin {
+    Startup,
     Welcome,
     BitcoinChoice,
     ReturningUserChoice,
@@ -311,9 +313,11 @@ impl RustOnboardingManager {
     pub fn new() -> Arc<Self> {
         let (sender, receiver) = flume::bounded(100);
         let has_wallets = !Database::global().wallets.all().unwrap_or_default().is_empty();
+        let terms_accepted = Database::global().global_flag.is_terms_accepted();
         let resolution = resolve_initial_flow(
             Self::load_onboarding_progress(),
             has_wallets,
+            terms_accepted,
             |wallet_id, network, wallet_mode| {
                 let wallet_exists = Database::global()
                     .wallets
@@ -329,7 +333,7 @@ impl RustOnboardingManager {
                 Some(mnemonic)
             },
         );
-        let should_start_cloud_check = matches!(&resolution.flow, FlowState::CloudCheck { .. });
+        let should_start_cloud_check = resolution.start_cloud_check;
 
         if resolution.clear_persisted_progress {
             Self::sync_onboarding_progress(None);
@@ -942,6 +946,7 @@ impl FlowState {
                 origin: RestoreOrigin::ReturningUserChoice,
                 error_message: None,
             },
+            (state, InternalEvent::CloudCheckFinished(_)) => state,
             (Self::BitcoinChoice, InternalEvent::WalletCreated { flow })
                 if flow.branch == OnboardingBranch::NewUser =>
             {
@@ -1235,21 +1240,24 @@ impl OnboardingProgress {
     }
 }
 
-fn default_initial_flow(has_wallets: bool) -> FlowState {
+fn default_initial_flow(has_wallets: bool, terms_accepted: bool) -> FlowState {
     if has_wallets {
         FlowState::Terms {
             target: CompletionTarget::SelectLatestOrNew,
             error_message: None,
             progress: None,
         }
+    } else if terms_accepted {
+        FlowState::CloudCheck { origin: RestoreOrigin::Startup }
     } else {
-        FlowState::CloudCheck { origin: RestoreOrigin::Welcome }
+        FlowState::Welcome { error_message: None }
     }
 }
 
 fn resolve_initial_flow<F>(
     progress: Option<OnboardingProgress>,
     has_wallets: bool,
+    terms_accepted: bool,
     load_mnemonic: F,
 ) -> InitialFlowResolution
 where
@@ -1257,15 +1265,21 @@ where
 {
     match progress {
         Some(progress) => match progress.restore_flow(load_mnemonic) {
-            Some(flow) => InitialFlowResolution { flow, clear_persisted_progress: false },
+            Some(flow) => InitialFlowResolution {
+                flow,
+                clear_persisted_progress: false,
+                start_cloud_check: false,
+            },
             None => InitialFlowResolution {
-                flow: default_initial_flow(has_wallets),
+                flow: default_initial_flow(has_wallets, terms_accepted),
                 clear_persisted_progress: true,
+                start_cloud_check: !has_wallets,
             },
         },
         None => InitialFlowResolution {
-            flow: default_initial_flow(has_wallets),
+            flow: default_initial_flow(has_wallets, terms_accepted),
             clear_persisted_progress: false,
+            start_cloud_check: !has_wallets,
         },
     }
 }
@@ -1301,6 +1315,11 @@ impl From<CloudCheckOutcome> for CloudRestoreDiscovery {
 impl RestoreOrigin {
     fn flow_state(self) -> FlowState {
         match self {
+            Self::Startup => FlowState::Terms {
+                target: CompletionTarget::SelectLatestOrNew,
+                error_message: None,
+                progress: None,
+            },
             Self::Welcome => FlowState::Welcome { error_message: None },
             Self::BitcoinChoice => FlowState::BitcoinChoice,
             Self::ReturningUserChoice => FlowState::ReturningUserChoice,
@@ -1470,21 +1489,49 @@ mod tests {
     }
 
     #[test]
-    fn backup_found_auto_switches_on_early_screens() {
-        let mut flow = FlowState::BitcoinChoice;
-        let mut discovery = CloudRestoreDiscovery::Checking;
+    fn empty_wallet_startup_begins_at_welcome_and_starts_background_cloud_check() {
+        let resolution = resolve_initial_flow(None, false, false, |_, _, _| None);
 
-        flow.apply_event(
-            InternalEvent::CloudCheckFinished(CloudCheckOutcome::BackupFound),
-            &mut discovery,
-            true,
-        );
+        assert!(!resolution.clear_persisted_progress);
+        assert!(resolution.start_cloud_check);
+        assert!(matches!(resolution.flow, FlowState::Welcome { error_message: None }));
+    }
 
-        assert_eq!(discovery, CloudRestoreDiscovery::BackupFound);
+    #[test]
+    fn accepted_terms_without_wallets_begins_at_startup_cloud_check() {
+        let resolution = resolve_initial_flow(None, false, true, |_, _, _| None);
+
+        assert!(!resolution.clear_persisted_progress);
+        assert!(resolution.start_cloud_check);
         assert!(matches!(
-            flow,
-            FlowState::RestoreOffer { origin: RestoreOrigin::BitcoinChoice, error_message: None }
+            resolution.flow,
+            FlowState::CloudCheck { origin: RestoreOrigin::Startup }
         ));
+    }
+
+    #[test]
+    fn backup_found_auto_switches_on_early_screens() {
+        let scenarios = [
+            (FlowState::Welcome { error_message: None }, RestoreOrigin::Welcome),
+            (FlowState::BitcoinChoice, RestoreOrigin::BitcoinChoice),
+            (FlowState::ReturningUserChoice, RestoreOrigin::ReturningUserChoice),
+        ];
+
+        for (mut flow, expected_origin) in scenarios {
+            let mut discovery = CloudRestoreDiscovery::Checking;
+
+            flow.apply_event(
+                InternalEvent::CloudCheckFinished(CloudCheckOutcome::BackupFound),
+                &mut discovery,
+                true,
+            );
+
+            assert_eq!(discovery, CloudRestoreDiscovery::BackupFound);
+            assert!(matches!(
+                flow,
+                FlowState::RestoreOffer { origin, error_message: None } if origin == expected_origin
+            ));
+        }
     }
 
     #[test]
@@ -1503,6 +1550,41 @@ mod tests {
     }
 
     #[test]
+    fn no_backup_during_background_startup_check_leaves_welcome_visible() {
+        let mut flow = FlowState::Welcome { error_message: None };
+        let mut discovery = CloudRestoreDiscovery::Checking;
+
+        flow.apply_event(
+            InternalEvent::CloudCheckFinished(CloudCheckOutcome::NoBackupConfirmed),
+            &mut discovery,
+            true,
+        );
+
+        assert_eq!(discovery, CloudRestoreDiscovery::NoBackupFound);
+        assert!(matches!(flow, FlowState::Welcome { error_message: None }));
+    }
+
+    #[test]
+    fn inconclusive_background_startup_check_leaves_welcome_visible() {
+        let mut flow = FlowState::Welcome { error_message: None };
+        let mut discovery = CloudRestoreDiscovery::Checking;
+
+        flow.apply_event(
+            InternalEvent::CloudCheckFinished(CloudCheckOutcome::Inconclusive(
+                CloudCheckIssue::CloudUnavailable,
+            )),
+            &mut discovery,
+            true,
+        );
+
+        assert_eq!(
+            discovery,
+            CloudRestoreDiscovery::Inconclusive(CloudCheckIssue::CloudUnavailable)
+        );
+        assert!(matches!(flow, FlowState::Welcome { error_message: None }));
+    }
+
+    #[test]
     fn skip_restore_returns_to_origin_and_disables_future_prompts() {
         let mut flow =
             FlowState::RestoreOffer { origin: RestoreOrigin::StorageChoice, error_message: None };
@@ -1517,6 +1599,30 @@ mod tests {
         assert_eq!(command, TransitionCommand::None);
         assert!(!restore_offer_allowed);
         assert!(matches!(flow, FlowState::StorageChoice));
+    }
+
+    #[test]
+    fn skip_restore_from_startup_check_goes_to_terms() {
+        let mut flow =
+            FlowState::RestoreOffer { origin: RestoreOrigin::Startup, error_message: None };
+        let mut restore_offer_allowed = true;
+
+        let command = flow.apply_user_action(
+            OnboardingAction::SkipRestore,
+            CloudRestoreDiscovery::BackupFound,
+            &mut restore_offer_allowed,
+        );
+
+        assert_eq!(command, TransitionCommand::None);
+        assert!(!restore_offer_allowed);
+        assert!(matches!(
+            flow,
+            FlowState::Terms {
+                target: CompletionTarget::SelectLatestOrNew,
+                error_message: None,
+                progress: None,
+            }
+        ));
     }
 
     #[test]
@@ -1620,10 +1726,12 @@ mod tests {
                 cloud_backup_enabled: false,
             }),
             true,
+            false,
             |_, _, _| None,
         );
 
         assert!(resolution.clear_persisted_progress);
+        assert!(!resolution.start_cloud_check);
         assert!(matches!(
             resolution.flow,
             FlowState::Terms {
