@@ -38,6 +38,8 @@ import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import org.bitcoinppl.cove_core.device.CloudSyncHealth
+import org.bitcoinppl.cove_core.device.FfiConverterTypeCloudSyncHealth
 import org.bitcoinppl.cove_core.device.FfiConverterTypeKeychainError
 import org.bitcoinppl.cove_core.device.KeychainException
 import org.bitcoinppl.cove_core.nfc.FfiConverterTypeNfcMessage
@@ -110,6 +112,7 @@ import org.bitcoinppl.cove_core.types.UtxoType
 import org.bitcoinppl.cove_core.types.WalletId
 import org.bitcoinppl.cove_core.ur.FfiConverterTypeUrError
 import org.bitcoinppl.cove_core.ur.UrException
+import org.bitcoinppl.cove_core.device.RustBuffer as RustBufferCloudSyncHealth
 import org.bitcoinppl.cove_core.device.RustBuffer as RustBufferKeychainError
 import org.bitcoinppl.cove_core.nfc.RustBuffer as RustBufferNfcMessage
 import org.bitcoinppl.cove_core.tapcard.RustBuffer as RustBufferTapCardParseError
@@ -1387,6 +1390,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rustcloudbackupmanager_clear_sync_error_if_no_failed_wallet_uploads(
     ): Short
+    external fun uniffi_cove_checksum_method_rustcloudbackupmanager_cloud_storage_did_change(
+    ): Short
     external fun uniffi_cove_checksum_method_rustcloudbackupmanager_current_status(
     ): Short
     external fun uniffi_cove_checksum_method_rustcloudbackupmanager_debug_reset_cloud_backup_state(
@@ -2402,6 +2407,8 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_method_rustcloudbackupmanager_backup_wallet_count(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_rustcloudbackupmanager_clear_sync_error_if_no_failed_wallet_uploads(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_cove_fn_method_rustcloudbackupmanager_cloud_storage_did_change(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     external fun uniffi_cove_fn_method_rustcloudbackupmanager_current_status(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -4007,6 +4014,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_clear_sync_error_if_no_failed_wallet_uploads() != 7150.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_cloud_storage_did_change() != 44707.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_current_status() != 9796.toShort()) {
@@ -17706,6 +17716,8 @@ public interface RustCloudBackupManagerInterface {
     
     fun `clearSyncErrorIfNoFailedWalletUploads`()
     
+    fun `cloudStorageDidChange`()
+    
     fun `currentStatus`(): CloudBackupStatus
     
     /**
@@ -17917,6 +17929,18 @@ open class RustCloudBackupManager: Disposable, AutoCloseable, RustCloudBackupMan
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustcloudbackupmanager_clear_sync_error_if_no_failed_wallet_uploads(
+        it,
+        _status)
+}
+    }
+    
+    
+
+    override fun `cloudStorageDidChange`()
+        = 
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustcloudbackupmanager_cloud_storage_did_change(
         it,
         _status)
 }
@@ -27460,6 +27484,8 @@ data class CloudBackupState (
     , 
     var `connectivityHint`: CloudConnectivityHint
     , 
+    var `syncHealth`: CloudSyncHealth
+    , 
     var `promptIntent`: CloudBackupPromptIntent
     , 
     var `progress`: CloudBackupProgress?
@@ -27505,6 +27531,7 @@ public object FfiConverterTypeCloudBackupState: FfiConverterRustBuffer<CloudBack
         return CloudBackupState(
             FfiConverterTypeCloudBackupStatus.read(buf),
             FfiConverterTypeCloudConnectivityHint.read(buf),
+            FfiConverterTypeCloudSyncHealth.read(buf),
             FfiConverterTypeCloudBackupPromptIntent.read(buf),
             FfiConverterOptionalTypeCloudBackupProgress.read(buf),
             FfiConverterOptionalTypeCloudBackupRestoreProgress.read(buf),
@@ -27525,6 +27552,7 @@ public object FfiConverterTypeCloudBackupState: FfiConverterRustBuffer<CloudBack
     override fun allocationSize(value: CloudBackupState) = (
             FfiConverterTypeCloudBackupStatus.allocationSize(value.`status`) +
             FfiConverterTypeCloudConnectivityHint.allocationSize(value.`connectivityHint`) +
+            FfiConverterTypeCloudSyncHealth.allocationSize(value.`syncHealth`) +
             FfiConverterTypeCloudBackupPromptIntent.allocationSize(value.`promptIntent`) +
             FfiConverterOptionalTypeCloudBackupProgress.allocationSize(value.`progress`) +
             FfiConverterOptionalTypeCloudBackupRestoreProgress.allocationSize(value.`restoreProgress`) +
@@ -27544,6 +27572,7 @@ public object FfiConverterTypeCloudBackupState: FfiConverterRustBuffer<CloudBack
     override fun write(value: CloudBackupState, buf: ByteBuffer) {
             FfiConverterTypeCloudBackupStatus.write(value.`status`, buf)
             FfiConverterTypeCloudConnectivityHint.write(value.`connectivityHint`, buf)
+            FfiConverterTypeCloudSyncHealth.write(value.`syncHealth`, buf)
             FfiConverterTypeCloudBackupPromptIntent.write(value.`promptIntent`, buf)
             FfiConverterOptionalTypeCloudBackupProgress.write(value.`progress`, buf)
             FfiConverterOptionalTypeCloudBackupRestoreProgress.write(value.`restoreProgress`, buf)
@@ -33745,6 +33774,15 @@ sealed class CloudBackupReconcileMessage {
         companion object
     }
     
+    data class SyncHealth(
+        val v1: org.bitcoinppl.cove_core.device.CloudSyncHealth) : CloudBackupReconcileMessage()
+        
+    {
+        
+
+        companion object
+    }
+    
     data class Progress(
         val v1: org.bitcoinppl.cove_core.CloudBackupProgress?) : CloudBackupReconcileMessage()
         
@@ -33893,46 +33931,49 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
             2 -> CloudBackupReconcileMessage.ConnectivityHint(
                 FfiConverterTypeCloudConnectivityHint.read(buf),
                 )
-            3 -> CloudBackupReconcileMessage.Progress(
+            3 -> CloudBackupReconcileMessage.SyncHealth(
+                FfiConverterTypeCloudSyncHealth.read(buf),
+                )
+            4 -> CloudBackupReconcileMessage.Progress(
                 FfiConverterOptionalTypeCloudBackupProgress.read(buf),
                 )
-            4 -> CloudBackupReconcileMessage.RestoreProgress(
+            5 -> CloudBackupReconcileMessage.RestoreProgress(
                 FfiConverterOptionalTypeCloudBackupRestoreProgress.read(buf),
                 )
-            5 -> CloudBackupReconcileMessage.RestoreReport(
+            6 -> CloudBackupReconcileMessage.RestoreReport(
                 FfiConverterOptionalTypeCloudBackupRestoreReport.read(buf),
                 )
-            6 -> CloudBackupReconcileMessage.SyncError(
+            7 -> CloudBackupReconcileMessage.SyncError(
                 FfiConverterOptionalString.read(buf),
                 )
-            7 -> CloudBackupReconcileMessage.VerificationPrompt(
+            8 -> CloudBackupReconcileMessage.VerificationPrompt(
                 FfiConverterBoolean.read(buf),
                 )
-            8 -> CloudBackupReconcileMessage.VerificationMetadata(
+            9 -> CloudBackupReconcileMessage.VerificationMetadata(
                 FfiConverterTypeCloudBackupVerificationMetadata.read(buf),
                 )
-            9 -> CloudBackupReconcileMessage.PendingUploadVerification(
+            10 -> CloudBackupReconcileMessage.PendingUploadVerification(
                 FfiConverterBoolean.read(buf),
                 )
-            10 -> CloudBackupReconcileMessage.Detail(
+            11 -> CloudBackupReconcileMessage.Detail(
                 FfiConverterOptionalTypeCloudBackupDetail.read(buf),
                 )
-            11 -> CloudBackupReconcileMessage.Verification(
+            12 -> CloudBackupReconcileMessage.Verification(
                 FfiConverterTypeVerificationState.read(buf),
                 )
-            12 -> CloudBackupReconcileMessage.Sync(
+            13 -> CloudBackupReconcileMessage.Sync(
                 FfiConverterTypeSyncState.read(buf),
                 )
-            13 -> CloudBackupReconcileMessage.Recovery(
+            14 -> CloudBackupReconcileMessage.Recovery(
                 FfiConverterTypeRecoveryState.read(buf),
                 )
-            14 -> CloudBackupReconcileMessage.CloudOnly(
+            15 -> CloudBackupReconcileMessage.CloudOnly(
                 FfiConverterTypeCloudOnlyState.read(buf),
                 )
-            15 -> CloudBackupReconcileMessage.CloudOnlyOperation(
+            16 -> CloudBackupReconcileMessage.CloudOnlyOperation(
                 FfiConverterTypeCloudOnlyOperation.read(buf),
                 )
-            16 -> CloudBackupReconcileMessage.PromptIntent(
+            17 -> CloudBackupReconcileMessage.PromptIntent(
                 FfiConverterTypeCloudBackupPromptIntent.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -33952,6 +33993,13 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
             (
                 4UL
                 + FfiConverterTypeCloudConnectivityHint.allocationSize(value.v1)
+            )
+        }
+        is CloudBackupReconcileMessage.SyncHealth -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeCloudSyncHealth.allocationSize(value.v1)
             )
         }
         is CloudBackupReconcileMessage.Progress -> {
@@ -34066,73 +34114,78 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
                 FfiConverterTypeCloudConnectivityHint.write(value.v1, buf)
                 Unit
             }
-            is CloudBackupReconcileMessage.Progress -> {
+            is CloudBackupReconcileMessage.SyncHealth -> {
                 buf.putInt(3)
+                FfiConverterTypeCloudSyncHealth.write(value.v1, buf)
+                Unit
+            }
+            is CloudBackupReconcileMessage.Progress -> {
+                buf.putInt(4)
                 FfiConverterOptionalTypeCloudBackupProgress.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.RestoreProgress -> {
-                buf.putInt(4)
+                buf.putInt(5)
                 FfiConverterOptionalTypeCloudBackupRestoreProgress.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.RestoreReport -> {
-                buf.putInt(5)
+                buf.putInt(6)
                 FfiConverterOptionalTypeCloudBackupRestoreReport.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.SyncError -> {
-                buf.putInt(6)
+                buf.putInt(7)
                 FfiConverterOptionalString.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.VerificationPrompt -> {
-                buf.putInt(7)
+                buf.putInt(8)
                 FfiConverterBoolean.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.VerificationMetadata -> {
-                buf.putInt(8)
+                buf.putInt(9)
                 FfiConverterTypeCloudBackupVerificationMetadata.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.PendingUploadVerification -> {
-                buf.putInt(9)
+                buf.putInt(10)
                 FfiConverterBoolean.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.Detail -> {
-                buf.putInt(10)
+                buf.putInt(11)
                 FfiConverterOptionalTypeCloudBackupDetail.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.Verification -> {
-                buf.putInt(11)
+                buf.putInt(12)
                 FfiConverterTypeVerificationState.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.Sync -> {
-                buf.putInt(12)
+                buf.putInt(13)
                 FfiConverterTypeSyncState.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.Recovery -> {
-                buf.putInt(13)
+                buf.putInt(14)
                 FfiConverterTypeRecoveryState.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.CloudOnly -> {
-                buf.putInt(14)
+                buf.putInt(15)
                 FfiConverterTypeCloudOnlyState.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.CloudOnlyOperation -> {
-                buf.putInt(15)
+                buf.putInt(16)
                 FfiConverterTypeCloudOnlyOperation.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.PromptIntent -> {
-                buf.putInt(16)
+                buf.putInt(17)
                 FfiConverterTypeCloudBackupPromptIntent.write(value.v1, buf)
                 Unit
             }
@@ -54178,6 +54231,8 @@ public object FfiConverterSequenceTypeWalletId: FfiConverterRustBuffer<List<Wall
  */
 public typealias Timestamp = kotlin.ULong
 public typealias FfiConverterTypeTimestamp = FfiConverterULong
+
+
 
 
 

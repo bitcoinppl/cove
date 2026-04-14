@@ -1202,6 +1202,96 @@ public func FfiConverterTypeCloudStorageError_lower(_ value: CloudStorageError) 
 }
 
 
+
+public enum CloudSyncHealth: Equatable, Hashable {
+    
+    case allUploaded
+    case uploading
+    case failed(String
+    )
+    case noFiles
+    case unavailable
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension CloudSyncHealth: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCloudSyncHealth: FfiConverterRustBuffer {
+    typealias SwiftType = CloudSyncHealth
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudSyncHealth {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .allUploaded
+        
+        case 2: return .uploading
+        
+        case 3: return .failed(try FfiConverterString.read(from: &buf)
+        )
+        
+        case 4: return .noFiles
+        
+        case 5: return .unavailable
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CloudSyncHealth, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .allUploaded:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .uploading:
+            writeInt(&buf, Int32(2))
+        
+        
+        case let .failed(v1):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case .noFiles:
+            writeInt(&buf, Int32(4))
+        
+        
+        case .unavailable:
+            writeInt(&buf, Int32(5))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudSyncHealth_lift(_ buf: RustBuffer) throws -> CloudSyncHealth {
+    return try FfiConverterTypeCloudSyncHealth.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudSyncHealth_lower(_ value: CloudSyncHealth) -> RustBuffer {
+    return FfiConverterTypeCloudSyncHealth.lower(value)
+}
+
+
+
 public 
 enum KeychainError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
@@ -1544,6 +1634,8 @@ public protocol CloudStorageAccess: AnyObject, Sendable {
      */
     func isBackupUploaded(namespace: String, recordId: String) throws  -> Bool
     
+    func overallSyncHealth()  -> CloudSyncHealth
+    
 }
 
 
@@ -1777,6 +1869,28 @@ fileprivate struct UniffiCallbackInterfaceCloudStorageAccess {
                 makeCall: makeCall,
                 writeReturn: writeReturn,
                 lowerError: FfiConverterTypeCloudStorageError_lower
+            )
+        },
+        overallSyncHealth: { (
+            uniffiHandle: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> CloudSyncHealth in
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceCloudStorageAccess.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.overallSyncHealth(
+                )
+            }
+
+            
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterTypeCloudSyncHealth_lower($0) }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
             )
         }
     )
@@ -2552,6 +2666,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_device_checksum_method_cloudstorageaccess_is_backup_uploaded() != 28663) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_device_checksum_method_cloudstorageaccess_overall_sync_health() != 51383) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_device_checksum_method_deviceaccess_timezone() != 54194) {

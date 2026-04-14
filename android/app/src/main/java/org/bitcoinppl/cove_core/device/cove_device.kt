@@ -637,6 +637,9 @@ internal interface UniffiCallbackInterfaceCloudStorageAccessMethod6 : com.sun.jn
 internal interface UniffiCallbackInterfaceCloudStorageAccessMethod7 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`recordId`: RustBuffer.ByValue,`uniffiOutReturn`: ByteByReference,uniffiCallStatus: UniffiRustCallStatus,)
 }
+internal interface UniffiCallbackInterfaceCloudStorageAccessMethod8 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
+}
 internal interface UniffiCallbackInterfaceDeviceAccessMethod0 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
 }
@@ -664,7 +667,7 @@ internal interface UniffiCallbackInterfacePasskeyProviderMethod3 : com.sun.jna.C
 internal interface UniffiCallbackInterfacePasskeyProviderMethod4 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`rpId`: RustBuffer.ByValue,`credentialId`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
 }
-@Structure.FieldOrder("uniffiFree", "uniffiClone", "uploadMasterKeyBackup", "uploadWalletBackup", "downloadMasterKeyBackup", "downloadWalletBackup", "deleteWalletBackup", "listNamespaces", "listWalletFiles", "isBackupUploaded")
+@Structure.FieldOrder("uniffiFree", "uniffiClone", "uploadMasterKeyBackup", "uploadWalletBackup", "downloadMasterKeyBackup", "downloadWalletBackup", "deleteWalletBackup", "listNamespaces", "listWalletFiles", "isBackupUploaded", "overallSyncHealth")
 internal open class UniffiVTableCallbackInterfaceCloudStorageAccess(
     @JvmField internal var `uniffiFree`: UniffiCallbackInterfaceFree? = null,
     @JvmField internal var `uniffiClone`: UniffiCallbackInterfaceClone? = null,
@@ -676,6 +679,7 @@ internal open class UniffiVTableCallbackInterfaceCloudStorageAccess(
     @JvmField internal var `listNamespaces`: UniffiCallbackInterfaceCloudStorageAccessMethod5? = null,
     @JvmField internal var `listWalletFiles`: UniffiCallbackInterfaceCloudStorageAccessMethod6? = null,
     @JvmField internal var `isBackupUploaded`: UniffiCallbackInterfaceCloudStorageAccessMethod7? = null,
+    @JvmField internal var `overallSyncHealth`: UniffiCallbackInterfaceCloudStorageAccessMethod8? = null,
 ) : Structure() {
     class UniffiByValue(
         `uniffiFree`: UniffiCallbackInterfaceFree? = null,
@@ -688,7 +692,8 @@ internal open class UniffiVTableCallbackInterfaceCloudStorageAccess(
         `listNamespaces`: UniffiCallbackInterfaceCloudStorageAccessMethod5? = null,
         `listWalletFiles`: UniffiCallbackInterfaceCloudStorageAccessMethod6? = null,
         `isBackupUploaded`: UniffiCallbackInterfaceCloudStorageAccessMethod7? = null,
-    ): UniffiVTableCallbackInterfaceCloudStorageAccess(`uniffiFree`,`uniffiClone`,`uploadMasterKeyBackup`,`uploadWalletBackup`,`downloadMasterKeyBackup`,`downloadWalletBackup`,`deleteWalletBackup`,`listNamespaces`,`listWalletFiles`,`isBackupUploaded`,), Structure.ByValue
+        `overallSyncHealth`: UniffiCallbackInterfaceCloudStorageAccessMethod8? = null,
+    ): UniffiVTableCallbackInterfaceCloudStorageAccess(`uniffiFree`,`uniffiClone`,`uploadMasterKeyBackup`,`uploadWalletBackup`,`downloadMasterKeyBackup`,`downloadWalletBackup`,`deleteWalletBackup`,`listNamespaces`,`listWalletFiles`,`isBackupUploaded`,`overallSyncHealth`,), Structure.ByValue
 
    internal fun uniffiSetValue(other: UniffiVTableCallbackInterfaceCloudStorageAccess) {
         `uniffiFree` = other.`uniffiFree`
@@ -701,6 +706,7 @@ internal open class UniffiVTableCallbackInterfaceCloudStorageAccess(
         `listNamespaces` = other.`listNamespaces`
         `listWalletFiles` = other.`listWalletFiles`
         `isBackupUploaded` = other.`isBackupUploaded`
+        `overallSyncHealth` = other.`overallSyncHealth`
     }
 
 }
@@ -829,6 +835,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_device_checksum_method_cloudstorageaccess_list_wallet_files(
     ): Short
     external fun uniffi_cove_device_checksum_method_cloudstorageaccess_is_backup_uploaded(
+    ): Short
+    external fun uniffi_cove_device_checksum_method_cloudstorageaccess_overall_sync_health(
     ): Short
     external fun uniffi_cove_device_checksum_method_deviceaccess_timezone(
     ): Short
@@ -1071,6 +1079,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_is_backup_uploaded() != 28663.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_overall_sync_health() != 51383.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_device_checksum_method_deviceaccess_timezone() != 54194.toShort()) {
@@ -2649,6 +2660,121 @@ public object FfiConverterTypeCloudStorageError : FfiConverterRustBuffer<CloudSt
 
 
 
+sealed class CloudSyncHealth {
+    
+    object AllUploaded : CloudSyncHealth()
+    
+    
+    object Uploading : CloudSyncHealth()
+    
+    
+    data class Failed(
+        val v1: kotlin.String) : CloudSyncHealth()
+        
+    {
+        
+
+        companion object
+    }
+    
+    object NoFiles : CloudSyncHealth()
+    
+    
+    object Unavailable : CloudSyncHealth()
+    
+    
+
+    
+
+    
+    
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudSyncHealth : FfiConverterRustBuffer<CloudSyncHealth>{
+    override fun read(buf: ByteBuffer): CloudSyncHealth {
+        return when(buf.getInt()) {
+            1 -> CloudSyncHealth.AllUploaded
+            2 -> CloudSyncHealth.Uploading
+            3 -> CloudSyncHealth.Failed(
+                FfiConverterString.read(buf),
+                )
+            4 -> CloudSyncHealth.NoFiles
+            5 -> CloudSyncHealth.Unavailable
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: CloudSyncHealth): ULong = when(value) {
+        is CloudSyncHealth.AllUploaded -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudSyncHealth.Uploading -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudSyncHealth.Failed -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+        }
+        is CloudSyncHealth.NoFiles -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudSyncHealth.Unavailable -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+    }
+
+    override fun write(value: CloudSyncHealth, buf: ByteBuffer) {
+        when(value) {
+            is CloudSyncHealth.AllUploaded -> {
+                buf.putInt(1)
+                Unit
+            }
+            is CloudSyncHealth.Uploading -> {
+                buf.putInt(2)
+                Unit
+            }
+            is CloudSyncHealth.Failed -> {
+                buf.putInt(3)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is CloudSyncHealth.NoFiles -> {
+                buf.putInt(4)
+                Unit
+            }
+            is CloudSyncHealth.Unavailable -> {
+                buf.putInt(5)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
 
 
 sealed class KeychainException: kotlin.Exception() {
@@ -3014,6 +3140,8 @@ public interface CloudStorageAccess {
      */
     fun `isBackupUploaded`(`namespace`: kotlin.String, `recordId`: kotlin.String): kotlin.Boolean
     
+    fun `overallSyncHealth`(): CloudSyncHealth
+    
     companion object
 }
 
@@ -3162,6 +3290,17 @@ internal object uniffiCallbackInterfaceCloudStorageAccess {
             )
         }
     }
+    internal object `overallSyncHealth`: UniffiCallbackInterfaceCloudStorageAccessMethod8 {
+        override fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,) {
+            val uniffiObj = FfiConverterTypeCloudStorageAccess.handleMap.get(uniffiHandle)
+            val makeCall = { ->
+                uniffiObj.`overallSyncHealth`(
+                )
+            }
+            val writeReturn = { value: CloudSyncHealth -> uniffiOutReturn.setValue(FfiConverterTypeCloudSyncHealth.lower(value)) }
+            uniffiTraitInterfaceCall(uniffiCallStatus, makeCall, writeReturn)
+        }
+    }
 
     internal object uniffiFree: UniffiCallbackInterfaceFree {
         override fun callback(handle: Long) {
@@ -3186,6 +3325,7 @@ internal object uniffiCallbackInterfaceCloudStorageAccess {
         `listNamespaces`,
         `listWalletFiles`,
         `isBackupUploaded`,
+        `overallSyncHealth`,
     )
 
     // Registers the foreign callback with the Rust side.
