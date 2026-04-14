@@ -381,7 +381,6 @@ impl RustCloudBackupManager {
                 passkey,
             );
         }
-        self.clear_pending_enable_session();
 
         let passkey = PasskeyAccess::global();
         if !passkey.is_prf_supported() {
@@ -507,7 +506,6 @@ impl RustCloudBackupManager {
             );
         }
 
-        self.clear_pending_enable_session();
         let passkey_access = PasskeyAccess::global();
         let keychain = Keychain::global();
 
@@ -576,7 +574,6 @@ impl RustCloudBackupManager {
         let passkey_access = PasskeyAccess::global();
         let keychain = Keychain::global();
         let cloud = CloudStorage::global();
-        self.clear_pending_enable_session();
 
         let cspp = cove_cspp::Cspp::new(keychain.clone());
         let had_local_master_key = cspp
@@ -1743,19 +1740,22 @@ mod tests {
         run_wallet_upload_for_test_async(&manager, metadata.id.clone()).await;
 
         assert_eq!(globals.cloud.uploaded_wallet_backup_count(), 0);
+        assert_eq!(globals.cloud.wallet_backup_upload_attempt_count(), 1);
         assert!(manager.state().sync_error.is_none());
         assert!(matches!(
             Database::global().cloud_blob_sync_states.get(&record_id).unwrap(),
             Some(PersistedCloudBlobSyncState { state: PersistedCloudBlobState::Dirty(_), .. })
         ));
-        tokio::time::sleep(Duration::from_millis(50)).await;
-        assert_eq!(globals.cloud.uploaded_wallet_backup_count(), 0);
-        manager.do_upload_wallet_if_dirty(&metadata.id).unwrap();
 
-        assert!(globals.cloud.uploaded_wallet_backup_count() >= 1);
-        assert!(manager.state().sync_error.is_none());
         wait_for_test_condition(
-            Duration::from_millis(250),
+            Duration::from_secs(7),
+            "deferred live upload should retry automatically after the backoff",
+            || globals.cloud.wallet_backup_upload_attempt_count() >= 2,
+        )
+        .await;
+
+        wait_for_test_condition(
+            Duration::from_secs(1),
             "deferred live upload should eventually reach an uploaded state",
             || {
                 matches!(
@@ -1769,6 +1769,8 @@ mod tests {
             },
         )
         .await;
+        assert!(globals.cloud.uploaded_wallet_backup_count() >= 1);
+        assert!(manager.state().sync_error.is_none());
 
         clear_wallet_upload_runtime_for_test_async(&manager).await;
     }
@@ -1886,6 +1888,50 @@ mod tests {
         ));
 
         clear_wallet_upload_runtime_for_test_async(&manager).await;
+    }
+
+    #[test]
+    fn update_connectivity_hint_preserves_sync_error_when_failed_wallet_uploads_exist() {
+        let _guard = test_lock().lock();
+        let globals = test_globals();
+        let manager = RustCloudBackupManager::init();
+        configure_enabled_cloud_backup(&manager, globals, 0);
+
+        let wallet_id = xpub_only_wallet_metadata().id;
+        let record_id = cove_cspp::backup_data::wallet_record_id(wallet_id.as_ref());
+        Database::global()
+            .cloud_blob_sync_states
+            .set(&PersistedCloudBlobSyncState {
+                kind: CloudUploadKind::BackupBlob,
+                namespace_id: Keychain::global().get(CSPP_NAMESPACE_ID_KEY.into()).unwrap(),
+                wallet_id: Some(wallet_id),
+                record_id,
+                state: PersistedCloudBlobState::Failed(CloudBlobFailedState {
+                    revision_hash: None,
+                    error: "upload failed".into(),
+                    retryable: false,
+                    failed_at: 1,
+                }),
+            })
+            .unwrap();
+        manager.set_sync_error(Some("upload failed".into()));
+
+        manager.update_connectivity_hint(CloudConnectivityHint::Online);
+
+        assert_eq!(manager.state().sync_error.as_deref(), Some("upload failed"));
+    }
+
+    #[test]
+    fn update_connectivity_hint_clears_sync_error_when_failed_wallet_uploads_are_gone() {
+        let _guard = test_lock().lock();
+        let globals = test_globals();
+        let manager = RustCloudBackupManager::init();
+        configure_enabled_cloud_backup(&manager, globals, 0);
+        manager.set_sync_error(Some("upload failed".into()));
+
+        manager.update_connectivity_hint(CloudConnectivityHint::Online);
+
+        assert!(manager.state().sync_error.is_none());
     }
 
     #[expect(
@@ -2989,6 +3035,129 @@ mod tests {
 
         assert!(manager.take_pending_enable_session().is_none());
         assert!(cspp.load_master_key_from_store().unwrap().is_none());
+    }
+
+    #[test]
+    fn enable_preserves_awaiting_force_new_session() {
+        let _guard = test_lock().lock();
+        let globals = test_globals();
+        let manager = RustCloudBackupManager::init();
+
+        reset_cloud_backup_test_state(&manager, globals);
+        manager.update_connectivity_hint(CloudConnectivityHint::Online);
+        let existing_master_key = cove_cspp::master_key::MasterKey::generate();
+        let existing_namespace = existing_master_key.namespace_id();
+        let encrypted_master = cove_cspp::master_key_crypto::encrypt_master_key(
+            &existing_master_key,
+            &[7; 32],
+            &[9; 32],
+        )
+        .unwrap();
+        globals.cloud.set_wallet_files(existing_namespace.clone(), vec!["wallet-1.json".into()]);
+        globals.cloud.set_master_key_backup(
+            existing_namespace,
+            serde_json::to_vec(&encrypted_master).unwrap(),
+        );
+        globals.passkey.set_discover_result(Err(PasskeyError::UserCancelled));
+
+        let master_key = cove_cspp::master_key::MasterKey::generate();
+        let expected_namespace = master_key.namespace_id();
+        let expected_credential_id = vec![1, 2, 3];
+        manager.replace_pending_enable_session(PendingEnableSession::new(
+            master_key,
+            UnpersistedPrfKey {
+                prf_key: [7; 32],
+                prf_salt: [9; 32],
+                credential_id: expected_credential_id.clone(),
+            },
+        ));
+
+        manager.do_enable_cloud_backup().unwrap();
+
+        let pending = manager.take_pending_enable_session().unwrap();
+        let (pending_master_key, pending_passkey) = pending.into_parts();
+        assert_eq!(pending_master_key.namespace_id(), expected_namespace);
+        assert_eq!(pending_passkey.credential_id, expected_credential_id);
+    }
+
+    #[test]
+    fn enable_create_new_preserves_awaiting_force_new_session() {
+        let _guard = test_lock().lock();
+        let globals = test_globals();
+        let manager = RustCloudBackupManager::init();
+
+        reset_cloud_backup_test_state(&manager, globals);
+        manager.update_connectivity_hint(CloudConnectivityHint::Online);
+        globals.passkey.set_discover_result(Err(PasskeyError::UserCancelled));
+
+        let master_key = cove_cspp::master_key::MasterKey::generate();
+        let expected_namespace = master_key.namespace_id();
+        let expected_credential_id = vec![1, 2, 3];
+        manager.replace_pending_enable_session(PendingEnableSession::new(
+            master_key,
+            UnpersistedPrfKey {
+                prf_key: [7; 32],
+                prf_salt: [9; 32],
+                credential_id: expected_credential_id.clone(),
+            },
+        ));
+
+        manager.do_enable_cloud_backup_create_new().unwrap();
+
+        let pending = manager.take_pending_enable_session().unwrap();
+        let (pending_master_key, pending_passkey) = pending.into_parts();
+        assert_eq!(pending_master_key.namespace_id(), expected_namespace);
+        assert_eq!(pending_passkey.credential_id, expected_credential_id);
+    }
+
+    #[test]
+    fn enable_no_discovery_preserves_awaiting_force_new_session() {
+        let _guard = test_lock().lock();
+        let globals = test_globals();
+        let manager = RustCloudBackupManager::init();
+
+        reset_cloud_backup_test_state(&manager, globals);
+        manager.update_connectivity_hint(CloudConnectivityHint::Online);
+        globals.passkey.set_create_result(Err(PasskeyError::UserCancelled));
+
+        let master_key = cove_cspp::master_key::MasterKey::generate();
+        let expected_namespace = master_key.namespace_id();
+        let expected_credential_id = vec![1, 2, 3];
+        manager.replace_pending_enable_session(PendingEnableSession::new(
+            master_key,
+            UnpersistedPrfKey {
+                prf_key: [7; 32],
+                prf_salt: [9; 32],
+                credential_id: expected_credential_id.clone(),
+            },
+        ));
+
+        manager.do_enable_cloud_backup_no_discovery().unwrap();
+
+        let pending = manager.take_pending_enable_session().unwrap();
+        let (pending_master_key, pending_passkey) = pending.into_parts();
+        assert_eq!(pending_master_key.namespace_id(), expected_namespace);
+        assert_eq!(pending_passkey.credential_id, expected_credential_id);
+    }
+
+    #[test]
+    fn enable_force_new_consumes_staged_session() {
+        let _guard = test_lock().lock();
+        let globals = test_globals();
+        let manager = RustCloudBackupManager::init();
+
+        reset_cloud_backup_test_state(&manager, globals);
+        manager.update_connectivity_hint(CloudConnectivityHint::Online);
+
+        manager.replace_pending_enable_session(PendingEnableSession::new(
+            cove_cspp::master_key::MasterKey::generate(),
+            UnpersistedPrfKey { prf_key: [7; 32], prf_salt: [9; 32], credential_id: vec![1, 2, 3] },
+        ));
+
+        manager.do_enable_cloud_backup_force_new().unwrap();
+
+        assert!(manager.take_pending_enable_session().is_none());
+        assert_eq!(manager.current_status(), CloudBackupStatus::Enabled);
     }
 
     #[test]

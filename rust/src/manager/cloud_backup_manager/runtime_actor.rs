@@ -442,25 +442,7 @@ impl CloudBackupRuntimeActor {
     ) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
 
-        self.active_wallet_uploads.remove(&wallet_id);
-
-        if let Some(error_message) = error_message {
-            if deferred {
-                info!("Cloud backup upload deferred for wallet_id={wallet_id}: {error_message}");
-                manager.set_pending_upload_verification(
-                    manager.has_pending_cloud_upload_verification(),
-                );
-                return Produces::ok(());
-            } else {
-                error!("Cloud backup upload failed for wallet_id={wallet_id}: {error_message}");
-                manager.set_sync_error(Some(error_message));
-            }
-        } else if succeeded {
-            self.reset_wallet_upload_retry_count(&wallet_id);
-            manager.clear_sync_error_if_no_failed_wallet_uploads();
-        }
-
-        self.schedule_wallet_upload_follow_up(wallet_id);
+        self.finish_wallet_upload(&manager, wallet_id, succeeded, error_message, deferred);
         Produces::ok(())
     }
 
@@ -479,30 +461,47 @@ impl CloudBackupRuntimeActor {
         };
 
         let upload_result = manager.do_upload_wallet_if_dirty(&wallet_id);
-        if let Err(error) = &upload_result {
-            if matches!(error, super::CloudBackupError::Deferred(_)) {
-                info!("Cloud backup upload deferred for wallet_id={wallet_id}: {error}");
-            } else {
-                error!("Cloud backup upload failed for wallet_id={wallet_id}: {error}");
-                manager.set_sync_error(Some(error.to_string()));
-            }
-        }
+        let deferred = matches!(upload_result, Err(super::CloudBackupError::Deferred(_)));
+        let error_message = upload_result.err().map(|error| error.to_string());
+        self.finish_wallet_upload(
+            &manager,
+            wallet_id,
+            error_message.is_none(),
+            error_message,
+            deferred,
+        );
+        Produces::ok(())
+    }
 
+    fn finish_wallet_upload(
+        &mut self,
+        manager: &RustCloudBackupManager,
+        wallet_id: WalletId,
+        succeeded: bool,
+        error_message: Option<String>,
+        deferred: bool,
+    ) {
         self.active_wallet_uploads.remove(&wallet_id);
 
-        if matches!(upload_result, Err(super::CloudBackupError::Deferred(_))) {
-            manager
-                .set_pending_upload_verification(manager.has_pending_cloud_upload_verification());
-            return Produces::ok(());
-        }
+        if let Some(error_message) = error_message {
+            if deferred {
+                info!("Cloud backup upload deferred for wallet_id={wallet_id}: {error_message}");
+                manager.set_pending_upload_verification(
+                    manager.has_pending_cloud_upload_verification(),
+                );
+                let delay = self.next_wallet_upload_retry_delay(&wallet_id);
+                self.schedule_wallet_upload_after(wallet_id, delay);
+                return;
+            }
 
-        if upload_result.is_ok() {
+            error!("Cloud backup upload failed for wallet_id={wallet_id}: {error_message}");
+            manager.set_sync_error(Some(error_message));
+        } else if succeeded {
             self.reset_wallet_upload_retry_count(&wallet_id);
             manager.clear_sync_error_if_no_failed_wallet_uploads();
         }
 
         self.schedule_wallet_upload_follow_up(wallet_id);
-        Produces::ok(())
     }
 
     pub async fn resume_wallet_uploads_from_persisted_state(&mut self) -> ActorResult<()> {

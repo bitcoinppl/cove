@@ -866,11 +866,11 @@ impl RustCloudBackupManager {
         self.refresh_prompt_intent();
     }
 
-    pub(super) fn set_progress(&self, progress: Option<CloudBackupProgress>) {
+    pub(crate) fn set_progress(&self, progress: Option<CloudBackupProgress>) {
         self.set_and_notify_field(progress, |state| &mut state.progress, Message::Progress);
     }
 
-    pub(super) fn set_restore_progress(&self, progress: Option<CloudBackupRestoreProgress>) {
+    pub(crate) fn set_restore_progress(&self, progress: Option<CloudBackupRestoreProgress>) {
         self.set_and_notify_field(
             progress,
             |state| &mut state.restore_progress,
@@ -878,7 +878,7 @@ impl RustCloudBackupManager {
         );
     }
 
-    pub(super) fn set_restore_report(&self, report: Option<CloudBackupRestoreReport>) {
+    pub(crate) fn set_restore_report(&self, report: Option<CloudBackupRestoreReport>) {
         self.set_and_notify_field(
             report,
             |state| &mut state.restore_report,
@@ -886,11 +886,11 @@ impl RustCloudBackupManager {
         );
     }
 
-    pub(super) fn set_sync_error(&self, sync_error: Option<String>) {
+    pub(crate) fn set_sync_error(&self, sync_error: Option<String>) {
         self.set_and_notify_field(sync_error, |state| &mut state.sync_error, Message::SyncError);
     }
 
-    pub(super) fn refresh_persisted_flags(&self) {
+    pub(crate) fn refresh_persisted_flags(&self) {
         let (verification_metadata, should_prompt_verification) = Self::load_persisted_flags();
 
         let (metadata_changed, prompt_changed) = {
@@ -920,7 +920,7 @@ impl RustCloudBackupManager {
         self.refresh_prompt_intent();
     }
 
-    pub(super) fn set_pending_upload_verification(&self, pending: bool) {
+    pub(crate) fn set_pending_upload_verification(&self, pending: bool) {
         self.set_and_notify_field(
             pending,
             |state| &mut state.has_pending_upload_verification,
@@ -929,11 +929,11 @@ impl RustCloudBackupManager {
         self.refresh_prompt_intent();
     }
 
-    pub(super) fn set_detail(&self, detail: Option<CloudBackupDetail>) {
+    pub(crate) fn set_detail(&self, detail: Option<CloudBackupDetail>) {
         self.set_and_notify_field(detail, |state| &mut state.detail, Message::Detail);
     }
 
-    pub(super) fn set_verification(&self, verification: VerificationState) {
+    pub(crate) fn set_verification(&self, verification: VerificationState) {
         self.set_and_notify_field(
             verification,
             |state| &mut state.verification,
@@ -942,20 +942,20 @@ impl RustCloudBackupManager {
         self.refresh_prompt_intent();
     }
 
-    pub(super) fn set_sync(&self, sync: SyncState) {
+    pub(crate) fn set_sync(&self, sync: SyncState) {
         self.set_and_notify_field(sync, |state| &mut state.sync, Message::Sync);
     }
 
-    pub(super) fn set_recovery(&self, recovery: RecoveryState) {
+    pub(crate) fn set_recovery(&self, recovery: RecoveryState) {
         self.set_and_notify_field(recovery, |state| &mut state.recovery, Message::Recovery);
         self.refresh_prompt_intent();
     }
 
-    pub(super) fn set_cloud_only(&self, cloud_only: CloudOnlyState) {
+    pub(crate) fn set_cloud_only(&self, cloud_only: CloudOnlyState) {
         self.set_and_notify_field(cloud_only, |state| &mut state.cloud_only, Message::CloudOnly);
     }
 
-    pub(super) fn set_cloud_only_operation(&self, cloud_only_operation: CloudOnlyOperation) {
+    pub(crate) fn set_cloud_only_operation(&self, cloud_only_operation: CloudOnlyOperation) {
         self.set_and_notify_field(
             cloud_only_operation,
             |state| &mut state.cloud_only_operation,
@@ -1449,7 +1449,7 @@ impl RustCloudBackupManager {
         }
 
         if matches!(hint, CloudConnectivityHint::Online) {
-            self.set_sync_error(None);
+            self.clear_sync_error_if_no_failed_wallet_uploads();
             send!(self.runtime.resume_wallet_uploads_from_persisted_state());
             send!(self.runtime.wake_pending_upload_verifier());
             self.start_pending_upload_verification_loop();
