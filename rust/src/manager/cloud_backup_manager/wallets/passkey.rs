@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use cove_cspp::backup_data::EncryptedMasterKeyBackup;
 use cove_device::cloud_storage::CloudStorage;
 use cove_device::passkey::{PasskeyAccess, PasskeyError};
@@ -15,49 +17,48 @@ trait PasskeyAccessExt {
 impl PasskeyAccessExt for PasskeyAccess {
     fn create_new_prf_key(&self, log_message: &str) -> Result<UnpersistedPrfKey, CloudBackupError> {
         info!("{log_message}");
-        let prf_salt: [u8; 32] = rand::rng().random();
-        let credential_id = self
-            .create_passkey(
-                PASSKEY_RP_ID.to_string(),
-                rand::rng().random::<[u8; 16]>().to_vec(),
-                random_challenge(),
-            )
-            .map_err(map_enable_passkey_error)?;
-
-        let prf_output = self
-            .authenticate_with_prf(
-                PASSKEY_RP_ID.to_string(),
-                credential_id.clone(),
-                prf_salt.to_vec(),
-                random_challenge(),
-            )
-            .map_err(map_enable_passkey_error)?;
-
-        Ok(UnpersistedPrfKey { prf_key: prf_output_to_key(prf_output)?, prf_salt, credential_id })
+        create_new_prf_key_with_mapper(self, map_enable_passkey_error)
     }
 
     fn create_new_prf_key_for_wrapper_repair(&self) -> Result<UnpersistedPrfKey, CloudBackupError> {
         info!("Creating new passkey for wrapper repair");
-        let prf_salt: [u8; 32] = rand::rng().random();
-        let credential_id = self
-            .create_passkey(
-                PASSKEY_RP_ID.to_string(),
-                rand::rng().random::<[u8; 16]>().to_vec(),
-                random_challenge(),
-            )
-            .map_err(map_wrapper_repair_passkey_error)?;
-
-        let prf_output = self
-            .authenticate_with_prf(
-                PASSKEY_RP_ID.to_string(),
-                credential_id.clone(),
-                prf_salt.to_vec(),
-                random_challenge(),
-            )
-            .map_err(map_wrapper_repair_passkey_error)?;
-
-        Ok(UnpersistedPrfKey { prf_key: prf_output_to_key(prf_output)?, prf_salt, credential_id })
+        create_new_prf_key_with_mapper(self, map_wrapper_repair_passkey_error)
     }
+}
+
+fn create_new_prf_key_with_mapper(
+    passkey: &PasskeyAccess,
+    map_passkey_error: fn(PasskeyError) -> CloudBackupError,
+) -> Result<UnpersistedPrfKey, CloudBackupError> {
+    let prf_salt: [u8; 32] = rand::rng().random();
+    let credential_id = passkey
+        .create_passkey(
+            PASSKEY_RP_ID.to_string(),
+            rand::rng().random::<[u8; 16]>().to_vec(),
+            random_challenge(),
+        )
+        .map_err(map_passkey_error)?;
+
+    // wait briefly before targeted auth so iOS can settle after registration
+    // without probing for presence and flashing another native passkey sheet
+    delay_before_new_passkey_auth();
+
+    let prf_output = passkey
+        .authenticate_with_prf(
+            PASSKEY_RP_ID.to_string(),
+            credential_id.clone(),
+            prf_salt.to_vec(),
+            random_challenge(),
+        )
+        .map_err(map_passkey_error)?;
+
+    Ok(UnpersistedPrfKey { prf_key: prf_output_to_key(prf_output)?, prf_salt, credential_id })
+}
+
+fn delay_before_new_passkey_auth() {
+    let delay = Duration::from_secs(3);
+    info!("Waiting {delay:?} before authenticating new passkey");
+    std::thread::sleep(delay);
 }
 
 pub struct NamespaceMatch {

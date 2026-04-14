@@ -202,36 +202,25 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
         challenge: Data,
         context: String
     ) throws -> (Data, ASAuthorizationPlatformPublicKeyCredentialAssertion) {
-        var lastExtractionError: PrfExtractionError?
+        // avoid an automatic second assertion here because targeted auth retries
+        // can cause the native sign-in sheet to disappear and reappear
+        let assertion = try performAssertionRequest(
+            rpId: rpId,
+            credentialId: credentialId,
+            prfSalt: prfSalt,
+            challenge: challenge,
+            context: context
+        )
 
-        for attempt in 1 ... 2 {
-            // this retry reuses the original challenge because this callback
-            // boundary currently receives one challenge per operation
-            let assertion = try performAssertionRequest(
-                rpId: rpId,
-                credentialId: credentialId,
-                prfSalt: prfSalt,
-                challenge: challenge,
-                context: context
-            )
-
-            do {
-                let prfOutput = try extractPrfOutput(from: assertion, context: context)
-                return (prfOutput, assertion)
-            } catch let error as PrfExtractionError {
-                lastExtractionError = error
-                guard shouldRetryAssertion(error, attempt: attempt) else { break }
-                Log.warn("[PASSKEY] \(context) \(error.logDescription) on attempt \(attempt), retrying once")
-            }
-        }
-
-        if let lastExtractionError {
+        do {
+            let prfOutput = try extractPrfOutput(from: assertion, context: context)
+            return (prfOutput, assertion)
+        } catch let error as PrfExtractionError {
             Log.warn(
-                "[PASSKEY] \(context) could not obtain usable PRF output after retry: \(lastExtractionError.logDescription)"
+                "[PASSKEY] \(context) could not obtain usable PRF output: \(error.logDescription)"
             )
+            throw PasskeyError.PrfUnsupportedProvider
         }
-
-        throw PasskeyError.PrfUnsupportedProvider
     }
 
     private func performAssertionRequest(
@@ -307,10 +296,6 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
         }
 
         return prfOutput.prefix(32)
-    }
-
-    private func shouldRetryAssertion(_ error: PrfExtractionError, attempt: Int) -> Bool {
-        attempt == 1
     }
 }
 

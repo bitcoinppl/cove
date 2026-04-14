@@ -58,7 +58,6 @@ impl cove_cspp::CsppStore for MockStoreHandle {
 
 type MockDiscoverResult = Result<(Vec<u8>, Vec<u8>), PasskeyError>;
 type MockPasskeyActionResult = Arc<Mutex<Option<Result<Vec<u8>, PasskeyError>>>>;
-
 #[derive(Debug, Clone, Default)]
 pub(crate) struct MockKeychain {
     entries: Arc<Mutex<HashMap<String, String>>>,

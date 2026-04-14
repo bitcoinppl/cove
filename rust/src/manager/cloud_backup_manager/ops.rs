@@ -1533,6 +1533,38 @@ mod tests {
     }
 
     #[test]
+    fn enable_create_new_succeeds_with_new_passkey_auth() {
+        let _guard = test_lock().lock();
+        let globals = test_globals();
+        let manager = RustCloudBackupManager::init();
+
+        reset_cloud_backup_test_state(&manager, globals);
+        manager.update_connectivity_hint(CloudConnectivityHint::Online);
+        globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
+        globals.passkey.set_authenticate_result(Ok(vec![7; 32]));
+
+        manager.do_enable_cloud_backup_create_new().unwrap();
+
+        assert_eq!(manager.current_status(), CloudBackupStatus::Enabled);
+    }
+
+    #[test]
+    fn enable_no_discovery_succeeds_with_new_passkey_auth() {
+        let _guard = test_lock().lock();
+        let globals = test_globals();
+        let manager = RustCloudBackupManager::init();
+
+        reset_cloud_backup_test_state(&manager, globals);
+        manager.update_connectivity_hint(CloudConnectivityHint::Online);
+        globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
+        globals.passkey.set_authenticate_result(Ok(vec![7; 32]));
+
+        manager.do_enable_cloud_backup_no_discovery().unwrap();
+
+        assert_eq!(manager.current_status(), CloudBackupStatus::Enabled);
+    }
+
+    #[test]
     fn finalize_passkey_repair_keeps_existing_count_when_wallet_refresh_fails() {
         let _guard = test_lock().lock();
         let globals = test_globals();

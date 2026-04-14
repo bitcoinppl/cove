@@ -902,7 +902,8 @@ struct MainSettingsScreen: View {
                     CloudBackupManager.shared.dispatch(action: .enableCloudBackup)
                 },
                 onCancel: { sheetState = .none },
-                message: nil
+                message: nil,
+                isBusy: false
             )
         }
     }
