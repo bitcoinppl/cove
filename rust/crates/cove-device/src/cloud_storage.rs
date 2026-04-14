@@ -26,6 +26,15 @@ pub enum CloudStorageError {
     QuotaExceeded,
 }
 
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum CloudSyncHealth {
+    AllUploaded,
+    Uploading,
+    Failed(String),
+    NoFiles,
+    Unavailable,
+}
+
 #[uniffi::export(callback_interface)]
 pub trait CloudStorageAccess: Send + Sync + std::fmt::Debug + 'static {
     fn upload_master_key_backup(
@@ -67,6 +76,8 @@ pub trait CloudStorageAccess: Send + Sync + std::fmt::Debug + 'static {
         namespace: String,
         record_id: String,
     ) -> Result<bool, CloudStorageError>;
+
+    fn overall_sync_health(&self) -> CloudSyncHealth;
 }
 
 static REF: OnceCell<CloudStorage> = OnceCell::new();
@@ -156,6 +167,10 @@ impl CloudStorage {
         record_id: String,
     ) -> Result<bool, CloudStorageError> {
         self.0.is_backup_uploaded(namespace, record_id)
+    }
+
+    pub fn overall_sync_health(&self) -> CloudSyncHealth {
+        self.0.overall_sync_health()
     }
 
     pub fn list_wallet_backups(&self, namespace: String) -> Result<Vec<String>, CloudStorageError> {

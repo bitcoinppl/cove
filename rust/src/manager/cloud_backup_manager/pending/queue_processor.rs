@@ -77,6 +77,7 @@ impl PendingUploadVerifier {
         self.0.finalize_pending_verification_if_ready();
         let has_pending = self.0.has_pending_cloud_upload_verification();
         self.send_pending_state(has_pending);
+        self.0.refresh_sync_health();
         match Self::run_outcome(had_pending, has_pending, any_failed) {
             PendingUploadRunOutcome::Idle => {
                 info!("Pending upload verification: no pending blobs");

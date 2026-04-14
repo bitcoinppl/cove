@@ -13,7 +13,7 @@ use std::time::Duration;
 use act_zero::{Addr, call, send};
 use cove_cspp::CsppStore as _;
 use cove_cspp::backup_data::{MASTER_KEY_RECORD_ID, wallet_record_id};
-use cove_device::cloud_storage::CloudStorage;
+use cove_device::cloud_storage::{CloudStorage, CloudSyncHealth};
 use cove_tokio::task::spawn_actor;
 use cove_util::ResultExt as _;
 use flume::{Receiver, Sender};
@@ -117,6 +117,7 @@ pub enum CloudBackupManagerAction {
 pub enum CloudBackupReconcileMessage {
     Status(CloudBackupStatus),
     ConnectivityHint(CloudConnectivityHint),
+    SyncHealth(CloudSyncHealth),
     Progress(Option<CloudBackupProgress>),
     RestoreProgress(Option<CloudBackupRestoreProgress>),
     RestoreReport(Option<CloudBackupRestoreReport>),
@@ -261,6 +262,7 @@ pub enum VerificationFailureKind {
 pub struct CloudBackupState {
     pub status: CloudBackupStatus,
     pub connectivity_hint: CloudConnectivityHint,
+    pub sync_health: CloudSyncHealth,
     pub prompt_intent: CloudBackupPromptIntent,
     pub progress: Option<CloudBackupProgress>,
     pub restore_progress: Option<CloudBackupRestoreProgress>,
@@ -282,6 +284,7 @@ impl Default for CloudBackupState {
         Self {
             status: CloudBackupStatus::Disabled,
             connectivity_hint: CloudConnectivityHint::Unknown,
+            sync_health: CloudSyncHealth::NoFiles,
             prompt_intent: CloudBackupPromptIntent::None,
             progress: None,
             restore_progress: None,
@@ -823,6 +826,10 @@ impl RustCloudBackupManager {
         changed
     }
 
+    pub(crate) fn set_sync_health(&self, sync_health: CloudSyncHealth) {
+        self.set_and_notify_field(sync_health, |state| &mut state.sync_health, Message::SyncHealth);
+    }
+
     pub(crate) fn set_prompt_intent(&self, prompt_intent: CloudBackupPromptIntent) {
         self.set_and_notify_field(
             prompt_intent,
@@ -888,6 +895,10 @@ impl RustCloudBackupManager {
 
     pub(crate) fn set_sync_error(&self, sync_error: Option<String>) {
         self.set_and_notify_field(sync_error, |state| &mut state.sync_error, Message::SyncError);
+    }
+
+    pub(crate) fn refresh_sync_health(&self) {
+        self.set_sync_health(CloudStorage::global().overall_sync_health());
     }
 
     pub(crate) fn refresh_persisted_flags(&self) {
@@ -1356,6 +1367,7 @@ impl RustCloudBackupManager {
         state.verification_metadata = verification_metadata;
         state.should_prompt_verification = should_prompt_verification;
         state.has_pending_upload_verification = self.has_pending_cloud_upload_verification();
+        state.sync_health = CloudStorage::global().overall_sync_health();
         state.prompt_intent = self.prompt_state.lock().resolve(&state);
         state
     }
@@ -1390,6 +1402,11 @@ impl RustCloudBackupManager {
         self.set_status(Self::runtime_status_for(&db_state));
         self.refresh_persisted_flags();
         self.set_pending_upload_verification(self.has_pending_cloud_upload_verification());
+        self.refresh_sync_health();
+    }
+
+    pub fn cloud_storage_did_change(&self) {
+        self.refresh_sync_health();
     }
 
     /// Check if cloud backup is enabled, used as nav guard
@@ -1489,6 +1506,7 @@ impl RustCloudBackupManager {
         self.set_cloud_only(CloudOnlyState::NotFetched);
         self.set_cloud_only_operation(CloudOnlyOperation::Idle);
         self.set_status(CloudBackupStatus::Disabled);
+        self.refresh_sync_health();
         cove_tokio::task::block_on(call!(self.runtime.clear_upload_runtime_state()))
             .unwrap_or_else(|error| {
                 error!("Failed to clear cloud backup runtime upload state: {error}");

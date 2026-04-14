@@ -401,6 +401,7 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) fn handle_refresh_detail(&self) {
+        self.refresh_sync_health();
         if let Some(result) = self.refresh_cloud_backup_detail() {
             match result {
                 super::cloud_backup_manager::CloudBackupDetailResult::Success(detail) => {

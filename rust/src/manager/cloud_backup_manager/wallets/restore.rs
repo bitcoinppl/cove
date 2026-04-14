@@ -246,7 +246,7 @@ impl DownloadedWalletBackup {
 mod tests {
     use super::*;
     use cove_cspp::backup_data::WalletSecret;
-    use cove_device::cloud_storage::{CloudStorageAccess, CloudStorageError};
+    use cove_device::cloud_storage::{CloudStorageAccess, CloudStorageError, CloudSyncHealth};
 
     fn test_wallet_entry(metadata: &WalletMetadata) -> WalletEntry {
         WalletEntry {
@@ -323,6 +323,10 @@ mod tests {
             _record_id: String,
         ) -> Result<bool, CloudStorageError> {
             Ok(false)
+        }
+
+        fn overall_sync_health(&self) -> CloudSyncHealth {
+            CloudSyncHealth::NoFiles
         }
     }
 

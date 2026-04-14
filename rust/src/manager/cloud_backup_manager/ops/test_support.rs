@@ -8,7 +8,9 @@ use cove_cspp::CsppStore;
 use cove_cspp::backup_data::{
     WalletEntry, WalletMode as CloudWalletMode, WalletSecret, wallet_filename_from_record_id,
 };
-use cove_device::cloud_storage::{CloudStorage, CloudStorageAccess, CloudStorageError};
+use cove_device::cloud_storage::{
+    CloudStorage, CloudStorageAccess, CloudStorageError, CloudSyncHealth,
+};
 use cove_device::keychain::{CSPP_NAMESPACE_ID_KEY, Keychain, KeychainAccess};
 use cove_device::passkey::{
     DiscoveredPasskeyResult, PasskeyAccess, PasskeyCredentialPresence, PasskeyError,
@@ -311,6 +313,10 @@ impl CloudStorageAccess for MockCloudStorage {
         _record_id: String,
     ) -> Result<bool, CloudStorageError> {
         Ok(true)
+    }
+
+    fn overall_sync_health(&self) -> CloudSyncHealth {
+        CloudSyncHealth::AllUploaded
     }
 }
 
