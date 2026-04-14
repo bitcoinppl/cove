@@ -26,6 +26,13 @@ struct OnboardingContainer: View {
         }
     }
 
+    private var onOpenCloudRestore: (() -> Void)? {
+        guard manager.state.shouldOfferCloudRestore else { return nil }
+        return {
+            manager.dispatch(.openCloudRestore)
+        }
+    }
+
     @ViewBuilder
     private func stepView(for step: OnboardingStep) -> some View {
         switch step {
@@ -89,25 +96,18 @@ struct OnboardingContainer: View {
 
         case .storageChoice:
             OnboardingStorageChoiceScreen(
-                onExchange: {
-                    manager.dispatch(.selectStorage(selection: .exchange))
-                },
-                onHardwareWallet: {
-                    manager.dispatch(.selectStorage(selection: .hardwareWallet))
-                },
-                onSoftwareWallet: {
-                    manager.dispatch(.selectStorage(selection: .softwareWallet))
+                onRestoreFromCoveBackup: onOpenCloudRestore,
+                onSelectStorage: { selection in
+                    manager.dispatch(.selectStorage(selection: selection))
                 },
                 onBack: { manager.dispatch(.back) }
             )
 
         case .softwareChoice:
             OnboardingSoftwareChoiceScreen(
-                onCreateWallet: {
-                    manager.dispatch(.selectSoftwareAction(selection: .createNewWallet))
-                },
-                onImportWallet: {
-                    manager.dispatch(.selectSoftwareAction(selection: .importExistingWallet))
+                onRestoreFromCoveBackup: onOpenCloudRestore,
+                onSelectSoftwareAction: { selection in
+                    manager.dispatch(.selectSoftwareAction(selection: selection))
                 },
                 onBack: { manager.dispatch(.back) }
             )
@@ -163,6 +163,7 @@ struct OnboardingContainer: View {
         case .hardwareDeviceSelection:
             OnboardingHardwareDeviceSelectionScreen(
                 selectedDevice: manager.state.hardwareDevice,
+                onRestoreFromCoveBackup: onOpenCloudRestore,
                 onSelect: { device in
                     manager.dispatch(.selectHardwareDevice(device: device))
                 },

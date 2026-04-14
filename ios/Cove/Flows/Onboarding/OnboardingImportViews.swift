@@ -3,6 +3,7 @@ import UniformTypeIdentifiers
 
 struct OnboardingHardwareDeviceSelectionScreen: View {
     let selectedDevice: OnboardingHardwareDevice?
+    let onRestoreFromCoveBackup: (() -> Void)?
     let onSelect: (OnboardingHardwareDevice) -> Void
     let onBack: () -> Void
 
@@ -13,6 +14,10 @@ struct OnboardingHardwareDeviceSelectionScreen: View {
             subtitle: "Import the wallet you already have without moving your keys onto this device."
         ) {
             VStack(spacing: 14) {
+                if let onRestoreFromCoveBackup {
+                    OnboardingCloudRestoreChoiceCard(action: onRestoreFromCoveBackup)
+                }
+
                 ForEach(OnboardingHardwareDevice.allCases, id: \.self) { device in
                     OnboardingChoiceCard(
                         title: device.title,
