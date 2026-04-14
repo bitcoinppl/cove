@@ -14,17 +14,24 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
     typealias Message = CloudBackupReconcileMessage
 
     @ObservationIgnored let rust: RustCloudBackupManager
-    @ObservationIgnored private let rustBridge = DispatchQueue(
-        label: "cove.CloudBackupManager.rustbridge", qos: .userInitiated
-    )
+    @ObservationIgnored private let rustBridge: DispatchQueue
+    @ObservationIgnored private let syncHealthObserver: SyncHealthObserver
 
     var state: CloudBackupState
 
     private init() {
         let rust = RustCloudBackupManager()
+        let rustBridge = DispatchQueue(label: "cove.CloudBackupManager.rustbridge", qos: .userInitiated)
         self.rust = rust
+        self.rustBridge = rustBridge
         self.state = rust.state()
+        self.syncHealthObserver = ICloudDriveHelper.shared.makeSyncHealthObserver {
+            rustBridge.async {
+                rust.cloudStorageDidChange()
+            }
+        }
         rust.listenForUpdates(reconciler: WeakReconciler(self))
+        syncHealthObserver.start()
     }
 
     var status: CloudBackupStatus {
@@ -37,6 +44,10 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
 
     var connectivityHint: CloudConnectivityHint {
         state.connectivityHint
+    }
+
+    var syncHealth: CloudSyncHealth {
+        state.syncHealth
     }
 
     var progress: (completed: UInt32, total: UInt32)? {
@@ -137,6 +148,8 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
             state.status = status
         case let .connectivityHint(connectivityHint):
             state.connectivityHint = connectivityHint
+        case let .syncHealth(syncHealth):
+            state.syncHealth = syncHealth
         case let .promptIntent(promptIntent):
             state.promptIntent = promptIntent
         case let .progress(progress):

@@ -4,7 +4,6 @@ struct CloudBackupDetailScreen: View {
     @Environment(CloudBackupPresentationCoordinator.self)
     private var cloudBackupPresentationCoordinator
     @State private var manager = CloudBackupManager.shared
-    @State private var syncHealth: ICloudDriveHelper.SyncHealth = .noFiles
     @State private var showRecreateConfirmation = false
     @State private var showReinitializeConfirmation = false
     @State private var hasAutoVerified = false
@@ -53,7 +52,6 @@ struct CloudBackupDetailScreen: View {
         .task {
             guard !isPasskeyMissing, !isUnsupportedPasskeyProvider else { return }
 
-            refreshSyncHealth()
             manager.dispatch(action: .refreshDetail)
 
             if !hasAutoVerified {
@@ -63,12 +61,6 @@ struct CloudBackupDetailScreen: View {
         }
         .onDisappear {
             cloudBackupPresentationCoordinator.setBlocker(.cloudBackupDetailDialog, active: false)
-        }
-        .onChange(of: manager.detail) { _, _ in
-            refreshSyncHealth()
-        }
-        .onChange(of: manager.verification) { _, _ in
-            refreshSyncHealth()
         }
         .onChange(of: hasCloudBackupPresentationBlocker, initial: true) { _, active in
             cloudBackupPresentationCoordinator.setBlocker(.cloudBackupDetailDialog, active: active)
@@ -103,10 +95,6 @@ struct CloudBackupDetailScreen: View {
         }
     }
 
-    private func refreshSyncHealth() {
-        syncHealth = ICloudDriveHelper.shared.overallSyncHealth()
-    }
-
     @ViewBuilder
     private var formContent: some View {
         if isUnsupportedPasskeyProvider {
@@ -136,7 +124,7 @@ struct CloudBackupDetailScreen: View {
         } else if let detail = manager.detail, !isCancelled {
             DetailFormContent(
                 detail: detail,
-                syncHealth: syncHealth,
+                syncHealth: manager.syncHealth,
                 manager: manager
             )
         } else if shouldShowLoadingState {

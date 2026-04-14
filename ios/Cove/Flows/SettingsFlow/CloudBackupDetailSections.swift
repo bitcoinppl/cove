@@ -11,7 +11,7 @@ private extension CloudOnlyOperation {
 
 struct DetailFormContent: View {
     let detail: CloudBackupDetail
-    let syncHealth: ICloudDriveHelper.SyncHealth
+    let syncHealth: CloudSyncHealth
     let manager: CloudBackupManager
 
     private var showCloudOnlySection: Bool {
@@ -107,7 +107,7 @@ struct MissingPasskeyContent: View {
 
 struct HeaderSection: View {
     let lastSync: UInt64?
-    let syncHealth: ICloudDriveHelper.SyncHealth
+    let syncHealth: CloudSyncHealth
 
     var body: some View {
         Section {
