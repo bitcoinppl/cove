@@ -185,9 +185,6 @@ struct OnboardingContainer: View {
                 onImported: { walletId in
                     manager.dispatch(.softwareImportCompleted(walletId: walletId))
                 },
-                onBackupImported: {
-                    manager.dispatch(.backupImportCompleted)
-                },
                 onBack: { manager.dispatch(.back) }
             )
         }

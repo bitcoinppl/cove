@@ -215,7 +215,7 @@ struct OnboardingSoftwareChoiceScreen: View {
 
                 OnboardingChoiceCard(
                     title: "Import existing wallet",
-                    subtitle: "Use words, QR, or a Cove backup file",
+                    subtitle: "Use words or QR from another wallet",
                     systemImage: "square.and.arrow.down"
                 ) {
                     onSelectSoftwareAction(.importExistingWallet)

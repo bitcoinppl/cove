@@ -23863,7 +23863,6 @@ public enum OnboardingAction: Equatable, Hashable {
     )
     case hardwareImportCompleted(walletId: WalletId
     )
-    case backupImportCompleted
     case openCloudRestore
     case startRestore
     case skipRestore
@@ -23934,26 +23933,24 @@ public struct FfiConverterTypeOnboardingAction: FfiConverterRustBuffer {
         case 16: return .hardwareImportCompleted(walletId: try FfiConverterTypeWalletId.read(from: &buf)
         )
         
-        case 17: return .backupImportCompleted
+        case 17: return .openCloudRestore
         
-        case 18: return .openCloudRestore
+        case 18: return .startRestore
         
-        case 19: return .startRestore
+        case 19: return .skipRestore
         
-        case 20: return .skipRestore
+        case 20: return .continueWithoutCloudRestore
         
-        case 21: return .continueWithoutCloudRestore
+        case 21: return .restoreComplete
         
-        case 22: return .restoreComplete
-        
-        case 23: return .restoreFailed(error: try FfiConverterString.read(from: &buf)
+        case 22: return .restoreFailed(error: try FfiConverterString.read(from: &buf)
         )
         
-        case 24: return .verifyWordsCompleted
+        case 23: return .verifyWordsCompleted
         
-        case 25: return .acceptTerms
+        case 24: return .acceptTerms
         
-        case 26: return .back
+        case 25: return .back
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -24034,45 +24031,41 @@ public struct FfiConverterTypeOnboardingAction: FfiConverterRustBuffer {
             FfiConverterTypeWalletId.write(walletId, into: &buf)
             
         
-        case .backupImportCompleted:
+        case .openCloudRestore:
             writeInt(&buf, Int32(17))
         
         
-        case .openCloudRestore:
+        case .startRestore:
             writeInt(&buf, Int32(18))
         
         
-        case .startRestore:
+        case .skipRestore:
             writeInt(&buf, Int32(19))
         
         
-        case .skipRestore:
+        case .continueWithoutCloudRestore:
             writeInt(&buf, Int32(20))
         
         
-        case .continueWithoutCloudRestore:
+        case .restoreComplete:
             writeInt(&buf, Int32(21))
         
         
-        case .restoreComplete:
-            writeInt(&buf, Int32(22))
-        
-        
         case let .restoreFailed(error):
-            writeInt(&buf, Int32(23))
+            writeInt(&buf, Int32(22))
             FfiConverterString.write(error, into: &buf)
             
         
         case .verifyWordsCompleted:
-            writeInt(&buf, Int32(24))
+            writeInt(&buf, Int32(23))
         
         
         case .acceptTerms:
-            writeInt(&buf, Int32(25))
+            writeInt(&buf, Int32(24))
         
         
         case .back:
-            writeInt(&buf, Int32(26))
+            writeInt(&buf, Int32(25))
         
         }
     }

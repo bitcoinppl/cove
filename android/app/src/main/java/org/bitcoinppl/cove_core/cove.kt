@@ -40289,9 +40289,6 @@ sealed class OnboardingAction {
         companion object
     }
     
-    object BackupImportCompleted : OnboardingAction()
-    
-    
     object OpenCloudRestore : OnboardingAction()
     
     
@@ -40371,18 +40368,17 @@ public object FfiConverterTypeOnboardingAction : FfiConverterRustBuffer<Onboardi
             16 -> OnboardingAction.HardwareImportCompleted(
                 FfiConverterTypeWalletId.read(buf),
                 )
-            17 -> OnboardingAction.BackupImportCompleted
-            18 -> OnboardingAction.OpenCloudRestore
-            19 -> OnboardingAction.StartRestore
-            20 -> OnboardingAction.SkipRestore
-            21 -> OnboardingAction.ContinueWithoutCloudRestore
-            22 -> OnboardingAction.RestoreComplete
-            23 -> OnboardingAction.RestoreFailed(
+            17 -> OnboardingAction.OpenCloudRestore
+            18 -> OnboardingAction.StartRestore
+            19 -> OnboardingAction.SkipRestore
+            20 -> OnboardingAction.ContinueWithoutCloudRestore
+            21 -> OnboardingAction.RestoreComplete
+            22 -> OnboardingAction.RestoreFailed(
                 FfiConverterString.read(buf),
                 )
-            24 -> OnboardingAction.VerifyWordsCompleted
-            25 -> OnboardingAction.AcceptTerms
-            26 -> OnboardingAction.Back
+            23 -> OnboardingAction.VerifyWordsCompleted
+            24 -> OnboardingAction.AcceptTerms
+            25 -> OnboardingAction.Back
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -40489,12 +40485,6 @@ public object FfiConverterTypeOnboardingAction : FfiConverterRustBuffer<Onboardi
             (
                 4UL
                 + FfiConverterTypeWalletId.allocationSize(value.`walletId`)
-            )
-        }
-        is OnboardingAction.BackupImportCompleted -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
             )
         }
         is OnboardingAction.OpenCloudRestore -> {
@@ -40627,45 +40617,41 @@ public object FfiConverterTypeOnboardingAction : FfiConverterRustBuffer<Onboardi
                 FfiConverterTypeWalletId.write(value.`walletId`, buf)
                 Unit
             }
-            is OnboardingAction.BackupImportCompleted -> {
+            is OnboardingAction.OpenCloudRestore -> {
                 buf.putInt(17)
                 Unit
             }
-            is OnboardingAction.OpenCloudRestore -> {
+            is OnboardingAction.StartRestore -> {
                 buf.putInt(18)
                 Unit
             }
-            is OnboardingAction.StartRestore -> {
+            is OnboardingAction.SkipRestore -> {
                 buf.putInt(19)
                 Unit
             }
-            is OnboardingAction.SkipRestore -> {
+            is OnboardingAction.ContinueWithoutCloudRestore -> {
                 buf.putInt(20)
                 Unit
             }
-            is OnboardingAction.ContinueWithoutCloudRestore -> {
+            is OnboardingAction.RestoreComplete -> {
                 buf.putInt(21)
                 Unit
             }
-            is OnboardingAction.RestoreComplete -> {
-                buf.putInt(22)
-                Unit
-            }
             is OnboardingAction.RestoreFailed -> {
-                buf.putInt(23)
+                buf.putInt(22)
                 FfiConverterString.write(value.`error`, buf)
                 Unit
             }
             is OnboardingAction.VerifyWordsCompleted -> {
-                buf.putInt(24)
+                buf.putInt(23)
                 Unit
             }
             is OnboardingAction.AcceptTerms -> {
-                buf.putInt(25)
+                buf.putInt(24)
                 Unit
             }
             is OnboardingAction.Back -> {
-                buf.putInt(26)
+                buf.putInt(25)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }

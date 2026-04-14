@@ -1,5 +1,4 @@
 import SwiftUI
-import UniformTypeIdentifiers
 
 struct OnboardingHardwareDeviceSelectionScreen: View {
     let selectedDevice: OnboardingHardwareDevice?
@@ -42,13 +41,11 @@ struct OnboardingSoftwareImportFlowView: View {
         case wordCount
         case words(NumberOfBip39Words)
         case qr
-        case backupFile
     }
 
     @State private var mode: Mode = .chooser
 
     let onImported: (WalletId) -> Void
-    let onBackupImported: () -> Void
     let onBack: () -> Void
 
     var body: some View {
@@ -74,14 +71,6 @@ struct OnboardingSoftwareImportFlowView: View {
                         systemImage: "qrcode.viewfinder"
                     ) {
                         mode = .qr
-                    }
-
-                    OnboardingChoiceCard(
-                        title: "Import Cove backup file",
-                        subtitle: "Restore from a previously exported encrypted backup",
-                        systemImage: "doc.badge.plus"
-                    ) {
-                        mode = .backupFile
                     }
                 }
 
@@ -133,13 +122,6 @@ struct OnboardingSoftwareImportFlowView: View {
                     importType: .qr,
                     onImported: onImported
                 )
-            }
-
-        case .backupFile:
-            OnboardingEmbeddedNavigation(title: "Import Backup File", onBack: {
-                mode = .chooser
-            }) {
-                BackupImportView(onImported: onBackupImported)
             }
         }
     }
