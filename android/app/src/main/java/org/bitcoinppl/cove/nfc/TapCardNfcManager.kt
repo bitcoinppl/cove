@@ -120,15 +120,31 @@ class TapCardNfcManager private constructor() {
                                 IsoDep.get(detectedTag)
                                     ?: throw Exception("Tag doesn't support IsoDep (ISO7816)")
 
-                            // connect to tag
+                            // connect to tag with increased timeout for reliability
                             if (!isoDep.isConnected) {
                                 isoDep.connect()
                             }
 
-                            Log.d(tag, "Connected to IsoDep tag")
+                            // use higher timeout for backup (heavier NFC operation)
+                            val isBackup = cmd is TapSignerCmd.Backup
+                            val timeout = if (isBackup) {
+                                TapCardTransport.ISODEP_BACKUP_TIMEOUT_MS
+                            } else {
+                                TapCardTransport.ISODEP_TIMEOUT_MS
+                            }
+                            isoDep.timeout = timeout
 
-                            // create transport with message callback
-                            val transport = TapCardTransport(isoDep, onMessageUpdate)
+                            Log.d(tag, "Connected to IsoDep tag (timeout=${timeout}ms, backup=$isBackup)")
+
+                            // send proactive UX guidance for backup operations
+                            if (isBackup) {
+                                onMessageUpdate?.invoke(
+                                    "Keep your phone steady on the card \u2014 backup may take a few seconds"
+                                )
+                            }
+
+                            // create transport with message callback and appropriate timeout
+                            val transport = TapCardTransport(isoDep, onMessageUpdate, timeout)
 
                             // create TapSignerReader using factory function (workaround for UniFFI async constructor limitation)
                             Log.d(tag, "Creating TapSignerReader with command using factory function")
@@ -231,6 +247,7 @@ class TapCardNfcManager private constructor() {
 private class TapCardTransport(
     private val isoDep: IsoDep,
     private val onMessageUpdate: ((String) -> Unit)?,
+    private val timeoutMs: Int = ISODEP_TIMEOUT_MS,
 ) : TapcardTransportProtocol {
     private val tag = "TapCardTransport"
     private var currentMessage = ""
@@ -253,6 +270,7 @@ private class TapCardTransport(
         return try {
             if (!isoDep.isConnected) {
                 isoDep.connect()
+                isoDep.timeout = timeoutMs
             }
 
             val response = isoDep.transceive(commandApdu)
@@ -260,7 +278,17 @@ private class TapCardTransport(
             response
         } catch (e: Exception) {
             Log.e(tag, "APDU error", e)
-            throw TransportException.UnknownException("Tag connection lost, please hold your phone still")
+            throw TransportException.UnknownException(
+                "Tag connection lost, please hold your phone still and try again"
+            )
         }
+    }
+
+    companion object {
+        // IsoDep transceive timeout (default is ~2s which is too short for some operations)
+        const val ISODEP_TIMEOUT_MS = 5000
+
+        // higher timeout for backup operations (heavier multi-step APDU exchange)
+        const val ISODEP_BACKUP_TIMEOUT_MS = 8000
     }
 }
