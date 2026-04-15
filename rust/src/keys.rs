@@ -278,6 +278,9 @@ impl From<cove_bdk::descriptor_ext::Error> for DescriptorKeyParseError {
             E::NotMatchingPair => Self::UnsupportedDescriptor(
                 "descriptors are not a matching external/internal pair".to_string(),
             ),
+            E::MultisigNotSupported => {
+                Self::UnsupportedDescriptor("multisig descriptors are not yet supported".to_string())
+            }
         }
     }
 }

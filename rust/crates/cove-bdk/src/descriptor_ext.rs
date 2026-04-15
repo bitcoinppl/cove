@@ -17,6 +17,9 @@ pub enum Error {
 
     #[error("descriptors are not a matching external/internal pair")]
     NotMatchingPair,
+
+    #[error("multisig descriptors are not yet supported")]
+    MultisigNotSupported,
 }
 
 type Result<T, E = Error> = std::result::Result<T, E>;
@@ -154,9 +157,7 @@ impl DescriptorExt for Descriptor<DescriptorPublicKey> {
 
             // multi-sig
             D::Wsh(_pk) => {
-                return Err(Error::UnsupportedDescriptor(
-                    "unsupported wallet, multisig".to_string(),
-                ));
+                return Err(Error::MultisigNotSupported);
             }
         };
 
@@ -170,6 +171,10 @@ impl DescriptorExt for Descriptor<DescriptorPublicKey> {
             DescriptorType::Wpkh => "wpkh",
             DescriptorType::Tr => "tr",
             DescriptorType::Sh => "sh",
+            DescriptorType::Wsh
+            | DescriptorType::ShWsh
+            | DescriptorType::WshSortedMulti
+            | DescriptorType::ShWshSortedMulti => return Err(Error::MultisigNotSupported),
             other => Err(Error::UnsupportedDescriptorType(other))?,
         };
 
@@ -247,6 +252,43 @@ mod tests {
         let export = DescriptorExt::to_export_string(&ext, &int);
         assert!(export.contains("/<0;1>/*"));
         assert!(!export.contains('\n'), "matching pair should be a single line");
+    }
+
+    fn wsh_sortedmulti_desc() -> ExtendedDescriptor {
+        // 2-of-2 wsh(sortedmulti) using bare compressed public keys (no xpub derivation)
+        "wsh(sortedmulti(2,02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5,03774ae7f858a9411e5ef4246b70c65aac5649980be5c17891bbec17895da008cb))"
+            .parse()
+            .expect("valid wsh(sortedmulti) descriptor")
+    }
+
+    #[test]
+    fn wsh_sortedmulti_descriptor_public_key_returns_multisig_not_supported() {
+        let desc = wsh_sortedmulti_desc();
+        let result = DescriptorExt::descriptor_public_key(&desc);
+        assert!(
+            matches!(result, Err(Error::MultisigNotSupported)),
+            "expected MultisigNotSupported, got {result:?}"
+        );
+    }
+
+    #[test]
+    fn wsh_sortedmulti_full_origin_returns_multisig_not_supported() {
+        let desc = wsh_sortedmulti_desc();
+        let result = desc.full_origin();
+        assert!(
+            matches!(result, Err(Error::MultisigNotSupported)),
+            "expected MultisigNotSupported, got {result:?}"
+        );
+    }
+
+    #[test]
+    fn wsh_sortedmulti_origin_returns_multisig_not_supported() {
+        let desc = wsh_sortedmulti_desc();
+        let result = desc.origin();
+        assert!(
+            matches!(result, Err(Error::MultisigNotSupported)),
+            "expected MultisigNotSupported, got {result:?}"
+        );
     }
 
     #[test]
