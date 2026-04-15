@@ -123,12 +123,19 @@ impl From<parse::Error> for TapCardParseError {
 #[uniffi::export]
 pub fn tap_signer_preview_new(preview: bool) -> TapSigner {
     assert!(preview);
+
+    // Derive a public key from a dummy secret key
+    let secp = bitcoin::secp256k1::Secp256k1::new();
+    let secret_key =
+        bitcoin::secp256k1::SecretKey::from_slice(&[1u8; 32]).expect("32 bytes, valid secret key");
+    let pubkey = bitcoin::secp256k1::PublicKey::from_secret_key(&secp, &secret_key);
+
     TapSigner {
             state: TapSignerState::Unused,
             card_ident: "0000000000000000".to_string(),
             nonce: "0000000000000000".to_string(),
             signature: "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000".to_string(),
-            pubkey: Arc::new(PublicKey::from_slice(&[0u8; 33]).unwrap()),
+            pubkey: Arc::new(pubkey),
         }
 }
 
