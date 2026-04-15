@@ -15,6 +15,8 @@ struct NumberPadPinView: View {
     let isPinCorrect: (String) -> Bool
     var showPin: Bool
     var pinLength: Int
+    var manualSubmit: Bool
+    var showCharacterCount: Bool
 
     // back button
     private var backEnabled: Bool
@@ -34,6 +36,8 @@ struct NumberPadPinView: View {
         isPinCorrect: @escaping (String) -> Bool,
         showPin: Bool = false,
         pinLength: Int = 6,
+        manualSubmit: Bool = false,
+        showCharacterCount: Bool = false,
         backAction: (() -> Void)? = nil,
         onUnlock: @escaping (String) -> Void = { _ in },
         onWrongPin: @escaping (String) -> Void = { _ in }
@@ -43,6 +47,8 @@ struct NumberPadPinView: View {
         self.isPinCorrect = isPinCorrect
         self.showPin = showPin
         self.pinLength = pinLength
+        self.manualSubmit = manualSubmit
+        self.showCharacterCount = showCharacterCount
         backEnabled = backAction != nil
         self.backAction = backAction ?? {}
         self.onUnlock = onUnlock
@@ -69,24 +75,33 @@ struct NumberPadPinView: View {
             Spacer()
 
             // Adding Wiggling Animation for Wrong Password With Keyframe Animator
-            HStack(spacing: 10) {
-                ForEach(0 ..< pinLength, id: \.self) { index in
-                    RoundedRectangle(cornerRadius: 10)
-                        .frame(width: 40, height: 45)
-                        .foregroundStyle(.white)
-                        // Showing Pin at each box with the help of Index
-                        .overlay {
-                            // Safe Check
-                            if pin.count > index {
-                                let index = pin.index(pin.startIndex, offsetBy: index)
-                                let string = showPin ? String(pin[index]) : "●"
+            VStack {
+                HStack(spacing: 10) {
+                    ForEach(0 ..< pinLength, id: \.self) { index in
+                        RoundedRectangle(cornerRadius: 10)
+                            .frame(width: 40, height: 45)
+                            .foregroundStyle(.white)
+                            // Showing Pin at each box with the help of Index
+                            .overlay {
+                                // Safe Check
+                                if pin.count > index {
+                                    let index = pin.index(pin.startIndex, offsetBy: index)
+                                    let string = showPin ? String(pin[index]) : "●"
 
-                                Text(string)
-                                    .font(showPin ? .title : .body)
-                                    .fontWeight(.bold)
-                                    .foregroundStyle(.black)
+                                    Text(string)
+                                        .font(showPin ? .title : .body)
+                                        .fontWeight(.bold)
+                                        .foregroundStyle(.black)
+                                }
                             }
-                        }
+                    }
+                }
+
+                if showCharacterCount {
+                    Text("\(pin.count)/32 characters")
+                        .font(.caption)
+                        .foregroundStyle(.gray)
+                        .padding(.top, 4)
                 }
             }
             .keyframeAnimator(
@@ -178,7 +193,7 @@ struct NumberPadPinView: View {
             })
             .padding(.vertical)
             .onChange(of: pin) { _, newValue in
-                if newValue.count == pinLength {
+                if newValue.count == pinLength, !manualSubmit {
                     let pin = newValue
 
                     // Validate Pin
@@ -193,6 +208,31 @@ struct NumberPadPinView: View {
                         animateField.toggle()
                     }
                 }
+            }
+
+            if manualSubmit {
+                Button(action: {
+                    if isPinCorrect(pin) {
+                        withAnimation(.snappy, completionCriteria: .logicallyComplete) {
+                            lockState = .unlocked
+                        } completion: {
+                            onUnlock(pin)
+                            self.pin = ""
+                        }
+                    } else {
+                        animateField.toggle()
+                    }
+                }) {
+                    Text("Continue")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(pin.count >= 6 ? Color.blue : Color.gray)
+                        .cornerRadius(10)
+                }
+                .disabled(pin.count < 6)
+                .padding(.horizontal)
             }
         }
         .padding()

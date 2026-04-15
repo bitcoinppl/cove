@@ -123,13 +123,16 @@ struct TapSignerConfirmPinView: View {
                 }
                 .padding(.horizontal)
 
-                HStack {
-                    ForEach(0 ..< 6, id: \.self) { index in
+                let columns = Array(repeating: GridItem(.flexible(), spacing: 12, alignment: .center), count: 6)
+                LazyVGrid(columns: columns, alignment: .center, spacing: 12) {
+                    ForEach(0 ..< min(max(confirmPin.count, 6), 32), id: \.self) { index in
                         Circle()
                             .stroke(.primary, lineWidth: 1.3)
-                            .fill(confirmPin.count <= index ? Color.clear : .primary)
-                            .frame(width: 18)
-                            .padding(.horizontal, 10)
+                            .background(
+                                Circle()
+                                    .fill(confirmPin.count <= index ? Color.clear : .primary)
+                            )
+                            .frame(width: 18, height: 18)
                             .id(index)
                     }
                 }
@@ -137,8 +140,7 @@ struct TapSignerConfirmPinView: View {
                     initialValue: CGFloat.zero,
                     trigger: animateField,
                     content: { content, value in
-                        content
-                            .offset(x: value)
+                        content.offset(x: value)
                     },
                     keyframes: { _ in
                         KeyframeTrack {
@@ -152,15 +154,33 @@ struct TapSignerConfirmPinView: View {
                         }
                     }
                 )
-                .fixedSize(horizontal: true, vertical: true)
+                .padding(.horizontal, 36)
+                .frame(maxWidth: .infinity, alignment: .center)
                 .contentShape(Rectangle())
                 .onTapGesture { isFocused = true }
+
+                Text("\(confirmPin.count)/32 characters")
+                    .font(.caption)
+                    .foregroundStyle(.gray)
 
                 TextField("Hidden Input", text: $confirmPin)
                     .opacity(0)
                     .frame(width: 0, height: 0)
                     .focused($isFocused)
                     .keyboardType(.numberPad)
+
+                Button(action: {
+                    checkPin()
+                }) {
+                    Text("Continue")
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(confirmPin.count >= 6 ? Color.blue : Color.gray)
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
+                }
+                .disabled(confirmPin.count < 6)
+                .padding(.horizontal)
 
                 Spacer()
             }
@@ -169,21 +189,9 @@ struct TapSignerConfirmPinView: View {
                 isFocused = true
             }
             .onChange(of: isFocused) { _, _ in isFocused = true }
-            .onChange(of: confirmPin) { old, pin in
-                if pin.count == 6 {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                        checkPin()
-                    }
-                }
-
-                if pin.count > 6, old.count < 6 {
-                    confirmPin = old
-                    return
-                }
-
-                if pin.count > 6 {
-                    confirmPin = String(args.startingPin.prefix(6))
-                    return
+            .onChange(of: confirmPin) { _, pin in
+                if pin.count > 32 {
+                    confirmPin = String(pin.prefix(32))
                 }
             }
         }

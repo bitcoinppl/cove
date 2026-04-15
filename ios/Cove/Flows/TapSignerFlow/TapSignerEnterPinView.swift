@@ -15,7 +15,7 @@ struct TapSignerEnterPin: View {
     let action: AfterPinAction
 
     var message: String {
-        action.userMessage()
+        action.userMessage() + " (6-32 characters)"
     }
 
     // private
@@ -174,25 +174,48 @@ struct TapSignerEnterPin: View {
                 }
                 .padding(.horizontal)
 
-                HStack {
-                    ForEach(0 ..< 6, id: \.self) { index in
+                let columns = Array(repeating: GridItem(.flexible(), spacing: 12, alignment: .center), count: 6)
+                LazyVGrid(columns: columns, alignment: .center, spacing: 12) {
+                    ForEach(0 ..< min(max(pin.count, 6), 32), id: \.self) { index in
                         Circle()
                             .stroke(.primary, lineWidth: 1.3)
-                            .fill(pin.count <= index ? Color.clear : .primary)
-                            .frame(width: 18)
-                            .padding(.horizontal, 10)
+                            .background(
+                                Circle()
+                                    .fill(pin.count <= index ? Color.clear : .primary)
+                            )
+                            .frame(width: 18, height: 18)
                             .id(index)
                     }
                 }
-                .fixedSize(horizontal: true, vertical: true)
+                .padding(.horizontal, 36)
+                .frame(maxWidth: .infinity, alignment: .center)
                 .contentShape(Rectangle())
                 .onTapGesture { isFocused = true }
+
+                Text("\(pin.count)/32 characters")
+                    .font(.caption)
+                    .foregroundStyle(.gray)
 
                 TextField("Hidden Input", text: $pin)
                     .opacity(0)
                     .frame(width: 0, height: 0)
                     .focused($isFocused)
                     .keyboardType(.numberPad)
+
+                Button(action: {
+                    let nfc = manager.getOrCreateNfc(tapSigner)
+                    manager.enteredPin = pin
+                    runAction(nfc, pin)
+                }) {
+                    Text("Continue")
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(pin.count >= 6 ? Color.blue : Color.gray)
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
+                }
+                .disabled(pin.count < 6)
+                .padding(.horizontal)
 
                 Spacer()
             }
@@ -201,22 +224,9 @@ struct TapSignerEnterPin: View {
                 isFocused = true
             }
             .onChange(of: isFocused) { _, _ in isFocused = true }
-            .onChange(of: pin) { old, newPin in
-                let nfc = manager.getOrCreateNfc(tapSigner)
-
-                if newPin.count == 6 {
-                    manager.enteredPin = newPin
-                    return runAction(nfc, newPin)
-                }
-
-                if newPin.count > 6, old.count < 6 {
-                    pin = old
-                    return
-                }
-
-                if newPin.count > 6 {
-                    pin = String(pin.prefix(6))
-                    return
+            .onChange(of: pin) { _, newPin in
+                if newPin.count > 32 {
+                    pin = String(newPin.prefix(32))
                 }
             }
         }

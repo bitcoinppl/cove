@@ -295,7 +295,7 @@ impl GlobalConfigTable {
             return Err(GlobalConfigTableError::PinCodeMustBeHashed.into());
         }
 
-        if hashed_pin_code.len() <= 6 {
+        if hashed_pin_code.len() < 6 {
             return Err(GlobalConfigTableError::PinCodeMustBeHashed.into());
         }
 

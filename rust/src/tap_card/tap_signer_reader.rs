@@ -37,7 +37,7 @@ pub enum TapSignerReaderError {
     #[error("No command")]
     NoCommand,
 
-    #[error("Invalid pin length, must be betweeen 6 and 32, found {0}")]
+    #[error("Invalid pin length, must be between 6 and 32, found {0}")]
     InvalidPinLength(u8),
 
     #[error("PIN must be numeric only, found {0}")]
