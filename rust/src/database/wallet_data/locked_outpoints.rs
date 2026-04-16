@@ -67,10 +67,30 @@ impl LockedOutpointsTable {
     /// Returns `true` when the outpoint is locked.
     pub fn is_locked(&self, outpoint: &bitcoin::OutPoint) -> Result<bool, Error> {
         let read_txn = self.db.begin_read().map_err_str(DatabaseError::DatabaseAccess)?;
-        let table = read_txn.open_table(LOCKED_OUTPOINTS_TABLE).map_err_str(DatabaseError::TableAccess)?;
+        let table =
+            read_txn.open_table(LOCKED_OUTPOINTS_TABLE).map_err_str(DatabaseError::TableAccess)?;
         let key = OutPointKey::from(outpoint);
 
         Ok(table.get(key)?.is_some())
+    }
+
+    /// Check whether multiple outpoints are locked in a single read transaction.
+    pub fn are_locked(&self, outpoints: &[bitcoin::OutPoint]) -> Result<Vec<bool>, Error> {
+        if outpoints.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let read_txn = self.db.begin_read().map_err_str(DatabaseError::DatabaseAccess)?;
+        let table =
+            read_txn.open_table(LOCKED_OUTPOINTS_TABLE).map_err_str(DatabaseError::TableAccess)?;
+
+        let mut results = Vec::with_capacity(outpoints.len());
+        for outpoint in outpoints {
+            let key = OutPointKey::from(outpoint);
+            results.push(table.get(key)?.is_some());
+        }
+
+        Ok(results)
     }
 
     // MARK: Bulk operations
@@ -118,18 +138,19 @@ impl LockedOutpointsTable {
     /// Return all currently-locked outpoints.
     pub fn all_locked(&self) -> Result<Vec<bitcoin::OutPoint>, Error> {
         let read_txn = self.db.begin_read().map_err_str(DatabaseError::DatabaseAccess)?;
-        let table = read_txn.open_table(LOCKED_OUTPOINTS_TABLE).map_err_str(DatabaseError::TableAccess)?;
+        let table =
+            read_txn.open_table(LOCKED_OUTPOINTS_TABLE).map_err_str(DatabaseError::TableAccess)?;
 
-        let outpoints = table
+        let outpoints: std::result::Result<Vec<_>, redb::StorageError> = table
             .iter()?
-            .filter_map(Result::ok)
-            .map(|(key,_): (redb::AccessGuard<'_, OutPointKey>, _)| {
+            .map(|entry| {
+                let (key, _) = entry?;
                 let k = key.value();
-                bitcoin::OutPoint { txid: k.id(), vout: k.index }
+                Ok(bitcoin::OutPoint { txid: k.id(), vout: k.index })
             })
             .collect();
 
-        Ok(outpoints)
+        Ok(outpoints.map_err(|e| DatabaseError::DatabaseAccess(e.to_string()))?)
     }
 }
 

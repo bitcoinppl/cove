@@ -32,8 +32,8 @@ type Result<T, E = Error> = std::result::Result<T, E>;
 impl UtxoLockManager {
     #[uniffi::constructor]
     pub fn new(id: WalletId) -> std::result::Result<Self, Error> {
-        let db = WalletDataDb::new_or_existing(id)
-            .map_err(|e| Error::DatabaseOpen(e.to_string()))?;
+        let db =
+            WalletDataDb::new_or_existing(id).map_err(|e| Error::DatabaseOpen(e.to_string()))?;
 
         Ok(Self { db })
     }
@@ -41,19 +41,13 @@ impl UtxoLockManager {
     /// Lock a single outpoint.
     pub fn lock_outpoint(&self, outpoint: Arc<OutPoint>) -> Result<()> {
         let bitcoin_op: bitcoin::OutPoint = outpoint.as_ref().into();
-        self.db
-            .locked_outpoints
-            .lock(&bitcoin_op)
-            .map_err(|e| Error::LockFailed(e.to_string()))
+        self.db.locked_outpoints.lock(&bitcoin_op).map_err(|e| Error::LockFailed(e.to_string()))
     }
 
     /// Unlock a single outpoint. No-op if it was already unlocked.
     pub fn unlock_outpoint(&self, outpoint: Arc<OutPoint>) -> Result<()> {
         let bitcoin_op: bitcoin::OutPoint = outpoint.as_ref().into();
-        self.db
-            .locked_outpoints
-            .unlock(&bitcoin_op)
-            .map_err(|e| Error::UnlockFailed(e.to_string()))
+        self.db.locked_outpoints.unlock(&bitcoin_op).map_err(|e| Error::UnlockFailed(e.to_string()))
     }
 
     /// Check whether a single outpoint is locked.
@@ -76,20 +70,16 @@ impl UtxoLockManager {
             return Ok(LockState::Unlocked);
         }
 
-        let mut locked_count: usize = 0;
+        let bitcoin_ops: Vec<bitcoin::OutPoint> =
+            outpoints.iter().map(|op| op.as_ref().into()).collect();
 
-        for op in &outpoints {
-            let bitcoin_op: bitcoin::OutPoint = op.as_ref().into();
-            let is_locked = self
-                .db
-                .locked_outpoints
-                .is_locked(&bitcoin_op)
-                .map_err(|e| Error::QueryFailed(e.to_string()))?;
+        let locked_statuses = self
+            .db
+            .locked_outpoints
+            .are_locked(&bitcoin_ops)
+            .map_err(|e| Error::QueryFailed(e.to_string()))?;
 
-            if is_locked {
-                locked_count += 1;
-            }
-        }
+        let locked_count = locked_statuses.into_iter().filter(|&is_locked| is_locked).count();
 
         let state = if locked_count == 0 {
             LockState::Unlocked
