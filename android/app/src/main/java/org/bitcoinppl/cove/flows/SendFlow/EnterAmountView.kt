@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -29,6 +30,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -61,6 +63,11 @@ fun EnterAmountView(
     var showUnitMenu by remember { mutableStateOf(false) }
     var textWidth by remember { mutableStateOf(0.dp) }
     var isFocused by remember { mutableStateOf(false) }
+
+    // fall back to a local FocusRequester so the clickable wrapper can always
+    // programmatically focus the TextField even when the parent doesn't pass one
+    val localFocusRequester = remember { FocusRequester() }
+    val effectiveFocusRequester = focusRequester ?: localFocusRequester
 
     // offset to compensate for unit dropdown (matches iOS)
     val configuration = LocalConfiguration.current
@@ -98,7 +105,16 @@ fun EnterAmountView(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.Bottom,
         ) {
-            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+            Box(
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        // extend the tap target beyond the text glyphs and provide
+                        // a ripple; BasicTextField still consumes taps within its
+                        // own bounds, so this only fires for taps on empty space
+                        .clickable { effectiveFocusRequester.requestFocus() },
+                contentAlignment = Alignment.Center,
+            ) {
                 AutoSizeTextField(
                     value = amount,
                     onValueChange = { newValue ->
@@ -118,7 +134,14 @@ fun EnterAmountView(
                     },
                     maxFontSize = 48.sp,
                     minimumScaleFactor = 0.01f,
-                    color = if (exceedsBalance) CoveColor.WarningOrange else MaterialTheme.colorScheme.onSurface,
+                    color =
+                        when {
+                            // hide the default "0" value behind the placeholder so
+                            // we don't see both at once
+                            !isFocused && (amount.isEmpty() || amount == "0") -> Color.Transparent
+                            exceedsBalance -> CoveColor.WarningOrange
+                            else -> MaterialTheme.colorScheme.onSurface
+                        },
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 30.dp).offset(x = amountOffset),
@@ -128,8 +151,17 @@ fun EnterAmountView(
                         onFocusChanged(focused)
                     },
                     keyboardActions = KeyboardActions(onDone = { onDone() }),
-                    focusRequester = focusRequester,
+                    focusRequester = effectiveFocusRequester,
                 )
+
+                if (!isFocused && (amount.isEmpty() || amount == "0")) {
+                    Text(
+                        text = stringResource(R.string.placeholder_tap_to_enter_amount),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium,
+                    )
+                }
             }
             // unit dropdown area (only shown when in BTC mode, matches iOS)
             if (!isFiatMode) {
@@ -173,6 +205,11 @@ fun EnterAmountView(
                 }
             }
         }
+        Spacer(Modifier.height(8.dp))
+        HorizontalDivider(
+            color = MaterialTheme.colorScheme.outlineVariant,
+            thickness = 1.dp,
+        )
         Spacer(Modifier.height(8.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
