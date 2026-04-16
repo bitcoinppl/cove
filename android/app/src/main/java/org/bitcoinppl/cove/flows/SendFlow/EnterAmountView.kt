@@ -33,6 +33,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -68,6 +69,8 @@ fun EnterAmountView(
     // programmatically focus the TextField even when the parent doesn't pass one
     val localFocusRequester = remember { FocusRequester() }
     val effectiveFocusRequester = focusRequester ?: localFocusRequester
+
+    val showTapPlaceholder = !isFocused && (amount.isEmpty() || amount == "0")
 
     // offset to compensate for unit dropdown (matches iOS)
     val configuration = LocalConfiguration.current
@@ -138,13 +141,22 @@ fun EnterAmountView(
                         when {
                             // hide the default "0" value behind the placeholder so
                             // we don't see both at once
-                            !isFocused && (amount.isEmpty() || amount == "0") -> Color.Transparent
+                            showTapPlaceholder -> Color.Transparent
                             exceedsBalance -> CoveColor.WarningOrange
                             else -> MaterialTheme.colorScheme.onSurface
                         },
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 30.dp).offset(x = amountOffset),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 30.dp)
+                            .offset(x = amountOffset)
+                            // remove from accessibility tree when hidden behind
+                            // the placeholder so TalkBack doesn't announce both
+                            .then(
+                                if (showTapPlaceholder) Modifier.clearAndSetSemantics {} else Modifier,
+                            ),
                     onTextWidthChanged = { width -> textWidth = width },
                     onFocusChanged = { focused ->
                         isFocused = focused
@@ -154,12 +166,13 @@ fun EnterAmountView(
                     focusRequester = effectiveFocusRequester,
                 )
 
-                if (!isFocused && (amount.isEmpty() || amount == "0")) {
+                if (showTapPlaceholder) {
                     Text(
                         text = stringResource(R.string.placeholder_tap_to_enter_amount),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Medium,
+                        modifier = Modifier.offset(x = amountOffset),
                     )
                 }
             }
