@@ -840,17 +840,42 @@ impl RustSendFlowManager {
         Some(())
     }
 
+    /// Called when the user types or pastes into the address field.
+    /// Handles plain addresses and full bitcoin: URIs (extracts amount if present).
     fn handle_entering_address_changed(self: &Arc<Self>, address: String) {
         debug!("handle_entering_address_changed: {address}");
 
         let mut sender = DeferredSender::new(self.reconciler.clone());
 
-        // update the state
         self.state.lock().entering_address = address.clone();
 
-        // if the address is valid, then set it in the state
-        let address = Address::from_string(&address, self.state.lock().metadata.network).ok();
-        let address = address.map(Arc::new);
+        let network = self.state.lock().metadata.network;
+        let parsed = AddressWithNetwork::try_new(&address).ok();
+        let parsed = parsed
+            .filter(|address_with_network| address_with_network.is_valid_for_network(network));
+
+        // if input was a URI, show just the address in the text field
+        if let Some(address_with_network) = &parsed {
+            let clean = address_with_network.address.to_string();
+            if clean != address {
+                self.state.lock().entering_address = clean.clone();
+                sender.queue(Message::UpdateEnteringAddress(clean));
+            }
+        }
+
+        let is_coin_control = self.state.lock().mode.is_coin_control();
+        if let Some(amount) =
+            parsed.as_ref().and_then(|address_with_network| address_with_network.amount)
+            && !is_coin_control
+        {
+            let max_was_selected = self.state.lock().max_selected.take().is_some();
+            if max_was_selected {
+                sender.queue(Message::UnsetMaxSelected);
+            }
+            self.handle_amount_changed(amount);
+        }
+
+        let address = parsed.map(|address_with_network| Arc::new(address_with_network.address));
         self.state.lock().address = address.clone();
         sender.queue(Message::UpdateAddress(address.clone()));
 

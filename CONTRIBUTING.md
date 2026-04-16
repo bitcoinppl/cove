@@ -89,7 +89,6 @@ Run `just` to see the public recipes. Aliases are shortcuts for commands you use
 - **iOS builds stuck?** Try `just xcode-reset` to clear Xcode caches
 - **Clean slate needed?** Run `just clean` to remove all build artifacts
 - **UniFFI binding issues?** Regenerate bindings after changing Rust exports
-- **Actor not receiving messages?** Verify `FfiApp::init_on_start` is called during app startup
 
 ## Before Committing
 
@@ -97,6 +96,8 @@ Run `just` to see the public recipes. Aliases are shortcuts for commands you use
 2. Run `just ci` to execute all checks (format, lint, clippy, tests, compilation)
 3. Fix any issues reported by CI checks
 4. If clippy reports warnings, run `just fix` first to auto-fix what's possible
+5. If you changed Rust exports that generate bindings, run `just build-ios` and `just build-android` before committing
+6. Rebase on the latest `master` if `master` has changed since you started your work
 
 ## Commit Messages
 
@@ -122,6 +123,11 @@ the user is manually selecting coins.
 A good subject line completes: "If applied, this commit will ___"
 
 See [How to Write a Git Commit Message](https://cbea.ms/git-commit/) for the full guide.
+
+## Pull Requests
+
+- If changes were requested on your pull request and you addressed them, request review again
+- If you do not get a review within two days, ping Praveen on Discord or tag him in the GitHub pull request
 
 ## Further Reading
 
