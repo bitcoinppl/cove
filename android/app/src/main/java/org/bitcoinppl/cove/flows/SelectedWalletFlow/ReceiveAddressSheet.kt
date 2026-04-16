@@ -67,18 +67,20 @@ fun ReceiveAddressSheet(
     var addressInfo by remember { mutableStateOf<AddressInfoWithDerivation?>(null) }
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var initialLoadComplete by remember { mutableStateOf(false) }
 
-    // load initial address on mount
-    LaunchedEffect(manager) {
+    // load initial address on mount, re-fetch safely on state changes
+    LaunchedEffect(manager, manager.loadState) {
         try {
             isLoading = true
-            addressInfo = manager.rust.nextAddress()
+            addressInfo = manager.getReceiveAddress(forceNew = false)
             errorMessage = null
         } catch (e: Exception) {
             Log.e(tag, "Unable to get next address", e)
             errorMessage = e.message ?: "Unable to get address"
         } finally {
             isLoading = false
+            initialLoadComplete = true
         }
     }
 
@@ -87,7 +89,7 @@ fun ReceiveAddressSheet(
         scope.launch {
             try {
                 isLoading = true
-                addressInfo = manager.rust.nextAddress()
+                addressInfo = manager.getReceiveAddress(forceNew = true)
                 errorMessage = null
             } catch (e: Exception) {
                 Log.e(tag, "Unable to get next address", e)
@@ -133,8 +135,10 @@ fun ReceiveAddressSheet(
             addressRaw = addressInfo?.addressUnformatted(),
             derivationPath = addressInfo?.derivationPath(),
             isLoading = isLoading,
+            addressGeneratedTime = manager.addressGeneratedTime,
             onCopyAddress = ::copyAddress,
             onCreateNewAddress = ::createNewAddress,
+            initialLoadComplete = initialLoadComplete,
         )
     }
 }
@@ -146,10 +150,39 @@ private fun ReceiveAddressSheetContent(
     addressRaw: String?,
     derivationPath: String?,
     isLoading: Boolean,
+    addressGeneratedTime: Long,
+    initialLoadComplete: Boolean,
     onCopyAddress: () -> Unit,
     onCreateNewAddress: () -> Unit,
 ) {
     val isDarkTheme = !MaterialTheme.colorScheme.isLight
+    var timeLeftStr by remember { mutableStateOf("") }
+
+    LaunchedEffect(addressGeneratedTime, initialLoadComplete) {
+        if (!initialLoadComplete) return@LaunchedEffect
+        while(true) {
+            if (addressGeneratedTime == 0L) {
+                timeLeftStr = ""
+            } else {
+                val elapsed = System.currentTimeMillis() - addressGeneratedTime
+                val remaining = (5 * 60 * 1000L) - elapsed
+                
+                if (remaining > 0) {
+                    if (remaining <= 60_000L) {
+                        val seconds = (remaining / 1000)
+                        timeLeftStr = String.format("Auto-refresh in %02d", seconds)
+                    } else {
+                        timeLeftStr = ""
+                    }
+                } else {
+                    timeLeftStr = "Refreshing..."
+                    onCreateNewAddress()
+                    break
+                }
+            }
+            kotlinx.coroutines.delay(1000)
+        }
+    }
 
     Column(
         modifier =
@@ -278,7 +311,18 @@ private fun ReceiveAddressSheetContent(
             }
         }
 
-        Spacer(modifier = Modifier.height(64.dp))
+        Spacer(modifier = Modifier.height(32.dp))
+
+        if (timeLeftStr.isNotEmpty() && !isLoading) {
+            Text(
+                text = timeLeftStr,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                modifier = Modifier.padding(top = 4.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(32.dp))
 
         // copy address button
         Button(
@@ -330,6 +374,8 @@ private fun ReceiveAddressSheetPreview() {
             isLoading = false,
             onCopyAddress = {},
             onCreateNewAddress = {},
+            addressGeneratedTime = System.currentTimeMillis(),
+            initialLoadComplete = false,
         )
     }
 }

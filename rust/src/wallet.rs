@@ -603,6 +603,13 @@ impl Wallet {
         Ok(address_info_with_derivation)
     }
 
+    /// Check if the address at the given index is still in the unused addresses list
+    pub fn is_address_unused(&mut self, index: u32) -> Result<bool, WalletError> {
+        let is_unused =
+            self.bdk.list_unused_addresses(KeychainKind::External).any(|addr| addr.index == index);
+        Ok(is_unused)
+    }
+
     pub fn persist(&mut self) -> Result<(), WalletError> {
         self.bdk.persist(&mut self.db.lock()).map_err_str(WalletError::PersistError)?;
 

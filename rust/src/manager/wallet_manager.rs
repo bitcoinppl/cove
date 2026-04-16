@@ -15,6 +15,7 @@ use tracing::{debug, error, warn};
 use cove_common::consts::MAX_RESCAN_GAP_LIMIT;
 use cove_tokio::task::{self, spawn_actor};
 use cove_util::{format::NumberFormatter as _, result_ext::ResultExt as _};
+use tokio::sync::Mutex as AsyncMutex;
 
 use crate::{
     app::FfiApp,
@@ -85,6 +86,7 @@ pub enum WalletManagerReconcileMessage {
 
     SendFlowError(SendFlowErrorAlert),
     HotWalletKeyMissing(WalletId),
+    AddressGeneratedTime(u64),
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
@@ -164,6 +166,7 @@ pub struct RustWalletManager {
 
     #[allow(dead_code)]
     scanner: Option<Addr<WalletScanner>>,
+    address_generation_lock: Arc<AsyncMutex<()>>,
 }
 
 pub type Error = WalletManagerError;
@@ -314,6 +317,7 @@ impl RustWalletManager {
             label_manager,
             initial_load_state,
             scanner,
+            address_generation_lock: Arc::new(AsyncMutex::new(())),
         })
     }
 
@@ -385,6 +389,7 @@ impl RustWalletManager {
             label_manager,
             initial_load_state: WalletLoadState::Loading,
             scanner,
+            address_generation_lock: Arc::new(AsyncMutex::new(())),
         })
     }
 
@@ -415,6 +420,7 @@ impl RustWalletManager {
             label_manager,
             initial_load_state: WalletLoadState::Loading,
             scanner: None,
+            address_generation_lock: Arc::new(AsyncMutex::new(())),
         })
     }
 
@@ -878,6 +884,63 @@ impl RustWalletManager {
     pub async fn number_of_confirmations_fmt(&self, block_height: u32) -> Result<String, Error> {
         let number_of_confirmations = self.number_of_confirmations(block_height).await?;
         Ok(number_of_confirmations.thousands_int())
+    }
+
+    /// Get the receive address for the wallet, deduplicated and persistently cached
+    #[uniffi::method]
+    pub async fn get_receive_address(
+        &self,
+        force_new: bool,
+    ) -> Result<AddressInfoWithDerivation, Error> {
+        let _guard = self.address_generation_lock.lock().await;
+        let db = Database::global();
+
+        let txns = call!(self.actor.transactions()).await.unwrap_or_default();
+        let current_tx_count = txns.len();
+
+        if !force_new && let Ok(Some(cache)) = db.global_cache.get_receive_address(&self.id) {
+            let now = jiff::Timestamp::now().as_second() as u64;
+            let time_elapsed = now.saturating_sub(cache.generated_at) > (5 * 60);
+
+            let mut address_was_used = false;
+            if current_tx_count != cache.tx_count {
+                let cached_index = cache.address_info.index();
+                let is_cached_still_unused = call!(self.actor.is_address_unused(cached_index))
+                    .await
+                    .map_err_str(Error::NextAddressError)?;
+
+                // If cached address is no longer in the unused list, then it's used
+                address_was_used = !is_cached_still_unused;
+            }
+
+            if !time_elapsed && !address_was_used {
+                if current_tx_count != cache.tx_count {
+                    // Cache's tx_count is outdated, but the address was not used
+                    // Update the tx_count to skip the checks on subsequent UI updates
+                    let mut updated_cache = cache.clone();
+                    updated_cache.tx_count = current_tx_count;
+                    let _ = db.global_cache.set_receive_address(&self.id, updated_cache);
+                }
+
+                self.reconciler.send(Message::AddressGeneratedTime(cache.generated_at));
+                return Ok(cache.address_info);
+            }
+        }
+
+        let new_address =
+            call!(self.actor.next_address()).await.map_err_str(Error::NextAddressError)?;
+        let now = jiff::Timestamp::now().as_second() as u64;
+
+        let cache = crate::database::global_cache::ReceiveAddressCache {
+            address_info: new_address.clone(),
+            generated_at: now,
+            tx_count: current_tx_count,
+        };
+
+        let _ = db.global_cache.set_receive_address(&self.id, cache);
+        self.reconciler.send(Message::AddressGeneratedTime(now));
+
+        Ok(new_address)
     }
 
     /// Get the next address for the wallet
@@ -1384,6 +1447,7 @@ impl RustWalletManager {
             label_manager,
             initial_load_state: WalletLoadState::Loading,
             scanner: None,
+            address_generation_lock: Arc::new(AsyncMutex::new(())),
         }
     }
 }

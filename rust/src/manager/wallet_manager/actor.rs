@@ -734,6 +734,11 @@ impl WalletActor {
         Produces::ok(address)
     }
 
+    pub async fn is_address_unused(&mut self, index: u32) -> ActorResult<bool> {
+        let is_unused = self.wallet.is_address_unused(index)?;
+        Produces::ok(is_unused)
+    }
+
     #[into_actor_result]
     pub async fn check_node_connection(&mut self) {
         let node = Database::global().global_config.selected_node();

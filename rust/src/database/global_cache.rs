@@ -14,6 +14,9 @@ use crate::{
 use super::Error;
 use cove_types::redb::Json;
 
+use crate::wallet::metadata::WalletId;
+use cove_types::address::AddressInfoWithDerivation;
+
 pub const TABLE: TableDefinition<&'static str, Json<GlobalCacheData>> =
     TableDefinition::new("global_cache");
 
@@ -29,10 +32,18 @@ pub struct PricesKey;
 #[derive(Debug, Clone, Copy)]
 pub struct FeesKey;
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ReceiveAddressCache {
+    pub address_info: AddressInfoWithDerivation,
+    pub generated_at: u64,
+    pub tx_count: usize,
+}
+
 #[derive(Debug, Clone, derive_more::From, serde::Serialize, serde::Deserialize)]
 pub enum GlobalCacheData {
     Prices(PriceResponse),
     Fees(FeeResponse),
+    ReceiveAddress(ReceiveAddressCache),
 }
 
 #[derive(Debug, Clone)]
@@ -60,6 +71,43 @@ pub enum GlobalCacheTableError {
 }
 
 impl GlobalCacheTable {
+    pub fn get_receive_address(&self, id: &WalletId) -> Result<Option<ReceiveAddressCache>, Error> {
+        let read_txn = self.db.begin_read().map_err_str(Error::DatabaseAccess)?;
+        let table = read_txn.open_table(TABLE).map_err_str(Error::TableAccess)?;
+
+        let id_str: &str = id.as_ref();
+        let key = format!("receive_address_{}", id_str);
+
+        let value = table
+            .get(key.as_str())
+            .map_err_str(GlobalCacheTableError::Read)?
+            .map(|value| value.value());
+        if let Some(GlobalCacheData::ReceiveAddress(data)) = value {
+            Ok(Some(data))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn set_receive_address(
+        &self,
+        id: &WalletId,
+        data: ReceiveAddressCache,
+    ) -> Result<(), Error> {
+        let write_txn = self.db.begin_write().map_err_str(Error::DatabaseAccess)?;
+        {
+            let mut table = write_txn.open_table(TABLE).map_err_str(Error::TableAccess)?;
+            let id_str: &str = id.as_ref();
+            let key = format!("receive_address_{}", id_str);
+
+            table
+                .insert(key.as_str(), GlobalCacheData::ReceiveAddress(data))
+                .map_err_str(GlobalCacheTableError::Save)?;
+        }
+        write_txn.commit().map_err_str(Error::DatabaseAccess)?;
+        Ok(())
+    }
+
     pub fn get_prices(&self) -> Result<Option<PriceResponse>, Error> {
         let key = GlobalCacheKey::Prices(PricesKey);
         if let Some(GlobalCacheData::Prices(prices)) = self.get(key)? {

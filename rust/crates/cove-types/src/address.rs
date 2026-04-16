@@ -49,7 +49,9 @@ pub struct Address(BdkAddress);
 )]
 pub struct AddressInfo(BdkAddressInfo);
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Object)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, uniffi::Object, serde::Serialize, serde::Deserialize,
+)]
 pub struct AddressInfoWithDerivation {
     pub info: AddressInfo,
     pub derivation_path: Option<String>,
@@ -320,38 +322,38 @@ impl Address {
 
 #[uniffi::export]
 impl AddressInfo {
-    fn address_unformatted(&self) -> String {
+    pub fn address_unformatted(&self) -> String {
         self.address.to_string()
     }
 
-    fn address(&self) -> Address {
+    pub fn address(&self) -> Address {
         self.address.clone().into()
     }
 
-    fn index(&self) -> u32 {
+    pub fn index(&self) -> u32 {
         self.index
     }
 }
 
 #[uniffi::export]
 impl AddressInfoWithDerivation {
-    fn address_unformatted(&self) -> String {
+    pub fn address_unformatted(&self) -> String {
         self.info.address.to_string()
     }
 
-    fn address_spaced_out(&self) -> String {
+    pub fn address_spaced_out(&self) -> String {
         address_string_spaced_out(self.info.address.to_string())
     }
 
-    fn address(&self) -> Address {
+    pub fn address(&self) -> Address {
         self.info.address.clone().into()
     }
 
-    fn index(&self) -> u32 {
+    pub fn index(&self) -> u32 {
         self.info.index
     }
 
-    fn derivation_path(&self) -> Option<String> {
+    pub fn derivation_path(&self) -> Option<String> {
         self.derivation_path.clone()
     }
 }
@@ -404,6 +406,50 @@ impl<'de> Deserialize<'de> for Address {
             BdkAddress::from_str(&s).map_err(serde::de::Error::custom)?.assume_checked();
 
         Ok(Self(bdk_address))
+    }
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct AddressInfoShadow {
+    address: String,
+    index: u32,
+    keychain: String,
+}
+
+impl serde::Serialize for AddressInfo {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let shadow = AddressInfoShadow {
+            address: self.0.address.to_string(),
+            index: self.0.index,
+            keychain: match self.0.keychain {
+                bdk_wallet::KeychainKind::External => "External".to_string(),
+                bdk_wallet::KeychainKind::Internal => "Internal".to_string(),
+            },
+        };
+        shadow.serialize(serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for AddressInfo {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let shadow = AddressInfoShadow::deserialize(deserializer)?;
+        let address = BdkAddress::from_str(&shadow.address)
+            .map_err(serde::de::Error::custom)?
+            .assume_checked();
+
+        let keychain = match shadow.keychain.as_str() {
+            "External" => bdk_wallet::KeychainKind::External,
+            "Internal" => bdk_wallet::KeychainKind::Internal,
+            _ => return Err(serde::de::Error::custom("invalid keychain kind")),
+        };
+
+        Ok(AddressInfo(BdkAddressInfo { address, index: shadow.index, keychain }))
     }
 }
 

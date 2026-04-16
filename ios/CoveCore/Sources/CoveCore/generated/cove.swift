@@ -8771,6 +8771,11 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
     func getFeeOptions() async throws  -> FeeRateOptions
     
     /**
+     * Get the receive address for the wallet, deduplicated and persistently cached
+     */
+    func getReceiveAddress(forceNew: Bool) async throws  -> AddressInfoWithDerivation
+    
+    /**
      * gets the transactions for the wallet that are currently available
      */
     func getTransactions() async 
@@ -9384,6 +9389,26 @@ open func getFeeOptions()async throws  -> FeeRateOptions  {
             completeFunc: ffi_cove_rust_future_complete_u64,
             freeFunc: ffi_cove_rust_future_free_u64,
             liftFunc: FfiConverterTypeFeeRateOptions_lift,
+            errorHandler: FfiConverterTypeWalletManagerError_lift
+        )
+}
+    
+    /**
+     * Get the receive address for the wallet, deduplicated and persistently cached
+     */
+open func getReceiveAddress(forceNew: Bool)async throws  -> AddressInfoWithDerivation  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_rustwalletmanager_get_receive_address(
+                    self.uniffiCloneHandle(),
+                    FfiConverterBool.lower(forceNew)
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_u64,
+            completeFunc: ffi_cove_rust_future_complete_u64,
+            freeFunc: ffi_cove_rust_future_free_u64,
+            liftFunc: FfiConverterTypeAddressInfoWithDerivation_lift,
             errorHandler: FfiConverterTypeWalletManagerError_lift
         )
 }
@@ -31484,6 +31509,8 @@ public enum WalletManagerReconcileMessage {
     )
     case hotWalletKeyMissing(WalletId
     )
+    case addressGeneratedTime(UInt64
+    )
 
 
 
@@ -31543,6 +31570,9 @@ public struct FfiConverterTypeWalletManagerReconcileMessage: FfiConverterRustBuf
         )
         
         case 14: return .hotWalletKeyMissing(try FfiConverterTypeWalletId.read(from: &buf)
+        )
+        
+        case 15: return .addressGeneratedTime(try FfiConverterUInt64.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -31619,6 +31649,11 @@ public struct FfiConverterTypeWalletManagerReconcileMessage: FfiConverterRustBuf
         case let .hotWalletKeyMissing(v1):
             writeInt(&buf, Int32(14))
             FfiConverterTypeWalletId.write(v1, into: &buf)
+            
+        
+        case let .addressGeneratedTime(v1):
+            writeInt(&buf, Int32(15))
+            FfiConverterUInt64.write(v1, into: &buf)
             
         }
     }
@@ -36778,6 +36813,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_get_fee_options() != 42115) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustwalletmanager_get_receive_address() != 38137) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_get_transactions() != 27342) {

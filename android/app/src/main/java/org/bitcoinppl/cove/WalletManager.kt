@@ -3,6 +3,7 @@ package org.bitcoinppl.cove
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateMap
@@ -89,6 +90,13 @@ class WalletManager :
 
     val accentColor: Color
         get() = walletMetadata?.color?.toComposeColor() ?: Color.Blue
+
+    var addressGeneratedTime by mutableLongStateOf(0L)
+        private set
+
+    suspend fun getReceiveAddress(forceNew: Boolean = false): AddressInfoWithDerivation {
+        return rust.getReceiveAddress(forceNew)
+    }
 
     // private constructor - use companion factory methods
     private constructor(
@@ -300,6 +308,10 @@ class WalletManager :
 
             is WalletManagerReconcileMessage.HotWalletKeyMissing -> {
                 AppManager.getInstance().alertState = TaggedItem(AppAlertState.HotWalletKeyMissing(message.v1))
+            }
+
+            is WalletManagerReconcileMessage.AddressGeneratedTime -> {
+                addressGeneratedTime = message.v1.toLong() * 1000L
             }
         }
     }

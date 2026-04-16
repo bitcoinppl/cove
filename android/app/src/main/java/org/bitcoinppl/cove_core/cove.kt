@@ -1576,6 +1576,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_get_fee_options(
     ): Short
+    external fun uniffi_cove_checksum_method_rustwalletmanager_get_receive_address(
+    ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_get_transactions(
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_get_unsigned_transactions(
@@ -2665,6 +2667,8 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_method_rustwalletmanager_force_wallet_scan(`ptr`: Long,
     ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_get_fee_options(`ptr`: Long,
+    ): Long
+    external fun uniffi_cove_fn_method_rustwalletmanager_get_receive_address(`ptr`: Long,`forceNew`: Byte,
     ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_get_transactions(`ptr`: Long,
     ): Long
@@ -4317,6 +4321,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_get_fee_options() != 42115.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_get_receive_address() != 38137.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_get_transactions() != 27342.toShort()) {
@@ -20712,6 +20719,11 @@ public interface RustWalletManagerInterface {
     suspend fun `getFeeOptions`(): FeeRateOptions
     
     /**
+     * Get the receive address for the wallet, deduplicated and persistently cached
+     */
+    suspend fun `getReceiveAddress`(`forceNew`: kotlin.Boolean): AddressInfoWithDerivation
+    
+    /**
      * gets the transactions for the wallet that are currently available
      */
     suspend fun `getTransactions`()
@@ -21455,6 +21467,30 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
         { future -> UniffiLib.ffi_cove_rust_future_free_u64(future) },
         // lift function
         { FfiConverterTypeFeeRateOptions.lift(it) },
+        // Error FFI converter
+        WalletManagerException.ErrorHandler,
+    )
+    }
+
+    
+    /**
+     * Get the receive address for the wallet, deduplicated and persistently cached
+     */
+    @Throws(WalletManagerException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `getReceiveAddress`(`forceNew`: kotlin.Boolean) : AddressInfoWithDerivation {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_get_receive_address(
+                uniffiHandle,
+                FfiConverterBoolean.lower(`forceNew`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_u64(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_u64(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_u64(future) },
+        // lift function
+        { FfiConverterTypeAddressInfoWithDerivation.lift(it) },
         // Error FFI converter
         WalletManagerException.ErrorHandler,
     )
@@ -50874,6 +50910,15 @@ sealed class WalletManagerReconcileMessage: Disposable  {
         companion object
     }
     
+    data class AddressGeneratedTime(
+        val v1: kotlin.ULong) : WalletManagerReconcileMessage()
+        
+    {
+        
+
+        companion object
+    }
+    
 
     
     @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
@@ -50967,6 +51012,13 @@ sealed class WalletManagerReconcileMessage: Disposable  {
     )
                 
             }
+            is WalletManagerReconcileMessage.AddressGeneratedTime -> {
+                
+    Disposable.destroy(
+        this.v1
+    )
+                
+            }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
     
@@ -51021,6 +51073,9 @@ public object FfiConverterTypeWalletManagerReconcileMessage : FfiConverterRustBu
                 )
             14 -> WalletManagerReconcileMessage.HotWalletKeyMissing(
                 FfiConverterTypeWalletId.read(buf),
+                )
+            15 -> WalletManagerReconcileMessage.AddressGeneratedTime(
+                FfiConverterULong.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
@@ -51123,6 +51178,13 @@ public object FfiConverterTypeWalletManagerReconcileMessage : FfiConverterRustBu
                 + FfiConverterTypeWalletId.allocationSize(value.v1)
             )
         }
+        is WalletManagerReconcileMessage.AddressGeneratedTime -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterULong.allocationSize(value.v1)
+            )
+        }
     }
 
     override fun write(value: WalletManagerReconcileMessage, buf: ByteBuffer) {
@@ -51193,6 +51255,11 @@ public object FfiConverterTypeWalletManagerReconcileMessage : FfiConverterRustBu
             is WalletManagerReconcileMessage.HotWalletKeyMissing -> {
                 buf.putInt(14)
                 FfiConverterTypeWalletId.write(value.v1, buf)
+                Unit
+            }
+            is WalletManagerReconcileMessage.AddressGeneratedTime -> {
+                buf.putInt(15)
+                FfiConverterULong.write(value.v1, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }

@@ -20,6 +20,39 @@ struct ReceiveView: View {
     private let pasteboard = UIPasteboard.general
     @State private var addressInfo: AddressInfoWithDerivation?
 
+    @State private var timeRemainingString: String = ""
+    @State private var timerTask: Task<Void, Never>? = nil
+
+    func startTimer() {
+        timerTask?.cancel()
+        timerTask = Task { @MainActor in
+            while !Task.isCancelled {
+                guard let generatedTime = manager.addressGeneratedTime else {
+                    timeRemainingString = ""
+                    try? await Task.sleep(for: .seconds(1))
+                    continue
+                }
+
+                let elapsed = Date().timeIntervalSince(generatedTime)
+                let remaining = (5 * 60) - elapsed
+
+                if remaining > 0 {
+                    if remaining <= 60 {
+                        let seconds = Int(remaining)
+                        timeRemainingString = String(format: "Auto-refresh in %02d", seconds)
+                    } else {
+                        timeRemainingString = ""
+                    }
+                } else {
+                    timeRemainingString = "Refreshing..."
+                    nextAddressSync()
+                    break
+                }
+                try? await Task.sleep(for: .seconds(1))
+            }
+        }
+    }
+
     var addressLoaded: Bool {
         addressInfo != nil
     }
@@ -38,13 +71,16 @@ struct ReceiveView: View {
     }
 
     func nextAddressSync() {
-        Task { await nextAddress() }
+        Task { await nextAddress(forceNew: true) }
     }
 
-    func nextAddress() async {
+    func nextAddress(forceNew: Bool = false) async {
         do {
-            let addressInfo = try await manager.rust.nextAddress()
-            await MainActor.run { self.addressInfo = addressInfo }
+            let addressInfo = try await manager.getReceiveAddress(forceNew: forceNew)
+            await MainActor.run {
+                self.addressInfo = addressInfo
+                self.startTimer()
+            }
         } catch {
             Log.error("Unable to get next address: \(error)")
             dismiss()
@@ -110,7 +146,16 @@ struct ReceiveView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .padding(.horizontal)
 
-                Spacer(minLength: 32)
+                Spacer(minLength: 4)
+
+                if !timeRemainingString.isEmpty, addressLoaded {
+                    Text(timeRemainingString)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 2)
+                }
+
+                Spacer(minLength: 12)
 
                 // ----- Copy button -----
                 Button(action: copyText) {
@@ -133,6 +178,17 @@ struct ReceiveView: View {
         .background(Color(.systemBackground))
         .task {
             await nextAddress()
+        }
+        .onChange(of: manager.loadState) { _, _ in
+            Task { await nextAddress() }
+        }
+        .onChange(of: manager.addressGeneratedTime) { _, _ in
+            if addressLoaded {
+                startTimer()
+            }
+        }
+        .onDisappear {
+            timerTask?.cancel()
         }
     }
 }

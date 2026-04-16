@@ -30,6 +30,12 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
     /// scroll position for transaction list (persists across navigation)
     var scrolledTransactionId: String?
 
+    private(set) var addressGeneratedTime: Date? = nil
+
+    func getReceiveAddress(forceNew: Bool = false) async throws -> AddressInfoWithDerivation {
+        try await rust.getReceiveAddress(forceNew: forceNew)
+    }
+
     init(id: WalletId) throws {
         self.id = id
         let rust = try RustWalletManager(id: id)
@@ -220,6 +226,10 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
 
         case let .hotWalletKeyMissing(walletId):
             AppManager.shared.alertState = .init(.hotWalletKeyMissing(walletId: walletId))
+
+        case let .addressGeneratedTime(timestamp):
+            let date = Date(timeIntervalSince1970: TimeInterval(timestamp))
+            withAnimation { self.addressGeneratedTime = date }
         }
     }
 
