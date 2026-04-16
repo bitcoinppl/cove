@@ -183,6 +183,32 @@ impl WalletActor {
         Produces::ok(balance)
     }
 
+    /// Locked outpoints that must never be selected for spending.
+    ///
+    /// Used by automatic coin-selection paths via `TxBuilder::unspendable()`.
+    fn locked_outpoints(&self) -> Result<Vec<OutPoint>, Error> {
+        self.db
+            .locked_outpoints
+            .all_locked_outpoints()
+            .map_err(|e| Error::BuildTxError(e.to_string()))
+    }
+
+    /// Reject a manual UTXO selection that includes any locked outpoints.
+    fn reject_locked_outpoints(&self, utxos: &[OutPoint]) -> Result<(), Error> {
+        let locked = self
+            .db
+            .locked_outpoints
+            .find_locked(utxos)
+            .map_err(|e| Error::BuildTxError(e.to_string()))?;
+
+        if !locked.is_empty() {
+            let display: Vec<String> = locked.iter().map(|op| format!("{op}")).collect();
+            return Err(Error::LockedOutpointsSelected(display.join(", ")));
+        }
+
+        Ok(())
+    }
+
     // Build a transaction but don't advance the change address index
     #[into_actor_result]
     pub async fn build_ephemeral_drain_tx(
@@ -192,7 +218,9 @@ impl WalletActor {
     ) -> Result<Psbt, Error> {
         debug!("build_ephemeral_drain_tx for fee rate {}", fee.sat_per_vb());
         let script_pubkey = address.script_pubkey();
+        let locked = self.locked_outpoints()?;
         let mut tx_builder = self.wallet.bdk.build_tx();
+        tx_builder.unspendable(locked);
 
         tx_builder.drain_wallet().drain_to(script_pubkey).fee_rate(fee.into());
         let psbt = tx_builder.finish().map_err_str(Error::BuildTxError)?;
@@ -214,7 +242,9 @@ impl WalletActor {
         let script_pubkey = address.script_pubkey();
 
         let coin_selection = CoveDefaultCoinSelection::new(self.seed);
+        let locked = self.locked_outpoints()?;
         let mut tx_builder = self.wallet.bdk.build_tx().coin_selection(coin_selection);
+        tx_builder.unspendable(locked);
 
         tx_builder.ordering(TxOrdering::Untouched);
         tx_builder.add_recipient(script_pubkey, amount);
@@ -248,6 +278,7 @@ impl WalletActor {
         fee_rate: impl Into<BdkFeeRate>,
     ) -> Result<Psbt, Error> {
         debug!("build_manual_tx: {total_amount:?}");
+        self.reject_locked_outpoints(&utxos)?;
 
         let fee_rate = fee_rate.into();
         let send_amount = self.get_max_send_for_utxos(total_amount, &address, fee_rate, &utxos)?;
@@ -1006,6 +1037,7 @@ impl WalletActor {
     /// Get the max amount that can be sent for the given utxos
     /// The total amount max is the total value of the UTXOs.
     /// If the total amount is less than the UTXO total amount we will have a change output as well.
+    /// Validate locked outpoints and compute the max sendable amount for a manual UTXO set.
     fn get_max_send_for_utxos(
         &mut self,
         total_amount: Amount,
@@ -1013,6 +1045,7 @@ impl WalletActor {
         fee_rate: impl Into<BdkFeeRate>,
         utxos: &[bitcoin::OutPoint],
     ) -> Result<Amount, Error> {
+        self.reject_locked_outpoints(utxos)?;
         let fee_rate = fee_rate.into();
 
         let (utxo_total_amount, fee_estimate) = {

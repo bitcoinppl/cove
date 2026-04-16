@@ -50,15 +50,12 @@ impl LockedOutpointsTable {
     pub fn is_locked(&self, outpoint: impl Into<OutPointKey>) -> Result<bool, Error> {
         let key = outpoint.into();
         let table = self.read_table()?;
-        let locked = table
-            .get(key)
-            .map_err(|error| Error::Read(error.to_string()))?
-            .is_some();
+        let locked = table.get(key).map_err(|error| Error::Read(error.to_string()))?.is_some();
 
         Ok(locked)
     }
 
-    /// Return the set of all currently locked outpoints.
+    /// Return the set of all currently locked outpoints as `OutPointKey`s.
     pub fn all_locked(&self) -> Result<Vec<OutPointKey>, Error> {
         let table = self.read_table()?;
         let locked = table
@@ -68,6 +65,34 @@ impl LockedOutpointsTable {
             .map(|(key, _)| key.value())
             .collect();
 
+        Ok(locked)
+    }
+
+    /// Return the set of all currently locked outpoints as `bitcoin::OutPoint`s.
+    ///
+    /// Convenience wrapper used by PSBT builders to pass to `TxBuilder::unspendable()`.
+    pub fn all_locked_outpoints(&self) -> Result<Vec<bitcoin::OutPoint>, Error> {
+        let locked = self.all_locked()?;
+        Ok(locked
+            .into_iter()
+            .map(|key| bitcoin::OutPoint { txid: key.id(), vout: key.index })
+            .collect())
+    }
+
+    /// Return the subset of `outpoints` that are currently locked.
+    ///
+    /// Used to validate manual coin-selection: if the result is non-empty,
+    /// the caller should reject the selection before building the PSBT.
+    pub fn find_locked(
+        &self,
+        outpoints: &[bitcoin::OutPoint],
+    ) -> Result<Vec<bitcoin::OutPoint>, Error> {
+        let mut locked = Vec::new();
+        for op in outpoints {
+            if self.is_locked(*op)? {
+                locked.push(*op);
+            }
+        }
         Ok(locked)
     }
 
@@ -296,10 +321,7 @@ mod tests {
 
         let ops = vec![outpoint_key(0x01, 0), outpoint_key(0x01, 1)];
 
-        assert_eq!(
-            table.aggregate_lock_state(&ops).unwrap(),
-            Some(UtxoLockState::Unlocked)
-        );
+        assert_eq!(table.aggregate_lock_state(&ops).unwrap(), Some(UtxoLockState::Unlocked));
     }
 
     #[test]
@@ -310,10 +332,7 @@ mod tests {
         let ops = vec![outpoint_key(0x01, 0), outpoint_key(0x01, 1)];
         table.lock_all(&ops).unwrap();
 
-        assert_eq!(
-            table.aggregate_lock_state(&ops).unwrap(),
-            Some(UtxoLockState::Locked)
-        );
+        assert_eq!(table.aggregate_lock_state(&ops).unwrap(), Some(UtxoLockState::Locked));
     }
 
     #[test]
@@ -327,10 +346,7 @@ mod tests {
         table.lock(op1.clone()).unwrap();
         // op2 not locked
 
-        assert_eq!(
-            table.aggregate_lock_state(&[op1, op2]).unwrap(),
-            Some(UtxoLockState::Mixed)
-        );
+        assert_eq!(table.aggregate_lock_state(&[op1, op2]).unwrap(), Some(UtxoLockState::Mixed));
     }
 
     #[test]
@@ -439,5 +455,91 @@ mod tests {
         // should not error
         table.unlock(op.clone()).unwrap();
         assert!(!table.is_locked(op).unwrap());
+    }
+
+    // ── Tests for #658: PSBT-builder helpers ──────────────────────────
+
+    /// Helper to convert an `OutPointKey` to a `bitcoin::OutPoint`.
+    fn to_bitcoin_outpoint(key: &OutPointKey) -> bitcoin::OutPoint {
+        bitcoin::OutPoint { txid: key.id(), vout: key.index }
+    }
+
+    #[test]
+    fn all_locked_outpoints_empty_when_none_locked() {
+        let (db, _tmp) = WalletDataDb::new_test(WalletId::preview_new());
+        let table = &db.locked_outpoints;
+
+        let result = table.all_locked_outpoints().unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn all_locked_outpoints_returns_bitcoin_outpoints() {
+        let (db, _tmp) = WalletDataDb::new_test(WalletId::preview_new());
+        let table = &db.locked_outpoints;
+
+        // Use index 0 for both to avoid the known endian mismatch in
+        // OutPointKey::from_bytes (big-endian) vs as_bytes (native).
+        let op1 = outpoint_key(0x01, 0);
+        let op2 = outpoint_key(0x02, 0);
+        table.lock_all(&[op1.clone(), op2.clone()]).unwrap();
+
+        let locked = table.all_locked_outpoints().unwrap();
+        assert_eq!(locked.len(), 2);
+
+        // Round-trip: lock as OutPointKey, retrieve as bitcoin::OutPoint,
+        // then convert back to OutPointKey and verify equality.
+        let locked_keys: Vec<OutPointKey> = locked.iter().map(OutPointKey::from).collect();
+        assert!(locked_keys.contains(&op1));
+        assert!(locked_keys.contains(&op2));
+    }
+
+    #[test]
+    fn find_locked_returns_only_locked_subset() {
+        let (db, _tmp) = WalletDataDb::new_test(WalletId::preview_new());
+        let table = &db.locked_outpoints;
+
+        let op1 = outpoint_key(0x01, 0);
+        let op2 = outpoint_key(0x02, 1);
+        let op3 = outpoint_key(0x03, 2);
+
+        // Lock only op1 and op3
+        table.lock_all(&[op1.clone(), op3.clone()]).unwrap();
+
+        let selection =
+            vec![to_bitcoin_outpoint(&op1), to_bitcoin_outpoint(&op2), to_bitcoin_outpoint(&op3)];
+
+        let locked = table.find_locked(&selection).unwrap();
+        assert_eq!(locked.len(), 2);
+        assert!(locked.contains(&to_bitcoin_outpoint(&op1)));
+        assert!(locked.contains(&to_bitcoin_outpoint(&op3)));
+        // op2 is not locked, should not appear
+        assert!(!locked.contains(&to_bitcoin_outpoint(&op2)));
+    }
+
+    #[test]
+    fn find_locked_returns_empty_when_none_locked() {
+        let (db, _tmp) = WalletDataDb::new_test(WalletId::preview_new());
+        let table = &db.locked_outpoints;
+
+        let selection = vec![
+            to_bitcoin_outpoint(&outpoint_key(0x01, 0)),
+            to_bitcoin_outpoint(&outpoint_key(0x02, 1)),
+        ];
+
+        let locked = table.find_locked(&selection).unwrap();
+        assert!(locked.is_empty());
+    }
+
+    #[test]
+    fn find_locked_empty_selection_returns_empty() {
+        let (db, _tmp) = WalletDataDb::new_test(WalletId::preview_new());
+        let table = &db.locked_outpoints;
+
+        // Lock something, but pass empty selection
+        table.lock(outpoint_key(0x01, 0)).unwrap();
+
+        let locked = table.find_locked(&[]).unwrap();
+        assert!(locked.is_empty());
     }
 }

@@ -5273,6 +5273,112 @@ public func FfiConverterTypeLabelsTable_lower(_ value: LabelsTable) -> UInt64 {
 
 
 
+public protocol LockedOutpointsTableProtocol: AnyObject, Sendable {
+    
+}
+open class LockedOutpointsTable: LockedOutpointsTableProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_cove_fn_clone_lockedoutpointstable(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_lockedoutpointstable(handle, $0) }
+    }
+
+    
+
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLockedOutpointsTable: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = LockedOutpointsTable
+
+    public static func lift(_ handle: UInt64) throws -> LockedOutpointsTable {
+        return LockedOutpointsTable(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: LockedOutpointsTable) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LockedOutpointsTable {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: LockedOutpointsTable, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLockedOutpointsTable_lift(_ handle: UInt64) throws -> LockedOutpointsTable {
+    return try FfiConverterTypeLockedOutpointsTable.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLockedOutpointsTable_lower(_ value: LockedOutpointsTable) -> UInt64 {
+    return FfiConverterTypeLockedOutpointsTable.lower(value)
+}
+
+
+
+
+
+
 public protocol MigrationProtocol: AnyObject, Sendable {
     
     /**
@@ -29687,6 +29793,96 @@ public func FfiConverterTypeUrType_lower(_ value: UrType) -> RustBuffer {
 
 
 
+/**
+ * 3-state aggregate lock state for a set of outpoints.
+ *
+ * Used by the Transaction Details UI to render the correct bulk toggle:
+ * - `Unlocked`: none locked → tap locks all
+ * - `Mixed`: some locked → tap locks all remaining
+ * - `Locked`: all locked → tap unlocks all
+ */
+
+public enum UtxoLockState: Equatable, Hashable {
+    
+    /**
+     * No wallet-owned unspent outputs are locked.
+     */
+    case unlocked
+    /**
+     * Some (but not all) wallet-owned unspent outputs are locked.
+     */
+    case mixed
+    /**
+     * All wallet-owned unspent outputs are locked.
+     */
+    case locked
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension UtxoLockState: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeUtxoLockState: FfiConverterRustBuffer {
+    typealias SwiftType = UtxoLockState
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UtxoLockState {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .unlocked
+        
+        case 2: return .mixed
+        
+        case 3: return .locked
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: UtxoLockState, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .unlocked:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .mixed:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .locked:
+            writeInt(&buf, Int32(3))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUtxoLockState_lift(_ buf: RustBuffer) throws -> UtxoLockState {
+    return try FfiConverterTypeUtxoLockState.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUtxoLockState_lower(_ value: UtxoLockState) -> RustBuffer {
+    return FfiConverterTypeUtxoLockState.lower(value)
+}
+
+
+
 
 public enum VerificationFailureKind: Equatable, Hashable {
     
@@ -31055,6 +31251,8 @@ enum WalletManagerError: Swift.Error, Equatable, Hashable, Foundation.LocalizedE
     )
     case AddUtxosError(String
     )
+    case LockedOutpointsSelected(String
+    )
     case DatabaseCorruption(id: WalletId, error: String
     )
 
@@ -31172,7 +31370,10 @@ public struct FfiConverterTypeWalletManagerError: FfiConverterRustBuffer {
         case 27: return .AddUtxosError(
             try FfiConverterString.read(from: &buf)
             )
-        case 28: return .DatabaseCorruption(
+        case 28: return .LockedOutpointsSelected(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 29: return .DatabaseCorruption(
             id: try FfiConverterTypeWalletId.read(from: &buf), 
             error: try FfiConverterString.read(from: &buf)
             )
@@ -31321,8 +31522,13 @@ public struct FfiConverterTypeWalletManagerError: FfiConverterRustBuffer {
             FfiConverterString.write(v1, into: &buf)
             
         
-        case let .DatabaseCorruption(id,error):
+        case let .LockedOutpointsSelected(v1):
             writeInt(&buf, Int32(28))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .DatabaseCorruption(id,error):
+            writeInt(&buf, Int32(29))
             FfiConverterTypeWalletId.write(id, into: &buf)
             FfiConverterString.write(error, into: &buf)
             

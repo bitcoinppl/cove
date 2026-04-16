@@ -250,6 +250,9 @@ pub enum WalletManagerError {
     #[error("Unable to add UTXOs to PSBT: {0}")]
     AddUtxosError(String),
 
+    #[error("Cannot spend locked outpoints: {0}")]
+    LockedOutpointsSelected(String),
+
     #[error("Wallet database corrupted for {id}: {error}")]
     DatabaseCorruption { id: WalletId, error: String },
 }
