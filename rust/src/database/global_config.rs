@@ -37,7 +37,7 @@ pub enum GlobalConfigKey {
     DecoySelectedWalletId,
     LockedAt,
     OnboardingProgress,
-    CustomBlockExplorer,
+    CustomBlockExplorer(Network),
 }
 
 impl From<GlobalConfigKey> for &'static str {
@@ -60,7 +60,10 @@ impl From<GlobalConfigKey> for &'static str {
             GlobalConfigKey::DecoySelectedWalletId => "decoy_selected_wallet_id",
             GlobalConfigKey::LockedAt => "locked_at",
             GlobalConfigKey::OnboardingProgress => "onboarding_progress",
-            GlobalConfigKey::CustomBlockExplorer => "custom_block_explorer",
+            GlobalConfigKey::CustomBlockExplorer(Network::Bitcoin) => "custom_block_explorer_bitcoin",
+            GlobalConfigKey::CustomBlockExplorer(Network::Testnet) => "custom_block_explorer_testnet",
+            GlobalConfigKey::CustomBlockExplorer(Network::Testnet4) => "custom_block_explorer_testnet4",
+            GlobalConfigKey::CustomBlockExplorer(Network::Signet) => "custom_block_explorer_signet",
         }
     }
 }
@@ -118,8 +121,6 @@ impl GlobalConfigTable {
     string_config_accessor!(priv_hashed_pin_code, GlobalConfigKey::HashedPinCode, String);
 
     string_config_accessor!(pub locked_at, GlobalConfigKey::LockedAt, u64);
-
-    string_config_accessor!(pub custom_block_explorer, GlobalConfigKey::CustomBlockExplorer, String);
 
     // string_config_accessor!(
     //     pub auth_type,
@@ -304,23 +305,41 @@ impl GlobalConfigTable {
         self.set_priv_hashed_pin_code(hashed_pin_code)
     }
 
+    pub fn custom_block_explorer(&self, network: Network) -> Option<String> {
+        let key = GlobalConfigKey::CustomBlockExplorer(network);
+        let url = self.get(key).unwrap_or(None).unwrap_or_default();
+        if url.is_empty() {
+            None
+        } else {
+            Some(url)
+        }
+    }
+
     #[uniffi::method(name = "customBlockExplorer")]
-    pub fn _custom_block_explorer(&self) -> Option<String> {
-        self.custom_block_explorer().ok().filter(|s| !s.is_empty())
+    pub fn _custom_block_explorer(&self, network: Network) -> Option<String> {
+        self.custom_block_explorer(network)
     }
 
     #[uniffi::method(name = "setCustomBlockExplorer")]
-    pub fn _set_custom_block_explorer(&self, url: String) -> Result<()> {
+    pub fn _set_custom_block_explorer(&self, network: Network, url: String) -> Result<()> {
         if url.is_empty() {
-            return self.delete_custom_block_explorer();
+            return self._clear_custom_block_explorer(network);
         }
 
-        self.set_custom_block_explorer(url)
+        if !url.starts_with("https://") && !url.starts_with("http://") {
+            return Err(Error::from(GlobalConfigTableError::Save(
+                "Custom block explorer URL must start with http:// or https://".to_string(),
+            )));
+        }
+
+        let key = GlobalConfigKey::CustomBlockExplorer(network);
+        self.set(key, url)
     }
 
     #[uniffi::method(name = "clearCustomBlockExplorer")]
-    pub fn _clear_custom_block_explorer(&self) -> Result<()> {
-        self.delete_custom_block_explorer()
+    pub fn _clear_custom_block_explorer(&self, network: Network) -> Result<()> {
+        let key = GlobalConfigKey::CustomBlockExplorer(network);
+        self.delete(key)
     }
 
     pub(crate) fn get(&self, key: GlobalConfigKey) -> Result<Option<String>> {
