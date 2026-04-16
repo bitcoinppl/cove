@@ -5,12 +5,12 @@ use bdk_wallet::keys::bip39::Mnemonic;
 use bdk_wallet::keys::{
     DerivableKey as _, DescriptorSecretKey as BdkDescriptorSecretKey, ExtendedKey,
 };
-use bdk_wallet::{CreateParams, KeychainKind};
 use bdk_wallet::{
     keys::{DescriptorPublicKey as BdkDescriptorPublicKey, KeyMap},
     miniscript::descriptor::{DescriptorXKey, Wildcard},
     template::{Bip44, Bip49, Bip84, DescriptorTemplate as _},
 };
+use bdk_wallet::{CreateParams, KeychainKind};
 use bitcoin::bip32::Xpub;
 use cove_bdk::descriptor_ext::DescriptorExt as _;
 
@@ -34,6 +34,9 @@ pub enum DescriptorKeyParseError {
 
     #[error("unsupported descriptor type: {0:?}")]
     UnsupportedDescriptorType(DescriptorType),
+
+    #[error("multisig descriptors are not yet supported")]
+    MultisigNotSupported,
 
     #[error("no origin found")]
     NoOrigin,
@@ -73,9 +76,9 @@ impl Descriptors {
 
     pub fn new_from_tap_signer(derive: &DeriveInfo) -> Result<Self, Error> {
         use bitcoin::{
-            NetworkKind,
             bip32::{ChainCode, ChildNumber, Xpub},
             secp256k1::PublicKey,
+            NetworkKind,
         };
 
         // dept is always 3 and always the first (0) child, derives the standard derivation path
@@ -278,9 +281,7 @@ impl From<cove_bdk::descriptor_ext::Error> for DescriptorKeyParseError {
             E::NotMatchingPair => Self::UnsupportedDescriptor(
                 "descriptors are not a matching external/internal pair".to_string(),
             ),
-            E::MultisigNotSupported => {
-                Self::UnsupportedDescriptor("multisig descriptors are not yet supported".to_string())
-            }
+            E::MultisigNotSupported => Self::MultisigNotSupported,
         }
     }
 }
