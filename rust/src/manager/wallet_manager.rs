@@ -348,6 +348,14 @@ impl RustWalletManager {
     }
 
     #[uniffi::method]
+    pub fn utxo_lock_manager(&self) -> Result<Arc<crate::utxo_lock_manager::UtxoLockManager>, Error> {
+        let manager = crate::utxo_lock_manager::UtxoLockManager::new(self.id.clone())
+            .map_err(|e| Error::UnknownError(e.to_string()))?;
+
+        Ok(Arc::new(manager))
+    }
+
+    #[uniffi::method]
     pub fn convert_from_fiat_string(
         &self,
         fiat_amount: &str,

@@ -17,9 +17,11 @@ pub mod redb;
 pub mod transaction;
 pub mod unit;
 pub mod utxo;
+pub mod lock_state;
 
 // export the types
 pub use address_index::AddressIndex;
+pub use lock_state::LockState;
 pub use block_size::BlockSizeLast;
 pub use confirm::{ConfirmDetails, ConfirmDetailsError, InputOutputDetails, SplitOutput};
 

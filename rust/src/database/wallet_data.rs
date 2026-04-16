@@ -1,4 +1,5 @@
 pub mod label;
+pub mod locked_outpoints;
 
 use std::{
     path::{Path, PathBuf},
@@ -6,6 +7,7 @@ use std::{
 };
 
 use label::LabelsTable;
+use locked_outpoints::LockedOutpointsTable;
 use once_cell::sync::Lazy;
 use parking_lot::RwLock;
 use redb::{ReadOnlyTable, TableDefinition};
@@ -63,6 +65,7 @@ pub struct WalletDataDb {
     pub id: WalletId,
     pub db: Arc<redb::Database>,
     pub labels: LabelsTable,
+    pub locked_outpoints: LockedOutpointsTable,
 }
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
@@ -105,6 +108,7 @@ impl WalletDataDb {
             .open_table(TABLE)
             .map_err(|e| WalletDataError::TableAccess { id: id.clone(), error: e.to_string() })?;
         let labels = LabelsTable::new(db.clone(), &write_txn);
+        let locked_outpoints = LockedOutpointsTable::new(db.clone(), &write_txn);
 
         // commit the write transaction
         write_txn.commit().map_err(|e| WalletDataError::DatabaseAccess {
@@ -112,7 +116,7 @@ impl WalletDataDb {
             error: e.to_string(),
         })?;
 
-        Ok(Self { id, db, labels })
+        Ok(Self { id, db, labels, locked_outpoints })
     }
 
     pub fn get_scan_state(&self, address_type: WalletAddressType) -> Result<Option<ScanState>> {

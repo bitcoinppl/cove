@@ -58,7 +58,7 @@ impl redb::Value for OutPointKey {
         Self: 'a,
     {
         let id = data[..32].try_into().expect("id is 32 bytes");
-        let index = u32::from_be_bytes(data[32..36].try_into().expect("index is 4 bytes"));
+        let index = u32::from_ne_bytes(data[32..36].try_into().expect("index is 4 bytes"));
 
         Self { id, index }
     }
