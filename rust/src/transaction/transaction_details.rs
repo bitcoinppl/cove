@@ -390,6 +390,10 @@ impl TransactionDetails {
     pub fn transaction_url(&self) -> String {
         if let Some(custom_url) = Database::global().global_config.custom_block_explorer(self.network) {
             if !custom_url.is_empty() {
+                if custom_url.contains("{txid}") {
+                    return custom_url.replace("{txid}", &self.tx_id.0.to_string());
+                }
+                
                 let base = custom_url.trim_end_matches('/');
                 return format!("{base}/{}", self.tx_id.0);
             }

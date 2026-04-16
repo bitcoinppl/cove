@@ -316,14 +316,14 @@ impl GlobalConfigTable {
     }
 
     #[uniffi::method(name = "customBlockExplorer")]
-    pub fn _custom_block_explorer(&self, network: Network) -> Option<String> {
+    pub fn get_custom_block_explorer(&self, network: Network) -> Option<String> {
         self.custom_block_explorer(network)
     }
 
     #[uniffi::method(name = "setCustomBlockExplorer")]
-    pub fn _set_custom_block_explorer(&self, network: Network, url: String) -> Result<()> {
+    pub fn set_custom_block_explorer(&self, network: Network, url: String) -> Result<()> {
         if url.is_empty() {
-            return self._clear_custom_block_explorer(network);
+            return self.clear_custom_block_explorer(network);
         }
 
         if !url.starts_with("https://") && !url.starts_with("http://") {
@@ -337,7 +337,7 @@ impl GlobalConfigTable {
     }
 
     #[uniffi::method(name = "clearCustomBlockExplorer")]
-    pub fn _clear_custom_block_explorer(&self, network: Network) -> Result<()> {
+    pub fn clear_custom_block_explorer(&self, network: Network) -> Result<()> {
         let key = GlobalConfigKey::CustomBlockExplorer(network);
         self.delete(key)
     }
