@@ -60,9 +60,15 @@ impl From<GlobalConfigKey> for &'static str {
             GlobalConfigKey::DecoySelectedWalletId => "decoy_selected_wallet_id",
             GlobalConfigKey::LockedAt => "locked_at",
             GlobalConfigKey::OnboardingProgress => "onboarding_progress",
-            GlobalConfigKey::CustomBlockExplorer(Network::Bitcoin) => "custom_block_explorer_bitcoin",
-            GlobalConfigKey::CustomBlockExplorer(Network::Testnet) => "custom_block_explorer_testnet",
-            GlobalConfigKey::CustomBlockExplorer(Network::Testnet4) => "custom_block_explorer_testnet4",
+            GlobalConfigKey::CustomBlockExplorer(Network::Bitcoin) => {
+                "custom_block_explorer_bitcoin"
+            }
+            GlobalConfigKey::CustomBlockExplorer(Network::Testnet) => {
+                "custom_block_explorer_testnet"
+            }
+            GlobalConfigKey::CustomBlockExplorer(Network::Testnet4) => {
+                "custom_block_explorer_testnet4"
+            }
             GlobalConfigKey::CustomBlockExplorer(Network::Signet) => "custom_block_explorer_signet",
         }
     }
@@ -308,11 +314,7 @@ impl GlobalConfigTable {
     pub fn custom_block_explorer(&self, network: Network) -> Option<String> {
         let key = GlobalConfigKey::CustomBlockExplorer(network);
         let url = self.get(key).unwrap_or(None).unwrap_or_default();
-        if url.is_empty() {
-            None
-        } else {
-            Some(url)
-        }
+        if url.is_empty() { None } else { Some(url) }
     }
 
     #[uniffi::method(name = "customBlockExplorer")]
@@ -320,7 +322,7 @@ impl GlobalConfigTable {
         self.custom_block_explorer(network)
     }
 
-    #[uniffi::method(name = "setCustomBlockExplorer")]
+    #[uniffi::method]
     pub fn set_custom_block_explorer(&self, network: Network, url: String) -> Result<()> {
         if url.is_empty() {
             return self.clear_custom_block_explorer(network);
@@ -336,7 +338,7 @@ impl GlobalConfigTable {
         self.set(key, url)
     }
 
-    #[uniffi::method(name = "clearCustomBlockExplorer")]
+    #[uniffi::method]
     pub fn clear_custom_block_explorer(&self, network: Network) -> Result<()> {
         let key = GlobalConfigKey::CustomBlockExplorer(network);
         self.delete(key)

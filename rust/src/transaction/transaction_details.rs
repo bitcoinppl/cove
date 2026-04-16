@@ -388,18 +388,22 @@ impl TransactionDetails {
 
     #[uniffi::method]
     pub fn transaction_url(&self) -> String {
-        if let Some(custom_url) = Database::global().global_config.custom_block_explorer(self.network) {
-            if !custom_url.is_empty() {
-                if custom_url.contains("{txid}") {
-                    return custom_url.replace("{txid}", &self.tx_id.0.to_string());
-                }
-                
-                let base = custom_url.trim_end_matches('/');
-                return format!("{base}/{}", self.tx_id.0);
-            }
+        let custom_url = Database::global().global_config.custom_block_explorer(self.network);
+
+        let Some(url) = custom_url else {
+            return Self::default_transaction_url(self.network, &self.tx_id);
+        };
+
+        if url.is_empty() {
+            return Self::default_transaction_url(self.network, &self.tx_id);
         }
 
-        Self::default_transaction_url(self.network, &self.tx_id)
+        if url.contains("{txid}") {
+            return url.replace("{txid}", &self.tx_id.0.to_string());
+        }
+
+        let base = url.trim_end_matches('/');
+        format!("{base}/{}", self.tx_id.0)
     }
 
     #[uniffi::method]
