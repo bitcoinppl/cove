@@ -71,6 +71,21 @@ jobs:
       - name: Build Rust FFI and generate Kotlin bindings
         run: just build-android
 
+      - name: Verify Android bindings are up to date
+        shell: bash
+        run: |
+          bindings_path="android/app/src/main/java/org/bitcoinppl/cove_core"
+          status="$(git status --porcelain --untracked-files=all -- "$bindings_path")"
+
+          if [[ -n "$status" ]]; then
+            echo "Android bindings are out of date. Run 'just build-android' and commit the regenerated bindings."
+            echo
+            git status --short --untracked-files=all -- "$bindings_path"
+            echo
+            git diff --stat -- "$bindings_path" || true
+            exit 1
+          fi
+
       - name: Compile Android
         run: cd android && ./gradlew assembleDebug
 
@@ -89,6 +104,21 @@ jobs:
 
       - name: Build Rust FFI bindings
         run: just build-ios
+
+      - name: Verify iOS bindings are up to date
+        shell: bash
+        run: |
+          bindings_path="ios/CoveCore/Sources/CoveCore/generated"
+          status="$(git status --porcelain --untracked-files=all -- "$bindings_path")"
+
+          if [[ -n "$status" ]]; then
+            echo "iOS bindings are out of date. Run 'just build-ios' and commit the regenerated bindings."
+            echo
+            git status --short --untracked-files=all -- "$bindings_path"
+            echo
+            git diff --stat -- "$bindings_path" || true
+            exit 1
+          fi
 
       - name: Compile iOS
         run: cd ios && xcodebuild -scheme Cove -sdk iphonesimulator -arch arm64 build
