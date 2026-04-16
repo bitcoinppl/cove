@@ -65,6 +65,16 @@ impl FiatOnChangeHandler {
 
         let symbol = self.selected_currency.symbol();
 
+        // reject input containing alphabetic characters so pasted bitcoin
+        // addresses (and similar mixed-alphanumeric strings) aren't silently
+        // stripped down to just their digits and treated as a fiat amount. #314
+        if new_value.chars().any(|c| c.is_alphabetic()) {
+            return Ok(Changeset {
+                entering_fiat_amount: Some(old_value.to_string()),
+                ..Default::default()
+            });
+        }
+
         let number_of_decimal_points = new_value.chars().filter(|c| *c == '.').count();
 
         let new_value_raw =
@@ -169,5 +179,84 @@ impl FiatOnChangeHandler {
         }
 
         Ok(changes)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn handler() -> FiatOnChangeHandler {
+        let prices = PriceResponse {
+            time: 0,
+            fetched_at: 0,
+            usd: 100_000,
+            eur: 100_000,
+            gbp: 100_000,
+            cad: 100_000,
+            chf: 100_000,
+            aud: 100_000,
+            jpy: 100_000,
+        };
+        FiatOnChangeHandler::new(prices, FiatCurrency::Usd, None)
+    }
+
+    #[test]
+    fn pasting_bech32_bitcoin_address_is_rejected() {
+        let h = handler();
+        let old = "$100";
+        let new = "$100bc1qxyz0123456789abcdef";
+        let result = h.on_change(old, new).unwrap();
+        assert_eq!(result.entering_fiat_amount.as_deref(), Some("$100"));
+        assert!(result.btc_amount.is_none());
+        assert!(result.fiat_value.is_none());
+    }
+
+    #[test]
+    fn pasting_legacy_bitcoin_address_is_rejected() {
+        let h = handler();
+        let old = "$0";
+        let new = "1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2";
+        let result = h.on_change(old, new).unwrap();
+        assert_eq!(result.entering_fiat_amount.as_deref(), Some("$0"));
+        assert!(result.btc_amount.is_none());
+    }
+
+    #[test]
+    fn typing_a_single_letter_is_rejected() {
+        let h = handler();
+        let old = "$1";
+        let new = "$1a";
+        let result = h.on_change(old, new).unwrap();
+        assert_eq!(result.entering_fiat_amount.as_deref(), Some("$1"));
+        assert!(result.btc_amount.is_none());
+    }
+
+    #[test]
+    fn plain_digits_are_still_accepted() {
+        let h = handler();
+        let old = "$";
+        let new = "$123";
+        let result = h.on_change(old, new).unwrap();
+        assert!(result.fiat_value.is_some());
+        assert!(result.btc_amount.is_some());
+    }
+
+    #[test]
+    fn decimal_input_still_accepted() {
+        let h = handler();
+        let old = "$1";
+        let new = "$1.5";
+        let result = h.on_change(old, new).unwrap();
+        assert!(result.fiat_value.is_some());
+        assert!(result.btc_amount.is_some());
+    }
+
+    #[test]
+    fn empty_input_still_works() {
+        let h = handler();
+        let result = h.on_change("$100", "").unwrap();
+        assert_eq!(result.entering_fiat_amount.as_deref(), Some("$"));
+        assert_eq!(result.fiat_value, Some(0.0));
     }
 }
