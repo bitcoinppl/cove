@@ -56,6 +56,7 @@ import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
 import org.bitcoinppl.cove.views.ColumnMajorGrid
 import org.bitcoinppl.cove.views.RecoveryWordChip
 import org.bitcoinppl.cove_core.Mnemonic
+import org.bitcoinppl.cove_core.MnemonicException
 import org.bitcoinppl.cove_core.types.WalletId
 
 /**
@@ -69,7 +70,7 @@ fun SecretWordsScreen(
     walletId: WalletId,
 ) {
     var words by remember(walletId) { mutableStateOf<Mnemonic?>(null) }
-    var errorMessage by remember(walletId) { mutableStateOf<String?>(null) }
+    var loadError by remember(walletId) { mutableStateOf<RecoveryWordsLoadError?>(null) }
     var showSeedQrAlert by remember { mutableStateOf(false) }
     var showSeedQrSheet by remember { mutableStateOf(false) }
 
@@ -84,11 +85,15 @@ fun SecretWordsScreen(
         // close previous mnemonic before loading new one
         words?.close()
         words = null
+        loadError = null
 
         try {
             words = Mnemonic(id = walletId)
+        } catch (e: MnemonicException) {
+            loadError = RecoveryWordsLoadError.Mnemonic(e)
+            android.util.Log.e("SecretWordsScreen", "mnemonic error loading mnemonic", e)
         } catch (e: Exception) {
-            errorMessage = e.message ?: "failed to load recovery words"
+            loadError = RecoveryWordsLoadError.Generic(e.message ?: "Failed to load recovery words")
             android.util.Log.e("SecretWordsScreen", "error loading mnemonic", e)
         }
     }
@@ -133,12 +138,14 @@ fun SecretWordsScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { showSeedQrAlert = true }) {
-                        Icon(
-                            painter = painterResource(R.drawable.icon_qr_code),
-                            contentDescription = "Show Seed QR",
-                            tint = Color.White,
-                        )
+                    if (words != null) {
+                        IconButton(onClick = { showSeedQrAlert = true }) {
+                            Icon(
+                                painter = painterResource(R.drawable.icon_qr_code),
+                                contentDescription = "Show Seed QR",
+                                tint = Color.White,
+                            )
+                        }
                     }
                 },
             )
@@ -186,9 +193,15 @@ fun SecretWordsScreen(
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
-                            text = errorMessage ?: stringResource(R.string.label_loading),
-                            color = Color.White.copy(alpha = 0.7f),
+                            text = loadError?.message ?: stringResource(R.string.label_loading),
+                            color = Color.White.copy(alpha = 0.95f),
                             fontSize = 16.sp,
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(Color.Red.copy(alpha = 0.16f))
+                                    .padding(16.dp),
                         )
                     }
                 }
@@ -349,4 +362,29 @@ private fun SeedQrSheetContent(seedQrString: String) {
 
         Spacer(modifier = Modifier.height(32.dp))
     }
+}
+
+private sealed class RecoveryWordsLoadError {
+    data class Mnemonic(
+        val error: MnemonicException,
+    ) : RecoveryWordsLoadError()
+
+    data class Generic(
+        val detail: String,
+    ) : RecoveryWordsLoadError()
+
+    val message: String
+        get() =
+            when (this) {
+                is Mnemonic ->
+                    when (error) {
+                        is MnemonicException.NotAvailable ->
+                            "Recovery words are unavailable on this device for this wallet. This can happen after restoring to a new phone because secure hardware-backed key storage does not transfer. Restore this wallet from your saved recovery words before sending more BTC to it."
+                        is MnemonicException.GetWalletKeychain ->
+                            "Cove could not access this wallet's recovery words in secure storage right now."
+                        is MnemonicException.UnknownWord ->
+                            "Cove could not decode this wallet's recovery words."
+                    }
+                is Generic -> detail
+            }
 }

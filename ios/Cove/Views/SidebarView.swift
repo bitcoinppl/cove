@@ -83,11 +83,17 @@ struct SidebarView: View {
                                     .lineLimit(1)
                                     .minimumScaleFactor(0.80)
                                     .frame(maxWidth: .infinity, alignment: .leading)
+
+                                Spacer(minLength: 0)
                             }
                             .frame(maxWidth: .infinity)
                         }
                         .padding()
                         .background(Color.coveLightGray.opacity(0.06))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(Color.clear, lineWidth: 1)
+                        }
                         .cornerRadius(10)
                         .contentShape(
                             .contextMenuPreview,
