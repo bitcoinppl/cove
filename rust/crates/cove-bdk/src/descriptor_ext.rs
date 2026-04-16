@@ -141,6 +141,9 @@ impl DescriptorExt for Descriptor<DescriptorPublicKey> {
             D::Tr(pk) => pk.internal_key(),
             D::Sh(pk) => match pk.as_inner() {
                 ShInner::Wpkh(pk) => pk.as_inner(),
+                ShInner::Wsh(_) => {
+                    return Err(Error::MultisigNotSupported);
+                }
                 _ => {
                     return Err(Error::UnsupportedDescriptor(
                         "unsupported wallet bare descriptor not wpkh".to_string(),
@@ -299,5 +302,21 @@ mod tests {
         assert_eq!(lines.len(), 2, "mismatched pair should produce two lines");
         assert_eq!(lines[0], ext.to_normalized_string());
         assert_eq!(lines[1], int.to_normalized_string());
+    }
+
+    fn sh_wsh_sortedmulti_desc() -> ExtendedDescriptor {
+        "sh(wsh(sortedmulti(2,02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5,03774ae7f858a9411e5ef4246b70c65aac5649980be5c17891bbec17895da008cb)))"
+            .parse()
+            .expect("valid sh(wsh(sortedmulti)) descriptor")
+    }
+
+    #[test]
+    fn sh_wsh_sortedmulti_descriptor_public_key_returns_multisig_not_supported() {
+        let desc = sh_wsh_sortedmulti_desc();
+        let result = DescriptorExt::descriptor_public_key(&desc);
+        assert!(
+            matches!(result, Err(Error::MultisigNotSupported)),
+            "expected MultisigNotSupported, got {result:?}"
+        );
     }
 }
