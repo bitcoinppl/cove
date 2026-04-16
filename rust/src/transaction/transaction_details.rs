@@ -187,6 +187,16 @@ impl TransactionDetails {
 
         Some(sans_fee.into())
     }
+
+    /// Default block explorer URL for a given network and transaction ID.
+    fn default_transaction_url(network: Network, tx_id: &TxId) -> String {
+        match network {
+            Network::Bitcoin => format!("https://mempool.space/tx/{}", tx_id.0),
+            Network::Testnet => format!("https://mempool.space/testnet/tx/{}", tx_id.0),
+            Network::Testnet4 => format!("https://mempool.space/testnet4/tx/{}", tx_id.0),
+            Network::Signet => format!("https://mutinynet.com/tx/{}", tx_id.0),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Record)]
@@ -378,12 +388,14 @@ impl TransactionDetails {
 
     #[uniffi::method]
     pub fn transaction_url(&self) -> String {
-        match self.network {
-            Network::Bitcoin => format!("https://mempool.space/tx/{}", self.tx_id.0),
-            Network::Testnet => format!("https://mempool.space/testnet/tx/{}", self.tx_id.0),
-            Network::Testnet4 => format!("https://mempool.space/testnet4/tx/{}", self.tx_id.0),
-            Network::Signet => format!("https://mutinynet.com/tx/{}", self.tx_id.0),
+        if let Ok(custom_url) = Database::global().global_config.custom_block_explorer() {
+            if !custom_url.is_empty() {
+                let base = custom_url.trim_end_matches('/');
+                return format!("{base}/{}", self.tx_id.0);
+            }
         }
+
+        Self::default_transaction_url(self.network, &self.tx_id)
     }
 
     #[uniffi::method]

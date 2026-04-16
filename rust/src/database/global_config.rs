@@ -304,6 +304,25 @@ impl GlobalConfigTable {
         self.set_priv_hashed_pin_code(hashed_pin_code)
     }
 
+    #[uniffi::method(name = "customBlockExplorer")]
+    pub fn _custom_block_explorer(&self) -> Option<String> {
+        self.custom_block_explorer().ok().filter(|s| !s.is_empty())
+    }
+
+    #[uniffi::method(name = "setCustomBlockExplorer")]
+    pub fn _set_custom_block_explorer(&self, url: String) -> Result<()> {
+        if url.is_empty() {
+            return self.delete_custom_block_explorer();
+        }
+
+        self.set_custom_block_explorer(url)
+    }
+
+    #[uniffi::method(name = "clearCustomBlockExplorer")]
+    pub fn _clear_custom_block_explorer(&self) -> Result<()> {
+        self.delete_custom_block_explorer()
+    }
+
     pub(crate) fn get(&self, key: GlobalConfigKey) -> Result<Option<String>> {
         let read_txn =
             self.db.begin_read().map_err(|error| Error::DatabaseAccess(error.to_string()))?;
