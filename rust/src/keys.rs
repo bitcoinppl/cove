@@ -5,12 +5,12 @@ use bdk_wallet::keys::bip39::Mnemonic;
 use bdk_wallet::keys::{
     DerivableKey as _, DescriptorSecretKey as BdkDescriptorSecretKey, ExtendedKey,
 };
+use bdk_wallet::{CreateParams, KeychainKind};
 use bdk_wallet::{
     keys::{DescriptorPublicKey as BdkDescriptorPublicKey, KeyMap},
     miniscript::descriptor::{DescriptorXKey, Wildcard},
     template::{Bip44, Bip49, Bip84, DescriptorTemplate as _},
 };
-use bdk_wallet::{CreateParams, KeychainKind};
 use bitcoin::bip32::Xpub;
 use cove_bdk::descriptor_ext::DescriptorExt as _;
 
@@ -76,9 +76,9 @@ impl Descriptors {
 
     pub fn new_from_tap_signer(derive: &DeriveInfo) -> Result<Self, Error> {
         use bitcoin::{
+            NetworkKind,
             bip32::{ChainCode, ChildNumber, Xpub},
             secp256k1::PublicKey,
-            NetworkKind,
         };
 
         // dept is always 3 and always the first (0) child, derives the standard derivation path
