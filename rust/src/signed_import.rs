@@ -50,22 +50,37 @@ pub enum SignedImportError {
 
     #[error("Unrecognized format: input is neither a valid PSBT nor transaction")]
     UnrecognizedFormat,
+
+    #[error("PSBT has no signatures — sign it with your hardware wallet before importing")]
+    NotSigned,
 }
 
 type Error = SignedImportError;
 type Result<T, E = Error> = std::result::Result<T, E>;
+
+pub fn psbt_has_signatures(psbt: &Psbt) -> bool {
+    psbt.0.inputs.iter().any(|input| {
+        !input.partial_sigs.is_empty()
+            || input.tap_key_sig.is_some()
+            || !input.tap_script_sigs.is_empty()
+            || input.final_script_sig.as_ref().is_some_and(|s| !s.is_empty())
+            || input.final_script_witness.as_ref().is_some_and(|w| !w.is_empty())
+    })
+}
 
 impl SignedTransactionOrPsbt {
     /// Try to parse from a string input (base64 or hex encoded)
     pub fn try_parse(input: &str) -> Result<Self> {
         let input = input.trim();
 
-        // try PSBT parsing first (more specific detection)
-        if let Ok(psbt) = Self::try_parse_psbt_string(input) {
-            return Ok(psbt);
+        // try PSBT first, propagate NotSigned so caller gets a clear error
+        match Self::try_parse_psbt_string(input) {
+            Ok(psbt) => return Ok(psbt),
+            Err(Error::NotSigned) => return Err(Error::NotSigned),
+            Err(_) => {}
         }
 
-        // fall back to raw transaction parsing
+        // fall back to transaction parsing
         if let Ok(txn) = BitcoinTransaction::try_from_str(input) {
             return Ok(Self::Transaction(Arc::new(txn)));
         }
@@ -78,6 +93,9 @@ impl SignedTransactionOrPsbt {
         // check for PSBT magic bytes first
         if data.len() >= PSBT_MAGIC.len() && &data[..PSBT_MAGIC.len()] == PSBT_MAGIC {
             let psbt = Psbt::try_new(data.to_vec()).map_err_str(Error::PsbtParseError)?;
+            if !psbt_has_signatures(&psbt) {
+                return Err(Error::NotSigned);
+            }
             return Ok(Self::SignedPsbt(Arc::new(psbt)));
         }
 
@@ -99,9 +117,10 @@ impl SignedTransactionOrPsbt {
         match nfc_message {
             NfcMessage::String(string) => Self::try_parse(string),
             NfcMessage::Data(data) => Self::try_from_bytes(data),
-            NfcMessage::Both(string, data) => {
-                Self::try_from_bytes(data).or_else(|_| Self::try_parse(string))
-            }
+            NfcMessage::Both(string, data) => Self::try_from_bytes(data).or_else(|e| match e {
+                Error::NotSigned => Err(Error::NotSigned),
+                _ => Self::try_parse(string),
+            }),
         }
     }
 
@@ -112,6 +131,9 @@ impl SignedTransactionOrPsbt {
             let bytes = BASE64_STANDARD.decode(input).map_err_str(Error::Base64DecodeError)?;
 
             let psbt = Psbt::try_new(bytes).map_err_str(Error::PsbtParseError)?;
+            if !psbt_has_signatures(&psbt) {
+                return Err(Error::NotSigned);
+            }
 
             return Ok(Self::SignedPsbt(Arc::new(psbt)));
         }
@@ -122,6 +144,9 @@ impl SignedTransactionOrPsbt {
             let bytes = hex::decode(input).map_err_str(Error::HexDecodeError)?;
 
             let psbt = Psbt::try_new(bytes).map_err_str(Error::PsbtParseError)?;
+            if !psbt_has_signatures(&psbt) {
+                return Err(Error::NotSigned);
+            }
 
             return Ok(Self::SignedPsbt(Arc::new(psbt)));
         }
@@ -219,49 +244,51 @@ impl SignedTransactionOrPsbt {
 mod tests {
     use super::*;
 
-    // Sample PSBT from cove-ur tests (hex encoded)
+    // unsigned PSBT two inputs, no signatures
     const TEST_PSBT_HEX: &str = "70736274ff01009a020000000258e87a21b56daf0c23be8e7070456c336f7cbaa5c8757924f545887bb2abdd750000000000ffffffff838d0427d0ec650a68aa46bb0b098aea4422c071b2ca78352a077959d07cea1d0100000000ffffffff0270aaf00800000000160014d85c2b71d0060b09c9886aeb815e50991dda124d00e1f5050000000016001400aea9a2e5f0f876a588df5546e8742d1d87008f000000000000000000";
 
+    // inject a dummy witness push so psbt_has_signatures returns true
+    fn make_signed_psbt_bytes() -> Vec<u8> {
+        let mut psbt = Psbt::try_new(hex::decode(TEST_PSBT_HEX).unwrap()).unwrap();
+        for input in &mut psbt.0.inputs {
+            let mut witness = bitcoin::Witness::new();
+            witness.push([0x01u8]);
+            input.final_script_witness = Some(witness);
+        }
+        psbt.0.serialize()
+    }
+
     #[test]
-    fn test_parse_psbt_hex() {
-        let result = SignedTransactionOrPsbt::try_parse(TEST_PSBT_HEX);
-        assert!(result.is_ok(), "Failed to parse hex PSBT: {:?}", result);
+    fn test_parse_signed_psbt_hex() {
+        let result = SignedTransactionOrPsbt::try_parse(&hex::encode(make_signed_psbt_bytes()));
+        assert!(result.is_ok(), "{result:?}");
         assert!(result.unwrap().is_psbt());
     }
 
     #[test]
-    fn test_parse_psbt_base64() {
-        let bytes = hex::decode(TEST_PSBT_HEX).unwrap();
-        let base64 = BASE64_STANDARD.encode(&bytes);
-
+    fn test_parse_signed_psbt_base64() {
+        let base64 = BASE64_STANDARD.encode(make_signed_psbt_bytes());
         let result = SignedTransactionOrPsbt::try_parse(&base64);
-        assert!(result.is_ok(), "Failed to parse base64 PSBT: {:?}", result);
+        assert!(result.is_ok(), "{result:?}");
         assert!(result.unwrap().is_psbt());
     }
 
     #[test]
-    fn test_parse_psbt_bytes() {
-        let bytes = hex::decode(TEST_PSBT_HEX).unwrap();
-
-        let result = SignedTransactionOrPsbt::try_from_bytes(&bytes);
-        assert!(result.is_ok(), "Failed to parse PSBT bytes: {:?}", result);
+    fn test_parse_signed_psbt_bytes() {
+        let result = SignedTransactionOrPsbt::try_from_bytes(&make_signed_psbt_bytes());
+        assert!(result.is_ok(), "{result:?}");
         assert!(result.unwrap().is_psbt());
     }
 
     #[test]
-    fn test_tx_id_from_psbt() {
-        let bytes = hex::decode(TEST_PSBT_HEX).unwrap();
-        let parsed = SignedTransactionOrPsbt::try_from_bytes(&bytes).unwrap();
-
-        // verify tx_id can be retrieved
+    fn test_tx_id_from_signed_psbt() {
+        let parsed = SignedTransactionOrPsbt::try_from_bytes(&make_signed_psbt_bytes()).unwrap();
         let _tx_id = parsed.tx_id();
     }
 
     #[test]
     fn test_psbt_accessors() {
-        let bytes = hex::decode(TEST_PSBT_HEX).unwrap();
-        let parsed = SignedTransactionOrPsbt::try_from_bytes(&bytes).unwrap();
-
+        let parsed = SignedTransactionOrPsbt::try_from_bytes(&make_signed_psbt_bytes()).unwrap();
         assert!(parsed.is_psbt());
         assert!(!parsed.is_transaction());
         assert!(parsed.psbt().is_some());
@@ -269,23 +296,41 @@ mod tests {
     }
 
     #[test]
+    fn test_whitespace_handling() {
+        let padded = format!("  {}  ", hex::encode(make_signed_psbt_bytes()));
+        let result = SignedTransactionOrPsbt::try_parse(&padded);
+        assert!(result.is_ok(), "{result:?}");
+        assert!(result.unwrap().is_psbt());
+    }
+
+    #[test]
+    fn test_unsigned_psbt_hex_returns_not_signed() {
+        let result = SignedTransactionOrPsbt::try_parse(TEST_PSBT_HEX);
+        assert!(matches!(result, Err(SignedImportError::NotSigned)), "{result:?}");
+    }
+
+    #[test]
+    fn test_unsigned_psbt_base64_returns_not_signed() {
+        let base64 = BASE64_STANDARD.encode(hex::decode(TEST_PSBT_HEX).unwrap());
+        let result = SignedTransactionOrPsbt::try_parse(&base64);
+        assert!(matches!(result, Err(SignedImportError::NotSigned)), "{result:?}");
+    }
+
+    #[test]
+    fn test_unsigned_psbt_bytes_returns_not_signed() {
+        let bytes = hex::decode(TEST_PSBT_HEX).unwrap();
+        let result = SignedTransactionOrPsbt::try_from_bytes(&bytes);
+        assert!(matches!(result, Err(SignedImportError::NotSigned)), "{result:?}");
+    }
+
+    #[test]
     fn test_invalid_input() {
         let result = SignedTransactionOrPsbt::try_parse("invalid data");
-        assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), SignedImportError::UnrecognizedFormat));
+        assert!(matches!(result, Err(SignedImportError::UnrecognizedFormat)));
     }
 
     #[test]
     fn test_empty_input() {
-        let result = SignedTransactionOrPsbt::try_parse("");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_whitespace_handling() {
-        let psbt_with_whitespace = format!("  {}  ", TEST_PSBT_HEX);
-        let result = SignedTransactionOrPsbt::try_parse(&psbt_with_whitespace);
-        assert!(result.is_ok(), "Should handle whitespace: {:?}", result);
-        assert!(result.unwrap().is_psbt());
+        assert!(SignedTransactionOrPsbt::try_parse("").is_err());
     }
 }
