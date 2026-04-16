@@ -70,29 +70,28 @@ impl HistoricalPriceService {
             .map(|(block_number, _)| *block_number)
             .collect::<Vec<_>>();
 
-        let fetched_prices: HashMap<u32, HistoricalPrice> =
-            stream::iter(blocks_to_fetch.into_iter())
-                .map(|block_number| {
-                    let timestamp = *block_number_timestamp
-                        .get(&block_number)
-                        .expect("bug in creating block_number_timestamp");
+        let fetched_prices: HashMap<u32, HistoricalPrice> = stream::iter(blocks_to_fetch)
+            .map(|block_number| {
+                let timestamp = *block_number_timestamp
+                    .get(&block_number)
+                    .expect("bug in creating block_number_timestamp");
 
-                    async move {
-                        match self
-                            .get_and_save_price_for_timestamp(network, block_number, timestamp)
-                            .await
-                        {
-                            Ok(price) => Some((block_number, price)),
-                            Err(_) => None,
-                        }
+                async move {
+                    match self
+                        .get_and_save_price_for_timestamp(network, block_number, timestamp)
+                        .await
+                    {
+                        Ok(price) => Some((block_number, price)),
+                        Err(_) => None,
                     }
-                })
-                .buffer_unordered(4)
-                .collect::<Vec<_>>()
-                .await
-                .into_iter()
-                .flatten()
-                .collect();
+                }
+            })
+            .buffer_unordered(4)
+            .collect::<Vec<_>>()
+            .await
+            .into_iter()
+            .flatten()
+            .collect();
 
         let txns_with_prices = txns
             .iter()
