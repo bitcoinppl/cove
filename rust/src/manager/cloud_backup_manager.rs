@@ -46,6 +46,7 @@ use self::wallets::{
 use super::cloud_backup_detail_manager::{
     CloudOnlyOperation, CloudOnlyState, RecoveryState, SyncState, VerificationState,
 };
+use super::connectivity_manager::CONNECTIVITY_MANAGER;
 
 type LocalWalletSecret = crate::backup::model::WalletSecret;
 
@@ -81,14 +82,6 @@ pub enum CloudBackupPromptIntent {
     VerificationPrompt,
 }
 
-#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, Default, uniffi::Enum)]
-pub enum CloudConnectivityHint {
-    Online,
-    Offline,
-    #[default]
-    Unknown,
-}
-
 #[derive(Debug, Clone, uniffi::Enum)]
 pub enum CloudBackupManagerAction {
     EnableCloudBackup,
@@ -116,7 +109,6 @@ pub enum CloudBackupManagerAction {
 #[derive(Debug, Clone, uniffi::Enum)]
 pub enum CloudBackupReconcileMessage {
     Status(CloudBackupStatus),
-    ConnectivityHint(CloudConnectivityHint),
     SyncHealth(CloudSyncHealth),
     Progress(Option<CloudBackupProgress>),
     RestoreProgress(Option<CloudBackupRestoreProgress>),
@@ -261,7 +253,6 @@ pub enum VerificationFailureKind {
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct CloudBackupState {
     pub status: CloudBackupStatus,
-    pub connectivity_hint: CloudConnectivityHint,
     pub sync_health: CloudSyncHealth,
     pub prompt_intent: CloudBackupPromptIntent,
     pub progress: Option<CloudBackupProgress>,
@@ -283,7 +274,6 @@ impl Default for CloudBackupState {
     fn default() -> Self {
         Self {
             status: CloudBackupStatus::Disabled,
-            connectivity_hint: CloudConnectivityHint::Unknown,
             sync_health: CloudSyncHealth::NoFiles,
             prompt_intent: CloudBackupPromptIntent::None,
             progress: None,
@@ -670,12 +660,8 @@ impl RustCloudBackupManager {
         matches!(issue, CloudStorageIssue::Offline | CloudStorageIssue::Unavailable)
     }
 
-    pub(crate) fn current_connectivity_hint(&self) -> CloudConnectivityHint {
-        self.state.read().connectivity_hint
-    }
-
-    pub(crate) fn is_definitely_offline(&self) -> bool {
-        matches!(self.current_connectivity_hint(), CloudConnectivityHint::Offline)
+    pub(crate) fn is_offline(&self) -> bool {
+        !CONNECTIVITY_MANAGER.is_connected()
     }
 
     fn offline_message_for_step(step: BlockingCloudStep) -> &'static str {
@@ -712,7 +698,7 @@ impl RustCloudBackupManager {
         &self,
         step: BlockingCloudStep,
     ) -> Result<(), CloudBackupError> {
-        if self.is_definitely_offline() {
+        if self.is_offline() {
             return Err(self.offline_error_for_step(step));
         }
 
@@ -737,13 +723,16 @@ impl RustCloudBackupManager {
 
         let (sender, receiver) = flume::bounded(1000);
 
-        Arc::new_cyclic(|manager| Self {
+        let manager = Arc::new_cyclic(|manager| Self {
             state: Arc::new(RwLock::new(CloudBackupState::default())),
             reconciler: sender,
             reconcile_receiver: Arc::new(receiver),
             prompt_state: Arc::new(parking_lot::Mutex::new(CloudBackupPromptState::default())),
             runtime: spawn_actor(CloudBackupRuntimeActor::new(manager.clone())),
-        })
+        });
+
+        manager.start_connectivity_listener();
+        manager
     }
 
     fn verification_metadata_for(
@@ -816,14 +805,31 @@ impl RustCloudBackupManager {
         self.refresh_prompt_intent();
     }
 
-    fn set_connectivity_hint(&self, connectivity_hint: CloudConnectivityHint) -> bool {
-        let changed = self.current_connectivity_hint() != connectivity_hint;
-        self.set_and_notify_field(
-            connectivity_hint,
-            |state| &mut state.connectivity_hint,
-            Message::ConnectivityHint,
-        );
-        changed
+    fn start_connectivity_listener(self: &Arc<Self>) {
+        // use a weak reference so the listener thread exits when the manager is dropped
+        let manager = Arc::downgrade(self);
+        let receiver = CONNECTIVITY_MANAGER.subscribe();
+
+        std::thread::spawn(move || {
+            while let Ok(connected) = receiver.recv() {
+                let Some(manager) = manager.upgrade() else {
+                    break;
+                };
+
+                manager.handle_connectivity_change(connected);
+            }
+        });
+    }
+
+    pub(crate) fn handle_connectivity_change(&self, connected: bool) {
+        if !connected {
+            return;
+        }
+
+        self.clear_sync_error_if_no_failed_wallet_uploads();
+        send!(self.runtime.resume_wallet_uploads_from_persisted_state());
+        send!(self.runtime.wake_pending_upload_verifier());
+        self.start_pending_upload_verification_loop();
     }
 
     pub(crate) fn set_sync_health(&self, sync_health: CloudSyncHealth) {
@@ -1094,7 +1100,7 @@ impl RustCloudBackupManager {
             return;
         }
 
-        if self.is_definitely_offline() {
+        if self.is_offline() {
             return;
         }
 
@@ -1458,19 +1464,6 @@ impl RustCloudBackupManager {
         self.sync_persisted_state();
         send!(self.runtime.resume_wallet_uploads_from_persisted_state());
         self.start_pending_upload_verification_loop();
-    }
-
-    pub fn update_connectivity_hint(&self, hint: CloudConnectivityHint) {
-        if !self.set_connectivity_hint(hint) {
-            return;
-        }
-
-        if matches!(hint, CloudConnectivityHint::Online) {
-            self.clear_sync_error_if_no_failed_wallet_uploads();
-            send!(self.runtime.resume_wallet_uploads_from_persisted_state());
-            send!(self.runtime.wake_pending_upload_verifier());
-            self.start_pending_upload_verification_loop();
-        }
     }
 
     /// Reset local cloud backup state (keychain + DB) without touching iCloud

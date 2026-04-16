@@ -40,10 +40,6 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
         state.promptIntent
     }
 
-    var connectivityHint: CloudConnectivityHint {
-        state.connectivityHint
-    }
-
     var syncHealth: CloudSyncHealth {
         state.syncHealth
     }
@@ -144,8 +140,6 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
         switch message {
         case let .status(status):
             state.status = status
-        case let .connectivityHint(connectivityHint):
-            state.connectivityHint = connectivityHint
         case let .syncHealth(syncHealth):
             state.syncHealth = syncHealth
         case let .promptIntent(promptIntent):

@@ -746,6 +746,9 @@ internal interface UniffiCallbackInterfaceCoinControlManagerReconcilerMethod0 : 
 internal interface UniffiCallbackInterfaceCoinControlManagerReconcilerMethod1 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`messages`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
 }
+internal interface UniffiCallbackInterfaceConnectivityManagerReconcilerMethod0 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`message`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
+}
 internal interface UniffiCallbackInterfaceImportWalletManagerReconcilerMethod0 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`message`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
 }
@@ -858,6 +861,25 @@ internal open class UniffiVTableCallbackInterfaceCoinControlManagerReconciler(
         `uniffiClone` = other.`uniffiClone`
         `reconcile` = other.`reconcile`
         `reconcileMany` = other.`reconcileMany`
+    }
+
+}
+@Structure.FieldOrder("uniffiFree", "uniffiClone", "reconcile")
+internal open class UniffiVTableCallbackInterfaceConnectivityManagerReconciler(
+    @JvmField internal var `uniffiFree`: UniffiCallbackInterfaceFree? = null,
+    @JvmField internal var `uniffiClone`: UniffiCallbackInterfaceClone? = null,
+    @JvmField internal var `reconcile`: UniffiCallbackInterfaceConnectivityManagerReconcilerMethod0? = null,
+) : Structure() {
+    class UniffiByValue(
+        `uniffiFree`: UniffiCallbackInterfaceFree? = null,
+        `uniffiClone`: UniffiCallbackInterfaceClone? = null,
+        `reconcile`: UniffiCallbackInterfaceConnectivityManagerReconcilerMethod0? = null,
+    ): UniffiVTableCallbackInterfaceConnectivityManagerReconciler(`uniffiFree`,`uniffiClone`,`reconcile`,), Structure.ByValue
+
+   internal fun uniffiSetValue(other: UniffiVTableCallbackInterfaceConnectivityManagerReconciler) {
+        `uniffiFree` = other.`uniffiFree`
+        `uniffiClone` = other.`uniffiClone`
+        `reconcile` = other.`reconcile`
     }
 
 }
@@ -1414,8 +1436,6 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rustcloudbackupmanager_sync_persisted_state(
     ): Short
-    external fun uniffi_cove_checksum_method_rustcloudbackupmanager_update_connectivity_hint(
-    ): Short
     external fun uniffi_cove_checksum_method_rustcloudbackupmanager_verify_backup_integrity(
     ): Short
     external fun uniffi_cove_checksum_method_rustcoincontrolmanager_button_presentation(
@@ -1433,6 +1453,14 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_checksum_method_rustcoincontrolmanager_unit(
     ): Short
     external fun uniffi_cove_checksum_method_rustcoincontrolmanager_utxos(
+    ): Short
+    external fun uniffi_cove_checksum_method_rustconnectivitymanager_is_connected(
+    ): Short
+    external fun uniffi_cove_checksum_method_rustconnectivitymanager_listen_for_updates(
+    ): Short
+    external fun uniffi_cove_checksum_method_rustconnectivitymanager_set_connection_state(
+    ): Short
+    external fun uniffi_cove_checksum_method_rustconnectivitymanager_state(
     ): Short
     external fun uniffi_cove_checksum_method_rustimportwalletmanager_dispatch(
     ): Short
@@ -1876,6 +1904,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_constructor_coincontrolmanagerstate_preview_new(
     ): Short
+    external fun uniffi_cove_checksum_constructor_rustconnectivitymanager_new(
+    ): Short
     external fun uniffi_cove_checksum_constructor_rustimportwalletmanager_new(
     ): Short
     external fun uniffi_cove_checksum_constructor_rustonboardingmanager_new(
@@ -1960,6 +1990,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_coincontrolmanagerreconciler_reconcile_many(
     ): Short
+    external fun uniffi_cove_checksum_method_connectivitymanagerreconciler_reconcile(
+    ): Short
     external fun uniffi_cove_checksum_method_importwalletmanagerreconciler_reconcile(
     ): Short
     external fun uniffi_cove_checksum_method_onboardingmanagerreconciler_reconcile(
@@ -2000,6 +2032,7 @@ internal object UniffiLib {
         uniffiCallbackInterfaceAuthManagerReconciler.register(this)
         uniffiCallbackInterfaceCloudBackupManagerReconciler.register(this)
         uniffiCallbackInterfaceCoinControlManagerReconciler.register(this)
+        uniffiCallbackInterfaceConnectivityManagerReconciler.register(this)
         uniffiCallbackInterfaceFfiReconcile.register(this)
         uniffiCallbackInterfaceImportWalletManagerReconciler.register(this)
         uniffiCallbackInterfaceOnboardingManagerReconciler.register(this)
@@ -2434,8 +2467,6 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_rustcloudbackupmanager_sync_persisted_state(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
-    external fun uniffi_cove_fn_method_rustcloudbackupmanager_update_connectivity_hint(`ptr`: Long,`hint`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-    ): Unit
     external fun uniffi_cove_fn_method_rustcloudbackupmanager_verify_backup_integrity(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_clone_rustcoincontrolmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -2470,6 +2501,20 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_cove_fn_free_filteredutxos(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
+    external fun uniffi_cove_fn_clone_rustconnectivitymanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_fn_free_rustconnectivitymanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_cove_fn_constructor_rustconnectivitymanager_new(uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_fn_method_rustconnectivitymanager_is_connected(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
+    external fun uniffi_cove_fn_method_rustconnectivitymanager_listen_for_updates(`ptr`: Long,`reconciler`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_cove_fn_method_rustconnectivitymanager_set_connection_state(`ptr`: Long,`isConnected`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_cove_fn_method_rustconnectivitymanager_state(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_clone_rustimportwalletmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Long
     external fun uniffi_cove_fn_free_rustimportwalletmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -3089,6 +3134,8 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_init_callback_vtable_cloudbackupmanagerreconciler(`vtable`: UniffiVTableCallbackInterfaceCloudBackupManagerReconciler,
     ): Unit
     external fun uniffi_cove_fn_init_callback_vtable_coincontrolmanagerreconciler(`vtable`: UniffiVTableCallbackInterfaceCoinControlManagerReconciler,
+    ): Unit
+    external fun uniffi_cove_fn_init_callback_vtable_connectivitymanagerreconciler(`vtable`: UniffiVTableCallbackInterfaceConnectivityManagerReconciler,
     ): Unit
     external fun uniffi_cove_fn_init_callback_vtable_importwalletmanagerreconciler(`vtable`: UniffiVTableCallbackInterfaceImportWalletManagerReconciler,
     ): Unit
@@ -4056,9 +4103,6 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_sync_persisted_state() != 19758.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_update_connectivity_hint() != 42789.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
     if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_verify_backup_integrity() != 47801.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -4084,6 +4128,18 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustcoincontrolmanager_utxos() != 43520.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustconnectivitymanager_is_connected() != 47607.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustconnectivitymanager_listen_for_updates() != 49341.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustconnectivitymanager_set_connection_state() != 17798.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustconnectivitymanager_state() != 43225.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustimportwalletmanager_dispatch() != 59923.toShort()) {
@@ -4749,6 +4805,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_constructor_coincontrolmanagerstate_preview_new() != 11196.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_constructor_rustconnectivitymanager_new() != 58689.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_constructor_rustimportwalletmanager_new() != 12433.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -4873,6 +4932,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_coincontrolmanagerreconciler_reconcile_many() != 14668.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_connectivitymanagerreconciler_reconcile() != 20375.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_importwalletmanagerreconciler_reconcile() != 13279.toShort()) {
@@ -17767,8 +17829,6 @@ public interface RustCloudBackupManagerInterface {
      */
     fun `syncPersistedState`()
     
-    fun `updateConnectivityHint`(`hint`: CloudConnectivityHint)
-    
     /**
      * Background startup health check for cloud backup integrity
      */
@@ -18109,18 +18169,6 @@ open class RustCloudBackupManager: Disposable, AutoCloseable, RustCloudBackupMan
     UniffiLib.uniffi_cove_fn_method_rustcloudbackupmanager_sync_persisted_state(
         it,
         _status)
-}
-    }
-    
-    
-
-    override fun `updateConnectivityHint`(`hint`: CloudConnectivityHint)
-        = 
-    callWithHandle {
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_method_rustcloudbackupmanager_update_connectivity_hint(
-        it,
-        FfiConverterTypeCloudConnectivityHint.lower(`hint`),_status)
 }
     }
     
@@ -18557,6 +18605,312 @@ public object FfiConverterTypeRustCoinControlManager: FfiConverter<RustCoinContr
     override fun allocationSize(value: RustCoinControlManager) = 8UL
 
     override fun write(value: RustCoinControlManager, buf: ByteBuffer) {
+        buf.putLong(lower(value))
+    }
+}
+
+
+// This template implements a class for working with a Rust struct via a handle
+// to the live Rust struct on the other side of the FFI.
+//
+// There's some subtlety here, because we have to be careful not to operate on a Rust
+// struct after it has been dropped, and because we must expose a public API for freeing
+// theq Kotlin wrapper object in lieu of reliable finalizers. The core requirements are:
+//
+//   * Each instance holds an opaque handle to the underlying Rust struct.
+//     Method calls need to read this handle from the object's state and pass it in to
+//     the Rust FFI.
+//
+//   * When an instance is no longer needed, its handle should be passed to a
+//     special destructor function provided by the Rust FFI, which will drop the
+//     underlying Rust struct.
+//
+//   * Given an instance, calling code is expected to call the special
+//     `destroy` method in order to free it after use, either by calling it explicitly
+//     or by using a higher-level helper like the `use` method. Failing to do so risks
+//     leaking the underlying Rust struct.
+//
+//   * We can't assume that calling code will do the right thing, and must be prepared
+//     to handle Kotlin method calls executing concurrently with or even after a call to
+//     `destroy`, and to handle multiple (possibly concurrent!) calls to `destroy`.
+//
+//   * We must never allow Rust code to operate on the underlying Rust struct after
+//     the destructor has been called, and must never call the destructor more than once.
+//     Doing so may trigger memory unsafety.
+//
+//   * To mitigate many of the risks of leaking memory and use-after-free unsafety, a `Cleaner`
+//     is implemented to call the destructor when the Kotlin object becomes unreachable.
+//     This is done in a background thread. This is not a panacea, and client code should be aware that
+//      1. the thread may starve if some there are objects that have poorly performing
+//     `drop` methods or do significant work in their `drop` methods.
+//      2. the thread is shared across the whole library. This can be tuned by using `android_cleaner = true`,
+//         or `android = true` in the [`kotlin` section of the `uniffi.toml` file](https://mozilla.github.io/uniffi-rs/kotlin/configuration.html).
+//
+// If we try to implement this with mutual exclusion on access to the handle, there is the
+// possibility of a race between a method call and a concurrent call to `destroy`:
+//
+//    * Thread A starts a method call, reads the value of the handle, but is interrupted
+//      before it can pass the handle over the FFI to Rust.
+//    * Thread B calls `destroy` and frees the underlying Rust struct.
+//    * Thread A resumes, passing the already-read handle value to Rust and triggering
+//      a use-after-free.
+//
+// One possible solution would be to use a `ReadWriteLock`, with each method call taking
+// a read lock (and thus allowed to run concurrently) and the special `destroy` method
+// taking a write lock (and thus blocking on live method calls). However, we aim not to
+// generate methods with any hidden blocking semantics, and a `destroy` method that might
+// block if called incorrectly seems to meet that bar.
+//
+// So, we achieve our goals by giving each instance an associated `AtomicLong` counter to track
+// the number of in-flight method calls, and an `AtomicBoolean` flag to indicate whether `destroy`
+// has been called. These are updated according to the following rules:
+//
+//    * The initial value of the counter is 1, indicating a live object with no in-flight calls.
+//      The initial value for the flag is false.
+//
+//    * At the start of each method call, we atomically check the counter.
+//      If it is 0 then the underlying Rust struct has already been destroyed and the call is aborted.
+//      If it is nonzero them we atomically increment it by 1 and proceed with the method call.
+//
+//    * At the end of each method call, we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+//    * When `destroy` is called, we atomically flip the flag from false to true.
+//      If the flag was already true we silently fail.
+//      Otherwise we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+// Astute readers may observe that this all sounds very similar to the way that Rust's `Arc<T>` works,
+// and indeed it is, with the addition of a flag to guard against multiple calls to `destroy`.
+//
+// The overall effect is that the underlying Rust struct is destroyed only when `destroy` has been
+// called *and* all in-flight method calls have completed, avoiding violating any of the expectations
+// of the underlying Rust code.
+//
+// This makes a cleaner a better alternative to _not_ calling `destroy()` as
+// and when the object is finished with, but the abstraction is not perfect: if the Rust object's `drop`
+// method is slow, and/or there are many objects to cleanup, and it's on a low end Android device, then the cleaner
+// thread may be starved, and the app will leak memory.
+//
+// In this case, `destroy`ing manually may be a better solution.
+//
+// The cleaner can live side by side with the manual calling of `destroy`. In the order of responsiveness, uniffi objects
+// with Rust peers are reclaimed:
+//
+// 1. By calling the `destroy` method of the object, which calls `rustObject.free()`. If that doesn't happen:
+// 2. When the object becomes unreachable, AND the Cleaner thread gets to call `rustObject.free()`. If the thread is starved then:
+// 3. The memory is reclaimed when the process terminates.
+//
+// [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
+//
+
+
+public interface RustConnectivityManagerInterface {
+    
+    fun `isConnected`(): kotlin.Boolean
+    
+    fun `listenForUpdates`(`reconciler`: ConnectivityManagerReconciler)
+    
+    fun `setConnectionState`(`isConnected`: kotlin.Boolean)
+    
+    fun `state`(): ConnectivityState
+    
+    companion object
+}
+
+open class RustConnectivityManager: Disposable, AutoCloseable, RustConnectivityManagerInterface
+{
+
+    @Suppress("UNUSED_PARAMETER")
+    /**
+     * @suppress
+     */
+    constructor(withHandle: UniffiWithHandle, handle: Long) {
+        this.handle = handle
+        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
+    }
+
+    /**
+     * @suppress
+     *
+     * This constructor can be used to instantiate a fake object. Only used for tests. Any
+     * attempt to actually use an object constructed this way will fail as there is no
+     * connected Rust object.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    constructor(noHandle: NoHandle) {
+        this.handle = 0
+        this.cleanable = null
+    }
+    constructor() :
+        this(UniffiWithHandle, 
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_constructor_rustconnectivitymanager_new(
+    
+        _status)
+}
+    )
+
+    protected val handle: Long
+    protected val cleanable: UniffiCleaner.Cleanable?
+
+    private val wasDestroyed = AtomicBoolean(false)
+    private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
+    override fun destroy() {
+        // Only allow a single call to this method.
+        // TODO: maybe we should log a warning if called more than once?
+        if (this.wasDestroyed.compareAndSet(false, true)) {
+            // This decrement always matches the initial count of 1 given at creation time.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    @Synchronized
+    override fun close() {
+        this.destroy()
+    }
+
+    internal inline fun <R> callWithHandle(block: (handle: Long) -> R): R {
+        // Check and increment the call counter, to keep the object alive.
+        // This needs a compare-and-set retry loop in case of concurrent updates.
+        do {
+            val c = this.callCounter.get()
+            if (c == 0L) {
+                throw IllegalStateException("${this.javaClass.simpleName} object has already been destroyed")
+            }
+            if (c == Long.MAX_VALUE) {
+                throw IllegalStateException("${this.javaClass.simpleName} call counter would overflow")
+            }
+        } while (! this.callCounter.compareAndSet(c, c + 1L))
+        // Now we can safely do the method call without the handle being freed concurrently.
+        try {
+            return block(this.uniffiCloneHandle())
+        } finally {
+            // This decrement always matches the increment we performed above.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    // Use a static inner class instead of a closure so as not to accidentally
+    // capture `this` as part of the cleanable's action.
+    private class UniffiCleanAction(private val handle: Long) : Runnable {
+        override fun run() {
+            if (handle == 0.toLong()) {
+                // Fake object created with `NoHandle`, don't try to free.
+                return;
+            }
+            uniffiRustCall { status ->
+                UniffiLib.uniffi_cove_fn_free_rustconnectivitymanager(handle, status)
+            }
+        }
+    }
+
+    /**
+     * @suppress
+     */
+    fun uniffiCloneHandle(): Long {
+        if (handle == 0.toLong()) {
+            throw InternalException("uniffiCloneHandle() called on NoHandle object");
+        }
+        return uniffiRustCall() { status ->
+            UniffiLib.uniffi_cove_fn_clone_rustconnectivitymanager(handle, status)
+        }
+    }
+
+    override fun `isConnected`(): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustconnectivitymanager_is_connected(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    override fun `listenForUpdates`(`reconciler`: ConnectivityManagerReconciler)
+        = 
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustconnectivitymanager_listen_for_updates(
+        it,
+        FfiConverterTypeConnectivityManagerReconciler.lower(`reconciler`),_status)
+}
+    }
+    
+    
+
+    override fun `setConnectionState`(`isConnected`: kotlin.Boolean)
+        = 
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustconnectivitymanager_set_connection_state(
+        it,
+        FfiConverterBoolean.lower(`isConnected`),_status)
+}
+    }
+    
+    
+
+    override fun `state`(): ConnectivityState {
+            return FfiConverterTypeConnectivityState.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustconnectivitymanager_state(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    
+
+    
+
+
+    
+    
+    /**
+     * @suppress
+     */
+    companion object
+    
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeRustConnectivityManager: FfiConverter<RustConnectivityManager, Long> {
+    override fun lower(value: RustConnectivityManager): Long {
+        return value.uniffiCloneHandle()
+    }
+
+    override fun lift(value: Long): RustConnectivityManager {
+        return RustConnectivityManager(UniffiWithHandle, value)
+    }
+
+    override fun read(buf: ByteBuffer): RustConnectivityManager {
+        return lift(buf.getLong())
+    }
+
+    override fun allocationSize(value: RustConnectivityManager) = 8UL
+
+    override fun write(value: RustConnectivityManager, buf: ByteBuffer) {
         buf.putLong(lower(value))
     }
 }
@@ -27516,8 +27870,6 @@ public object FfiConverterTypeCloudBackupRestoreReport: FfiConverterRustBuffer<C
 data class CloudBackupState (
     var `status`: CloudBackupStatus
     , 
-    var `connectivityHint`: CloudConnectivityHint
-    , 
     var `syncHealth`: CloudSyncHealth
     , 
     var `promptIntent`: CloudBackupPromptIntent
@@ -27564,7 +27916,6 @@ public object FfiConverterTypeCloudBackupState: FfiConverterRustBuffer<CloudBack
     override fun read(buf: ByteBuffer): CloudBackupState {
         return CloudBackupState(
             FfiConverterTypeCloudBackupStatus.read(buf),
-            FfiConverterTypeCloudConnectivityHint.read(buf),
             FfiConverterTypeCloudSyncHealth.read(buf),
             FfiConverterTypeCloudBackupPromptIntent.read(buf),
             FfiConverterOptionalTypeCloudBackupProgress.read(buf),
@@ -27585,7 +27936,6 @@ public object FfiConverterTypeCloudBackupState: FfiConverterRustBuffer<CloudBack
 
     override fun allocationSize(value: CloudBackupState) = (
             FfiConverterTypeCloudBackupStatus.allocationSize(value.`status`) +
-            FfiConverterTypeCloudConnectivityHint.allocationSize(value.`connectivityHint`) +
             FfiConverterTypeCloudSyncHealth.allocationSize(value.`syncHealth`) +
             FfiConverterTypeCloudBackupPromptIntent.allocationSize(value.`promptIntent`) +
             FfiConverterOptionalTypeCloudBackupProgress.allocationSize(value.`progress`) +
@@ -27605,7 +27955,6 @@ public object FfiConverterTypeCloudBackupState: FfiConverterRustBuffer<CloudBack
 
     override fun write(value: CloudBackupState, buf: ByteBuffer) {
             FfiConverterTypeCloudBackupStatus.write(value.`status`, buf)
-            FfiConverterTypeCloudConnectivityHint.write(value.`connectivityHint`, buf)
             FfiConverterTypeCloudSyncHealth.write(value.`syncHealth`, buf)
             FfiConverterTypeCloudBackupPromptIntent.write(value.`promptIntent`, buf)
             FfiConverterOptionalTypeCloudBackupProgress.write(value.`progress`, buf)
@@ -27735,6 +28084,39 @@ public object FfiConverterTypeConfirmedDetails: FfiConverterRustBuffer<Confirmed
     override fun write(value: ConfirmedDetails, buf: ByteBuffer) {
             FfiConverterUInt.write(value.`blockNumber`, buf)
             FfiConverterULong.write(value.`confirmationTime`, buf)
+    }
+}
+
+
+
+data class ConnectivityState (
+    var `status`: ConnectivityStatus
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeConnectivityState: FfiConverterRustBuffer<ConnectivityState> {
+    override fun read(buf: ByteBuffer): ConnectivityState {
+        return ConnectivityState(
+            FfiConverterTypeConnectivityStatus.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: ConnectivityState) = (
+            FfiConverterTypeConnectivityStatus.allocationSize(value.`status`)
+    )
+
+    override fun write(value: ConnectivityState, buf: ByteBuffer) {
+            FfiConverterTypeConnectivityStatus.write(value.`status`, buf)
     }
 }
 
@@ -33794,15 +34176,6 @@ sealed class CloudBackupReconcileMessage {
         companion object
     }
     
-    data class ConnectivityHint(
-        val v1: org.bitcoinppl.cove_core.CloudConnectivityHint) : CloudBackupReconcileMessage()
-        
-    {
-        
-
-        companion object
-    }
-    
     data class SyncHealth(
         val v1: org.bitcoinppl.cove_core.device.CloudSyncHealth) : CloudBackupReconcileMessage()
         
@@ -33957,52 +34330,49 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
             1 -> CloudBackupReconcileMessage.Status(
                 FfiConverterTypeCloudBackupStatus.read(buf),
                 )
-            2 -> CloudBackupReconcileMessage.ConnectivityHint(
-                FfiConverterTypeCloudConnectivityHint.read(buf),
-                )
-            3 -> CloudBackupReconcileMessage.SyncHealth(
+            2 -> CloudBackupReconcileMessage.SyncHealth(
                 FfiConverterTypeCloudSyncHealth.read(buf),
                 )
-            4 -> CloudBackupReconcileMessage.Progress(
+            3 -> CloudBackupReconcileMessage.Progress(
                 FfiConverterOptionalTypeCloudBackupProgress.read(buf),
                 )
-            5 -> CloudBackupReconcileMessage.RestoreProgress(
+            4 -> CloudBackupReconcileMessage.RestoreProgress(
                 FfiConverterOptionalTypeCloudBackupRestoreProgress.read(buf),
                 )
-            6 -> CloudBackupReconcileMessage.RestoreReport(
+            5 -> CloudBackupReconcileMessage.RestoreReport(
                 FfiConverterOptionalTypeCloudBackupRestoreReport.read(buf),
                 )
-            7 -> CloudBackupReconcileMessage.SyncError(
+            6 -> CloudBackupReconcileMessage.SyncError(
                 FfiConverterOptionalString.read(buf),
                 )
-            8 -> CloudBackupReconcileMessage.VerificationPrompt(
+            7 -> CloudBackupReconcileMessage.VerificationPrompt(
                 FfiConverterBoolean.read(buf),
                 )
-            9 -> CloudBackupReconcileMessage.VerificationMetadata(
+            8 -> CloudBackupReconcileMessage.VerificationMetadata(
                 FfiConverterTypeCloudBackupVerificationMetadata.read(buf),
                 )
-            10 -> CloudBackupReconcileMessage.PendingUploadVerification(
+            9 -> CloudBackupReconcileMessage.PendingUploadVerification(
                 FfiConverterBoolean.read(buf),
                 )
-            11 -> CloudBackupReconcileMessage.Detail(
+            10 -> CloudBackupReconcileMessage.Detail(
                 FfiConverterOptionalTypeCloudBackupDetail.read(buf),
                 )
-            12 -> CloudBackupReconcileMessage.Verification(
+            11 -> CloudBackupReconcileMessage.Verification(
                 FfiConverterTypeVerificationState.read(buf),
                 )
-            13 -> CloudBackupReconcileMessage.Sync(
+            12 -> CloudBackupReconcileMessage.Sync(
                 FfiConverterTypeSyncState.read(buf),
                 )
-            14 -> CloudBackupReconcileMessage.Recovery(
+            13 -> CloudBackupReconcileMessage.Recovery(
                 FfiConverterTypeRecoveryState.read(buf),
                 )
-            15 -> CloudBackupReconcileMessage.CloudOnly(
+            14 -> CloudBackupReconcileMessage.CloudOnly(
                 FfiConverterTypeCloudOnlyState.read(buf),
                 )
-            16 -> CloudBackupReconcileMessage.CloudOnlyOperation(
+            15 -> CloudBackupReconcileMessage.CloudOnlyOperation(
                 FfiConverterTypeCloudOnlyOperation.read(buf),
                 )
-            17 -> CloudBackupReconcileMessage.PromptIntent(
+            16 -> CloudBackupReconcileMessage.PromptIntent(
                 FfiConverterTypeCloudBackupPromptIntent.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -34015,13 +34385,6 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
             (
                 4UL
                 + FfiConverterTypeCloudBackupStatus.allocationSize(value.v1)
-            )
-        }
-        is CloudBackupReconcileMessage.ConnectivityHint -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterTypeCloudConnectivityHint.allocationSize(value.v1)
             )
         }
         is CloudBackupReconcileMessage.SyncHealth -> {
@@ -34138,83 +34501,78 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
                 FfiConverterTypeCloudBackupStatus.write(value.v1, buf)
                 Unit
             }
-            is CloudBackupReconcileMessage.ConnectivityHint -> {
-                buf.putInt(2)
-                FfiConverterTypeCloudConnectivityHint.write(value.v1, buf)
-                Unit
-            }
             is CloudBackupReconcileMessage.SyncHealth -> {
-                buf.putInt(3)
+                buf.putInt(2)
                 FfiConverterTypeCloudSyncHealth.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.Progress -> {
-                buf.putInt(4)
+                buf.putInt(3)
                 FfiConverterOptionalTypeCloudBackupProgress.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.RestoreProgress -> {
-                buf.putInt(5)
+                buf.putInt(4)
                 FfiConverterOptionalTypeCloudBackupRestoreProgress.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.RestoreReport -> {
-                buf.putInt(6)
+                buf.putInt(5)
                 FfiConverterOptionalTypeCloudBackupRestoreReport.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.SyncError -> {
-                buf.putInt(7)
+                buf.putInt(6)
                 FfiConverterOptionalString.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.VerificationPrompt -> {
-                buf.putInt(8)
+                buf.putInt(7)
                 FfiConverterBoolean.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.VerificationMetadata -> {
-                buf.putInt(9)
+                buf.putInt(8)
                 FfiConverterTypeCloudBackupVerificationMetadata.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.PendingUploadVerification -> {
-                buf.putInt(10)
+                buf.putInt(9)
                 FfiConverterBoolean.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.Detail -> {
-                buf.putInt(11)
+                buf.putInt(10)
                 FfiConverterOptionalTypeCloudBackupDetail.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.Verification -> {
-                buf.putInt(12)
+                buf.putInt(11)
                 FfiConverterTypeVerificationState.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.Sync -> {
-                buf.putInt(13)
+                buf.putInt(12)
                 FfiConverterTypeSyncState.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.Recovery -> {
-                buf.putInt(14)
+                buf.putInt(13)
                 FfiConverterTypeRecoveryState.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.CloudOnly -> {
-                buf.putInt(15)
+                buf.putInt(14)
                 FfiConverterTypeCloudOnlyState.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.CloudOnlyOperation -> {
-                buf.putInt(16)
+                buf.putInt(15)
                 FfiConverterTypeCloudOnlyOperation.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.PromptIntent -> {
-                buf.putInt(17)
+                buf.putInt(16)
                 FfiConverterTypeCloudBackupPromptIntent.write(value.v1, buf)
                 Unit
             }
@@ -34537,41 +34895,6 @@ public object FfiConverterTypeCloudBackupWalletStatus: FfiConverterRustBuffer<Cl
     override fun allocationSize(value: CloudBackupWalletStatus) = 4UL
 
     override fun write(value: CloudBackupWalletStatus, buf: ByteBuffer) {
-        buf.putInt(value.ordinal + 1)
-    }
-}
-
-
-
-
-
-
-enum class CloudConnectivityHint {
-    
-    ONLINE,
-    OFFLINE,
-    UNKNOWN;
-
-    
-
-
-    companion object
-}
-
-
-/**
- * @suppress
- */
-public object FfiConverterTypeCloudConnectivityHint: FfiConverterRustBuffer<CloudConnectivityHint> {
-    override fun read(buf: ByteBuffer) = try {
-        CloudConnectivityHint.values()[buf.getInt() - 1]
-    } catch (e: IndexOutOfBoundsException) {
-        throw RuntimeException("invalid enum value, something is very wrong!!", e)
-    }
-
-    override fun allocationSize(value: CloudConnectivityHint) = 4UL
-
-    override fun write(value: CloudConnectivityHint, buf: ByteBuffer) {
         buf.putInt(value.ordinal + 1)
     }
 }
@@ -35589,6 +35912,99 @@ public object FfiConverterTypeColdWalletRoute: FfiConverterRustBuffer<ColdWallet
     override fun allocationSize(value: ColdWalletRoute) = 4UL
 
     override fun write(value: ColdWalletRoute, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+sealed class ConnectivityManagerReconcileMessage {
+    
+    data class Status(
+        val v1: org.bitcoinppl.cove_core.ConnectivityStatus) : ConnectivityManagerReconcileMessage()
+        
+    {
+        
+
+        companion object
+    }
+    
+
+    
+
+    
+    
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeConnectivityManagerReconcileMessage : FfiConverterRustBuffer<ConnectivityManagerReconcileMessage>{
+    override fun read(buf: ByteBuffer): ConnectivityManagerReconcileMessage {
+        return when(buf.getInt()) {
+            1 -> ConnectivityManagerReconcileMessage.Status(
+                FfiConverterTypeConnectivityStatus.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: ConnectivityManagerReconcileMessage): ULong = when(value) {
+        is ConnectivityManagerReconcileMessage.Status -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeConnectivityStatus.allocationSize(value.v1)
+            )
+        }
+    }
+
+    override fun write(value: ConnectivityManagerReconcileMessage, buf: ByteBuffer) {
+        when(value) {
+            is ConnectivityManagerReconcileMessage.Status -> {
+                buf.putInt(1)
+                FfiConverterTypeConnectivityStatus.write(value.v1, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+
+enum class ConnectivityStatus {
+    
+    CONNECTED,
+    DISCONNECTED;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeConnectivityStatus: FfiConverterRustBuffer<ConnectivityStatus> {
+    override fun read(buf: ByteBuffer) = try {
+        ConnectivityStatus.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: ConnectivityStatus) = 4UL
+
+    override fun write(value: ConnectivityStatus, buf: ByteBuffer) {
         buf.putInt(value.ordinal + 1)
     }
 }
@@ -51766,6 +52182,66 @@ internal object uniffiCallbackInterfaceCoinControlManagerReconciler {
  * @suppress
  */
 public object FfiConverterTypeCoinControlManagerReconciler: FfiConverterCallbackInterface<CoinControlManagerReconciler>()
+
+
+
+
+
+public interface ConnectivityManagerReconciler {
+    
+    fun `reconcile`(`message`: ConnectivityManagerReconcileMessage)
+    
+    companion object
+}
+
+
+
+// Put the implementation in an object so we don't pollute the top-level namespace
+internal object uniffiCallbackInterfaceConnectivityManagerReconciler {
+    internal object `reconcile`: UniffiCallbackInterfaceConnectivityManagerReconcilerMethod0 {
+        override fun callback(`uniffiHandle`: Long,`message`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,) {
+            val uniffiObj = FfiConverterTypeConnectivityManagerReconciler.handleMap.get(uniffiHandle)
+            val makeCall = { ->
+                uniffiObj.`reconcile`(
+                    FfiConverterTypeConnectivityManagerReconcileMessage.lift(`message`),
+                )
+            }
+            val writeReturn = { _: Unit -> Unit }
+            uniffiTraitInterfaceCall(uniffiCallStatus, makeCall, writeReturn)
+        }
+    }
+
+    internal object uniffiFree: UniffiCallbackInterfaceFree {
+        override fun callback(handle: Long) {
+            FfiConverterTypeConnectivityManagerReconciler.handleMap.remove(handle)
+        }
+    }
+
+    internal object uniffiClone: UniffiCallbackInterfaceClone {
+        override fun callback(handle: Long): Long {
+            return FfiConverterTypeConnectivityManagerReconciler.handleMap.clone(handle)
+        }
+    }
+
+    internal var vtable = UniffiVTableCallbackInterfaceConnectivityManagerReconciler.UniffiByValue(
+        uniffiFree,
+        uniffiClone,
+        `reconcile`,
+    )
+
+    // Registers the foreign callback with the Rust side.
+    // This method is generated for each callback interface.
+    internal fun register(lib: UniffiLib) {
+        lib.uniffi_cove_fn_init_callback_vtable_connectivitymanagerreconciler(vtable)
+    }
+}
+
+/**
+ * The ffiConverter which transforms the Callbacks in to handles to pass to Rust.
+ *
+ * @suppress
+ */
+public object FfiConverterTypeConnectivityManagerReconciler: FfiConverterCallbackInterface<ConnectivityManagerReconciler>()
 
 
 

@@ -1058,9 +1058,10 @@ mod tests {
     };
     use crate::label_manager::LabelManager;
     use crate::manager::cloud_backup_manager::{
-        CLOUD_BACKUP_MANAGER, CloudBackupDetailResult, CloudConnectivityHint,
-        DeepVerificationResult, VerificationFailureKind, VerificationState,
+        CLOUD_BACKUP_MANAGER, CloudBackupDetailResult, DeepVerificationResult,
+        VerificationFailureKind, VerificationState,
     };
+    use crate::manager::connectivity_manager::CONNECTIVITY_MANAGER;
     use crate::manager::wallet_manager::RustWalletManager;
     use crate::network::Network;
     use crate::wallet::{
@@ -1539,7 +1540,7 @@ mod tests {
         let manager = RustCloudBackupManager::init();
 
         reset_cloud_backup_test_state(&manager, globals);
-        manager.update_connectivity_hint(CloudConnectivityHint::Online);
+        CONNECTIVITY_MANAGER.set_connection_state(true);
         globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
         globals.passkey.set_authenticate_result(Ok(vec![7; 32]));
 
@@ -1555,7 +1556,7 @@ mod tests {
         let manager = RustCloudBackupManager::init();
 
         reset_cloud_backup_test_state(&manager, globals);
-        manager.update_connectivity_hint(CloudConnectivityHint::Online);
+        CONNECTIVITY_MANAGER.set_connection_state(true);
         globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
         globals.passkey.set_authenticate_result(Ok(vec![7; 32]));
 
@@ -1923,7 +1924,7 @@ mod tests {
     }
 
     #[test]
-    fn update_connectivity_hint_preserves_sync_error_when_failed_wallet_uploads_exist() {
+    fn connectivity_reconnect_preserves_sync_error_when_failed_wallet_uploads_exist() {
         let _guard = test_lock().lock();
         let globals = test_globals();
         let manager = RustCloudBackupManager::init();
@@ -1948,20 +1949,20 @@ mod tests {
             .unwrap();
         manager.set_sync_error(Some("upload failed".into()));
 
-        manager.update_connectivity_hint(CloudConnectivityHint::Online);
+        manager.handle_connectivity_change(true);
 
         assert_eq!(manager.state().sync_error.as_deref(), Some("upload failed"));
     }
 
     #[test]
-    fn update_connectivity_hint_clears_sync_error_when_failed_wallet_uploads_are_gone() {
+    fn connectivity_reconnect_clears_sync_error_when_failed_wallet_uploads_are_gone() {
         let _guard = test_lock().lock();
         let globals = test_globals();
         let manager = RustCloudBackupManager::init();
         configure_enabled_cloud_backup(&manager, globals, 0);
         manager.set_sync_error(Some("upload failed".into()));
 
-        manager.update_connectivity_hint(CloudConnectivityHint::Online);
+        manager.handle_connectivity_change(true);
 
         assert!(manager.state().sync_error.is_none());
     }
@@ -2466,7 +2467,7 @@ mod tests {
         persist_xpub_wallets(vec![metadata.clone()]);
         let record_id = cove_cspp::backup_data::wallet_record_id(metadata.id.as_ref());
         persist_uploading_blob_state(metadata.id.clone(), 1);
-        manager.update_connectivity_hint(CloudConnectivityHint::Offline);
+        CONNECTIVITY_MANAGER.set_connection_state(false);
 
         let error = manager.do_upload_wallet_if_dirty(&metadata.id).unwrap_err();
 
@@ -3076,7 +3077,7 @@ mod tests {
         let manager = RustCloudBackupManager::init();
 
         reset_cloud_backup_test_state(&manager, globals);
-        manager.update_connectivity_hint(CloudConnectivityHint::Online);
+        CONNECTIVITY_MANAGER.set_connection_state(true);
         let existing_master_key = cove_cspp::master_key::MasterKey::generate();
         let existing_namespace = existing_master_key.namespace_id();
         let encrypted_master = cove_cspp::master_key_crypto::encrypt_master_key(
@@ -3119,7 +3120,7 @@ mod tests {
         let manager = RustCloudBackupManager::init();
 
         reset_cloud_backup_test_state(&manager, globals);
-        manager.update_connectivity_hint(CloudConnectivityHint::Online);
+        CONNECTIVITY_MANAGER.set_connection_state(true);
         globals.passkey.set_discover_result(Err(PasskeyError::UserCancelled));
 
         let master_key = cove_cspp::master_key::MasterKey::generate();
@@ -3149,7 +3150,7 @@ mod tests {
         let manager = RustCloudBackupManager::init();
 
         reset_cloud_backup_test_state(&manager, globals);
-        manager.update_connectivity_hint(CloudConnectivityHint::Online);
+        CONNECTIVITY_MANAGER.set_connection_state(true);
         globals.passkey.set_create_result(Err(PasskeyError::UserCancelled));
 
         let master_key = cove_cspp::master_key::MasterKey::generate();
@@ -3179,7 +3180,7 @@ mod tests {
         let manager = RustCloudBackupManager::init();
 
         reset_cloud_backup_test_state(&manager, globals);
-        manager.update_connectivity_hint(CloudConnectivityHint::Online);
+        CONNECTIVITY_MANAGER.set_connection_state(true);
 
         manager.replace_pending_enable_session(PendingEnableSession::new(
             cove_cspp::master_key::MasterKey::generate(),

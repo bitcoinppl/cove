@@ -27,6 +27,7 @@ use crate::database::cloud_backup::{
     PersistedCloudBackupState, PersistedCloudBackupStatus, PersistedCloudBlobState,
     PersistedCloudBlobSyncState,
 };
+use crate::manager::connectivity_manager::CONNECTIVITY_MANAGER;
 use crate::mnemonic::MnemonicExt as _;
 use crate::network::Network;
 use crate::wallet::metadata::{WalletId, WalletMetadata, WalletMode, WalletType};
@@ -535,6 +536,7 @@ pub(crate) fn reset_cloud_backup_test_state(
     globals: &TestGlobals,
 ) {
     init_test_runtime();
+    CONNECTIVITY_MANAGER.set_connection_state(true);
     globals.reset();
     clear_local_wallets();
     let reset_manager = manager.clone();

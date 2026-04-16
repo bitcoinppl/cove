@@ -398,7 +398,7 @@ impl RustOnboardingManager {
     fn start_cloud_check(self: &Arc<Self>) {
         let me = Arc::clone(self);
         thread::spawn(move || {
-            if CLOUD_BACKUP_MANAGER.is_definitely_offline() {
+            if CLOUD_BACKUP_MANAGER.is_offline() {
                 me.finish_cloud_check(CloudCheckOutcome::Inconclusive(CloudCheckIssue::Offline));
                 return;
             }

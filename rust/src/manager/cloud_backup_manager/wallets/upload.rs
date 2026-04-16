@@ -181,7 +181,7 @@ impl RustCloudBackupManager {
             return Ok(());
         };
 
-        if self.is_definitely_offline() {
+        if self.is_offline() {
             return Err(CloudBackupError::Deferred(
                 "wallet backup upload is waiting for a connection".into(),
             ));

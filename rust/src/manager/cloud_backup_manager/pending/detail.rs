@@ -25,7 +25,7 @@ impl RustCloudBackupManager {
             Err(error) => return Some(CloudBackupDetailResult::AccessError(error.to_string())),
         };
 
-        if self.is_definitely_offline() {
+        if self.is_offline() {
             return Some(CloudBackupDetailResult::AccessError(
                 self.offline_error_for_step(BlockingCloudStep::DetailRefresh).to_string(),
             ));

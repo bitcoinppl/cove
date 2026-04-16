@@ -638,6 +638,120 @@ public func FfiConverterTypeCloudStorage_lower(_ value: CloudStorage) -> UInt64 
 
 
 
+public protocol ConnectivityProtocol: AnyObject, Sendable {
+    
+}
+open class Connectivity: ConnectivityProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_cove_device_fn_clone_connectivity(self.handle, $0) }
+    }
+public convenience init(connectivity: ConnectivityAccess) {
+    let handle =
+        try! rustCall() {
+    uniffi_cove_device_fn_constructor_connectivity_new(
+        FfiConverterCallbackInterfaceConnectivityAccess_lower(connectivity),$0
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_cove_device_fn_free_connectivity(handle, $0) }
+    }
+
+    
+
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeConnectivity: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = Connectivity
+
+    public static func lift(_ handle: UInt64) throws -> Connectivity {
+        return Connectivity(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: Connectivity) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Connectivity {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: Connectivity, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeConnectivity_lift(_ handle: UInt64) throws -> Connectivity {
+    return try FfiConverterTypeConnectivity.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeConnectivity_lower(_ value: Connectivity) -> UInt64 {
+    return FfiConverterTypeConnectivity.lower(value)
+}
+
+
+
+
+
+
 public protocol DeviceProtocol: AnyObject, Sendable {
     
 }
@@ -1971,6 +2085,135 @@ public func FfiConverterCallbackInterfaceCloudStorageAccess_lower(_ v: CloudStor
 
 
 
+public protocol ConnectivityAccess: AnyObject, Sendable {
+    
+    func isConnected()  -> Bool
+    
+}
+
+
+// Put the implementation in a struct so we don't pollute the top-level namespace
+fileprivate struct UniffiCallbackInterfaceConnectivityAccess {
+
+    // Create the VTable using a series of closures.
+    // Swift automatically converts these into C callback functions.
+    //
+    // Store the vtable directly.
+    static let vtable: UniffiVTableCallbackInterfaceConnectivityAccess = UniffiVTableCallbackInterfaceConnectivityAccess(
+        uniffiFree: { (uniffiHandle: UInt64) -> () in
+            do {
+                try FfiConverterCallbackInterfaceConnectivityAccess.handleMap.remove(handle: uniffiHandle)
+            } catch {
+                print("Uniffi callback interface ConnectivityAccess: handle missing in uniffiFree")
+            }
+        },
+        uniffiClone: { (uniffiHandle: UInt64) -> UInt64 in
+            do {
+                return try FfiConverterCallbackInterfaceConnectivityAccess.handleMap.clone(handle: uniffiHandle)
+            } catch {
+                fatalError("Uniffi callback interface ConnectivityAccess: handle missing in uniffiClone")
+            }
+        },
+        isConnected: { (
+            uniffiHandle: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<Int8>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> Bool in
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceConnectivityAccess.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.isConnected(
+                )
+            }
+
+            
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterBool.lower($0) }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        }
+    )
+
+    // Rust stores this pointer for future callback invocations, so it must live
+    // for the process lifetime (not just for the init function call).
+    static let vtablePtr: UnsafePointer<UniffiVTableCallbackInterfaceConnectivityAccess> = {
+        let ptr = UnsafeMutablePointer<UniffiVTableCallbackInterfaceConnectivityAccess>.allocate(capacity: 1)
+        ptr.initialize(to: vtable)
+        return UnsafePointer(ptr)
+    }()
+}
+
+private func uniffiCallbackInitConnectivityAccess() {
+    uniffi_cove_device_fn_init_callback_vtable_connectivityaccess(UniffiCallbackInterfaceConnectivityAccess.vtablePtr)
+}
+
+// FfiConverter protocol for callback interfaces
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterCallbackInterfaceConnectivityAccess {
+    fileprivate static let handleMap = UniffiHandleMap<ConnectivityAccess>()
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+extension FfiConverterCallbackInterfaceConnectivityAccess : FfiConverter {
+    typealias SwiftType = ConnectivityAccess
+    typealias FfiType = UInt64
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func lift(_ handle: UInt64) throws -> SwiftType {
+        try handleMap.get(handle: handle)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func lower(_ v: SwiftType) -> UInt64 {
+        return handleMap.insert(obj: v)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func write(_ v: SwiftType, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(v))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterCallbackInterfaceConnectivityAccess_lift(_ handle: UInt64) throws -> ConnectivityAccess {
+    return try FfiConverterCallbackInterfaceConnectivityAccess.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterCallbackInterfaceConnectivityAccess_lower(_ v: ConnectivityAccess) -> UInt64 {
+    return FfiConverterCallbackInterfaceConnectivityAccess.lower(v)
+}
+
+
+
+
 public protocol DeviceAccess: AnyObject, Sendable {
     
     func timezone()  -> String
@@ -2635,6 +2878,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_device_checksum_constructor_cloudstorage_new() != 17602) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_device_checksum_constructor_connectivity_new() != 64633) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_device_checksum_constructor_device_new() != 18892) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -2671,6 +2917,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_device_checksum_method_cloudstorageaccess_overall_sync_health() != 51383) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_device_checksum_method_connectivityaccess_is_connected() != 15918) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_device_checksum_method_deviceaccess_timezone() != 54194) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -2700,6 +2949,7 @@ private let initializationResult: InitializationResult = {
     }
 
     uniffiCallbackInitCloudStorageAccess()
+    uniffiCallbackInitConnectivityAccess()
     uniffiCallbackInitDeviceAccess()
     uniffiCallbackInitKeychainAccess()
     uniffiCallbackInitPasskeyProvider()

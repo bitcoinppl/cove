@@ -640,6 +640,9 @@ internal interface UniffiCallbackInterfaceCloudStorageAccessMethod7 : com.sun.jn
 internal interface UniffiCallbackInterfaceCloudStorageAccessMethod8 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
 }
+internal interface UniffiCallbackInterfaceConnectivityAccessMethod0 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: ByteByReference,uniffiCallStatus: UniffiRustCallStatus,)
+}
 internal interface UniffiCallbackInterfaceDeviceAccessMethod0 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
 }
@@ -707,6 +710,25 @@ internal open class UniffiVTableCallbackInterfaceCloudStorageAccess(
         `listWalletFiles` = other.`listWalletFiles`
         `isBackupUploaded` = other.`isBackupUploaded`
         `overallSyncHealth` = other.`overallSyncHealth`
+    }
+
+}
+@Structure.FieldOrder("uniffiFree", "uniffiClone", "isConnected")
+internal open class UniffiVTableCallbackInterfaceConnectivityAccess(
+    @JvmField internal var `uniffiFree`: UniffiCallbackInterfaceFree? = null,
+    @JvmField internal var `uniffiClone`: UniffiCallbackInterfaceClone? = null,
+    @JvmField internal var `isConnected`: UniffiCallbackInterfaceConnectivityAccessMethod0? = null,
+) : Structure() {
+    class UniffiByValue(
+        `uniffiFree`: UniffiCallbackInterfaceFree? = null,
+        `uniffiClone`: UniffiCallbackInterfaceClone? = null,
+        `isConnected`: UniffiCallbackInterfaceConnectivityAccessMethod0? = null,
+    ): UniffiVTableCallbackInterfaceConnectivityAccess(`uniffiFree`,`uniffiClone`,`isConnected`,), Structure.ByValue
+
+   internal fun uniffiSetValue(other: UniffiVTableCallbackInterfaceConnectivityAccess) {
+        `uniffiFree` = other.`uniffiFree`
+        `uniffiClone` = other.`uniffiClone`
+        `isConnected` = other.`isConnected`
     }
 
 }
@@ -814,6 +836,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_device_checksum_constructor_cloudstorage_new(
     ): Short
+    external fun uniffi_cove_device_checksum_constructor_connectivity_new(
+    ): Short
     external fun uniffi_cove_device_checksum_constructor_device_new(
     ): Short
     external fun uniffi_cove_device_checksum_constructor_keychain_new(
@@ -837,6 +861,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_device_checksum_method_cloudstorageaccess_is_backup_uploaded(
     ): Short
     external fun uniffi_cove_device_checksum_method_cloudstorageaccess_overall_sync_health(
+    ): Short
+    external fun uniffi_cove_device_checksum_method_connectivityaccess_is_connected(
     ): Short
     external fun uniffi_cove_device_checksum_method_deviceaccess_timezone(
     ): Short
@@ -873,6 +899,7 @@ internal object UniffiLib {
     init {
         Native.register(UniffiLib::class.java, findLibraryName(componentName = "cove_device"))
         uniffiCallbackInterfaceCloudStorageAccess.register(this)
+        uniffiCallbackInterfaceConnectivityAccess.register(this)
         uniffiCallbackInterfaceDeviceAccess.register(this)
         uniffiCallbackInterfaceKeychainAccess.register(this)
         uniffiCallbackInterfacePasskeyProvider.register(this)
@@ -886,6 +913,12 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_cove_device_fn_method_cloudstorage_has_any_cloud_backup(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Byte
+    external fun uniffi_cove_device_fn_clone_connectivity(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_device_fn_free_connectivity(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_cove_device_fn_constructor_connectivity_new(`connectivity`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
     external fun uniffi_cove_device_fn_clone_device(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Long
     external fun uniffi_cove_device_fn_free_device(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -907,6 +940,8 @@ internal object UniffiLib {
     external fun uniffi_cove_device_fn_method_passkeyaccess_is_prf_supported(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Byte
     external fun uniffi_cove_device_fn_init_callback_vtable_cloudstorageaccess(`vtable`: UniffiVTableCallbackInterfaceCloudStorageAccess,
+    ): Unit
+    external fun uniffi_cove_device_fn_init_callback_vtable_connectivityaccess(`vtable`: UniffiVTableCallbackInterfaceConnectivityAccess,
     ): Unit
     external fun uniffi_cove_device_fn_init_callback_vtable_deviceaccess(`vtable`: UniffiVTableCallbackInterfaceDeviceAccess,
     ): Unit
@@ -1048,6 +1083,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_device_checksum_constructor_cloudstorage_new() != 17602.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_device_checksum_constructor_connectivity_new() != 64633.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_device_checksum_constructor_device_new() != 18892.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1082,6 +1120,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_overall_sync_health() != 51383.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_device_checksum_method_connectivityaccess_is_connected() != 15918.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_device_checksum_method_deviceaccess_timezone() != 54194.toShort()) {
@@ -1664,6 +1705,254 @@ public object FfiConverterTypeCloudStorage: FfiConverter<CloudStorage, Long> {
     override fun allocationSize(value: CloudStorage) = 8UL
 
     override fun write(value: CloudStorage, buf: ByteBuffer) {
+        buf.putLong(lower(value))
+    }
+}
+
+
+// This template implements a class for working with a Rust struct via a handle
+// to the live Rust struct on the other side of the FFI.
+//
+// There's some subtlety here, because we have to be careful not to operate on a Rust
+// struct after it has been dropped, and because we must expose a public API for freeing
+// theq Kotlin wrapper object in lieu of reliable finalizers. The core requirements are:
+//
+//   * Each instance holds an opaque handle to the underlying Rust struct.
+//     Method calls need to read this handle from the object's state and pass it in to
+//     the Rust FFI.
+//
+//   * When an instance is no longer needed, its handle should be passed to a
+//     special destructor function provided by the Rust FFI, which will drop the
+//     underlying Rust struct.
+//
+//   * Given an instance, calling code is expected to call the special
+//     `destroy` method in order to free it after use, either by calling it explicitly
+//     or by using a higher-level helper like the `use` method. Failing to do so risks
+//     leaking the underlying Rust struct.
+//
+//   * We can't assume that calling code will do the right thing, and must be prepared
+//     to handle Kotlin method calls executing concurrently with or even after a call to
+//     `destroy`, and to handle multiple (possibly concurrent!) calls to `destroy`.
+//
+//   * We must never allow Rust code to operate on the underlying Rust struct after
+//     the destructor has been called, and must never call the destructor more than once.
+//     Doing so may trigger memory unsafety.
+//
+//   * To mitigate many of the risks of leaking memory and use-after-free unsafety, a `Cleaner`
+//     is implemented to call the destructor when the Kotlin object becomes unreachable.
+//     This is done in a background thread. This is not a panacea, and client code should be aware that
+//      1. the thread may starve if some there are objects that have poorly performing
+//     `drop` methods or do significant work in their `drop` methods.
+//      2. the thread is shared across the whole library. This can be tuned by using `android_cleaner = true`,
+//         or `android = true` in the [`kotlin` section of the `uniffi.toml` file](https://mozilla.github.io/uniffi-rs/kotlin/configuration.html).
+//
+// If we try to implement this with mutual exclusion on access to the handle, there is the
+// possibility of a race between a method call and a concurrent call to `destroy`:
+//
+//    * Thread A starts a method call, reads the value of the handle, but is interrupted
+//      before it can pass the handle over the FFI to Rust.
+//    * Thread B calls `destroy` and frees the underlying Rust struct.
+//    * Thread A resumes, passing the already-read handle value to Rust and triggering
+//      a use-after-free.
+//
+// One possible solution would be to use a `ReadWriteLock`, with each method call taking
+// a read lock (and thus allowed to run concurrently) and the special `destroy` method
+// taking a write lock (and thus blocking on live method calls). However, we aim not to
+// generate methods with any hidden blocking semantics, and a `destroy` method that might
+// block if called incorrectly seems to meet that bar.
+//
+// So, we achieve our goals by giving each instance an associated `AtomicLong` counter to track
+// the number of in-flight method calls, and an `AtomicBoolean` flag to indicate whether `destroy`
+// has been called. These are updated according to the following rules:
+//
+//    * The initial value of the counter is 1, indicating a live object with no in-flight calls.
+//      The initial value for the flag is false.
+//
+//    * At the start of each method call, we atomically check the counter.
+//      If it is 0 then the underlying Rust struct has already been destroyed and the call is aborted.
+//      If it is nonzero them we atomically increment it by 1 and proceed with the method call.
+//
+//    * At the end of each method call, we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+//    * When `destroy` is called, we atomically flip the flag from false to true.
+//      If the flag was already true we silently fail.
+//      Otherwise we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+// Astute readers may observe that this all sounds very similar to the way that Rust's `Arc<T>` works,
+// and indeed it is, with the addition of a flag to guard against multiple calls to `destroy`.
+//
+// The overall effect is that the underlying Rust struct is destroyed only when `destroy` has been
+// called *and* all in-flight method calls have completed, avoiding violating any of the expectations
+// of the underlying Rust code.
+//
+// This makes a cleaner a better alternative to _not_ calling `destroy()` as
+// and when the object is finished with, but the abstraction is not perfect: if the Rust object's `drop`
+// method is slow, and/or there are many objects to cleanup, and it's on a low end Android device, then the cleaner
+// thread may be starved, and the app will leak memory.
+//
+// In this case, `destroy`ing manually may be a better solution.
+//
+// The cleaner can live side by side with the manual calling of `destroy`. In the order of responsiveness, uniffi objects
+// with Rust peers are reclaimed:
+//
+// 1. By calling the `destroy` method of the object, which calls `rustObject.free()`. If that doesn't happen:
+// 2. When the object becomes unreachable, AND the Cleaner thread gets to call `rustObject.free()`. If the thread is starved then:
+// 3. The memory is reclaimed when the process terminates.
+//
+// [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
+//
+
+
+public interface ConnectivityInterface {
+    
+    companion object
+}
+
+open class Connectivity: Disposable, AutoCloseable, ConnectivityInterface
+{
+
+    @Suppress("UNUSED_PARAMETER")
+    /**
+     * @suppress
+     */
+    constructor(withHandle: UniffiWithHandle, handle: Long) {
+        this.handle = handle
+        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
+    }
+
+    /**
+     * @suppress
+     *
+     * This constructor can be used to instantiate a fake object. Only used for tests. Any
+     * attempt to actually use an object constructed this way will fail as there is no
+     * connected Rust object.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    constructor(noHandle: NoHandle) {
+        this.handle = 0
+        this.cleanable = null
+    }
+    constructor(`connectivity`: ConnectivityAccess) :
+        this(UniffiWithHandle, 
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_device_fn_constructor_connectivity_new(
+    
+        FfiConverterTypeConnectivityAccess.lower(`connectivity`),_status)
+}
+    )
+
+    protected val handle: Long
+    protected val cleanable: UniffiCleaner.Cleanable?
+
+    private val wasDestroyed = AtomicBoolean(false)
+    private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
+    override fun destroy() {
+        // Only allow a single call to this method.
+        // TODO: maybe we should log a warning if called more than once?
+        if (this.wasDestroyed.compareAndSet(false, true)) {
+            // This decrement always matches the initial count of 1 given at creation time.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    @Synchronized
+    override fun close() {
+        this.destroy()
+    }
+
+    internal inline fun <R> callWithHandle(block: (handle: Long) -> R): R {
+        // Check and increment the call counter, to keep the object alive.
+        // This needs a compare-and-set retry loop in case of concurrent updates.
+        do {
+            val c = this.callCounter.get()
+            if (c == 0L) {
+                throw IllegalStateException("${this.javaClass.simpleName} object has already been destroyed")
+            }
+            if (c == Long.MAX_VALUE) {
+                throw IllegalStateException("${this.javaClass.simpleName} call counter would overflow")
+            }
+        } while (! this.callCounter.compareAndSet(c, c + 1L))
+        // Now we can safely do the method call without the handle being freed concurrently.
+        try {
+            return block(this.uniffiCloneHandle())
+        } finally {
+            // This decrement always matches the increment we performed above.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    // Use a static inner class instead of a closure so as not to accidentally
+    // capture `this` as part of the cleanable's action.
+    private class UniffiCleanAction(private val handle: Long) : Runnable {
+        override fun run() {
+            if (handle == 0.toLong()) {
+                // Fake object created with `NoHandle`, don't try to free.
+                return;
+            }
+            uniffiRustCall { status ->
+                UniffiLib.uniffi_cove_device_fn_free_connectivity(handle, status)
+            }
+        }
+    }
+
+    /**
+     * @suppress
+     */
+    fun uniffiCloneHandle(): Long {
+        if (handle == 0.toLong()) {
+            throw InternalException("uniffiCloneHandle() called on NoHandle object");
+        }
+        return uniffiRustCall() { status ->
+            UniffiLib.uniffi_cove_device_fn_clone_connectivity(handle, status)
+        }
+    }
+
+    
+
+    
+
+
+    
+    
+    /**
+     * @suppress
+     */
+    companion object
+    
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeConnectivity: FfiConverter<Connectivity, Long> {
+    override fun lower(value: Connectivity): Long {
+        return value.uniffiCloneHandle()
+    }
+
+    override fun lift(value: Long): Connectivity {
+        return Connectivity(UniffiWithHandle, value)
+    }
+
+    override fun read(buf: ByteBuffer): Connectivity {
+        return lift(buf.getLong())
+    }
+
+    override fun allocationSize(value: Connectivity) = 8UL
+
+    override fun write(value: Connectivity, buf: ByteBuffer) {
         buf.putLong(lower(value))
     }
 }
@@ -3341,6 +3630,65 @@ internal object uniffiCallbackInterfaceCloudStorageAccess {
  * @suppress
  */
 public object FfiConverterTypeCloudStorageAccess: FfiConverterCallbackInterface<CloudStorageAccess>()
+
+
+
+
+
+public interface ConnectivityAccess {
+    
+    fun `isConnected`(): kotlin.Boolean
+    
+    companion object
+}
+
+
+
+// Put the implementation in an object so we don't pollute the top-level namespace
+internal object uniffiCallbackInterfaceConnectivityAccess {
+    internal object `isConnected`: UniffiCallbackInterfaceConnectivityAccessMethod0 {
+        override fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: ByteByReference,uniffiCallStatus: UniffiRustCallStatus,) {
+            val uniffiObj = FfiConverterTypeConnectivityAccess.handleMap.get(uniffiHandle)
+            val makeCall = { ->
+                uniffiObj.`isConnected`(
+                )
+            }
+            val writeReturn = { value: kotlin.Boolean -> uniffiOutReturn.setValue(FfiConverterBoolean.lower(value)) }
+            uniffiTraitInterfaceCall(uniffiCallStatus, makeCall, writeReturn)
+        }
+    }
+
+    internal object uniffiFree: UniffiCallbackInterfaceFree {
+        override fun callback(handle: Long) {
+            FfiConverterTypeConnectivityAccess.handleMap.remove(handle)
+        }
+    }
+
+    internal object uniffiClone: UniffiCallbackInterfaceClone {
+        override fun callback(handle: Long): Long {
+            return FfiConverterTypeConnectivityAccess.handleMap.clone(handle)
+        }
+    }
+
+    internal var vtable = UniffiVTableCallbackInterfaceConnectivityAccess.UniffiByValue(
+        uniffiFree,
+        uniffiClone,
+        `isConnected`,
+    )
+
+    // Registers the foreign callback with the Rust side.
+    // This method is generated for each callback interface.
+    internal fun register(lib: UniffiLib) {
+        lib.uniffi_cove_device_fn_init_callback_vtable_connectivityaccess(vtable)
+    }
+}
+
+/**
+ * The ffiConverter which transforms the Callbacks in to handles to pass to Rust.
+ *
+ * @suppress
+ */
+public object FfiConverterTypeConnectivityAccess: FfiConverterCallbackInterface<ConnectivityAccess>()
 
 
 

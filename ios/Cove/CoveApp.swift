@@ -52,6 +52,7 @@ struct CoveApp: App {
     init() {
         _ = Keychain(keychain: KeychainAccessor())
         _ = Device(device: DeviceAccesor())
+        _ = Connectivity(connectivity: CloudConnectivityMonitor.shared)
         _ = PasskeyAccess(provider: PasskeyProviderImpl())
         _ = CloudStorage(cloudStorage: CloudStorageAccessImpl())
         Self.excludeDataDirFromBackup(logFailure: false)
@@ -309,13 +310,14 @@ private struct BootstrapTimeoutError: LocalizedError {
     }
 }
 
-final class CloudConnectivityMonitor: @unchecked Sendable {
+final class CloudConnectivityMonitor: ConnectivityAccess, @unchecked Sendable {
     static let shared = CloudConnectivityMonitor()
 
     private let monitor = NWPathMonitor()
     private let queue = DispatchQueue(label: "cove.CloudConnectivityMonitor")
     private let lock = NSLock()
     private var started = false
+    private var isConnectedValue = true
 
     private init() {}
 
@@ -326,18 +328,25 @@ final class CloudConnectivityMonitor: @unchecked Sendable {
         started = true
 
         monitor.pathUpdateHandler = { path in
-            let hint: CloudConnectivityHint =
-                if path.status == .satisfied {
-                    .online
-                } else if path.status == .unsatisfied {
-                    .offline
-                } else {
-                    .unknown
-                }
-
-            CloudBackupManager.shared.rust.updateConnectivityHint(hint: hint)
+            let connected = path.status == .satisfied
+            self.lock.lock()
+            self.isConnectedValue = connected
+            self.lock.unlock()
+            self.updateRustConnectivity(connected)
         }
 
         monitor.start(queue: queue)
+        isConnectedValue = monitor.currentPath.status == .satisfied
+        updateRustConnectivity(isConnectedValue)
+    }
+
+    func isConnected() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return isConnectedValue
+    }
+
+    private func updateRustConnectivity(_ isConnected: Bool) {
+        RustConnectivityManager().setConnectionState(isConnected: isConnected)
     }
 }
