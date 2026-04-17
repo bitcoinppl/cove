@@ -46,11 +46,7 @@ struct MoreInfoPopover: View {
         Task {
             do {
                 let result = try await manager.rust.exportTransactionsCsv()
-                ShareSheet.present(data: result.content, filename: result.filename) { success in
-                    if !success {
-                        Log.warn("Transaction Export Failed: cancelled or failed")
-                    }
-                }
+                ShareSheet.presentFromMenu(data: result.content, filename: result.filename)
             } catch {
                 app.alertState = .init(.general(
                     title: "Transaction Export Failed",
@@ -79,16 +75,7 @@ struct MoreInfoPopover: View {
             let prefix = t.identFileNamePrefix()
             let filename = "\(prefix)_backup.txt"
 
-            Button(action: {
-                // Defer presentation until the Menu's dismissal animation completes.
-                // ShareLink presented directly from a Menu races the dismissal and
-                // can fail silently or surface extension errors. See issues #449 and #313.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                    ShareSheet.present(data: content, filename: filename) { success in
-                        if !success { Log.warn("Backup export cancelled or failed") }
-                    }
-                }
-            }) {
+            Button(action: { ShareSheet.presentFromMenu(data: content, filename: filename) }) {
                 Label("Download Backup", systemImage: "square.and.arrow.down")
             }
         } else if let backupError = tapSignerBackupError {

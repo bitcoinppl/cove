@@ -97,6 +97,29 @@ enum ShareSheet {
         presenter.present(activityViewController, animated: true)
     }
 
+    /// Like `present(data:filename:completion:)` but defers by 400ms so that a
+    /// transient presenter (Menu, confirmationDialog) can finish its dismissal
+    /// animation before the share sheet appears. Centralises the magic delay and
+    /// failure-logging so callers don't repeat them.
+    @MainActor
+    static func presentFromMenu(data: String, filename: String) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            present(data: data, filename: filename) { success in
+                if !success { Log.warn("Share sheet cancelled or failed: \(filename)") }
+            }
+        }
+    }
+
+    /// Binary-data variant of `presentFromMenu`.
+    @MainActor
+    static func presentFromMenu(data: Data, filename: String) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            present(data: data, filename: filename) { success in
+                if !success { Log.warn("Share sheet cancelled or failed: \(filename)") }
+            }
+        }
+    }
+
     /// Presents share sheet with arbitrary data by writing to a temporary file
     /// - Parameters:
     ///   - data: the data to share
