@@ -125,21 +125,26 @@ class TapCardNfcManager private constructor() {
                                 isoDep.connect()
                             }
 
-                            // use higher timeout for backup (heavier NFC operation)
-                            val isBackup = cmd is TapSignerCmd.Backup
-                            val timeout = if (isBackup) {
-                                TapCardTransport.ISODEP_BACKUP_TIMEOUT_MS
-                            } else {
-                                TapCardTransport.ISODEP_TIMEOUT_MS
-                            }
+                            // use higher timeout for backup and setup (both run backup APDUs)
+                            val needsLongTimeout =
+                                cmd is TapSignerCmd.Backup || cmd is TapSignerCmd.Setup
+                            val timeout =
+                                if (needsLongTimeout) {
+                                    TapCardTransport.ISODEP_BACKUP_TIMEOUT_MS
+                                } else {
+                                    TapCardTransport.ISODEP_TIMEOUT_MS
+                                }
                             isoDep.timeout = timeout
 
-                            Log.d(tag, "Connected to IsoDep tag (timeout=${timeout}ms, backup=$isBackup)")
+                            Log.d(
+                                tag,
+                                "Connected to IsoDep tag (timeout=${timeout}ms, cmd=${cmd::class.simpleName})",
+                            )
 
-                            // send proactive UX guidance for backup operations
-                            if (isBackup) {
+                            // send proactive UX guidance for heavy NFC operations
+                            if (needsLongTimeout) {
                                 onMessageUpdate?.invoke(
-                                    "Keep your phone steady on the card \u2014 backup may take a few seconds"
+                                    "Keep your phone steady on the card \u2014 this may take a few seconds"
                                 )
                             }
 
