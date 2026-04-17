@@ -59,11 +59,7 @@ pub(crate) fn verify_checksum(data_with_checksum: &[u8]) -> Option<&[u8]> {
     }
     let (body, cs) = data_with_checksum.split_at(data_with_checksum.len() - 2);
     let expected = checksum(body);
-    if cs == expected {
-        Some(body)
-    } else {
-        None
-    }
+    if cs == expected { Some(body) } else { None }
 }
 
 #[cfg(test)]

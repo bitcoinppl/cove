@@ -45,9 +45,8 @@ pub fn encode(data: &[u8], file_type: KtFileType) -> String {
 pub fn decode(s: &str) -> Result<(KtFileType, Vec<u8>), Error> {
     let s = s.trim().to_uppercase();
 
-    let rest = s
-        .strip_prefix("B$")
-        .ok_or_else(|| Error::InvalidBbqr("missing 'B$' header".into()))?;
+    let rest =
+        s.strip_prefix("B$").ok_or_else(|| Error::InvalidBbqr("missing 'B$' header".into()))?;
 
     if rest.len() < 6 {
         return Err(Error::InvalidBbqr("too short to be a valid BBQr packet".into()));
@@ -68,10 +67,10 @@ pub fn decode(s: &str) -> Result<(KtFileType, Vec<u8>), Error> {
     if header_tail.len() != 4 {
         return Err(Error::InvalidBbqr("truncated header".into()));
     }
-    let num_parts =
-        u8::from_str_radix(&header_tail[0..2], 16).map_err(|_| Error::InvalidBbqr("bad num_parts".into()))?;
-    let part_index =
-        u8::from_str_radix(&header_tail[2..4], 16).map_err(|_| Error::InvalidBbqr("bad part_index".into()))?;
+    let num_parts = u8::from_str_radix(&header_tail[0..2], 16)
+        .map_err(|_| Error::InvalidBbqr("bad num_parts".into()))?;
+    let part_index = u8::from_str_radix(&header_tail[2..4], 16)
+        .map_err(|_| Error::InvalidBbqr("bad part_index".into()))?;
 
     if num_parts != 1 || part_index != 0 {
         return Err(Error::InvalidBbqr(format!(

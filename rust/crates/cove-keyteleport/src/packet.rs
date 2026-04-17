@@ -31,9 +31,9 @@ impl ReceiverPacket {
         if ft != KtFileType::Receiver {
             return Err(Error::InvalidReceiverPacket("expected R-type BBQr".into()));
         }
-        let arr: [u8; 33] = data
-            .try_into()
-            .map_err(|_| Error::InvalidReceiverPacket("encrypted pubkey must be 33 bytes".into()))?;
+        let arr: [u8; 33] = data.try_into().map_err(|_| {
+            Error::InvalidReceiverPacket("encrypted pubkey must be 33 bytes".into())
+        })?;
         Ok(Self { encrypted_pubkey: arr })
     }
 
