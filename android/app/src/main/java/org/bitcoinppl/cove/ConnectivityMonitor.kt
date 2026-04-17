@@ -18,7 +18,14 @@ class ConnectivityMonitor(
     private val callback =
         object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
-                pushConnectivityState(true)
+                pushConnectivityState(isConnected(network))
+            }
+
+            override fun onCapabilitiesChanged(
+                network: Network,
+                capabilities: NetworkCapabilities,
+            ) {
+                pushConnectivityState(isConnected(capabilities))
             }
 
             override fun onLost(network: Network) {
@@ -32,9 +39,7 @@ class ConnectivityMonitor(
 
     override fun isConnected(): Boolean {
         val network = connectivityManager.activeNetwork ?: return false
-        val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
-        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
-            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        return isConnected(network)
     }
 
     fun start() {
@@ -49,5 +54,15 @@ class ConnectivityMonitor(
         RustConnectivityManager().use { rustConnectivityManager ->
             rustConnectivityManager.setConnectionState(connected)
         }
+    }
+
+    private fun isConnected(network: Network): Boolean {
+        val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
+        return isConnected(capabilities)
+    }
+
+    private fun isConnected(capabilities: NetworkCapabilities): Boolean {
+        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
     }
 }
