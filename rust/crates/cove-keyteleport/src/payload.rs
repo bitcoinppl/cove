@@ -29,8 +29,8 @@ impl Payload {
             }
             Payload::Xprv(xprv) => {
                 // base58-decoded binary XPRV (78 bytes), prefixed with the type byte
-                let decoded = bitcoin::base58::decode(xprv)
-                    .unwrap_or_else(|_| xprv.as_bytes().to_vec());
+                let decoded =
+                    bitcoin::base58::decode(xprv).unwrap_or_else(|_| xprv.as_bytes().to_vec());
                 let mut out = Vec::with_capacity(1 + decoded.len());
                 out.push(TYPE_XPRV);
                 out.extend_from_slice(&decoded);
@@ -74,7 +74,9 @@ mod tests {
         assert_eq!(bytes[0], TYPE_MNEMONIC);
         let recovered = Payload::from_bytes(&bytes).unwrap();
         match (p, recovered) {
-            (Payload::Mnemonic(a), Payload::Mnemonic(b)) => assert_eq!(a.to_string(), b.to_string()),
+            (Payload::Mnemonic(a), Payload::Mnemonic(b)) => {
+                assert_eq!(a.to_string(), b.to_string())
+            }
             _ => panic!("type mismatch"),
         }
     }

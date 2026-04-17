@@ -74,7 +74,11 @@ impl ReceiverSession {
     /// 5. AES-CTR(inner_key) decrypt → inner plaintext
     /// 6. Verify 2-byte checksum on inner plaintext
     /// 7. Parse payload type byte
-    pub fn decode(&self, sender_pkt: &SenderPacket, teleport_password: &str) -> Result<Payload, Error> {
+    pub fn decode(
+        &self,
+        sender_pkt: &SenderPacket,
+        teleport_password: &str,
+    ) -> Result<Payload, Error> {
         let sk = session_key(&self.privkey(), sender_pkt.sender_pubkey());
 
         // Outer decryption + checksum
