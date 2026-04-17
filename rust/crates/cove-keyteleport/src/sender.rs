@@ -13,7 +13,6 @@ use crate::payload::Payload;
 #[derive(Debug)]
 pub struct SenderSession {
     privkey_bytes: Zeroizing<[u8; 32]>,
-    _receiver_pubkey: PublicKey,
     session_key: Zeroizing<[u8; 32]>,
     /// 8-character Base32 teleport password shown to the sender, shared out-of-band.
     teleport_password: String,
@@ -55,7 +54,6 @@ impl SenderSession {
 
         Ok(Self {
             privkey_bytes: Zeroizing::new(key_bytes),
-            _receiver_pubkey: receiver_pubkey,
             session_key: Zeroizing::new(sk),
             teleport_password,
         })
