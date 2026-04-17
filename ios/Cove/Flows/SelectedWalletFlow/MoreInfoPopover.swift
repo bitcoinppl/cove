@@ -79,10 +79,16 @@ struct MoreInfoPopover: View {
             let prefix = t.identFileNamePrefix()
             let filename = "\(prefix)_backup.txt"
 
-            ShareLink(
-                item: BackupExport(content: content, filename: filename),
-                preview: SharePreview(filename)
-            ) {
+            Button(action: {
+                // Defer presentation until the Menu's dismissal animation completes.
+                // ShareLink presented directly from a Menu races the dismissal and
+                // can fail silently or surface extension errors. See issues #449 and #313.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                    ShareSheet.present(data: content, filename: filename) { success in
+                        if !success { Log.warn("Backup export cancelled or failed") }
+                    }
+                }
+            }) {
                 Label("Download Backup", systemImage: "square.and.arrow.down")
             }
         } else if let backupError = tapSignerBackupError {
