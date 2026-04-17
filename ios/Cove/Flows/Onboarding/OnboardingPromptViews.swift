@@ -58,6 +58,7 @@ struct OnboardingWelcomeScreen: View {
 }
 
 struct OnboardingBitcoinChoiceScreen: View {
+    let errorMessage: String?
     let onNewHere: () -> Void
     let onHasBitcoin: () -> Void
 
@@ -67,6 +68,10 @@ struct OnboardingBitcoinChoiceScreen: View {
             title: "Do you already have Bitcoin?",
             subtitle: "We’ll tailor the setup based on where you’re starting from."
         ) {
+            if let errorMessage {
+                OnboardingInlineMessage(text: errorMessage)
+            }
+
             VStack(spacing: 14) {
                 OnboardingChoiceCard(
                     title: "No, I’m new here",
@@ -143,6 +148,7 @@ struct OnboardingRestoreUnavailableScreen: View {
 }
 
 struct OnboardingStorageChoiceScreen: View {
+    let errorMessage: String?
     let onRestoreFromCoveBackup: (() -> Void)?
     let onSelectStorage: (OnboardingStorageSelection) -> Void
     let onBack: () -> Void
@@ -153,6 +159,10 @@ struct OnboardingStorageChoiceScreen: View {
             title: "How do you store your Bitcoin?",
             subtitle: "Choose the option that best matches what you use today."
         ) {
+            if let errorMessage {
+                OnboardingInlineMessage(text: errorMessage)
+            }
+
             VStack(spacing: 14) {
                 if let onRestoreFromCoveBackup {
                     OnboardingCloudRestoreChoiceCard(action: onRestoreFromCoveBackup)
@@ -190,6 +200,7 @@ struct OnboardingStorageChoiceScreen: View {
 }
 
 struct OnboardingSoftwareChoiceScreen: View {
+    let errorMessage: String?
     let onRestoreFromCoveBackup: (() -> Void)?
     let onSelectSoftwareAction: (OnboardingSoftwareSelection) -> Void
     let onBack: () -> Void
@@ -200,6 +211,10 @@ struct OnboardingSoftwareChoiceScreen: View {
             title: "What would you like to do?",
             subtitle: "Create a new wallet in Cove or import the one you already use."
         ) {
+            if let errorMessage {
+                OnboardingInlineMessage(text: errorMessage)
+            }
+
             VStack(spacing: 14) {
                 if let onRestoreFromCoveBackup {
                     OnboardingCloudRestoreChoiceCard(action: onRestoreFromCoveBackup)
