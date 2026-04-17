@@ -289,6 +289,24 @@ impl WalletActor {
         Ok(psbt)
     }
 
+    /// Build a replacement transaction for an unconfirmed RBF-signaling transaction.
+    ///
+    /// Reuses the original inputs and outputs; caller supplies a higher fee rate.
+    /// BDK validates that `txid` is unconfirmed and signals opt-in RBF (BIP 125).
+    #[into_actor_result]
+    pub async fn build_fee_bump_tx(
+        &mut self,
+        txid: Txid,
+        fee_rate: impl Into<BdkFeeRate>,
+    ) -> Result<Psbt, Error> {
+        debug!("build_fee_bump_tx: {txid}");
+        let mut builder =
+            self.wallet.bdk.build_fee_bump(txid).map_err(|e| Error::BuildTxError(e.to_string()))?;
+        builder.fee_rate(fee_rate.into());
+        let psbt = builder.finish().map_err(|e| Error::BuildTxError(e.to_string()))?;
+        Ok(psbt)
+    }
+
     // cancel a transaction, reset the address & change address index
     pub async fn cancel_txn(&mut self, txn: BdkTransaction) {
         self.wallet.bdk.cancel_tx(&txn);
