@@ -1,5 +1,6 @@
 use cove_device::keychain::Keychain;
 use cove_device::passkey::{PasskeyAccess, PasskeyError};
+use cove_tokio::unblock::run_blocking as run_sync_task;
 use rand::RngExt as _;
 use tracing::info;
 
@@ -28,7 +29,7 @@ pub(super) enum PasskeyAuthPolicy {
     DiscoverOnly,
 }
 
-pub(super) fn authenticate_with_policy(
+pub(super) async fn authenticate_with_policy(
     keychain: &Keychain,
     passkey: &PasskeyAccess,
     prf_salt: &[u8; 32],
@@ -36,13 +37,20 @@ pub(super) fn authenticate_with_policy(
 ) -> Result<PasskeyAuthOutcome, CloudBackupError> {
     if matches!(policy, PasskeyAuthPolicy::StoredOnly | PasskeyAuthPolicy::StoredThenDiscover) {
         if let Some(ref credential_id) = load_stored_credential_id(keychain) {
-            let challenge: Vec<u8> = rand::rng().random::<[u8; 32]>().to_vec();
-            match passkey.authenticate_with_prf(
-                PASSKEY_RP_ID.to_string(),
-                credential_id.clone(),
-                prf_salt.to_vec(),
-                challenge,
-            ) {
+            let passkey = passkey.clone();
+            let credential_id = credential_id.clone();
+            let auth_credential_id = credential_id.clone();
+            let prf_salt = *prf_salt;
+            match run_sync_task(move || {
+                passkey.authenticate_with_prf(
+                    PASSKEY_RP_ID.to_string(),
+                    auth_credential_id,
+                    prf_salt.to_vec(),
+                    rand::rng().random::<[u8; 32]>().to_vec(),
+                )
+            })
+            .await
+            {
                 Ok(prf_output) => {
                     let prf_key: [u8; 32] = prf_output.try_into().map_err(|_| {
                         CloudBackupError::Internal("PRF output is not 32 bytes".into())
@@ -50,7 +58,7 @@ pub(super) fn authenticate_with_policy(
 
                     return Ok(PasskeyAuthOutcome::Authenticated(AuthenticatedPasskey {
                         prf_key,
-                        credential_id: credential_id.clone(),
+                        credential_id,
                         credential_recovered: false,
                     }));
                 }
@@ -75,12 +83,17 @@ pub(super) fn authenticate_with_policy(
         return Ok(PasskeyAuthOutcome::NoCredentialFound);
     }
 
-    let challenge: Vec<u8> = rand::rng().random::<[u8; 32]>().to_vec();
-    let discovered = match passkey.discover_and_authenticate_with_prf(
-        PASSKEY_RP_ID.to_string(),
-        prf_salt.to_vec(),
-        challenge,
-    ) {
+    let passkey = passkey.clone();
+    let prf_salt = *prf_salt;
+    let discovered = match run_sync_task(move || {
+        passkey.discover_and_authenticate_with_prf(
+            PASSKEY_RP_ID.to_string(),
+            prf_salt.to_vec(),
+            rand::rng().random::<[u8; 32]>().to_vec(),
+        )
+    })
+    .await
+    {
         Ok(discovered) => discovered,
         Err(error) => return map_discovery_error(error),
     };
@@ -98,7 +111,7 @@ pub(super) fn authenticate_with_policy(
 }
 
 impl VerificationSession {
-    pub(super) fn authenticate_with_fallback(
+    pub(super) async fn authenticate_with_fallback(
         &self,
         prf_salt: &[u8; 32],
     ) -> Result<PasskeyAuthOutcome, CloudBackupError> {
@@ -108,7 +121,7 @@ impl VerificationSession {
             PasskeyAuthPolicy::StoredThenDiscover
         };
 
-        authenticate_with_policy(&self.keychain, &self.passkey, prf_salt, policy)
+        authenticate_with_policy(&self.keychain, &self.passkey, prf_salt, policy).await
     }
 }
 

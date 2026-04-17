@@ -47,7 +47,7 @@ impl RustCloudBackupManager {
     ///
     /// Verifies the master key is in the keychain and backup files exist in iCloud
     /// Returns None if everything is OK, Some(warning) if there's a problem
-    pub fn verify_backup_integrity_impl(&self) -> Option<String> {
+    pub async fn verify_backup_integrity_impl(&self) -> Option<String> {
         let state = self.state.read().status.clone();
         if !matches!(state, CloudBackupStatus::Enabled | CloudBackupStatus::PasskeyMissing) {
             return None;
@@ -88,13 +88,17 @@ impl RustCloudBackupManager {
             return self.finish_backup_integrity_check(&issues, downgrade);
         }
 
-        self.verify_wallet_backups(namespace, &mut issues);
+        self.verify_wallet_backups(namespace, &mut issues).await;
         self.finish_backup_integrity_check(&issues, downgrade)
     }
 
-    fn verify_wallet_backups(&self, namespace: String, issues: &mut Vec<BackupIntegrityIssue>) {
+    async fn verify_wallet_backups(
+        &self,
+        namespace: String,
+        issues: &mut Vec<BackupIntegrityIssue>,
+    ) {
         let cloud = CloudStorage::global();
-        let wallet_record_ids = match cloud.list_wallet_backups(namespace.clone()) {
+        let wallet_record_ids = match cloud.list_wallet_backups(namespace.clone()).await {
             Ok(wallet_record_ids) => wallet_record_ids,
             Err(error) => {
                 warn!("Backup integrity: wallet list check failed: {error}");
@@ -103,7 +107,7 @@ impl RustCloudBackupManager {
             }
         };
 
-        let remote_wallet_truth = match self.load_remote_wallet_truth(&wallet_record_ids) {
+        let remote_wallet_truth = match self.load_remote_wallet_truth(&wallet_record_ids).await {
             Ok(remote_wallet_truth) => remote_wallet_truth,
             Err(error) => {
                 warn!("Backup integrity: remote truth refresh failed: {error}");
@@ -115,7 +119,9 @@ impl RustCloudBackupManager {
         let inventory = match CloudWalletInventory::load_with_remote_truth(
             &wallet_record_ids,
             remote_wallet_truth,
-        ) {
+        )
+        .await
+        {
             Ok(inventory) => inventory,
             Err(error) => {
                 warn!("Backup integrity: local wallet inventory failed: {error}");
@@ -130,8 +136,8 @@ impl RustCloudBackupManager {
         let handled_unsynced = !unsynced.is_empty();
         let mut backup_failed = false;
         if handled_unsynced {
-            let backup_result = self.do_backup_wallets(&unsynced);
-            self.refresh_integrity_detail(&namespace, &wallet_record_ids);
+            let backup_result = self.do_backup_wallets(&unsynced).await;
+            self.refresh_integrity_detail(&namespace, &wallet_record_ids).await;
             if let Err(error) = backup_result {
                 error!("Backup integrity: auto-sync failed: {error}");
                 issues.push(BackupIntegrityIssue::WalletsNotBackedUp);
@@ -156,8 +162,8 @@ impl RustCloudBackupManager {
             && wallet_record_ids.is_empty()
             && count_all_wallets(&db).unwrap_or_default() > 0
         {
-            let sync_result = self.do_sync_unsynced_wallets();
-            self.refresh_integrity_detail(&namespace, &wallet_record_ids);
+            let sync_result = self.do_sync_unsynced_wallets().await;
+            self.refresh_integrity_detail(&namespace, &wallet_record_ids).await;
             if let Err(error) = sync_result {
                 error!("Backup integrity: auto-sync failed: {error}");
                 issues.push(BackupIntegrityIssue::WalletsNotBackedUp);
@@ -165,9 +171,13 @@ impl RustCloudBackupManager {
         }
     }
 
-    fn refresh_integrity_detail(&self, namespace: &str, fallback_wallet_record_ids: &[String]) {
+    async fn refresh_integrity_detail(
+        &self,
+        namespace: &str,
+        fallback_wallet_record_ids: &[String],
+    ) {
         let cloud = CloudStorage::global();
-        let wallet_record_ids = match cloud.list_wallet_backups(namespace.to_string()) {
+        let wallet_record_ids = match cloud.list_wallet_backups(namespace.to_string()).await {
             Ok(wallet_record_ids) => wallet_record_ids,
             Err(error) => {
                 warn!("Backup integrity: detail relist failed: {error}");
@@ -175,7 +185,7 @@ impl RustCloudBackupManager {
             }
         };
 
-        let remote_wallet_truth = match self.load_remote_wallet_truth(&wallet_record_ids) {
+        let remote_wallet_truth = match self.load_remote_wallet_truth(&wallet_record_ids).await {
             Ok(remote_wallet_truth) => remote_wallet_truth,
             Err(error) => {
                 warn!("Backup integrity: detail remote truth refresh failed: {error}");
@@ -186,7 +196,9 @@ impl RustCloudBackupManager {
         let inventory = match CloudWalletInventory::load_with_remote_truth(
             &wallet_record_ids,
             remote_wallet_truth,
-        ) {
+        )
+        .await
+        {
             Ok(inventory) => inventory,
             Err(error) => {
                 warn!("Backup integrity: detail refresh failed: {error}");

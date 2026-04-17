@@ -1162,10 +1162,12 @@ dependencies = [
 name = "cove-device"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "bdk_wallet",
  "bip39",
  "bitcoin",
  "cove-cspp",
+ "cove-tokio",
  "cove-types",
  "cove-util",
  "hex",

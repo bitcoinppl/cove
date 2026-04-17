@@ -7106,7 +7106,7 @@ public protocol RustCloudBackupManagerProtocol: AnyObject, Sendable {
     /**
      * Background startup health check for cloud backup integrity
      */
-    func verifyBackupIntegrity()  -> String?
+    func verifyBackupIntegrity() async  -> String?
     
 }
 open class RustCloudBackupManager: RustCloudBackupManagerProtocol, @unchecked Sendable {
@@ -7323,12 +7323,22 @@ open func syncPersistedState()  {try! rustCall() {
     /**
      * Background startup health check for cloud backup integrity
      */
-open func verifyBackupIntegrity() -> String?  {
-    return try!  FfiConverterOptionString.lift(try! rustCall() {
-    uniffi_cove_fn_method_rustcloudbackupmanager_verify_backup_integrity(
-            self.uniffiCloneHandle(),$0
-    )
-})
+open func verifyBackupIntegrity()async  -> String?  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_rustcloudbackupmanager_verify_backup_integrity(
+                    self.uniffiCloneHandle()
+                    
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_rust_buffer,
+            completeFunc: ffi_cove_rust_future_complete_rust_buffer,
+            freeFunc: ffi_cove_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterOptionString.lift,
+            errorHandler: nil
+            
+        )
 }
     
 
@@ -36704,7 +36714,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustcloudbackupmanager_sync_persisted_state() != 19758) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustcloudbackupmanager_verify_backup_integrity() != 47801) {
+    if (uniffi_cove_checksum_method_rustcloudbackupmanager_verify_backup_integrity() != 35162) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustcoincontrolmanager_button_presentation() != 24764) {

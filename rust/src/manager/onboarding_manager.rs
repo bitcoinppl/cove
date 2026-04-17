@@ -1,4 +1,4 @@
-use std::{sync::Arc, thread, time::Duration};
+use std::{sync::Arc, time::Duration};
 
 use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
 use cove_util::ResultExt as _;
@@ -397,7 +397,7 @@ impl RustOnboardingManager {
 impl RustOnboardingManager {
     fn start_cloud_check(self: &Arc<Self>) {
         let me = Arc::clone(self);
-        thread::spawn(move || {
+        cove_tokio::task::spawn(async move {
             if CLOUD_BACKUP_MANAGER.is_offline() {
                 me.finish_cloud_check(CloudCheckOutcome::Inconclusive(CloudCheckIssue::Offline));
                 return;
@@ -405,11 +405,15 @@ impl RustOnboardingManager {
 
             let retry_delays = [1u64, 2, 2, 3, 5, 10];
             let cloud = CloudStorage::global().clone();
-            let outcome = determine_cloud_check_outcome(
+            let outcome = determine_cloud_check_outcome_async(
                 &retry_delays,
-                || cloud.has_any_cloud_backup(),
-                thread::sleep,
-            );
+                || {
+                    let cloud = cloud.clone();
+                    async move { cloud.has_any_cloud_backup().await }
+                },
+                |duration| tokio::time::sleep(duration),
+            )
+            .await;
             me.finish_cloud_check(outcome);
         });
     }
@@ -1411,14 +1415,16 @@ fn cloud_check_inconclusive_message(issue: CloudCheckIssue) -> String {
     }
 }
 
-fn determine_cloud_check_outcome<F, S>(
+async fn determine_cloud_check_outcome_async<F, Fut, S, SleepFut>(
     retry_delays: &[u64],
     mut has_any_cloud_backup: F,
     mut sleep: S,
 ) -> CloudCheckOutcome
 where
-    F: FnMut() -> Result<bool, CloudStorageError>,
-    S: FnMut(Duration),
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = Result<bool, CloudStorageError>>,
+    S: FnMut(Duration) -> SleepFut,
+    SleepFut: std::future::Future<Output = ()>,
 {
     for (attempt, delay) in retry_delays.iter().enumerate() {
         info!(
@@ -1427,16 +1433,16 @@ where
             retry_delays.len() + 1
         );
 
-        match has_any_cloud_backup() {
+        match has_any_cloud_backup().await {
             Ok(true) => return CloudCheckOutcome::BackupFound,
             Ok(false) => return CloudCheckOutcome::NoBackupConfirmed,
             Err(error) => warn!("Onboarding: cloud backup check failed: {error}"),
         }
 
-        sleep(Duration::from_secs(*delay));
+        sleep(Duration::from_secs(*delay)).await;
     }
 
-    match has_any_cloud_backup() {
+    match has_any_cloud_backup().await {
         Ok(true) => CloudCheckOutcome::BackupFound,
         Ok(false) => CloudCheckOutcome::NoBackupConfirmed,
         Err(error) => {
@@ -1451,6 +1457,41 @@ mod tests {
     use bip39::Mnemonic;
 
     use super::*;
+
+    fn determine_cloud_check_outcome<F, S>(
+        retry_delays: &[u64],
+        mut has_any_cloud_backup: F,
+        mut sleep: S,
+    ) -> CloudCheckOutcome
+    where
+        F: FnMut() -> Result<bool, CloudStorageError>,
+        S: FnMut(Duration),
+    {
+        for (attempt, delay) in retry_delays.iter().enumerate() {
+            info!(
+                "Onboarding: checking cloud backup attempt={}/{}",
+                attempt + 1,
+                retry_delays.len() + 1
+            );
+
+            match has_any_cloud_backup() {
+                Ok(true) => return CloudCheckOutcome::BackupFound,
+                Ok(false) => return CloudCheckOutcome::NoBackupConfirmed,
+                Err(error) => warn!("Onboarding: cloud backup check failed: {error}"),
+            }
+
+            sleep(Duration::from_secs(*delay));
+        }
+
+        match has_any_cloud_backup() {
+            Ok(true) => CloudCheckOutcome::BackupFound,
+            Ok(false) => CloudCheckOutcome::NoBackupConfirmed,
+            Err(error) => {
+                warn!("Onboarding: final cloud backup check failed: {error}");
+                CloudCheckOutcome::Inconclusive(classify_cloud_check_error(&error))
+            }
+        }
+    }
 
     #[test]
     fn continue_from_backup_requires_a_saved_backup_method() {

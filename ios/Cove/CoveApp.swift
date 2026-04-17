@@ -5,9 +5,7 @@
 //  Created by Praveen Perera  on 6/17/24.
 //
 
-@_exported import CoveCore
 import MijickPopups
-import Network
 import SwiftUI
 
 extension EnvironmentValues {
@@ -292,7 +290,7 @@ extension CoveApp {
             guard isICloudAvailable else { return }
 
             let warning = await Task.detached {
-                CloudBackupManager.shared.rust.verifyBackupIntegrity()
+                await CloudBackupManager.shared.rust.verifyBackupIntegrity()
             }.value
             if let warning { Log.error("[STARTUP] backup integrity warning: \(warning)") }
         }
@@ -307,46 +305,5 @@ private enum BootstrapResult {
 private struct BootstrapTimeoutError: LocalizedError {
     var errorDescription: String? {
         "bootstrap timed out"
-    }
-}
-
-final class CloudConnectivityMonitor: ConnectivityAccess, @unchecked Sendable {
-    static let shared = CloudConnectivityMonitor()
-
-    private let monitor = NWPathMonitor()
-    private let queue = DispatchQueue(label: "cove.CloudConnectivityMonitor")
-    private let lock = NSLock()
-    private var started = false
-    private var isConnectedValue = true
-
-    private init() {}
-
-    func start() {
-        lock.lock()
-        defer { lock.unlock() }
-        guard !started else { return }
-        started = true
-
-        monitor.pathUpdateHandler = { path in
-            let connected = path.status == .satisfied
-            self.lock.lock()
-            self.isConnectedValue = connected
-            self.lock.unlock()
-            self.updateRustConnectivity(connected)
-        }
-
-        monitor.start(queue: queue)
-        isConnectedValue = monitor.currentPath.status == .satisfied
-        updateRustConnectivity(isConnectedValue)
-    }
-
-    func isConnected() -> Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return isConnectedValue
-    }
-
-    private func updateRustConnectivity(_ isConnected: Bool) {
-        RustConnectivityManager().setConnectionState(isConnected: isConnected)
     }
 }

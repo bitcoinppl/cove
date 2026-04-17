@@ -195,8 +195,9 @@ impl MockCloudStorage {
     }
 }
 
+#[async_trait::async_trait]
 impl CloudStorageAccess for MockCloudStorage {
-    fn upload_master_key_backup(
+    async fn upload_master_key_backup(
         &self,
         namespace: String,
         data: Vec<u8>,
@@ -209,7 +210,7 @@ impl CloudStorageAccess for MockCloudStorage {
         Ok(())
     }
 
-    fn upload_wallet_backup(
+    async fn upload_wallet_backup(
         &self,
         namespace: String,
         record_id: String,
@@ -241,7 +242,10 @@ impl CloudStorageAccess for MockCloudStorage {
         Ok(())
     }
 
-    fn download_master_key_backup(&self, namespace: String) -> Result<Vec<u8>, CloudStorageError> {
+    async fn download_master_key_backup(
+        &self,
+        namespace: String,
+    ) -> Result<Vec<u8>, CloudStorageError> {
         self.state
             .lock()
             .master_key_backups
@@ -250,7 +254,7 @@ impl CloudStorageAccess for MockCloudStorage {
             .ok_or(CloudStorageError::NotFound(namespace))
     }
 
-    fn download_wallet_backup(
+    async fn download_wallet_backup(
         &self,
         namespace: String,
         record_id: String,
@@ -275,7 +279,7 @@ impl CloudStorageAccess for MockCloudStorage {
             .ok_or(CloudStorageError::NotFound(format!("{namespace}/{record_id}")))
     }
 
-    fn delete_wallet_backup(
+    async fn delete_wallet_backup(
         &self,
         _namespace: String,
         _record_id: String,
@@ -283,11 +287,11 @@ impl CloudStorageAccess for MockCloudStorage {
         Ok(())
     }
 
-    fn list_namespaces(&self) -> Result<Vec<String>, CloudStorageError> {
+    async fn list_namespaces(&self) -> Result<Vec<String>, CloudStorageError> {
         Ok(self.state.lock().wallet_files.keys().cloned().collect())
     }
 
-    fn list_wallet_files(&self, namespace: String) -> Result<Vec<String>, CloudStorageError> {
+    async fn list_wallet_files(&self, namespace: String) -> Result<Vec<String>, CloudStorageError> {
         let state = self.state.lock();
         if let Some(error) = state.list_wallet_files_error.clone() {
             return Err(error);
@@ -308,7 +312,7 @@ impl CloudStorageAccess for MockCloudStorage {
         Ok(wallet_files)
     }
 
-    fn is_backup_uploaded(
+    async fn is_backup_uploaded(
         &self,
         _namespace: String,
         _record_id: String,
@@ -316,7 +320,7 @@ impl CloudStorageAccess for MockCloudStorage {
         Ok(true)
     }
 
-    fn overall_sync_health(&self) -> CloudSyncHealth {
+    async fn overall_sync_health(&self) -> CloudSyncHealth {
         CloudSyncHealth::AllUploaded
     }
 }
@@ -543,7 +547,16 @@ pub(crate) fn reset_cloud_backup_test_state(
     std::thread::spawn(move || reset_manager.debug_reset_cloud_backup_state())
         .join()
         .expect("reset cloud backup test state thread");
-    manager.clear_wallet_upload_debouncers_for_test();
+    let runtime = manager.runtime.clone();
+    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+    let _task = cove_tokio::task::spawn(async move {
+        let result = call!(runtime.clear_upload_runtime_state()).await;
+        sender.send(result).expect("send clear upload runtime state result");
+    });
+    receiver
+        .recv()
+        .expect("receive clear upload runtime state result")
+        .expect("clear upload runtime state");
 }
 
 pub(crate) async fn wait_for_test_condition(
@@ -658,7 +671,7 @@ pub(crate) fn persist_xpub_wallets(wallets: Vec<WalletMetadata>) {
     }
 }
 
-pub(crate) fn encrypted_wallet_backup_bytes(
+pub(crate) async fn encrypted_wallet_backup_bytes(
     metadata: &WalletMetadata,
     master_key: &cove_cspp::master_key::MasterKey,
     revision_hash: &str,
@@ -668,6 +681,7 @@ pub(crate) fn encrypted_wallet_backup_bytes(
         metadata,
         metadata.wallet_mode,
     )
+    .await
     .unwrap();
     prepared.entry.content_revision_hash = revision_hash.to_string();
 
@@ -784,16 +798,10 @@ pub(crate) async fn run_wallet_upload_for_test_async(
         .expect("run wallet upload");
 }
 
-pub(crate) fn new_restore_operation_for_test(
+pub(crate) async fn new_restore_operation_for_test(
     manager: &RustCloudBackupManager,
 ) -> super::super::runtime_actor::RestoreOperation {
-    let runtime = manager.runtime.clone();
-    std::thread::spawn(move || {
-        cove_tokio::task::block_on(call!(runtime.new_restore_operation()))
-            .expect("create restore operation")
-    })
-    .join()
-    .expect("restore operation thread")
+    call!(manager.runtime.new_restore_operation()).await.expect("create restore operation")
 }
 
 #[cfg(test)]

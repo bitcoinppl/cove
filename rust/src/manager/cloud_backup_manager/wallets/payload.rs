@@ -97,7 +97,7 @@ impl From<LocalWalletMode> for WalletMode {
     }
 }
 
-pub fn build_wallet_entry(
+pub async fn build_wallet_entry(
     metadata: &WalletMetadata,
     mode: LocalWalletMode,
 ) -> Result<WalletEntry, CloudBackupError> {
@@ -149,7 +149,7 @@ pub fn build_wallet_entry(
 
     let wallet_mode = mode.into();
 
-    let labels_jsonl = export_wallet_labels_jsonl(id)?;
+    let labels_jsonl = export_wallet_labels_jsonl(id).await?;
     let prepared_labels = prepare_cloud_labels(&labels_jsonl)?;
     let revision_payload = WalletBackupRevisionPayload::for_backup(
         metadata,
@@ -202,11 +202,11 @@ fn build_cold_wallet_secret(
     }
 }
 
-pub fn prepare_wallet_backup(
+pub async fn prepare_wallet_backup(
     metadata: &WalletMetadata,
     mode: LocalWalletMode,
 ) -> Result<PreparedWalletBackup, CloudBackupError> {
-    let entry = build_wallet_entry(metadata, mode)?;
+    let entry = build_wallet_entry(metadata, mode).await?;
     let record_id = cove_cspp::backup_data::wallet_record_id(metadata.id.as_ref());
     let revision_hash = entry.content_revision_hash.clone();
 
@@ -262,13 +262,13 @@ where
     value.as_ref().map(stable_sync_hash).transpose()
 }
 
-fn export_wallet_labels_jsonl(
+async fn export_wallet_labels_jsonl(
     wallet_id: &crate::wallet::metadata::WalletId,
 ) -> Result<String, CloudBackupError> {
     let manager = LabelManager::try_new(wallet_id.clone())
         .map_err(|error| CloudBackupError::Internal(format!("open labels db: {error}")))?;
 
-    manager.export_blocking().map_err(|error| CloudBackupError::Internal(error.to_string()))
+    manager.export().await.map_err(|error| CloudBackupError::Internal(error.to_string()))
 }
 
 pub fn decode_cloud_labels_jsonl(entry: &WalletEntry) -> Result<Option<String>, CloudBackupError> {

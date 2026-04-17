@@ -33,7 +33,7 @@ pub(super) struct PendingUploadVerifier(pub(super) RustCloudBackupManager);
 const MAX_PENDING_WALLET_UPLOAD_CONFIRMATION_ATTEMPTS: u32 = 3;
 
 impl PendingUploadVerifier {
-    pub(super) fn run_once(&self) -> bool {
+    pub(super) async fn run_once(&self) -> bool {
         let table = &Database::global().cloud_blob_sync_states;
         let states = match table.list() {
             Ok(states) => states,
@@ -53,7 +53,7 @@ impl PendingUploadVerifier {
             let current_state = state.clone();
 
             had_pending = true;
-            let result = self.check_blob(sync_state, &current_state);
+            let result = self.check_blob(sync_state, &current_state).await;
             let next_state = Self::apply_blob_result(sync_state, &current_state, &result);
             let persisted = match table.set_if_current(sync_state, &next_state) {
                 Ok(persisted) => persisted,
@@ -74,7 +74,7 @@ impl PendingUploadVerifier {
             self.schedule_retry_if_needed(&next_state);
         }
 
-        self.0.finalize_pending_verification_if_ready();
+        self.0.finalize_pending_verification_if_ready().await;
         let has_pending = self.0.has_pending_cloud_upload_verification();
         self.send_pending_state(has_pending);
         self.0.refresh_sync_health();
@@ -112,28 +112,28 @@ impl PendingUploadVerifier {
         }
     }
 
-    fn check_blob(
+    async fn check_blob(
         &self,
         sync_state: &PersistedCloudBlobSyncState,
         current: &CloudBlobUploadedPendingConfirmationState,
     ) -> BlobCheckResult {
         if sync_state.wallet_id.is_none() {
-            return self.check_master_key_wrapper(&sync_state.namespace_id);
+            return self.check_master_key_wrapper(&sync_state.namespace_id).await;
         }
 
-        self.check_wallet_blob(sync_state, current)
+        self.check_wallet_blob(sync_state, current).await
     }
 
-    fn check_master_key_wrapper(&self, namespace_id: &str) -> BlobCheckResult {
+    async fn check_master_key_wrapper(&self, namespace_id: &str) -> BlobCheckResult {
         let cloud = CloudStorage::global();
-        match cloud.download_master_key_backup(namespace_id.to_string()) {
+        match cloud.download_master_key_backup(namespace_id.to_string()).await {
             Ok(_) => BlobCheckResult::Confirmed,
             Err(CloudStorageError::NotFound(_)) => BlobCheckResult::NotYetUploaded,
             Err(error) => cloud_storage_failure_result(error),
         }
     }
 
-    fn check_wallet_blob(
+    async fn check_wallet_blob(
         &self,
         sync_state: &PersistedCloudBlobSyncState,
         current: &CloudBlobUploadedPendingConfirmationState,
@@ -154,6 +154,7 @@ impl PendingUploadVerifier {
         );
         let wallet_json = match CloudStorage::global()
             .download_wallet_backup(sync_state.namespace_id.clone(), sync_state.record_id.clone())
+            .await
         {
             Ok(wallet_json) => wallet_json,
             Err(CloudStorageError::NotFound(_)) => return BlobCheckResult::NotYetUploaded,

@@ -1,6 +1,4 @@
 import Foundation
-
-@_exported import CoveCore
 import SwiftUI
 
 extension WeakReconciler: CloudBackupManagerReconciler where Reconciler == CloudBackupManager {}
@@ -30,6 +28,8 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
         }
         rust.listenForUpdates(reconciler: WeakReconciler(self))
         syncHealthObserver.start()
+        // Keep the initial iCloud health probe off the main startup path.
+        rustBridge.async { rust.cloudStorageDidChange() }
     }
 
     var status: CloudBackupStatus {

@@ -513,7 +513,7 @@ public protocol CloudStorageProtocol: AnyObject, Sendable {
     /**
      * Check if any cloud backup namespaces exist
      */
-    func hasAnyCloudBackup() throws  -> Bool
+    func hasAnyCloudBackup() async throws  -> Bool
     
 }
 open class CloudStorage: CloudStorageProtocol, @unchecked Sendable {
@@ -580,12 +580,21 @@ public convenience init(cloudStorage: CloudStorageAccess) {
     /**
      * Check if any cloud backup namespaces exist
      */
-open func hasAnyCloudBackup()throws  -> Bool  {
-    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeCloudStorageError_lift) {
-    uniffi_cove_device_fn_method_cloudstorage_has_any_cloud_backup(
-            self.uniffiCloneHandle(),$0
-    )
-})
+open func hasAnyCloudBackup()async throws  -> Bool  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_device_fn_method_cloudstorage_has_any_cloud_backup(
+                    self.uniffiCloneHandle()
+                    
+                )
+            },
+            pollFunc: ffi_cove_device_rust_future_poll_i8,
+            completeFunc: ffi_cove_device_rust_future_complete_i8,
+            freeFunc: ffi_cove_device_rust_future_free_i8,
+            liftFunc: FfiConverterBool.lift,
+            errorHandler: FfiConverterTypeCloudStorageError_lift
+        )
 }
     
 
@@ -1319,6 +1328,7 @@ public func FfiConverterTypeCloudStorageError_lower(_ value: CloudStorageError) 
 
 public enum CloudSyncHealth: Equatable, Hashable {
     
+    case unknown
     case allUploaded
     case uploading
     case failed(String
@@ -1346,16 +1356,18 @@ public struct FfiConverterTypeCloudSyncHealth: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
         
-        case 1: return .allUploaded
+        case 1: return .unknown
         
-        case 2: return .uploading
+        case 2: return .allUploaded
         
-        case 3: return .failed(try FfiConverterString.read(from: &buf)
+        case 3: return .uploading
+        
+        case 4: return .failed(try FfiConverterString.read(from: &buf)
         )
         
-        case 4: return .noFiles
+        case 5: return .noFiles
         
-        case 5: return .unavailable
+        case 6: return .unavailable
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -1365,25 +1377,29 @@ public struct FfiConverterTypeCloudSyncHealth: FfiConverterRustBuffer {
         switch value {
         
         
-        case .allUploaded:
+        case .unknown:
             writeInt(&buf, Int32(1))
         
         
-        case .uploading:
+        case .allUploaded:
             writeInt(&buf, Int32(2))
         
         
-        case let .failed(v1):
+        case .uploading:
             writeInt(&buf, Int32(3))
+        
+        
+        case let .failed(v1):
+            writeInt(&buf, Int32(4))
             FfiConverterString.write(v1, into: &buf)
             
         
         case .noFiles:
-            writeInt(&buf, Int32(4))
+            writeInt(&buf, Int32(5))
         
         
         case .unavailable:
-            writeInt(&buf, Int32(5))
+            writeInt(&buf, Int32(6))
         
         }
     }
@@ -1723,32 +1739,32 @@ public func FfiConverterTypePasskeyError_lower(_ value: PasskeyError) -> RustBuf
 
 public protocol CloudStorageAccess: AnyObject, Sendable {
     
-    func uploadMasterKeyBackup(namespace: String, data: Data) throws 
+    func uploadMasterKeyBackup(namespace: String, data: Data) async throws 
     
-    func uploadWalletBackup(namespace: String, recordId: String, data: Data) throws 
+    func uploadWalletBackup(namespace: String, recordId: String, data: Data) async throws 
     
-    func downloadMasterKeyBackup(namespace: String) throws  -> Data
+    func downloadMasterKeyBackup(namespace: String) async throws  -> Data
     
-    func downloadWalletBackup(namespace: String, recordId: String) throws  -> Data
+    func downloadWalletBackup(namespace: String, recordId: String) async throws  -> Data
     
-    func deleteWalletBackup(namespace: String, recordId: String) throws 
+    func deleteWalletBackup(namespace: String, recordId: String) async throws 
     
     /**
      * List all namespace IDs (subdirectories of cspp-namespaces/)
      */
-    func listNamespaces() throws  -> [String]
+    func listNamespaces() async throws  -> [String]
     
     /**
      * List wallet backup filenames within a namespace (e.g. "wallet-<hash>.json")
      */
-    func listWalletFiles(namespace: String) throws  -> [String]
+    func listWalletFiles(namespace: String) async throws  -> [String]
     
     /**
      * Check whether a blob has been fully uploaded to iCloud
      */
-    func isBackupUploaded(namespace: String, recordId: String) throws  -> Bool
+    func isBackupUploaded(namespace: String, recordId: String) async throws  -> Bool
     
-    func overallSyncHealth()  -> CloudSyncHealth
+    func overallSyncHealth() async  -> CloudSyncHealth
     
 }
 
@@ -1779,27 +1795,43 @@ fileprivate struct UniffiCallbackInterfaceCloudStorageAccess {
             uniffiHandle: UInt64,
             namespace: RustBuffer,
             data: RustBuffer,
-            uniffiOutReturn: UnsafeMutableRawPointer,
-            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteVoid,
+            uniffiCallbackData: UInt64,
+            uniffiOutDroppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
         ) in
             let makeCall = {
-                () throws -> () in
+                () async throws -> () in
                 guard let uniffiObj = try? FfiConverterCallbackInterfaceCloudStorageAccess.handleMap.get(handle: uniffiHandle) else {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
-                return try uniffiObj.uploadMasterKeyBackup(
+                return try await uniffiObj.uploadMasterKeyBackup(
                      namespace: try FfiConverterString.lift(namespace),
                      data: try FfiConverterData.lift(data)
                 )
             }
 
-            
-            let writeReturn = { () }
-            uniffiTraitInterfaceCallWithError(
-                callStatus: uniffiCallStatus,
+            let uniffiHandleSuccess = { (returnValue: ()) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultVoid(
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultVoid(
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            uniffiTraitInterfaceCallAsyncWithError(
                 makeCall: makeCall,
-                writeReturn: writeReturn,
-                lowerError: FfiConverterTypeCloudStorageError_lower
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                lowerError: FfiConverterTypeCloudStorageError_lower,
+                droppedCallback: uniffiOutDroppedCallback
             )
         },
         uploadWalletBackup: { (
@@ -1807,204 +1839,344 @@ fileprivate struct UniffiCallbackInterfaceCloudStorageAccess {
             namespace: RustBuffer,
             recordId: RustBuffer,
             data: RustBuffer,
-            uniffiOutReturn: UnsafeMutableRawPointer,
-            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteVoid,
+            uniffiCallbackData: UInt64,
+            uniffiOutDroppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
         ) in
             let makeCall = {
-                () throws -> () in
+                () async throws -> () in
                 guard let uniffiObj = try? FfiConverterCallbackInterfaceCloudStorageAccess.handleMap.get(handle: uniffiHandle) else {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
-                return try uniffiObj.uploadWalletBackup(
+                return try await uniffiObj.uploadWalletBackup(
                      namespace: try FfiConverterString.lift(namespace),
                      recordId: try FfiConverterString.lift(recordId),
                      data: try FfiConverterData.lift(data)
                 )
             }
 
-            
-            let writeReturn = { () }
-            uniffiTraitInterfaceCallWithError(
-                callStatus: uniffiCallStatus,
+            let uniffiHandleSuccess = { (returnValue: ()) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultVoid(
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultVoid(
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            uniffiTraitInterfaceCallAsyncWithError(
                 makeCall: makeCall,
-                writeReturn: writeReturn,
-                lowerError: FfiConverterTypeCloudStorageError_lower
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                lowerError: FfiConverterTypeCloudStorageError_lower,
+                droppedCallback: uniffiOutDroppedCallback
             )
         },
         downloadMasterKeyBackup: { (
             uniffiHandle: UInt64,
             namespace: RustBuffer,
-            uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
-            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutDroppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
         ) in
             let makeCall = {
-                () throws -> Data in
+                () async throws -> Data in
                 guard let uniffiObj = try? FfiConverterCallbackInterfaceCloudStorageAccess.handleMap.get(handle: uniffiHandle) else {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
-                return try uniffiObj.downloadMasterKeyBackup(
+                return try await uniffiObj.downloadMasterKeyBackup(
                      namespace: try FfiConverterString.lift(namespace)
                 )
             }
 
-            
-            let writeReturn = { uniffiOutReturn.pointee = FfiConverterData.lower($0) }
-            uniffiTraitInterfaceCallWithError(
-                callStatus: uniffiCallStatus,
+            let uniffiHandleSuccess = { (returnValue: Data) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: FfiConverterData.lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            uniffiTraitInterfaceCallAsyncWithError(
                 makeCall: makeCall,
-                writeReturn: writeReturn,
-                lowerError: FfiConverterTypeCloudStorageError_lower
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                lowerError: FfiConverterTypeCloudStorageError_lower,
+                droppedCallback: uniffiOutDroppedCallback
             )
         },
         downloadWalletBackup: { (
             uniffiHandle: UInt64,
             namespace: RustBuffer,
             recordId: RustBuffer,
-            uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
-            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutDroppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
         ) in
             let makeCall = {
-                () throws -> Data in
+                () async throws -> Data in
                 guard let uniffiObj = try? FfiConverterCallbackInterfaceCloudStorageAccess.handleMap.get(handle: uniffiHandle) else {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
-                return try uniffiObj.downloadWalletBackup(
+                return try await uniffiObj.downloadWalletBackup(
                      namespace: try FfiConverterString.lift(namespace),
                      recordId: try FfiConverterString.lift(recordId)
                 )
             }
 
-            
-            let writeReturn = { uniffiOutReturn.pointee = FfiConverterData.lower($0) }
-            uniffiTraitInterfaceCallWithError(
-                callStatus: uniffiCallStatus,
+            let uniffiHandleSuccess = { (returnValue: Data) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: FfiConverterData.lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            uniffiTraitInterfaceCallAsyncWithError(
                 makeCall: makeCall,
-                writeReturn: writeReturn,
-                lowerError: FfiConverterTypeCloudStorageError_lower
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                lowerError: FfiConverterTypeCloudStorageError_lower,
+                droppedCallback: uniffiOutDroppedCallback
             )
         },
         deleteWalletBackup: { (
             uniffiHandle: UInt64,
             namespace: RustBuffer,
             recordId: RustBuffer,
-            uniffiOutReturn: UnsafeMutableRawPointer,
-            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteVoid,
+            uniffiCallbackData: UInt64,
+            uniffiOutDroppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
         ) in
             let makeCall = {
-                () throws -> () in
+                () async throws -> () in
                 guard let uniffiObj = try? FfiConverterCallbackInterfaceCloudStorageAccess.handleMap.get(handle: uniffiHandle) else {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
-                return try uniffiObj.deleteWalletBackup(
+                return try await uniffiObj.deleteWalletBackup(
                      namespace: try FfiConverterString.lift(namespace),
                      recordId: try FfiConverterString.lift(recordId)
                 )
             }
 
-            
-            let writeReturn = { () }
-            uniffiTraitInterfaceCallWithError(
-                callStatus: uniffiCallStatus,
+            let uniffiHandleSuccess = { (returnValue: ()) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultVoid(
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultVoid(
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            uniffiTraitInterfaceCallAsyncWithError(
                 makeCall: makeCall,
-                writeReturn: writeReturn,
-                lowerError: FfiConverterTypeCloudStorageError_lower
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                lowerError: FfiConverterTypeCloudStorageError_lower,
+                droppedCallback: uniffiOutDroppedCallback
             )
         },
         listNamespaces: { (
             uniffiHandle: UInt64,
-            uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
-            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutDroppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
         ) in
             let makeCall = {
-                () throws -> [String] in
+                () async throws -> [String] in
                 guard let uniffiObj = try? FfiConverterCallbackInterfaceCloudStorageAccess.handleMap.get(handle: uniffiHandle) else {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
-                return try uniffiObj.listNamespaces(
+                return try await uniffiObj.listNamespaces(
                 )
             }
 
-            
-            let writeReturn = { uniffiOutReturn.pointee = FfiConverterSequenceString.lower($0) }
-            uniffiTraitInterfaceCallWithError(
-                callStatus: uniffiCallStatus,
+            let uniffiHandleSuccess = { (returnValue: [String]) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: FfiConverterSequenceString.lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            uniffiTraitInterfaceCallAsyncWithError(
                 makeCall: makeCall,
-                writeReturn: writeReturn,
-                lowerError: FfiConverterTypeCloudStorageError_lower
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                lowerError: FfiConverterTypeCloudStorageError_lower,
+                droppedCallback: uniffiOutDroppedCallback
             )
         },
         listWalletFiles: { (
             uniffiHandle: UInt64,
             namespace: RustBuffer,
-            uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
-            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutDroppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
         ) in
             let makeCall = {
-                () throws -> [String] in
+                () async throws -> [String] in
                 guard let uniffiObj = try? FfiConverterCallbackInterfaceCloudStorageAccess.handleMap.get(handle: uniffiHandle) else {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
-                return try uniffiObj.listWalletFiles(
+                return try await uniffiObj.listWalletFiles(
                      namespace: try FfiConverterString.lift(namespace)
                 )
             }
 
-            
-            let writeReturn = { uniffiOutReturn.pointee = FfiConverterSequenceString.lower($0) }
-            uniffiTraitInterfaceCallWithError(
-                callStatus: uniffiCallStatus,
+            let uniffiHandleSuccess = { (returnValue: [String]) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: FfiConverterSequenceString.lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            uniffiTraitInterfaceCallAsyncWithError(
                 makeCall: makeCall,
-                writeReturn: writeReturn,
-                lowerError: FfiConverterTypeCloudStorageError_lower
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                lowerError: FfiConverterTypeCloudStorageError_lower,
+                droppedCallback: uniffiOutDroppedCallback
             )
         },
         isBackupUploaded: { (
             uniffiHandle: UInt64,
             namespace: RustBuffer,
             recordId: RustBuffer,
-            uniffiOutReturn: UnsafeMutablePointer<Int8>,
-            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteI8,
+            uniffiCallbackData: UInt64,
+            uniffiOutDroppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
         ) in
             let makeCall = {
-                () throws -> Bool in
+                () async throws -> Bool in
                 guard let uniffiObj = try? FfiConverterCallbackInterfaceCloudStorageAccess.handleMap.get(handle: uniffiHandle) else {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
-                return try uniffiObj.isBackupUploaded(
+                return try await uniffiObj.isBackupUploaded(
                      namespace: try FfiConverterString.lift(namespace),
                      recordId: try FfiConverterString.lift(recordId)
                 )
             }
 
-            
-            let writeReturn = { uniffiOutReturn.pointee = FfiConverterBool.lower($0) }
-            uniffiTraitInterfaceCallWithError(
-                callStatus: uniffiCallStatus,
+            let uniffiHandleSuccess = { (returnValue: Bool) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultI8(
+                        returnValue: FfiConverterBool.lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultI8(
+                        returnValue: 0,
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            uniffiTraitInterfaceCallAsyncWithError(
                 makeCall: makeCall,
-                writeReturn: writeReturn,
-                lowerError: FfiConverterTypeCloudStorageError_lower
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                lowerError: FfiConverterTypeCloudStorageError_lower,
+                droppedCallback: uniffiOutDroppedCallback
             )
         },
         overallSyncHealth: { (
             uniffiHandle: UInt64,
-            uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
-            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutDroppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
         ) in
             let makeCall = {
-                () throws -> CloudSyncHealth in
+                () async throws -> CloudSyncHealth in
                 guard let uniffiObj = try? FfiConverterCallbackInterfaceCloudStorageAccess.handleMap.get(handle: uniffiHandle) else {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
-                return uniffiObj.overallSyncHealth(
+                return await uniffiObj.overallSyncHealth(
                 )
             }
 
-            
-            let writeReturn = { uniffiOutReturn.pointee = FfiConverterTypeCloudSyncHealth_lower($0) }
-            uniffiTraitInterfaceCall(
-                callStatus: uniffiCallStatus,
+            let uniffiHandleSuccess = { (returnValue: CloudSyncHealth) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: FfiConverterTypeCloudSyncHealth_lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
                 makeCall: makeCall,
-                writeReturn: writeReturn
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                droppedCallback: uniffiOutDroppedCallback
             )
         }
     )
@@ -2853,6 +3025,144 @@ fileprivate struct FfiConverterSequenceString: FfiConverterRustBuffer {
         return seq
     }
 }
+private let UNIFFI_RUST_FUTURE_POLL_READY: Int8 = 0
+private let UNIFFI_RUST_FUTURE_POLL_WAKE: Int8 = 1
+
+fileprivate let uniffiContinuationHandleMap = UniffiHandleMap<UnsafeContinuation<Int8, Never>>()
+
+fileprivate func uniffiRustCallAsync<F, T>(
+    rustFutureFunc: () -> UInt64,
+    pollFunc: (UInt64, @escaping UniffiRustFutureContinuationCallback, UInt64) -> (),
+    completeFunc: (UInt64, UnsafeMutablePointer<RustCallStatus>) -> F,
+    freeFunc: (UInt64) -> (),
+    liftFunc: (F) throws -> T,
+    errorHandler: ((RustBuffer) throws -> Swift.Error)?
+) async throws -> T {
+    // Make sure to call the ensure init function since future creation doesn't have a
+    // RustCallStatus param, so doesn't use makeRustCall()
+    uniffiEnsureCoveDeviceInitialized()
+    let rustFuture = rustFutureFunc()
+    defer {
+        freeFunc(rustFuture)
+    }
+    var pollResult: Int8;
+    repeat {
+        pollResult = await withUnsafeContinuation {
+            pollFunc(
+                rustFuture,
+                { handle, pollResult in
+                    uniffiFutureContinuationCallback(handle: handle, pollResult: pollResult)
+                },
+                uniffiContinuationHandleMap.insert(obj: $0)
+            )
+        }
+    } while pollResult != UNIFFI_RUST_FUTURE_POLL_READY
+
+    return try liftFunc(makeRustCall(
+        { completeFunc(rustFuture, $0) },
+        errorHandler: errorHandler
+    ))
+}
+
+// Callback handlers for an async calls.  These are invoked by Rust when the future is ready.  They
+// lift the return value or error and resume the suspended function.
+fileprivate func uniffiFutureContinuationCallback(handle: UInt64, pollResult: Int8) {
+    if let continuation = try? uniffiContinuationHandleMap.remove(handle: handle) {
+        continuation.resume(returning: pollResult)
+    } else {
+        print("uniffiFutureContinuationCallback invalid handle")
+    }
+}
+private func uniffiTraitInterfaceCallAsync<T>(
+    makeCall: @escaping () async throws -> T,
+    handleSuccess: @escaping (T) -> (),
+    handleError: @escaping (Int8, RustBuffer) -> (),
+    droppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
+) {
+    let task = Task {
+        // Note: it's important we call either `handleSuccess` or `handleError` exactly once.  Each
+        // call consumes an Arc reference, which means there should be no possibility of a double
+        // call.  The following code is structured so that will will never call both `handleSuccess`
+        // and `handleError`, even in the face of weird errors.
+        //
+        // On platforms that need extra machinery to make C-ABI calls, like JNA or ctypes, it's
+        // possible that we fail to make either call.  However, it doesn't seem like this is
+        // possible on Swift since swift can just make the C call directly.
+        var callResult: T
+        do {
+            callResult = try await makeCall()
+        } catch {
+            handleError(CALL_UNEXPECTED_ERROR, FfiConverterString.lower(String(describing: error)))
+            return
+        }
+        handleSuccess(callResult)
+    }
+    let handle = UNIFFI_FOREIGN_FUTURE_HANDLE_MAP.insert(obj: task)
+    droppedCallback.pointee = UniffiForeignFutureDroppedCallbackStruct(
+        handle: handle,
+        free: uniffiForeignFutureDroppedCallback
+    )
+}
+
+private func uniffiTraitInterfaceCallAsyncWithError<T, E>(
+    makeCall: @escaping () async throws -> T,
+    handleSuccess: @escaping (T) -> (),
+    handleError: @escaping (Int8, RustBuffer) -> (),
+    lowerError: @escaping (E) -> RustBuffer,
+    droppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
+) {
+    let task = Task {
+        // See the note in uniffiTraitInterfaceCallAsync for details on `handleSuccess` and
+        // `handleError`.
+        var callResult: T
+        do {
+            callResult = try await makeCall()
+        } catch let error as E {
+            handleError(CALL_ERROR, lowerError(error))
+            return
+        } catch {
+            handleError(CALL_UNEXPECTED_ERROR, FfiConverterString.lower(String(describing: error)))
+            return
+        }
+        handleSuccess(callResult)
+    }
+    let handle = UNIFFI_FOREIGN_FUTURE_HANDLE_MAP.insert(obj: task)
+    droppedCallback.pointee = UniffiForeignFutureDroppedCallbackStruct(
+        handle: handle,
+        free: uniffiForeignFutureDroppedCallback
+    )
+}
+
+// Borrow the callback handle map implementation to store foreign future handles
+// TODO: consolidate the handle-map code (https://github.com/mozilla/uniffi-rs/pull/1823)
+fileprivate let UNIFFI_FOREIGN_FUTURE_HANDLE_MAP = UniffiHandleMap<UniffiForeignFutureTask>()
+
+// Protocol for tasks that handle foreign futures.
+//
+// Defining a protocol allows all tasks to be stored in the same handle map.  This can't be done
+// with the task object itself, since has generic parameters.
+fileprivate protocol UniffiForeignFutureTask {
+    func cancel()
+}
+
+extension Task: UniffiForeignFutureTask {}
+
+private func uniffiForeignFutureDroppedCallback(handle: UInt64) {
+    do {
+        let task = try UNIFFI_FOREIGN_FUTURE_HANDLE_MAP.remove(handle: handle)
+        // Set the cancellation flag on the task.  If it's still running, the code can check the
+        // cancellation flag or call `Task.checkCancellation()`.  If the task has completed, this is
+        // a no-op.
+        task.cancel()
+    } catch {
+        print("uniffiForeignFutureDroppedCallback: handle missing from handlemap")
+    }
+}
+
+// For testing
+public func uniffiForeignFutureHandleCountCoveDevice() -> Int {
+    UNIFFI_FOREIGN_FUTURE_HANDLE_MAP.count
+}
 
 private enum InitializationResult {
     case ok
@@ -2869,7 +3179,7 @@ private let initializationResult: InitializationResult = {
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
-    if (uniffi_cove_device_checksum_method_cloudstorage_has_any_cloud_backup() != 55372) {
+    if (uniffi_cove_device_checksum_method_cloudstorage_has_any_cloud_backup() != 9486) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_device_checksum_method_passkeyaccess_is_prf_supported() != 31494) {
@@ -2890,31 +3200,31 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_device_checksum_constructor_passkeyaccess_new() != 32284) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_cloudstorageaccess_upload_master_key_backup() != 38493) {
+    if (uniffi_cove_device_checksum_method_cloudstorageaccess_upload_master_key_backup() != 49256) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_cloudstorageaccess_upload_wallet_backup() != 48039) {
+    if (uniffi_cove_device_checksum_method_cloudstorageaccess_upload_wallet_backup() != 12330) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_cloudstorageaccess_download_master_key_backup() != 17041) {
+    if (uniffi_cove_device_checksum_method_cloudstorageaccess_download_master_key_backup() != 27611) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_cloudstorageaccess_download_wallet_backup() != 58597) {
+    if (uniffi_cove_device_checksum_method_cloudstorageaccess_download_wallet_backup() != 18237) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_cloudstorageaccess_delete_wallet_backup() != 46277) {
+    if (uniffi_cove_device_checksum_method_cloudstorageaccess_delete_wallet_backup() != 23759) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_cloudstorageaccess_list_namespaces() != 28959) {
+    if (uniffi_cove_device_checksum_method_cloudstorageaccess_list_namespaces() != 32218) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_cloudstorageaccess_list_wallet_files() != 18430) {
+    if (uniffi_cove_device_checksum_method_cloudstorageaccess_list_wallet_files() != 43627) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_cloudstorageaccess_is_backup_uploaded() != 28663) {
+    if (uniffi_cove_device_checksum_method_cloudstorageaccess_is_backup_uploaded() != 15879) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_cloudstorageaccess_overall_sync_health() != 51383) {
+    if (uniffi_cove_device_checksum_method_cloudstorageaccess_overall_sync_health() != 51700) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_device_checksum_method_connectivityaccess_is_connected() != 15918) {

@@ -10,7 +10,7 @@ use std::path::Path;
 use std::sync::{Arc, LazyLock};
 use std::time::Duration;
 
-use act_zero::{Addr, call, send};
+use act_zero::{Addr, send};
 use cove_cspp::CsppStore as _;
 use cove_cspp::backup_data::{MASTER_KEY_RECORD_ID, wallet_record_id};
 use cove_device::cloud_storage::{CloudStorage, CloudSyncHealth};
@@ -274,7 +274,7 @@ impl Default for CloudBackupState {
     fn default() -> Self {
         Self {
             status: CloudBackupStatus::Disabled,
-            sync_health: CloudSyncHealth::NoFiles,
+            sync_health: CloudSyncHealth::Unknown,
             prompt_intent: CloudBackupPromptIntent::None,
             progress: None,
             restore_progress: None,
@@ -558,6 +558,7 @@ pub struct RustCloudBackupManager {
     pub reconciler: Sender<Message>,
     pub reconcile_receiver: Arc<Receiver<Message>>,
     prompt_state: Arc<parking_lot::Mutex<CloudBackupPromptState>>,
+    pending_enable_session: Arc<parking_lot::Mutex<Option<PendingEnableSession>>>,
     pub(crate) runtime: Addr<CloudBackupRuntimeActor>,
 }
 
@@ -728,6 +729,7 @@ impl RustCloudBackupManager {
             reconciler: sender,
             reconcile_receiver: Arc::new(receiver),
             prompt_state: Arc::new(parking_lot::Mutex::new(CloudBackupPromptState::default())),
+            pending_enable_session: Arc::new(parking_lot::Mutex::new(None)),
             runtime: spawn_actor(CloudBackupRuntimeActor::new(manager.clone())),
         });
 
@@ -904,7 +906,7 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) fn refresh_sync_health(&self) {
-        self.set_sync_health(CloudStorage::global().overall_sync_health());
+        send!(self.runtime.request_sync_health_refresh());
     }
 
     pub(crate) fn refresh_persisted_flags(&self) {
@@ -1044,7 +1046,7 @@ impl RustCloudBackupManager {
         operation.run(|| self.set_restore_report(report)).map(|_| ())
     }
 
-    pub(crate) fn build_cloud_backup_detail_with_remote_truth(
+    pub(crate) async fn build_cloud_backup_detail_with_remote_truth(
         &self,
         wallet_record_ids: &[String],
         remote_wallet_truth: RemoteWalletTruth,
@@ -1052,7 +1054,8 @@ impl RustCloudBackupManager {
         Ok(self::cloud_inventory::CloudWalletInventory::load_with_remote_truth(
             wallet_record_ids,
             remote_wallet_truth,
-        )?
+        )
+        .await?
         .build_detail())
     }
 
@@ -1154,10 +1157,7 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) fn replace_pending_enable_session(&self, session: PendingEnableSession) {
-        cove_tokio::task::block_on(call!(self.runtime.replace_pending_enable_session(session)))
-            .unwrap_or_else(|error| {
-                error!("Failed to cache pending enable session: {error}");
-            });
+        *self.pending_enable_session.lock() = Some(session);
     }
 
     pub(crate) fn take_retry_pending_enable_session(&self) -> Option<PendingEnableSession> {
@@ -1174,18 +1174,11 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) fn take_pending_enable_session(&self) -> Option<PendingEnableSession> {
-        cove_tokio::task::block_on(call!(self.runtime.take_pending_enable_session()))
-            .unwrap_or_else(|error| {
-                error!("Failed to take pending enable session: {error}");
-                None
-            })
+        self.pending_enable_session.lock().take()
     }
 
     pub(crate) fn clear_pending_enable_session(&self) {
-        cove_tokio::task::block_on(call!(self.runtime.clear_pending_enable_session()))
-            .unwrap_or_else(|error| {
-                error!("Failed to clear pending enable session: {error}");
-            });
+        self.pending_enable_session.lock().take();
     }
 
     pub(crate) fn replace_pending_verification_completion(
@@ -1230,7 +1223,7 @@ impl RustCloudBackupManager {
         send!(self.runtime.clear_pending_verification_completion());
     }
 
-    fn load_remote_wallet_truth(
+    async fn load_remote_wallet_truth(
         &self,
         wallet_record_ids: &[String],
     ) -> Result<RemoteWalletTruth, CloudBackupError> {
@@ -1259,7 +1252,7 @@ impl RustCloudBackupManager {
         for wallet in local_wallets {
             let record_id = wallet_record_id(wallet.id.as_ref());
 
-            match reader.summary(&record_id) {
+            match reader.summary(&record_id).await {
                 Ok(WalletBackupLookup::Found(summary)) => {
                     remote_wallet_truth.summaries_by_record_id.insert(record_id, summary);
                 }
@@ -1368,12 +1361,12 @@ impl RustCloudBackupManager {
     }
 
     pub fn state(&self) -> CloudBackupState {
+        let db_state = Self::load_persisted_state();
         let mut state = self.state.read().clone();
-        let (verification_metadata, should_prompt_verification) = Self::load_persisted_flags();
-        state.verification_metadata = verification_metadata;
-        state.should_prompt_verification = should_prompt_verification;
+        state.status = Self::runtime_status_for(&db_state);
+        state.verification_metadata = Self::verification_metadata_for(&db_state);
+        state.should_prompt_verification = db_state.should_prompt_verification();
         state.has_pending_upload_verification = self.has_pending_cloud_upload_verification();
-        state.sync_health = CloudStorage::global().overall_sync_health();
         state.prompt_intent = self.prompt_state.lock().resolve(&state);
         state
     }
@@ -1408,7 +1401,6 @@ impl RustCloudBackupManager {
         self.set_status(Self::runtime_status_for(&db_state));
         self.refresh_persisted_flags();
         self.set_pending_upload_verification(self.has_pending_cloud_upload_verification());
-        self.refresh_sync_health();
     }
 
     pub fn cloud_storage_did_change(&self) {
@@ -1500,16 +1492,13 @@ impl RustCloudBackupManager {
         self.set_cloud_only_operation(CloudOnlyOperation::Idle);
         self.set_status(CloudBackupStatus::Disabled);
         self.refresh_sync_health();
-        cove_tokio::task::block_on(call!(self.runtime.clear_upload_runtime_state()))
-            .unwrap_or_else(|error| {
-                error!("Failed to clear cloud backup runtime upload state: {error}");
-            });
+        send!(self.runtime.clear_upload_runtime_state());
         info!("Debug: reset cloud backup local state (including master key)");
     }
 
     /// Background startup health check for cloud backup integrity
-    pub fn verify_backup_integrity(&self) -> Option<String> {
-        self.verify_backup_integrity_impl()
+    pub async fn verify_backup_integrity(&self) -> Option<String> {
+        self.verify_backup_integrity_impl().await
     }
 
     /// Back up a newly created wallet, fire-and-forget
@@ -1537,11 +1526,11 @@ impl RustCloudBackupManager {
         send!(self.runtime.start_operation(CloudBackupOperation::EnableNoDiscovery, None));
     }
 
+    /// Dismiss staged enable state for the existing-backup confirmation flow
     pub(crate) fn discard_pending_enable_cloud_backup(&self) {
-        cove_tokio::task::block_on(call!(self.runtime.discard_pending_enable_session()))
-            .unwrap_or_else(|error| {
-                error!("Failed to discard pending enable session: {error}");
-            });
+        if self.take_pending_enable_session().is_some() {
+            cove_cspp::Cspp::new(Keychain::global().clone()).delete_master_key();
+        }
         self.clear_existing_backup_found_prompt();
     }
 
@@ -1750,7 +1739,8 @@ pub(crate) fn ensure_cloud_backup_test_tokio_runtime() {
                     .build()
                     .expect("create cloud backup test tokio runtime");
 
-                runtime.block_on(async move {
+                let drive_runtime = tokio::runtime::Runtime::block_on;
+                drive_runtime(&runtime, async move {
                     cove_tokio::init();
                     sender.send(()).expect("signal cloud backup test tokio runtime");
                     std::future::pending::<()>().await;
@@ -1763,24 +1753,25 @@ pub(crate) fn ensure_cloud_backup_test_tokio_runtime() {
 
 #[cfg(test)]
 impl RustCloudBackupManager {
-    pub(crate) fn clear_wallet_upload_debouncers_for_test(&self) {
+    pub(crate) async fn clear_wallet_upload_debouncers_for_test(&self) {
         let runtime = self.runtime.clone();
-        std::thread::spawn(move || {
-            cove_tokio::task::block_on(call!(runtime.clear_upload_runtime_state()))
-                .expect("clear upload runtime state");
-        })
-        .join()
-        .expect("clear upload runtime state thread");
+        let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+        let _task = cove_tokio::task::spawn(async move {
+            let result = send!(runtime.clear_upload_runtime_state());
+            sender.send(result).expect("send clear upload runtime state result");
+        });
+        receiver.recv().expect("receive clear upload runtime state result");
     }
 
-    pub(crate) fn verify_pending_uploads_once_for_test(&self) -> bool {
-        self.verify_pending_uploads_once()
+    pub(crate) async fn verify_pending_uploads_once_for_test(&self) -> bool {
+        self.verify_pending_uploads_once().await
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use act_zero::call;
     use tempfile::TempDir;
 
     fn test_lock() -> &'static parking_lot::Mutex<()> {
@@ -1794,22 +1785,28 @@ mod tests {
 
     fn new_restore_operation(manager: &RustCloudBackupManager) -> RestoreOperation {
         let runtime = manager.runtime.clone();
-        std::thread::spawn(move || {
-            cove_tokio::task::block_on(call!(runtime.new_restore_operation()))
-                .expect("create restore operation")
-        })
-        .join()
-        .expect("create restore operation thread")
+        let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+        let _task = cove_tokio::task::spawn(async move {
+            let result = call!(runtime.new_restore_operation()).await;
+            sender.send(result).expect("send restore operation result");
+        });
+        receiver
+            .recv()
+            .expect("receive restore operation result")
+            .expect("create restore operation")
     }
 
     fn invalidate_restore_operation(manager: &RustCloudBackupManager) {
         let runtime = manager.runtime.clone();
-        std::thread::spawn(move || {
-            cove_tokio::task::block_on(call!(runtime.invalidate_restore_operation()))
-                .expect("invalidate restore operation");
-        })
-        .join()
-        .expect("invalidate restore operation thread");
+        let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+        let _task = cove_tokio::task::spawn(async move {
+            let result = call!(runtime.invalidate_restore_operation()).await;
+            sender.send(result).expect("send invalidate restore operation result");
+        });
+        receiver
+            .recv()
+            .expect("receive invalidate restore operation result")
+            .expect("invalidate restore operation");
     }
 
     #[test]

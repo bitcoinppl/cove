@@ -49,12 +49,12 @@ pub(super) struct CloudWalletInventory {
 }
 
 impl CloudWalletInventory {
-    pub(super) fn load_with_remote_truth(
+    pub(super) async fn load_with_remote_truth(
         wallet_record_ids: &[String],
         remote_wallet_truth: RemoteWalletTruth,
     ) -> Result<Self, CloudBackupError> {
         let db = Database::global();
-        let local_wallets = all_local_wallet_snapshots(&db)?;
+        let local_wallets = all_local_wallet_snapshots(&db).await?;
         let last_sync = last_sync(&db);
         let sync_states_by_record_id = sync_states_by_record_id(&db)?;
 
@@ -228,20 +228,22 @@ fn wallet_item_bucket(item: &CloudBackupWalletItem) -> Option<WalletItemBucket> 
     }
 }
 
-fn all_local_wallet_snapshots(db: &Database) -> Result<Vec<LocalWalletSnapshot>, CloudBackupError> {
-    all_local_wallets(db)?
-        .into_iter()
-        .map(|wallet| {
-            let prepared = prepare_wallet_backup(&wallet, wallet.wallet_mode)?;
+async fn all_local_wallet_snapshots(
+    db: &Database,
+) -> Result<Vec<LocalWalletSnapshot>, CloudBackupError> {
+    let mut snapshots = Vec::new();
 
-            Ok(LocalWalletSnapshot {
-                metadata: wallet,
-                record_id: prepared.record_id,
-                revision_hash: prepared.revision_hash,
-                local_label_count: prepared.entry.labels_count,
-            })
-        })
-        .collect()
+    for wallet in all_local_wallets(db)? {
+        let prepared = prepare_wallet_backup(&wallet, wallet.wallet_mode).await?;
+        snapshots.push(LocalWalletSnapshot {
+            metadata: wallet,
+            record_id: prepared.record_id,
+            revision_hash: prepared.revision_hash,
+            local_label_count: prepared.entry.labels_count,
+        });
+    }
+
+    Ok(snapshots)
 }
 
 fn sync_status_from_state(

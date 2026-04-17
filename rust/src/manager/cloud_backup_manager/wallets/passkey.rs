@@ -3,62 +3,57 @@ use std::time::Duration;
 use cove_cspp::backup_data::EncryptedMasterKeyBackup;
 use cove_device::cloud_storage::CloudStorage;
 use cove_device::passkey::{PasskeyAccess, PasskeyError};
+use cove_tokio::unblock::run_blocking as run_sync_task;
 use rand::RngExt as _;
 use tracing::{info, warn};
 
 use super::super::{CloudBackupError, PASSKEY_RP_ID};
 use super::UnpersistedPrfKey;
 
-trait PasskeyAccessExt {
-    fn create_new_prf_key(&self, log_message: &str) -> Result<UnpersistedPrfKey, CloudBackupError>;
-    fn create_new_prf_key_for_wrapper_repair(&self) -> Result<UnpersistedPrfKey, CloudBackupError>;
-}
-
-impl PasskeyAccessExt for PasskeyAccess {
-    fn create_new_prf_key(&self, log_message: &str) -> Result<UnpersistedPrfKey, CloudBackupError> {
-        info!("{log_message}");
-        create_new_prf_key_with_mapper(self, map_enable_passkey_error)
-    }
-
-    fn create_new_prf_key_for_wrapper_repair(&self) -> Result<UnpersistedPrfKey, CloudBackupError> {
-        info!("Creating new passkey for wrapper repair");
-        create_new_prf_key_with_mapper(self, map_wrapper_repair_passkey_error)
-    }
-}
-
-fn create_new_prf_key_with_mapper(
+async fn create_new_prf_key_with_mapper(
     passkey: &PasskeyAccess,
     map_passkey_error: fn(PasskeyError) -> CloudBackupError,
 ) -> Result<UnpersistedPrfKey, CloudBackupError> {
     let prf_salt: [u8; 32] = rand::rng().random();
-    let credential_id = passkey
-        .create_passkey(
-            PASSKEY_RP_ID.to_string(),
-            rand::rng().random::<[u8; 16]>().to_vec(),
-            random_challenge(),
-        )
-        .map_err(map_passkey_error)?;
+    let credential_id = {
+        let passkey = passkey.clone();
+        run_sync_task(move || {
+            passkey.create_passkey(
+                PASSKEY_RP_ID.to_string(),
+                rand::rng().random::<[u8; 16]>().to_vec(),
+                random_challenge(),
+            )
+        })
+        .await
+        .map_err(map_passkey_error)?
+    };
 
     // wait briefly before targeted auth so iOS can settle after registration
     // without probing for presence and flashing another native passkey sheet
-    delay_before_new_passkey_auth();
+    delay_before_new_passkey_auth().await;
 
-    let prf_output = passkey
-        .authenticate_with_prf(
-            PASSKEY_RP_ID.to_string(),
-            credential_id.clone(),
-            prf_salt.to_vec(),
-            random_challenge(),
-        )
-        .map_err(map_passkey_error)?;
+    let prf_output = {
+        let passkey = passkey.clone();
+        let credential_id = credential_id.clone();
+        run_sync_task(move || {
+            passkey.authenticate_with_prf(
+                PASSKEY_RP_ID.to_string(),
+                credential_id,
+                prf_salt.to_vec(),
+                random_challenge(),
+            )
+        })
+        .await
+        .map_err(map_passkey_error)?
+    };
 
     Ok(UnpersistedPrfKey { prf_key: prf_output_to_key(prf_output)?, prf_salt, credential_id })
 }
 
-fn delay_before_new_passkey_auth() {
+async fn delay_before_new_passkey_auth() {
     let delay = Duration::from_secs(3);
     info!("Waiting {delay:?} before authenticating new passkey");
-    std::thread::sleep(delay);
+    tokio::time::sleep(delay).await;
 }
 
 pub struct NamespaceMatch {
@@ -80,27 +75,36 @@ pub enum NamespaceMatchOutcome {
 ///
 /// Used by the wrapper-repair path where we need to defer persistence until
 /// after the cloud upload succeeds
-pub fn create_prf_key_without_persisting(
+pub async fn create_prf_key_without_persisting(
     passkey: &PasskeyAccess,
 ) -> Result<UnpersistedPrfKey, CloudBackupError> {
-    passkey.create_new_prf_key_for_wrapper_repair()
+    info!("Creating new passkey for wrapper repair");
+    create_new_prf_key_with_mapper(passkey, map_wrapper_repair_passkey_error).await
 }
 
 /// Try to discover an existing passkey, fall back to creating a new one
 ///
 /// Used by wrapper repair so keychain persistence still happens only after
 /// the repaired master-key wrapper upload succeeds
-pub fn discover_or_create_prf_key_without_persisting(
+pub async fn discover_or_create_prf_key_without_persisting(
     passkey: &PasskeyAccess,
 ) -> Result<UnpersistedPrfKey, CloudBackupError> {
     info!("Attempting passkey discovery before creating new wrapper-repair passkey");
     let prf_salt: [u8; 32] = rand::rng().random();
 
-    match passkey.discover_and_authenticate_with_prf(
-        PASSKEY_RP_ID.to_string(),
-        prf_salt.to_vec(),
-        random_challenge(),
-    ) {
+    let discovery = {
+        let passkey = passkey.clone();
+        run_sync_task(move || {
+            passkey.discover_and_authenticate_with_prf(
+                PASSKEY_RP_ID.to_string(),
+                prf_salt.to_vec(),
+                random_challenge(),
+            )
+        })
+        .await
+    };
+
+    match discovery {
         Ok(discovered) => {
             let prf_key = prf_output_to_key(discovered.prf_output)?;
             info!("Discovered existing passkey for wrapper repair");
@@ -113,20 +117,20 @@ pub fn discover_or_create_prf_key_without_persisting(
         }
         Err(PasskeyError::NoCredentialFound) => {
             info!("No existing passkey found for wrapper repair, creating new");
-            create_prf_key_without_persisting(passkey)
+            create_prf_key_without_persisting(passkey).await
         }
         Err(PasskeyError::PrfUnsupportedProvider) => {
             Err(CloudBackupError::UnsupportedPasskeyProvider)
         }
         Err(error) => {
             warn!("Wrapper-repair discovery failed ({error}), falling back to create");
-            create_prf_key_without_persisting(passkey)
+            create_prf_key_without_persisting(passkey).await
         }
     }
 }
 
 /// Try to match the selected passkey against cloud namespaces
-pub fn try_match_namespace_with_passkey(
+pub async fn try_match_namespace_with_passkey(
     cloud: &CloudStorage,
     passkey: &PasskeyAccess,
     namespaces: &[String],
@@ -142,7 +146,7 @@ pub fn try_match_namespace_with_passkey(
 
     for namespace in namespaces {
         let Ok(master_json) =
-            cloud.download_master_key_backup(namespace.clone()).inspect_err(|error| {
+            cloud.download_master_key_backup(namespace.clone()).await.inspect_err(|error| {
                 warn!("Failed to download master key for namespace {namespace}: {error}");
                 had_download_failures = true;
             })
@@ -176,11 +180,18 @@ pub fn try_match_namespace_with_passkey(
     }
 
     let (namespace_id, first_encrypted) = &downloaded[0];
-    let discovery = passkey.discover_and_authenticate_with_prf(
-        PASSKEY_RP_ID.to_string(),
-        first_encrypted.prf_salt.to_vec(),
-        random_challenge(),
-    );
+    let discovery = {
+        let passkey = passkey.clone();
+        let prf_salt = first_encrypted.prf_salt;
+        run_sync_task(move || {
+            passkey.discover_and_authenticate_with_prf(
+                PASSKEY_RP_ID.to_string(),
+                prf_salt.to_vec(),
+                random_challenge(),
+            )
+        })
+        .await
+    };
     let discovered = match discovery {
         Ok(discovered) => discovered,
         Err(PasskeyError::UserCancelled) => return Ok(NamespaceMatchOutcome::UserDeclined),
@@ -200,12 +211,20 @@ pub fn try_match_namespace_with_passkey(
     }
 
     for (namespace_id, encrypted) in downloaded.iter().skip(1) {
-        let prf_output = match passkey.authenticate_with_prf(
-            PASSKEY_RP_ID.to_string(),
-            discovered.credential_id.clone(),
-            encrypted.prf_salt.to_vec(),
-            random_challenge(),
-        ) {
+        let prf_output = match {
+            let passkey = passkey.clone();
+            let credential_id = discovered.credential_id.clone();
+            let prf_salt = encrypted.prf_salt;
+            run_sync_task(move || {
+                passkey.authenticate_with_prf(
+                    PASSKEY_RP_ID.to_string(),
+                    credential_id,
+                    prf_salt.to_vec(),
+                    random_challenge(),
+                )
+            })
+            .await
+        } {
             Ok(prf_output) => prf_output,
             Err(PasskeyError::UserCancelled) => return Ok(NamespaceMatchOutcome::UserDeclined),
             Err(error) => {
@@ -240,11 +259,12 @@ pub fn try_match_namespace_with_passkey(
     Ok(NamespaceMatchOutcome::NoMatch)
 }
 
-pub fn create_new_prf_key(
+pub async fn create_new_prf_key(
     passkey: &PasskeyAccess,
     log_message: &str,
 ) -> Result<UnpersistedPrfKey, CloudBackupError> {
-    passkey.create_new_prf_key(log_message)
+    info!("{log_message}");
+    create_new_prf_key_with_mapper(passkey, map_enable_passkey_error).await
 }
 
 fn map_wrapper_repair_passkey_error(error: PasskeyError) -> CloudBackupError {

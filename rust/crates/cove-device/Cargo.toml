@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 # cove crates
 cove-cspp = { path = "../cove-cspp" }
+cove-tokio = { path = "../cove-tokio" }
 cove-types = { path = "../cove-types" }
 cove-util = { path = "../cove-util" }
 
@@ -21,6 +22,9 @@ thiserror = { workspace = true }
 
 # logging
 tracing = { workspace = true }
+
+# async
+async-trait = "0.1.81"
 
 # uniffi
 uniffi = { workspace = true }
