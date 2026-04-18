@@ -447,7 +447,7 @@ private fun SheetContent(
                     QrCodeScanView(
                         onScanned = { multiFormat ->
                             app.sheetState = null
-                            app.handleMultiFormat(multiFormat)
+                            Scanner.handleMultiFormat(multiFormat)
                         },
                         onDismiss = onDismiss,
                         app = app,

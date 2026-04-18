@@ -76,6 +76,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.Scanner
 import org.bitcoinppl.cove.AppSheetState
 import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.QrCodeScanView
@@ -632,7 +633,7 @@ fun SendFlowHardwareScreen(
         QrCodeScanView(
             onScanned = { multiFormat ->
                 showQrScanner = false
-                app.handleMultiFormat(multiFormat)
+                Scanner.handleMultiFormat(multiFormat)
             },
             onDismiss = { showQrScanner = false },
             app = app,
