@@ -6,6 +6,29 @@
 //
 
 import SwiftUI
+import UIKit
+
+// Prevents screenshots by overlaying a secure UITextField which iOS treats as protected content
+private struct ScreenshotProtection: UIViewRepresentable {
+    func makeUIView(context: Context) -> UIView {
+        let field = UITextField()
+        field.isSecureTextEntry = true
+        field.isUserInteractionEnabled = false
+        // the secure layer UIKit attaches covers the parent view in screenshots
+        let view = field.layer.sublayers?.first?.delegate as? UIView ?? UIView()
+        view.translatesAutoresizingMaskIntoConstraints = false
+        view.alpha = 0
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {}
+}
+
+private extension View {
+    func screenshotProtected() -> some View {
+        overlay(ScreenshotProtection().allowsHitTesting(false))
+    }
+}
 
 struct SecretWordsScreen: View {
     @Environment(AppManager.self) private var app
@@ -125,6 +148,7 @@ struct SecretWordsScreen: View {
         .sheet(isPresented: $showSeedQrSheet) {
             if let words {
                 SeedQrSheetView(words: words)
+                    .screenshotProtected()
             }
         }
         .background(
@@ -137,6 +161,7 @@ struct SecretWordsScreen: View {
         )
         .background(Color.midnightBlue)
         .tint(.white)
+        .screenshotProtected()
     }
 }
 

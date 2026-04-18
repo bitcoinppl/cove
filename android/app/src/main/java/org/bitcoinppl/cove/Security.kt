@@ -73,3 +73,10 @@ private fun createEncryptedPrefs(context: Context, requestStrongBox: Boolean): S
 class DeviceAccessor : DeviceAccess {
     override fun timezone(): String = TimeZone.getDefault().id
 }
+
+/** Tracks whether the currently visible screen contains sensitive content (e.g. seed words).
+ *  Seed screens set this to true on appear and false on dispose so MainActivity
+ *  never clears FLAG_SECURE while sensitive content is on screen. */
+object ScreenSecurity {
+    var isSensitiveScreen: Boolean = false
+}

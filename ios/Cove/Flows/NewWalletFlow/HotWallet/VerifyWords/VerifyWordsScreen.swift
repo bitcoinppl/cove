@@ -6,6 +6,26 @@
 //
 
 import SwiftUI
+import UIKit
+
+private extension View {
+    func screenshotProtected() -> some View {
+        overlay(ScreenshotProtectionView().allowsHitTesting(false))
+    }
+}
+
+private struct ScreenshotProtectionView: UIViewRepresentable {
+    func makeUIView(context: Context) -> UIView {
+        let field = UITextField()
+        field.isSecureTextEntry = true
+        field.isUserInteractionEnabled = false
+        let view = field.layer.sublayers?.first?.delegate as? UIView ?? UIView()
+        view.translatesAutoresizingMaskIntoConstraints = false
+        view.alpha = 0
+        return view
+    }
+    func updateUIView(_ uiView: UIView, context: Context) {}
+}
 
 // MARK: CONTAINER
 
@@ -411,6 +431,7 @@ struct VerifyWordsScreen: View {
                 .opacity(0.5)
         )
         .background(Color.midnightBlue)
+        .screenshotProtected()
     }
 
     private var isReturning: Bool {

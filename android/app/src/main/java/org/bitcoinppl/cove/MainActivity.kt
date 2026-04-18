@@ -119,7 +119,7 @@ class MainActivity : FragmentActivity() {
                 WindowManager.LayoutParams.FLAG_SECURE,
                 WindowManager.LayoutParams.FLAG_SECURE,
             )
-        } else if (hasFocus) {
+        } else if (hasFocus && !ScreenSecurity.isSensitiveScreen) {
             window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
         }
     }
@@ -141,7 +141,9 @@ class MainActivity : FragmentActivity() {
         super.onResume()
         if (!isBootstrapped) return
         privacyCoverView?.visibility = View.GONE
-        window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        if (!ScreenSecurity.isSensitiveScreen) {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
 
         // refresh fees and prices in background (30-sec throttle protects against excessive requests)
         // only dispatch if async runtime is ready (initialized in LaunchedEffect)
