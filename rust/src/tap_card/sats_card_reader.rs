@@ -53,20 +53,41 @@ pub enum SatsCardCmd {
 }
 
 /// Responses from SATSCARD commands
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+#[derive(Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum SatsCardResponse {
     Status(SatsCardSlotStatus),
     Unseal(SatsCardUnsealResult),
 }
 
+impl std::fmt::Debug for SatsCardResponse {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Status(status) => f.debug_tuple("Status").field(status).finish(),
+            Self::Unseal(result) => f.debug_tuple("Unseal").field(result).finish(),
+        }
+    }
+}
+
 /// Result of unsealing a SATSCARD slot, contains the private key for sweeping
-#[derive(Debug, Clone, Hash, PartialEq, Eq, uniffi::Record)]
+#[derive(Clone, Hash, PartialEq, Eq, uniffi::Record)]
 pub struct SatsCardUnsealResult {
     pub slot: u8,
     pub private_key: Vec<u8>,
     pub pubkey: Vec<u8>,
     pub master_pubkey: Vec<u8>,
     pub chain_code: Vec<u8>,
+}
+
+impl std::fmt::Debug for SatsCardUnsealResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SatsCardUnsealResult")
+            .field("slot", &self.slot)
+            .field("private_key", &"<redacted>")
+            .field("pubkey", &"<redacted>")
+            .field("master_pubkey", &"<redacted>")
+            .field("chain_code", &"<redacted>")
+            .finish()
+    }
 }
 
 #[derive(Debug, uniffi::Object)]
@@ -178,6 +199,13 @@ impl SatsCardReader {
 
         let unseal_response = reader.unseal(slot, cvc).await.map_err(TransportError::from)?;
 
+        *self.slot_status.lock() = Some(SatsCardSlotStatus {
+            active_slot: reader.slots.0,
+            num_slots: reader.slots.1,
+            address: reader.addr.clone(),
+            is_sealed: reader.addr.is_some(),
+        });
+
         Ok(SatsCardUnsealResult {
             slot: unseal_response.slot,
             private_key: unseal_response.privkey.to_vec(),
@@ -201,7 +229,6 @@ pub async fn create_sats_card_reader(
 impl std::hash::Hash for SatsCardReader {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.id.hash(state);
-        self.slot_status.lock().hash(state);
     }
 }
 
