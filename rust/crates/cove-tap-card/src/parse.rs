@@ -184,6 +184,11 @@ fn message_and_signature_to_pubkeys(
     signature: &str,
 ) -> Result<Vec<PublicKey>, SignatureParseError> {
     let signature = hex::decode(signature.as_bytes()).map_err(SignatureParseError::HexDecode)?;
+
+    if signature.len() != 64 {
+        return Err(SignatureParseError::InvalidSignatureLength(signature.len() as u32));
+    }
+
     let mut pubkeys = Vec::with_capacity(4);
 
     for rec_id in 0..4 {
@@ -347,8 +352,8 @@ mod tests {
 
     #[test]
     fn test_sats_card_missing_state_errors() {
-        let fragment = "o=0&r=95kesdwq&n=ab78fd50637f8f5a&s=26d1a0684f99fe43b223dca75081bb05bd0233b901139cdd33a4d0a2e61666ed1470d7c53d90f6ae4c60a6cbc7a0f4ded5f13461092b24604ad476bbcf1dd913";
-        let err = TapCard::parse(&satscard_https(fragment)).unwrap_err();
+        let fragment = SATSCARD_SEALED_FRAGMENT.replacen("u=S&", "", 1);
+        let err = TapCard::parse(&satscard_https(&fragment)).unwrap_err();
         assert!(matches!(err, Error::MissingField(Field::State)));
     }
 
@@ -357,6 +362,13 @@ mod tests {
         let fragment = SATSCARD_SEALED_FRAGMENT.replace("r=95kesdwq&", "");
         let err = TapCard::parse(&satscard_https(&fragment)).unwrap_err();
         assert!(matches!(err, Error::MissingField(Field::Address)));
+    }
+
+    #[test]
+    fn test_sats_card_missing_slot_number_errors() {
+        let fragment = SATSCARD_SEALED_FRAGMENT.replace("o=0&", "");
+        let err = TapCard::parse(&satscard_https(&fragment)).unwrap_err();
+        assert!(matches!(err, Error::MissingField(Field::SlotNumber)));
     }
 
     #[test]
@@ -446,7 +458,7 @@ mod tests {
         let err = TapCard::parse(url).unwrap_err();
         assert!(matches!(
             err,
-            Error::UnableToParseSignature(SignatureParseError::UnableToRecoverPubkey)
+            Error::UnableToParseSignature(SignatureParseError::InvalidSignatureLength(1))
         ));
     }
 
