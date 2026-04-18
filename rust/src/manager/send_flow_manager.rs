@@ -1681,6 +1681,14 @@ impl RustSendFlowManager {
 
             me.reconciler.send_async(Message::FeeBumpConfirmDetails(details.clone())).await;
 
+            // save unsigned transaction for hardware wallets before routing
+            if matches!(wallet_type, WalletType::Cold | WalletType::XpubOnly)
+                && let Err(e) = manager.save_unsigned_transaction(details.clone())
+            {
+                let error = SendFlowError::UnableToSaveUnsignedTransaction(e.to_string());
+                return me.send_alert_async(error).await;
+            }
+
             let next_route = match wallet_type {
                 WalletType::Hot => RouteFactory::new().send_confirm(wallet_id, details, None, None),
                 WalletType::Cold | WalletType::XpubOnly => {

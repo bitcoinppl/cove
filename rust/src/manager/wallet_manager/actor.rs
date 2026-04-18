@@ -300,10 +300,9 @@ impl WalletActor {
         fee_rate: impl Into<BdkFeeRate>,
     ) -> Result<Psbt, Error> {
         debug!("build_fee_bump_tx: {txid}");
-        let mut builder =
-            self.wallet.bdk.build_fee_bump(txid).map_err(|e| Error::BuildTxError(e.to_string()))?;
+        let mut builder = self.wallet.bdk.build_fee_bump(txid).map_err_str(Error::BuildTxError)?;
         builder.fee_rate(fee_rate.into());
-        let psbt = builder.finish().map_err(|e| Error::BuildTxError(e.to_string()))?;
+        let psbt = builder.finish().map_err_str(Error::BuildTxError)?;
         Ok(psbt)
     }
 
