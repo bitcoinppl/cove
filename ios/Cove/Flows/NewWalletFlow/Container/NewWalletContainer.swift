@@ -18,6 +18,8 @@ struct NewWalletContainer: View {
             NewHotWalletContainer(route: route)
         case .coldWallet(.qrCode):
             QrCodeImportScreen()
+        case .keyTeleportReceive:
+            Text("Key Teleport receive (iOS coming soon)")
         }
     }
 }
