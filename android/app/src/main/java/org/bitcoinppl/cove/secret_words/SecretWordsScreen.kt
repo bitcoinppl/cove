@@ -83,14 +83,16 @@ fun SecretWordsScreen(
     val context = LocalContext.current
     DisposableEffect(Unit) {
         val window = (context as? android.app.Activity)?.window
-        ScreenSecurity.isSensitiveScreen = true
+        ScreenSecurity.enter()
         window?.setFlags(
             WindowManager.LayoutParams.FLAG_SECURE,
             WindowManager.LayoutParams.FLAG_SECURE,
         )
         onDispose {
-            ScreenSecurity.isSensitiveScreen = false
-            window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            ScreenSecurity.exit()
+            if (!ScreenSecurity.isSensitiveScreen) {
+                window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            }
         }
     }
 

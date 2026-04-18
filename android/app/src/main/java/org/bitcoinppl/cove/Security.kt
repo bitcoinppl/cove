@@ -74,9 +74,16 @@ class DeviceAccessor : DeviceAccess {
     override fun timezone(): String = TimeZone.getDefault().id
 }
 
-/** Tracks whether the currently visible screen contains sensitive content (e.g. seed words).
- *  Seed screens set this to true on appear and false on dispose so MainActivity
- *  never clears FLAG_SECURE while sensitive content is on screen. */
+/** Ref-counts the number of sensitive screens currently on the back stack.
+ *  Seed screens call enter() on appear and exit() on dispose. FLAG_SECURE is only
+ *  cleared when the count reaches zero, preventing gaps during screen transitions. */
 object ScreenSecurity {
-    var isSensitiveScreen: Boolean = false
+    private val count = java.util.concurrent.atomic.AtomicInteger(0)
+
+    val isSensitiveScreen: Boolean
+        get() = count.get() > 0
+
+    fun enter() { count.incrementAndGet() }
+
+    fun exit() { count.updateAndGet { if (it > 0) it - 1 else 0 } }
 }
