@@ -30,7 +30,14 @@ impl ReceiverSession {
             rand::rng().fill(&mut key_bytes);
         }
 
-        let numeric_code = rand::random::<u32>() % (MAX_NUMERIC_CODE + 1);
+        // Rejection sampling to avoid modulo bias (u32::MAX+1 is not divisible by 100_000_000).
+        let numeric_code = loop {
+            let v = rand::random::<u32>();
+            let limit = u32::MAX - (u32::MAX % (MAX_NUMERIC_CODE + 1));
+            if v < limit {
+                break v % (MAX_NUMERIC_CODE + 1);
+            }
+        };
         Self { privkey_bytes: Zeroizing::new(key_bytes), numeric_code }
     }
 

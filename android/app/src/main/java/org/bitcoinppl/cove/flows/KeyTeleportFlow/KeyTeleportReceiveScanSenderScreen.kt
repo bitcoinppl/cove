@@ -52,6 +52,8 @@ fun KeyTeleportReceiveScanSenderScreen(
         Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
             QrCodeScanView(
                 showTopBar = false,
+                app = app,
+                onDismiss = { app.popRoute() },
                 onScanned = { multiFormat ->
                     when (multiFormat) {
                         is MultiFormat.KeyTeleportSenderPacket -> {

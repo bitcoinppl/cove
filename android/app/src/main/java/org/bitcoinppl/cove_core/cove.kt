@@ -39229,10 +39229,10 @@ sealed class KeyTeleportReceiveRoute {
     
     /**
      * Review the decoded payload before importing as a wallet.
+     * The actual secret is held in ephemeral container state, not here.
      */
     data class ReviewImport(
-        val `payloadKind`: org.bitcoinppl.cove_core.KeyTeleportPayloadKind, 
-        val `wordsOrXprv`: kotlin.String) : KeyTeleportReceiveRoute()
+        val `payloadKind`: org.bitcoinppl.cove_core.KeyTeleportPayloadKind) : KeyTeleportReceiveRoute()
         
     {
         
@@ -39263,7 +39263,6 @@ public object FfiConverterTypeKeyTeleportReceiveRoute : FfiConverterRustBuffer<K
                 )
             4 -> KeyTeleportReceiveRoute.ReviewImport(
                 FfiConverterTypeKeyTeleportPayloadKind.read(buf),
-                FfiConverterString.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
@@ -39294,7 +39293,6 @@ public object FfiConverterTypeKeyTeleportReceiveRoute : FfiConverterRustBuffer<K
             (
                 4UL
                 + FfiConverterTypeKeyTeleportPayloadKind.allocationSize(value.`payloadKind`)
-                + FfiConverterString.allocationSize(value.`wordsOrXprv`)
             )
         }
     }
@@ -39317,7 +39315,6 @@ public object FfiConverterTypeKeyTeleportReceiveRoute : FfiConverterRustBuffer<K
             is KeyTeleportReceiveRoute.ReviewImport -> {
                 buf.putInt(4)
                 FfiConverterTypeKeyTeleportPayloadKind.write(value.`payloadKind`, buf)
-                FfiConverterString.write(value.`wordsOrXprv`, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }

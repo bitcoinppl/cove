@@ -7,12 +7,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove_core.KeyTeleportPayload
 import org.bitcoinppl.cove_core.KeyTeleportPayloadKind
 import org.bitcoinppl.cove_core.KeyTeleportReceiveRoute
 import org.bitcoinppl.cove_core.KeyTeleportReceiverSession
 import org.bitcoinppl.cove_core.NewWalletRoute
 import org.bitcoinppl.cove_core.Route
-import org.bitcoinppl.cove_core.RouteFactory
 
 private fun ktRoute(inner: KeyTeleportReceiveRoute): Route =
     Route.NewWallet(NewWalletRoute.KeyTeleportReceive(inner))
@@ -23,9 +23,11 @@ fun KeyTeleportReceiveContainer(
     route: KeyTeleportReceiveRoute,
 ) {
     var session by remember { mutableStateOf<KeyTeleportReceiverSession?>(null) }
+    // Decoded payload held in ephemeral memory — never stored in route state
+    var decodedPayload by remember { mutableStateOf<KeyTeleportPayload?>(null) }
 
     DisposableEffect(Unit) {
-        session = KeyTeleportReceiverSession.new()
+        session = KeyTeleportReceiverSession()
         onDispose { session?.destroy() }
     }
 
@@ -56,21 +58,27 @@ fun KeyTeleportReceiveContainer(
                 app = app,
                 session = s,
                 senderPacketBbqr = route.senderPacketBbqr,
-                onDecoded = { payloadKind, wordsOrXprv ->
-                    app.pushRoute(
-                        ktRoute(
-                            KeyTeleportReceiveRoute.ReviewImport(payloadKind, wordsOrXprv),
-                        ),
-                    )
+                onDecoded = { payload ->
+                    decodedPayload = payload
+                    val kind = when (payload) {
+                        is KeyTeleportPayload.Mnemonic -> KeyTeleportPayloadKind.MNEMONIC
+                        is KeyTeleportPayload.Xprv -> KeyTeleportPayloadKind.XPRV
+                    }
+                    app.pushRoute(ktRoute(KeyTeleportReceiveRoute.ReviewImport(kind)))
                 },
             )
         }
 
         is KeyTeleportReceiveRoute.ReviewImport -> {
+            val payload = decodedPayload
+            if (payload == null) {
+                // Session expired / back-nav edge case — go back to start
+                app.pushRoute(ktRoute(KeyTeleportReceiveRoute.ShowQr))
+                return
+            }
             KeyTeleportReceiveImportScreen(
                 app = app,
-                payloadKind = route.payloadKind,
-                wordsOrXprv = route.wordsOrXprv,
+                payload = payload,
             )
         }
     }

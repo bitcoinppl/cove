@@ -45,7 +45,7 @@ import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.ImportWalletException
-import org.bitcoinppl.cove_core.KeyTeleportPayloadKind
+import org.bitcoinppl.cove_core.KeyTeleportPayload
 import org.bitcoinppl.cove_core.Route
 
 private const val TAG = "KeyTeleportImportScreen"
@@ -54,38 +54,47 @@ private const val TAG = "KeyTeleportImportScreen"
 @Composable
 fun KeyTeleportReceiveImportScreen(
     app: AppManager,
-    payloadKind: KeyTeleportPayloadKind,
-    wordsOrXprv: String,
+    payload: KeyTeleportPayload,
 ) {
     var isImporting by remember { mutableStateOf(false) }
 
-    val isMnemonic = payloadKind == KeyTeleportPayloadKind.MNEMONIC
-    val words = if (isMnemonic) wordsOrXprv.split(" ") else emptyList()
+    val isMnemonic = payload is KeyTeleportPayload.Mnemonic
+    val words = if (payload is KeyTeleportPayload.Mnemonic) payload.words.split(" ") else emptyList()
 
     fun doImport() {
         if (isImporting) return
         isImporting = true
 
         try {
-            if (isMnemonic) {
-                val manager = ImportWalletManager()
-                val wordGroups = listOf(words)
-                val metadata = manager.importWallet(wordGroups)
-                manager.close()
-                app.rust.selectWallet(metadata.id)
-                app.resetRoute(Route.SelectedWallet(metadata.id))
-                app.alertState = TaggedItem(AppAlertState.ImportedSuccessfully)
-            } else {
-                // XPRV — use cold wallet xpub import path
-                val wallet = org.bitcoinppl.cove_core.Wallet.newFromXpub(wordsOrXprv)
-                val id = wallet.id()
-                wallet.close()
-                app.rust.selectWallet(id)
-                app.alertState = TaggedItem(AppAlertState.ImportedSuccessfully)
+            when (payload) {
+                is KeyTeleportPayload.Mnemonic -> {
+                    val metadata = try {
+                        val manager = ImportWalletManager()
+                        try {
+                            manager.importWallet(listOf(words))
+                        } finally {
+                            manager.close()
+                        }
+                    } catch (e: ImportWalletException.WalletAlreadyExists) {
+                        Log.w(TAG, "Wallet already exists: ${e.v1}")
+                        app.alertState = TaggedItem(AppAlertState.DuplicateWallet(e.v1))
+                        return
+                    }
+                    app.rust.selectWallet(metadata.id)
+                    app.resetRoute(Route.SelectedWallet(metadata.id))
+                    app.alertState = TaggedItem(AppAlertState.ImportedSuccessfully)
+                }
+
+                is KeyTeleportPayload.Xprv -> {
+                    // XPRV hot-wallet import is not yet supported in this version.
+                    app.alertState = TaggedItem(
+                        AppAlertState.General(
+                            title = "Not Yet Supported",
+                            message = "Importing an XPRV via Key Teleport is not yet supported. Only mnemonic transfer is supported at this time.",
+                        ),
+                    )
+                }
             }
-        } catch (e: ImportWalletException.WalletAlreadyExists) {
-            Log.w(TAG, "Wallet already exists: ${e.v1}")
-            app.alertState = TaggedItem(AppAlertState.DuplicateWallet(e.v1))
         } catch (e: Exception) {
             Log.e(TAG, "Import failed", e)
             app.alertState = TaggedItem(
@@ -139,7 +148,6 @@ fun KeyTeleportReceiveImportScreen(
             )
 
             if (isMnemonic) {
-                // show word grid
                 FlowRow(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -176,10 +184,9 @@ fun KeyTeleportReceiveImportScreen(
                         }
                     }
                 }
-            } else {
-                // show xprv (truncated)
+            } else if (payload is KeyTeleportPayload.Xprv) {
                 Text(
-                    text = wordsOrXprv,
+                    text = payload.xprv,
                     fontFamily = FontFamily.Monospace,
                     fontSize = 11.sp,
                     modifier = Modifier

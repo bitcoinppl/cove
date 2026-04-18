@@ -38,16 +38,13 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.KeyTeleportException
 import org.bitcoinppl.cove_core.KeyTeleportPayload
-import org.bitcoinppl.cove_core.KeyTeleportPayloadKind
 import org.bitcoinppl.cove_core.KeyTeleportReceiverSession
 
 private const val TAG = "KeyTeleportPasswordScreen"
@@ -58,7 +55,7 @@ fun KeyTeleportReceivePasswordScreen(
     app: AppManager,
     session: KeyTeleportReceiverSession,
     senderPacketBbqr: String,
-    onDecoded: (KeyTeleportPayloadKind, String) -> Unit,
+    onDecoded: (KeyTeleportPayload) -> Unit,
 ) {
     var password by remember { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
@@ -70,14 +67,8 @@ fun KeyTeleportReceivePasswordScreen(
         isDecoding = true
         scope.launch {
             try {
-                val payload = withContext(Dispatchers.Default) {
-                    session.decode(senderPacketBbqr, password)
-                }
-                val (kind, data) = when (payload) {
-                    is KeyTeleportPayload.Mnemonic -> KeyTeleportPayloadKind.MNEMONIC to payload.words
-                    is KeyTeleportPayload.Xprv -> KeyTeleportPayloadKind.XPRV to payload.xprv
-                }
-                onDecoded(kind, data)
+                val payload = session.decode(senderPacketBbqr, password)
+                onDecoded(payload)
             } catch (e: KeyTeleportException.DecodeFailed) {
                 Log.w(TAG, "Wrong password or code: $e")
                 app.alertState = TaggedItem(

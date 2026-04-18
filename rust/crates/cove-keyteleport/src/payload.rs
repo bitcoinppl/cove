@@ -7,7 +7,6 @@ const TYPE_MNEMONIC: u8 = b's';
 const TYPE_XPRV: u8 = b'x';
 
 /// A decrypted Key Teleport payload — the secret being transferred.
-#[derive(Debug)]
 pub enum Payload {
     /// A BIP-39 mnemonic (12 / 18 / 24 words). Type byte `s`.
     Mnemonic(Mnemonic),
@@ -57,6 +56,15 @@ impl Payload {
                 Ok(Payload::Xprv(xprv))
             }
             other => Err(Error::InvalidPayload(format!("unknown payload type byte 0x{other:02X}"))),
+        }
+    }
+}
+
+impl core::fmt::Debug for Payload {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Payload::Mnemonic(_) => f.write_str("Payload::Mnemonic(<redacted>)"),
+            Payload::Xprv(_) => f.write_str("Payload::Xprv(<redacted>)"),
         }
     }
 }

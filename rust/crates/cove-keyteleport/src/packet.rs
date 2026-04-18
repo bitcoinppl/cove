@@ -85,12 +85,17 @@ impl SenderPacket {
 
     /// Parse from raw bytes: sender_pubkey (33 bytes) || encrypted_body.
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
-        if bytes.len() < 33 {
-            return Err(Error::InvalidSenderPacket("too short (need ≥33 bytes)".into()));
+        const COMPRESSED_PUBKEY_LEN: usize = 33;
+        const MIN_ENCRYPTED_BODY_LEN: usize = 5; // payload type byte + inner checksum + outer checksum
+
+        if bytes.len() < COMPRESSED_PUBKEY_LEN + MIN_ENCRYPTED_BODY_LEN {
+            return Err(Error::InvalidSenderPacket(
+                "too short (need sender pubkey plus encrypted body)".into(),
+            ));
         }
-        let sender_pubkey = PublicKey::from_slice(&bytes[..33])
+        let sender_pubkey = PublicKey::from_slice(&bytes[..COMPRESSED_PUBKEY_LEN])
             .map_err(|e| Error::InvalidSenderPacket(format!("bad sender pubkey: {e}")))?;
-        let encrypted_body = bytes[33..].to_vec();
+        let encrypted_body = bytes[COMPRESSED_PUBKEY_LEN..].to_vec();
         Ok(Self { sender_pubkey, encrypted_body })
     }
 }

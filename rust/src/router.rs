@@ -48,7 +48,8 @@ pub enum KeyTeleportReceiveRoute {
     /// Enter the teleport password that the sender shared out-of-band.
     EnterPassword { sender_packet_bbqr: String },
     /// Review the decoded payload before importing as a wallet.
-    ReviewImport { payload_kind: KeyTeleportPayloadKind, words_or_xprv: String },
+    /// The actual secret is held in ephemeral container state, not here.
+    ReviewImport { payload_kind: KeyTeleportPayloadKind },
 }
 
 /// Payload type indicator — carried through the route so the import screen
