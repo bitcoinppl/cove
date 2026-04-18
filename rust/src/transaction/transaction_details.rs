@@ -398,8 +398,12 @@ impl TransactionDetails {
             return Self::default_transaction_url(self.network, &self.tx_id);
         }
 
-        if url.contains("{txid}") {
-            return url.replace("{txid}", &self.tx_id.0.to_string());
+        if url.contains("{txid}") || url.contains("{tx_id}") || url.contains("{0}") {
+            let tx_id_str = self.tx_id.0.to_string();
+            return url
+                .replace("{txid}", &tx_id_str)
+                .replace("{tx_id}", &tx_id_str)
+                .replace("{0}", &tx_id_str);
         }
 
         let base = url.trim_end_matches('/');
