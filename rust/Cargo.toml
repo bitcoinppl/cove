@@ -57,6 +57,7 @@ bitcoin = { version = "0.32" }
 bdk_wallet = { version = "2.3", features = ["keys-bip39", "file_store", "rusqlite"] }
 bip39 = { version = "2.2", features = ["zeroize"] }
 bip329 = { version = "0.4" }
+payjoin = { version = "0.25", default-features = false, features = ["v1"] }
 pubport = { version = "0.5" }
 
 # bitcoin nodes

@@ -13,6 +13,7 @@ cove-util = { path = "../cove-util" }
 # bitcoin
 bitcoin = { workspace = true, features = ["serde"] }
 bdk_wallet = { workspace = true }
+payjoin = { workspace = true }
 
 # error handling
 thiserror = { workspace = true }
@@ -69,7 +70,6 @@ hex = { workspace = true }
 # util
 ahash = { workspace = true }
 tap = { workspace = true }
-url = { workspace = true }
 
 [build-dependencies]
 uniffi = { workspace = true, features = ["build"] }
