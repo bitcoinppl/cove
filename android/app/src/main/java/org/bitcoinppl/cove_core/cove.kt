@@ -41445,6 +41445,7 @@ enum class OnboardingStep {
     
     CLOUD_CHECK,
     RESTORE_OFFER,
+    RESTORE_OFFLINE,
     RESTORE_UNAVAILABLE,
     RESTORING,
     WELCOME,

@@ -24743,6 +24743,7 @@ public enum OnboardingStep: Equatable, Hashable {
     
     case cloudCheck
     case restoreOffer
+    case restoreOffline
     case restoreUnavailable
     case restoring
     case welcome
@@ -24783,35 +24784,37 @@ public struct FfiConverterTypeOnboardingStep: FfiConverterRustBuffer {
         
         case 2: return .restoreOffer
         
-        case 3: return .restoreUnavailable
+        case 3: return .restoreOffline
         
-        case 4: return .restoring
+        case 4: return .restoreUnavailable
         
-        case 5: return .welcome
+        case 5: return .restoring
         
-        case 6: return .bitcoinChoice
+        case 6: return .welcome
         
-        case 7: return .returningUserChoice
+        case 7: return .bitcoinChoice
         
-        case 8: return .storageChoice
+        case 8: return .returningUserChoice
         
-        case 9: return .softwareChoice
+        case 9: return .storageChoice
         
-        case 10: return .creatingWallet
+        case 10: return .softwareChoice
         
-        case 11: return .backupWallet
+        case 11: return .creatingWallet
         
-        case 12: return .cloudBackup
+        case 12: return .backupWallet
         
-        case 13: return .secretWords
+        case 13: return .cloudBackup
         
-        case 14: return .exchangeFunding
+        case 14: return .secretWords
         
-        case 15: return .hardwareImport
+        case 15: return .exchangeFunding
         
-        case 16: return .softwareImport
+        case 16: return .hardwareImport
         
-        case 17: return .terms
+        case 17: return .softwareImport
+        
+        case 18: return .terms
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -24829,64 +24832,68 @@ public struct FfiConverterTypeOnboardingStep: FfiConverterRustBuffer {
             writeInt(&buf, Int32(2))
         
         
-        case .restoreUnavailable:
+        case .restoreOffline:
             writeInt(&buf, Int32(3))
         
         
-        case .restoring:
+        case .restoreUnavailable:
             writeInt(&buf, Int32(4))
         
         
-        case .welcome:
+        case .restoring:
             writeInt(&buf, Int32(5))
         
         
-        case .bitcoinChoice:
+        case .welcome:
             writeInt(&buf, Int32(6))
         
         
-        case .returningUserChoice:
+        case .bitcoinChoice:
             writeInt(&buf, Int32(7))
         
         
-        case .storageChoice:
+        case .returningUserChoice:
             writeInt(&buf, Int32(8))
         
         
-        case .softwareChoice:
+        case .storageChoice:
             writeInt(&buf, Int32(9))
         
         
-        case .creatingWallet:
+        case .softwareChoice:
             writeInt(&buf, Int32(10))
         
         
-        case .backupWallet:
+        case .creatingWallet:
             writeInt(&buf, Int32(11))
         
         
-        case .cloudBackup:
+        case .backupWallet:
             writeInt(&buf, Int32(12))
         
         
-        case .secretWords:
+        case .cloudBackup:
             writeInt(&buf, Int32(13))
         
         
-        case .exchangeFunding:
+        case .secretWords:
             writeInt(&buf, Int32(14))
         
         
-        case .hardwareImport:
+        case .exchangeFunding:
             writeInt(&buf, Int32(15))
         
         
-        case .softwareImport:
+        case .hardwareImport:
             writeInt(&buf, Int32(16))
         
         
-        case .terms:
+        case .softwareImport:
             writeInt(&buf, Int32(17))
+        
+        
+        case .terms:
+            writeInt(&buf, Int32(18))
         
         }
     }

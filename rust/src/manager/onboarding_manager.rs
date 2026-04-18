@@ -39,6 +39,7 @@ pub enum OnboardingStep {
     #[default]
     CloudCheck,
     RestoreOffer,
+    RestoreOffline,
     RestoreUnavailable,
     Restoring,
     Welcome,
@@ -221,6 +222,9 @@ enum FlowState {
     RestoreOffer {
         origin: RestoreOrigin,
         error_message: Option<String>,
+    },
+    RestoreOffline {
+        origin: RestoreOrigin,
     },
     RestoreUnavailable {
         origin: RestoreOrigin,
@@ -940,6 +944,9 @@ impl FlowState {
                 *restore_offer_allowed = false;
                 (origin.flow_state(), TransitionCommand::None)
             }
+            (Self::RestoreOffline { origin }, OnboardingAction::ContinueWithoutCloudRestore) => {
+                (origin.flow_state_after_restore_unavailable(), TransitionCommand::None)
+            }
             (
                 Self::RestoreUnavailable { origin },
                 OnboardingAction::ContinueWithoutCloudRestore,
@@ -971,6 +978,9 @@ impl FlowState {
             }
             (Self::HardwareImport, OnboardingAction::Back) => {
                 (Self::StorageChoice { error_message: None }, TransitionCommand::None)
+            }
+            (Self::RestoreOffline { origin }, OnboardingAction::Back) => {
+                (origin.flow_state(), TransitionCommand::None)
             }
             (Self::RestoreUnavailable { origin }, OnboardingAction::Back) => {
                 (origin.flow_state(), TransitionCommand::None)
@@ -1039,10 +1049,7 @@ impl FlowState {
             (
                 Self::CloudCheck { origin },
                 InternalEvent::CloudCheckFinished(CloudCheckOutcome::Inconclusive(issue)),
-            ) => {
-                let _ = issue;
-                Self::RestoreOffer { origin, error_message: None }
-            }
+            ) => Self::restore_inconclusive_entry_for(issue, origin),
             (
                 Self::Welcome { .. },
                 InternalEvent::CloudCheckFinished(CloudCheckOutcome::BackupFound),
@@ -1126,6 +1133,10 @@ impl FlowState {
             Self::RestoreOffer { error_message, .. } => {
                 state.step = OnboardingStep::RestoreOffer;
                 state.error_message = error_message.clone();
+                state
+            }
+            Self::RestoreOffline { .. } => {
+                state.step = OnboardingStep::RestoreOffline;
                 state
             }
             Self::RestoreUnavailable { .. } => {
@@ -1259,7 +1270,16 @@ impl FlowState {
                 Self::RestoreOffer { origin, error_message: None }
             }
             CloudRestoreDiscovery::NoBackupFound => Self::RestoreUnavailable { origin },
-            CloudRestoreDiscovery::Inconclusive(_) => {
+            CloudRestoreDiscovery::Inconclusive(issue) => {
+                Self::restore_inconclusive_entry_for(issue, origin)
+            }
+        }
+    }
+
+    fn restore_inconclusive_entry_for(issue: CloudCheckIssue, origin: RestoreOrigin) -> Self {
+        match issue {
+            CloudCheckIssue::Offline => Self::RestoreOffline { origin },
+            CloudCheckIssue::CloudUnavailable | CloudCheckIssue::Unknown => {
                 Self::RestoreOffer { origin, error_message: None }
             }
         }
@@ -1315,6 +1335,7 @@ impl FlowState {
             self,
             Self::CloudCheck { .. }
                 | Self::RestoreOffer { .. }
+                | Self::RestoreOffline { .. }
                 | Self::Welcome { .. }
                 | Self::BitcoinChoice { .. }
                 | Self::ReturningUserChoice
@@ -1326,7 +1347,8 @@ impl FlowState {
     fn prepare_for_cloud_check_retry(&mut self) {
         let origin = match self {
             Self::CloudCheck { origin }
-            | Self::RestoreOffer { origin, .. } => Some(*origin),
+            | Self::RestoreOffer { origin, .. }
+            | Self::RestoreOffline { origin } => Some(*origin),
             _ => None,
         };
 
@@ -1510,7 +1532,7 @@ fn classify_cloud_check_error(error: &CloudStorageError) -> CloudCheckIssue {
 fn cloud_check_inconclusive_message(issue: CloudCheckIssue) -> String {
     match issue {
         CloudCheckIssue::Offline => {
-            "You may be offline. Connect to the internet and try again, or you can still try restoring with your passkey if you're reinstalling this device.".into()
+            "You're offline, so Cove can't check for an iCloud backup right now. You can continue onboarding now and check Cloud Backup later in Settings.".into()
         }
         CloudCheckIssue::CloudUnavailable => {
             "We couldn't confirm whether an iCloud backup is available because iCloud may be unavailable. You can still try restoring with your passkey if you're reinstalling this device.".into()
@@ -1837,7 +1859,7 @@ mod tests {
     }
 
     #[test]
-    fn explicit_restore_while_offline_goes_to_restore_offer() {
+    fn explicit_restore_while_offline_goes_to_restore_offline() {
         let mut flow = FlowState::ReturningUserChoice;
         let mut restore_offer_allowed = true;
 
@@ -1852,10 +1874,7 @@ mod tests {
         assert_eq!(command, TransitionCommand::None);
         assert!(matches!(
             flow,
-            FlowState::RestoreOffer {
-                origin: RestoreOrigin::ReturningUserChoice,
-                error_message: None,
-            }
+            FlowState::RestoreOffline { origin: RestoreOrigin::ReturningUserChoice }
         ));
     }
 
@@ -2096,6 +2115,24 @@ mod tests {
     }
 
     #[test]
+    fn cloud_check_offline_goes_to_restore_offline_screen() {
+        let mut flow = FlowState::CloudCheck { origin: RestoreOrigin::Startup };
+        let mut discovery = CloudRestoreDiscovery::Checking;
+
+        flow.apply_event(
+            InternalEvent::CloudCheckFinished(CloudCheckOutcome::Inconclusive(
+                CloudCheckIssue::Offline,
+            )),
+            &mut discovery,
+            true,
+        );
+
+        assert_eq!(discovery, CloudRestoreDiscovery::Inconclusive(CloudCheckIssue::Offline));
+        assert!(matches!(flow, FlowState::RestoreOffline { origin: RestoreOrigin::Startup }));
+        assert_eq!(flow.ui_state(discovery, false).step, OnboardingStep::RestoreOffline);
+    }
+
+    #[test]
     fn cloud_check_non_offline_inconclusive_keeps_restore_offer_flow() {
         let mut flow = FlowState::CloudCheck { origin: RestoreOrigin::Startup };
         let mut discovery = CloudRestoreDiscovery::Checking;
@@ -2184,6 +2221,29 @@ mod tests {
     }
 
     #[test]
+    fn continue_without_cloud_restore_from_startup_offline_goes_to_terms() {
+        let mut flow = FlowState::RestoreOffline { origin: RestoreOrigin::Startup };
+        let mut restore_offer_allowed = true;
+
+        let command = flow.apply_user_action(
+            OnboardingAction::ContinueWithoutCloudRestore,
+            CloudRestoreDiscovery::Inconclusive(CloudCheckIssue::Offline),
+            &mut restore_offer_allowed,
+        );
+
+        assert_eq!(command, TransitionCommand::None);
+        assert!(matches!(
+            flow,
+            FlowState::Terms {
+                context: TermsContext::StartupRestoreRecovery,
+                error_message: None,
+                progress: None,
+                allow_auto_advance: true,
+            }
+        ));
+    }
+
+    #[test]
     fn accepting_startup_recovery_terms_goes_to_welcome() {
         let mut flow = FlowState::terms(TermsContext::StartupRestoreRecovery, None);
         let mut restore_offer_allowed = false;
@@ -2252,6 +2312,20 @@ mod tests {
 
         assert_eq!(command, TransitionCommand::None);
         assert!(matches!(flow, FlowState::StorageChoice { error_message: None }));
+    }
+
+    #[test]
+    fn offline_retry_rechecks_from_restore_offline_screen() {
+        let mut state = preview_internal_state(
+            FlowState::RestoreOffline { origin: RestoreOrigin::Startup },
+            CloudRestoreDiscovery::Inconclusive(CloudCheckIssue::Offline),
+        );
+
+        assert!(prepare_offline_cloud_check_retry(&mut state));
+        assert_eq!(state.cloud_restore_discovery, CloudRestoreDiscovery::Checking);
+        assert!(matches!(state.flow, FlowState::CloudCheck { origin: RestoreOrigin::Startup }));
+        assert_eq!(state.ui.step, OnboardingStep::CloudCheck);
+        assert_eq!(state.ui.cloud_restore_state, OnboardingCloudRestoreState::Checking);
     }
 
     #[test]
