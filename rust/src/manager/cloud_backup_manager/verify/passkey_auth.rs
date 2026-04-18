@@ -1,6 +1,6 @@
 use cove_device::keychain::Keychain;
 use cove_device::passkey::{PasskeyAccess, PasskeyError};
-use cove_tokio::unblock::run_blocking as run_sync_task;
+use cove_tokio::unblock;
 use rand::RngExt as _;
 use tracing::info;
 
@@ -41,7 +41,7 @@ pub(super) async fn authenticate_with_policy(
             let credential_id = credential_id.clone();
             let auth_credential_id = credential_id.clone();
             let prf_salt = *prf_salt;
-            match run_sync_task(move || {
+            let auth_result = unblock::run_blocking(move || {
                 passkey.authenticate_with_prf(
                     PASSKEY_RP_ID.to_string(),
                     auth_credential_id,
@@ -49,8 +49,9 @@ pub(super) async fn authenticate_with_policy(
                     rand::rng().random::<[u8; 32]>().to_vec(),
                 )
             })
-            .await
-            {
+            .await;
+
+            match auth_result {
                 Ok(prf_output) => {
                     let prf_key: [u8; 32] = prf_output.try_into().map_err(|_| {
                         CloudBackupError::Internal("PRF output is not 32 bytes".into())
@@ -85,15 +86,16 @@ pub(super) async fn authenticate_with_policy(
 
     let passkey = passkey.clone();
     let prf_salt = *prf_salt;
-    let discovered = match run_sync_task(move || {
+    let discovered_result = unblock::run_blocking(move || {
         passkey.discover_and_authenticate_with_prf(
             PASSKEY_RP_ID.to_string(),
             prf_salt.to_vec(),
             rand::rng().random::<[u8; 32]>().to_vec(),
         )
     })
-    .await
-    {
+    .await;
+
+    let discovered = match discovered_result {
         Ok(discovered) => discovered,
         Err(error) => return map_discovery_error(error),
     };

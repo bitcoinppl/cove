@@ -3,7 +3,7 @@ use std::time::Duration;
 use cove_cspp::backup_data::EncryptedMasterKeyBackup;
 use cove_device::cloud_storage::CloudStorage;
 use cove_device::passkey::{PasskeyAccess, PasskeyError};
-use cove_tokio::unblock::run_blocking as run_sync_task;
+use cove_tokio::unblock;
 use rand::RngExt as _;
 use tracing::{info, warn};
 
@@ -17,7 +17,7 @@ async fn create_new_prf_key_with_mapper(
     let prf_salt: [u8; 32] = rand::rng().random();
     let credential_id = {
         let passkey = passkey.clone();
-        run_sync_task(move || {
+        unblock::run_blocking(move || {
             passkey.create_passkey(
                 PASSKEY_RP_ID.to_string(),
                 rand::rng().random::<[u8; 16]>().to_vec(),
@@ -35,7 +35,7 @@ async fn create_new_prf_key_with_mapper(
     let prf_output = {
         let passkey = passkey.clone();
         let credential_id = credential_id.clone();
-        run_sync_task(move || {
+        unblock::run_blocking(move || {
             passkey.authenticate_with_prf(
                 PASSKEY_RP_ID.to_string(),
                 credential_id,
@@ -94,7 +94,7 @@ pub async fn discover_or_create_prf_key_without_persisting(
 
     let discovery = {
         let passkey = passkey.clone();
-        run_sync_task(move || {
+        unblock::run_blocking(move || {
             passkey.discover_and_authenticate_with_prf(
                 PASSKEY_RP_ID.to_string(),
                 prf_salt.to_vec(),
@@ -183,7 +183,7 @@ pub async fn try_match_namespace_with_passkey(
     let discovery = {
         let passkey = passkey.clone();
         let prf_salt = first_encrypted.prf_salt;
-        run_sync_task(move || {
+        unblock::run_blocking(move || {
             passkey.discover_and_authenticate_with_prf(
                 PASSKEY_RP_ID.to_string(),
                 prf_salt.to_vec(),
@@ -215,7 +215,7 @@ pub async fn try_match_namespace_with_passkey(
             let passkey = passkey.clone();
             let credential_id = discovered.credential_id.clone();
             let prf_salt = encrypted.prf_salt;
-            run_sync_task(move || {
+            unblock::run_blocking(move || {
                 passkey.authenticate_with_prf(
                     PASSKEY_RP_ID.to_string(),
                     credential_id,

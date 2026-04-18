@@ -3,7 +3,7 @@ use cove_cspp::master_key_crypto;
 use cove_device::cloud_storage::CloudStorage;
 use cove_device::keychain::Keychain;
 use cove_device::passkey::PasskeyAccess;
-use cove_tokio::unblock::run_blocking as run_sync_task;
+use cove_tokio::unblock;
 use cove_util::ResultExt as _;
 use rand::RngExt as _;
 use tracing::info;
@@ -224,7 +224,7 @@ impl WrapperRepairOperation {
                 let prf_salt: [u8; 32] = rand::rng().random();
                 let passkey = self.passkey.clone();
                 let auth_credential_id = credential_id.clone();
-                let prf_output = run_sync_task(move || {
+                let prf_output = unblock::run_blocking(move || {
                     passkey.authenticate_with_prf(
                         PASSKEY_RP_ID.to_owned(),
                         auth_credential_id,
