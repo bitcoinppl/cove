@@ -311,15 +311,11 @@ impl GlobalConfigTable {
         self.set_priv_hashed_pin_code(hashed_pin_code)
     }
 
+    #[uniffi::method]
     pub fn custom_block_explorer(&self, network: Network) -> Option<String> {
         let key = GlobalConfigKey::CustomBlockExplorer(network);
         let url = self.get(key).unwrap_or(None).unwrap_or_default();
         if url.is_empty() { None } else { Some(url) }
-    }
-
-    #[uniffi::method(name = "customBlockExplorer")]
-    pub fn get_custom_block_explorer(&self, network: Network) -> Option<String> {
-        self.custom_block_explorer(network)
     }
 
     #[uniffi::method]

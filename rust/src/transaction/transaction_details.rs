@@ -351,10 +351,6 @@ impl TransactionDetails {
         self.pending_or_confirmed.is_confirmed()
     }
 
-    /// Whether the transaction signals opt-in Replace-By-Fee (BIP 125).
-    ///
-    /// Returns `true` when at least one input has `nSequence < 0xFFFFFFFE`,
-    /// indicating the sender opted in to fee replacement while unconfirmed.
     #[uniffi::method]
     pub fn is_rbf_signaling(&self) -> bool {
         self.is_rbf_signaling
