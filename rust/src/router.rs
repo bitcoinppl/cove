@@ -313,9 +313,7 @@ impl RouteFactory {
     }
 
     pub fn key_teleport_receive(&self) -> Route {
-        Route::NewWallet(NewWalletRoute::KeyTeleportReceive(
-            KeyTeleportReceiveRoute::default(),
-        ))
+        Route::NewWallet(NewWalletRoute::KeyTeleportReceive(KeyTeleportReceiveRoute::default()))
     }
 
     pub fn qr_import(&self) -> Route {
