@@ -6,7 +6,8 @@ use act_zero::call;
 use bip39::Mnemonic;
 use cove_cspp::CsppStore;
 use cove_cspp::backup_data::{
-    WalletEntry, WalletMode as CloudWalletMode, WalletSecret, wallet_filename_from_record_id,
+    MASTER_KEY_RECORD_ID, WalletEntry, WalletMode as CloudWalletMode, WalletSecret,
+    wallet_filename_from_record_id,
 };
 use cove_device::cloud_storage::{
     CloudStorage, CloudStorageAccess, CloudStorageError, CloudSyncHealth,
@@ -178,6 +179,10 @@ impl MockCloudStorage {
         self.state.lock().uploaded_wallet_backups.len()
     }
 
+    pub(crate) fn has_master_key_backup(&self, namespace: &str) -> bool {
+        self.state.lock().master_key_backups.contains_key(namespace)
+    }
+
     pub(crate) fn wallet_backup_upload_attempt_count(&self) -> usize {
         self.state.lock().wallet_backup_upload_attempts
     }
@@ -281,9 +286,19 @@ impl CloudStorageAccess for MockCloudStorage {
 
     async fn delete_wallet_backup(
         &self,
-        _namespace: String,
-        _record_id: String,
+        namespace: String,
+        record_id: String,
     ) -> Result<(), CloudStorageError> {
+        let mut state = self.state.lock();
+        if record_id == MASTER_KEY_RECORD_ID {
+            state.master_key_backups.remove(&namespace);
+            return Ok(());
+        }
+
+        state.wallet_backups.remove(&(namespace.clone(), record_id.clone()));
+        state.uploaded_wallet_backups.retain(|(uploaded_namespace, uploaded_record_id)| {
+            uploaded_namespace != &namespace || uploaded_record_id != &record_id
+        });
         Ok(())
     }
 

@@ -1,9 +1,13 @@
 use std::collections::{HashMap, HashSet};
 
 use cove_util::ResultExt as _;
+use futures::stream::{self, StreamExt as _, TryStreamExt as _};
 
 use super::wallets::{RemoteWalletBackupSummary, all_local_wallets, prepare_wallet_backup};
-use super::{CloudBackupDetail, CloudBackupError, CloudBackupWalletItem, CloudBackupWalletStatus};
+use super::{
+    CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupDetail, CloudBackupError, CloudBackupWalletItem,
+    CloudBackupWalletStatus,
+};
 use crate::database::Database;
 use crate::database::cloud_backup::{
     CloudBlobFailedState, PersistedCloudBackupStatus, PersistedCloudBlobState,
@@ -231,19 +235,19 @@ fn wallet_item_bucket(item: &CloudBackupWalletItem) -> Option<WalletItemBucket> 
 async fn all_local_wallet_snapshots(
     db: &Database,
 ) -> Result<Vec<LocalWalletSnapshot>, CloudBackupError> {
-    let mut snapshots = Vec::new();
-
-    for wallet in all_local_wallets(db)? {
-        let prepared = prepare_wallet_backup(&wallet, wallet.wallet_mode).await?;
-        snapshots.push(LocalWalletSnapshot {
-            metadata: wallet,
-            record_id: prepared.record_id,
-            revision_hash: prepared.revision_hash,
-            local_label_count: prepared.entry.labels_count,
-        });
-    }
-
-    Ok(snapshots)
+    stream::iter(all_local_wallets(db)?)
+        .map(|wallet| async move {
+            let prepared = prepare_wallet_backup(&wallet, wallet.wallet_mode).await?;
+            Ok(LocalWalletSnapshot {
+                metadata: wallet,
+                record_id: prepared.record_id,
+                revision_hash: prepared.revision_hash,
+                local_label_count: prepared.entry.labels_count,
+            })
+        })
+        .buffered(CLOUD_BACKUP_IO_CONCURRENCY)
+        .try_collect()
+        .await
 }
 
 fn sync_status_from_state(

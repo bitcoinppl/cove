@@ -289,9 +289,7 @@ extension CoveApp {
             let isICloudAvailable = await MainActor.run { FileManager.default.ubiquityIdentityToken != nil }
             guard isICloudAvailable else { return }
 
-            let warning = await Task.detached {
-                await CloudBackupManager.shared.rust.verifyBackupIntegrity()
-            }.value
+            let warning = await CloudBackupManager.shared.rust.verifyBackupIntegrity()
             if let warning { Log.error("[STARTUP] backup integrity warning: \(warning)") }
         }
     }

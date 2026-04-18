@@ -1473,44 +1473,11 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{Arc, Mutex};
+
     use bip39::Mnemonic;
 
     use super::*;
-
-    fn determine_cloud_check_outcome<F, S>(
-        retry_delays: &[u64],
-        mut has_any_cloud_backup: F,
-        mut sleep: S,
-    ) -> CloudCheckOutcome
-    where
-        F: FnMut() -> Result<bool, CloudStorageError>,
-        S: FnMut(Duration),
-    {
-        for (attempt, delay) in retry_delays.iter().enumerate() {
-            info!(
-                "Onboarding: checking cloud backup attempt={}/{}",
-                attempt + 1,
-                retry_delays.len() + 1
-            );
-
-            match has_any_cloud_backup() {
-                Ok(true) => return CloudCheckOutcome::BackupFound,
-                Ok(false) => return CloudCheckOutcome::NoBackupConfirmed,
-                Err(error) => warn!("Onboarding: cloud backup check failed: {error}"),
-            }
-
-            sleep(Duration::from_secs(*delay));
-        }
-
-        match has_any_cloud_backup() {
-            Ok(true) => CloudCheckOutcome::BackupFound,
-            Ok(false) => CloudCheckOutcome::NoBackupConfirmed,
-            Err(error) => {
-                warn!("Onboarding: final cloud backup check failed: {error}");
-                CloudCheckOutcome::Inconclusive(classify_cloud_check_error(&error))
-            }
-        }
-    }
 
     #[test]
     fn continue_from_backup_requires_a_saved_backup_method() {
@@ -2168,30 +2135,44 @@ mod tests {
         assert_eq!(classify_cloud_check_error(&error), CloudCheckIssue::CloudUnavailable);
     }
 
-    #[test]
-    fn cloud_check_false_short_circuits_without_sleeping() {
-        let mut slept = Vec::new();
-        let outcome = determine_cloud_check_outcome(
+    #[tokio::test(flavor = "current_thread")]
+    async fn cloud_check_false_short_circuits_without_sleeping() {
+        let slept = Arc::new(Mutex::new(Vec::new()));
+        let sleep_log = Arc::clone(&slept);
+        let outcome = determine_cloud_check_outcome_async(
             &[1, 2, 3],
-            || Ok(false),
-            |duration| slept.push(duration),
-        );
+            || async { Ok(false) },
+            move |duration| {
+                let sleep_log = Arc::clone(&sleep_log);
+                async move {
+                    sleep_log.lock().unwrap().push(duration);
+                }
+            },
+        )
+        .await;
 
         assert_eq!(outcome, CloudCheckOutcome::NoBackupConfirmed);
-        assert!(slept.is_empty());
+        assert!(slept.lock().unwrap().is_empty());
     }
 
-    #[test]
-    fn cloud_check_retries_errors_and_returns_inconclusive() {
-        let mut slept = Vec::new();
-        let outcome = determine_cloud_check_outcome(
+    #[tokio::test(flavor = "current_thread")]
+    async fn cloud_check_retries_errors_and_returns_inconclusive() {
+        let slept = Arc::new(Mutex::new(Vec::new()));
+        let sleep_log = Arc::clone(&slept);
+        let outcome = determine_cloud_check_outcome_async(
             &[1, 2],
-            || Err(CloudStorageError::NotAvailable("network timed out".into())),
-            |duration| slept.push(duration),
-        );
+            || async { Err(CloudStorageError::NotAvailable("network timed out".into())) },
+            move |duration| {
+                let sleep_log = Arc::clone(&sleep_log);
+                async move {
+                    sleep_log.lock().unwrap().push(duration);
+                }
+            },
+        )
+        .await;
 
         assert_eq!(outcome, CloudCheckOutcome::Inconclusive(CloudCheckIssue::CloudUnavailable));
-        assert_eq!(slept, vec![Duration::from_secs(1), Duration::from_secs(2)]);
+        assert_eq!(*slept.lock().unwrap(), vec![Duration::from_secs(1), Duration::from_secs(2)]);
     }
 
     #[test]

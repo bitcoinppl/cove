@@ -5,12 +5,13 @@ use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
 use cove_device::keychain::Keychain;
 use cove_device::passkey::{PasskeyAccess, PasskeyCredentialPresence};
 use cove_util::ResultExt as _;
+use futures::stream::{self, StreamExt as _, TryStreamExt as _};
 use tracing::{info, warn};
 use zeroize::Zeroizing;
 
 use super::super::{
-    CloudBackupDetail, CloudBackupError, DeepVerificationFailure, DeepVerificationReport,
-    DeepVerificationResult, PASSKEY_RP_ID, PendingVerificationCompletion,
+    CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupDetail, CloudBackupError, DeepVerificationFailure,
+    DeepVerificationReport, DeepVerificationResult, PASSKEY_RP_ID, PendingVerificationCompletion,
     PendingVerificationUpload, RustCloudBackupManager, VerificationFailureKind,
     cloud_inventory::CloudWalletInventory,
     wallets::{WalletBackupLookup, WalletBackupReader, prepare_wallet_backup},
@@ -368,15 +369,18 @@ impl VerificationSession {
                 self.retry_result(format!("failed to auto-sync missing wallet backups: {error}")),
             );
         }
-        let mut pending_uploads = Vec::with_capacity(unsynced.len());
-        for wallet in &unsynced {
-            let prepared = match prepare_wallet_backup(wallet, wallet.wallet_mode).await {
-                Ok(prepared) => prepared,
-                Err(error) => return Some(self.local_inventory_retry_result(&error)),
-            };
-            pending_uploads
-                .push(PendingVerificationUpload::new(prepared.record_id, prepared.revision_hash));
-        }
+        let pending_uploads = match stream::iter(unsynced.iter().cloned())
+            .map(|wallet| async move {
+                let prepared = prepare_wallet_backup(&wallet, wallet.wallet_mode).await?;
+                Ok(PendingVerificationUpload::new(prepared.record_id, prepared.revision_hash))
+            })
+            .buffered(CLOUD_BACKUP_IO_CONCURRENCY)
+            .try_collect::<Vec<_>>()
+            .await
+        {
+            Ok(pending_uploads) => pending_uploads,
+            Err(error) => return Some(self.local_inventory_retry_result(&error)),
+        };
 
         let updated_ids = match self.cloud.list_wallet_backups(self.namespace.clone()).await {
             Ok(updated_ids) => updated_ids,

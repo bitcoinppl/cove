@@ -203,7 +203,6 @@ impl WrapperRepairOperation {
         match strategy {
             WrapperRepairStrategy::CreateNew => {
                 let new_prf = create_prf_key_without_persisting(&self.passkey).await?;
-                info!("Creating new passkey for wrapper repair");
 
                 Ok(WrapperRepairCredentials {
                     prf_key: new_prf.prf_key,

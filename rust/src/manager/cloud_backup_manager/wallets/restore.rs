@@ -22,6 +22,7 @@ pub(crate) enum WalletBackupLookup<T> {
 
 type ExistingFingerprints = Vec<(Fingerprint, cove_types::network::Network, LocalWalletMode)>;
 
+#[derive(Clone)]
 pub(crate) struct WalletBackupReader {
     cloud: CloudStorage,
     namespace: String,

@@ -3,6 +3,7 @@ use cove_device::cloud_storage::CloudStorage;
 use cove_device::keychain::{CSPP_NAMESPACE_ID_KEY, Keychain};
 use cove_device::passkey::PasskeyAccess;
 use cove_util::ResultExt as _;
+use futures::stream::{self, StreamExt as _};
 use tracing::{info, warn};
 use zeroize::Zeroizing;
 
@@ -16,9 +17,10 @@ use super::wallets::{
 };
 
 use super::{
-    BlockingCloudStep, CloudBackupError, CloudBackupPasskeyChoiceFlow, CloudBackupRestoreProgress,
-    CloudBackupRestoreReport, CloudBackupRestoreStage, CloudBackupStatus, CloudBackupWalletItem,
-    CloudBackupWalletStatus, PendingEnableSession, RestoreOperation, RustCloudBackupManager,
+    BlockingCloudStep, CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupError, CloudBackupPasskeyChoiceFlow,
+    CloudBackupRestoreProgress, CloudBackupRestoreReport, CloudBackupRestoreStage,
+    CloudBackupStatus, CloudBackupWalletItem, CloudBackupWalletStatus, PendingEnableSession,
+    RestoreOperation, RustCloudBackupManager,
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{PersistedCloudBackupState, PersistedCloudBackupStatus};
@@ -42,6 +44,14 @@ enum EnablePasskeyAcquisition {
 }
 
 impl RustCloudBackupManager {
+    async fn lookup_wallet_backup(
+        reader: WalletBackupReader,
+        record_id: String,
+    ) -> (String, Result<WalletBackupLookup<DownloadedWalletBackup>, CloudBackupError>) {
+        let lookup = reader.lookup(&record_id).await;
+        (record_id, lookup)
+    }
+
     fn clear_enable_progress(&self, status: CloudBackupStatus) {
         self.set_progress(None);
         self.set_restore_progress(None);
@@ -189,6 +199,7 @@ impl RustCloudBackupManager {
         let orphan_ids: Vec<_> = wallet_record_ids
             .iter()
             .filter(|record_id| !local_record_ids.contains(*record_id))
+            .cloned()
             .collect();
 
         if orphan_ids.is_empty() {
@@ -211,9 +222,15 @@ impl RustCloudBackupManager {
             Zeroizing::new(master_key.critical_data_key()),
         );
         let mut items = Vec::new();
+        let mut lookups = stream::iter(
+            orphan_ids
+                .into_iter()
+                .map(|record_id| Self::lookup_wallet_backup(reader.clone(), record_id)),
+        )
+        .buffered(CLOUD_BACKUP_IO_CONCURRENCY);
 
-        for record_id in orphan_ids {
-            let wallet = match reader.lookup(record_id).await {
+        while let Some((record_id, lookup)) = lookups.next().await {
+            let wallet = match lookup {
                 Ok(WalletBackupLookup::Found(wallet)) => wallet,
                 Ok(WalletBackupLookup::UnsupportedVersion(version)) => {
                     warn!(
@@ -835,10 +852,18 @@ impl RustCloudBackupManager {
         )?;
 
         let mut downloaded_wallets = Vec::with_capacity(wallet_record_ids.len());
+        let mut lookups = stream::iter(
+            wallet_record_ids
+                .iter()
+                .cloned()
+                .map(|record_id| Self::lookup_wallet_backup(reader.clone(), record_id)),
+        )
+        .buffered(CLOUD_BACKUP_IO_CONCURRENCY);
+        let mut completed = 0;
 
-        for (index, record_id) in wallet_record_ids.iter().enumerate() {
+        while let Some((record_id, lookup)) = lookups.next().await {
             self.ensure_current_restore_operation(operation)?;
-            match reader.lookup(record_id).await {
+            match lookup {
                 Ok(WalletBackupLookup::Found(wallet)) => {
                     downloaded_wallets.push((record_id.clone(), wallet));
                 }
@@ -866,11 +891,12 @@ impl RustCloudBackupManager {
                     report.failed_wallet_errors.push(error.to_string());
                 }
             }
+            completed += 1;
 
             self.send_restore_progress(
                 operation,
                 CloudBackupRestoreStage::Downloading,
-                (index + 1) as u32,
+                completed,
                 Some(total),
             )?;
         }
@@ -3160,6 +3186,37 @@ mod tests {
         manager.discard_pending_enable_cloud_backup();
 
         assert!(manager.take_pending_enable_session().is_none());
+        assert!(cspp.load_master_key_from_store().unwrap().is_none());
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn discard_pending_enable_retry_upload_deletes_remote_master_key() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        let manager = RustCloudBackupManager::init();
+
+        reset_cloud_backup_test_state(&manager, globals);
+
+        let master_key = cove_cspp::master_key::MasterKey::generate();
+        let namespace = master_key.namespace_id();
+        let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
+        cspp.save_master_key(&master_key).unwrap();
+        globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
+        manager.replace_pending_enable_session(PendingEnableSession::retry_upload(
+            master_key,
+            UnpersistedPrfKey { prf_key: [7; 32], prf_salt: [9; 32], credential_id: vec![1, 2, 3] },
+        ));
+
+        manager.discard_pending_enable_cloud_backup();
+
+        wait_for_test_condition(
+            Duration::from_secs(1),
+            "remote master key backup should be deleted",
+            || !globals.cloud.has_master_key_backup(&namespace),
+        )
+        .await;
+
         assert!(cspp.load_master_key_from_store().unwrap().is_none());
     }
 

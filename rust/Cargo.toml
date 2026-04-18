@@ -21,6 +21,7 @@ arc-swap = "1.7"
 
 # async
 tokio = { version = "1.43" }
+async-trait = "0.1.81"
 
 # encoding / decoding 
 hex = "0.4.3"
@@ -151,7 +152,7 @@ act-zero-ext = "0.2.0"
 
 # async 
 tokio = { workspace = true, features = ["rt"] }
-async-trait = "0.1.81"
+async-trait = { workspace = true }
 futures = "0.3.30"
 backon = "1.6"
 

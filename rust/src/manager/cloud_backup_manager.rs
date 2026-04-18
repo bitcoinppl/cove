@@ -17,6 +17,7 @@ use cove_device::cloud_storage::{CloudStorage, CloudSyncHealth};
 use cove_tokio::task::spawn_actor;
 use cove_util::ResultExt as _;
 use flume::{Receiver, Sender};
+use futures::stream::{self, StreamExt as _};
 use parking_lot::RwLock;
 use tracing::{error, info, warn};
 use zeroize::Zeroizing;
@@ -51,6 +52,7 @@ use super::connectivity_manager::CONNECTIVITY_MANAGER;
 type LocalWalletSecret = crate::backup::model::WalletSecret;
 
 const PASSKEY_RP_ID: &str = "covebitcoinwallet.com";
+pub(super) const CLOUD_BACKUP_IO_CONCURRENCY: usize = 4;
 type Message = CloudBackupReconcileMessage;
 
 pub static CLOUD_BACKUP_MANAGER: LazyLock<Arc<RustCloudBackupManager>> =
@@ -1241,18 +1243,27 @@ impl RustCloudBackupManager {
             });
         };
 
-        let cloud = CloudStorage::global();
-        let reader = WalletBackupReader::new(
-            cloud.clone(),
-            namespace.clone(),
-            Zeroizing::new(master_key.critical_data_key()),
-        );
+        let cloud = CloudStorage::global().clone();
+        let critical_key = master_key.critical_data_key();
         let mut remote_wallet_truth = RemoteWalletTruth::default();
 
-        for wallet in local_wallets {
-            let record_id = wallet_record_id(wallet.id.as_ref());
+        let mut summaries = stream::iter(local_wallets)
+            .map(|wallet| {
+                let cloud = cloud.clone();
+                let namespace = namespace.clone();
 
-            match reader.summary(&record_id).await {
+                async move {
+                    let record_id = wallet_record_id(wallet.id.as_ref());
+                    let reader =
+                        WalletBackupReader::new(cloud, namespace, Zeroizing::new(critical_key));
+                    let result = reader.summary(&record_id).await;
+                    (record_id, result)
+                }
+            })
+            .buffer_unordered(CLOUD_BACKUP_IO_CONCURRENCY);
+
+        while let Some((record_id, result)) = summaries.next().await {
+            match result {
                 Ok(WalletBackupLookup::Found(summary)) => {
                     remote_wallet_truth.summaries_by_record_id.insert(record_id, summary);
                 }
@@ -1528,8 +1539,22 @@ impl RustCloudBackupManager {
 
     /// Dismiss staged enable state for the existing-backup confirmation flow
     pub(crate) fn discard_pending_enable_cloud_backup(&self) {
-        if self.take_pending_enable_session().is_some() {
+        if let Some(pending) = self.take_pending_enable_session() {
+            let should_delete_remote = pending.is_retry_upload();
+            let namespace_id = pending.master_key.namespace_id();
+
             cove_cspp::Cspp::new(Keychain::global().clone()).delete_master_key();
+
+            if should_delete_remote {
+                cove_tokio::task::spawn(async move {
+                    if let Err(error) = CloudStorage::global()
+                        .delete_wallet_backup(namespace_id, MASTER_KEY_RECORD_ID.to_string())
+                        .await
+                    {
+                        warn!("Discard pending enable failed to delete remote master key: {error}");
+                    }
+                });
+            }
         }
         self.clear_existing_backup_found_prompt();
     }
@@ -1754,13 +1779,9 @@ pub(crate) fn ensure_cloud_backup_test_tokio_runtime() {
 #[cfg(test)]
 impl RustCloudBackupManager {
     pub(crate) async fn clear_wallet_upload_debouncers_for_test(&self) {
-        let runtime = self.runtime.clone();
-        let (sender, receiver) = std::sync::mpsc::sync_channel(1);
-        let _task = cove_tokio::task::spawn(async move {
-            let result = send!(runtime.clear_upload_runtime_state());
-            sender.send(result).expect("send clear upload runtime state result");
-        });
-        receiver.recv().expect("receive clear upload runtime state result");
+        act_zero::call!(self.runtime.clear_upload_runtime_state())
+            .await
+            .expect("clear upload runtime state");
     }
 
     pub(crate) async fn verify_pending_uploads_once_for_test(&self) -> bool {

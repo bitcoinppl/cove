@@ -5,7 +5,8 @@ final class CloudStorageAccessImpl: CloudStorageAccess, @unchecked Sendable {
     private let helper = ICloudDriveHelper.shared
     private let queue = DispatchQueue(
         label: "cove.CloudStorageAccessImpl",
-        qos: .userInitiated
+        qos: .userInitiated,
+        attributes: .concurrent
     )
 
     private func run<T: Sendable>(
@@ -68,7 +69,7 @@ final class CloudStorageAccessImpl: CloudStorageAccess, @unchecked Sendable {
 
     func deleteWalletBackup(namespace: String, recordId: String) async throws {
         try await run {
-            let url = try self.helper.walletFileReadURL(namespace: namespace, recordId: recordId)
+            let url = try self.helper.backupFileReadURL(namespace: namespace, recordId: recordId)
             if FileManager.default.fileExists(atPath: url.path) {
                 try self.helper.coordinatedDelete(at: url, missingItemID: recordId)
                 return

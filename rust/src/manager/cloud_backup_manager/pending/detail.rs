@@ -33,7 +33,7 @@ impl RustCloudBackupManager {
 
         info!("refresh_cloud_backup_detail: listing wallets for namespace {namespace}");
         let cloud = CloudStorage::global();
-        let wallet_record_ids = match cloud.list_wallet_backups(namespace).await {
+        let wallet_record_ids = match cloud.list_wallet_backups(namespace.clone()).await {
             Ok(ids) => ids,
             Err(CloudStorageError::NotFound(_)) => {
                 info!("No wallet backups found in namespace, re-uploading all wallets");
@@ -43,10 +43,7 @@ impl RustCloudBackupManager {
                     )));
                 }
 
-                match cloud
-                    .list_wallet_backups(self.current_namespace_id().unwrap_or_default())
-                    .await
-                {
+                match cloud.list_wallet_backups(namespace.clone()).await {
                     Ok(ids) => ids,
                     Err(error) => {
                         return Some(CloudBackupDetailResult::AccessError(error.to_string()));

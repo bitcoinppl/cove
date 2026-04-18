@@ -268,7 +268,7 @@ async fn export_wallet_labels_jsonl(
     let manager = LabelManager::try_new(wallet_id.clone())
         .map_err(|error| CloudBackupError::Internal(format!("open labels db: {error}")))?;
 
-    manager.export().await.map_err(|error| CloudBackupError::Internal(error.to_string()))
+    manager.export().await.map_err_str(CloudBackupError::Internal)
 }
 
 pub fn decode_cloud_labels_jsonl(entry: &WalletEntry) -> Result<Option<String>, CloudBackupError> {

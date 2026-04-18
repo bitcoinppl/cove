@@ -24,7 +24,7 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 
 # async
-async-trait = "0.1.81"
+async-trait = { workspace = true }
 
 # uniffi
 uniffi = { workspace = true }
