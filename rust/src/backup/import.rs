@@ -600,6 +600,17 @@ fn restore_settings(settings: &super::model::AppSettings) -> Result<(), BackupEr
         }
     }
 
+    for (network_str, explorer_url) in &settings.custom_block_explorers {
+        let Ok(network) = Network::try_from(network_str.as_str()) else {
+            warn!("skipping unknown network in custom_block_explorers: {network_str}");
+            continue;
+        };
+
+        if let Err(e) = config.set(GlobalConfigKey::CustomBlockExplorer(network), explorer_url.clone()) {
+            errors.push(format!("custom explorer for {network_str}: {e}"));
+        }
+    }
+
     if errors.is_empty() {
         Ok(())
     } else {

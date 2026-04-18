@@ -123,6 +123,9 @@ pub struct AppSettings {
     pub color_scheme: Option<String>,
     /// Per-network node configuration: (network_string, node_config_json)
     pub selected_nodes: Vec<(String, String)>,
+    /// Per-network custom block explorer URLs: (network_string, custom_url)
+    #[serde(default)]
+    pub custom_block_explorers: Vec<(String, String)>,
 }
 
 /// Result of a successful backup export
@@ -248,6 +251,7 @@ mod tests {
                     "bitcoin".to_string(),
                     "{\"url\":\"localhost\"}".to_string(),
                 )],
+                custom_block_explorers: vec![],
             },
         }
     }
@@ -335,6 +339,7 @@ mod tests {
                 selected_fiat_currency: None,
                 color_scheme: None,
                 selected_nodes: vec![],
+                custom_block_explorers: vec![],
             },
         };
 
