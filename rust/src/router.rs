@@ -35,6 +35,28 @@ pub enum NewWalletRoute {
     Select,
     HotWallet(HotWalletRoute),
     ColdWallet(ColdWalletRoute),
+    KeyTeleportReceive(KeyTeleportReceiveRoute),
+}
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Default, uniffi::Enum)]
+pub enum KeyTeleportReceiveRoute {
+    /// Show the receiver QR / BBQr and numeric code.
+    #[default]
+    ShowQr,
+    /// Scan (or paste) the sender's BBQr packet.
+    ScanSender,
+    /// Enter the teleport password that the sender shared out-of-band.
+    EnterPassword { sender_packet_bbqr: String },
+    /// Review the decoded payload before importing as a wallet.
+    ReviewImport { payload_kind: KeyTeleportPayloadKind, words_or_xprv: String },
+}
+
+/// Payload type indicator — carried through the route so the import screen
+/// can display appropriate labels without re-decrypting.
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum KeyTeleportPayloadKind {
+    Mnemonic,
+    Xprv,
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Default, uniffi::Enum)]
@@ -288,6 +310,12 @@ impl RouteFactory {
 
     pub fn cold_wallet_import(&self, route: ColdWalletRoute) -> Route {
         route.into()
+    }
+
+    pub fn key_teleport_receive(&self) -> Route {
+        Route::NewWallet(NewWalletRoute::KeyTeleportReceive(
+            KeyTeleportReceiveRoute::default(),
+        ))
     }
 
     pub fn qr_import(&self) -> Route {

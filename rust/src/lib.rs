@@ -38,6 +38,7 @@ mod router;
 mod auth;
 mod autocomplete;
 mod backup;
+mod key_teleport;
 mod bdk_store;
 mod build;
 mod converter;
