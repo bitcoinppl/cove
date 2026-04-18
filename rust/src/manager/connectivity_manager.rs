@@ -25,7 +25,7 @@ pub struct ConnectivityState {
 #[derive(Clone, Debug, uniffi::Object)]
 pub struct RustConnectivityManager {
     is_connected: Arc<AtomicBool>,
-    subscribers: Arc<Mutex<Vec<Sender<bool>>>>,
+    subscribers: Arc<Mutex<Vec<Sender<()>>>>,
 }
 
 impl RustConnectivityManager {
@@ -46,8 +46,8 @@ impl RustConnectivityManager {
         self.is_connected.load(Ordering::Acquire)
     }
 
-    pub(crate) fn subscribe(&self) -> Receiver<bool> {
-        let (sender, receiver) = flume::bounded(16);
+    pub(crate) fn subscribe(&self) -> Receiver<()> {
+        let (sender, receiver) = flume::bounded(1);
         self.subscribers.lock().push(sender);
         receiver
     }
@@ -58,15 +58,16 @@ impl RustConnectivityManager {
             return false;
         }
 
-        self.broadcast(is_connected);
+        self.broadcast();
         true
     }
 
-    fn broadcast(&self, is_connected: bool) {
+    fn broadcast(&self) {
         let mut subscribers = self.subscribers.lock();
-        subscribers.retain(|sender| match sender.try_send(is_connected) {
+        subscribers.retain(|sender| match sender.try_send(()) {
             Ok(()) => true,
-            Err(TrySendError::Full(_) | TrySendError::Disconnected(_)) => false,
+            Err(TrySendError::Full(_)) => true,
+            Err(TrySendError::Disconnected(_)) => false,
         });
     }
 }
@@ -109,7 +110,8 @@ mod tests {
 
         manager.set_connection_state(next);
 
-        assert_eq!(receiver.recv().unwrap(), next);
+        receiver.recv().unwrap();
+        assert_eq!(manager.connected(), next);
     }
 
     #[test]
@@ -124,25 +126,55 @@ mod tests {
     }
 
     #[test]
-    fn broadcast_drops_full_and_disconnected_subscribers() {
+    fn broadcast_keeps_full_subscribers_registered() {
+        let manager = RustConnectivityManager::init();
+        let (full_sender, full_receiver) = flume::bounded(1);
+
+        full_sender.send(()).expect("fill subscriber channel");
+        manager.subscribers.lock().push(full_sender);
+
+        manager.broadcast();
+
+        assert_eq!(manager.subscribers.lock().len(), 1);
+        full_receiver.recv().unwrap();
+
+        manager.broadcast();
+
+        full_receiver.recv().unwrap();
+    }
+
+    #[test]
+    fn subscribe_coalesces_multiple_changes_and_uses_latest_state() {
+        let manager = RustConnectivityManager::init();
+        let receiver = manager.subscribe();
+
+        manager.is_connected.store(false, Ordering::Release);
+        manager.set_connection_state_internal(true);
+        manager.set_connection_state_internal(false);
+
+        receiver.recv().unwrap();
+
+        assert!(receiver.try_recv().is_err());
+        assert!(!manager.connected());
+    }
+
+    #[test]
+    fn broadcast_drops_disconnected_subscribers() {
         let manager = RustConnectivityManager::init();
         let (healthy_sender, healthy_receiver) = flume::bounded(1);
-        let (full_sender, _full_receiver) = flume::bounded(1);
         let (disconnected_sender, disconnected_receiver) = flume::bounded(1);
 
-        full_sender.send(false).expect("fill subscriber channel");
         drop(disconnected_receiver);
 
         {
             let mut subscribers = manager.subscribers.lock();
             subscribers.push(healthy_sender);
-            subscribers.push(full_sender);
             subscribers.push(disconnected_sender);
         }
 
-        manager.broadcast(true);
+        manager.broadcast();
 
-        assert_eq!(healthy_receiver.recv().unwrap(), true);
+        healthy_receiver.recv().unwrap();
         assert_eq!(manager.subscribers.lock().len(), 1);
     }
 }

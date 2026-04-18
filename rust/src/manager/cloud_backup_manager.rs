@@ -815,11 +815,12 @@ impl RustCloudBackupManager {
         let receiver = CONNECTIVITY_MANAGER.subscribe();
 
         std::thread::spawn(move || {
-            while let Ok(connected) = receiver.recv() {
+            while receiver.recv().is_ok() {
                 let Some(manager) = manager.upgrade() else {
                     break;
                 };
 
+                let connected = CONNECTIVITY_MANAGER.connected();
                 manager.handle_connectivity_change(connected);
             }
         });

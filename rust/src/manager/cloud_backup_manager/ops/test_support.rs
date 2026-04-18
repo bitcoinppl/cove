@@ -452,6 +452,7 @@ impl TestGlobals {
         self.cloud.reset();
         self.passkey.reset();
         cove_cspp::Cspp::<Keychain>::clear_cached_master_key();
+        CONNECTIVITY_MANAGER.set_connection_state(true);
     }
 }
 

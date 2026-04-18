@@ -1,4 +1,10 @@
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+    time::Duration,
+};
 
 use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
 use cove_util::ResultExt as _;
@@ -10,7 +16,10 @@ use tracing::{info, warn};
 use crate::{
     app::{App, AppAction, FfiApp},
     database::{Database, global_config::GlobalConfigKey},
-    manager::cloud_backup_manager::{CLOUD_BACKUP_MANAGER, RustCloudBackupManager},
+    manager::{
+        cloud_backup_manager::{CLOUD_BACKUP_MANAGER, RustCloudBackupManager},
+        connectivity_manager::CONNECTIVITY_MANAGER,
+    },
     mnemonic::{Mnemonic as StoredMnemonic, MnemonicExt, NumberOfBip39Words},
     network::Network,
     pending_wallet::PendingWallet,
@@ -307,6 +316,8 @@ struct InternalState {
 #[derive(Clone, Debug, uniffi::Object)]
 pub struct RustOnboardingManager {
     state: Arc<RwLock<InternalState>>,
+    cloud_check_in_flight: Arc<AtomicBool>,
+    pending_cloud_check_retry: Arc<AtomicBool>,
     reconciler: MessageSender<Message>,
     reconcile_receiver: Arc<Receiver<SingleOrMany<Message>>>,
 }
@@ -345,10 +356,13 @@ impl RustOnboardingManager {
 
         let manager = Arc::new(Self {
             state: Arc::new(RwLock::new(InternalState::new(resolution.flow))),
+            cloud_check_in_flight: Arc::new(AtomicBool::new(false)),
+            pending_cloud_check_retry: Arc::new(AtomicBool::new(false)),
             reconciler: MessageSender::new(sender),
             reconcile_receiver: Arc::new(receiver),
         });
 
+        manager.start_connectivity_listener();
         manager.maybe_advance_accepted_terms();
 
         if should_start_cloud_check {
@@ -405,7 +419,44 @@ impl RustOnboardingManager {
 }
 
 impl RustOnboardingManager {
+    fn start_connectivity_listener(self: &Arc<Self>) {
+        let manager = Arc::downgrade(self);
+        let receiver = CONNECTIVITY_MANAGER.subscribe();
+
+        std::thread::spawn(move || {
+            while receiver.recv().is_ok() {
+                let Some(manager) = manager.upgrade() else {
+                    break;
+                };
+
+                let connected = CONNECTIVITY_MANAGER.connected();
+                manager.handle_connectivity_change(connected);
+            }
+        });
+    }
+
+    fn handle_connectivity_change(self: &Arc<Self>, connected: bool) {
+        if !connected {
+            return;
+        }
+
+        if self.cloud_check_in_flight.load(Ordering::Acquire) {
+            self.pending_cloud_check_retry.store(true, Ordering::Release);
+            return;
+        }
+
+        if !self.prepare_offline_cloud_check_retry() {
+            return;
+        }
+
+        self.start_cloud_check();
+    }
+
     fn start_cloud_check(self: &Arc<Self>) {
+        if self.cloud_check_in_flight.swap(true, Ordering::AcqRel) {
+            return;
+        }
+
         let me = Arc::clone(self);
         cove_tokio::task::spawn(async move {
             if CLOUD_BACKUP_MANAGER.is_offline() {
@@ -428,8 +479,34 @@ impl RustOnboardingManager {
         });
     }
 
-    fn finish_cloud_check(&self, outcome: CloudCheckOutcome) {
+    fn prepare_offline_cloud_check_retry(&self) -> bool {
+        self.mutate_state(|state, deferred| state.prepare_offline_cloud_check_retry(deferred))
+    }
+
+    fn finish_cloud_check(self: &Arc<Self>, outcome: CloudCheckOutcome) {
+        let should_retry =
+            self.finish_cloud_check_and_prepare_retry(outcome, CONNECTIVITY_MANAGER.connected());
+        if should_retry {
+            self.start_cloud_check();
+        }
+    }
+
+    fn finish_cloud_check_and_prepare_retry(
+        &self,
+        outcome: CloudCheckOutcome,
+        connected: bool,
+    ) -> bool {
         self.apply_event(InternalEvent::CloudCheckFinished(outcome));
+        self.cloud_check_in_flight.store(false, Ordering::Release);
+
+        if !self.pending_cloud_check_retry.swap(false, Ordering::AcqRel)
+            || outcome != CloudCheckOutcome::Inconclusive(CloudCheckIssue::Offline)
+            || !connected
+        {
+            return false;
+        }
+
+        self.prepare_offline_cloud_check_retry()
     }
 
     fn apply_event(&self, event: InternalEvent) {
@@ -622,6 +699,23 @@ impl InternalState {
         }
 
         self.flow.resolve_terms_acceptance(true)
+    }
+
+    fn prepare_offline_cloud_check_retry(
+        &mut self,
+        deferred: &mut DeferredSender<Message>,
+    ) -> bool {
+        if self.cloud_restore_discovery
+            != CloudRestoreDiscovery::Inconclusive(CloudCheckIssue::Offline)
+            || !self.flow.is_offline_cloud_check_retry_eligible()
+        {
+            return false;
+        }
+
+        self.cloud_restore_discovery = CloudRestoreDiscovery::Checking;
+        self.flow.prepare_for_cloud_check_retry();
+        self.sync_ui(deferred);
+        true
     }
 
     fn sync_ui(&mut self, deferred: &mut DeferredSender<Message>) {
@@ -2306,6 +2400,48 @@ mod tests {
     }
 
     #[test]
+    fn connectivity_reconnect_while_cloud_check_is_in_flight_retries_after_offline_finish() {
+        let manager = preview_manager(
+            FlowState::Welcome { error_message: None },
+            CloudRestoreDiscovery::Checking,
+        );
+        manager.cloud_check_in_flight.store(true, Ordering::Release);
+
+        manager.handle_connectivity_change(true);
+
+        assert!(manager.pending_cloud_check_retry.load(Ordering::Acquire));
+        assert_eq!(manager.state().cloud_restore_state, OnboardingCloudRestoreState::Checking);
+
+        assert!(manager.finish_cloud_check_and_prepare_retry(
+            CloudCheckOutcome::Inconclusive(CloudCheckIssue::Offline),
+            true,
+        ));
+        assert!(!manager.cloud_check_in_flight.load(Ordering::Acquire));
+        assert!(!manager.pending_cloud_check_retry.load(Ordering::Acquire));
+        assert_eq!(manager.state().cloud_restore_state, OnboardingCloudRestoreState::Checking);
+        assert_eq!(manager.state().cloud_restore_message, None);
+    }
+
+    #[test]
+    fn connectivity_reconnect_while_cloud_check_is_in_flight_does_not_retry_non_offline_finish() {
+        let manager = preview_manager(
+            FlowState::Welcome { error_message: None },
+            CloudRestoreDiscovery::Checking,
+        );
+        manager.cloud_check_in_flight.store(true, Ordering::Release);
+
+        manager.handle_connectivity_change(true);
+
+        assert!(
+            !manager
+                .finish_cloud_check_and_prepare_retry(CloudCheckOutcome::NoBackupConfirmed, true,)
+        );
+        assert!(!manager.cloud_check_in_flight.load(Ordering::Acquire));
+        assert!(!manager.pending_cloud_check_retry.load(Ordering::Acquire));
+        assert_eq!(manager.state().cloud_restore_state, OnboardingCloudRestoreState::NoBackupFound);
+    }
+
+    #[test]
     fn cloud_check_timeout_is_treated_as_cloud_unavailable() {
         let error = CloudStorageError::NotAvailable("iCloud metadata query timed out".into());
 
@@ -2465,5 +2601,34 @@ mod tests {
             cloud_backup_enabled: false,
             secret_words_saved: false,
         }
+    }
+    fn preview_internal_state(
+        flow: FlowState,
+        cloud_restore_discovery: CloudRestoreDiscovery,
+    ) -> InternalState {
+        let ui = flow.ui_state(cloud_restore_discovery, false);
+
+        InternalState { flow, cloud_restore_discovery, restore_offer_allowed: true, ui }
+    }
+
+    fn preview_manager(
+        flow: FlowState,
+        cloud_restore_discovery: CloudRestoreDiscovery,
+    ) -> Arc<RustOnboardingManager> {
+        let (sender, receiver) = flume::bounded(16);
+
+        Arc::new(RustOnboardingManager {
+            state: Arc::new(RwLock::new(preview_internal_state(flow, cloud_restore_discovery))),
+            cloud_check_in_flight: Arc::new(AtomicBool::new(false)),
+            pending_cloud_check_retry: Arc::new(AtomicBool::new(false)),
+            reconciler: MessageSender::new(sender),
+            reconcile_receiver: Arc::new(receiver),
+        })
+    }
+
+    fn prepare_offline_cloud_check_retry(state: &mut InternalState) -> bool {
+        let (sender, _receiver) = flume::bounded(16);
+        let mut deferred = DeferredSender::new(MessageSender::new(sender));
+        state.prepare_offline_cloud_check_retry(&mut deferred)
     }
 }
