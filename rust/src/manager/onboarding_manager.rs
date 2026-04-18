@@ -1,10 +1,4 @@
-use std::{
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-    },
-    time::Duration,
-};
+use std::{sync::Arc, time::Duration};
 
 use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
 use cove_util::ResultExt as _;
@@ -16,10 +10,7 @@ use tracing::{info, warn};
 use crate::{
     app::{App, AppAction, FfiApp},
     database::{Database, global_config::GlobalConfigKey},
-    manager::{
-        cloud_backup_manager::{CLOUD_BACKUP_MANAGER, RustCloudBackupManager},
-        connectivity_manager::CONNECTIVITY_MANAGER,
-    },
+    manager::cloud_backup_manager::{CLOUD_BACKUP_MANAGER, RustCloudBackupManager},
     mnemonic::{Mnemonic as StoredMnemonic, MnemonicExt, NumberOfBip39Words},
     network::Network,
     pending_wallet::PendingWallet,
@@ -316,7 +307,6 @@ struct InternalState {
 #[derive(Clone, Debug, uniffi::Object)]
 pub struct RustOnboardingManager {
     state: Arc<RwLock<InternalState>>,
-    cloud_check_in_flight: Arc<AtomicBool>,
     reconciler: MessageSender<Message>,
     reconcile_receiver: Arc<Receiver<SingleOrMany<Message>>>,
 }
@@ -355,12 +345,10 @@ impl RustOnboardingManager {
 
         let manager = Arc::new(Self {
             state: Arc::new(RwLock::new(InternalState::new(resolution.flow))),
-            cloud_check_in_flight: Arc::new(AtomicBool::new(false)),
             reconciler: MessageSender::new(sender),
             reconcile_receiver: Arc::new(receiver),
         });
 
-        manager.start_connectivity_listener();
         manager.maybe_advance_accepted_terms();
 
         if should_start_cloud_check {
@@ -417,60 +405,27 @@ impl RustOnboardingManager {
 }
 
 impl RustOnboardingManager {
-    fn start_connectivity_listener(self: &Arc<Self>) {
-        let manager = Arc::downgrade(self);
-        let receiver = CONNECTIVITY_MANAGER.subscribe();
-
-        std::thread::spawn(move || {
-            while let Ok(connected) = receiver.recv() {
-                let Some(manager) = manager.upgrade() else {
-                    break;
-                };
-
-                manager.handle_connectivity_change(connected);
-            }
-        });
-    }
-
-    fn handle_connectivity_change(self: &Arc<Self>, connected: bool) {
-        if !connected || !self.prepare_offline_cloud_check_retry() {
-            return;
-        }
-
-        self.start_cloud_check();
-    }
-
     fn start_cloud_check(self: &Arc<Self>) {
-        if self.cloud_check_in_flight.swap(true, Ordering::AcqRel) {
-            return;
-        }
-
         let me = Arc::clone(self);
         cove_tokio::task::spawn(async move {
-            let outcome = if CLOUD_BACKUP_MANAGER.is_offline() {
-                CloudCheckOutcome::Inconclusive(CloudCheckIssue::Offline)
-            } else {
-                let retry_delays = [1u64, 2, 2, 3, 5, 10];
-                let cloud = CloudStorage::global().clone();
+            if CLOUD_BACKUP_MANAGER.is_offline() {
+                me.finish_cloud_check(CloudCheckOutcome::Inconclusive(CloudCheckIssue::Offline));
+                return;
+            }
 
-                determine_cloud_check_outcome_async(
-                    &retry_delays,
-                    || {
-                        let cloud = cloud.clone();
-                        async move { cloud.has_any_cloud_backup().await }
-                    },
-                    |duration| tokio::time::sleep(duration),
-                )
-                .await
-            };
-
-            me.cloud_check_in_flight.store(false, Ordering::Release);
+            let retry_delays = [1u64, 2, 2, 3, 5, 10];
+            let cloud = CloudStorage::global().clone();
+            let outcome = determine_cloud_check_outcome_async(
+                &retry_delays,
+                || {
+                    let cloud = cloud.clone();
+                    async move { cloud.has_any_cloud_backup().await }
+                },
+                |duration| tokio::time::sleep(duration),
+            )
+            .await;
             me.finish_cloud_check(outcome);
         });
-    }
-
-    fn prepare_offline_cloud_check_retry(&self) -> bool {
-        self.mutate_state(|state, deferred| state.prepare_offline_cloud_check_retry(deferred))
     }
 
     fn finish_cloud_check(&self, outcome: CloudCheckOutcome) {
@@ -667,23 +622,6 @@ impl InternalState {
         }
 
         self.flow.resolve_terms_acceptance(true)
-    }
-
-    fn prepare_offline_cloud_check_retry(
-        &mut self,
-        deferred: &mut DeferredSender<Message>,
-    ) -> bool {
-        if self.cloud_restore_discovery
-            != CloudRestoreDiscovery::Inconclusive(CloudCheckIssue::Offline)
-            || !self.flow.is_offline_cloud_check_retry_eligible()
-        {
-            return false;
-        }
-
-        self.cloud_restore_discovery = CloudRestoreDiscovery::Checking;
-        self.flow.prepare_for_cloud_check_retry();
-        self.sync_ui(deferred);
-        true
     }
 
     fn sync_ui(&mut self, deferred: &mut DeferredSender<Message>) {
@@ -2527,20 +2465,5 @@ mod tests {
             cloud_backup_enabled: false,
             secret_words_saved: false,
         }
-    }
-
-    fn preview_internal_state(
-        flow: FlowState,
-        cloud_restore_discovery: CloudRestoreDiscovery,
-    ) -> InternalState {
-        let ui = flow.ui_state(cloud_restore_discovery, false);
-
-        InternalState { flow, cloud_restore_discovery, restore_offer_allowed: true, ui }
-    }
-
-    fn prepare_offline_cloud_check_retry(state: &mut InternalState) -> bool {
-        let (sender, _receiver) = flume::bounded(16);
-        let mut deferred = DeferredSender::new(MessageSender::new(sender));
-        state.prepare_offline_cloud_check_retry(&mut deferred)
     }
 }
