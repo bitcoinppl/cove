@@ -554,8 +554,15 @@ pub(crate) fn reset_cloud_backup_test_state(
     manager: &RustCloudBackupManager,
     globals: &TestGlobals,
 ) {
+    reset_cloud_backup_test_state_with_hook(manager, globals, || {});
+}
+
+pub(crate) fn reset_cloud_backup_test_state_with_hook(
+    manager: &RustCloudBackupManager,
+    globals: &TestGlobals,
+    before_reconnect: impl FnOnce(),
+) {
     init_test_runtime();
-    CONNECTIVITY_MANAGER.set_connection_state(true);
     globals.reset();
     clear_local_wallets();
     let reset_manager = manager.clone();
@@ -572,6 +579,8 @@ pub(crate) fn reset_cloud_backup_test_state(
         .recv()
         .expect("receive clear upload runtime state result")
         .expect("clear upload runtime state");
+    before_reconnect();
+    CONNECTIVITY_MANAGER.set_connection_state(true);
 }
 
 pub(crate) async fn wait_for_test_condition(

@@ -2064,6 +2064,42 @@ mod tests {
         assert!(manager.state().sync_error.is_none());
     }
 
+    #[test]
+    fn reset_cloud_backup_test_state_clears_state_before_reconnect() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        let manager = RustCloudBackupManager::init();
+        configure_enabled_cloud_backup(&manager, globals, 0);
+
+        let wallet_id = xpub_only_wallet_metadata().id;
+        let record_id = cove_cspp::backup_data::wallet_record_id(wallet_id.as_ref());
+        Database::global()
+            .cloud_blob_sync_states
+            .set(&PersistedCloudBlobSyncState {
+                kind: CloudUploadKind::BackupBlob,
+                namespace_id: Keychain::global().get(CSPP_NAMESPACE_ID_KEY.into()).unwrap(),
+                wallet_id: Some(wallet_id),
+                record_id,
+                state: PersistedCloudBlobState::Failed(CloudBlobFailedState {
+                    revision_hash: None,
+                    error: "upload failed".into(),
+                    retryable: false,
+                    failed_at: 1,
+                }),
+            })
+            .unwrap();
+        manager.set_sync_error(Some("upload failed".into()));
+        CONNECTIVITY_MANAGER.set_connection_state(false);
+
+        reset_cloud_backup_test_state_with_hook(&manager, globals, || {
+            assert!(Database::global().cloud_blob_sync_states.list().unwrap().is_empty());
+            assert!(manager.state().sync_error.is_none());
+        });
+
+        assert!(CONNECTIVITY_MANAGER.is_connected());
+    }
+
     #[expect(
         clippy::await_holding_lock,
         reason = "tests serialize shared cloud backup globals across awaits"
