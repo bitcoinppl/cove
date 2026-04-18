@@ -65,15 +65,26 @@ impl FiatOnChangeHandler {
 
         let symbol = self.selected_currency.symbol();
 
-        // reject input containing alphabetic characters so pasted bitcoin
-        // addresses (and similar mixed-alphanumeric strings) aren't silently
-        // stripped down to just their digits and treated as a fiat amount. #314
-        if new_value.chars().any(|c| c.is_alphabetic()) {
-            return Ok(Changeset {
-                entering_fiat_amount: Some(old_value.to_string()),
-                ..Default::default()
-            });
-        }
+        // If the pasted text contains letters, try stripping known currency tokens
+        // (e.g. "100 CHF" → "100", "BTC 0.5" → "0.5"). Only reject if alphabetic
+        // characters survive that cleanup — a bech32 address always will. #314
+        let stripped_buf;
+        let new_value = if new_value.chars().any(|c| c.is_alphabetic()) {
+            match sanitize::strip_currency_suffix(new_value) {
+                Some(s) => {
+                    stripped_buf = s;
+                    stripped_buf.as_str()
+                }
+                None => {
+                    return Ok(Changeset {
+                        entering_fiat_amount: Some(old_value.to_string()),
+                        ..Default::default()
+                    });
+                }
+            }
+        } else {
+            new_value
+        };
 
         let number_of_decimal_points = new_value.chars().filter(|c| *c == '.').count();
 
@@ -258,5 +269,35 @@ mod tests {
         let result = h.on_change("$100", "").unwrap();
         assert_eq!(result.entering_fiat_amount.as_deref(), Some("$"));
         assert_eq!(result.fiat_value, Some(0.0));
+    }
+
+    #[test]
+    fn pasting_amount_with_chf_suffix_is_accepted() {
+        let h = handler();
+        let result = h.on_change("$0", "100 CHF").unwrap();
+        assert!(result.fiat_value.is_some(), "100 CHF should parse as a fiat amount");
+        assert!(result.btc_amount.is_some());
+    }
+
+    #[test]
+    fn pasting_amount_with_btc_suffix_is_accepted() {
+        let h = handler();
+        let result = h.on_change("$0", "0.5 BTC").unwrap();
+        assert!(result.fiat_value.is_some(), "0.5 BTC should parse as a numeric amount");
+    }
+
+    #[test]
+    fn pasting_amount_with_sats_suffix_is_accepted() {
+        let h = handler();
+        let result = h.on_change("$0", "1000 SATS").unwrap();
+        assert!(result.fiat_value.is_some(), "1000 SATS should parse after stripping suffix");
+    }
+
+    #[test]
+    fn pasting_bech32_address_still_rejected_after_suffix_strip() {
+        let h = handler();
+        let result = h.on_change("$0", "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq").unwrap();
+        assert_eq!(result.entering_fiat_amount.as_deref(), Some("$0"));
+        assert!(result.btc_amount.is_none());
     }
 }
