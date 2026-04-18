@@ -8,9 +8,9 @@
 import SwiftUI
 import UIKit
 
-// Prevents screenshots by overlaying a secure UITextField which iOS treats as protected content
+/// Prevents screenshots by overlaying a secure UITextField which iOS treats as protected content
 private struct ScreenshotProtection: UIViewRepresentable {
-    func makeUIView(context: Context) -> UIView {
+    func makeUIView(context _: Context) -> UIView {
         let field = UITextField()
         field.isSecureTextEntry = true
         field.isUserInteractionEnabled = false
@@ -21,7 +21,7 @@ private struct ScreenshotProtection: UIViewRepresentable {
         return view
     }
 
-    func updateUIView(_ uiView: UIView, context: Context) {}
+    func updateUIView(_: UIView, context _: Context) {}
 }
 
 private extension View {

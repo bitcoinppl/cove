@@ -15,7 +15,7 @@ private extension View {
 }
 
 private struct ScreenshotProtectionView: UIViewRepresentable {
-    func makeUIView(context: Context) -> UIView {
+    func makeUIView(context _: Context) -> UIView {
         let field = UITextField()
         field.isSecureTextEntry = true
         field.isUserInteractionEnabled = false
@@ -25,7 +25,7 @@ private struct ScreenshotProtectionView: UIViewRepresentable {
         return view
     }
 
-    func updateUIView(_ uiView: UIView, context: Context) {}
+    func updateUIView(_: UIView, context _: Context) {}
 }
 
 struct HotWalletCreateScreen: View {
