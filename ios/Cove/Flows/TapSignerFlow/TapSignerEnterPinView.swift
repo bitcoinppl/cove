@@ -54,6 +54,8 @@ struct TapSignerEnterPin: View {
                 if error.isAuthError() {
                     app.sheetState = nil
                     app.alertState = .init(.tapSignerWrongPin(tapSigner: tapSigner, action: .derive))
+                } else if error.isConnectionError() {
+                    app.alertState = .init(.general(title: "Connection Lost", message: "Tag connection lost, please hold your phone still"))
                 } else {
                     app.alertState = .init(.tapSignerDeriveFailed(message: error.description))
                 }
@@ -83,6 +85,8 @@ struct TapSignerEnterPin: View {
                 if error.isAuthError() {
                     app.sheetState = nil
                     app.alertState = .init(.tapSignerWrongPin(tapSigner: tapSigner, action: .backup))
+                } else if error.isConnectionError() {
+                    app.alertState = .init(.general(title: "Connection Lost", message: "Tag connection lost, please hold your phone still"))
                 } else {
                     app.alertState = .init(
                         .general(title: "Backup Failed!", message: error.description)
@@ -128,6 +132,8 @@ struct TapSignerEnterPin: View {
                 if error.isAuthError() {
                     app.sheetState = nil
                     app.alertState = .init(.tapSignerWrongPin(tapSigner: tapSigner, action: .sign(psbt)))
+                } else if error.isConnectionError() {
+                    app.alertState = .init(.general(title: "Connection Lost", message: "Tag connection lost, please hold your phone still"))
                 } else {
                     app.alertState = .init(
                         .general(title: "Signing Failed!", message: error.description)

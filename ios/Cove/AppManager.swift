@@ -5,7 +5,9 @@ import SwiftUI
 private let walletModeChangeDelayMs = 250
 private let sidebarNavigationDelayMs = 250
 
-@Observable final class AppManager: FfiReconcile {
+@MainActor
+@Observable
+final class AppManager: FfiReconcile {
     static let shared = makeShared()
 
     private let logger = Log(id: "AppManager")
@@ -98,6 +100,7 @@ private let sidebarNavigationDelayMs = 250
         self.rust.listenForUpdates(updater: self)
     }
 
+    @MainActor
     public func getWalletManager(id: WalletId) throws -> WalletManager {
         if let walletvm = walletManager, walletvm.id == id {
             logger.debug("found and using vm for \(id)")
@@ -112,6 +115,7 @@ private let sidebarNavigationDelayMs = 250
         return walletManager!
     }
 
+    @MainActor
     public func getSendFlowManager(_ wm: WalletManager, presenter: SendFlowPresenter) -> SendFlowManager {
         let id = wm.id
 

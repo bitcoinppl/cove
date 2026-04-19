@@ -1,6 +1,8 @@
 import SwiftUI
 
-@Observable class ImportWalletManager: ImportWalletManagerReconciler {
+@MainActor
+@Observable
+final class ImportWalletManager: ImportWalletManagerReconciler {
     private let logger = Log(id: "ImportWalletManager")
     var rust: RustImportWalletManager
 

@@ -252,6 +252,9 @@ private suspend fun deriveAction(
         if (isAuthError(e)) {
             Log.w("TapSignerEnterPin", "TapSigner auth failed - likely wrong PIN")
             manager.errorMessage = "Wrong PIN, please try again"
+        } else if (isConnectionError(e)) {
+            Log.w("TapSignerEnterPin", "TapSigner connection lost")
+            manager.errorMessage = "Tag connection lost, please hold your phone still"
         } else {
             manager.errorMessage = "Connection failed, please try again"
         }
@@ -317,6 +320,9 @@ private suspend fun backupAction(
         if (isAuthError(e)) {
             Log.w("TapSignerEnterPin", "TapSigner auth failed - likely wrong PIN")
             manager.errorMessage = "Wrong PIN, please try again"
+        } else if (isConnectionError(e)) {
+            Log.w("TapSignerEnterPin", "TapSigner connection lost")
+            manager.errorMessage = "Tag connection lost, please hold your phone still"
         } else {
             manager.errorMessage = "Connection failed, please try again"
         }
@@ -374,6 +380,9 @@ private suspend fun signAction(
         if (isAuthError(e)) {
             Log.w("TapSignerEnterPin", "TapSigner auth failed - likely wrong PIN")
             manager.errorMessage = "Wrong PIN, please try again"
+        } else if (isConnectionError(e)) {
+            Log.w("TapSignerEnterPin", "TapSigner connection lost")
+            manager.errorMessage = "Tag connection lost, please hold your phone still"
         } else {
             manager.errorMessage = "Connection failed, please try again"
         }
@@ -384,4 +393,10 @@ private fun isAuthError(error: Exception): Boolean {
     // check if error is a bad auth error using type-safe FFI function
     return error is org.bitcoinppl.cove_core.TapSignerReaderException &&
         error.isAuthError()
+}
+
+private fun isConnectionError(error: Exception): Boolean {
+    // check if error is a connection error using type-safe FFI function
+    return error is org.bitcoinppl.cove_core.TapSignerReaderException &&
+        error.isConnectionError()
 }

@@ -8,7 +8,8 @@
 import Foundation
 import KeychainSwift
 
-class KeychainAccessor: KeychainAccess {
+@MainActor
+final class KeychainAccessor: KeychainAccess {
     let keychain: KeychainSwift
 
     init() {

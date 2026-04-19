@@ -81,6 +81,7 @@ struct TapSignerConfirmPinView: View {
             case let .failure(error):
                 if error.isAuthError() { return app.alertState = .init(.tapSignerInvalidAuth) }
                 if error.isNoBackupError() { return app.alertState = .init(.tapSignerNoBackup(tapSigner: args.tapSigner)) }
+                if error.isConnectionError() { return app.alertState = .init(.general(title: "Connection Lost", message: "Tag connection lost, please hold your phone still")) }
                 app.alertState = .init(.general(title: "Error", message: error.description))
             }
         }

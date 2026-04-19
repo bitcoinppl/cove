@@ -283,9 +283,7 @@ private class TapCardTransport(
             response
         } catch (e: Exception) {
             Log.e(tag, "APDU error", e)
-            throw TransportException.UnknownException(
-                "Tag connection lost, please hold your phone still and try again"
-            )
+            throw TransportException.ConnectionException("Tag connection lost, please hold your phone still")
         }
     }
 

@@ -3256,6 +3256,8 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_tapsignerreadererror_isautherror(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Byte
+    external fun uniffi_cove_fn_method_tapsignerreadererror_isconnectionerror(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
     external fun uniffi_cove_fn_method_tapsignerreadererror_isnobackuperror(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Byte
     external fun uniffi_cove_fn_method_tapsignerreadererror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -46884,6 +46886,16 @@ sealed class TapSignerReaderException: kotlin.Exception() {
     }
     
 
+     fun `isConnectionError`(): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_tapsignerreadererror_isconnectionerror(FfiConverterTypeTapSignerReaderError.lower(this),
+        _status)
+}
+    )
+    }
+    
+
      fun `isNoBackupError`(): kotlin.Boolean {
             return FfiConverterBoolean.lift(
     uniffiRustCall() { _status ->
@@ -48008,6 +48020,14 @@ sealed class TransportException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
+    class ConnectionException(
+        
+        val v1: kotlin.String
+        ) : TransportException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+    
     class UnknownException(
         
         val v1: kotlin.String
@@ -48062,7 +48082,10 @@ public object FfiConverterTypeTransportError : FfiConverterRustBuffer<TransportE
             6 -> TransportException.CvcChangeException(
                 FfiConverterString.read(buf),
                 )
-            7 -> TransportException.UnknownException(
+            7 -> TransportException.ConnectionException(
+                FfiConverterString.read(buf),
+                )
+            8 -> TransportException.UnknownException(
                 FfiConverterString.read(buf),
                 )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
@@ -48097,6 +48120,11 @@ public object FfiConverterTypeTransportError : FfiConverterRustBuffer<TransportE
                 + FfiConverterString.allocationSize(value.v1)
             )
             is TransportException.CvcChangeException -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+            is TransportException.ConnectionException -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
                 + FfiConverterString.allocationSize(value.v1)
@@ -48141,8 +48169,13 @@ public object FfiConverterTypeTransportError : FfiConverterRustBuffer<TransportE
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is TransportException.UnknownException -> {
+            is TransportException.ConnectionException -> {
                 buf.putInt(7)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is TransportException.UnknownException -> {
+                buf.putInt(8)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
