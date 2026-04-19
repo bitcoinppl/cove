@@ -58,6 +58,11 @@ impl redb::Value for OutPointKey {
         Self: 'a,
     {
         let id = data[..32].try_into().expect("id is 32 bytes");
+        // `IntoBytes` (zerocopy) writes the `u32` in native-endian as a raw
+        // memory cast of the `#[repr(C)]` struct, so we must read it back
+        // with `from_ne_bytes` to match.  The previous `from_be_bytes` was a
+        // latent bug that was invisible because `label.rs` never reads the
+        // index value back from the key.
         let index = u32::from_ne_bytes(data[32..36].try_into().expect("index is 4 bytes"));
 
         Self { id, index }
