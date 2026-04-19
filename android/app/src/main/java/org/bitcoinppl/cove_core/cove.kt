@@ -1316,6 +1316,10 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_walletstable_len(
     ): Short
+    external fun uniffi_cove_checksum_method_walletstable_move_wallet(
+    ): Short
+    external fun uniffi_cove_checksum_method_walletstable_reorder_wallets(
+    ): Short
     external fun uniffi_cove_checksum_method_priceresponse_get(
     ): Short
     external fun uniffi_cove_checksum_method_priceresponse_get_for_currency(
@@ -2290,6 +2294,10 @@ internal object UniffiLib {
     ): Byte
     external fun uniffi_cove_fn_method_walletstable_len(`ptr`: Long,`network`: RustBufferNetwork.ByValue,`mode`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Short
+    external fun uniffi_cove_fn_method_walletstable_move_wallet(`ptr`: Long,`walletId`: RustBufferWalletId.ByValue,`toPosition`: Int,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_walletstable_reorder_wallets(`ptr`: Long,`orderedIds`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_clone_walletdatadb(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Long
     external fun uniffi_cove_fn_free_walletdatadb(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -3927,6 +3935,12 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_walletstable_len() != 51436.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_walletstable_move_wallet() != 47857.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_walletstable_reorder_wallets() != 55038.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_priceresponse_get() != 6552.toShort()) {
@@ -26310,6 +26324,17 @@ public interface WalletsTableInterface {
     
     fun `len`(`network`: Network, `mode`: WalletMode): kotlin.UShort
     
+    /**
+     * Move a wallet to `to_position`. Out-of-range positions clamp to the list bounds.
+     */
+    fun `moveWallet`(`walletId`: WalletId, `toPosition`: kotlin.UInt): List<WalletMetadata>
+    
+    /**
+     * Reorder wallets for the current (network, mode) to match `ordered_ids`.
+     * `ordered_ids` must be a permutation of the current wallet IDs.
+     */
+    fun `reorderWallets`(`orderedIds`: List<WalletId>): List<WalletMetadata>
+    
     companion object
 }
 
@@ -26481,6 +26506,41 @@ open class WalletsTable: Disposable, AutoCloseable, WalletsTableInterface
     UniffiLib.uniffi_cove_fn_method_walletstable_len(
         it,
         FfiConverterTypeNetwork.lower(`network`),FfiConverterTypeWalletMode.lower(`mode`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Move a wallet to `to_position`. Out-of-range positions clamp to the list bounds.
+     */
+    @Throws(DatabaseException::class)override fun `moveWallet`(`walletId`: WalletId, `toPosition`: kotlin.UInt): List<WalletMetadata> {
+            return FfiConverterSequenceTypeWalletMetadata.lift(
+    callWithHandle {
+    uniffiRustCallWithError(DatabaseException) { _status ->
+    UniffiLib.uniffi_cove_fn_method_walletstable_move_wallet(
+        it,
+        FfiConverterTypeWalletId.lower(`walletId`),FfiConverterUInt.lower(`toPosition`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Reorder wallets for the current (network, mode) to match `ordered_ids`.
+     * `ordered_ids` must be a permutation of the current wallet IDs.
+     */
+    @Throws(DatabaseException::class)override fun `reorderWallets`(`orderedIds`: List<WalletId>): List<WalletMetadata> {
+            return FfiConverterSequenceTypeWalletMetadata.lift(
+    callWithHandle {
+    uniffiRustCallWithError(DatabaseException) { _status ->
+    UniffiLib.uniffi_cove_fn_method_walletstable_reorder_wallets(
+        it,
+        FfiConverterSequenceTypeWalletId.lower(`orderedIds`),_status)
 }
     }
     )
@@ -29567,6 +29627,12 @@ data class WalletMetadata (
     var `origin`: kotlin.String?
     , 
     /**
+     * Position in the wallet list within its (network, mode); lower appears first.
+     * Backfilled by `WalletsTable::migrate_positions` for pre-existing records.
+     */
+    var `position`: kotlin.UInt
+    , 
+    /**
      * Metadata data specific to different hardware wallets
      */
     var `hardwareMetadata`: HardwareWalletMetadata?
@@ -29643,6 +29709,7 @@ data class WalletMetadata (
         this.`addressType`,
         this.`fiatOrBtc`,
         this.`origin`,
+        this.`position`,
         this.`hardwareMetadata`,
         this.`showLabels`,
         this.`internal`
@@ -29673,6 +29740,7 @@ public object FfiConverterTypeWalletMetadata: FfiConverterRustBuffer<WalletMetad
             FfiConverterTypeWalletAddressType.read(buf),
             FfiConverterTypeFiatOrBtc.read(buf),
             FfiConverterOptionalString.read(buf),
+            FfiConverterUInt.read(buf),
             FfiConverterOptionalTypeHardwareWalletMetadata.read(buf),
             FfiConverterBoolean.read(buf),
             FfiConverterTypeInternalOnlyMetadata.read(buf),
@@ -29695,6 +29763,7 @@ public object FfiConverterTypeWalletMetadata: FfiConverterRustBuffer<WalletMetad
             FfiConverterTypeWalletAddressType.allocationSize(value.`addressType`) +
             FfiConverterTypeFiatOrBtc.allocationSize(value.`fiatOrBtc`) +
             FfiConverterOptionalString.allocationSize(value.`origin`) +
+            FfiConverterUInt.allocationSize(value.`position`) +
             FfiConverterOptionalTypeHardwareWalletMetadata.allocationSize(value.`hardwareMetadata`) +
             FfiConverterBoolean.allocationSize(value.`showLabels`) +
             FfiConverterTypeInternalOnlyMetadata.allocationSize(value.`internal`)
@@ -29716,6 +29785,7 @@ public object FfiConverterTypeWalletMetadata: FfiConverterRustBuffer<WalletMetad
             FfiConverterTypeWalletAddressType.write(value.`addressType`, buf)
             FfiConverterTypeFiatOrBtc.write(value.`fiatOrBtc`, buf)
             FfiConverterOptionalString.write(value.`origin`, buf)
+            FfiConverterUInt.write(value.`position`, buf)
             FfiConverterOptionalTypeHardwareWalletMetadata.write(value.`hardwareMetadata`, buf)
             FfiConverterBoolean.write(value.`showLabels`, buf)
             FfiConverterTypeInternalOnlyMetadata.write(value.`internal`, buf)
@@ -51450,6 +51520,18 @@ sealed class WalletTableException: kotlin.Exception() {
             get() = ""
     }
     
+    class WalletNotFound(
+        ) : WalletTableException() {
+        override val message
+            get() = ""
+    }
+    
+    class ReorderMismatch(
+        ) : WalletTableException() {
+        override val message
+            get() = ""
+    }
+    
 
     
 
@@ -51485,6 +51567,8 @@ public object FfiConverterTypeWalletTableError : FfiConverterRustBuffer<WalletTa
                 FfiConverterString.read(buf),
                 )
             3 -> WalletTableException.WalletAlreadyExists()
+            4 -> WalletTableException.WalletNotFound()
+            5 -> WalletTableException.ReorderMismatch()
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
@@ -51505,6 +51589,14 @@ public object FfiConverterTypeWalletTableError : FfiConverterRustBuffer<WalletTa
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
             )
+            is WalletTableException.WalletNotFound -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is WalletTableException.ReorderMismatch -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
         }
     }
 
@@ -51522,6 +51614,14 @@ public object FfiConverterTypeWalletTableError : FfiConverterRustBuffer<WalletTa
             }
             is WalletTableException.WalletAlreadyExists -> {
                 buf.putInt(3)
+                Unit
+            }
+            is WalletTableException.WalletNotFound -> {
+                buf.putInt(4)
+                Unit
+            }
+            is WalletTableException.ReorderMismatch -> {
+                buf.putInt(5)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
