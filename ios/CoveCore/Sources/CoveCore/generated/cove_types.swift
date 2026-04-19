@@ -4463,10 +4463,23 @@ public struct Utxo: Equatable, Hashable {
     public var derivationIndex: UInt32
     public var blockHeight: UInt32
     public var type: UtxoType
+    /**
+     * Whether this outpoint is currently locked (excluded from coin selection).
+     * Populated by `CoinControlManager` from the `locked_outpoints` table.
+     * Defaults to `false` for newly constructed `Utxo`s; callers that need
+     * accurate lock state should query the manager or set this field explicitly.
+     */
+    public var isLocked: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(outpoint: OutPoint, label: String?, datetime: UInt64, amount: Amount, address: Address, derivationIndex: UInt32, blockHeight: UInt32, type: UtxoType) {
+    public init(outpoint: OutPoint, label: String?, datetime: UInt64, amount: Amount, address: Address, derivationIndex: UInt32, blockHeight: UInt32, type: UtxoType, 
+        /**
+         * Whether this outpoint is currently locked (excluded from coin selection).
+         * Populated by `CoinControlManager` from the `locked_outpoints` table.
+         * Defaults to `false` for newly constructed `Utxo`s; callers that need
+         * accurate lock state should query the manager or set this field explicitly.
+         */isLocked: Bool = false) {
         self.outpoint = outpoint
         self.label = label
         self.datetime = datetime
@@ -4475,6 +4488,7 @@ public struct Utxo: Equatable, Hashable {
         self.derivationIndex = derivationIndex
         self.blockHeight = blockHeight
         self.type = type
+        self.isLocked = isLocked
     }
 
     
@@ -4555,7 +4569,8 @@ public struct FfiConverterTypeUtxo: FfiConverterRustBuffer {
                 address: FfiConverterTypeAddress.read(from: &buf), 
                 derivationIndex: FfiConverterUInt32.read(from: &buf), 
                 blockHeight: FfiConverterUInt32.read(from: &buf), 
-                type: FfiConverterTypeUtxoType.read(from: &buf)
+                type: FfiConverterTypeUtxoType.read(from: &buf), 
+                isLocked: FfiConverterBool.read(from: &buf)
         )
     }
 
@@ -4568,6 +4583,7 @@ public struct FfiConverterTypeUtxo: FfiConverterRustBuffer {
         FfiConverterUInt32.write(value.derivationIndex, into: &buf)
         FfiConverterUInt32.write(value.blockHeight, into: &buf)
         FfiConverterTypeUtxoType.write(value.type, into: &buf)
+        FfiConverterBool.write(value.isLocked, into: &buf)
     }
 }
 

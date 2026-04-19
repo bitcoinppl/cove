@@ -40,6 +40,12 @@ pub struct Utxo {
     pub derivation_index: u32,
     pub block_height: u32,
     pub type_: UtxoType,
+    /// Whether this outpoint is currently locked (excluded from coin selection).
+    /// Populated by `CoinControlManager` from the `locked_outpoints` table.
+    /// Defaults to `false` for newly constructed `Utxo`s; callers that need
+    /// accurate lock state should query the manager or set this field explicitly.
+    #[uniffi(default = false)]
+    pub is_locked: bool,
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Object)]
@@ -106,6 +112,7 @@ impl Utxo {
             derivation_index,
             block_height,
             type_,
+            is_locked: false,
         };
 
         Ok(utxo)
@@ -238,6 +245,7 @@ pub mod ffi_preview {
                 derivation_index: 0,
                 block_height,
                 type_,
+                is_locked: false,
             }
         }
     }

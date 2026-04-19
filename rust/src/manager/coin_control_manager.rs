@@ -16,6 +16,7 @@ use cove_types::{
 use parking_lot::Mutex;
 
 use crate::{
+    database::wallet_data::WalletDataDb,
     manager::deferred_sender::{self, DeferredSender},
     wallet::metadata::WalletMetadata,
 };
@@ -66,6 +67,19 @@ pub enum CoinControlManagerAction {
 
     NotifySelectedUtxosChanged(Vec<Arc<OutPoint>>),
     NotifySearchChanged(String),
+}
+
+/// Errors returned from per-outpoint lock and unlock operations.
+#[derive(Debug, Clone, thiserror::Error, uniffi::Error)]
+pub enum CoinControlManagerError {
+    #[error("Unable to access wallet data: {0}")]
+    DatabaseAccess(String),
+
+    #[error("Unable to lock outpoint: {0}")]
+    LockFailed(String),
+
+    #[error("Unable to unlock outpoint: {0}")]
+    UnlockFailed(String),
 }
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
@@ -131,6 +145,67 @@ impl RustCoinControlManager {
             .into_iter()
             .filter(|utxo| selected_utxos_ids.contains(&utxo.outpoint))
             .collect()
+    }
+
+    /// Returns true if `outpoint` is currently locked.
+    #[uniffi::method]
+    pub fn is_locked(&self, outpoint: Arc<OutPoint>) -> bool {
+        let outpoint = bitcoin::OutPoint::from(outpoint.as_ref());
+        self.state.lock().locked_outpoints.contains(&outpoint)
+    }
+
+    /// Lock a single outpoint so it is excluded from coin selection.
+    /// Refreshes the in-memory utxo list and notifies the UI.
+    #[uniffi::method]
+    pub fn lock_outpoint(
+        &self,
+        outpoint: Arc<OutPoint>,
+    ) -> Result<(), CoinControlManagerError> {
+        let wallet_id = self.state.lock().wallet_id.clone();
+        let bitcoin_outpoint = bitcoin::OutPoint::from(outpoint.as_ref());
+
+        let db = WalletDataDb::new_or_existing(wallet_id)
+            .map_err(|e| CoinControlManagerError::DatabaseAccess(e.to_string()))?;
+
+        db.locked_outpoints
+            .lock(bitcoin_outpoint)
+            .map_err(|e| CoinControlManagerError::LockFailed(e.to_string()))?;
+
+        let utxos = {
+            let mut state = self.state.lock();
+            state.reload_locked_outpoints();
+            state.utxos()
+        };
+
+        self.reconciler.send(Message::UpdateUtxos(utxos));
+        Ok(())
+    }
+
+    /// Unlock a single outpoint, returning it to the spendable set.
+    /// Refreshes the in-memory utxo list and notifies the UI.
+    #[uniffi::method]
+    pub fn unlock_outpoint(
+        &self,
+        outpoint: Arc<OutPoint>,
+    ) -> Result<(), CoinControlManagerError> {
+        let wallet_id = self.state.lock().wallet_id.clone();
+        let bitcoin_outpoint = bitcoin::OutPoint::from(outpoint.as_ref());
+
+        let db = WalletDataDb::new_or_existing(wallet_id)
+            .map_err(|e| CoinControlManagerError::DatabaseAccess(e.to_string()))?;
+
+        db.locked_outpoints
+            .unlock(bitcoin_outpoint)
+            .map_err(|e| CoinControlManagerError::UnlockFailed(e.to_string()))?;
+
+        let utxos = {
+            let mut state = self.state.lock();
+            state.reload_locked_outpoints();
+            state.utxos()
+        };
+
+        self.reconciler.send(Message::UpdateUtxos(utxos));
+        Ok(())
     }
 
     #[uniffi::method]
@@ -280,7 +355,12 @@ impl RustCoinControlManager {
         let old_selected_utxos = self.state.lock().selected_utxos.clone();
 
         let new_selected_utxos = if old_selected_utxos.is_empty() {
-            self.utxos().into_iter().map(|utxo| utxo.outpoint).collect()
+            // exclude locked outpoints from "select all" — they can't be spent
+            self.utxos()
+                .into_iter()
+                .filter(|utxo| !utxo.is_locked)
+                .map(|utxo| utxo.outpoint)
+                .collect()
         } else {
             vec![]
         };

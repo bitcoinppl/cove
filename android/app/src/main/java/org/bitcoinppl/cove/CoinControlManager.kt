@@ -75,10 +75,14 @@ class CoinControlManager(
 
     /**
      * update selected utxos and dispatch notification
+     *
+     * Locked UTXOs are filtered out so they cannot be selected for spending.
      */
     fun updateSelected(value: Set<ULong>) {
-        selected = value
-        val outpoints = utxos.filter { value.contains(it.outpoint.hashToUint()) }.map { it.outpoint }
+        val lockedIds = utxos.filter { it.isLocked }.map { it.outpoint.hashToUint() }.toSet()
+        val filtered = value - lockedIds
+        selected = filtered
+        val outpoints = utxos.filter { filtered.contains(it.outpoint.hashToUint()) }.map { it.outpoint }
         dispatch(CoinControlManagerAction.NotifySelectedUtxosChanged(outpoints))
     }
 
@@ -202,6 +206,28 @@ class CoinControlManager(
     fun dispatch(action: CoinControlManagerAction) {
         logDebug("dispatch: $action")
         mainScope.launch(Dispatchers.IO) { rust.dispatch(action) }
+    }
+
+    /** Persistently lock a UTXO so it is excluded from coin selection. */
+    fun lockOutpoint(outpoint: OutPoint) {
+        mainScope.launch(Dispatchers.IO) {
+            try {
+                rust.lockOutpoint(outpoint)
+            } catch (e: Throwable) {
+                android.util.Log.e(tag, "lockOutpoint failed: ${e.message}", e)
+            }
+        }
+    }
+
+    /** Unlock a previously locked UTXO so it becomes spendable again. */
+    fun unlockOutpoint(outpoint: OutPoint) {
+        mainScope.launch(Dispatchers.IO) {
+            try {
+                rust.unlockOutpoint(outpoint)
+            } catch (e: Throwable) {
+                android.util.Log.e(tag, "unlockOutpoint failed: ${e.message}", e)
+            }
+        }
     }
 
     override fun close() {

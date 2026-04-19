@@ -1,9 +1,11 @@
 package org.bitcoinppl.cove.flows.CoinControlFlow
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,6 +28,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowDropUp
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.ButtonDefaults
@@ -410,6 +413,7 @@ private fun UtxoListScreenContent(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun UtxoItemRow(
     manager: org.bitcoinppl.cove.CoinControlManager,
@@ -417,18 +421,33 @@ private fun UtxoItemRow(
     selected: Boolean,
     onToggle: () -> Unit,
 ) {
+    var menuExpanded by remember { mutableStateOf(false) }
+    val rowAlpha = if (utxo.isLocked) 0.55f else 1f
+
     Row(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 16.dp)
-                .clickable { onToggle() },
+                .combinedClickable(
+                    onClick = { if (!utxo.isLocked) onToggle() },
+                    onLongClick = { menuExpanded = true },
+                ).padding(horizontal = 16.dp, vertical = 16.dp)
+                .graphicsLayer(alpha = rowAlpha),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         SelectionCircle(selected = selected)
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                if (utxo.isLocked) {
+                    Icon(
+                        imageVector = Icons.Filled.Lock,
+                        contentDescription = "Locked",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(12.dp),
+                    )
+                    Spacer(Modifier.width(4.dp))
+                }
                 Text(
                     text = utxo.displayName,
                     fontWeight = FontWeight.Normal,
@@ -462,6 +481,29 @@ private fun UtxoItemRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 12.sp,
             )
+        }
+
+        androidx.compose.material3.DropdownMenu(
+            expanded = menuExpanded,
+            onDismissRequest = { menuExpanded = false },
+        ) {
+            if (utxo.isLocked) {
+                androidx.compose.material3.DropdownMenuItem(
+                    text = { Text("Unlock UTXO") },
+                    onClick = {
+                        manager.unlockOutpoint(utxo.outpoint)
+                        menuExpanded = false
+                    },
+                )
+            } else {
+                androidx.compose.material3.DropdownMenuItem(
+                    text = { Text("Lock UTXO") },
+                    onClick = {
+                        manager.lockOutpoint(utxo.outpoint)
+                        menuExpanded = false
+                    },
+                )
+            }
         }
     }
 }

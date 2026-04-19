@@ -51,6 +51,20 @@ struct UtxoListScreen: View {
                     UtxoRow(manager: manager, utxo: utxo)
                         .listRowBackground(Color.secondarySystemGroupedBackground)
                         .contextMenu {
+                            if utxo.isLocked {
+                                Button(action: {
+                                    manager.unlockOutpoint(utxo.outpoint)
+                                }) {
+                                    Label("Unlock UTXO", systemImage: "lock.open")
+                                }
+                            } else {
+                                Button(action: {
+                                    manager.lockOutpoint(utxo.outpoint)
+                                }) {
+                                    Label("Lock UTXO", systemImage: "lock")
+                                }
+                            }
+
                             Button(action: {
                                 UIPasteboard.general.string = utxo.address.unformatted()
                             }) {
@@ -315,6 +329,13 @@ private struct UtxoRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 // Name
                 HStack(spacing: 4) {
+                    if utxo.isLocked {
+                        Image(systemName: "lock.fill")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .accessibilityLabel("Locked")
+                    }
+
                     Text(utxo.name())
                         .font(.footnote)
                         .truncationMode(.middle)
@@ -352,6 +373,7 @@ private struct UtxoRow: View {
             }
         }
         .padding(.vertical, 4)
+        .opacity(utxo.isLocked ? 0.55 : 1.0)
     }
 }
 

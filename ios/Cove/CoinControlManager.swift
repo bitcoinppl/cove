@@ -34,9 +34,12 @@ extension WeakReconciler: CoinControlManagerReconciler where Reconciler == CoinC
     var selectedBinding: Binding<Set<Utxo.ID>> {
         Binding(
             get: { self.selected },
-            set: {
-                self.selected = $0
-                self.dispatch(.notifySelectedUtxosChanged(Array($0)))
+            set: { newValue in
+                // Locked UTXOs cannot be selected for spending.
+                let lockedIds = Set(self.utxos.filter { $0.isLocked }.map { $0.id })
+                let filtered = newValue.subtracting(lockedIds)
+                self.selected = filtered
+                self.dispatch(.notifySelectedUtxosChanged(Array(filtered)))
             }
         )
     }
@@ -171,6 +174,30 @@ extension WeakReconciler: CoinControlManagerReconciler where Reconciler == CoinC
         rustBridge.async {
             self.logger.debug("dispatch: \(action)")
             self.rust.dispatch(action: action)
+        }
+    }
+
+    /// Persistently lock a UTXO so it is excluded from coin selection.
+    public func lockOutpoint(_ outpoint: OutPoint) {
+        rustBridge.async { [weak self] in
+            guard let self else { return }
+            do {
+                try self.rust.lockOutpoint(outpoint: outpoint)
+            } catch {
+                self.logger.error("lockOutpoint failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    /// Unlock a previously locked UTXO so it becomes spendable again.
+    public func unlockOutpoint(_ outpoint: OutPoint) {
+        rustBridge.async { [weak self] in
+            guard let self else { return }
+            do {
+                try self.rust.unlockOutpoint(outpoint: outpoint)
+            } catch {
+                self.logger.error("unlockOutpoint failed: \(error.localizedDescription)")
+            }
         }
     }
 }
