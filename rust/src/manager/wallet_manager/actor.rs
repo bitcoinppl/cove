@@ -19,7 +19,9 @@ use crate::{
         client_builder::NodeClientBuilder,
     },
     receive_address_watcher::ReceiveAddressWatcher,
-    transaction::{ConfirmedTransaction, FeeRate, Transaction, TransactionDetails, TxId},
+    transaction::{
+        ConfirmedTransaction, FeeRate, Transaction, TransactionDetails, TransactionLockState, TxId,
+    },
     transaction_watcher::TransactionWatcher,
     wallet::{
         Address, AddressInfo, Wallet, WalletAddressType, balance::Balance, metadata::BlockSizeLast,
@@ -320,6 +322,72 @@ impl WalletActor {
 
         transactions.sort_unstable_by(|a, b| a.cmp(b).reverse());
         transactions
+    }
+
+    pub async fn transaction_lock_state(&mut self, txid: TxId) -> ActorResult<TransactionLockState> {
+        let outputs = self.wallet_unspent_outputs_for_tx(txid.0);
+        Produces::ok(self.compute_lock_state(&outputs))
+    }
+
+    #[into_actor_result]
+    pub async fn toggle_transaction_lock(&mut self, txid: TxId) -> Result<(), Error> {
+        let outputs = self.wallet_unspent_outputs_for_tx(txid.0);
+
+        if outputs.is_empty() {
+            return Ok(());
+        }
+
+        let current_state = self.compute_lock_state(&outputs);
+
+        // unlocked or mixed -> lock all
+        // locked -> unlock all
+        let spendable = matches!(current_state, TransactionLockState::Locked);
+
+        self.db
+            .labels
+            .set_outputs_spendable(outputs, spendable)
+            .map_err_str(Error::UnknownError)?;
+
+        // notify cloud backup that labels changed
+        crate::manager::cloud_backup_manager::CLOUD_BACKUP_MANAGER
+            .handle_wallet_backup_change(self.wallet.id.clone());
+
+        Ok(())
+    }
+
+    /// Compute the aggregate lock state for the given wallet-owned unspent outputs.
+    fn compute_lock_state(&self, outputs: &[OutPoint]) -> TransactionLockState {
+        if outputs.is_empty() {
+            return TransactionLockState::None;
+        }
+
+        let mut locked_count = 0;
+        for outpoint in outputs {
+            let record = self.db.labels.get_output_record(outpoint).unwrap_or(None);
+            if let Some(record) = record {
+                if !record.item.spendable {
+                    locked_count += 1;
+                }
+            }
+        }
+
+        if locked_count == 0 {
+            TransactionLockState::Unlocked
+        } else if locked_count == outputs.len() {
+            TransactionLockState::Locked
+        } else {
+            TransactionLockState::Mixed
+        }
+    }
+
+    /// Returns all wallet-owned, still-unspent outpoints created by the given txid.
+    fn wallet_unspent_outputs_for_tx(&self, txid: Txid) -> Vec<OutPoint> {
+        self.wallet
+            .bdk
+            .list_unspent()
+            .filter(|utxo| utxo.outpoint.txid == txid)
+            .map(|utxo| utxo.outpoint)
+            .collect()
     }
 
     pub async fn split_transaction_outputs(

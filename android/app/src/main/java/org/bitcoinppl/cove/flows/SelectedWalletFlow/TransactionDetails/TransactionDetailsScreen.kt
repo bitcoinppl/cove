@@ -78,10 +78,13 @@ import org.bitcoinppl.cove.views.BalanceAutoSizeText
 import org.bitcoinppl.cove.views.ImageButton
 import org.bitcoinppl.cove_core.HeaderIconPresenter
 import org.bitcoinppl.cove_core.TransactionDetails
+import org.bitcoinppl.cove_core.TransactionLockState
 import org.bitcoinppl.cove_core.TransactionState
 import org.bitcoinppl.cove_core.WalletManagerAction
 import org.bitcoinppl.cove_core.types.FfiColorScheme
 import org.bitcoinppl.cove_core.types.TransactionDirection
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LockOpen
 
 private const val INITIAL_DELAY_MS = 2000L
 private const val FREQUENT_POLL_INTERVAL_MS = 30000L
@@ -125,11 +128,17 @@ fun TransactionDetailsScreen(
     // get current color scheme (respects in-app theme toggle)
     val isDark = !MaterialTheme.colorScheme.isLight
 
+    // state for recovery lock and UTXO lock
+    var lockState by remember { mutableStateOf(TransactionLockState.NONE) }
+
     // immediately fetch fresh transaction details on screen load
     LaunchedEffect(manager, txId) {
         try {
             val freshDetails = manager.rust.transactionDetails(txId = txId)
             manager.updateTransactionDetailsCache(txId, freshDetails)
+            
+            // also fetch lock state
+            lockState = manager.rust.transactionLockState(txId = txId)
         } catch (e: Exception) {
             android.util.Log.e("TransactionDetails", "error fetching fresh details", e)
         }
@@ -337,6 +346,57 @@ fun TransactionDetailsScreen(
                         )
                     }
                 },
+                actions = {
+                    if (lockState != TransactionLockState.NONE) {
+                        IconButton(onClick = {
+                            scope.launch {
+                                try {
+                                    manager.rust.toggleTransactionLock(txId = txId)
+                                    // refresh state after toggle
+                                    val newState = manager.rust.transactionLockState(txId = txId)
+                                    lockState = newState
+
+                                    val message = when (newState) {
+                                        TransactionLockState.LOCKED -> "Transaction outputs locked"
+                                        TransactionLockState.UNLOCKED -> "Transaction outputs unlocked"
+                                        TransactionLockState.MIXED -> "Remaining outputs locked"
+                                        else -> null
+                                    }
+                                    if (message != null) {
+                                        snackbarHostState.showSnackbar(message)
+                                    }
+                                } catch (e: Exception) {
+                                    android.util.Log.e("TransactionDetails", "error toggling lock", e)
+                                    snackbarHostState.showSnackbar("Failed to update lock state")
+                                }
+                            }
+                        }) {
+                            androidx.compose.animation.AnimatedContent(
+                                targetState = lockState,
+                                transitionSpec = {
+                                    (fadeIn() + androidx.compose.animation.scaleIn())
+                                        .togetherWith(fadeOut() + androidx.compose.animation.scaleOut())
+                                },
+                                label = "lock_state_anim"
+                            ) { state ->
+                                val icon = when (state) {
+                                    TransactionLockState.LOCKED -> Icons.Default.Lock
+                                    TransactionLockState.MIXED -> Icons.Default.Lock
+                                    else -> Icons.Default.LockOpen
+                                }
+                                Icon(
+                                    imageVector = icon,
+                                    contentDescription = when (state) {
+                                        TransactionLockState.LOCKED -> "Unlock all outputs"
+                                        TransactionLockState.MIXED -> "Lock remaining outputs"
+                                        else -> "Lock all outputs"
+                                    },
+                                    tint = if (state == TransactionLockState.MIXED) CoveColor.WarningOrange else fg
+                                )
+                            }
+                        }
+                    }
+                }
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -356,12 +416,14 @@ fun TransactionDetailsScreen(
                         val freshDetails = manager.rust.transactionDetails(txId = txId)
                         manager.updateTransactionDetailsCache(txId, freshDetails)
 
-                        // also update confirmations
+                        // also update confirmations and lock state
                         val blockNumber = freshDetails.blockNumber()
                         if (blockNumber != null) {
                             val confirmations = manager.rust.numberOfConfirmations(blockHeight = blockNumber)
                             numberOfConfirmations = confirmations.toInt()
                         }
+                        
+                        lockState = manager.rust.transactionLockState(txId = txId)
                     } catch (e: Exception) {
                         android.util.Log.e("TransactionDetails", "error refreshing details", e)
                     }

@@ -81,6 +81,14 @@ pub enum PendingOrConfirmed {
     Confirmed(ConfirmedDetails),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum)]
+pub enum TransactionLockState {
+    Unlocked,
+    Locked,
+    Mixed,
+    None,
+}
+
 impl TransactionDetails {
     pub fn try_new(
         wallet: &BdkWallet,

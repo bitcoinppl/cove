@@ -197,6 +197,30 @@ impl LabelsTable {
         Ok(label)
     }
 
+    pub fn get_output_record(
+        &self,
+        outpoint: impl Borrow<bitcoin::OutPoint>,
+    ) -> Result<Option<Record<OutputRecord>>, Error> {
+        let outpoint = outpoint.borrow();
+        let table = self.read_table(OUTPUT_TABLE)?;
+        let key = OutPointKey::from(outpoint);
+        let record = table.get(key)?.map(|record| record.value());
+
+        Ok(record)
+    }
+
+    pub fn locked_outpoints(&self) -> Result<Vec<bitcoin::OutPoint>, Error> {
+        let table = self.read_table(OUTPUT_TABLE)?;
+        let locked = table
+            .iter()?
+            .filter_map(|r| r.ok())
+            .map(|(_, v)| v.value())
+            .filter(|r| !r.item.spendable)
+            .map(|r| r.item.ref_)
+            .collect();
+        Ok(locked)
+    }
+
     pub fn get_address_record(
         &self,
         address: impl Borrow<Address<NetworkUnchecked>>,
@@ -319,6 +343,50 @@ impl LabelsTable {
                 tracing::warn!("unsupported label type for saving {label:?}");
             }
         }
+
+        Ok(())
+    }
+
+    pub fn set_outputs_spendable(
+        &self,
+        outpoints: impl IntoIterator<Item = bitcoin::OutPoint>,
+        spendable: bool,
+    ) -> Result<(), Error> {
+        let write_txn = self.db.begin_write().map_err_str(DatabaseError::DatabaseAccess)?;
+
+        {
+            let mut table = write_txn.open_table(OUTPUT_TABLE)?;
+            for outpoint in outpoints {
+                let key = OutPointKey::from(&outpoint);
+
+                let existing = table.get(key.clone())?.map(|r| r.value());
+                let mut record = match existing {
+                    Some(r) => r,
+                    None => {
+                        // if setting to spendable and no record exists, it's already spendable by default
+                        if spendable {
+                            continue;
+                        }
+                        Record::new(OutputRecord {
+                            ref_: outpoint,
+                            label: None,
+                            spendable: true,
+                        })
+                    }
+                };
+
+                if record.item.spendable == spendable {
+                    continue;
+                }
+
+                record.item.spendable = spendable;
+                record.timestamps.updated_at = jiff::Timestamp::now().as_second().cast_unsigned();
+
+                table.insert(key, record)?;
+            }
+        }
+
+        write_txn.commit().map_err_str(DatabaseError::DatabaseAccess)?;
 
         Ok(())
     }
