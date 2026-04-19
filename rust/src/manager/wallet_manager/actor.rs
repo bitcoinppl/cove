@@ -14,7 +14,11 @@ use crate::{
         Address, AddressInfo, Wallet, WalletAddressType, balance::Balance, metadata::BlockSizeLast,
     },
 };
-use act_zero::{runtimes::tokio::spawn_actor, *};
+use act_zero::{
+    runtimes::tokio::{Timer, spawn_actor},
+    timer::Tick,
+    *,
+};
 use act_zero_ext::into_actor_result;
 use ahash::HashMap;
 use bdk_wallet::{
@@ -59,6 +63,13 @@ use self::mnemonic::{Mnemonic, MnemonicExt as _};
 
 use super::{SingleOrMany, WalletManagerReconcileMessage};
 
+#[derive(Debug, Default)]
+struct PendingScanState {
+    timer: Timer,
+    pending_txids: Vec<Txid>,
+    timer_armed: bool,
+}
+
 #[derive(Debug)]
 pub struct WalletActor {
     pub addr: WeakAddr<Self>,
@@ -71,6 +82,7 @@ pub struct WalletActor {
 
     seed: u64,
     transaction_watchers: HashMap<Txid, Addr<TransactionWatcher>>,
+    pending_scans: PendingScanState,
 
     // cached values, source of truth is the redb database saved with wallet metadata
     last_scan_finished: Option<Duration>,
@@ -167,6 +179,24 @@ impl Actor for WalletActor {
     }
 }
 
+#[async_trait::async_trait]
+impl Tick for WalletActor {
+    async fn tick(&mut self) -> ActorResult<()> {
+        if !self.pending_scans.timer.tick() {
+            return Produces::ok(());
+        }
+
+        self.pending_scans.timer_armed = false;
+
+        for tx_id in std::mem::take(&mut self.pending_scans.pending_txids) {
+            send!(self.addr.perform_scan_for_single_tx_id(tx_id));
+            send!(self.addr.remove_watcher_for_txn(tx_id));
+        }
+
+        Produces::ok(())
+    }
+}
+
 impl WalletActor {
     pub fn new(
         wallet: Wallet,
@@ -185,6 +215,7 @@ impl WalletActor {
             last_height_fetched: None,
             state: ActorState::Initial,
             transaction_watchers: HashMap::default(),
+            pending_scans: PendingScanState::default(),
             db,
         })
     }
@@ -933,15 +964,15 @@ impl WalletActor {
         // update the height and perform sync scan which will update the transactions
         self.perform_scan_for_single_tx_id(tx_id).await?;
 
-        // wait 30 seconds run the scan again and then remove the watcher
-        // sanity check to make sure the transaction was picked up by the wallet
-        // and no extra watchers were created in the meantime
-        let addr = self.addr.clone();
-        self.addr.send_fut(async move {
-            tokio::time::sleep(Duration::from_secs(30)).await;
-            send!(addr.perform_scan_for_single_tx_id(tx_id));
-            send!(addr.remove_watcher_for_txn(tx_id));
-        });
+        // wait 30 seconds, run follow-up scans, then remove watcher(s).
+        self.pending_scans.pending_txids.push(tx_id);
+
+        if !self.pending_scans.timer_armed {
+            self.pending_scans.timer_armed = true;
+            self.pending_scans
+                .timer
+                .set_timeout_for_weak(self.addr.clone(), Duration::from_secs(30));
+        }
 
         Produces::ok(())
     }
@@ -952,7 +983,7 @@ impl WalletActor {
         // TODO: stop the wallet scans too, need to save the task handle when we start the scan
     }
 
-    async fn remove_watcher_for_txn(&mut self, tx_id: Txid) {
+    pub async fn remove_watcher_for_txn(&mut self, tx_id: Txid) {
         debug!("removing watcher for txn: {tx_id}");
         self.transaction_watchers.remove(&tx_id);
     }
