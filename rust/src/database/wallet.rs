@@ -35,6 +35,12 @@ pub enum WalletTableError {
 
     #[error("wallet already exists")]
     WalletAlreadyExists,
+
+    #[error("wallet not found for reorder")]
+    WalletNotFound,
+
+    #[error("reorder id list does not match the current wallet list")]
+    ReorderMismatch,
 }
 
 #[derive(Debug, Clone, Copy, uniffi::Object)]
@@ -124,6 +130,72 @@ impl WalletsTable {
 
         Ok(wallets)
     }
+
+    /// Reorder wallets for the current (network, mode) to match `ordered_ids`.
+    /// `ordered_ids` must be a permutation of the current wallet IDs.
+    pub fn reorder_wallets(
+        &self,
+        ordered_ids: Vec<WalletId>,
+    ) -> Result<Vec<WalletMetadata>, Error> {
+        let network = Database::global().global_config.selected_network();
+        let mode = Database::global().global_config.wallet_mode();
+
+        let mut wallets = self.get_all(network, mode)?;
+
+        if ordered_ids.len() != wallets.len() {
+            return Err(WalletTableError::ReorderMismatch.into());
+        }
+
+        let mut seen = vec![false; wallets.len()];
+        for (new_pos, id) in ordered_ids.iter().enumerate() {
+            let Some(idx) = wallets.iter().position(|w| &w.id == id) else {
+                return Err(WalletTableError::WalletNotFound.into());
+            };
+
+            if seen[idx] {
+                return Err(WalletTableError::ReorderMismatch.into());
+            }
+            seen[idx] = true;
+
+            wallets[idx].position = new_pos as u32;
+        }
+
+        wallets.sort_by_key(|wallet| wallet.position);
+        self.save_all_wallets(network, mode, wallets.clone())?;
+        Updater::send_update(Update::WalletsChanged);
+
+        Ok(wallets)
+    }
+
+    /// Move a wallet to `to_position`. Out-of-range positions clamp to the list bounds.
+    pub fn move_wallet(
+        &self,
+        wallet_id: WalletId,
+        to_position: u32,
+    ) -> Result<Vec<WalletMetadata>, Error> {
+        let network = Database::global().global_config.selected_network();
+        let mode = Database::global().global_config.wallet_mode();
+
+        let mut wallets = self.get_all(network, mode)?;
+
+        let Some(from_idx) = wallets.iter().position(|w| w.id == wallet_id) else {
+            return Err(WalletTableError::WalletNotFound.into());
+        };
+
+        let to_idx = (to_position as usize).min(wallets.len().saturating_sub(1));
+
+        let wallet = wallets.remove(from_idx);
+        wallets.insert(to_idx, wallet);
+
+        for (i, w) in wallets.iter_mut().enumerate() {
+            w.position = i as u32;
+        }
+
+        self.save_all_wallets(network, mode, wallets.clone())?;
+        Updater::send_update(Update::WalletsChanged);
+
+        Ok(wallets)
+    }
 }
 
 impl WalletsTable {
@@ -140,6 +212,9 @@ impl WalletsTable {
         if wallets.iter().any(|w| w.id == wallet.id) {
             return Err(WalletTableError::WalletAlreadyExists.into());
         }
+
+        let mut wallet = wallet;
+        wallet.position = wallets.len() as u32;
 
         let wallet_for_backup = should_backup_to_cloud.then(|| wallet.clone());
         wallets.push(wallet);
@@ -158,6 +233,43 @@ impl WalletsTable {
         write_txn.open_table(TABLE).expect("failed to create table");
 
         Self { db }
+    }
+
+    /// Backfill `position` for wallets persisted before the field existed.
+    /// Idempotent. Must be called after `Database::init()`'s startup transaction
+    /// commits, since this opens its own write transaction.
+    pub fn migrate_positions(&self) -> Result<(), Error> {
+        use strum::IntoEnumIterator;
+
+        for network in Network::iter() {
+            for mode in WalletMode::iter() {
+                let wallets = self.get_all(network, mode)?;
+
+                if wallets.len() <= 1 {
+                    continue;
+                }
+
+                let needs_migration = wallets.iter().all(|w| w.position == 0);
+                if !needs_migration {
+                    continue;
+                }
+
+                debug!("migrating wallet positions for {network}/{mode}");
+
+                let migrated: Vec<WalletMetadata> = wallets
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, mut w)| {
+                        w.position = i as u32;
+                        w
+                    })
+                    .collect();
+
+                self.save_all_wallets(network, mode, migrated)?;
+            }
+        }
+
+        Ok(())
     }
 
     pub fn mark_wallet_as_verified(&self, id: &WalletId) -> Result<(), Error> {
@@ -192,7 +304,9 @@ impl WalletsTable {
         Ok(wallet)
     }
 
-    /// Get all wallets for a network
+    /// Get all wallets for a network, sorted by `position` ascending.
+    /// Uses a stable sort so pre-migration records (all `position == 0`) keep
+    /// their stored order.
     pub fn get_all(
         &self,
         network: Network,
@@ -201,11 +315,13 @@ impl WalletsTable {
         let table = self.read_table()?;
         let key = WalletKey::from((network, mode)).to_string();
 
-        let value = table
+        let mut value: Vec<WalletMetadata> = table
             .get(key.as_str())
             .map_err_str(WalletTableError::ReadError)?
             .map(|value| value.value())
             .unwrap_or(vec![]);
+
+        value.sort_by_key(|wallet| wallet.position);
 
         Ok(value)
     }
