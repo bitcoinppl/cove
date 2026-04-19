@@ -66,6 +66,7 @@ fun KeyTeleportReceiveScanSenderScreen(
                                     message = "Please scan the sender's Key Teleport QR code (starts with B\$2S)",
                                 ),
                             )
+                            app.popRoute()
                         }
                     }
                 },

@@ -488,7 +488,7 @@ struct CoveMainView: View {
                 // when labels are imported, we need to get the transactions again with the updated labels
                 Task { await manager.rust.getTransactions() }
             case .keyTeleportSenderPacket:
-                app.pushRoute(RouteFactory().keyTeleportReceive())
+                app.alertState = TaggedItem(.invalidFormat(message: "Key Teleport receive is not yet available on iOS. Please use the Android app to receive via Key Teleport."))
             }
         } catch {
             switch error {

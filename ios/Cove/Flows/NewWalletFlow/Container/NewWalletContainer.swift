@@ -19,7 +19,7 @@ struct NewWalletContainer: View {
         case .coldWallet(.qrCode):
             QrCodeImportScreen()
         case .keyTeleportReceive:
-            Text("Key Teleport receive (iOS coming soon)")
+            KeyTeleportReceiveUnavailableView()
         }
     }
 }

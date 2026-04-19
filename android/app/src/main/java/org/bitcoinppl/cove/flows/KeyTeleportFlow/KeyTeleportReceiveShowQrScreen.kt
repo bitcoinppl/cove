@@ -93,15 +93,21 @@ fun KeyTeleportReceiveShowQrScreen(
             )
         },
     ) { paddingValues ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
-                .padding(horizontal = 24.dp)
-                .verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(20.dp),
+                .padding(paddingValues),
         ) {
+            // Scrollable content — no weight() here (would crash inside verticalScroll)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
+                    .padding(bottom = 88.dp) // leave room for the pinned button
+                    .verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(20.dp),
+            ) {
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
@@ -193,16 +199,20 @@ fun KeyTeleportReceiveShowQrScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(8.dp))
+            } // end scrollable Column
 
+            // Button pinned to bottom, outside the scrollable column
             Button(
                 onClick = onContinue,
                 modifier = Modifier
+                    .align(Alignment.BottomCenter)
                     .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
                     .padding(bottom = 24.dp),
             ) {
                 Text("Sender has scanned — Continue")
             }
-        }
+        } // end Box
     }
 }
