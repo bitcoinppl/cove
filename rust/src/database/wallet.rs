@@ -165,7 +165,7 @@ impl WalletsTable {
 impl WalletsTable {
     fn save_new_wallet_metadata_with_backup_behavior(
         &self,
-        wallet: WalletMetadata,
+        mut wallet: WalletMetadata,
         should_backup_to_cloud: bool,
     ) -> Result<(), Error> {
         let network = wallet.network;
@@ -178,7 +178,6 @@ impl WalletsTable {
         }
 
         let wallet_for_backup = should_backup_to_cloud.then(|| wallet.clone());
-        let mut wallet = wallet;
         wallet.position = next_append_position(&wallets);
         wallets.push(wallet);
         self.save_all_wallets(network, mode, wallets)?;
