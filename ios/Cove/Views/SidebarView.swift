@@ -158,7 +158,9 @@ struct SidebarView: View {
             walletList = app.wallets
         }
         .onChange(of: app.wallets) { _, updated in
-            walletList = updated
+            if draggedWalletId == nil {
+                walletList = updated
+            }
         }
     }
 
