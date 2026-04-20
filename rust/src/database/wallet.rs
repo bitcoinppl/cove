@@ -332,10 +332,11 @@ impl WalletsTable {
 
         let mut wallets = self.get_all(network, mode)?;
 
-        // update the wallet
         for wallet in &mut wallets {
             if wallet.id == metadata.id {
+                let current_position = wallet.position;
                 *wallet = metadata.clone();
+                wallet.position = current_position;
             }
         }
 
@@ -388,6 +389,11 @@ impl WalletsTable {
         let mut wallets = self.get_all(network, mode)?;
 
         wallets.retain(|wallet| &wallet.id != id);
+
+        for (i, wallet) in wallets.iter_mut().enumerate() {
+            wallet.position = i as u32;
+        }
+
         self.save_all_wallets(network, mode, wallets)?;
 
         Updater::send_update(Update::WalletsChanged);
