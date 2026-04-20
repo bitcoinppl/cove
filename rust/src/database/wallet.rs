@@ -134,26 +134,21 @@ impl WalletsTable {
     }
 
     /// Persist a new wallet order for the active wallet list.
+    ///
+    /// Validation rules:
+    /// - `ordered_ids` must be a full permutation of existing wallet IDs in the active bucket.
+    /// - Partial lists are rejected.
+    /// - Unknown IDs are rejected.
+    /// - Duplicate IDs are rejected.
+    ///
+    /// The write is atomic-like at the application level: validation and reorder construction
+    /// happen before `save_all_wallets` is called, so invalid inputs do not mutate persisted state.
     pub fn reorder_wallets(&self, ordered_ids: Vec<WalletId>) -> Result<(), Error> {
         let network = Database::global().global_config.selected_network();
         let mode = Database::global().global_config.wallet_mode();
 
         let wallets = self.get_all(network, mode)?;
-        validate_reorder_order(&ordered_ids, &wallets)?;
-
-        let mut by_id: HashMap<WalletId, WalletMetadata> = wallets
-            .into_iter()
-            .map(|w| (w.id.clone(), w))
-            .collect();
-
-        let mut reordered = Vec::with_capacity(ordered_ids.len());
-        for (i, id) in ordered_ids.iter().enumerate() {
-            let mut wallet = by_id.remove(id).ok_or_else(|| {
-                WalletTableError::InvalidWalletReorder("missing wallet after validation".into())
-            })?;
-            wallet.position = i as u32;
-            reordered.push(wallet);
-        }
+        let reordered = build_reordered_wallets(&ordered_ids, wallets)?;
 
         self.save_all_wallets(network, mode, reordered)?;
         Updater::send_update(Update::WalletsChanged);
@@ -395,6 +390,11 @@ fn next_append_position(wallets: &[WalletMetadata]) -> u32 {
 }
 
 
+/// Zero-inference migration for wallets saved before `WalletMetadata.position` existed.
+///
+/// Older rows deserialize with `position == 0`. To avoid random or hash-based reordering,
+/// we preserve the currently stored vector order exactly by assigning sequential positions
+/// from each wallet's existing index (`0..n-1`).
 fn migrate_legacy_positions_if_needed(wallets: &mut Vec<WalletMetadata>) -> bool {
     if wallets.len() > 1 && wallets.iter().all(|w| w.position == 0) {
         for (i, w) in wallets.iter_mut().enumerate() {
@@ -438,6 +438,27 @@ fn validate_reorder_order(
         }
     }
     Ok(())
+}
+
+fn build_reordered_wallets(
+    ordered_ids: &[WalletId],
+    wallets: Vec<WalletMetadata>,
+) -> Result<Vec<WalletMetadata>, WalletTableError> {
+    validate_reorder_order(ordered_ids, &wallets)?;
+
+    let mut by_id: HashMap<WalletId, WalletMetadata> =
+        wallets.into_iter().map(|w| (w.id.clone(), w)).collect();
+
+    let mut reordered = Vec::with_capacity(ordered_ids.len());
+    for (i, id) in ordered_ids.iter().enumerate() {
+        let mut wallet = by_id.remove(id).ok_or_else(|| {
+            WalletTableError::InvalidWalletReorder("missing wallet after validation".into())
+        })?;
+        wallet.position = i as u32;
+        reordered.push(wallet);
+    }
+
+    Ok(reordered)
 }
 
 #[cfg(test)]
@@ -517,6 +538,26 @@ mod tests {
         let w = vec![wallet_with_id("a", 0), wallet_with_id("b", 1)];
         let order = vec!["a".into()];
         assert!(validate_reorder_order(&order, &w).is_err());
+    }
+
+    #[test]
+    fn build_reordered_wallets_invalid_input_does_not_mutate_original_vector() {
+        let original = vec![wallet_with_id("a", 0), wallet_with_id("b", 1)];
+        let working = original.clone();
+        let order = vec!["a".into(), "unknown".into()];
+
+        assert!(build_reordered_wallets(&order, working.clone()).is_err());
+        assert_eq!(working, original);
+    }
+
+    #[test]
+    fn next_append_is_sequential_for_existing_sequence() {
+        let wallets = vec![
+            wallet_with_id("a", 0),
+            wallet_with_id("b", 1),
+            wallet_with_id("c", 2),
+        ];
+        assert_eq!(next_append_position(&wallets), 3);
     }
 
     #[test]
