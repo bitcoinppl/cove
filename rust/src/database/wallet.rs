@@ -395,7 +395,7 @@ fn next_append_position(wallets: &[WalletMetadata]) -> u32 {
 /// Older rows deserialize with `position == 0`. To avoid random or hash-based reordering,
 /// we preserve the currently stored vector order exactly by assigning sequential positions
 /// from each wallet's existing index (`0..n-1`).
-fn migrate_legacy_positions_if_needed(wallets: &mut Vec<WalletMetadata>) -> bool {
+fn migrate_legacy_positions_if_needed(wallets: &mut [WalletMetadata]) -> bool {
     if wallets.len() > 1 && wallets.iter().all(|w| w.position == 0) {
         for (i, w) in wallets.iter_mut().enumerate() {
             w.position = i as u32;
