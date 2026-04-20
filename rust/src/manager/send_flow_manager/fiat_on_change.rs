@@ -66,8 +66,16 @@ impl FiatOnChangeHandler {
         // strip currency tokens from pasted amounts (e.g. "$12.50", "12.50 USD")
         let sanitized_fiat;
         let new_value = match sanitize::sanitize_amount(new_value) {
-            Some(s) => { sanitized_fiat = s; sanitized_fiat.as_str() }
-            None => return Ok(Changeset { entering_fiat_amount: Some(old_value.to_string()), ..Default::default() }),
+            Some(s) => {
+                sanitized_fiat = s;
+                sanitized_fiat.as_str()
+            }
+            None => {
+                return Ok(Changeset {
+                    entering_fiat_amount: Some(old_value.to_string()),
+                    ..Default::default()
+                });
+            }
         };
 
         let symbol = self.selected_currency.symbol();

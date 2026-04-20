@@ -2,10 +2,8 @@
 /// formatted amounts (e.g. "100 CHF", "BTC 0.5", "$12.50", "100 SATS").
 const CURRENCY_TOKENS: &[&str] = &[
     // fiat symbols
-    "$", "€", "£", "¥", "₹",
-    // fiat codes
-    "USD", "EUR", "GBP", "JPY", "CAD", "AUD", "CHF", "INR", "MXN",
-    // bitcoin units
+    "$", "€", "£", "¥", "₹", // fiat codes
+    "USD", "EUR", "GBP", "JPY", "CAD", "AUD", "CHF", "INR", "MXN", // bitcoin units
     "BTC", "SAT", "SATS",
 ];
 
