@@ -163,7 +163,7 @@ fun SidebarView(
                         Modifier
                             .graphicsLayer {
                                 translationY = if (isDragged) draggedDistance else 0f
-                            }.pointerInput(wallet.id, walletList) {
+                            }.pointerInput(wallet.id) {
                                 detectDragGesturesAfterLongPress(
                                     onDragStart = {
                                         draggedWalletId = wallet.id
