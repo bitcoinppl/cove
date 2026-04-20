@@ -23,6 +23,10 @@ pub struct WalletMetadata {
     pub verified: bool,
     pub network: Network,
 
+    /// Wallet order in the sidebar. Lower values appear first.
+    #[serde(default)]
+    pub position: u32,
+
     #[serde(default)]
     pub master_fingerprint: Option<Arc<Fingerprint>>,
     #[serde(default)]
@@ -195,6 +199,7 @@ impl WalletMetadata {
             origin: None,
             verified: false,
             network,
+            position: 0,
             fiat_or_btc: FiatOrBtc::Btc,
             selected_unit: Unit::default(),
             sensitive_visible: true,
@@ -244,6 +249,7 @@ impl WalletMetadata {
             color: WalletColor::random(),
             verified: false,
             network: Network::Bitcoin,
+            position: 0,
             fiat_or_btc: FiatOrBtc::Btc,
             address_type: WalletAddressType::default(),
             selected_unit: Unit::default(),

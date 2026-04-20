@@ -300,6 +300,7 @@ mod tests {
             color: WalletColor::Blue,
             verified: true,
             network: Network::Bitcoin,
+            position: 0,
             master_fingerprint: None,
             selected_unit: Default::default(),
             sensitive_visible: true,

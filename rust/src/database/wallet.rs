@@ -1,4 +1,9 @@
-use std::{fmt::Display, sync::Arc, time::Duration};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Display,
+    sync::Arc,
+    time::Duration,
+};
 
 use redb::{ReadOnlyTable, ReadableTableMetadata, TableDefinition};
 use tracing::debug;
@@ -35,6 +40,9 @@ pub enum WalletTableError {
 
     #[error("wallet already exists")]
     WalletAlreadyExists,
+
+    #[error("invalid wallet reorder: {0}")]
+    InvalidWalletReorder(String),
 }
 
 #[derive(Debug, Clone, Copy, uniffi::Object)]
@@ -124,6 +132,34 @@ impl WalletsTable {
 
         Ok(wallets)
     }
+
+    /// Persist a new wallet order for the active wallet list.
+    pub fn reorder_wallets(&self, ordered_ids: Vec<WalletId>) -> Result<(), Error> {
+        let network = Database::global().global_config.selected_network();
+        let mode = Database::global().global_config.wallet_mode();
+
+        let wallets = self.get_all(network, mode)?;
+        validate_reorder_order(&ordered_ids, &wallets)?;
+
+        let mut by_id: HashMap<WalletId, WalletMetadata> = wallets
+            .into_iter()
+            .map(|w| (w.id.clone(), w))
+            .collect();
+
+        let mut reordered = Vec::with_capacity(ordered_ids.len());
+        for (i, id) in ordered_ids.iter().enumerate() {
+            let mut wallet = by_id.remove(id).ok_or_else(|| {
+                WalletTableError::InvalidWalletReorder("missing wallet after validation".into())
+            })?;
+            wallet.position = i as u32;
+            reordered.push(wallet);
+        }
+
+        self.save_all_wallets(network, mode, reordered)?;
+        Updater::send_update(Update::WalletsChanged);
+
+        Ok(())
+    }
 }
 
 impl WalletsTable {
@@ -142,6 +178,8 @@ impl WalletsTable {
         }
 
         let wallet_for_backup = should_backup_to_cloud.then(|| wallet.clone());
+        let mut wallet = wallet;
+        wallet.position = next_append_position(&wallets);
         wallets.push(wallet);
         self.save_all_wallets(network, mode, wallets)?;
 
@@ -192,8 +230,21 @@ impl WalletsTable {
         Ok(wallet)
     }
 
-    /// Get all wallets for a network
+    /// Get all wallets for a network (sorted by [`WalletMetadata::position`], then id).
     pub fn get_all(
+        &self,
+        network: Network,
+        mode: WalletMode,
+    ) -> Result<Vec<WalletMetadata>, Error> {
+        let mut wallets = self.load_wallets_raw(network, mode)?;
+        if migrate_legacy_positions_if_needed(&mut wallets) {
+            self.save_all_wallets(network, mode, wallets.clone())?;
+        }
+        sort_wallets_by_position(&mut wallets);
+        Ok(wallets)
+    }
+
+    fn load_wallets_raw(
         &self,
         network: Network,
         mode: WalletMode,
@@ -205,7 +256,7 @@ impl WalletsTable {
             .get(key.as_str())
             .map_err_str(WalletTableError::ReadError)?
             .map(|value| value.value())
-            .unwrap_or(vec![]);
+            .unwrap_or_default();
 
         Ok(value)
     }
@@ -332,6 +383,147 @@ impl WalletsTable {
         let table = read_txn.open_table(TABLE).map_err_str(Error::TableAccess)?;
 
         Ok(table)
+    }
+}
+
+fn next_append_position(wallets: &[WalletMetadata]) -> u32 {
+    wallets
+        .iter()
+        .map(|w| w.position)
+        .max()
+        .map(|m| m.saturating_add(1))
+        .unwrap_or(0)
+}
+
+
+fn migrate_legacy_positions_if_needed(wallets: &mut Vec<WalletMetadata>) -> bool {
+    if wallets.len() > 1 && wallets.iter().all(|w| w.position == 0) {
+        for (i, w) in wallets.iter_mut().enumerate() {
+            w.position = i as u32;
+        }
+        true
+    } else {
+        false
+    }
+}
+
+fn sort_wallets_by_position(wallets: &mut [WalletMetadata]) {
+    wallets.sort_by(|a, b| {
+        a.position
+            .cmp(&b.position)
+            .then_with(|| a.id.cmp(&b.id))
+    });
+}
+
+fn validate_reorder_order(
+    ordered_ids: &[WalletId],
+    wallets: &[WalletMetadata],
+) -> Result<(), WalletTableError> {
+    let expected: HashSet<WalletId> = wallets.iter().map(|w| w.id.clone()).collect();
+    if ordered_ids.len() != expected.len() {
+        return Err(WalletTableError::InvalidWalletReorder(
+            "order must list every wallet exactly once".into(),
+        ));
+    }
+    let mut seen = HashSet::new();
+    for id in ordered_ids {
+        if !expected.contains(id) {
+            return Err(WalletTableError::InvalidWalletReorder(format!(
+                "unknown wallet id: {id}"
+            )));
+        }
+        if !seen.insert(id.clone()) {
+            return Err(WalletTableError::InvalidWalletReorder(format!(
+                "duplicate wallet id: {id}"
+            )));
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::network::Network;
+    use crate::wallet::metadata::{WalletMode, WalletType};
+
+    fn wallet_with_id(id: &str, position: u32) -> WalletMetadata {
+        let mut m = WalletMetadata::preview_new();
+        m.id = id.into();
+        m.position = position;
+        m.network = Network::Bitcoin;
+        m.wallet_mode = WalletMode::Main;
+        m.wallet_type = WalletType::Hot;
+        m
+    }
+
+    #[test]
+    fn migrate_legacy_assigns_positions_from_vec_order() {
+        let mut wallets = vec![wallet_with_id("a", 0), wallet_with_id("b", 0), wallet_with_id("c", 0)];
+        assert!(migrate_legacy_positions_if_needed(&mut wallets));
+        assert_eq!(wallets[0].position, 0);
+        assert_eq!(wallets[1].position, 1);
+        assert_eq!(wallets[2].position, 2);
+    }
+
+    #[test]
+    fn migrate_legacy_skips_single_wallet() {
+        let mut wallets = vec![wallet_with_id("only", 0)];
+        assert!(!migrate_legacy_positions_if_needed(&mut wallets));
+    }
+
+    #[test]
+    fn sort_wallets_by_position_then_id() {
+        let mut wallets = vec![
+            wallet_with_id("z", 1),
+            wallet_with_id("a", 1),
+            wallet_with_id("m", 0),
+        ];
+        sort_wallets_by_position(&mut wallets);
+        assert_eq!(AsRef::<str>::as_ref(&wallets[0].id), "m");
+        assert_eq!(AsRef::<str>::as_ref(&wallets[1].id), "a");
+        assert_eq!(AsRef::<str>::as_ref(&wallets[2].id), "z");
+    }
+
+    #[test]
+    fn validate_reorder_accepts_permutation() {
+        let w = vec![
+            wallet_with_id("a", 0),
+            wallet_with_id("b", 1),
+            wallet_with_id("c", 2),
+        ];
+        let order = vec!["c".into(), "a".into(), "b".into()];
+        assert!(validate_reorder_order(&order, &w).is_ok());
+    }
+
+    #[test]
+    fn validate_reorder_rejects_duplicate() {
+        let w = vec![wallet_with_id("a", 0), wallet_with_id("b", 1)];
+        let order = vec!["a".into(), "a".into()];
+        assert!(matches!(
+            validate_reorder_order(&order, &w),
+            Err(WalletTableError::InvalidWalletReorder(_))
+        ));
+    }
+
+    #[test]
+    fn validate_reorder_rejects_unknown_id() {
+        let w = vec![wallet_with_id("a", 0)];
+        let order = vec!["nope".into()];
+        assert!(validate_reorder_order(&order, &w).is_err());
+    }
+
+    #[test]
+    fn validate_reorder_rejects_partial_list() {
+        let w = vec![wallet_with_id("a", 0), wallet_with_id("b", 1)];
+        let order = vec!["a".into()];
+        assert!(validate_reorder_order(&order, &w).is_err());
+    }
+
+    #[test]
+    fn next_append_after_gap() {
+        let wallets = vec![wallet_with_id("a", 0), wallet_with_id("b", 10)];
+        assert_eq!(next_append_position(&wallets), 11);
     }
 }
 
