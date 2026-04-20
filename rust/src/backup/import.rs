@@ -606,7 +606,9 @@ fn restore_settings(settings: &super::model::AppSettings) -> Result<(), BackupEr
             continue;
         };
 
-        if let Err(e) = config.set(GlobalConfigKey::CustomBlockExplorer(network), explorer_url.clone()) {
+        if let Err(e) =
+            config.set(GlobalConfigKey::CustomBlockExplorer(network), explorer_url.clone())
+        {
             errors.push(format!("custom explorer for {network_str}: {e}"));
         }
     }

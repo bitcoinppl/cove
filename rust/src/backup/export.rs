@@ -153,12 +153,20 @@ impl BackupExporter {
             if let Some(node_json) = self.get_config(GlobalConfigKey::SelectedNode(network)) {
                 selected_nodes.push((network.to_string(), node_json));
             }
-            if let Some(explorer_url) = self.get_config(GlobalConfigKey::CustomBlockExplorer(network)) {
+            if let Some(explorer_url) =
+                self.get_config(GlobalConfigKey::CustomBlockExplorer(network))
+            {
                 custom_block_explorers.push((network.to_string(), explorer_url));
             }
         }
 
-        Ok(AppSettings { selected_network, selected_fiat_currency, color_scheme, selected_nodes, custom_block_explorers })
+        Ok(AppSettings {
+            selected_network,
+            selected_fiat_currency,
+            color_scheme,
+            selected_nodes,
+            custom_block_explorers,
+        })
     }
 
     fn get_config(&mut self, key: GlobalConfigKey) -> Option<String> {
