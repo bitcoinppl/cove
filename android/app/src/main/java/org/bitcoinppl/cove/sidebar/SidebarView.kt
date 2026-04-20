@@ -60,6 +60,7 @@ import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.WalletColor
 import org.bitcoinppl.cove_core.WalletMetadata
 import android.util.Log
+import androidx.compose.foundation.Image
 
 @Composable
 fun SidebarView(
