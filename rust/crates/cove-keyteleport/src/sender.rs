@@ -15,7 +15,7 @@ pub struct SenderSession {
     privkey_bytes: Zeroizing<[u8; 32]>,
     session_key: Zeroizing<[u8; 32]>,
     /// 8-character Base32 teleport password shown to the sender, shared out-of-band.
-    teleport_password: String,
+    teleport_password: Zeroizing<String>,
 }
 
 impl SenderSession {
@@ -50,7 +50,7 @@ impl SenderSession {
         // Generate teleport password: 5 random bytes → 8 Base32 chars
         let mut raw = [0u8; 5];
         rand::rng().fill(&mut raw[..]);
-        let teleport_password = BASE32_NOPAD.encode(&raw);
+        let teleport_password = Zeroizing::new(BASE32_NOPAD.encode(&raw));
 
         Ok(Self {
             privkey_bytes: Zeroizing::new(key_bytes),
@@ -65,7 +65,7 @@ impl SenderSession {
 
     /// The 8-character Base32 teleport password to share with the receiver out-of-band.
     pub fn teleport_password(&self) -> &str {
-        &self.teleport_password
+        self.teleport_password.as_str()
     }
 
     /// Encrypt the payload and produce a `SenderPacket`.
