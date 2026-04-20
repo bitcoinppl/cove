@@ -11933,6 +11933,15 @@ public protocol WalletsTableProtocol: AnyObject, Sendable {
     
     /**
      * Persist a new wallet order for the active wallet list.
+     *
+     * Validation rules:
+     * - `ordered_ids` must be a full permutation of existing wallet IDs in the active bucket.
+     * - Partial lists are rejected.
+     * - Unknown IDs are rejected.
+     * - Duplicate IDs are rejected.
+     *
+     * The write is atomic-like at the application level: validation and reorder construction
+     * happen before `save_all_wallets` is called, so invalid inputs do not mutate persisted state.
      */
     func reorderWallets(orderedIds: [WalletId]) throws 
     
@@ -12037,6 +12046,15 @@ open func len(network: Network, mode: WalletMode)throws  -> UInt16  {
     
     /**
      * Persist a new wallet order for the active wallet list.
+     *
+     * Validation rules:
+     * - `ordered_ids` must be a full permutation of existing wallet IDs in the active bucket.
+     * - Partial lists are rejected.
+     * - Unknown IDs are rejected.
+     * - Duplicate IDs are rejected.
+     *
+     * The write is atomic-like at the application level: validation and reorder construction
+     * happen before `save_all_wallets` is called, so invalid inputs do not mutate persisted state.
      */
 open func reorderWallets(orderedIds: [WalletId])throws   {try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
     uniffi_cove_fn_method_walletstable_reorder_wallets(
@@ -36407,7 +36425,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_walletstable_len() != 51436) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_walletstable_reorder_wallets() != 12851) {
+    if (uniffi_cove_checksum_method_walletstable_reorder_wallets() != 2046) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_priceresponse_get() != 6552) {
