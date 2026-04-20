@@ -188,8 +188,7 @@ struct SidebarView: View {
         persistWalletOrder(orderedIds: reordered.map(\.id), previous: previous)
     }
 
-    /// persists the new wallet order through the Rust FFI off the main actor, and
-    /// rolls back the optimistic UI update if persistence fails
+    /// Persists off the main actor and rolls back the optimistic UI on failure.
     private func persistWalletOrder(orderedIds: [WalletId], previous: [WalletMetadata]) {
         let database = app.database
         let appRef = app

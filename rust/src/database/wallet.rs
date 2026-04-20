@@ -1,6 +1,6 @@
 use std::{fmt::Display, sync::Arc, time::Duration};
 
-use redb::{ReadOnlyTable, ReadableTableMetadata, TableDefinition};
+use redb::{ReadOnlyTable, ReadableTable, ReadableTableMetadata, TableDefinition};
 use tracing::debug;
 
 use cove_util::result_ext::ResultExt as _;
@@ -140,30 +140,30 @@ impl WalletsTable {
         let network = Database::global().global_config.selected_network();
         let mode = Database::global().global_config.wallet_mode();
 
-        let mut wallets = self.get_all(network, mode)?;
-
-        if ordered_ids.len() != wallets.len() {
-            return Err(WalletTableError::ReorderMismatch.into());
-        }
-
-        let mut seen = vec![false; wallets.len()];
-        for (new_pos, id) in ordered_ids.iter().enumerate() {
-            let Some(idx) = wallets.iter().position(|w| &w.id == id) else {
-                return Err(WalletTableError::WalletNotFound.into());
-            };
-
-            if seen[idx] {
+        let wallets = self.mutate_positions_txn(network, mode, |wallets| {
+            if ordered_ids.len() != wallets.len() {
                 return Err(WalletTableError::ReorderMismatch.into());
             }
-            seen[idx] = true;
 
-            wallets[idx].position = new_pos as u32;
-        }
+            let mut seen = vec![false; wallets.len()];
+            for (new_pos, id) in ordered_ids.iter().enumerate() {
+                let Some(idx) = wallets.iter().position(|w| &w.id == id) else {
+                    return Err(WalletTableError::WalletNotFound.into());
+                };
 
-        wallets.sort_by_key(|wallet| wallet.position);
-        self.save_all_wallets(network, mode, wallets.clone())?;
+                if seen[idx] {
+                    return Err(WalletTableError::ReorderMismatch.into());
+                }
+                seen[idx] = true;
+
+                wallets[idx].position = new_pos as u32;
+            }
+
+            wallets.sort_by_key(|wallet| wallet.position);
+            Ok(())
+        })?;
+
         Updater::send_update(Update::WalletsChanged);
-
         Ok(wallets)
     }
 
@@ -176,24 +176,24 @@ impl WalletsTable {
         let network = Database::global().global_config.selected_network();
         let mode = Database::global().global_config.wallet_mode();
 
-        let mut wallets = self.get_all(network, mode)?;
+        let wallets = self.mutate_positions_txn(network, mode, |wallets| {
+            let Some(from_idx) = wallets.iter().position(|w| w.id == wallet_id) else {
+                return Err(WalletTableError::WalletNotFound.into());
+            };
 
-        let Some(from_idx) = wallets.iter().position(|w| w.id == wallet_id) else {
-            return Err(WalletTableError::WalletNotFound.into());
-        };
+            let to_idx = (to_position as usize).min(wallets.len().saturating_sub(1));
 
-        let to_idx = (to_position as usize).min(wallets.len().saturating_sub(1));
+            let wallet = wallets.remove(from_idx);
+            wallets.insert(to_idx, wallet);
 
-        let wallet = wallets.remove(from_idx);
-        wallets.insert(to_idx, wallet);
+            for (i, w) in wallets.iter_mut().enumerate() {
+                w.position = i as u32;
+            }
 
-        for (i, w) in wallets.iter_mut().enumerate() {
-            w.position = i as u32;
-        }
+            Ok(())
+        })?;
 
-        self.save_all_wallets(network, mode, wallets.clone())?;
         Updater::send_update(Update::WalletsChanged);
-
         Ok(wallets)
     }
 }
@@ -213,8 +213,9 @@ impl WalletsTable {
             return Err(WalletTableError::WalletAlreadyExists.into());
         }
 
+        // use max + 1 so a gap left by an older buggy build can't collide
         let mut wallet = wallet;
-        wallet.position = wallets.len() as u32;
+        wallet.position = wallets.iter().map(|w| w.position).max().map_or(0, |m| m + 1);
 
         let wallet_for_backup = should_backup_to_cloud.then(|| wallet.clone());
         wallets.push(wallet);
@@ -235,10 +236,11 @@ impl WalletsTable {
         Self { db }
     }
 
-    /// Backfill `position` for wallets persisted before the field existed.
-    /// Idempotent. Must be called after `Database::init()`'s startup transaction
-    /// commits, since this opens its own write transaction.
+    /// Backfill contiguous `position` values whenever duplicates are observed.
+    /// Idempotent; must run after `Database::init()`'s startup txn commits
+    /// because it opens its own write transaction.
     pub fn migrate_positions(&self) -> Result<(), Error> {
+        use std::collections::HashSet;
         use strum::IntoEnumIterator;
 
         for network in Network::iter() {
@@ -249,8 +251,9 @@ impl WalletsTable {
                     continue;
                 }
 
-                let needs_migration = wallets.iter().all(|w| w.position == 0);
-                if !needs_migration {
+                let mut seen = HashSet::with_capacity(wallets.len());
+                let has_duplicates = wallets.iter().any(|w| !seen.insert(w.position));
+                if !has_duplicates {
                     continue;
                 }
 
@@ -304,9 +307,8 @@ impl WalletsTable {
         Ok(wallet)
     }
 
-    /// Get all wallets for a network, sorted by `position` ascending.
-    /// Uses a stable sort so pre-migration records (all `position == 0`) keep
-    /// their stored order.
+    /// Get all wallets for a network, stable-sorted by `position` ascending so
+    /// records sharing a position keep their stored order until migration.
     pub fn get_all(
         &self,
         network: Network,
@@ -429,6 +431,44 @@ impl WalletsTable {
         Updater::send_update(AppStateReconcileMessage::DatabaseUpdated);
 
         Ok(())
+    }
+
+    /// Read → mutate → write wallet positions in one write transaction so
+    /// concurrent metadata writes cannot be clobbered by a stale clone.
+    /// Callers must only mutate `position` fields.
+    fn mutate_positions_txn<F>(
+        &self,
+        network: Network,
+        mode: WalletMode,
+        mutate: F,
+    ) -> Result<Vec<WalletMetadata>, Error>
+    where
+        F: FnOnce(&mut Vec<WalletMetadata>) -> Result<(), Error>,
+    {
+        let write_txn = self.db.begin_write()?;
+        let key = WalletKey::from((network, mode)).to_string();
+
+        let result = {
+            let mut table = write_txn.open_table(TABLE)?;
+
+            let mut wallets: Vec<WalletMetadata> = table
+                .get(key.as_str())
+                .map_err_str(WalletTableError::ReadError)?
+                .map(|value| value.value())
+                .unwrap_or_default();
+
+            wallets.sort_by_key(|w| w.position);
+            mutate(&mut wallets)?;
+
+            let snapshot = wallets.clone();
+            table.insert(&*key, wallets).map_err_str(WalletTableError::SaveError)?;
+            snapshot
+        };
+
+        write_txn.commit().map_err_str(WalletTableError::SaveError)?;
+        Updater::send_update(AppStateReconcileMessage::DatabaseUpdated);
+
+        Ok(result)
     }
 
     pub fn find_by_tap_signer_ident(

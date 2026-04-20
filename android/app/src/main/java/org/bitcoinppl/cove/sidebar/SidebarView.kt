@@ -85,8 +85,7 @@ fun SidebarView(
     val scope = rememberCoroutineScope()
     val spacingPx = with(density) { INTER_ITEM_SPACING_DP.dp.toPx() }
 
-    // local, optimistically-updated order of wallets for a smooth drag; synced from
-    // `app.wallets` whenever no drag is in progress
+    // local copy lets drags apply optimistically; resyncs from app.wallets when idle
     var walletList by remember { mutableStateOf(app.wallets) }
     var draggedWalletId by remember { mutableStateOf<WalletId?>(null) }
     var draggedOffsetY by remember { mutableFloatStateOf(0f) }
@@ -156,7 +155,7 @@ fun SidebarView(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // wallet list with long-press drag-to-reorder
+        // wallet list
         LazyColumn(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(INTER_ITEM_SPACING_DP.dp),
