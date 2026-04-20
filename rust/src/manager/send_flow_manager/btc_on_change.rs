@@ -5,8 +5,7 @@ use cove_types::{amount::Amount, unit::BitcoinUnit};
 use cove_util::format::{self, NumberFormatter as _};
 use tracing::debug;
 
-use super::sanitize;
-use super::state::State;
+use super::{sanitize, state::State};
 
 #[derive(Debug, Clone)]
 pub struct BtcOnChangeHandler {
@@ -45,27 +44,11 @@ impl BtcOnChangeHandler {
 
         let old = old_value.trim();
 
-        // strip known currency tokens from pasted input (e.g. "100 SATS" → "100"). #314
-        let stripped_buf;
-        let new = {
-            let raw = new_value.trim();
-            if raw.chars().any(|c| c.is_alphabetic()) {
-                match sanitize::strip_currency_suffix(raw) {
-                    Some(s) => {
-                        stripped_buf = s;
-                        stripped_buf.as_str()
-                    }
-                    // alphabetic chars survived — reject (e.g. a bech32 address)
-                    None => {
-                        return Changeset {
-                            entering_amount_btc: Some(old.to_string()),
-                            ..Default::default()
-                        };
-                    }
-                }
-            } else {
-                raw
-            }
+        // strip currency tokens from pasted input (e.g. "100 SATS" → "100"). #314
+        let sanitized;
+        let new = match sanitize::sanitize_amount(new_value.trim()) {
+            Some(s) => { sanitized = s; sanitized.as_str() }
+            None => return Changeset { entering_amount_btc: Some(old.into()), ..Default::default() },
         };
 
         // early exit if nothing changed

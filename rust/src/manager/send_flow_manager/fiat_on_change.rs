@@ -63,28 +63,14 @@ impl FiatOnChangeHandler {
         let old_value = old_value.trim();
         let new_value = new_value.trim();
 
-        let symbol = self.selected_currency.symbol();
-
-        // If the pasted text contains letters, try stripping known currency tokens
-        // (e.g. "100 CHF" → "100", "BTC 0.5" → "0.5"). Only reject if alphabetic
-        // characters survive that cleanup — a bech32 address always will. #314
-        let stripped_buf;
-        let new_value = if new_value.chars().any(|c| c.is_alphabetic()) {
-            match sanitize::strip_currency_suffix(new_value) {
-                Some(s) => {
-                    stripped_buf = s;
-                    stripped_buf.as_str()
-                }
-                None => {
-                    return Ok(Changeset {
-                        entering_fiat_amount: Some(old_value.to_string()),
-                        ..Default::default()
-                    });
-                }
-            }
-        } else {
-            new_value
+        // strip currency tokens from pasted amounts (e.g. "$12.50", "12.50 USD")
+        let sanitized_fiat;
+        let new_value = match sanitize::sanitize_amount(new_value) {
+            Some(s) => { sanitized_fiat = s; sanitized_fiat.as_str() }
+            None => return Ok(Changeset { entering_fiat_amount: Some(old_value.to_string()), ..Default::default() }),
         };
+
+        let symbol = self.selected_currency.symbol();
 
         let number_of_decimal_points = new_value.chars().filter(|c| *c == '.').count();
 

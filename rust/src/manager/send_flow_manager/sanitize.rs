@@ -1,31 +1,45 @@
 /// Known currency tokens that can appear as a prefix or suffix when pasting
-/// formatted amounts (e.g. "100 CHF", "BTC 0.5", "100 SATS").
-const CURRENCY_TOKENS: &[&str] =
-    &["SATS", "SAT", "BTC", "CHF", "USD", "EUR", "GBP", "CAD", "AUD", "JPY"];
+/// formatted amounts (e.g. "100 CHF", "BTC 0.5", "$12.50", "100 SATS").
+const CURRENCY_TOKENS: &[&str] = &[
+    // fiat symbols
+    "$", "€", "£", "¥", "₹",
+    // fiat codes
+    "USD", "EUR", "GBP", "JPY", "CAD", "AUD", "CHF", "INR", "MXN",
+    // bitcoin units
+    "BTC", "SAT", "SATS",
+];
 
-/// Strip leading/trailing currency tokens and whitespace from `s` (case-insensitive).
+fn strip_prefix_ignore_ascii_case<'a>(input: &'a str, token: &str) -> Option<&'a str> {
+    input
+        .get(..token.len())
+        .filter(|prefix| prefix.eq_ignore_ascii_case(token))
+        .map(|_| input[token.len()..].trim())
+}
+
+fn strip_suffix_ignore_ascii_case<'a>(input: &'a str, token: &str) -> Option<&'a str> {
+    let start = input.len().checked_sub(token.len())?;
+    input
+        .get(start..)
+        .filter(|suffix| suffix.eq_ignore_ascii_case(token))
+        .map(|_| input[..start].trim())
+}
+
+/// Strip leading/trailing currency tokens from `input` (case-insensitive).
 ///
 /// Returns `Some(cleaned)` if no alphabetic characters remain after stripping,
 /// or `None` if letters survive (e.g. a bech32 address or free-form text).
-pub fn strip_currency_suffix(s: &str) -> Option<String> {
-    let mut work = s.trim();
+pub fn strip_currency_suffix(input: &str) -> Option<String> {
+    let mut work = input.trim();
 
-    let mut changed = true;
-    while changed {
-        changed = false;
-        for token in CURRENCY_TOKENS {
-            let upper_work = work.to_ascii_uppercase();
-            if let Some(rest) = upper_work.strip_prefix(token) {
-                // advance past the token in the original (same byte length since ASCII)
-                work = work[token.len()..].trim();
-                let _ = rest;
-                changed = true;
-                continue;
-            }
-            if let Some(rest) = upper_work.strip_suffix(token) {
-                work = work[..rest.len()].trim();
-                changed = true;
-            }
+    loop {
+        let next = CURRENCY_TOKENS.iter().find_map(|token| {
+            strip_prefix_ignore_ascii_case(work, token)
+                .or_else(|| strip_suffix_ignore_ascii_case(work, token))
+        });
+
+        match next {
+            Some(stripped) => work = stripped,
+            None => break,
         }
     }
 
@@ -34,6 +48,22 @@ pub fn strip_currency_suffix(s: &str) -> Option<String> {
     }
 
     Some(work.to_string())
+}
+
+/// Sanitizes a raw amount string by stripping recognized currency tokens.
+///
+/// Returns `Some(sanitized)` when the input is usable — either no alphabetic
+/// characters were present (pass-through), or all alphabetic characters were
+/// recognized currency tokens and successfully stripped.
+///
+/// Returns `None` when the input contains alphabetic characters that are not a
+/// recognized currency token. The caller should reject the input and revert to
+/// the previous value.
+pub fn sanitize_amount(input: &str) -> Option<String> {
+    if !input.chars().any(|c| c.is_alphabetic()) {
+        return Some(input.to_string());
+    }
+    strip_currency_suffix(input)
 }
 
 // returns the dollars and the cents (with the decimal point) as a string
@@ -79,6 +109,11 @@ mod tests {
     }
 
     #[test]
+    fn strips_dollar_prefix() {
+        assert_eq!(strip_currency_suffix("$12.50").unwrap(), "12.50");
+    }
+
+    #[test]
     fn plain_number_passes_through() {
         assert_eq!(strip_currency_suffix("123.45").unwrap(), "123.45");
     }
@@ -91,5 +126,20 @@ mod tests {
     #[test]
     fn legacy_address_returns_none() {
         assert!(strip_currency_suffix("1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2").is_none());
+    }
+
+    #[test]
+    fn sanitize_amount_plain_number_passes_through() {
+        assert_eq!(sanitize_amount("100").unwrap(), "100");
+    }
+
+    #[test]
+    fn sanitize_amount_strips_currency() {
+        assert_eq!(sanitize_amount("100 sats").unwrap(), "100");
+    }
+
+    #[test]
+    fn sanitize_amount_rejects_address() {
+        assert!(sanitize_amount("bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq").is_none());
     }
 }
