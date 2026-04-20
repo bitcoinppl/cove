@@ -218,13 +218,25 @@ fun SidebarView(
                                                 scope.launch(Dispatchers.IO) {
                                                     runCatching {
                                                         app.database.wallets().reorderWallets(orderedIds = localOrder)
+                                                    }.onSuccess {
+                                                        withContext(Dispatchers.Main) {
+                                                            draggedWalletId = null
+                                                            draggedDistance = 0f
+                                                            dragStartCenterY = 0f
+                                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                        }
                                                     }.onFailure {
                                                         Log.e("SidebarView", "Failed to reorder wallets", it)
                                                         withContext(Dispatchers.Main) {
                                                             walletList = app.wallets
+                                                            draggedWalletId = null
+                                                            draggedDistance = 0f
+                                                            dragStartCenterY = 0f
+                                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                                         }
                                                     }
                                                 }
+                                                return@detectDragGesturesAfterLongPress
                                             }
                                         }
                                         draggedWalletId = null
