@@ -2157,15 +2157,17 @@ mod tests {
             Duration::from_secs(1),
             "startup resume should retry interrupted uploads",
             || {
-                matches!(
+                let upload_state_is_pending_or_confirmed = matches!(
                     Database::global().cloud_blob_sync_states.get(&record_id).unwrap(),
                     Some(PersistedCloudBlobSyncState {
-                        state: PersistedCloudBlobState::Dirty(_)
-                            | PersistedCloudBlobState::UploadedPendingConfirmation(_)
+                        state: PersistedCloudBlobState::UploadedPendingConfirmation(_)
                             | PersistedCloudBlobState::Confirmed(_),
                         ..
                     })
-                )
+                );
+
+                globals.cloud.wallet_backup_upload_attempt_count() >= 1
+                    && upload_state_is_pending_or_confirmed
             },
         )
         .await;
