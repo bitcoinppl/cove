@@ -35,6 +35,44 @@ pub enum NewWalletRoute {
     Select,
     HotWallet(HotWalletRoute),
     ColdWallet(ColdWalletRoute),
+    KeyTeleportReceive(KeyTeleportReceiveRoute),
+}
+
+#[derive(Clone, Hash, Eq, PartialEq, Default, uniffi::Enum)]
+pub enum KeyTeleportReceiveRoute {
+    /// Show the receiver QR / BBQr and numeric code.
+    #[default]
+    ShowQr,
+    /// Scan (or paste) the sender's BBQr packet.
+    ScanSender,
+    /// Enter the teleport password that the sender shared out-of-band.
+    EnterPassword { sender_packet_bbqr: String },
+    /// Review the decoded payload before importing as a wallet.
+    /// The actual secret is held in ephemeral container state, not here.
+    ReviewImport { payload_kind: KeyTeleportPayloadKind },
+}
+
+impl std::fmt::Debug for KeyTeleportReceiveRoute {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::ShowQr => write!(f, "ShowQr"),
+            Self::ScanSender => write!(f, "ScanSender"),
+            Self::EnterPassword { .. } => {
+                write!(f, "EnterPassword {{ sender_packet_bbqr: <redacted> }}")
+            }
+            Self::ReviewImport { payload_kind } => {
+                write!(f, "ReviewImport {{ payload_kind: {payload_kind:?} }}")
+            }
+        }
+    }
+}
+
+/// Payload type indicator — carried through the route so the import screen
+/// can display appropriate labels without re-decrypting.
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum KeyTeleportPayloadKind {
+    Mnemonic,
+    Xprv,
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Default, uniffi::Enum)]
@@ -288,6 +326,10 @@ impl RouteFactory {
 
     pub fn cold_wallet_import(&self, route: ColdWalletRoute) -> Route {
         route.into()
+    }
+
+    pub fn key_teleport_receive(&self) -> Route {
+        Route::NewWallet(NewWalletRoute::KeyTeleportReceive(KeyTeleportReceiveRoute::default()))
     }
 
     pub fn qr_import(&self) -> Route {

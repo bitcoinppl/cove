@@ -5,12 +5,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.flows.KeyTeleportFlow.KeyTeleportReceiveContainer
 import org.bitcoinppl.cove.flows.NewWalletFlow.cold_wallet.ColdWalletQrScanScreen
 import org.bitcoinppl.cove.flows.NewWalletFlow.hot_wallet.NewHotWalletContainer
 import org.bitcoinppl.cove.utils.intoRoute
 import org.bitcoinppl.cove_core.ColdWalletRoute
 import org.bitcoinppl.cove_core.HotWalletRoute
 import org.bitcoinppl.cove_core.NewWalletRoute
+import org.bitcoinppl.cove_core.RouteFactory
 
 /**
  * New wallet container - simple router for new wallet flows
@@ -47,6 +49,9 @@ fun NewWalletContainer(
                 onOpenNfcScan = {
                     app.scanNfc()
                 },
+                onOpenKeyTeleport = {
+                    app.pushRoute(RouteFactory().keyTeleportReceive())
+                },
                 snackbarHostState = snackbarHostState,
             )
         }
@@ -63,6 +68,12 @@ fun NewWalletContainer(
                     ColdWalletQrScanScreen(app = app, modifier = modifier)
                 }
             }
+        }
+        is NewWalletRoute.KeyTeleportReceive -> {
+            KeyTeleportReceiveContainer(
+                app = app,
+                route = route.v1,
+            )
         }
     }
 }

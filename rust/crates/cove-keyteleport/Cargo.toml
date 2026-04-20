@@ -1,0 +1,31 @@
+[package]
+name = "cove-keyteleport"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# bitcoin / secp256k1
+bitcoin = { workspace = true }
+bip39 = { workspace = true }
+
+# crypto primitives
+sha2 = { workspace = true }
+hmac = { workspace = true }
+rand = { workspace = true }
+zeroize = { workspace = true, features = ["derive"] }
+
+# AES-256-CTR
+aes = "0.8"
+ctr = "0.9"
+
+# PBKDF2-SHA512
+pbkdf2 = "0.12"
+
+# encoding
+data-encoding = { workspace = true }
+
+# error handling
+thiserror = { workspace = true }
+
+[dev-dependencies]
+hex = { workspace = true }

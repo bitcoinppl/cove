@@ -338,6 +338,11 @@ class AppManager private constructor() : FfiReconcile {
                     }
                 }
 
+                is MultiFormat.KeyTeleportSenderPacket -> {
+                    // A sender packet scanned outside the flow — start the receive flow from the top
+                    pushRoute(RouteFactory().keyTeleportReceive())
+                }
+
                 is MultiFormat.Bip329Labels -> {
                     val selectedWallet = database.globalConfig().selectedWallet()
                     if (selectedWallet == null) {

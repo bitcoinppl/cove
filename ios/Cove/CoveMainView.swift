@@ -419,6 +419,8 @@ struct CoveMainView: View {
                 )
             case let .signedPsbt(psbt):
                 handleSignedPsbt(psbt)
+            case .keyTeleportSenderPacket:
+                Log.warn("Key Teleport sender packet in file import — ignoring, use the receive flow")
             }
         } catch {
             switch error {
@@ -485,6 +487,8 @@ struct CoveMainView: View {
 
                 // when labels are imported, we need to get the transactions again with the updated labels
                 Task { await manager.rust.getTransactions() }
+            case .keyTeleportSenderPacket:
+                app.alertState = TaggedItem(.invalidFormat(message: "Key Teleport receive is not yet available on iOS. Please use the Android app to receive via Key Teleport."))
             }
         } catch {
             switch error {

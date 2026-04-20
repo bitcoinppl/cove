@@ -92,6 +92,7 @@ fun NewWalletSelectScreen(
     onOpenNewHotWallet: () -> Unit,
     onOpenQrScan: () -> Unit,
     onOpenNfcScan: () -> Unit,
+    onOpenKeyTeleport: () -> Unit = {},
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
     var showHardwareWalletSheet by remember { mutableStateOf(false) }
@@ -409,6 +410,25 @@ fun NewWalletSelectScreen(
                             pasteFromClipboard()?.let { content ->
                                 importWallet(content)
                             }
+                        },
+                )
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+                // Key Teleport option
+                ListItem(
+                    headlineContent = { Text("Key Teleport") },
+                    supportingContent = { Text("Receive mnemonic or XPRV wirelessly") },
+                    leadingContent = {
+                        Icon(
+                            painter = painterResource(R.drawable.icon_qr_code),
+                            contentDescription = null,
+                        )
+                    },
+                    modifier =
+                        Modifier.clickable {
+                            showHardwareWalletSheet = false
+                            onOpenKeyTeleport()
                         },
                 )
             }

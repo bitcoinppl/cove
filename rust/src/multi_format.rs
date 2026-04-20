@@ -42,6 +42,8 @@ pub enum MultiFormat {
     TapSignerUnused(Arc<cove_tap_card::TapSigner>),
     /// A signed but un-finalized PSBT
     SignedPsbt(Arc<Psbt>),
+    /// A Key Teleport sender packet (BBQr `S` type) scanned by the receiver.
+    KeyTeleportSenderPacket(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Error, thiserror::Error)]
@@ -107,6 +109,12 @@ impl MultiFormat {
         // try to parse UR format (single-part URs only)
         if string.to_ascii_lowercase().starts_with("ur:") {
             return Self::try_from_ur_string(string);
+        }
+
+        // Key Teleport sender packet (BBQr S-type): B$2S...
+        let upper = string.to_ascii_uppercase();
+        if upper.starts_with("B$2S") {
+            return Ok(Self::KeyTeleportSenderPacket(string.to_string()));
         }
 
         // try to parse address
