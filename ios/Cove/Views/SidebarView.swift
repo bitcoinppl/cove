@@ -114,8 +114,7 @@ struct SidebarView: View {
                                 app.pushRoutes(RouteFactory().nestedWalletSettings(id: wallet.id))
                             }
                             Button("Edit Order") {
-                                let generator = UIImpactFeedbackGenerator(style: .medium)
-                                generator.impactOccurred()
+                                HapticFeedback.progress.trigger()
                                 withAnimation { editMode = .active }
                             }
                         }
@@ -125,6 +124,11 @@ struct SidebarView: View {
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
                 .environment(\.editMode, $editMode)
+                .onChange(of: app.isSidebarVisible) { _, isVisible in
+                    if !isVisible, editMode.isEditing {
+                        editMode = .inactive
+                    }
+                }
 
                 VStack(spacing: 32) {
                     Divider()
@@ -175,17 +179,24 @@ struct SidebarView: View {
         let previous = app.wallets
         var reordered = previous
         reordered.move(fromOffsets: source, toOffset: destination)
+
+        guard reordered.map(\.id) != previous.map(\.id) else { return }
+
         app.wallets = reordered
+        HapticFeedback.progress.trigger()
 
-        let orderedIds = reordered.map(\.id)
-        let generator = UIImpactFeedbackGenerator(style: .medium)
-        generator.impactOccurred()
+        persistWalletOrder(orderedIds: reordered.map(\.id), previous: previous)
+    }
 
+    /// persists the new wallet order through the Rust FFI off the main actor, and
+    /// rolls back the optimistic UI update if persistence fails
+    private func persistWalletOrder(orderedIds: [WalletId], previous: [WalletMetadata]) {
         let database = app.database
         let appRef = app
         Task.detached {
             do {
                 _ = try database.wallets().reorderWallets(orderedIds: orderedIds)
+                await MainActor.run { HapticFeedback.success.trigger() }
             } catch {
                 Log.error("Failed to reorder wallets: \(error)")
                 await MainActor.run { appRef.wallets = previous }
