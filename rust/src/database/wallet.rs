@@ -381,14 +381,8 @@ impl WalletsTable {
 }
 
 fn next_append_position(wallets: &[WalletMetadata]) -> u32 {
-    wallets
-        .iter()
-        .map(|w| w.position)
-        .max()
-        .map(|m| m.saturating_add(1))
-        .unwrap_or(0)
+    wallets.iter().map(|w| w.position).max().map(|m| m.saturating_add(1)).unwrap_or(0)
 }
-
 
 /// Zero-inference migration for wallets saved before `WalletMetadata.position` existed.
 ///
@@ -407,11 +401,7 @@ fn migrate_legacy_positions_if_needed(wallets: &mut [WalletMetadata]) -> bool {
 }
 
 fn sort_wallets_by_position(wallets: &mut [WalletMetadata]) {
-    wallets.sort_by(|a, b| {
-        a.position
-            .cmp(&b.position)
-            .then_with(|| a.id.cmp(&b.id))
-    });
+    wallets.sort_by(|a, b| a.position.cmp(&b.position).then_with(|| a.id.cmp(&b.id)));
 }
 
 fn validate_reorder_order(
@@ -427,9 +417,7 @@ fn validate_reorder_order(
     let mut seen = HashSet::new();
     for id in ordered_ids {
         if !expected.contains(id) {
-            return Err(WalletTableError::InvalidWalletReorder(format!(
-                "unknown wallet id: {id}"
-            )));
+            return Err(WalletTableError::InvalidWalletReorder(format!("unknown wallet id: {id}")));
         }
         if !seen.insert(id.clone()) {
             return Err(WalletTableError::InvalidWalletReorder(format!(
@@ -479,7 +467,8 @@ mod tests {
 
     #[test]
     fn migrate_legacy_assigns_positions_from_vec_order() {
-        let mut wallets = vec![wallet_with_id("a", 0), wallet_with_id("b", 0), wallet_with_id("c", 0)];
+        let mut wallets =
+            vec![wallet_with_id("a", 0), wallet_with_id("b", 0), wallet_with_id("c", 0)];
         assert!(migrate_legacy_positions_if_needed(&mut wallets));
         assert_eq!(wallets[0].position, 0);
         assert_eq!(wallets[1].position, 1);
@@ -494,11 +483,8 @@ mod tests {
 
     #[test]
     fn sort_wallets_by_position_then_id() {
-        let mut wallets = vec![
-            wallet_with_id("z", 1),
-            wallet_with_id("a", 1),
-            wallet_with_id("m", 0),
-        ];
+        let mut wallets =
+            vec![wallet_with_id("z", 1), wallet_with_id("a", 1), wallet_with_id("m", 0)];
         sort_wallets_by_position(&mut wallets);
         assert_eq!(AsRef::<str>::as_ref(&wallets[0].id), "m");
         assert_eq!(AsRef::<str>::as_ref(&wallets[1].id), "a");
@@ -507,11 +493,7 @@ mod tests {
 
     #[test]
     fn validate_reorder_accepts_permutation() {
-        let w = vec![
-            wallet_with_id("a", 0),
-            wallet_with_id("b", 1),
-            wallet_with_id("c", 2),
-        ];
+        let w = vec![wallet_with_id("a", 0), wallet_with_id("b", 1), wallet_with_id("c", 2)];
         let order = vec!["c".into(), "a".into(), "b".into()];
         assert!(validate_reorder_order(&order, &w).is_ok());
     }
@@ -552,11 +534,7 @@ mod tests {
 
     #[test]
     fn next_append_is_sequential_for_existing_sequence() {
-        let wallets = vec![
-            wallet_with_id("a", 0),
-            wallet_with_id("b", 1),
-            wallet_with_id("c", 2),
-        ];
+        let wallets = vec![wallet_with_id("a", 0), wallet_with_id("b", 1), wallet_with_id("c", 2)];
         assert_eq!(next_append_position(&wallets), 3);
     }
 
