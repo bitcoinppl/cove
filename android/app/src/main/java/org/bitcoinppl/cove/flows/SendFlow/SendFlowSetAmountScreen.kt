@@ -318,6 +318,7 @@ fun SendFlowSetAmountScreen(
                                         null
                                     }
                             },
+                            currentWalletId = walletManager.id
                         )
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
                         SpendingWidget(
