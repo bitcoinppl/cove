@@ -36,6 +36,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -50,6 +51,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
@@ -73,6 +77,7 @@ fun SidebarView(
     var dragStartCenterY by remember { mutableFloatStateOf(0f) }
     val listState = rememberLazyListState()
     val haptic = LocalHapticFeedback.current
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(app.wallets, draggedWalletId) {
         // Keep local list in sync with source-of-truth while not actively dragging.
@@ -210,11 +215,15 @@ fun SidebarView(
                                             val appOrder = app.wallets.map { it.id }
                                             val localOrder = walletList.map { it.id }
                                             if (localOrder != appOrder) {
-                                                runCatching {
-                                                    app.database.wallets().reorderWallets(orderedIds = localOrder)
-                                                }.onFailure {
-                                                    Log.e("SidebarView", "Failed to reorder wallets", it)
-                                                    walletList = app.wallets
+                                                scope.launch(Dispatchers.IO) {
+                                                    runCatching {
+                                                        app.database.wallets().reorderWallets(orderedIds = localOrder)
+                                                    }.onFailure {
+                                                        Log.e("SidebarView", "Failed to reorder wallets", it)
+                                                        withContext(Dispatchers.Main) {
+                                                            walletList = app.wallets
+                                                        }
+                                                    }
                                                 }
                                             }
                                         }
