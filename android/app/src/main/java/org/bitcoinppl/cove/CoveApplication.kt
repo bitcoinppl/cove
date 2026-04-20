@@ -86,6 +86,14 @@ class CoveApplication : Application() {
      */
     private fun cleanupFfiObjects() {
         try {
+            connectivityMonitor?.stop()
+            connectivityMonitor = null
+            Log.d(TAG, "Connectivity monitor stopped")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error stopping connectivity monitor", e)
+        }
+
+        try {
             device?.close()
             device = null
             Log.d(TAG, "Device FFI object closed")

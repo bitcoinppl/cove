@@ -50,6 +50,12 @@ class ConnectivityMonitor(
         connectivityManager.registerDefaultNetworkCallback(callback)
     }
 
+    fun stop() {
+        if (!started) return
+        started = false
+        connectivityManager.unregisterNetworkCallback(callback)
+    }
+
     private fun pushConnectivityState(connected: Boolean) {
         RustConnectivityManager().use { rustConnectivityManager ->
             rustConnectivityManager.setConnectionState(connected)

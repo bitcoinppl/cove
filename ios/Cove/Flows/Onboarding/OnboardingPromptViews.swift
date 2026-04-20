@@ -147,6 +147,25 @@ struct OnboardingRestoreUnavailableScreen: View {
     }
 }
 
+struct OnboardingRestoreOfflineScreen: View {
+    let onContinue: () -> Void
+    let onBack: () -> Void
+
+    var body: some View {
+        OnboardingPromptScreen(
+            icon: "wifi.slash",
+            title: "You’re Offline",
+            subtitle: "Cove can’t check for an iCloud backup right now. You can continue onboarding and check Cloud Backup later in Settings."
+        ) {
+            Button("Continue Without Cloud Restore", action: onContinue)
+                .buttonStyle(OnboardingPrimaryButtonStyle())
+
+            Button("Back", action: onBack)
+                .buttonStyle(OnboardingSecondaryButtonStyle())
+        }
+    }
+}
+
 struct OnboardingStorageChoiceScreen: View {
     let errorMessage: String?
     let onRestoreFromCoveBackup: (() -> Void)?
@@ -437,4 +456,8 @@ struct OnboardingInlineMessage: View {
 
 #Preview("Cloud Check") {
     CloudCheckContent()
+}
+
+#Preview("Restore Offline") {
+    OnboardingRestoreOfflineScreen(onContinue: {}, onBack: {})
 }

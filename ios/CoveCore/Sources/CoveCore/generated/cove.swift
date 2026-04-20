@@ -7607,8 +7607,6 @@ public protocol RustConnectivityManagerProtocol: AnyObject, Sendable {
     
     func isConnected()  -> Bool
     
-    func listenForUpdates(reconciler: ConnectivityManagerReconciler) 
-    
     func setConnectionState(isConnected: Bool) 
     
     func state()  -> ConnectivityState
@@ -7680,14 +7678,6 @@ open func isConnected() -> Bool  {
             self.uniffiCloneHandle(),$0
     )
 })
-}
-    
-open func listenForUpdates(reconciler: ConnectivityManagerReconciler)  {try! rustCall() {
-    uniffi_cove_fn_method_rustconnectivitymanager_listen_for_updates(
-            self.uniffiCloneHandle(),
-        FfiConverterCallbackInterfaceConnectivityManagerReconciler_lower(reconciler),$0
-    )
-}
 }
     
 open func setConnectionState(isConnected: Bool)  {try! rustCall() {
@@ -20088,68 +20078,6 @@ public func FfiConverterTypeColdWalletRoute_lower(_ value: ColdWalletRoute) -> R
 
 
 
-public enum ConnectivityManagerReconcileMessage: Equatable, Hashable {
-    
-    case status(ConnectivityStatus
-    )
-
-
-
-
-
-}
-
-#if compiler(>=6)
-extension ConnectivityManagerReconcileMessage: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeConnectivityManagerReconcileMessage: FfiConverterRustBuffer {
-    typealias SwiftType = ConnectivityManagerReconcileMessage
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ConnectivityManagerReconcileMessage {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-        
-        case 1: return .status(try FfiConverterTypeConnectivityStatus.read(from: &buf)
-        )
-        
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: ConnectivityManagerReconcileMessage, into buf: inout [UInt8]) {
-        switch value {
-        
-        
-        case let .status(v1):
-            writeInt(&buf, Int32(1))
-            FfiConverterTypeConnectivityStatus.write(v1, into: &buf)
-            
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeConnectivityManagerReconcileMessage_lift(_ buf: RustBuffer) throws -> ConnectivityManagerReconcileMessage {
-    return try FfiConverterTypeConnectivityManagerReconcileMessage.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeConnectivityManagerReconcileMessage_lower(_ value: ConnectivityManagerReconcileMessage) -> RustBuffer {
-    return FfiConverterTypeConnectivityManagerReconcileMessage.lower(value)
-}
-
-
-
-
 public enum ConnectivityStatus: Equatable, Hashable {
     
     case connected
@@ -24841,6 +24769,7 @@ public enum OnboardingStep: Equatable, Hashable {
     
     case cloudCheck
     case restoreOffer
+    case restoreOffline
     case restoreUnavailable
     case restoring
     case welcome
@@ -24881,35 +24810,37 @@ public struct FfiConverterTypeOnboardingStep: FfiConverterRustBuffer {
         
         case 2: return .restoreOffer
         
-        case 3: return .restoreUnavailable
+        case 3: return .restoreOffline
         
-        case 4: return .restoring
+        case 4: return .restoreUnavailable
         
-        case 5: return .welcome
+        case 5: return .restoring
         
-        case 6: return .bitcoinChoice
+        case 6: return .welcome
         
-        case 7: return .returningUserChoice
+        case 7: return .bitcoinChoice
         
-        case 8: return .storageChoice
+        case 8: return .returningUserChoice
         
-        case 9: return .softwareChoice
+        case 9: return .storageChoice
         
-        case 10: return .creatingWallet
+        case 10: return .softwareChoice
         
-        case 11: return .backupWallet
+        case 11: return .creatingWallet
         
-        case 12: return .cloudBackup
+        case 12: return .backupWallet
         
-        case 13: return .secretWords
+        case 13: return .cloudBackup
         
-        case 14: return .exchangeFunding
+        case 14: return .secretWords
         
-        case 15: return .hardwareImport
+        case 15: return .exchangeFunding
         
-        case 16: return .softwareImport
+        case 16: return .hardwareImport
         
-        case 17: return .terms
+        case 17: return .softwareImport
+        
+        case 18: return .terms
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -24927,64 +24858,68 @@ public struct FfiConverterTypeOnboardingStep: FfiConverterRustBuffer {
             writeInt(&buf, Int32(2))
         
         
-        case .restoreUnavailable:
+        case .restoreOffline:
             writeInt(&buf, Int32(3))
         
         
-        case .restoring:
+        case .restoreUnavailable:
             writeInt(&buf, Int32(4))
         
         
-        case .welcome:
+        case .restoring:
             writeInt(&buf, Int32(5))
         
         
-        case .bitcoinChoice:
+        case .welcome:
             writeInt(&buf, Int32(6))
         
         
-        case .returningUserChoice:
+        case .bitcoinChoice:
             writeInt(&buf, Int32(7))
         
         
-        case .storageChoice:
+        case .returningUserChoice:
             writeInt(&buf, Int32(8))
         
         
-        case .softwareChoice:
+        case .storageChoice:
             writeInt(&buf, Int32(9))
         
         
-        case .creatingWallet:
+        case .softwareChoice:
             writeInt(&buf, Int32(10))
         
         
-        case .backupWallet:
+        case .creatingWallet:
             writeInt(&buf, Int32(11))
         
         
-        case .cloudBackup:
+        case .backupWallet:
             writeInt(&buf, Int32(12))
         
         
-        case .secretWords:
+        case .cloudBackup:
             writeInt(&buf, Int32(13))
         
         
-        case .exchangeFunding:
+        case .secretWords:
             writeInt(&buf, Int32(14))
         
         
-        case .hardwareImport:
+        case .exchangeFunding:
             writeInt(&buf, Int32(15))
         
         
-        case .softwareImport:
+        case .hardwareImport:
             writeInt(&buf, Int32(16))
         
         
-        case .terms:
+        case .softwareImport:
             writeInt(&buf, Int32(17))
+        
+        
+        case .terms:
+            writeInt(&buf, Int32(18))
         
         }
     }
@@ -32914,137 +32849,6 @@ public func FfiConverterCallbackInterfaceCoinControlManagerReconciler_lower(_ v:
 
 
 
-public protocol ConnectivityManagerReconciler: AnyObject, Sendable {
-    
-    func reconcile(message: ConnectivityManagerReconcileMessage) 
-    
-}
-
-
-// Put the implementation in a struct so we don't pollute the top-level namespace
-fileprivate struct UniffiCallbackInterfaceConnectivityManagerReconciler {
-
-    // Create the VTable using a series of closures.
-    // Swift automatically converts these into C callback functions.
-    //
-    // Store the vtable directly.
-    static let vtable: UniffiVTableCallbackInterfaceConnectivityManagerReconciler = UniffiVTableCallbackInterfaceConnectivityManagerReconciler(
-        uniffiFree: { (uniffiHandle: UInt64) -> () in
-            do {
-                try FfiConverterCallbackInterfaceConnectivityManagerReconciler.handleMap.remove(handle: uniffiHandle)
-            } catch {
-                print("Uniffi callback interface ConnectivityManagerReconciler: handle missing in uniffiFree")
-            }
-        },
-        uniffiClone: { (uniffiHandle: UInt64) -> UInt64 in
-            do {
-                return try FfiConverterCallbackInterfaceConnectivityManagerReconciler.handleMap.clone(handle: uniffiHandle)
-            } catch {
-                fatalError("Uniffi callback interface ConnectivityManagerReconciler: handle missing in uniffiClone")
-            }
-        },
-        reconcile: { (
-            uniffiHandle: UInt64,
-            message: RustBuffer,
-            uniffiOutReturn: UnsafeMutableRawPointer,
-            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
-        ) in
-            let makeCall = {
-                () throws -> () in
-                guard let uniffiObj = try? FfiConverterCallbackInterfaceConnectivityManagerReconciler.handleMap.get(handle: uniffiHandle) else {
-                    throw UniffiInternalError.unexpectedStaleHandle
-                }
-                return uniffiObj.reconcile(
-                     message: try FfiConverterTypeConnectivityManagerReconcileMessage_lift(message)
-                )
-            }
-
-            
-            let writeReturn = { () }
-            uniffiTraitInterfaceCall(
-                callStatus: uniffiCallStatus,
-                makeCall: makeCall,
-                writeReturn: writeReturn
-            )
-        }
-    )
-
-    // Rust stores this pointer for future callback invocations, so it must live
-    // for the process lifetime (not just for the init function call).
-    static let vtablePtr: UnsafePointer<UniffiVTableCallbackInterfaceConnectivityManagerReconciler> = {
-        let ptr = UnsafeMutablePointer<UniffiVTableCallbackInterfaceConnectivityManagerReconciler>.allocate(capacity: 1)
-        ptr.initialize(to: vtable)
-        return UnsafePointer(ptr)
-    }()
-}
-
-private func uniffiCallbackInitConnectivityManagerReconciler() {
-    uniffi_cove_fn_init_callback_vtable_connectivitymanagerreconciler(UniffiCallbackInterfaceConnectivityManagerReconciler.vtablePtr)
-}
-
-// FfiConverter protocol for callback interfaces
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-fileprivate struct FfiConverterCallbackInterfaceConnectivityManagerReconciler {
-    fileprivate static let handleMap = UniffiHandleMap<ConnectivityManagerReconciler>()
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-extension FfiConverterCallbackInterfaceConnectivityManagerReconciler : FfiConverter {
-    typealias SwiftType = ConnectivityManagerReconciler
-    typealias FfiType = UInt64
-
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public static func lift(_ handle: UInt64) throws -> SwiftType {
-        try handleMap.get(handle: handle)
-    }
-
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
-        let handle: UInt64 = try readInt(&buf)
-        return try lift(handle)
-    }
-
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public static func lower(_ v: SwiftType) -> UInt64 {
-        return handleMap.insert(obj: v)
-    }
-
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public static func write(_ v: SwiftType, into buf: inout [UInt8]) {
-        writeInt(&buf, lower(v))
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterCallbackInterfaceConnectivityManagerReconciler_lift(_ handle: UInt64) throws -> ConnectivityManagerReconciler {
-    return try FfiConverterCallbackInterfaceConnectivityManagerReconciler.lift(handle)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterCallbackInterfaceConnectivityManagerReconciler_lower(_ v: ConnectivityManagerReconciler) -> UInt64 {
-    return FfiConverterCallbackInterfaceConnectivityManagerReconciler.lower(v)
-}
-
-
-
-
 public protocol FfiReconcile: AnyObject, Sendable {
     
     /**
@@ -36783,9 +36587,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustconnectivitymanager_is_connected() != 47607) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustconnectivitymanager_listen_for_updates() != 49341) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_cove_checksum_method_rustconnectivitymanager_set_connection_state() != 17798) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -37584,9 +37385,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_coincontrolmanagerreconciler_reconcile_many() != 14668) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_connectivitymanagerreconciler_reconcile() != 20375) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_cove_checksum_method_importwalletmanagerreconciler_reconcile() != 13279) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -37622,7 +37420,6 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitAuthManagerReconciler()
     uniffiCallbackInitCloudBackupManagerReconciler()
     uniffiCallbackInitCoinControlManagerReconciler()
-    uniffiCallbackInitConnectivityManagerReconciler()
     uniffiCallbackInitFfiReconcile()
     uniffiCallbackInitImportWalletManagerReconciler()
     uniffiCallbackInitOnboardingManagerReconciler()

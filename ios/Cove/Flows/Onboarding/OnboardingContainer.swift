@@ -59,6 +59,12 @@ struct OnboardingContainer: View {
                 errorMessage: manager.state.errorMessage
             )
 
+        case .restoreOffline:
+            OnboardingRestoreOfflineScreen(
+                onContinue: { manager.dispatch(.continueWithoutCloudRestore) },
+                onBack: { manager.dispatch(.back) }
+            )
+
         case .restoreUnavailable:
             OnboardingRestoreUnavailableScreen(
                 onContinue: { manager.dispatch(.continueWithoutCloudRestore) },

@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use once_cell::sync::OnceCell;
-use tracing::warn;
 
 static REF: OnceCell<Connectivity> = OnceCell::new();
 
@@ -31,14 +30,47 @@ impl Connectivity {
 impl Connectivity {
     #[uniffi::constructor]
     pub fn new(connectivity: Box<dyn ConnectivityAccess>) -> Self {
-        if let Some(me) = REF.get() {
-            warn!("connectivity is already initialized");
-            return me.clone();
+        REF.get_or_init(|| Self(Arc::new(connectivity))).clone()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, Barrier};
+
+    use super::*;
+
+    #[derive(Debug)]
+    struct TestConnectivity(bool);
+
+    impl ConnectivityAccess for TestConnectivity {
+        fn is_connected(&self) -> bool {
+            self.0
         }
+    }
 
-        let me = Self(Arc::new(connectivity));
-        REF.set(me).expect("failed to set connectivity");
+    #[test]
+    fn concurrent_initialization_returns_the_same_singleton() {
+        let barrier = Arc::new(Barrier::new(3));
+        let connected_barrier = Arc::clone(&barrier);
+        let disconnected_barrier = Arc::clone(&barrier);
 
-        Self::global().clone()
+        let connected = std::thread::spawn(move || {
+            connected_barrier.wait();
+            Connectivity::new(Box::new(TestConnectivity(true)))
+        });
+        let disconnected = std::thread::spawn(move || {
+            disconnected_barrier.wait();
+            Connectivity::new(Box::new(TestConnectivity(false)))
+        });
+
+        barrier.wait();
+
+        let connected = connected.join().expect("join connected initializer");
+        let disconnected = disconnected.join().expect("join disconnected initializer");
+        let global = Connectivity::global();
+
+        assert_eq!(connected.is_connected(), global.is_connected());
+        assert_eq!(disconnected.is_connected(), global.is_connected());
     }
 }
