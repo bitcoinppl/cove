@@ -14,6 +14,7 @@ struct SidebarView: View {
     let currentRoute: Route
 
     @State private var editMode: EditMode = .inactive
+    @State private var reorderTask: Task<Void, Never>?
 
     func setForeground(_ route: Route) -> LinearGradient {
         if RouteFactory().isSameParentRoute(route: route, routeToCheck: currentRoute) {
@@ -188,17 +189,31 @@ struct SidebarView: View {
         persistWalletOrder(orderedIds: reordered.map(\.id), previous: previous)
     }
 
-    /// Persists off the main actor and rolls back the optimistic UI on failure.
     private func persistWalletOrder(orderedIds: [WalletId], previous: [WalletMetadata]) {
         let database = app.database
         let appRef = app
-        Task.detached {
+        let pending = reorderTask
+        reorderTask = Task {
+            await pending?.value
+
             do {
-                _ = try database.wallets().reorderWallets(orderedIds: orderedIds)
-                await MainActor.run { HapticFeedback.success.trigger() }
+                let persisted = try await Task.detached {
+                    try database.wallets().reorderWallets(orderedIds: orderedIds)
+                }.value
+
+                await MainActor.run {
+                    if appRef.wallets.map(\.id) == orderedIds {
+                        appRef.wallets = persisted
+                    }
+                    HapticFeedback.success.trigger()
+                }
             } catch {
                 Log.error("Failed to reorder wallets: \(error)")
-                await MainActor.run { appRef.wallets = previous }
+                await MainActor.run {
+                    if appRef.wallets.map(\.id) == orderedIds {
+                        appRef.wallets = previous
+                    }
+                }
             }
         }
     }
