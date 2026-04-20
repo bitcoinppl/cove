@@ -11941,6 +11941,11 @@ public protocol WalletsTableProtocol: AnyObject, Sendable {
     
     func len(network: Network, mode: WalletMode) throws  -> UInt16
     
+    /**
+     * Persist a new wallet order for the active wallet list.
+     */
+    func reorderWallets(orderedIds: [WalletId]) throws 
+    
 }
 open class WalletsTable: WalletsTableProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -12038,6 +12043,17 @@ open func len(network: Network, mode: WalletMode)throws  -> UInt16  {
         FfiConverterTypeWalletMode_lower(mode),$0
     )
 })
+}
+    
+    /**
+     * Persist a new wallet order for the active wallet list.
+     */
+open func reorderWallets(orderedIds: [WalletId])throws   {try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
+    uniffi_cove_fn_method_walletstable_reorder_wallets(
+            self.uniffiCloneHandle(),
+        FfiConverterSequenceTypeWalletId.lower(orderedIds),$0
+    )
+}
 }
     
 
@@ -15317,6 +15333,10 @@ public struct WalletMetadata: Equatable, Hashable {
     public var color: WalletColor
     public var verified: Bool
     public var network: Network
+    /**
+     * Wallet order in the sidebar. Lower values appear first.
+     */
+    public var position: UInt32
     public var masterFingerprint: Fingerprint?
     public var selectedUnit: BitcoinUnit
     public var sensitiveVisible: Bool
@@ -15340,7 +15360,10 @@ public struct WalletMetadata: Equatable, Hashable {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: WalletId, name: String, color: WalletColor, verified: Bool, network: Network, masterFingerprint: Fingerprint?, selectedUnit: BitcoinUnit, sensitiveVisible: Bool, detailsExpanded: Bool, walletType: WalletType, walletMode: WalletMode, discoveryState: DiscoveryState, addressType: WalletAddressType, fiatOrBtc: FiatOrBtc, origin: String?, 
+    public init(id: WalletId, name: String, color: WalletColor, verified: Bool, network: Network, 
+        /**
+         * Wallet order in the sidebar. Lower values appear first.
+         */position: UInt32, masterFingerprint: Fingerprint?, selectedUnit: BitcoinUnit, sensitiveVisible: Bool, detailsExpanded: Bool, walletType: WalletType, walletMode: WalletMode, discoveryState: DiscoveryState, addressType: WalletAddressType, fiatOrBtc: FiatOrBtc, origin: String?, 
         /**
          * Metadata data specific to different hardware wallets
          */hardwareMetadata: HardwareWalletMetadata?, 
@@ -15353,6 +15376,7 @@ public struct WalletMetadata: Equatable, Hashable {
         self.color = color
         self.verified = verified
         self.network = network
+        self.position = position
         self.masterFingerprint = masterFingerprint
         self.selectedUnit = selectedUnit
         self.sensitiveVisible = sensitiveVisible
@@ -15428,6 +15452,7 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
                 color: FfiConverterTypeWalletColor.read(from: &buf), 
                 verified: FfiConverterBool.read(from: &buf), 
                 network: FfiConverterTypeNetwork.read(from: &buf), 
+                position: FfiConverterUInt32.read(from: &buf), 
                 masterFingerprint: FfiConverterOptionTypeFingerprint.read(from: &buf), 
                 selectedUnit: FfiConverterTypeBitcoinUnit.read(from: &buf), 
                 sensitiveVisible: FfiConverterBool.read(from: &buf), 
@@ -15450,6 +15475,7 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
         FfiConverterTypeWalletColor.write(value.color, into: &buf)
         FfiConverterBool.write(value.verified, into: &buf)
         FfiConverterTypeNetwork.write(value.network, into: &buf)
+        FfiConverterUInt32.write(value.position, into: &buf)
         FfiConverterOptionTypeFingerprint.write(value.masterFingerprint, into: &buf)
         FfiConverterTypeBitcoinUnit.write(value.selectedUnit, into: &buf)
         FfiConverterBool.write(value.sensitiveVisible, into: &buf)
@@ -32018,6 +32044,8 @@ enum WalletTableError: Swift.Error, Equatable, Hashable, Foundation.LocalizedErr
     case ReadError(String
     )
     case WalletAlreadyExists
+    case InvalidWalletReorder(String
+    )
 
     
 
@@ -32064,6 +32092,9 @@ public struct FfiConverterTypeWalletTableError: FfiConverterRustBuffer {
             try FfiConverterString.read(from: &buf)
             )
         case 3: return .WalletAlreadyExists
+        case 4: return .InvalidWalletReorder(
+            try FfiConverterString.read(from: &buf)
+            )
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -32089,6 +32120,11 @@ public struct FfiConverterTypeWalletTableError: FfiConverterRustBuffer {
         case .WalletAlreadyExists:
             writeInt(&buf, Int32(3))
         
+        
+        case let .InvalidWalletReorder(v1):
+            writeInt(&buf, Int32(4))
+            FfiConverterString.write(v1, into: &buf)
+            
         }
     }
 }
@@ -36565,6 +36601,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_walletstable_len() != 51436) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_walletstable_reorder_wallets() != 12851) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_priceresponse_get() != 6552) {

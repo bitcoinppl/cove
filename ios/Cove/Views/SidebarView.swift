@@ -6,10 +6,13 @@
 //
 
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct SidebarView: View {
     @Environment(AppManager.self) private var app
     @Environment(\.navigate) private var navigate
+    @State private var walletList: [WalletMetadata] = []
+    @State private var draggedWalletId: WalletId?
 
     let currentRoute: Route
 
@@ -67,8 +70,9 @@ struct SidebarView: View {
                 .padding(.bottom, 16)
 
                 VStack(spacing: 12) {
-                    ForEach(app.wallets, id: \.id) { wallet in
+                    ForEach(walletList, id: \.id) { wallet in
                         Button(action: {
+                            guard draggedWalletId == nil else { return }
                             goTo(Route.selectedWallet(wallet.id))
                         }) {
                             HStack(spacing: 10) {
@@ -99,6 +103,20 @@ struct SidebarView: View {
                                 app.pushRoutes(RouteFactory().nestedWalletSettings(id: wallet.id))
                             }
                         }
+                        .onDrag {
+                            draggedWalletId = wallet.id
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            return NSItemProvider(object: "\(wallet.id)" as NSString)
+                        }
+                        .onDrop(
+                            of: [UTType.plainText],
+                            delegate: SidebarWalletDropDelegate(
+                                item: wallet,
+                                wallets: $walletList,
+                                draggedWalletId: $draggedWalletId,
+                                onReorderCommitted: persistWalletOrder
+                            )
+                        )
                     }
                 }
 
@@ -136,6 +154,12 @@ struct SidebarView: View {
         .padding(20)
         .frame(maxWidth: .infinity)
         .background(.midnightBlue)
+        .onAppear {
+            walletList = app.wallets
+        }
+        .onChange(of: app.wallets) { _, updated in
+            walletList = updated
+        }
     }
 
     func goTo(_ route: Route) {
@@ -169,5 +193,44 @@ struct SidebarView: View {
         }
 
         navigateRouteOnMain(route)
+    }
+
+    private func persistWalletOrder() {
+        do {
+            try app.database.wallets().reorderWallets(orderedIds: walletList.map(\.id))
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        } catch {
+            Log.error("Failed to reorder wallets \(error)")
+            walletList = app.wallets
+        }
+    }
+}
+
+private struct SidebarWalletDropDelegate: DropDelegate {
+    let item: WalletMetadata
+    @Binding var wallets: [WalletMetadata]
+    @Binding var draggedWalletId: WalletId?
+    let onReorderCommitted: () -> Void
+
+    func dropEntered(info _: DropInfo) {
+        guard let draggedWalletId,
+              draggedWalletId != item.id,
+              let from = wallets.firstIndex(where: { $0.id == draggedWalletId }),
+              let to = wallets.firstIndex(where: { $0.id == item.id })
+        else { return }
+
+        withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
+            wallets.move(
+                fromOffsets: IndexSet(integer: from),
+                toOffset: to > from ? to + 1 : to
+            )
+        }
+    }
+
+    func performDrop(info _: DropInfo) -> Bool {
+        guard draggedWalletId != nil else { return false }
+        draggedWalletId = nil
+        onReorderCommitted()
+        return true
     }
 }
