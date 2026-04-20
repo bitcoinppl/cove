@@ -6,6 +6,7 @@ use std::{
     time::Duration,
 };
 
+use backon::{FibonacciBuilder, Retryable as _};
 use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
 use cove_util::ResultExt as _;
 use flume::Receiver;
@@ -464,10 +465,8 @@ impl RustOnboardingManager {
                 return;
             }
 
-            let retry_delays = [1u64, 2, 2, 3, 5, 10];
             let cloud = CloudStorage::global().clone();
             let outcome = determine_cloud_check_outcome_async(
-                &retry_delays,
                 || {
                     let cloud = cloud.clone();
                     async move { cloud.has_any_cloud_backup().await }
@@ -504,10 +503,12 @@ impl RustOnboardingManager {
             );
             self.cloud_check_in_flight.store(false, Ordering::Release);
 
-            let should_retry = self.pending_cloud_check_retry.swap(false, Ordering::AcqRel)
+            let retry_was_requested = self.pending_cloud_check_retry.swap(false, Ordering::AcqRel);
+            let should_retry_offline_cloud_check = retry_was_requested
                 && outcome == CloudCheckOutcome::Inconclusive(CloudCheckIssue::Offline)
                 && connected;
-            if should_retry && state.prepare_offline_cloud_check_retry(deferred) {
+            if should_retry_offline_cloud_check && state.prepare_offline_cloud_check_retry(deferred)
+            {
                 return true;
             }
 
@@ -1582,34 +1583,32 @@ fn cloud_check_inconclusive_message(issue: CloudCheckIssue) -> String {
     }
 }
 
-async fn determine_cloud_check_outcome_async<F, Fut, S, SleepFut>(
-    retry_delays: &[u64],
+async fn determine_cloud_check_outcome_async<F, Fut, S>(
     mut has_any_cloud_backup: F,
-    mut sleep: S,
+    sleep: S,
 ) -> CloudCheckOutcome
 where
     F: FnMut() -> Fut,
     Fut: std::future::Future<Output = Result<bool, CloudStorageError>>,
-    S: FnMut(Duration) -> SleepFut,
-    SleepFut: std::future::Future<Output = ()>,
+    S: backon::Sleeper,
 {
-    for (attempt, delay) in retry_delays.iter().enumerate() {
-        info!(
-            "Onboarding: checking cloud backup attempt={}/{}",
-            attempt + 1,
-            retry_delays.len() + 1
-        );
+    let max_retries = 6;
+    let mut attempt = 0;
+    let result = (|| {
+        attempt += 1;
+        info!("Onboarding: checking cloud backup attempt={attempt}");
+        has_any_cloud_backup()
+    })
+    .retry(
+        FibonacciBuilder::default()
+            .with_max_delay(Duration::from_secs(10))
+            .with_max_times(max_retries),
+    )
+    .sleep(sleep)
+    .notify(|error: &CloudStorageError, _| warn!("Onboarding: cloud backup check failed: {error}"))
+    .await;
 
-        match has_any_cloud_backup().await {
-            Ok(true) => return CloudCheckOutcome::BackupFound,
-            Ok(false) => return CloudCheckOutcome::NoBackupConfirmed,
-            Err(error) => warn!("Onboarding: cloud backup check failed: {error}"),
-        }
-
-        sleep(Duration::from_secs(*delay)).await;
-    }
-
-    match has_any_cloud_backup().await {
+    match result {
         Ok(true) => CloudCheckOutcome::BackupFound,
         Ok(false) => CloudCheckOutcome::NoBackupConfirmed,
         Err(error) => {
@@ -2490,7 +2489,6 @@ mod tests {
         let slept = Arc::new(Mutex::new(Vec::new()));
         let sleep_log = Arc::clone(&slept);
         let outcome = determine_cloud_check_outcome_async(
-            &[1, 2, 3],
             || async { Ok(false) },
             move |duration| {
                 let sleep_log = Arc::clone(&sleep_log);
@@ -2507,22 +2505,13 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn cloud_check_retries_errors_and_returns_inconclusive() {
-        let slept = Arc::new(Mutex::new(Vec::new()));
-        let sleep_log = Arc::clone(&slept);
         let outcome = determine_cloud_check_outcome_async(
-            &[1, 2],
             || async { Err(CloudStorageError::NotAvailable("network timed out".into())) },
-            move |duration| {
-                let sleep_log = Arc::clone(&sleep_log);
-                async move {
-                    sleep_log.lock().unwrap().push(duration);
-                }
-            },
+            |_| async {},
         )
         .await;
 
         assert_eq!(outcome, CloudCheckOutcome::Inconclusive(CloudCheckIssue::CloudUnavailable));
-        assert_eq!(*slept.lock().unwrap(), vec![Duration::from_secs(1), Duration::from_secs(2)]);
     }
 
     #[test]
