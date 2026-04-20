@@ -1604,6 +1604,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_required_deletion_confirmations(
     ): Short
+    external fun uniffi_cove_checksum_method_rustwalletmanager_rescan_wallet_with_gap_limit(
+    ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_save_unsigned_transaction(
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_selected_fiat_currency(
@@ -2694,6 +2696,8 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_required_deletion_confirmations(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Byte
+    external fun uniffi_cove_fn_method_rustwalletmanager_rescan_wallet_with_gap_limit(`ptr`: Long,`gapLimit`: Int,
+    ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_save_unsigned_transaction(`ptr`: Long,`details`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     external fun uniffi_cove_fn_method_rustwalletmanager_selected_fiat_currency(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -4359,6 +4363,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_required_deletion_confirmations() != 30427.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_rescan_wallet_with_gap_limit() != 28630.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_save_unsigned_transaction() != 43358.toShort()) {
@@ -20748,6 +20755,8 @@ public interface RustWalletManagerInterface {
      */
     fun `requiredDeletionConfirmations`(): kotlin.UByte
     
+    suspend fun `rescanWalletWithGapLimit`(`gapLimit`: kotlin.UInt)
+    
     fun `saveUnsignedTransaction`(`details`: ConfirmDetails)
     
     fun `selectedFiatCurrency`(): FiatCurrency
@@ -21676,6 +21685,28 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     )
     }
     
+
+    
+    @Throws(WalletManagerException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `rescanWalletWithGapLimit`(`gapLimit`: kotlin.UInt) {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_rescan_wallet_with_gap_limit(
+                uniffiHandle,
+                FfiConverterUInt.lower(`gapLimit`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_void(future) },
+        // lift function
+        { Unit },
+        
+        // Error FFI converter
+        WalletManagerException.ErrorHandler,
+    )
+    }
 
     
     @Throws(WalletManagerException::class)override fun `saveUnsignedTransaction`(`details`: ConfirmDetails)

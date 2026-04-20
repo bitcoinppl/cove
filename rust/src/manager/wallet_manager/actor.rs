@@ -101,13 +101,24 @@ pub enum FullScanType {
     Initial,
     /// Expanded scan scans for 150 addresses GAP_LIMIT
     Expanded,
+    Rescan(u32),
 }
 
 impl FullScanType {
-    const fn stop_gap(&self) -> usize {
+    fn stop_gap(&self) -> usize {
         match self {
             Self::Initial => 20,
             Self::Expanded => 150,
+            Self::Rescan(gap) => *gap as usize,
+        }
+    }
+
+    /// Whether this scan covers at least as many addresses as the expanded scan.
+    fn covers_expanded(&self) -> bool {
+        match self {
+            Self::Initial => false,
+            Self::Expanded => true,
+            Self::Rescan(gap) => *gap as usize >= Self::Expanded.stop_gap(),
         }
     }
 }
@@ -1122,9 +1133,12 @@ impl WalletActor {
     // this is slower, but we want to be able to see all transactions in the UI, so scan the next
     // 150 addresses
     async fn maybe_perform_expanded_full_scan(&mut self) -> ActorResult<()> {
-        if self.state == ActorState::FullScanComplete(FullScanType::Expanded)
-            || self.state == ActorState::IncrementalScanComplete
-        {
+        let already_covered = matches!(
+            self.state,
+            ActorState::FullScanComplete(t) if t.covers_expanded(),
+        ) || self.state == ActorState::IncrementalScanComplete;
+
+        if already_covered {
             debug!("already scanned skipping expanded full scan ({:?})", self.state);
             return Produces::ok(());
         }
@@ -1194,6 +1208,48 @@ impl WalletActor {
         Produces::ok(())
     }
 
+    /// Perform a full scan with a user-supplied gap limit to recover missed addresses.
+    pub async fn perform_rescan_full_scan(&mut self, gap_limit: u32) -> ActorResult<()> {
+        debug!("perform_rescan_full_scan with gap_limit={gap_limit}");
+
+        if matches!(
+            self.state,
+            ActorState::PerformingFullScan(_) | ActorState::PerformingIncrementalScan
+        ) {
+            warn!("scan already in progress, rejecting rescan ({:?})", self.state);
+            return Err(
+                Error::WalletScanError("wallet scan already in progress".to_string()).into()
+            );
+        }
+
+        let scan_type = FullScanType::Rescan(gap_limit);
+
+        let (full_scan_request, graph, node_client) = self.get_for_full_scan().await?;
+
+        let txns = self.transactions().await?.await?;
+        self.reconciler
+            .send(WalletManagerReconcileMessage::StartedExpandedFullScan(txns).into())
+            .unwrap();
+
+        self.state = ActorState::PerformingFullScan(scan_type);
+
+        let addr = self.addr.clone();
+        self.addr.send_fut(async move {
+            let start = UNIX_EPOCH.elapsed().unwrap().as_secs();
+
+            let full_scan_result = node_client
+                .start_wallet_scan(&graph, full_scan_request, scan_type.stop_gap())
+                .await;
+
+            let now = UNIX_EPOCH.elapsed().unwrap().as_secs();
+            debug!("[rescan] done rescan full scan in {}s", now - start);
+
+            send!(addr.handle_full_scan_complete(full_scan_result, scan_type));
+        });
+
+        Produces::ok(())
+    }
+
     async fn get_for_full_scan(
         &mut self,
     ) -> Result<(FullScanRequest<KeychainKind>, TxGraph, NodeClient)> {
@@ -1249,8 +1305,10 @@ impl WalletActor {
             }
         }
 
-        // only mark as scan complete when the expanded full scan is complete
-        if full_scan_type == FullScanType::Expanded {
+        // only mark as scan complete when the scan covered at least the
+        // expanded 150-address gap; smaller rescans must not persist this
+        // or the automatic expanded scan will be skipped next boot.
+        if full_scan_type.covers_expanded() {
             let now = jiff::Timestamp::now().as_second() as u64;
             self.wallet.metadata.internal.performed_full_scan_at = Some(now);
             Database::global().wallets.update_internal_metadata(&self.wallet.metadata)?;

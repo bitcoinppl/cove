@@ -8807,6 +8807,8 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
      */
     func requiredDeletionConfirmations()  -> UInt8
     
+    func rescanWalletWithGapLimit(gapLimit: UInt32) async throws 
+    
     func saveUnsignedTransaction(details: ConfirmDetails) throws 
     
     func selectedFiatCurrency()  -> FiatCurrency
@@ -9546,6 +9548,23 @@ open func requiredDeletionConfirmations() -> UInt8  {
             self.uniffiCloneHandle(),$0
     )
 })
+}
+    
+open func rescanWalletWithGapLimit(gapLimit: UInt32)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_rustwalletmanager_rescan_wallet_with_gap_limit(
+                    self.uniffiCloneHandle(),
+                    FfiConverterUInt32.lower(gapLimit)
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_void,
+            completeFunc: ffi_cove_rust_future_complete_void,
+            freeFunc: ffi_cove_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeWalletManagerError_lift
+        )
 }
     
 open func saveUnsignedTransaction(details: ConfirmDetails)throws   {try rustCallWithError(FfiConverterTypeWalletManagerError_lift) {
@@ -36855,6 +36874,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_required_deletion_confirmations() != 30427) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustwalletmanager_rescan_wallet_with_gap_limit() != 28630) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_save_unsigned_transaction() != 43358) {

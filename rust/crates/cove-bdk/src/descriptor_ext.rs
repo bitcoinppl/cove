@@ -319,4 +319,24 @@ mod tests {
             "expected MultisigNotSupported, got {result:?}"
         );
     }
+
+    #[test]
+    fn sh_wsh_sortedmulti_full_origin_returns_multisig_not_supported() {
+        let desc = sh_wsh_sortedmulti_desc();
+        let result = desc.full_origin();
+        assert!(
+            matches!(result, Err(Error::MultisigNotSupported)),
+            "expected MultisigNotSupported, got {result:?}"
+        );
+    }
+
+    #[test]
+    fn sh_wsh_sortedmulti_origin_returns_multisig_not_supported() {
+        let desc = sh_wsh_sortedmulti_desc();
+        let result = desc.origin();
+        assert!(
+            matches!(result, Err(Error::MultisigNotSupported)),
+            "expected MultisigNotSupported, got {result:?}"
+        );
+    }
 }

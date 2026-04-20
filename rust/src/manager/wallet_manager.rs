@@ -12,6 +12,7 @@ use parking_lot::RwLock;
 use tap::TapFallible as _;
 use tracing::{debug, error, warn};
 
+use cove_common::consts::MAX_RESCAN_GAP_LIMIT;
 use cove_tokio::task::{self, spawn_actor};
 use cove_util::{format::NumberFormatter as _, result_ext::ResultExt as _};
 
@@ -1001,6 +1002,24 @@ impl RustWalletManager {
         tokio::spawn(async move {
             send!(actor.wallet_scan_and_notify(true));
         });
+    }
+
+    #[uniffi::method]
+    pub async fn rescan_wallet_with_gap_limit(&self, gap_limit: u32) -> Result<(), Error> {
+        debug!("rescan_wallet_with_gap_limit: {} gap_limit={}", self.id, gap_limit);
+
+        if gap_limit == 0 || gap_limit > MAX_RESCAN_GAP_LIMIT {
+            return Err(Error::WalletScanError(format!(
+                "gap_limit must be between 1 and {MAX_RESCAN_GAP_LIMIT}",
+            )));
+        }
+
+        let actor = self.actor.clone();
+        task::spawn(async move {
+            send!(actor.perform_rescan_full_scan(gap_limit));
+        });
+
+        Ok(())
     }
 
     #[uniffi::method]
