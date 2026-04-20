@@ -496,17 +496,24 @@ impl RustOnboardingManager {
         outcome: CloudCheckOutcome,
         connected: bool,
     ) -> bool {
-        self.apply_event(InternalEvent::CloudCheckFinished(outcome));
-        self.cloud_check_in_flight.store(false, Ordering::Release);
+        self.mutate_state(|state, deferred| {
+            state.flow.apply_event(
+                InternalEvent::CloudCheckFinished(outcome),
+                &mut state.cloud_restore_discovery,
+                state.restore_offer_allowed,
+            );
+            self.cloud_check_in_flight.store(false, Ordering::Release);
 
-        if !self.pending_cloud_check_retry.swap(false, Ordering::AcqRel)
-            || outcome != CloudCheckOutcome::Inconclusive(CloudCheckIssue::Offline)
-            || !connected
-        {
-            return false;
-        }
+            let should_retry = self.pending_cloud_check_retry.swap(false, Ordering::AcqRel)
+                && outcome == CloudCheckOutcome::Inconclusive(CloudCheckIssue::Offline)
+                && connected;
+            if should_retry && state.prepare_offline_cloud_check_retry(deferred) {
+                return true;
+            }
 
-        self.prepare_offline_cloud_check_retry()
+            state.sync_ui(deferred);
+            false
+        })
     }
 
     fn apply_event(&self, event: InternalEvent) {
@@ -2420,6 +2427,29 @@ mod tests {
         assert!(!manager.pending_cloud_check_retry.load(Ordering::Acquire));
         assert_eq!(manager.state().cloud_restore_state, OnboardingCloudRestoreState::Checking);
         assert_eq!(manager.state().cloud_restore_message, None);
+        assert_no_reconcile_messages(&manager);
+    }
+
+    #[test]
+    fn startup_restore_retry_after_offline_finish_skips_transient_offline_messages() {
+        let manager = preview_manager(
+            FlowState::CloudCheck { origin: RestoreOrigin::Startup },
+            CloudRestoreDiscovery::Checking,
+        );
+        manager.cloud_check_in_flight.store(true, Ordering::Release);
+
+        manager.handle_connectivity_change(true);
+
+        assert!(manager.finish_cloud_check_and_prepare_retry(
+            CloudCheckOutcome::Inconclusive(CloudCheckIssue::Offline),
+            true,
+        ));
+        assert!(!manager.cloud_check_in_flight.load(Ordering::Acquire));
+        assert!(!manager.pending_cloud_check_retry.load(Ordering::Acquire));
+        assert_eq!(manager.state().step, OnboardingStep::CloudCheck);
+        assert_eq!(manager.state().cloud_restore_state, OnboardingCloudRestoreState::Checking);
+        assert_eq!(manager.state().cloud_restore_message, None);
+        assert_no_reconcile_messages(&manager);
     }
 
     #[test]
@@ -2624,6 +2654,10 @@ mod tests {
             reconciler: MessageSender::new(sender),
             reconcile_receiver: Arc::new(receiver),
         })
+    }
+
+    fn assert_no_reconcile_messages(manager: &RustOnboardingManager) {
+        assert!(matches!(manager.reconcile_receiver.try_recv(), Err(flume::TryRecvError::Empty)));
     }
 
     fn prepare_offline_cloud_check_retry(state: &mut InternalState) -> bool {
