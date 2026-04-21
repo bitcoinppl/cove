@@ -441,11 +441,26 @@ impl RustOnboardingManager {
             return;
         }
 
-        if self.cloud_check_in_flight.load(Ordering::Acquire) {
-            self.pending_cloud_check_retry.store(true, Ordering::Release);
+        if self.cloud_check_in_flight.load(Ordering::Acquire)
+            && !self.mark_pending_cloud_check_retry()
+        {
             return;
         }
 
+        self.start_offline_cloud_check_retry();
+    }
+
+    fn mark_pending_cloud_check_retry(&self) -> bool {
+        self.pending_cloud_check_retry.store(true, Ordering::Release);
+
+        if self.cloud_check_in_flight.load(Ordering::Acquire) {
+            return false;
+        }
+
+        self.pending_cloud_check_retry.swap(false, Ordering::AcqRel)
+    }
+
+    fn start_offline_cloud_check_retry(self: &Arc<Self>) {
         if !self.prepare_offline_cloud_check_retry() {
             return;
         }
@@ -2427,6 +2442,27 @@ mod tests {
         assert_eq!(manager.state().cloud_restore_state, OnboardingCloudRestoreState::Checking);
         assert_eq!(manager.state().cloud_restore_message, None);
         assert_no_reconcile_messages(&manager);
+    }
+
+    #[test]
+    fn late_pending_connectivity_retry_after_offline_finish_is_taken_over() {
+        let manager = preview_manager(
+            FlowState::Welcome { error_message: None },
+            CloudRestoreDiscovery::Checking,
+        );
+        manager.cloud_check_in_flight.store(true, Ordering::Release);
+
+        assert!(!manager.finish_cloud_check_and_prepare_retry(
+            CloudCheckOutcome::Inconclusive(CloudCheckIssue::Offline),
+            true,
+        ));
+        assert_eq!(manager.state().cloud_restore_state, OnboardingCloudRestoreState::Inconclusive);
+
+        assert!(manager.mark_pending_cloud_check_retry());
+        assert!(!manager.pending_cloud_check_retry.load(Ordering::Acquire));
+        assert!(manager.prepare_offline_cloud_check_retry());
+        assert_eq!(manager.state().cloud_restore_state, OnboardingCloudRestoreState::Checking);
+        assert_eq!(manager.state().cloud_restore_message, None);
     }
 
     #[test]
