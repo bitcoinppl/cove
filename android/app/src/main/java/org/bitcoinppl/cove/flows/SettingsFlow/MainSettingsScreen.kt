@@ -257,7 +257,6 @@ fun MainSettingsScreen(
                         }
                     }
                 }
-
                 if (isBetaEnabled && !Auth.isInDecoyMode()) {
                     BetaToggleSection(
                         isBetaEnabled = isBetaEnabled,
