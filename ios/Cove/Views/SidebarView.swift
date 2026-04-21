@@ -186,10 +186,10 @@ struct SidebarView: View {
         app.wallets = reordered
         HapticFeedback.progress.trigger()
 
-        persistWalletOrder(orderedIds: reordered.map(\.id), previous: previous)
+        persistWalletOrder(orderedIds: reordered.map(\.id))
     }
 
-    private func persistWalletOrder(orderedIds: [WalletId], previous: [WalletMetadata]) {
+    private func persistWalletOrder(orderedIds: [WalletId]) {
         let database = app.database
         let appRef = app
         let pending = reorderTask
@@ -204,14 +204,14 @@ struct SidebarView: View {
                 await MainActor.run {
                     if appRef.wallets.map(\.id) == orderedIds {
                         appRef.wallets = persisted
+                        HapticFeedback.success.trigger()
                     }
-                    HapticFeedback.success.trigger()
                 }
             } catch {
                 Log.error("Failed to reorder wallets: \(error)")
                 await MainActor.run {
                     if appRef.wallets.map(\.id) == orderedIds {
-                        appRef.wallets = previous
+                        appRef.loadWallets()
                     }
                 }
             }

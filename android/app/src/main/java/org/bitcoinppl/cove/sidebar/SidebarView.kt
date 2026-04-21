@@ -56,6 +56,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.AppManager
@@ -90,6 +91,8 @@ fun SidebarView(
     var draggedWalletId by remember { mutableStateOf<WalletId?>(null) }
     var draggedOffsetY by remember { mutableFloatStateOf(0f) }
     var itemHeightPx by remember { mutableFloatStateOf(0f) }
+    var preDragSnapshot by remember { mutableStateOf<List<WalletMetadata>>(emptyList()) }
+    var pendingReorderJob by remember { mutableStateOf<Job?>(null) }
 
     LaunchedEffect(app.wallets) {
         if (draggedWalletId == null) walletList = app.wallets
@@ -185,6 +188,7 @@ fun SidebarView(
                             detectDragGesturesAfterLongPress(
                                 onDragStart = {
                                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    preDragSnapshot = walletList
                                     draggedWalletId = wallet.id
                                     draggedOffsetY = 0f
                                 },
@@ -217,20 +221,28 @@ fun SidebarView(
                                 },
                                 onDragEnd = {
                                     val orderedIds = walletList.map { it.id }
-                                    val previous = app.wallets
-                                    persistReorder(
-                                        scope = scope,
-                                        app = app,
-                                        orderedIds = orderedIds,
-                                        previous = previous,
-                                        haptics = haptics,
-                                        onRollback = { walletList = previous },
-                                    )
+                                    pendingReorderJob =
+                                        persistReorder(
+                                            scope = scope,
+                                            app = app,
+                                            previousJob = pendingReorderJob,
+                                            orderedIds = orderedIds,
+                                            haptics = haptics,
+                                            currentOptimisticIds = { walletList.map { it.id } },
+                                            onAdoptAuthoritative = { authoritative ->
+                                                walletList = authoritative
+                                                app.loadWallets()
+                                            },
+                                            onFailureResync = {
+                                                app.loadWallets()
+                                                walletList = app.wallets
+                                            },
+                                        )
                                     draggedWalletId = null
                                     draggedOffsetY = 0f
                                 },
                                 onDragCancel = {
-                                    walletList = app.wallets
+                                    walletList = preDragSnapshot
                                     draggedWalletId = null
                                     draggedOffsetY = 0f
                                 },
@@ -312,24 +324,33 @@ fun SidebarView(
 private fun persistReorder(
     scope: CoroutineScope,
     app: AppManager,
+    previousJob: Job?,
     orderedIds: List<WalletId>,
-    previous: List<WalletMetadata>,
     haptics: HapticFeedback,
-    onRollback: () -> Unit,
-) {
+    currentOptimisticIds: () -> List<WalletId>,
+    onAdoptAuthoritative: (List<WalletMetadata>) -> Unit,
+    onFailureResync: () -> Unit,
+): Job =
     scope.launch {
+        previousJob?.join()
+
         val result =
             withContext(Dispatchers.IO) {
                 runCatching { app.database.wallets().reorderWallets(orderedIds) }
             }
-        result.onSuccess {
-            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+
+        val stillCurrent = currentOptimisticIds() == orderedIds
+
+        result.onSuccess { authoritative ->
+            if (stillCurrent) {
+                onAdoptAuthoritative(authoritative)
+                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            }
         }.onFailure { error ->
             Log.e(TAG, "Failed to reorder wallets: ${error.message}")
-            onRollback()
+            if (stillCurrent) onFailureResync()
         }
     }
-}
 
 @Composable
 private fun WalletItem(
