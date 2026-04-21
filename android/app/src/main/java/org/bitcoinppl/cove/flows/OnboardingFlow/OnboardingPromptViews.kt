@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.ClickableText
@@ -42,7 +41,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -84,7 +82,7 @@ internal fun CloudCheckContent() {
             Spacer(modifier = Modifier.size(10.dp))
 
             Text(
-                text = "Cove may ask for Google Drive access so it can check whether you already have a backup",
+                text = "This only takes a moment",
                 color = OnboardingTextSecondary,
                 style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center,
@@ -193,13 +191,10 @@ private fun OnboardingTermsCheckboxCard(
             Modifier
                 .fillMaxWidth()
                 .background(OnboardingCardFill, RoundedCornerShape(16.dp))
-                .toggleable(
-                    value = checked,
-                    role = Role.Checkbox,
+                .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
-                    onValueChange = onCheckedChange,
-                )
+                ) { onCheckedChange(!checked) }
                 .padding(horizontal = 16.dp, vertical = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalAlignment = Alignment.Top,
@@ -260,13 +255,10 @@ private fun OnboardingTermsAgreementCard(
             Modifier
                 .fillMaxWidth()
                 .background(OnboardingCardFill, RoundedCornerShape(16.dp))
-                .toggleable(
-                    value = checked,
-                    role = Role.Checkbox,
+                .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
-                    onValueChange = onCheckedChange,
-                )
+                ) { onCheckedChange(!checked) }
                 .padding(horizontal = 16.dp, vertical = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalAlignment = Alignment.Top,

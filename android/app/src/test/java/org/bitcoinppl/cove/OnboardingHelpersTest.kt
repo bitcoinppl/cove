@@ -4,7 +4,6 @@ import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingRestorePhase
 import org.bitcoinppl.cove.flows.OnboardingFlow.combinedRestoreProgress
 import org.bitcoinppl.cove.flows.OnboardingFlow.resolveRestorePhase
 import org.bitcoinppl.cove.flows.OnboardingFlow.shouldCompleteOnboardingCloudBackup
-import org.bitcoinppl.cove.flows.OnboardingFlow.shouldNotifyRestoreError
 import org.bitcoinppl.cove_core.CloudBackupRestoreProgress
 import org.bitcoinppl.cove_core.CloudBackupRestoreReport
 import org.bitcoinppl.cove_core.CloudBackupRestoreStage
@@ -21,77 +20,11 @@ import org.junit.Test
 
 class OnboardingHelpersTest {
     @Test
-    fun resolveStartupModeMirrorsIosStartupShell() {
-        assertEquals(
-            StartupMode.ONBOARDING,
-            resolveStartupMode(
-                termsAccepted = false,
-                hasWallets = false,
-                cloudBackupStatus = CloudBackupStatus.Disabled,
-                hasPersistedOnboardingProgress = false,
-            ),
-        )
-        assertEquals(
-            StartupMode.ONBOARDING,
-            resolveStartupMode(
-                termsAccepted = false,
-                hasWallets = true,
-                cloudBackupStatus = CloudBackupStatus.Enabled,
-                hasPersistedOnboardingProgress = false,
-            ),
-        )
-        assertEquals(
-            StartupMode.ONBOARDING,
-            resolveStartupMode(
-                termsAccepted = true,
-                hasWallets = false,
-                cloudBackupStatus = CloudBackupStatus.Disabled,
-                hasPersistedOnboardingProgress = false,
-            ),
-        )
-        assertEquals(
-            StartupMode.READY,
-            resolveStartupMode(
-                termsAccepted = true,
-                hasWallets = false,
-                cloudBackupStatus = CloudBackupStatus.Enabled,
-                hasPersistedOnboardingProgress = false,
-            ),
-        )
-        assertEquals(
-            StartupMode.READY,
-            resolveStartupMode(
-                termsAccepted = true,
-                hasWallets = false,
-                cloudBackupStatus = CloudBackupStatus.PasskeyMissing,
-                hasPersistedOnboardingProgress = false,
-            ),
-        )
-        assertEquals(
-            StartupMode.READY,
-            resolveStartupMode(
-                termsAccepted = true,
-                hasWallets = true,
-                cloudBackupStatus = CloudBackupStatus.Disabled,
-                hasPersistedOnboardingProgress = false,
-            ),
-        )
-        assertEquals(
-            StartupMode.ONBOARDING,
-            resolveStartupMode(
-                termsAccepted = true,
-                hasWallets = true,
-                cloudBackupStatus = CloudBackupStatus.Enabled,
-                hasPersistedOnboardingProgress = true,
-            ),
-        )
-    }
-
-    @Test
-    fun persistedOnboardingProgressRequiresNonBlankState() {
-        assertFalse(hasPersistedOnboardingProgress(null))
-        assertFalse(hasPersistedOnboardingProgress(""))
-        assertTrue(hasPersistedOnboardingProgress("""{"step":"backup_wallet"}"""))
+    fun shouldStartOnboardingRequiresAcceptedTermsAndWallets() {
+        assertTrue(shouldStartOnboarding(termsAccepted = false, hasWallets = false))
+        assertTrue(shouldStartOnboarding(termsAccepted = false, hasWallets = true))
+        assertTrue(shouldStartOnboarding(termsAccepted = true, hasWallets = false))
+        assertFalse(shouldStartOnboarding(termsAccepted = true, hasWallets = true))
     }
 
     @Test
@@ -170,18 +103,6 @@ class OnboardingHelpersTest {
             )
         assertTrue(errorPhase is OnboardingRestorePhase.Error)
         assertEquals("restore failed", (errorPhase as OnboardingRestorePhase.Error).message)
-    }
-
-    @Test
-    fun shouldNotifyRestoreErrorOnlyForFirstRestoringError() {
-        assertTrue(shouldNotifyRestoreError(OnboardingRestorePhase.Restoring, hasDeliveredError = false))
-        assertFalse(shouldNotifyRestoreError(OnboardingRestorePhase.Restoring, hasDeliveredError = true))
-        assertFalse(
-            shouldNotifyRestoreError(
-                currentPhase = OnboardingRestorePhase.Error("restore failed"),
-                hasDeliveredError = false,
-            ),
-        )
     }
 
     @Test

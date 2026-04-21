@@ -82,8 +82,6 @@ internal enum class CloudBackupEnableOnboardingContext {
     HARDWARE_IMPORT,
 }
 
-internal const val RESTORE_TIMEOUT_MESSAGE = "Restore timed out. Please try again."
-
 internal sealed interface OnboardingRestorePhase {
     data object Restoring : OnboardingRestorePhase
 
@@ -132,11 +130,6 @@ internal fun resolveRestorePhase(
         }
         else -> currentPhase
     }
-
-internal fun shouldNotifyRestoreError(
-    currentPhase: OnboardingRestorePhase,
-    hasDeliveredError: Boolean,
-): Boolean = currentPhase is OnboardingRestorePhase.Restoring && !hasDeliveredError
 
 internal fun shouldCompleteOnboardingCloudBackup(
     status: CloudBackupStatus,
@@ -828,23 +821,12 @@ internal fun OnboardingRestoreView(
     var phase by remember { mutableStateOf<OnboardingRestorePhase>(OnboardingRestorePhase.Restoring) }
     var hasStartedRestore by remember { mutableStateOf(false) }
     var hasDeliveredCompletion by remember { mutableStateOf(false) }
-    var hasDeliveredError by remember { mutableStateOf(false) }
     var timeoutNonce by remember { mutableStateOf(0) }
-
-    fun failRestore(message: String) {
-        val shouldNotify = shouldNotifyRestoreError(phase, hasDeliveredError)
-        phase = OnboardingRestorePhase.Error(message)
-        if (shouldNotify) {
-            hasDeliveredError = true
-            onError(message)
-        }
-    }
 
     fun startRestore() {
         phase = OnboardingRestorePhase.Restoring
         hasStartedRestore = true
         hasDeliveredCompletion = false
-        hasDeliveredError = false
         timeoutNonce += 1
         backupManager.dispatch(CloudBackupManagerAction.RestoreFromCloudBackup)
     }
@@ -863,10 +845,9 @@ internal fun OnboardingRestoreView(
     LaunchedEffect(backupManager.status, backupManager.state.restoreReport) {
         val nextPhase = resolveRestorePhase(backupManager.status, backupManager.state.restoreReport, phase)
         if (nextPhase != phase) {
+            phase = nextPhase
             if (nextPhase is OnboardingRestorePhase.Error) {
-                failRestore(nextPhase.message)
-            } else {
-                phase = nextPhase
+                onError(nextPhase.message)
             }
         }
     }
@@ -876,7 +857,7 @@ internal fun OnboardingRestoreView(
         delay(120_000)
         if (phase != OnboardingRestorePhase.Restoring) return@LaunchedEffect
         backupManager.dispatch(CloudBackupManagerAction.CancelRestore)
-        failRestore(RESTORE_TIMEOUT_MESSAGE)
+        phase = OnboardingRestorePhase.Error("Restore timed out. Please try again.")
     }
 
     OnboardingRestoreContent(
@@ -1019,11 +1000,6 @@ internal fun OnboardingExchangeFundingView(
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(walletId) {
-        walletManager = null
-        addressRaw = null
-        addressText = null
-        errorMessage = null
-
         if (walletId == null) {
             errorMessage = "Unable to load a deposit address for this wallet."
             return@LaunchedEffect

@@ -53,6 +53,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -76,6 +77,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.cloudbackup.CloudBackupPresentationHost
 import org.bitcoinppl.cove.cloudbackup.ForegroundUiBridge
+import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingContainer
 import org.bitcoinppl.cove.flows.TapSignerFlow.TapSignerContainer
 import org.bitcoinppl.cove.navigation.CoveNavDisplay
 import org.bitcoinppl.cove.nfc.NfcScanSheet
@@ -83,7 +85,6 @@ import org.bitcoinppl.cove.nfc.TapCardNfcManager
 import org.bitcoinppl.cove.sidebar.SidebarContainer
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove.views.LockView
-import org.bitcoinppl.cove.views.TermsAndConditionsSheet
 import org.bitcoinppl.cove_core.bootstrap
 import org.bitcoinppl.cove_core.activeMigration
 import org.bitcoinppl.cove_core.bootstrapProgress
@@ -114,6 +115,11 @@ class MainActivity : FragmentActivity() {
     private var isBootstrapped = false
     private var authorizationLauncher: ActivityResultLauncher<IntentSenderRequest>? = null
     private var isPrivacyCoverVisible by mutableStateOf(false)
+
+    private enum class StartupMode {
+        ONBOARDING,
+        READY,
+    }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
@@ -303,6 +309,25 @@ class MainActivity : FragmentActivity() {
             }
 
             val app = remember { AppManager.getInstance() }
+            val auth = remember { AuthManager.getInstance() }
+            val snackbarHostState = remember { SnackbarHostState() }
+            var startupMode by remember {
+                mutableStateOf(
+                    if (shouldStartOnboarding(app.isTermsAccepted, app.hasWallets)) {
+                        StartupMode.ONBOARDING
+                    } else {
+                        StartupMode.READY
+                    },
+                )
+            }
+            val onboardingManager =
+                remember(startupMode) {
+                    if (startupMode == StartupMode.ONBOARDING) {
+                        OnboardingManager(app)
+                    } else {
+                        null
+                    }
+                }
 
             // compute dark theme based on user preference
             val systemDarkTheme = isSystemInDarkTheme()
@@ -314,54 +339,59 @@ class MainActivity : FragmentActivity() {
                 }
 
             CoveTheme(darkTheme = darkTheme) {
-                if (!app.isTermsAccepted) {
-                    // fullscreen blocking terms view (matches iOS behavior)
-                    FullScreenTermsView(app = app)
-                } else {
-                    val auth = remember { AuthManager.getInstance() }
-                    val snackbarHostState = remember { SnackbarHostState() }
+                DisposableEffect(onboardingManager) {
+                    onDispose {
+                        onboardingManager?.close()
+                    }
+                }
 
-                    CloudBackupPresentationHost(
-                        app = app,
-                        auth = auth,
-                        isCoverPresented = isPrivacyCoverVisible,
-                    ) {
-                        Scaffold(
-                            containerColor = Color.Transparent,
-                            contentWindowInsets = WindowInsets(0),
-                            snackbarHost = {
-                                SnackbarHost(
-                                    hostState = snackbarHostState,
-                                    modifier = Modifier.padding(WindowInsets.navigationBars.asPaddingValues()),
-                                )
-                            },
-                        ) { _ ->
-                            Box(modifier = Modifier.fillMaxSize()) {
-                                LockView {
-                                    SidebarContainer(app = app) {
-                                        // NavDisplay handles transitions and back gestures
-                                        // key resets view when network/routeId changes
-                                        key(app.selectedNetwork, app.routeId) {
-                                            CoveNavDisplay(app = app)
-                                        }
+                CloudBackupPresentationHost(
+                    app = app,
+                    auth = auth,
+                    isCoverPresented = isPrivacyCoverVisible,
+                ) {
+                    Scaffold(
+                        containerColor = Color.Transparent,
+                        contentWindowInsets = WindowInsets(0),
+                        snackbarHost = {
+                            SnackbarHost(
+                                hostState = snackbarHostState,
+                                modifier = Modifier.padding(WindowInsets.navigationBars.asPaddingValues()),
+                            )
+                        },
+                    ) { _ ->
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            when (startupMode) {
+                                StartupMode.ONBOARDING -> {
+                                    if (onboardingManager != null) {
+                                        OnboardingContainer(
+                                            manager = onboardingManager,
+                                            onComplete = { startupMode = StartupMode.READY },
+                                        )
                                     }
                                 }
+                                StartupMode.READY ->
+                                    LockView {
+                                        SidebarContainer(app = app) {
+                                            key(app.selectedNetwork, app.routeId) {
+                                                CoveNavDisplay(app = app)
+                                            }
+                                        }
+                                    }
+                            }
 
-                                // global sheet rendering
-                                app.sheetState?.let { taggedState ->
-                                    SheetContent(
-                                        state = taggedState,
-                                        app = app,
-                                        onDismiss = { app.sheetState = null },
-                                    )
-                                }
-
-                                // global alert rendering
-                                GlobalAlertHandler(
+                            app.sheetState?.let { taggedState ->
+                                SheetContent(
+                                    state = taggedState,
                                     app = app,
-                                    snackbarHostState = snackbarHostState,
+                                    onDismiss = { app.sheetState = null },
                                 )
                             }
+
+                            GlobalAlertHandler(
+                                app = app,
+                                snackbarHostState = snackbarHostState,
+                            )
                         }
                     }
                 }
@@ -1064,44 +1094,6 @@ private fun SplashLoadingView(
                     trackColor = Color.White.copy(alpha = 0.2f),
                 )
             }
-        }
-    }
-}
-
-@Composable
-private fun FullScreenTermsView(app: AppManager) {
-    // prevent back button from dismissing
-    BackHandler { }
-
-    Box(
-        modifier =
-            Modifier
-                .fillMaxSize()
-                .background(Color.Black),
-    ) {
-        // Cove icon at top center (visible behind terms content)
-        Image(
-            painter = painterResource(id = R.drawable.cove_logo),
-            contentDescription = "Cove",
-            modifier =
-                Modifier
-                    .align(Alignment.TopCenter)
-                    .statusBarsPadding()
-                    .padding(top = 24.dp)
-                    .size(100.dp)
-                    .clip(RoundedCornerShape(20.dp)),
-        )
-
-        // Terms content - starts below icon, fills rest of screen
-        Surface(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .fillMaxHeight(0.88f)
-                    .align(Alignment.BottomCenter),
-            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-        ) {
-            TermsAndConditionsSheet(app = app)
         }
     }
 }
