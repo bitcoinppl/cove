@@ -174,11 +174,8 @@ impl TransactionDetails {
             input_indexes,
             output_indexes,
             change_address,
-<<<<<<< HEAD
             is_rbf_signaling,
-=======
             lock_state: LockState::Unlocked,
->>>>>>> 8efa730c (refactor: integrate UTXO lock state natively into WalletActor and TransactionDetails)
         };
 
         Ok(me)
@@ -500,11 +497,8 @@ impl TransactionDetails {
             input_indexes: vec![],
             output_indexes: vec![],
             change_address: None,
-<<<<<<< HEAD
             is_rbf_signaling: false,
-=======
             lock_state: LockState::Unlocked,
->>>>>>> 8efa730c (refactor: integrate UTXO lock state natively into WalletActor and TransactionDetails)
         }
     }
 

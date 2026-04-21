@@ -947,20 +947,16 @@ impl WalletActor {
     /// These are the only outpoints that should be considered for lock state:
     /// - **wallet-owned**: we only care about our own outputs
     /// - **unspent**: locking a spent output is meaningless
-    fn wallet_owned_unspent_outpoints_for_tx(
-        &self,
-        tx_id: TxId,
-    ) -> Result<Vec<OutPoint>, Error> {
+    fn wallet_owned_unspent_outpoints_for_tx(&self, tx_id: TxId) -> Result<Vec<OutPoint>, Error> {
         let unspent_set: std::collections::HashSet<OutPoint> =
             self.wallet.bdk.list_unspent().map(|u| u.outpoint).collect();
 
         // The transaction's outputs that are both wallet-owned and still unspent
         let txid = tx_id.0;
-        let tx = self
-            .wallet
-            .bdk
-            .get_tx(txid)
-            .ok_or_else(|| Error::TransactionDetailsError("transaction not found".to_string()))?;
+        let tx =
+            self.wallet.bdk.get_tx(txid).ok_or_else(|| {
+                Error::TransactionDetailsError("transaction not found".to_string())
+            })?;
 
         let unspent_ops = tx
             .tx_node
@@ -1603,22 +1599,28 @@ async fn check_node_connection_inner(node: &Node) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bdk_wallet::bitcoin::{Transaction, TxOut, ScriptBuf, Sequence, Witness, OutPoint, TxIn, Amount, absolute};
     use crate::wallet::Wallet;
+    use bdk_wallet::bitcoin::{
+        Amount, OutPoint, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Witness, absolute,
+    };
     use flume;
 
     #[tokio::test]
     async fn test_wallet_owned_unspent_filtering() {
         crate::database::delete_database();
-        
-        // Use the public preview constructor to bypass private wallet methods 
+
+        // Use the public preview constructor to bypass private wallet methods
         let wallet = Wallet::preview_new_wallet();
-        
+
         let (reconciler, _) = flume::unbounded();
         let mut actor = WalletActor::new(wallet, reconciler).unwrap();
 
         // 1. Generate an address tracked by the wallet natively
-        let addr = actor.wallet.bdk.next_unused_address(bdk_wallet::KeychainKind::External).script_pubkey();
+        let addr = actor
+            .wallet
+            .bdk
+            .next_unused_address(bdk_wallet::KeychainKind::External)
+            .script_pubkey();
 
         // 2. Build a mock transaction with 2 outputs
         // Output 0: wallet-owned (using the addr we just tracked)
@@ -1638,8 +1640,9 @@ mod tests {
         actor.wallet.bdk.apply_unconfirmed_txs([(tx.clone(), 0)]);
 
         // 4. Test filtering: Should ONLY return Output 0 (wallet-owned and currently unspent)
-        let filtered_ops = actor.wallet_owned_unspent_outpoints_for_tx(cove_types::TxId(txid)).unwrap();
-        
+        let filtered_ops =
+            actor.wallet_owned_unspent_outpoints_for_tx(cove_types::TxId(txid)).unwrap();
+
         assert_eq!(filtered_ops.len(), 1, "Only wallet-owned outputs should be returned");
         assert_eq!(filtered_ops[0].vout, 0, "The correct wallet-owned vout was not filtered");
 
@@ -1660,9 +1663,13 @@ mod tests {
         actor.wallet.bdk.apply_unconfirmed_txs([(spend_tx, 0)]);
 
         // 7. Test filtering again for the original transaction
-        let filtered_ops_after_spend = actor.wallet_owned_unspent_outpoints_for_tx(cove_types::TxId(txid)).unwrap();
+        let filtered_ops_after_spend =
+            actor.wallet_owned_unspent_outpoints_for_tx(cove_types::TxId(txid)).unwrap();
 
         // 8. Result should now be completely empty
-        assert!(filtered_ops_after_spend.is_empty(), "Spent outputs must be aggressively ignored by the filter");
+        assert!(
+            filtered_ops_after_spend.is_empty(),
+            "Spent outputs must be aggressively ignored by the filter"
+        );
     }
 }
