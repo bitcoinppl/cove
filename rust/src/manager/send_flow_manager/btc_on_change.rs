@@ -44,8 +44,8 @@ impl BtcOnChangeHandler {
 
         let old = old_value.trim();
 
-        // strip currency tokens from pasted input (e.g. "100 SATS" → "100"). #314
-        let Some(new) = sanitize::sanitize_amount(new_value.trim()) else {
+        // strip BTC-unit tokens from pasted input (e.g. "100 SATS" → "100"). #314
+        let Some(new) = sanitize::sanitize_btc_amount(new_value.trim()) else {
             return Changeset { entering_amount_btc: Some(old.into()), ..Default::default() };
         };
 

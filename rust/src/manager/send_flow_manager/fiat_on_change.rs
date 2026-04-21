@@ -63,8 +63,8 @@ impl FiatOnChangeHandler {
         let old_value = old_value.trim();
         let new_value = new_value.trim();
 
-        // strip currency tokens from pasted amounts (e.g. "$12.50", "12.50 USD")
-        let Some(new_value) = sanitize::sanitize_amount(new_value) else {
+        // strip fiat tokens from pasted amounts (e.g. "$12.50", "12.50 USD"); rejects BTC/SATS
+        let Some(new_value) = sanitize::sanitize_fiat_amount(new_value) else {
             return Ok(Changeset {
                 entering_fiat_amount: Some(old_value.to_string()),
                 ..Default::default()
@@ -262,22 +262,29 @@ mod tests {
     fn pasting_amount_with_chf_suffix_is_accepted() {
         let h = handler();
         let result = h.on_change("$0", "100 CHF").unwrap();
-        assert!(result.fiat_value.is_some(), "100 CHF should parse as a fiat amount");
+        // CHF is a fiat token — strips to "100", treated as 100 USD
+        assert_eq!(result.fiat_value, Some(100.0));
         assert!(result.btc_amount.is_some());
     }
 
     #[test]
-    fn pasting_amount_with_btc_suffix_is_accepted() {
+    fn pasting_amount_with_btc_suffix_is_rejected() {
         let h = handler();
         let result = h.on_change("$0", "0.5 BTC").unwrap();
-        assert!(result.fiat_value.is_some(), "0.5 BTC should parse as a numeric amount");
+        // BTC is not a fiat token — should revert to old value
+        assert_eq!(result.entering_fiat_amount.as_deref(), Some("$0"));
+        assert!(result.fiat_value.is_none());
+        assert!(result.btc_amount.is_none());
     }
 
     #[test]
-    fn pasting_amount_with_sats_suffix_is_accepted() {
+    fn pasting_amount_with_sats_suffix_is_rejected() {
         let h = handler();
         let result = h.on_change("$0", "1000 SATS").unwrap();
-        assert!(result.fiat_value.is_some(), "1000 SATS should parse after stripping suffix");
+        // SATS is not a fiat token — should revert to old value
+        assert_eq!(result.entering_fiat_amount.as_deref(), Some("$0"));
+        assert!(result.fiat_value.is_none());
+        assert!(result.btc_amount.is_none());
     }
 
     #[test]
