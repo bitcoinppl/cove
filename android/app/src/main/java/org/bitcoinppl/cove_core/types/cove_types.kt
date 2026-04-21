@@ -694,9 +694,7 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_types_checksum_method_addresswithnetwork_network(
     ): Short
-    external fun uniffi_cove_types_checksum_method_addresswithnetwork_pj(
-    ): Short
-    external fun uniffi_cove_types_checksum_method_addresswithnetwork_pjos(
+    external fun uniffi_cove_types_checksum_method_addresswithnetwork_payjoin(
     ): Short
     external fun uniffi_cove_types_checksum_method_amount_as_btc(
     ): Short
@@ -966,9 +964,7 @@ internal object UniffiLib {
     ): Byte
     external fun uniffi_cove_types_fn_method_addresswithnetwork_network(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
-    external fun uniffi_cove_types_fn_method_addresswithnetwork_pj(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-    ): RustBuffer.ByValue
-    external fun uniffi_cove_types_fn_method_addresswithnetwork_pjos(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_types_fn_method_addresswithnetwork_payjoin(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_cove_types_fn_clone_amount(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Long
@@ -1490,10 +1486,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_types_checksum_method_addresswithnetwork_network() != 25441.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_addresswithnetwork_pj() != 25366.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_types_checksum_method_addresswithnetwork_pjos() != 29355.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_addresswithnetwork_payjoin() != 1526.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_method_amount_as_btc() != 12153.toShort()) {
@@ -3287,9 +3280,7 @@ public interface AddressWithNetworkInterface {
     
     fun `network`(): Network
     
-    fun `pj`(): kotlin.String?
-    
-    fun `pjos`(): kotlin.Boolean?
+    fun `payjoin`(): PayJoinParams?
     
     companion object
 }
@@ -3461,24 +3452,11 @@ open class AddressWithNetwork: Disposable, AutoCloseable, AddressWithNetworkInte
     }
     
 
-    override fun `pj`(): kotlin.String? {
-            return FfiConverterOptionalString.lift(
+    override fun `payjoin`(): PayJoinParams? {
+            return FfiConverterOptionalTypePayJoinParams.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_types_fn_method_addresswithnetwork_pj(
-        it,
-        _status)
-}
-    }
-    )
-    }
-    
-
-    override fun `pjos`(): kotlin.Boolean? {
-            return FfiConverterOptionalBoolean.lift(
-    callWithHandle {
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_types_fn_method_addresswithnetwork_pjos(
+    UniffiLib.uniffi_cove_types_fn_method_addresswithnetwork_payjoin(
         it,
         _status)
 }
@@ -9243,6 +9221,44 @@ public object FfiConverterTypeBlockSizeLast: FfiConverterRustBuffer<BlockSizeLas
 
 
 
+data class PayJoinParams (
+    var `endpoint`: kotlin.String
+    , 
+    var `outputSubstitution`: kotlin.Boolean
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypePayJoinParams: FfiConverterRustBuffer<PayJoinParams> {
+    override fun read(buf: ByteBuffer): PayJoinParams {
+        return PayJoinParams(
+            FfiConverterString.read(buf),
+            FfiConverterBoolean.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: PayJoinParams) = (
+            FfiConverterString.allocationSize(value.`endpoint`) +
+            FfiConverterBoolean.allocationSize(value.`outputSubstitution`)
+    )
+
+    override fun write(value: PayJoinParams, buf: ByteBuffer) {
+            FfiConverterString.write(value.`endpoint`, buf)
+            FfiConverterBoolean.write(value.`outputSubstitution`, buf)
+    }
+}
+
+
+
 data class Rgb (
     var `r`: kotlin.UByte
     , 
@@ -10539,38 +10555,6 @@ public object FfiConverterTypeUtxoType: FfiConverterRustBuffer<UtxoType> {
 /**
  * @suppress
  */
-public object FfiConverterOptionalBoolean: FfiConverterRustBuffer<kotlin.Boolean?> {
-    override fun read(buf: ByteBuffer): kotlin.Boolean? {
-        if (buf.get().toInt() == 0) {
-            return null
-        }
-        return FfiConverterBoolean.read(buf)
-    }
-
-    override fun allocationSize(value: kotlin.Boolean?): ULong {
-        if (value == null) {
-            return 1UL
-        } else {
-            return 1UL + FfiConverterBoolean.allocationSize(value)
-        }
-    }
-
-    override fun write(value: kotlin.Boolean?, buf: ByteBuffer) {
-        if (value == null) {
-            buf.put(0)
-        } else {
-            buf.put(1)
-            FfiConverterBoolean.write(value, buf)
-        }
-    }
-}
-
-
-
-
-/**
- * @suppress
- */
 public object FfiConverterOptionalString: FfiConverterRustBuffer<kotlin.String?> {
     override fun read(buf: ByteBuffer): kotlin.String? {
         if (buf.get().toInt() == 0) {
@@ -10657,6 +10641,38 @@ public object FfiConverterOptionalTypeFeeRateOptionWithTotalFee: FfiConverterRus
         } else {
             buf.put(1)
             FfiConverterTypeFeeRateOptionWithTotalFee.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypePayJoinParams: FfiConverterRustBuffer<PayJoinParams?> {
+    override fun read(buf: ByteBuffer): PayJoinParams? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypePayJoinParams.read(buf)
+    }
+
+    override fun allocationSize(value: PayJoinParams?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypePayJoinParams.allocationSize(value)
+        }
+    }
+
+    override fun write(value: PayJoinParams?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypePayJoinParams.write(value, buf)
         }
     }
 }
