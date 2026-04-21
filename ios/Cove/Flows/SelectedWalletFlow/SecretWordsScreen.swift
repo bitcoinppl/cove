@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import UIKit
 
 struct SecretWordsScreen: View {
     @Environment(AppManager.self) private var app
@@ -126,7 +125,6 @@ struct SecretWordsScreen: View {
         .sheet(isPresented: $showSeedQrSheet) {
             if let words {
                 SeedQrSheetView(words: words)
-                    .screenshotProtected()
             }
         }
         .background(
@@ -139,7 +137,6 @@ struct SecretWordsScreen: View {
         )
         .background(Color.midnightBlue)
         .tint(.white)
-        .screenshotProtected()
     }
 }
 

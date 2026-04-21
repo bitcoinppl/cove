@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import UIKit
 
 private let groupsOf = HotWalletImportScreen.GROUPS_OF
 
@@ -471,7 +470,6 @@ struct HotWalletImportScreen: View {
         )
         .background(Color.midnightBlue)
         .tint(.white)
-        .screenshotProtected()
     }
 
     // MARK: Alerts

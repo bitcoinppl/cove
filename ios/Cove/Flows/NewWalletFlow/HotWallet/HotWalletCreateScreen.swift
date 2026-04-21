@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import UIKit
 
 struct HotWalletCreateScreen: View {
     @State private var manager: PendingWalletManager
@@ -206,7 +205,6 @@ struct WordsView: View {
             )
         }
         .navigationBarBackButtonHidden(true)
-        .screenshotProtected()
     }
 }
 

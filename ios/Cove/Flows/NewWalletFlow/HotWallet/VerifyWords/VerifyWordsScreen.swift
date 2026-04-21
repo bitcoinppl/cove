@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import UIKit
 
 // MARK: CONTAINER
 
@@ -412,7 +411,6 @@ struct VerifyWordsScreen: View {
                 .opacity(0.5)
         )
         .background(Color.midnightBlue)
-        .screenshotProtected()
     }
 
     private var isReturning: Bool {
