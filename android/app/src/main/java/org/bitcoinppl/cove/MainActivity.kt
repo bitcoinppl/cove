@@ -12,6 +12,9 @@ import android.view.View
 import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.ImageView
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -71,6 +74,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.bitcoinppl.cove.cloudbackup.CloudBackupPresentationHost
+import org.bitcoinppl.cove.cloudbackup.ForegroundUiBridge
 import org.bitcoinppl.cove.flows.TapSignerFlow.TapSignerContainer
 import org.bitcoinppl.cove.navigation.CoveNavDisplay
 import org.bitcoinppl.cove.nfc.NfcScanSheet
@@ -78,7 +83,6 @@ import org.bitcoinppl.cove.nfc.TapCardNfcManager
 import org.bitcoinppl.cove.sidebar.SidebarContainer
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove.views.LockView
-import org.bitcoinppl.cove_core.RustCloudBackupManager
 import org.bitcoinppl.cove.views.TermsAndConditionsSheet
 import org.bitcoinppl.cove_core.bootstrap
 import org.bitcoinppl.cove_core.activeMigration
@@ -108,6 +112,8 @@ class MainActivity : FragmentActivity() {
     // view-based privacy cover - updates synchronously (unlike Compose state)
     private var privacyCoverView: View? = null
     private var isBootstrapped = false
+    private var authorizationLauncher: ActivityResultLauncher<IntentSenderRequest>? = null
+    private var isPrivacyCoverVisible by mutableStateOf(false)
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
@@ -126,10 +132,12 @@ class MainActivity : FragmentActivity() {
 
     override fun onPause() {
         super.onPause()
+        ForegroundUiBridge.detach(this)
         if (!isBootstrapped) return
         // show cover only on actual app transitions (not internal popups like DropdownMenu)
         if (Auth.isAuthEnabled) {
             privacyCoverView?.visibility = View.VISIBLE
+            isPrivacyCoverVisible = true
             window.setFlags(
                 WindowManager.LayoutParams.FLAG_SECURE,
                 WindowManager.LayoutParams.FLAG_SECURE,
@@ -139,19 +147,29 @@ class MainActivity : FragmentActivity() {
 
     override fun onResume() {
         super.onResume()
+        authorizationLauncher?.let { ForegroundUiBridge.attach(this, it) }
         if (!isBootstrapped) return
         privacyCoverView?.visibility = View.GONE
+        isPrivacyCoverVisible = false
         if (!ScreenSecurity.isSensitiveScreen) {
             window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
         }
 
+        val app = AppManager.getInstance()
+        app.cloudBackupManager.refreshCloudState()
+        app.cloudBackupManager.runBackgroundIntegrityCheck()
+
         // refresh fees and prices in background (30-sec throttle protects against excessive requests)
         // only dispatch if async runtime is ready (initialized in LaunchedEffect)
-        val app = AppManager.getInstance()
         if (app.asyncRuntimeReady) {
             app.dispatch(AppAction.UpdateFees)
             app.dispatch(AppAction.UpdateFiatPrices)
         }
+    }
+
+    override fun onDestroy() {
+        ForegroundUiBridge.detach(this)
+        super.onDestroy()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -168,6 +186,11 @@ class MainActivity : FragmentActivity() {
                     darkScrim = android.graphics.Color.TRANSPARENT,
                 ),
         )
+
+        authorizationLauncher =
+            registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
+                ForegroundUiBridge.handleAuthorizationResult(result)
+            }
 
         // initialize NFC manager with activity context
         TapCardNfcManager.getInstance().initialize(this)
@@ -295,43 +318,50 @@ class MainActivity : FragmentActivity() {
                     // fullscreen blocking terms view (matches iOS behavior)
                     FullScreenTermsView(app = app)
                 } else {
+                    val auth = remember { AuthManager.getInstance() }
                     val snackbarHostState = remember { SnackbarHostState() }
 
-                    Scaffold(
-                        containerColor = Color.Transparent,
-                        contentWindowInsets = WindowInsets(0),
-                        snackbarHost = {
-                            SnackbarHost(
-                                hostState = snackbarHostState,
-                                modifier = Modifier.padding(WindowInsets.navigationBars.asPaddingValues()),
-                            )
-                        },
-                    ) { _ ->
-                        Box(modifier = Modifier.fillMaxSize()) {
-                            LockView {
-                                SidebarContainer(app = app) {
-                                    // NavDisplay handles transitions and back gestures
-                                    // key resets view when network/routeId changes
-                                    key(app.selectedNetwork, app.routeId) {
-                                        CoveNavDisplay(app = app)
+                    CloudBackupPresentationHost(
+                        app = app,
+                        auth = auth,
+                        isCoverPresented = isPrivacyCoverVisible,
+                    ) {
+                        Scaffold(
+                            containerColor = Color.Transparent,
+                            contentWindowInsets = WindowInsets(0),
+                            snackbarHost = {
+                                SnackbarHost(
+                                    hostState = snackbarHostState,
+                                    modifier = Modifier.padding(WindowInsets.navigationBars.asPaddingValues()),
+                                )
+                            },
+                        ) { _ ->
+                            Box(modifier = Modifier.fillMaxSize()) {
+                                LockView {
+                                    SidebarContainer(app = app) {
+                                        // NavDisplay handles transitions and back gestures
+                                        // key resets view when network/routeId changes
+                                        key(app.selectedNetwork, app.routeId) {
+                                            CoveNavDisplay(app = app)
+                                        }
                                     }
                                 }
-                            }
 
-                            // global sheet rendering
-                            app.sheetState?.let { taggedState ->
-                                SheetContent(
-                                    state = taggedState,
+                                // global sheet rendering
+                                app.sheetState?.let { taggedState ->
+                                    SheetContent(
+                                        state = taggedState,
+                                        app = app,
+                                        onDismiss = { app.sheetState = null },
+                                    )
+                                }
+
+                                // global alert rendering
+                                GlobalAlertHandler(
                                     app = app,
-                                    onDismiss = { app.sheetState = null },
+                                    snackbarHostState = snackbarHostState,
                                 )
                             }
-
-                            // global alert rendering
-                            GlobalAlertHandler(
-                                app = app,
-                                snackbarHostState = snackbarHostState,
-                            )
                         }
                     }
                 }
@@ -542,9 +572,7 @@ private fun GlobalAlertDialog(
 
         is AppAlertState.HotWalletKeyMissing -> {
             val walletId = state.walletId
-            val cloudBackupEnabled =
-                runCatching { RustCloudBackupManager().use { it.isCloudBackupEnabled() } }
-                    .getOrDefault(false)
+            val cloudBackupEnabled = app.cloudBackupManager.isCloudBackupEnabled
             AlertDialog(
                 onDismissRequest = onDismiss,
                 title = { Text(state.title()) },

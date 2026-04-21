@@ -8,6 +8,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowManager
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowPresenter
 import org.bitcoinppl.cove_core.*
@@ -88,6 +89,8 @@ class AppManager private constructor() : FfiReconcile {
 
     internal var sendFlowManager: SendFlowManager? = null
         private set
+
+    val cloudBackupManager: CloudBackupManager = CloudBackupManager.getInstance()
 
     init {
         Log.d(tag, "Initializing AppManager")
