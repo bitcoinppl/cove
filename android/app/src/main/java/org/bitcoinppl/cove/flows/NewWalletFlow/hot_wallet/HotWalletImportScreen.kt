@@ -109,6 +109,9 @@ fun HotWalletImportScreen(
     numberOfWords: NumberOfBip39Words,
     importType: ImportType,
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
+    onBackPressed: (() -> Unit)? = null,
+    onImported: ((WalletId) -> Unit)? = null,
+    showNfcAction: Boolean = true,
 ) {
     // block screenshots unconditionally — import screen contains seed words
     val context = LocalContext.current
@@ -271,9 +274,11 @@ fun HotWalletImportScreen(
     fun importWallet() {
         try {
             val walletMetadata = manager.importWallet(enteredWords)
-            app.rust.selectWallet(walletMetadata.id)
             app.clearWalletManager()
-            app.resetRoute(Route.SelectedWallet(walletMetadata.id))
+            onImported?.invoke(walletMetadata.id) ?: run {
+                app.rust.selectWallet(walletMetadata.id)
+                app.resetRoute(Route.SelectedWallet(walletMetadata.id))
+            }
         } catch (e: ImportWalletException.InvalidWordGroup) {
             Log.d("HotWalletImport", "Invalid word group while importing hot wallet")
             alertState = AlertState.InvalidWords
@@ -312,7 +317,7 @@ fun HotWalletImportScreen(
                     )
                 },
                 navigationIcon = {
-                    IconButton(onClick = { app.popRoute() }) {
+                    IconButton(onClick = { onBackPressed?.invoke() ?: app.popRoute() }) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Default.ArrowBack,
                             contentDescription = "Back",
@@ -321,12 +326,13 @@ fun HotWalletImportScreen(
                 },
                 actions = {
                     Row {
-                        // NFC button
-                        IconButton(onClick = { showNfcScanner = true }) {
-                            Icon(
-                                imageVector = Icons.Default.Nfc,
-                                contentDescription = "NFC Import",
-                            )
+                        if (showNfcAction) {
+                            IconButton(onClick = { showNfcScanner = true }) {
+                                Icon(
+                                    imageVector = Icons.Default.Nfc,
+                                    contentDescription = "NFC Import",
+                                )
+                            }
                         }
 
                         // QR button
@@ -508,8 +514,10 @@ fun HotWalletImportScreen(
                             onClick = {
                                 alertState = AlertState.None
                                 duplicateWalletId?.let { walletId ->
-                                    app.rust.selectWallet(walletId)
-                                    app.resetRoute(Route.SelectedWallet(walletId))
+                                    onImported?.invoke(walletId) ?: run {
+                                        app.rust.selectWallet(walletId)
+                                        app.resetRoute(Route.SelectedWallet(walletId))
+                                    }
                                 }
                             },
                         ) {
