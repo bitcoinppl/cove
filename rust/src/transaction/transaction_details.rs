@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use cove_types::lock_state::LockState;
+
 use bdk_wallet::Wallet as BdkWallet;
 use bdk_wallet::bitcoin::Transaction as BdkTransaction;
 use bdk_wallet::chain::{
@@ -73,6 +75,9 @@ pub struct TransactionDetails {
     /// `true` when at least one input has `nSequence < 0xFFFFFFFE`,
     /// meaning the transaction can be replaced while unconfirmed.
     pub is_rbf_signaling: bool,
+    /// Aggregate lock state for the wallet-owned unspent outputs of this transaction.
+    /// Computed by the actor layer using `LockedOutpointsTable`.
+    pub lock_state: LockState,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Enum)]
@@ -169,10 +174,21 @@ impl TransactionDetails {
             input_indexes,
             output_indexes,
             change_address,
+<<<<<<< HEAD
             is_rbf_signaling,
+=======
+            lock_state: LockState::Unlocked,
+>>>>>>> 8efa730c (refactor: integrate UTXO lock state natively into WalletActor and TransactionDetails)
         };
 
         Ok(me)
+    }
+
+    /// Set the lock state after construction.
+    /// Called by the actor layer which has access to both the BDK wallet
+    /// and the `LockedOutpointsTable`.
+    pub fn set_lock_state(&mut self, state: LockState) {
+        self.lock_state = state;
     }
 
     pub fn sent_sans_fee(&self) -> Option<Amount> {
@@ -225,6 +241,11 @@ impl TransactionDetails {
     #[uniffi::method]
     pub const fn tx_id(&self) -> TxId {
         self.tx_id
+    }
+
+    #[uniffi::method]
+    pub fn lock_state(&self) -> LockState {
+        self.lock_state
     }
 
     #[uniffi::method]
@@ -479,7 +500,11 @@ impl TransactionDetails {
             input_indexes: vec![],
             output_indexes: vec![],
             change_address: None,
+<<<<<<< HEAD
             is_rbf_signaling: false,
+=======
+            lock_state: LockState::Unlocked,
+>>>>>>> 8efa730c (refactor: integrate UTXO lock state natively into WalletActor and TransactionDetails)
         }
     }
 

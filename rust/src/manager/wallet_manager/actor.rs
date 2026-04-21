@@ -896,10 +896,77 @@ impl WalletActor {
             .ok_or(Error::TransactionDetailsError("transaction not found".to_string()))?;
 
         let labels = self.db.labels.all_labels_for_txn(tx.tx_node.txid)?;
-        let details = TransactionDetails::try_new(&self.wallet.bdk, tx, labels.into())
+        let mut details = TransactionDetails::try_new(&self.wallet.bdk, tx, labels.into())
             .map_err_str(Error::TransactionDetailsError)?;
 
+        // Compute lock state from wallet-owned unspent outputs for this tx
+        let unspent_ops = self.wallet_owned_unspent_outpoints_for_tx(tx_id);
+        if !unspent_ops.is_empty() {
+            let locked_statuses = self
+                .db
+                .locked_outpoints
+                .are_locked(&unspent_ops)
+                .map_err_str(Error::TransactionDetailsError)?;
+
+            let locked_count = locked_statuses.into_iter().filter(|&b| b).count();
+            let lock_state = if locked_count == 0 {
+                cove_types::lock_state::LockState::Unlocked
+            } else if locked_count == unspent_ops.len() {
+                cove_types::lock_state::LockState::Locked
+            } else {
+                cove_types::lock_state::LockState::Mixed
+            };
+
+            details.set_lock_state(lock_state);
+        }
+
         Produces::ok(details)
+    }
+
+    /// Toggle the lock state for a transaction's wallet-owned unspent outputs.
+    ///
+    /// Uses `LockedOutpointsTable::toggle_all` which performs the read + write
+    /// in a single write transaction to avoid TOCTOU races.
+    pub async fn toggle_transaction_lock_state(
+        &mut self,
+        tx_id: TxId,
+    ) -> ActorResult<cove_types::lock_state::LockState> {
+        let unspent_ops = self.wallet_owned_unspent_outpoints_for_tx(tx_id);
+
+        let new_state = self
+            .db
+            .locked_outpoints
+            .toggle_all(&unspent_ops)
+            .map_err_str(Error::TransactionDetailsError)?;
+
+        Produces::ok(new_state)
+    }
+
+    /// Get the wallet-owned unspent outpoints created by a given transaction.
+    ///
+    /// These are the only outpoints that should be considered for lock state:
+    /// - **wallet-owned**: we only care about our own outputs
+    /// - **unspent**: locking a spent output is meaningless
+    fn wallet_owned_unspent_outpoints_for_tx(&self, tx_id: TxId) -> Vec<OutPoint> {
+        let unspent_set: std::collections::HashSet<OutPoint> =
+            self.wallet.bdk.list_unspent().map(|u| u.outpoint).collect();
+
+        // The transaction's outputs that are both wallet-owned and still unspent
+        let txid = tx_id.0;
+        if let Some(tx) = self.wallet.bdk.get_tx(txid) {
+            tx.tx_node
+                .tx
+                .output
+                .iter()
+                .enumerate()
+                .filter_map(|(vout, _output)| {
+                    let op = OutPoint { txid, vout: vout as u32 };
+                    if unspent_set.contains(&op) { Some(op) } else { None }
+                })
+                .collect()
+        } else {
+            vec![]
+        }
     }
 
     pub async fn start_transaction_watcher(&mut self, tx_id: Txid) -> ActorResult<()> {

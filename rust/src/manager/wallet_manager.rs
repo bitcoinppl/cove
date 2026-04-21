@@ -347,14 +347,22 @@ impl RustWalletManager {
         Arc::new(manager)
     }
 
+    /// Toggle the lock state of a transaction's wallet-owned unspent outputs.
+    ///
+    /// The backend enforces the "wallet-owned unspent only" rule — the caller
+    /// just passes a `TxId` and gets back the new aggregate `LockState`.
     #[uniffi::method]
-    pub fn utxo_lock_manager(
+    pub async fn toggle_transaction_lock_state(
         &self,
-    ) -> Result<Arc<crate::utxo_lock_manager::UtxoLockManager>, Error> {
-        let manager = crate::utxo_lock_manager::UtxoLockManager::new(self.id.clone())
-            .map_err(|e| Error::UnknownError(e.to_string()))?;
+        tx_id: Arc<TxId>,
+    ) -> Result<cove_types::lock_state::LockState, Error> {
+        let tx_id = Arc::unwrap_or_clone(tx_id);
 
-        Ok(Arc::new(manager))
+        let new_state = call!(self.actor.toggle_transaction_lock_state(tx_id))
+            .await
+            .map_err_str(Error::TransactionDetailsError)?;
+
+        Ok(new_state)
     }
 
     #[uniffi::method]

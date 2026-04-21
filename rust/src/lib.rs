@@ -65,7 +65,6 @@ mod tap_card;
 mod transaction;
 mod transaction_watcher;
 mod ur;
-mod utxo_lock_manager;
 mod wallet;
 mod wallet_scanner;
 mod word_validator;

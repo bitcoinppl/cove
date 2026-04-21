@@ -1,15 +1,17 @@
 use std::sync::Arc;
 
+use cove_types::lock_state::LockState;
 use cove_util::result_ext::ResultExt as _;
 use redb::{ReadableTable as _, TableDefinition};
 
-use crate::database::{cbor::Cbor, error::DatabaseError, key::OutPointKey};
+use crate::database::{error::DatabaseError, key::OutPointKey};
 
 /// Presence-based lock table: an outpoint key exists ⇒ locked, absent ⇒ unlocked.
 ///
-/// The value is a unit `()` wrapped in CBOR — we only care about key existence.
-pub(crate) const LOCKED_OUTPOINTS_TABLE: TableDefinition<OutPointKey, Cbor<()>> =
-    TableDefinition::new("locked_outpoints.cbor");
+/// The value is a unit `()` — we only care about key existence.
+/// `()` implements `redb::Value` natively so no `Cbor` wrapper is needed.
+pub(crate) const LOCKED_OUTPOINTS_TABLE: TableDefinition<OutPointKey, ()> =
+    TableDefinition::new("locked_outpoints");
 
 pub type Error = LockedOutpointsError;
 
@@ -152,6 +154,57 @@ impl LockedOutpointsTable {
 
         Ok(outpoints.map_err(|e| DatabaseError::DatabaseAccess(e.to_string()))?)
     }
+
+    /// Atomically compute aggregate lock state and toggle all outpoints.
+    ///
+    /// This performs the read (aggregate) and write (lock/unlock all) within a
+    /// **single write transaction** so there is no TOCTOU race if the user
+    /// double-taps the toggle button.
+    ///
+    /// - `Unlocked` / `Mixed` → lock all → returns `Locked`
+    /// - `Locked` → unlock all → returns `Unlocked`
+    pub fn toggle_all(&self, outpoints: &[bitcoin::OutPoint]) -> Result<LockState, Error> {
+        if outpoints.is_empty() {
+            return Ok(LockState::Unlocked);
+        }
+
+        let write_txn = self.db.begin_write().map_err_str(DatabaseError::DatabaseAccess)?;
+
+        let new_state = {
+            let mut table = write_txn.open_table(LOCKED_OUTPOINTS_TABLE)?;
+
+            // Step 1: Read aggregate state within this transaction
+            let mut locked_count: usize = 0;
+            for outpoint in outpoints {
+                let key = OutPointKey::from(outpoint);
+                if table.get(key)?.is_some() {
+                    locked_count += 1;
+                }
+            }
+
+            let all_locked = locked_count == outpoints.len();
+
+            // Step 2: Toggle based on current state
+            if all_locked {
+                // All locked → unlock all
+                for outpoint in outpoints {
+                    let key = OutPointKey::from(outpoint);
+                    table.remove(key)?;
+                }
+                LockState::Unlocked
+            } else {
+                // Unlocked or Mixed → lock all
+                for outpoint in outpoints {
+                    let key = OutPointKey::from(outpoint);
+                    table.insert(key, ())?;
+                }
+                LockState::Locked
+            }
+        };
+
+        write_txn.commit().map_err_str(DatabaseError::DatabaseAccess)?;
+        Ok(new_state)
+    }
 }
 
 impl From<redb::TransactionError> for Error {
@@ -177,6 +230,7 @@ mod tests {
 
     use crate::database::wallet_data::WalletDataDb;
     use crate::wallet::metadata::WalletId;
+    use cove_types::lock_state::LockState;
     use std::str::FromStr;
 
     fn test_outpoint(vout: u32) -> bitcoin::OutPoint {
@@ -272,5 +326,59 @@ mod tests {
         table.lock_all(&[]).unwrap();
         table.unlock_all(&[]).unwrap();
         assert!(table.all_locked().unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_toggle_from_unlocked() {
+        let (db, _tmp) = WalletDataDb::new_test(WalletId::new());
+        let table = &db.locked_outpoints;
+        let ops: Vec<_> = (0..3).map(test_outpoint).collect();
+
+        let state = table.toggle_all(&ops).unwrap();
+        assert_eq!(state, LockState::Locked);
+
+        for op in &ops {
+            assert!(table.is_locked(op).unwrap());
+        }
+    }
+
+    #[test]
+    fn test_toggle_from_locked() {
+        let (db, _tmp) = WalletDataDb::new_test(WalletId::new());
+        let table = &db.locked_outpoints;
+        let ops: Vec<_> = (0..3).map(test_outpoint).collect();
+
+        table.lock_all(&ops).unwrap();
+        let state = table.toggle_all(&ops).unwrap();
+        assert_eq!(state, LockState::Unlocked);
+
+        for op in &ops {
+            assert!(!table.is_locked(op).unwrap());
+        }
+    }
+
+    #[test]
+    fn test_toggle_from_mixed() {
+        let (db, _tmp) = WalletDataDb::new_test(WalletId::new());
+        let table = &db.locked_outpoints;
+        let ops: Vec<_> = (0..3).map(test_outpoint).collect();
+
+        // lock only the first one → mixed
+        table.lock(&ops[0]).unwrap();
+        let state = table.toggle_all(&ops).unwrap();
+        assert_eq!(state, LockState::Locked);
+
+        for op in &ops {
+            assert!(table.is_locked(op).unwrap());
+        }
+    }
+
+    #[test]
+    fn test_toggle_empty_is_unlocked() {
+        let (db, _tmp) = WalletDataDb::new_test(WalletId::new());
+        let table = &db.locked_outpoints;
+
+        let state = table.toggle_all(&[]).unwrap();
+        assert_eq!(state, LockState::Unlocked);
     }
 }
