@@ -2111,23 +2111,36 @@ mod tests {
         cove_tokio::init();
         let globals = test_globals();
         let manager = CLOUD_BACKUP_MANAGER.clone();
+        clear_wallet_upload_runtime_for_test_async(&manager).await;
         configure_enabled_cloud_backup(&manager, globals, 0);
 
         let metadata = xpub_only_wallet_metadata();
+        let record_id = cove_cspp::backup_data::wallet_record_id(metadata.id.as_ref());
         persist_xpub_wallets(vec![metadata.clone()]);
         persist_failed_blob_state(metadata.id.clone(), false);
         globals.cloud.fail_wallet_backup_upload_quota_exceeded();
+        let initial_attempt_count = globals.cloud.wallet_backup_upload_attempt_count();
 
         manager.resume_pending_cloud_upload_verification();
 
         assert_test_condition_stays_true(
             Duration::from_millis(250),
             "startup resume should not retry non-retryable failed uploads",
-            || globals.cloud.wallet_backup_upload_attempt_count() == 0,
+            || globals.cloud.wallet_backup_upload_attempt_count() == initial_attempt_count,
         )
         .await;
 
-        assert_eq!(globals.cloud.wallet_backup_upload_attempt_count(), 0);
+        assert_eq!(globals.cloud.wallet_backup_upload_attempt_count(), initial_attempt_count);
+        assert!(matches!(
+            Database::global().cloud_blob_sync_states.get(&record_id).unwrap(),
+            Some(PersistedCloudBlobSyncState {
+                state: PersistedCloudBlobState::Failed(CloudBlobFailedState {
+                    retryable: false,
+                    ..
+                }),
+                ..
+            })
+        ));
 
         clear_wallet_upload_runtime_for_test_async(&manager).await;
         globals.cloud.clear_wallet_backup_upload_failure();
