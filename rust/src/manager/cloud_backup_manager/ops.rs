@@ -1099,6 +1099,7 @@ mod test_support;
 #[cfg(test)]
 #[allow(clippy::await_holding_lock)]
 mod tests {
+    #![allow(clippy::await_holding_lock)]
     use std::sync::Arc;
     use std::time::Duration;
 

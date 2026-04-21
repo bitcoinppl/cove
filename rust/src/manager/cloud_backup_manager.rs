@@ -1792,6 +1792,7 @@ impl RustCloudBackupManager {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::await_holding_lock)]
     use super::*;
     use act_zero::call;
     use tempfile::TempDir;

@@ -151,6 +151,7 @@ pub(super) fn count_all_wallets(db: &Database) -> Result<u32, CloudBackupError> 
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::await_holding_lock)]
     use super::*;
     use crate::database::cloud_backup::PersistedCloudBackupStatus;
 
