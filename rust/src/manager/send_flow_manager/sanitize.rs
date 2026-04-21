@@ -1,8 +1,13 @@
-const FIAT_TOKENS: &[&str] = &[
-    // fiat symbols
-    "$", "€", "£", "¥", "₹", // fiat codes
-    "USD", "EUR", "GBP", "JPY", "CAD", "AUD", "CHF", "INR", "MXN",
-];
+use crate::fiat::FiatCurrency;
+use strum::IntoEnumIterator as _;
+
+fn fiat_tokens() -> Vec<&'static str> {
+    let mut tokens: Vec<&'static str> = FiatCurrency::all_symbols().to_vec();
+    for currency in FiatCurrency::iter() {
+        tokens.push(currency.into());
+    }
+    tokens
+}
 
 const BTC_TOKENS: &[&str] = &["BTC", "SAT", "SATS"];
 
@@ -52,7 +57,7 @@ pub fn sanitize_fiat_amount(input: &str) -> Option<String> {
     if !input.chars().any(|c| c.is_alphabetic()) {
         return Some(input.to_string());
     }
-    strip_tokens(input, FIAT_TOKENS)
+    strip_tokens(input, &fiat_tokens())
 }
 
 /// Sanitizes a raw amount string for the BTC/sats field.
