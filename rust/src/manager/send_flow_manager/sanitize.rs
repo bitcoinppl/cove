@@ -9,7 +9,7 @@ fn fiat_tokens() -> Vec<&'static str> {
     tokens
 }
 
-const BTC_TOKENS: &[&str] = &["BTC", "SAT", "SATS"];
+const BTC_TOKENS: &[&str] = &["SATS", "SAT", "BTC"];
 
 fn strip_prefix_ignore_ascii_case<'a>(input: &'a str, token: &str) -> Option<&'a str> {
     input
@@ -145,5 +145,12 @@ mod tests {
     #[test]
     fn sanitize_btc_rejects_address() {
         assert!(sanitize_btc_amount("bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq").is_none());
+    }
+
+    #[test]
+    fn sanitize_btc_sats_prefix_not_mis_stripped_as_sat() {
+        // "SATS" must be matched before "SAT" to avoid leaving a stray "S"
+        assert_eq!(sanitize_btc_amount("SATS 0.1").unwrap(), "0.1");
+        assert_eq!(sanitize_btc_amount("sats 1000").unwrap(), "1000");
     }
 }
