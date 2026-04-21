@@ -16,7 +16,6 @@ struct WalletSettingsContainer: View {
     let route: WalletSettingsRoute
 
     // private
-    @State private var manager: WalletManager? = nil
     @State private var error: String? = nil
 
     func walletNameBinding(_ manager: WalletManager) -> Binding<String> {
@@ -24,16 +23,6 @@ struct WalletSettingsContainer: View {
             get: { manager.walletMetadata.name },
             set: { manager.dispatch(action: .updateName($0)) }
         )
-    }
-
-    func initOnAppear() {
-        do {
-            let manager = try app.getWalletManager(id: id)
-            self.manager = manager
-        } catch {
-            self.error = "Failed to get wallet \(error.localizedDescription)"
-            Log.error(self.error!)
-        }
     }
 
     @ViewBuilder
@@ -60,14 +49,16 @@ struct WalletSettingsContainer: View {
             try? await Task.sleep(for: .seconds(5))
             app.rust.selectLatestOrNewWallet()
         }
-        .onAppear(perform: initOnAppear)
     }
 
     var body: some View {
-        if let manager {
-            WalletSettingsRoute(manager: manager, route: route)
-        } else {
+        WalletManagerHost(walletId: id, loading: {
             LoadingOrError
+        }, onError: { error in
+            self.error = "Failed to get wallet \(error.localizedDescription)"
+            Log.error(self.error!)
+        }) { manager in
+            WalletSettingsRoute(manager: manager, route: route)
         }
     }
 }

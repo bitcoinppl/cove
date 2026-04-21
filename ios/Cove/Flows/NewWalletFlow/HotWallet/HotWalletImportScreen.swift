@@ -225,7 +225,7 @@ struct HotWalletImportScreen: View {
             }
 
             try app.rust.selectWallet(id: walletMetadata.id)
-            app.walletManager = nil
+            app.clearWalletManager()
             app.resetRoute(to: .selectedWallet(walletMetadata.id))
         } catch let error as ImportWalletError {
             switch error {

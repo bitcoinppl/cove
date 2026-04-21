@@ -10,36 +10,72 @@ import SwiftUI
 // MARK: CONTAINER
 
 struct VerifyWordsContainer: View {
-    @Environment(AppManager.self) private var app
     @Environment(\.sizeCategory) var sizeCategory
 
     let id: WalletId
     let onVerified: (() -> Void)?
 
     @State private var verificationComplete = false
-    @State private var manager: WalletManager? = nil
-    @State private var stateMachine: WordVerifyStateMachine? = nil
 
     init(id: WalletId, onVerified: (() -> Void)? = nil) {
         self.id = id
         self.onVerified = onVerified
     }
 
-    func initOnAppear() {
-        do {
-            let manager = try app.getWalletManager(id: id)
-            let validator = try manager.rust.wordValidator()
-            let sm = WordVerifyStateMachine(validator: validator, startingWordNumber: 1)
-
-            self.manager = manager
-            self.stateMachine = sm
-        } catch {
+    var body: some View {
+        WalletManagerHost(walletId: id, loading: {
+            Text("Loading....")
+        }, onError: { error in
             Log.error("VerifyWords failed to initialize: \(error)")
+        }) { manager in
+            VerifyWordsLoadedView(
+                manager: manager,
+                onVerified: onVerified,
+                sizeCategory: sizeCategory,
+                verificationComplete: $verificationComplete
+            )
+        }
+        .navigationTitle("Verify Recovery Words")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarColorScheme(.dark, for: .navigationBar)
+    }
+}
+
+private struct VerifyWordsLoadedView: View {
+    let manager: WalletManager
+    let onVerified: (() -> Void)?
+    let sizeCategory: ContentSizeCategory
+
+    @Binding var verificationComplete: Bool
+    @State private var stateMachine: WordVerifyStateMachine?
+
+    var body: some View {
+        Group {
+            if let stateMachine {
+                if sizeCategory > .extraExtraExtraLarge || isMiniDevice {
+                    ScrollView {
+                        loadedScreen(stateMachine: stateMachine)
+                            .frame(minHeight: screenHeight, maxHeight: .infinity)
+                    }
+                    .background(
+                        Color.midnightBlue
+                            .ignoresSafeArea(.all)
+                    )
+                    .adaptiveToolbarStyle()
+                } else {
+                    loadedScreen(stateMachine: stateMachine)
+                }
+            } else {
+                Text("Loading....")
+            }
+        }
+        .task(id: ObjectIdentifier(manager)) {
+            await loadStateMachine()
         }
     }
 
     @ViewBuilder
-    func LoadedScreen(manager: WalletManager, stateMachine: WordVerifyStateMachine) -> some View {
+    private func loadedScreen(stateMachine: WordVerifyStateMachine) -> some View {
         if verificationComplete {
             VerificationCompleteScreen(manager: manager, onVerified: onVerified)
                 .transition(
@@ -63,30 +99,16 @@ struct VerifyWordsContainer: View {
         }
     }
 
-    var body: some View {
-        Group {
-            if let manager, let stateMachine {
-                if sizeCategory > .extraExtraExtraLarge || isMiniDevice {
-                    ScrollView {
-                        LoadedScreen(manager: manager, stateMachine: stateMachine)
-                            .frame(minHeight: screenHeight, maxHeight: .infinity)
-                    }
-                    .background(
-                        Color.midnightBlue
-                            .ignoresSafeArea(.all)
-                    )
-                    .adaptiveToolbarStyle()
-                } else {
-                    LoadedScreen(manager: manager, stateMachine: stateMachine)
-                }
-            } else {
-                Text("Loading....")
-                    .onAppear(perform: initOnAppear)
-            }
+    @MainActor
+    private func loadStateMachine() async {
+        do {
+            verificationComplete = false
+            let validator = try manager.rust.wordValidator()
+            stateMachine = WordVerifyStateMachine(validator: validator, startingWordNumber: 1)
+        } catch {
+            Log.error("VerifyWords failed to initialize: \(error)")
+            stateMachine = nil
         }
-        .navigationTitle("Verify Recovery Words")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbarColorScheme(.dark, for: .navigationBar)
     }
 }
 

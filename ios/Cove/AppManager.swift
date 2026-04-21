@@ -42,13 +42,10 @@ private let walletModeChangeDelayMs = 250
     /// changed when route is reset, to clear lifecycle view state
     var routeId = UUID()
 
-    /// Multiple screens within the same wallet (send, coin control, tx details, settings)
-    /// call getWalletManager, this avoids recreating the actor and reconciler each time
-    @ObservationIgnored
-    var walletManager: WalletManager?
+    /// AppManager is the sole owner of the live wallet manager used by wallet-backed routes.
+    private(set) var walletManager: WalletManager?
 
-    @ObservationIgnored
-    var sendFlowManager: SendFlowManager?
+    private(set) var sendFlowManager: SendFlowManager?
 
     public var colorScheme: ColorScheme? {
         switch colorSchemeSelection {
@@ -93,32 +90,49 @@ private let walletModeChangeDelayMs = 250
         self.rust.listenForUpdates(updater: self)
     }
 
-    public func getWalletManager(id: WalletId) throws -> WalletManager {
-        if let walletvm = walletManager, walletvm.id == id {
-            logger.debug("found and using vm for \(id)")
-            return walletvm
-        }
-
-        logger.debug("did not find vm for \(id), creating new vm: \(walletManager?.id ?? "none")")
-
-        let walletvm = try WalletManager(id: id)
-        walletManager = walletvm
-
-        return walletManager!
+    func cachedWalletManager(id: WalletId) -> WalletManager? {
+        guard let walletManager, walletManager.id == id else { return nil }
+        return walletManager
     }
 
-    public func getSendFlowManager(_ wm: WalletManager, presenter: SendFlowPresenter) -> SendFlowManager {
-        let id = wm.id
-
-        if let manager = sendFlowManager, wm.id == manager.id {
-            logger.debug("found and using sendflow manager for \(wm.id)")
-            manager.presenter = presenter
-            return manager
+    func ensureWalletManager(id: WalletId) throws -> WalletManager {
+        if let walletManager = cachedWalletManager(id: id) {
+            logger.debug("found and using vm for \(id)")
+            return walletManager
         }
 
-        let sendFlowManager = SendFlowManager(wm.rust.newSendFlowManager(balance: wm.balance), presenter: presenter)
-        logger.debug("did not find SendFlowManager for \(id), creating new")
+        logger.debug(
+            "did not find vm for \(id), creating new vm: \(walletManager?.id ?? "none")"
+        )
+        clearWalletManager()
 
+        let walletManager = try WalletManager(id: id)
+        self.walletManager = walletManager
+        return walletManager
+    }
+
+    func cachedSendFlowManager(id: WalletId) -> SendFlowManager? {
+        guard let sendFlowManager, sendFlowManager.id == id else { return nil }
+        return sendFlowManager
+    }
+
+    func ensureSendFlowManager(
+        _ walletManager: WalletManager,
+        presenter: SendFlowPresenter
+    ) -> SendFlowManager {
+        if let sendFlowManager = cachedSendFlowManager(id: walletManager.id) {
+            logger.debug("found and using sendflow manager for \(walletManager.id)")
+            sendFlowManager.presenter = presenter
+            return sendFlowManager
+        }
+
+        logger.debug("did not find SendFlowManager for \(walletManager.id), creating new")
+        clearSendFlowManager()
+
+        let sendFlowManager = SendFlowManager(
+            walletManager.rust.newSendFlowManager(balance: walletManager.balance),
+            presenter: presenter
+        )
         self.sendFlowManager = sendFlowManager
         return sendFlowManager
     }
@@ -129,8 +143,21 @@ private let walletModeChangeDelayMs = 250
         return "v\(appVersion) (\(rust.gitShortHash())-\(buildNumber))"
     }
 
-    public func updateWalletVm(_ vm: WalletManager) {
-        walletManager = vm
+    func clearWalletManager(id: WalletId? = nil) {
+        if id == nil {
+            walletManager = nil
+            clearSendFlowManager()
+            return
+        }
+
+        if walletManager?.id == id { walletManager = nil }
+        clearSendFlowManager(id: id)
+        return
+    }
+
+    func clearSendFlowManager(id: WalletId? = nil) {
+        guard id == nil || sendFlowManager?.id == id else { return }
+        sendFlowManager = nil
     }
 
     public func findTapSignerWallet(_ ts: TapSigner) -> WalletMetadata? {
@@ -149,7 +176,7 @@ private let walletModeChangeDelayMs = 250
     public func reset() {
         rust = FfiApp()
         database = Database()
-        walletManager = nil
+        clearWalletManager()
 
         let state = rust.state()
         router = state.router
@@ -158,7 +185,7 @@ private let walletModeChangeDelayMs = 250
     /// Reload wallets from database (e.g. after cloud restore)
     func reloadWallets() {
         wallets = (try? database.wallets().all()) ?? []
-        walletManager = nil
+        clearWalletManager()
     }
 
     var currentRoute: Route {
@@ -239,37 +266,37 @@ private let walletModeChangeDelayMs = 250
             logger.debug("Update: \(message)")
 
             switch message {
-            case let .routeUpdated(routes: routes):
+            case .routeUpdated(let routes):
                 router.routes = routes
 
-            case let .pushedRoute(route):
+            case .pushedRoute(let route):
                 router.routes.append(route)
 
             case .databaseUpdated:
                 database = Database()
 
-            case let .colorSchemeChanged(colorSchemeSelection):
+            case .colorSchemeChanged(let colorSchemeSelection):
                 self.colorSchemeSelection = colorSchemeSelection
 
-            case let .selectedNodeChanged(node):
+            case .selectedNodeChanged(let node):
                 selectedNode = node
 
-            case let .selectedNetworkChanged(network):
+            case .selectedNetworkChanged(let network):
                 selectedNetwork = network
                 loadWallets()
 
-            case let .defaultRouteChanged(route, nestedRoutes):
+            case .defaultRouteChanged(let route, let nestedRoutes):
                 router.routes = nestedRoutes
                 router.default = route
                 routeId = UUID()
 
-            case let .fiatPricesChanged(prices):
+            case .fiatPricesChanged(let prices):
                 self.prices = prices
 
-            case let .feesChanged(fees):
+            case .feesChanged(let fees):
                 self.fees = fees
 
-            case let .fiatCurrencyChanged(fiatCurrency):
+            case .fiatCurrencyChanged(let fiatCurrency):
                 selectedFiatCurrency = fiatCurrency
 
                 // refresh fiat values in the wallet manager
@@ -297,8 +324,8 @@ private let walletModeChangeDelayMs = 250
             case .walletsChanged:
                 wallets = (try? database.wallets().all()) ?? []
 
-            case let .clearCachedWalletManager(walletId):
-                if walletManager?.id == walletId { walletManager = nil }
+            case .clearCachedWalletManager(let walletId):
+                clearWalletManager(id: walletId)
 
             case .showLoadingPopup:
                 Task { await MiddlePopup(state: .loading).present() }
