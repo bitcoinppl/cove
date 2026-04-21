@@ -33,8 +33,6 @@ object ForegroundUiBridge {
 
     fun detach(activity: FragmentActivity) {
         if (currentActivity.value === activity) {
-            pendingAuthorizationResult?.cancel()
-            pendingAuthorizationResult = null
             currentActivity.value = null
             pendingAuthorizationResult?.cancel()
             pendingAuthorizationResult = null

@@ -81,34 +81,6 @@ import org.bitcoinppl.cove_core.VerificationState
 import org.bitcoinppl.cove_core.WalletMode
 import org.bitcoinppl.cove_core.device.CloudSyncHealth
 
-internal enum class CloudBackupDetailBodyState {
-    UNSUPPORTED_PASSKEY_PROVIDER,
-    MISSING_PASSKEY,
-    VERIFYING,
-    DETAIL,
-    CANCELLED_RECOVERY,
-    LOADING,
-}
-
-internal fun cloudBackupDetailBodyState(
-    status: CloudBackupStatus,
-    verification: VerificationState,
-    hasDetail: Boolean,
-): CloudBackupDetailBodyState? =
-    when {
-        status is CloudBackupStatus.UnsupportedPasskeyProvider -> CloudBackupDetailBodyState.UNSUPPORTED_PASSKEY_PROVIDER
-        status is CloudBackupStatus.PasskeyMissing -> CloudBackupDetailBodyState.MISSING_PASSKEY
-        verification is VerificationState.Verifying -> CloudBackupDetailBodyState.VERIFYING
-        hasDetail -> CloudBackupDetailBodyState.DETAIL
-        verification is VerificationState.Cancelled -> CloudBackupDetailBodyState.CANCELLED_RECOVERY
-        verification !is VerificationState.Failed -> CloudBackupDetailBodyState.LOADING
-        else -> null
-    }
-
-internal fun shouldShowFallbackVerificationSection(
-    bodyState: CloudBackupDetailBodyState?,
-): Boolean = bodyState == null
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CloudBackupScreen(
@@ -118,6 +90,7 @@ fun CloudBackupScreen(
     val manager = remember { CloudBackupManager.getInstance() }
     val coordinator = LocalCloudBackupPresentationCoordinator.current
 
+    var hasAutoVerified by remember { mutableStateOf(false) }
     var showRecreateConfirmation by remember { mutableStateOf(false) }
     var showReinitializeConfirmation by remember { mutableStateOf(false) }
 
@@ -140,8 +113,11 @@ fun CloudBackupScreen(
                 manager.isCloudBackupEnabled
 
         if (supportedStatus) {
-            manager.refreshCloudState()
             manager.dispatch(CloudBackupManagerAction.RefreshDetail)
+            if (!hasAutoVerified) {
+                hasAutoVerified = true
+                manager.dispatch(CloudBackupManagerAction.StartVerificationDiscoverable)
+            }
         }
     }
 
@@ -414,13 +390,12 @@ private fun CloudBackupDetailContent(
     onRecreate: () -> Unit,
     onReinitialize: () -> Unit,
 ) {
-    val bodyState =
-        cloudBackupDetailBodyState(
-            status = manager.status,
-            verification = manager.verification,
-            hasDetail = manager.detail != null,
-        )
-    val showFallbackVerificationSection = shouldShowFallbackVerificationSection(bodyState)
+    val isPasskeyMissing = manager.status is CloudBackupStatus.PasskeyMissing
+    val isUnsupportedPasskeyProvider = manager.status is CloudBackupStatus.UnsupportedPasskeyProvider
+    val isVerifying = manager.verification is VerificationState.Verifying
+    val verificationResult = manager.verification
+    val isCancelled = verificationResult is VerificationState.Cancelled
+    val shouldShowLoadingState = manager.detail == null && !isVerifying && verificationResult !is VerificationState.Failed && !isCancelled
 
     Column(
         modifier =
@@ -433,20 +408,20 @@ private fun CloudBackupDetailContent(
             ErrorInlineMessage(it, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
         }
 
-        when (bodyState) {
-            CloudBackupDetailBodyState.UNSUPPORTED_PASSKEY_PROVIDER -> {
+        when {
+            isUnsupportedPasskeyProvider -> {
                 UnsupportedPasskeyProviderContent(manager = manager)
             }
-            CloudBackupDetailBodyState.MISSING_PASSKEY -> {
+            isPasskeyMissing -> {
                 MissingPasskeyContent(manager = manager)
             }
-            CloudBackupDetailBodyState.VERIFYING -> {
+            isVerifying && verificationResult !is VerificationState.Failed -> {
                 CloudBackupProgressCard(
                     title = "Verifying cloud backup",
                     message = "Confirming that your backups can be decrypted and restored",
                 )
             }
-            CloudBackupDetailBodyState.DETAIL -> {
+            manager.detail != null && !isCancelled -> {
                 DetailFormContent(
                     detail = manager.detail!!,
                     syncHealth = manager.syncHealth,
@@ -455,24 +430,12 @@ private fun CloudBackupDetailContent(
                     onReinitialize = onReinitialize,
                 )
             }
-            CloudBackupDetailBodyState.CANCELLED_RECOVERY -> {
-                CancelledVerificationRecoveryContent(manager = manager)
-            }
-            CloudBackupDetailBodyState.LOADING -> {
+            shouldShowLoadingState -> {
                 CloudBackupProgressCard(
                     title = "Loading cloud backup",
                     message = "Finishing setup and fetching backup details",
                 )
             }
-            null -> Unit
-        }
-
-        if (showFallbackVerificationSection) {
-            VerificationSection(
-                manager = manager,
-                onRecreate = onRecreate,
-                onReinitialize = onReinitialize,
-            )
         }
     }
 }
@@ -498,26 +461,6 @@ private fun CloudBackupProgressCard(
             Column {
                 Text(title, fontWeight = FontWeight.SemiBold)
                 Text(message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-    }
-}
-
-@Composable
-private fun CancelledVerificationRecoveryContent(
-    manager: CloudBackupManager,
-) {
-    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        ErrorStateCard(
-            icon = Icons.Default.WarningAmber,
-            title = "Verification was cancelled",
-            body = "Try verification again or create a new passkey if your old one was deleted.",
-        )
-
-        SectionHeader("Verification")
-        MaterialSection {
-            Column {
-                CancelledVerificationActions(manager = manager)
             }
         }
     }
@@ -649,21 +592,14 @@ private fun CloudBackupHeaderSection(
     lastSync: ULong?,
     syncHealth: CloudSyncHealth,
 ) {
-    val statusUi =
+    val (icon, tint, label) =
         when (syncHealth) {
-            is CloudSyncHealth.Unknown -> HeaderStatusUi(Icons.Default.CloudOff, MaterialTheme.colorScheme.onSurfaceVariant, "Checking sync status")
-            is CloudSyncHealth.AllUploaded -> HeaderStatusUi(Icons.Default.CloudDone, Color(0xFF2E7D32), "All files synced to Google Drive")
-            is CloudSyncHealth.Uploading -> HeaderStatusUi(Icons.Default.CloudUpload, Color(0xFF1976D2), "Syncing to Google Drive")
-            is CloudSyncHealth.Failed -> HeaderStatusUi(Icons.Default.WarningAmber, MaterialTheme.colorScheme.error, "Sync error: ${syncHealth.v1}")
-            is CloudSyncHealth.NoFiles -> HeaderStatusUi(Icons.Default.CloudOff, MaterialTheme.colorScheme.onSurfaceVariant, "No cloud backup files uploaded yet")
-            is CloudSyncHealth.AuthorizationRequired ->
-                HeaderStatusUi(
-                    Icons.Default.WarningAmber,
-                    Color(0xFFED6C02),
-                    "Google Drive access needs to be reconnected",
-                    "Use Verify Now or Sync Now to continue with cloud backup",
-                )
-            is CloudSyncHealth.Unavailable -> HeaderStatusUi(Icons.Default.CloudOff, MaterialTheme.colorScheme.onSurfaceVariant, "Google Drive is unavailable")
+            is CloudSyncHealth.Unknown -> Triple(Icons.Default.CloudOff, MaterialTheme.colorScheme.onSurfaceVariant, "Checking sync status")
+            is CloudSyncHealth.AllUploaded -> Triple(Icons.Default.CloudDone, Color(0xFF2E7D32), "All files synced to Google Drive")
+            is CloudSyncHealth.Uploading -> Triple(Icons.Default.CloudUpload, Color(0xFF1976D2), "Syncing to Google Drive")
+            is CloudSyncHealth.Failed -> Triple(Icons.Default.WarningAmber, MaterialTheme.colorScheme.error, "Sync error: ${syncHealth.v1}")
+            is CloudSyncHealth.NoFiles -> Triple(Icons.Default.CloudOff, MaterialTheme.colorScheme.onSurfaceVariant, "No cloud backup files uploaded yet")
+            is CloudSyncHealth.Unavailable -> Triple(Icons.Default.CloudOff, MaterialTheme.colorScheme.onSurfaceVariant, "Google Drive is unavailable")
         }
 
     Card(
@@ -677,7 +613,7 @@ private fun CloudBackupHeaderSection(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Icon(statusUi.icon, contentDescription = null, tint = statusUi.tint)
+            Icon(icon, contentDescription = null, tint = tint)
             Text("Cloud Backup Active", fontWeight = FontWeight.SemiBold)
             lastSync?.let {
                 Text(
@@ -686,18 +622,7 @@ private fun CloudBackupHeaderSection(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Text(
-                statusUi.label,
-                style = MaterialTheme.typography.bodySmall,
-                color = statusUi.tint,
-            )
-            statusUi.guidance?.let {
-                Text(
-                    it,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            Text(label, style = MaterialTheme.typography.bodySmall, color = tint)
         }
     }
 }
@@ -751,13 +676,6 @@ private data class GroupKey(
     override fun compareTo(other: GroupKey): Int =
         compareValuesBy(this, other, GroupKey::network, { it.walletMode?.ordinal ?: Int.MAX_VALUE })
 }
-
-private data class HeaderStatusUi(
-    val icon: androidx.compose.ui.graphics.vector.ImageVector,
-    val tint: Color,
-    val label: String,
-    val guidance: String? = null,
-)
 
 @Composable
 private fun WalletItemRow(
@@ -837,16 +755,10 @@ private fun CloudOnlySection(
     MaterialSection(modifier = Modifier.padding(horizontal = 16.dp)) {
         Column {
             when (val cloudOnly = manager.cloudOnly) {
-                is CloudOnlyState.NotFetched -> {
-                    MaterialSettingsItem(
-                        title = "Load Cloud-Only Wallets",
-                        subtitle = "Check Google Drive for wallets that aren't on this device",
-                        onClick = { manager.dispatch(CloudBackupManagerAction.FetchCloudOnly) },
-                        leadingContent = { Icon(Icons.Default.CloudDone, contentDescription = null) },
-                    )
-                }
-
-                is CloudOnlyState.Loading -> {
+                is CloudOnlyState.NotFetched, is CloudOnlyState.Loading -> {
+                    LaunchedEffect(manager.cloudOnly) {
+                        manager.dispatch(CloudBackupManagerAction.FetchCloudOnly)
+                    }
                     LoadingRow("Loading wallets not on this device")
                 }
 
@@ -991,7 +903,18 @@ private fun VerificationSection(
                 }
 
                 is VerificationState.Cancelled -> {
-                    CancelledVerificationActions(manager = manager)
+                    MaterialSettingsItem(
+                        title = "Verification was cancelled",
+                        subtitle = "Try verification again or create a new passkey if your old one was deleted",
+                        onClick = { manager.dispatch(CloudBackupManagerAction.StartVerification) },
+                        leadingContent = { Icon(Icons.Default.WarningAmber, contentDescription = null, tint = Color(0xFFED6C02)) },
+                    )
+                    MaterialDivider()
+                    MaterialSettingsItem(
+                        title = "Create New Passkey",
+                        onClick = { manager.dispatch(CloudBackupManagerAction.RepairPasskey) },
+                        leadingContent = { Icon(Icons.Default.Key, contentDescription = null) },
+                    )
                 }
             }
 
@@ -1028,24 +951,6 @@ private fun VerificationSection(
             )
         }
     }
-}
-
-@Composable
-private fun CancelledVerificationActions(
-    manager: CloudBackupManager,
-) {
-    MaterialSettingsItem(
-        title = "Verification was cancelled",
-        subtitle = "Try verification again or create a new passkey if your old one was deleted",
-        onClick = { manager.dispatch(CloudBackupManagerAction.StartVerification) },
-        leadingContent = { Icon(Icons.Default.WarningAmber, contentDescription = null, tint = Color(0xFFED6C02)) },
-    )
-    MaterialDivider()
-    MaterialSettingsItem(
-        title = "Create New Passkey",
-        onClick = { manager.dispatch(CloudBackupManagerAction.RepairPasskey) },
-        leadingContent = { Icon(Icons.Default.Key, contentDescription = null) },
-    )
 }
 
 @Composable

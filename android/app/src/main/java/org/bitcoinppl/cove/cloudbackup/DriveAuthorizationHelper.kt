@@ -13,20 +13,14 @@ import kotlinx.coroutines.tasks.await
 
 internal class AuthorizationRequiredException(message: String) : Exception(message)
 
-internal interface DriveAuthorization {
-    suspend fun accessToken(interactive: Boolean): String
-
-    suspend fun clearToken(token: String)
-}
-
 internal class DriveAuthorizationHelper(
     context: Context,
-) : DriveAuthorization {
+) {
     private val appContext = context.applicationContext
     private val client by lazy { Identity.getAuthorizationClient(appContext) }
     private val requestedScopes = listOf(Scope(DRIVE_APP_DATA_SCOPE))
 
-    override suspend fun accessToken(interactive: Boolean): String {
+    suspend fun accessToken(interactive: Boolean): String {
         val authorizationResult = client
             .authorize(
                 AuthorizationRequest
@@ -40,7 +34,7 @@ internal class DriveAuthorizationHelper(
             ?: throw ApiException(com.google.android.gms.common.api.Status.RESULT_INTERNAL_ERROR)
     }
 
-    override suspend fun clearToken(token: String) {
+    suspend fun clearToken(token: String) {
         client
             .clearToken(
                 ClearTokenRequest

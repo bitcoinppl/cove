@@ -5,10 +5,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import java.io.Closeable
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove_core.CloudBackupDetail
@@ -29,26 +29,11 @@ import org.bitcoinppl.cove_core.SyncState
 import org.bitcoinppl.cove_core.VerificationState
 import org.bitcoinppl.cove_core.device.CloudSyncHealth
 
-internal fun cloudBackupEnabledForStatus(
-    status: CloudBackupStatus,
-    currentValue: Boolean,
-    readPersistedState: () -> Boolean,
-): Boolean =
-    when (status) {
-        is CloudBackupStatus.Disabled,
-        is CloudBackupStatus.Enabled,
-        is CloudBackupStatus.Enabling,
-        is CloudBackupStatus.Error,
-        is CloudBackupStatus.PasskeyMissing,
-        is CloudBackupStatus.Restoring,
-        is CloudBackupStatus.UnsupportedPasskeyProvider,
-        -> runCatching(readPersistedState).getOrDefault(currentValue)
-    }
-
 @Stable
 class CloudBackupManager private constructor() : CloudBackupManagerReconciler, Closeable {
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val rustScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val integrityCheckRunning = AtomicBoolean(false)
 
     val rust: RustCloudBackupManager = RustCloudBackupManager()
 
@@ -136,11 +121,6 @@ class CloudBackupManager private constructor() : CloudBackupManagerReconciler, C
     fun syncPersistedState() {
         rustScope.launch {
             runCatching { rust.syncPersistedState() }
-                .onSuccess {
-                    mainScope.launch {
-                        refreshPersistedEnabledState()
-                    }
-                }
                 .onFailure { error ->
                     Log.e(TAG, "syncPersistedState failed", error)
                 }
@@ -150,11 +130,6 @@ class CloudBackupManager private constructor() : CloudBackupManagerReconciler, C
     fun resumePendingCloudUploadVerification() {
         rustScope.launch {
             runCatching { rust.resumePendingCloudUploadVerification() }
-                .onSuccess {
-                    mainScope.launch {
-                        refreshPersistedEnabledState()
-                    }
-                }
                 .onFailure { error ->
                     Log.e(TAG, "resumePendingCloudUploadVerification failed", error)
                 }
@@ -164,14 +139,32 @@ class CloudBackupManager private constructor() : CloudBackupManagerReconciler, C
     fun refreshCloudState() {
         rustScope.launch {
             runCatching { rust.cloudStorageDidChange() }
-                .onSuccess {
-                    mainScope.launch {
-                        refreshPersistedEnabledState()
-                    }
-                }
                 .onFailure { error ->
                     Log.w(TAG, "cloud storage refresh failed", error)
                 }
+        }
+    }
+
+    fun runBackgroundIntegrityCheck() {
+        if (!isCloudBackupEnabled) {
+            return
+        }
+
+        if (!integrityCheckRunning.compareAndSet(false, true)) {
+            return
+        }
+
+        rustScope.launch {
+            try {
+                rust.resumePendingCloudUploadVerification()
+                rust.verifyBackupIntegrity()?.let { warning ->
+                    Log.e(TAG, "backup integrity warning: $warning")
+                }
+            } catch (error: Exception) {
+                Log.w(TAG, "backup integrity verification failed", error)
+            } finally {
+                integrityCheckRunning.set(false)
+            }
         }
     }
 
@@ -185,7 +178,12 @@ class CloudBackupManager private constructor() : CloudBackupManagerReconciler, C
         when (message) {
             is CloudBackupReconcileMessage.Status -> {
                 state = state.copy(status = message.v1)
-                refreshPersistedEnabledState(message.v1)
+                isCloudBackupEnabled =
+                    when (message.v1) {
+                        is CloudBackupStatus.Disabled -> false
+                        is CloudBackupStatus.Error -> isCloudBackupEnabled
+                        else -> true
+                    }
             }
             is CloudBackupReconcileMessage.SyncHealth -> state = state.copy(syncHealth = message.v1)
             is CloudBackupReconcileMessage.Progress -> state = state.copy(progress = message.v1)
@@ -205,18 +203,7 @@ class CloudBackupManager private constructor() : CloudBackupManagerReconciler, C
         }
     }
 
-    private fun refreshPersistedEnabledState(status: CloudBackupStatus = state.status) {
-        isCloudBackupEnabled =
-            cloudBackupEnabledForStatus(
-                status = status,
-                currentValue = isCloudBackupEnabled,
-                readPersistedState = rust::isCloudBackupEnabled,
-            )
-    }
-
     override fun close() {
-        mainScope.cancel()
-        rustScope.cancel()
         rust.close()
     }
 

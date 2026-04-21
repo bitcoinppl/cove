@@ -53,7 +53,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -74,12 +73,9 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.cloudbackup.CloudBackupPresentationHost
 import org.bitcoinppl.cove.cloudbackup.ForegroundUiBridge
-import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingContainer
 import org.bitcoinppl.cove.flows.TapSignerFlow.TapSignerContainer
 import org.bitcoinppl.cove.navigation.CoveNavDisplay
 import org.bitcoinppl.cove.nfc.NfcScanSheet
@@ -87,6 +83,7 @@ import org.bitcoinppl.cove.nfc.TapCardNfcManager
 import org.bitcoinppl.cove.sidebar.SidebarContainer
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove.views.LockView
+import org.bitcoinppl.cove.views.TermsAndConditionsSheet
 import org.bitcoinppl.cove_core.bootstrap
 import org.bitcoinppl.cove_core.activeMigration
 import org.bitcoinppl.cove_core.bootstrapProgress
@@ -99,7 +96,6 @@ import org.bitcoinppl.cove_core.AppAction
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.ColdWalletRoute
 import org.bitcoinppl.cove_core.Database
-import org.bitcoinppl.cove_core.GlobalConfigKey
 import org.bitcoinppl.cove_core.HotWalletRoute
 import org.bitcoinppl.cove_core.ImportType
 import org.bitcoinppl.cove_core.NewWalletRoute
@@ -110,32 +106,7 @@ import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.TapSignerRoute
 import org.bitcoinppl.cove_core.Wallet
 import org.bitcoinppl.cove_core.WalletType
-import org.bitcoinppl.cove_core.CloudBackupStatus
 import org.bitcoinppl.cove_core.types.ColorSchemeSelection
-
-internal enum class StartupMode {
-    ONBOARDING,
-    READY,
-}
-
-internal fun hasPersistedOnboardingProgress(
-    persistedProgress: String?,
-): Boolean = !persistedProgress.isNullOrBlank()
-
-internal fun resolveStartupMode(
-    termsAccepted: Boolean,
-    hasWallets: Boolean,
-    cloudBackupStatus: CloudBackupStatus,
-    hasPersistedOnboardingProgress: Boolean,
-): StartupMode {
-    // mirror CoveApp.swift's app-shell onboarding decision while preserving Android auth and Drive constraints
-    val shouldStartStartupRestore = !hasWallets && cloudBackupStatus is CloudBackupStatus.Disabled
-    return if (!termsAccepted || hasPersistedOnboardingProgress || shouldStartStartupRestore) {
-        StartupMode.ONBOARDING
-    } else {
-        StartupMode.READY
-    }
-}
 
 class MainActivity : FragmentActivity() {
     // view-based privacy cover - updates synchronously (unlike Compose state)
@@ -186,6 +157,7 @@ class MainActivity : FragmentActivity() {
 
         val app = AppManager.getInstance()
         app.cloudBackupManager.refreshCloudState()
+        app.cloudBackupManager.runBackgroundIntegrityCheck()
 
         // refresh fees and prices in background (30-sec throttle protects against excessive requests)
         // only dispatch if async runtime is ready (initialized in LaunchedEffect)
@@ -227,7 +199,6 @@ class MainActivity : FragmentActivity() {
             var bootstrapped by remember { mutableStateOf(false) }
             var bootstrapError by remember { mutableStateOf<String?>(null) }
             var bdkMigrationWarning by remember { mutableStateOf<String?>(null) }
-            var resolvedStartupMode by remember { mutableStateOf<StartupMode?>(null) }
 
             if (!bootstrapped) {
                 if (bootstrapError != null) {
@@ -249,34 +220,12 @@ class MainActivity : FragmentActivity() {
                     }
 
                     LaunchedEffect(Unit) {
-                        suspend fun completeBootstrap(warning: String? = null) {
+                        fun completeBootstrap(warning: String? = null) {
                             splashStatus = null
                             encryptionProgress = null
                             (application as CoveApplication).onBootstrapComplete()
                             val appInstance = AppManager.getInstance()
                             appInstance.asyncRuntimeReady = true
-
-                            runCatching {
-                                withContext(Dispatchers.IO) {
-                                    appInstance.cloudBackupManager.rust.syncPersistedState()
-                                }
-                            }.onFailure { error ->
-                                Log.w(TAG, "[STARTUP] syncPersistedState failed before startup routing", error)
-                            }
-
-                            val persistedOnboardingProgress =
-                                runCatching {
-                                    Database().globalConfig().get(GlobalConfigKey.OnboardingProgress)
-                                }.onFailure { error ->
-                                    Log.w(TAG, "[STARTUP] failed to read persisted onboarding progress before routing", error)
-                                }.getOrNull()
-                            resolvedStartupMode =
-                                resolveStartupMode(
-                                    termsAccepted = appInstance.isTermsAccepted,
-                                    hasWallets = appInstance.hasWallets,
-                                    cloudBackupStatus = appInstance.cloudBackupManager.rust.state().status,
-                                    hasPersistedOnboardingProgress = hasPersistedOnboardingProgress(persistedOnboardingProgress),
-                                )
                             isBootstrapped = true
                             bootstrapped = true
                             bdkMigrationWarning = warning
@@ -354,19 +303,6 @@ class MainActivity : FragmentActivity() {
             }
 
             val app = remember { AppManager.getInstance() }
-            val auth = remember { AuthManager.getInstance() }
-            val snackbarHostState = remember { SnackbarHostState() }
-            var startupMode by remember {
-                mutableStateOf(resolvedStartupMode ?: StartupMode.READY)
-            }
-            val onboardingManager =
-                remember(startupMode) {
-                    if (startupMode == StartupMode.ONBOARDING) {
-                        OnboardingManager(app)
-                    } else {
-                        null
-                    }
-                }
 
             // compute dark theme based on user preference
             val systemDarkTheme = isSystemInDarkTheme()
@@ -378,59 +314,54 @@ class MainActivity : FragmentActivity() {
                 }
 
             CoveTheme(darkTheme = darkTheme) {
-                DisposableEffect(onboardingManager) {
-                    onDispose {
-                        onboardingManager?.close()
-                    }
-                }
+                if (!app.isTermsAccepted) {
+                    // fullscreen blocking terms view (matches iOS behavior)
+                    FullScreenTermsView(app = app)
+                } else {
+                    val auth = remember { AuthManager.getInstance() }
+                    val snackbarHostState = remember { SnackbarHostState() }
 
-                CloudBackupPresentationHost(
-                    app = app,
-                    auth = auth,
-                    isCoverPresented = isPrivacyCoverVisible,
-                ) {
-                    Scaffold(
-                        containerColor = Color.Transparent,
-                        contentWindowInsets = WindowInsets(0),
-                        snackbarHost = {
-                            SnackbarHost(
-                                hostState = snackbarHostState,
-                                modifier = Modifier.padding(WindowInsets.navigationBars.asPaddingValues()),
-                            )
-                        },
-                    ) { _ ->
-                        Box(modifier = Modifier.fillMaxSize()) {
-                            LockView {
-                                when (startupMode) {
-                                    StartupMode.ONBOARDING -> {
-                                        if (onboardingManager != null) {
-                                            OnboardingContainer(
-                                                manager = onboardingManager,
-                                                onComplete = { startupMode = StartupMode.READY },
-                                            )
+                    CloudBackupPresentationHost(
+                        app = app,
+                        auth = auth,
+                        isCoverPresented = isPrivacyCoverVisible,
+                    ) {
+                        Scaffold(
+                            containerColor = Color.Transparent,
+                            contentWindowInsets = WindowInsets(0),
+                            snackbarHost = {
+                                SnackbarHost(
+                                    hostState = snackbarHostState,
+                                    modifier = Modifier.padding(WindowInsets.navigationBars.asPaddingValues()),
+                                )
+                            },
+                        ) { _ ->
+                            Box(modifier = Modifier.fillMaxSize()) {
+                                LockView {
+                                    SidebarContainer(app = app) {
+                                        // NavDisplay handles transitions and back gestures
+                                        // key resets view when network/routeId changes
+                                        key(app.selectedNetwork, app.routeId) {
+                                            CoveNavDisplay(app = app)
                                         }
                                     }
-                                    StartupMode.READY ->
-                                        SidebarContainer(app = app) {
-                                            key(app.selectedNetwork, app.routeId) {
-                                                CoveNavDisplay(app = app)
-                                            }
-                                        }
                                 }
-                            }
 
-                            app.sheetState?.let { taggedState ->
-                                SheetContent(
-                                    state = taggedState,
+                                // global sheet rendering
+                                app.sheetState?.let { taggedState ->
+                                    SheetContent(
+                                        state = taggedState,
+                                        app = app,
+                                        onDismiss = { app.sheetState = null },
+                                    )
+                                }
+
+                                // global alert rendering
+                                GlobalAlertHandler(
                                     app = app,
-                                    onDismiss = { app.sheetState = null },
+                                    snackbarHostState = snackbarHostState,
                                 )
                             }
-
-                            GlobalAlertHandler(
-                                app = app,
-                                snackbarHostState = snackbarHostState,
-                            )
                         }
                     }
                 }
@@ -1133,6 +1064,44 @@ private fun SplashLoadingView(
                     trackColor = Color.White.copy(alpha = 0.2f),
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun FullScreenTermsView(app: AppManager) {
+    // prevent back button from dismissing
+    BackHandler { }
+
+    Box(
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(Color.Black),
+    ) {
+        // Cove icon at top center (visible behind terms content)
+        Image(
+            painter = painterResource(id = R.drawable.cove_logo),
+            contentDescription = "Cove",
+            modifier =
+                Modifier
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(top = 24.dp)
+                    .size(100.dp)
+                    .clip(RoundedCornerShape(20.dp)),
+        )
+
+        // Terms content - starts below icon, fills rest of screen
+        Surface(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight(0.88f)
+                    .align(Alignment.BottomCenter),
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        ) {
+            TermsAndConditionsSheet(app = app)
         }
     }
 }
