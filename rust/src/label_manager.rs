@@ -238,7 +238,7 @@ impl LabelManager {
     }
 
     #[uniffi::method(name = "importLabels")]
-    pub fn _import_labels(
+    pub fn ffi_import_labels(
         &self,
         labels: Arc<Bip329Labels>,
     ) -> Result<LabelParseReport, LabelManagerError> {
@@ -248,6 +248,9 @@ impl LabelManager {
 
     pub fn import(&self, jsonl: &str) -> Result<LabelParseReport, LabelManagerError> {
         let (labels, report) = parse_labels(jsonl)?;
+        if labels.is_empty() {
+            return Ok(report);
+        }
         self.save_imported_labels(labels, report, true)
     }
 
@@ -315,17 +318,15 @@ impl LabelManager {
         labels: impl Into<Labels>,
     ) -> Result<LabelParseReport, LabelManagerError> {
         let labels = labels.into();
-        // Count only supported variants — insert_label_with_write_txn silently drops
+        // count only supported variants — insert_label_with_write_txn silently drops
         // PublicKey and ExtendedPublicKey, so labels.len() would overstate the import count.
-        let supported = labels
-            .iter()
-            .filter(|l| {
-                matches!(
-                    l,
-                    Label::Transaction(_) | Label::Address(_) | Label::Input(_) | Label::Output(_)
-                )
-            })
-            .count() as u32;
+        let is_supported = |l: &&Label| {
+            matches!(
+                l,
+                Label::Transaction(_) | Label::Address(_) | Label::Input(_) | Label::Output(_)
+            )
+        };
+        let supported = labels.iter().filter(is_supported).count() as u32;
         let skipped = labels.len() as u32 - supported;
         let report = LabelParseReport { imported: supported, skipped };
         self.save_imported_labels(labels, report, true)
@@ -589,7 +590,9 @@ fn parse_labels(jsonl: &str) -> Result<(Labels, LabelParseReport), LabelManagerE
     }
 
     if parsed.is_empty() {
-        return Err(LabelManagerError::Parse(first_error.unwrap_or_default()));
+        return Err(LabelManagerError::Parse(
+            first_error.unwrap_or_else(|| "no supported label types found".to_string()),
+        ));
     }
 
     if skipped > 0 {
