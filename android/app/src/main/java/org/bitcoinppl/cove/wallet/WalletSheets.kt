@@ -295,6 +295,19 @@ internal fun WalletSheetsHost(
                         }
                     }
                 },
+                onPartialSuccess = { skipped ->
+                    onDismissNfcScanner()
+                    scope.launch {
+                        val noun = if (skipped == 1u) "entry" else "entries"
+                        val msg = "Labels imported ($skipped $noun skipped)"
+                        try {
+                            manager.rust.getTransactions()
+                        } catch (e: Exception) {
+                            android.util.Log.e(tag, "Failed to refresh transactions after partial NFC label import")
+                        }
+                        snackbarHostState.showSnackbar(msg)
+                    }
+                },
                 onError = { errorMsg ->
                     onDismissNfcScanner()
                     scope.launch {

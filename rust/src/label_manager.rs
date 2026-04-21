@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use cove_util::result_ext::ResultExt as _;
+use tracing::{debug, warn};
 
 use crate::{
     database::{InsertOrUpdate, Record, record::Timestamps, wallet_data::WalletDataDb},
@@ -55,6 +56,12 @@ pub enum LabelManagerError {
 
 pub type Error = LabelManagerError;
 type Result<T, E = Error> = std::result::Result<T, E>;
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct LabelParseReport {
+    pub imported: u32,
+    pub skipped: u32,
+}
 
 #[derive(Debug, Clone, uniffi::Object)]
 pub struct AddressArgs {
@@ -231,13 +238,17 @@ impl LabelManager {
     }
 
     #[uniffi::method(name = "importLabels")]
-    pub fn _import_labels(&self, labels: Arc<Bip329Labels>) -> Result<(), LabelManagerError> {
+    pub fn _import_labels(
+        &self,
+        labels: Arc<Bip329Labels>,
+    ) -> Result<LabelParseReport, LabelManagerError> {
         let labels = Arc::unwrap_or_clone(labels);
         self.import_labels(labels.0)
     }
 
-    pub fn import(&self, jsonl: &str) -> Result<(), LabelManagerError> {
-        self.save_imported_labels(parse_labels(jsonl)?, true)
+    pub fn import(&self, jsonl: &str) -> Result<LabelParseReport, LabelManagerError> {
+        let (labels, report) = parse_labels(jsonl)?;
+        self.save_imported_labels(labels, report, true)
     }
 
     pub async fn export(&self) -> Result<String, LabelManagerError> {
@@ -299,28 +310,47 @@ impl LabelManager {
         Ok(Self { db })
     }
 
-    pub fn import_labels(&self, labels: impl Into<Labels>) -> Result<(), LabelManagerError> {
-        self.save_imported_labels(labels.into(), true)
+    pub fn import_labels(
+        &self,
+        labels: impl Into<Labels>,
+    ) -> Result<LabelParseReport, LabelManagerError> {
+        let labels = labels.into();
+        // Count only supported variants — insert_label_with_write_txn silently drops
+        // PublicKey and ExtendedPublicKey, so labels.len() would overstate the import count.
+        let supported = labels
+            .iter()
+            .filter(|l| {
+                matches!(
+                    l,
+                    Label::Transaction(_) | Label::Address(_) | Label::Input(_) | Label::Output(_)
+                )
+            })
+            .count() as u32;
+        let skipped = labels.len() as u32 - supported;
+        let report = LabelParseReport { imported: supported, skipped };
+        self.save_imported_labels(labels, report, true)
     }
 
     pub(crate) fn import_without_cloud_backup_dirty(
         &self,
         jsonl: &str,
-    ) -> Result<(), LabelManagerError> {
-        self.save_imported_labels(parse_labels(jsonl)?, false)
+    ) -> Result<LabelParseReport, LabelManagerError> {
+        let (labels, report) = parse_labels(jsonl)?;
+        self.save_imported_labels(labels, report, false)
     }
 
     fn save_imported_labels(
         &self,
         labels: Labels,
+        report: LabelParseReport,
         mark_cloud_backup_dirty: bool,
-    ) -> Result<(), LabelManagerError> {
+    ) -> Result<LabelParseReport, LabelManagerError> {
         self.db.labels.insert_labels(labels).map_err_str(LabelManagerError::Save)?;
         if mark_cloud_backup_dirty {
             self.mark_cloud_backup_dirty();
         }
 
-        Ok(())
+        Ok(report)
     }
 
     fn mark_cloud_backup_dirty(&self) {
@@ -524,6 +554,105 @@ impl LabelManager {
     }
 }
 
-fn parse_labels(jsonl: &str) -> Result<Labels, LabelManagerError> {
-    Labels::try_from_str(jsonl).map_err_str(LabelManagerError::Parse)
+fn parse_labels(jsonl: &str) -> Result<(Labels, LabelParseReport), LabelManagerError> {
+    let lines: Vec<&str> = jsonl.trim().lines().filter(|line| !line.trim().is_empty()).collect();
+
+    if lines.is_empty() {
+        return Ok((Labels::new(vec![]), LabelParseReport { imported: 0, skipped: 0 }));
+    }
+
+    let mut parsed = Vec::with_capacity(lines.len());
+    let mut first_error: Option<String> = None;
+    let mut skipped = 0u32;
+
+    for line in &lines {
+        match serde_json::from_str::<Label>(line) {
+            Ok(label) => {
+                if matches!(
+                    label,
+                    Label::Transaction(_) | Label::Address(_) | Label::Input(_) | Label::Output(_)
+                ) {
+                    parsed.push(label);
+                } else {
+                    debug!("skipping unsupported label type");
+                    skipped += 1;
+                }
+            }
+            Err(e) => {
+                if first_error.is_none() {
+                    first_error = Some(e.to_string());
+                }
+                debug!("skipping unrecognized label entry: {e}");
+                skipped += 1;
+            }
+        }
+    }
+
+    if parsed.is_empty() {
+        return Err(LabelManagerError::Parse(first_error.unwrap_or_default()));
+    }
+
+    if skipped > 0 {
+        warn!(
+            "imported {} of {} labels, skipped {skipped} unrecognized entries",
+            parsed.len(),
+            lines.len()
+        );
+    }
+
+    let report = LabelParseReport { imported: parsed.len() as u32, skipped };
+    Ok((Labels::new(parsed), report))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const VALID_TX: &str = r#"{"type":"tx","ref":"f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd","label":"test tx"}"#;
+    const VALID_OUTPUT: &str = r#"{"type":"output","ref":"f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:0","label":"test output"}"#;
+    const VALID_INPUT: &str = r#"{"type":"input","ref":"f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1","label":"test input"}"#;
+
+    // Nunchuk-style invalid output ref: vout contains non-numeric characters
+    const BAD_VOUT_OUTPUT: &str = r#"{"type":"output","ref":"f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:bad","label":"broken"}"#;
+
+    #[test]
+    fn test_parse_labels_valid() {
+        let jsonl = format!("{VALID_TX}\n{VALID_OUTPUT}\n{VALID_INPUT}");
+        let (labels, report) = parse_labels(&jsonl).unwrap();
+        assert_eq!(labels.len(), 3);
+        assert_eq!(report.imported, 3);
+        assert_eq!(report.skipped, 0);
+    }
+
+    #[test]
+    fn test_parse_labels_skips_bad_vout_line() {
+        let jsonl = format!("{VALID_TX}\n{BAD_VOUT_OUTPUT}\n{VALID_OUTPUT}");
+        let (labels, report) = parse_labels(&jsonl).unwrap();
+        assert_eq!(labels.len(), 2);
+        assert_eq!(report.imported, 2);
+        assert_eq!(report.skipped, 1);
+    }
+
+    #[test]
+    fn test_parse_labels_all_invalid_returns_error() {
+        let jsonl = format!("{BAD_VOUT_OUTPUT}\n{BAD_VOUT_OUTPUT}");
+        assert!(parse_labels(&jsonl).is_err());
+    }
+
+    #[test]
+    fn test_parse_labels_empty_returns_empty() {
+        let (labels, report) = parse_labels("").unwrap();
+        assert!(labels.is_empty());
+        assert_eq!(report.imported, 0);
+        assert_eq!(report.skipped, 0);
+    }
+
+    #[test]
+    fn test_parse_labels_ignores_blank_lines() {
+        let jsonl = format!("{VALID_TX}\n\n   \n{VALID_OUTPUT}");
+        let (labels, report) = parse_labels(&jsonl).unwrap();
+        assert_eq!(labels.len(), 2);
+        assert_eq!(report.imported, 2);
+        assert_eq!(report.skipped, 0);
+    }
 }

@@ -533,7 +533,7 @@ pub(crate) fn cleanup_failed_wallet(metadata: &WalletMetadata) -> Vec<String> {
 
 fn import_labels(id: &WalletId, jsonl: &str) -> Result<(), BackupError> {
     let manager = LabelManager::new(id.clone());
-    manager.import(jsonl).map_err(|e| BackupError::Restore(e.to_string()))
+    manager.import(jsonl).map(drop).map_err(|e| BackupError::Restore(e.to_string()))
 }
 
 pub(crate) fn restore_wallet_labels(
@@ -551,6 +551,7 @@ pub(crate) fn restore_wallet_labels(
         LabelRestoreBehavior::MarkCloudBackupDirty => import_labels(wallet_id, jsonl),
         LabelRestoreBehavior::PreserveCloudBackupClean => manager
             .import_without_cloud_backup_dirty(jsonl)
+            .map(drop)
             .map_err(|error| BackupError::Restore(error.to_string())),
     };
 

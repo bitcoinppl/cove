@@ -60,8 +60,7 @@ fun rememberWalletExportLaunchers(
                                 }
                             } ?: throw Exception("Unable to read file")
 
-                        // validate import was successful before showing success message
-                        currentManager.rust.labelManager().use { labelManager ->
+                        val result = currentManager.rust.labelManager().use { labelManager ->
                             labelManager.import(fileContents.trim())
                         }
 
@@ -74,7 +73,12 @@ fun rememberWalletExportLaunchers(
                             return@launch
                         }
 
-                        snackbarHostState.showSnackbar("Labels imported successfully")
+                        if (result.skipped > 0u) {
+                            val noun = if (result.skipped == 1u) "label" else "labels"
+                            snackbarHostState.showSnackbar("Labels imported. Could not import ${result.skipped} $noun")
+                        } else {
+                            snackbarHostState.showSnackbar("Labels imported successfully")
+                        }
                     } catch (e: Exception) {
                         android.util.Log.e(tag, "error importing labels", e)
                         snackbarHostState.showSnackbar("Unable to import labels: ${e.localizedMessage ?: e.message}")

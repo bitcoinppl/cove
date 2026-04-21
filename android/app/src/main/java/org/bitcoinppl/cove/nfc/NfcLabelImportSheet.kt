@@ -45,6 +45,7 @@ fun NfcLabelImportSheet(
     labelManager: LabelManager,
     onDismiss: () -> Unit,
     onSuccess: () -> Unit,
+    onPartialSuccess: (skipped: UInt) -> Unit,
     onError: (String) -> Unit,
 ) {
     val context = LocalContext.current
@@ -86,11 +87,13 @@ fun NfcLabelImportSheet(
                     // try to parse the NFC data as BIP329 labels
                     try {
                         result.text?.let { text ->
-                            // try to import the labels
-                            labelManager.import(text.trim())
-                            // success! dismiss and notify
+                            val importResult = labelManager.import(text.trim())
                             nfcReader.reset()
-                            onSuccess()
+                            if (importResult.skipped > 0u) {
+                                onPartialSuccess(importResult.skipped)
+                            } else {
+                                onSuccess()
+                            }
                             return@collect
                         }
 

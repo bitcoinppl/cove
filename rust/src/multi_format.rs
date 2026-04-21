@@ -142,9 +142,15 @@ impl MultiFormat {
             return Ok(Self::Transaction(Arc::new(txn)));
         }
 
-        // try and parse bip329 labels
-        if let Ok(labels) = bip329::Labels::try_from_str(string) {
-            return Ok(Self::Bip329Labels(Arc::new(labels.into())));
+        // try and parse bip329 labels — tolerant: skip unparseable lines so a single
+        // malformed entry doesn't discard all valid labels in the file
+        let parsed_labels: Vec<bip329::Label> = string
+            .trim()
+            .lines()
+            .filter_map(|line| bip329::Label::try_from_str(line.trim()).ok())
+            .collect();
+        if !parsed_labels.is_empty() {
+            return Ok(Self::Bip329Labels(Arc::new(bip329::Labels::new(parsed_labels).into())));
         }
 
         if string.contains("tapsigner.com/start") {

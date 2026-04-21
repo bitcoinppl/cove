@@ -448,13 +448,24 @@ struct SelectedWalletScreen: View {
         }
 
         do {
-            try labelManager.importLabels(labels: labels)
-            app.alertState = .init(
-                .general(
-                    title: "Success!",
-                    message: "Labels have been imported successfully."
+            let result = try labelManager.importLabels(labels: labels)
+            if result.skipped > 0 {
+                app.alertState = .init(
+                    .general(
+                        title: "Labels Imported",
+                        message: "Could not import \(result.skipped) labels"
+                    )
                 )
-            )
+            } else {
+                app.alertState = .init(
+                    .general(
+                        title: "Success!",
+                        message: "Labels have been imported successfully."
+                    )
+                )
+            }
+
+            Task { await manager.rust.getTransactions() }
 
         } catch {
             app.alertState = .init(
