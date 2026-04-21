@@ -179,9 +179,7 @@ fun SidebarView(
                             app.rust.selectWallet(wallet.id)
                         }
                     },
-                    onMeasuredHeight = { h ->
-                        if (itemHeightPx == 0f) itemHeightPx = h.toFloat()
-                    },
+                    onMeasuredHeight = { h -> itemHeightPx = h.toFloat() },
                     gestureModifier =
                         Modifier.pointerInput(wallet.id) {
                             detectDragGesturesAfterLongPress(
