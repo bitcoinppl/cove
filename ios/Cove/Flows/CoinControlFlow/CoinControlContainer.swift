@@ -10,47 +10,59 @@ import SwiftUI
 
 struct CoinControlContainer: View {
     @Environment(AppManager.self) private var app
-    @Environment(\.navigate) private var navigate
 
     let route: CoinControlRoute
 
-    // private
-    @State var walletManager: WalletManager? = nil
-    @State var manager: CoinControlManager? = nil
-
-    func initOnAppear() async {
-        let id = route.id()
-        if walletManager != nil, manager != nil { return }
-
-        do {
-            Log.debug("Getting wallet for CoinControlRoute \(id)")
-            let walletManager = try app.getWalletManager(id: id)
-            let rustManager = await walletManager.rust.newCoinControlManager()
-            let manager = CoinControlManager(rustManager)
-
-            self.walletManager = walletManager
-            self.manager = manager
-        } catch {
-            Log.error("[ERROR] Unable to get wallet \(error.localizedDescription)")
-            app.alertState = .init(
-                .general(
-                    title: "Error!", message: "Unable to get wallet \(error.localizedDescription)"
-                )
-            )
+    var body: some View {
+        WalletManagerHost(
+            walletId: route.id(),
+            loading: {
+                ProgressView()
+                    .tint(.primary)
+            },
+            onError: handleManagerError
+        ) { walletManager in
+            CoinControlLoadedView(route: route, walletManager: walletManager)
         }
     }
 
+    private func handleManagerError(_ error: Error) {
+        Log.error("[ERROR] Unable to get wallet \(error.localizedDescription)")
+        app.alertState = .init(
+            .general(
+                title: "Error!", message: "Unable to get wallet \(error.localizedDescription)"
+            )
+        )
+    }
+}
+
+private struct CoinControlLoadedView: View {
+    let route: CoinControlRoute
+    let walletManager: WalletManager
+
+    @State private var manager: CoinControlManager?
+
     var body: some View {
-        if let walletManager, let manager {
-            switch route {
-            case .list:
-                UtxoListScreen(manager: manager)
-                    .environment(walletManager)
+        Group {
+            if let manager {
+                switch route {
+                case .list:
+                    UtxoListScreen(manager: manager)
+                }
+            } else {
+                ProgressView()
+                    .tint(.primary)
             }
-        } else {
-            ProgressView()
-                .tint(.primary)
-                .task { await initOnAppear() }
         }
+        .task(id: ObjectIdentifier(walletManager)) {
+            await loadManager()
+        }
+    }
+
+    @MainActor
+    private func loadManager() async {
+        manager = nil
+        let rustManager = await walletManager.rust.newCoinControlManager()
+        manager = CoinControlManager(rustManager)
     }
 }

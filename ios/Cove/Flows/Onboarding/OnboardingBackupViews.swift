@@ -571,17 +571,51 @@ struct OnboardingHardwareImportCloudBackupChoiceView: View {
 }
 
 struct OnboardingExchangeFundingView: View {
-    @Environment(AppManager.self) private var app
-
     let walletId: WalletId?
     let onContinue: () -> Void
 
-    @State private var walletManager: WalletManager?
+    var body: some View {
+        if let walletId {
+            WalletManagerHost(walletId: walletId, loading: {
+                OnboardingExchangeFundingContent(onContinue: onContinue)
+            }, onError: { error in
+                Log.error("Unable to load wallet for onboarding funding: \(error)")
+            }) { manager in
+                OnboardingExchangeFundingContent(manager: manager, onContinue: onContinue)
+            }
+        } else {
+            OnboardingExchangeFundingContent(
+                initialErrorMessage: "The new wallet could not be loaded.",
+                onContinue: onContinue
+            )
+        }
+    }
+}
+
+private struct OnboardingExchangeFundingContent: View {
+    let manager: WalletManager?
+    let initialErrorMessage: String?
+    let onContinue: () -> Void
+
     @State private var addressInfo: AddressInfo?
     @State private var errorMessage: String?
     @State private var didCopyAddress = false
     @State private var copyResetTask: Task<Void, Never>?
     private let pasteboard = UIPasteboard.general
+
+    init(
+        manager: WalletManager? = nil,
+        initialErrorMessage: String? = nil,
+        onContinue: @escaping () -> Void
+    ) {
+        self.manager = manager
+        self.initialErrorMessage = initialErrorMessage
+        self.onContinue = onContinue
+    }
+
+    private var displayedErrorMessage: String? {
+        errorMessage ?? initialErrorMessage
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -601,8 +635,8 @@ struct OnboardingExchangeFundingView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
-                    if let errorMessage {
-                        OnboardingInlineMessage(text: errorMessage)
+                    if let displayedErrorMessage {
+                        OnboardingInlineMessage(text: displayedErrorMessage)
                     } else if let addressInfo {
                         VStack(spacing: 18) {
                             OnboardingAddressQr(address: addressInfo.addressUnformatted())
@@ -660,23 +694,22 @@ struct OnboardingExchangeFundingView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onboardingRecoveryBackground()
-        .task {
+        .task(id: manager.map(ObjectIdentifier.init)) {
             await loadAddress()
         }
     }
 
     private func loadAddress() async {
-        guard addressInfo == nil else { return }
-        guard let walletId else {
-            errorMessage = "The new wallet could not be loaded."
-            return
+        guard let manager else { return }
+
+        await MainActor.run {
+            addressInfo = nil
+            errorMessage = nil
         }
 
         do {
-            let manager = try app.getWalletManager(id: walletId)
             let address = try await manager.firstAddress()
             await MainActor.run {
-                walletManager = manager
                 addressInfo = address
             }
         } catch {

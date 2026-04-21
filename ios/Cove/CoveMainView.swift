@@ -62,7 +62,7 @@ struct CoveMainView: View {
 
             Button("Use with Hardware Wallet") {
                 do {
-                    try app.getWalletManager(id: walletId).rust.setWalletType(walletType: .cold)
+                    try app.ensureWalletManager(id: walletId).rust.setWalletType(walletType: .cold)
                     app.alertState = .none
                 } catch {
                     Log.error("Failed to set wallet type to cold: \(error)")

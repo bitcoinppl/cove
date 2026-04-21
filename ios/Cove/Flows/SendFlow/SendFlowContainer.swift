@@ -9,57 +9,100 @@ import SwiftUI
 
 public struct SendFlowContainer: View {
     @Environment(AppManager.self) private var app
-    @Environment(\.navigate) private var navigate
 
     /// passed in
     let sendRoute: SendRoute
 
-    // private
-    @State private var manager: WalletManager? = nil
-    @State private var sendFlowManager: SendFlowManager? = nil
-    @State private var initCompleted: Bool = false
-
-    func initOnAppear() {
-        let id = sendRoute.id()
-        if manager != nil { return }
-
-        do {
-            Log.debug("Getting wallet for SendRoute \(id)")
-            let manager = try app.getWalletManager(id: id)
-
-            let presenter = SendFlowPresenter(app: app, manager: manager)
-            let sendFlowManager = app.getSendFlowManager(manager, presenter: presenter)
-
-            switch sendRoute {
-            case let .setAmount(id: _, address: address, amount: amount):
-                if let address { sendFlowManager.setAddress(address) }
-                if let amount { sendFlowManager.setAmount(amount) }
-            default:
-                ()
-            }
-
-            waitForInit()
-            self.manager = manager
-            self.sendFlowManager = sendFlowManager
-        } catch {
+    public var body: some View {
+        WalletManagerHost(walletId: sendRoute.id(), loading: {
+            ProgressView()
+                .tint(.primary)
+        }, onError: { error in
             Log.error("Something went very wrong: \(error)")
             app.trySelectLatestOrNewWallet()
+        }) { manager in
+            SendFlowLoadedView(sendRoute: sendRoute, manager: manager)
         }
     }
+}
 
-    func waitForInit() {
-        Task {
-            let success = await sendFlowManager?.rust.waitForInit() ?? false
-            await MainActor.run {
-                // rust handles alert + popRoute on failure
-                if success { initCompleted = true }
+private struct SendFlowResolutionKey: Hashable {
+    let walletManagerId: ObjectIdentifier
+    let sendFlowManagerId: ObjectIdentifier?
+}
+
+private struct SendFlowLoadedView: View {
+    @Environment(AppManager.self) private var app
+
+    let sendRoute: SendRoute
+    let manager: WalletManager
+
+    @State private var initCompleted = false
+    @State private var initializedSendFlowManagerId: ObjectIdentifier?
+
+    private var sendFlowManager: SendFlowManager? {
+        app.cachedSendFlowManager(id: manager.id)
+    }
+
+    private var resolutionKey: SendFlowResolutionKey {
+        .init(
+            walletManagerId: ObjectIdentifier(manager),
+            sendFlowManagerId: sendFlowManager.map(ObjectIdentifier.init)
+        )
+    }
+
+    var body: some View {
+        Group {
+            if let sendFlowManager, initCompleted {
+                loadedContent(sendFlowManager: sendFlowManager)
+            } else {
+                ProgressView()
+                    .tint(.primary)
             }
+        }
+        .task(id: resolutionKey) {
+            await ensureSendFlowManagerInitialized()
         }
     }
 
     @ViewBuilder
-    func sendRouteToScreen(
-        sendRoute: SendRoute, manager: WalletManager, sendFlowManager _: SendFlowManager
+    private func loadedContent(sendFlowManager: SendFlowManager) -> some View {
+        let presenter = sendFlowManager.presenter
+
+        Group {
+            sendRouteToScreen(sendRoute: sendRoute, manager: manager)
+        }
+        .environment(presenter)
+        .environment(sendFlowManager)
+        .onAppear {
+            // if zero balance, show alert and send back
+            if manager.balance.spendable().asSats() == 0 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    withAnimation(.easeInOut(duration: 0.4)) {
+                        presenter.focusField = .none
+                    }
+                }
+
+                presenter.alertState = .init(.error(.NoBalance))
+                return
+            }
+        }
+        .alert(
+            alertTitle,
+            isPresented: showingAlert,
+            presenting: manager.sendFlowErrorAlert,
+            actions: { myAlert($0).actions },
+            message: { myAlert($0).message }
+        )
+        .onDisappear {
+            presenter.setDisappearing()
+        }
+    }
+
+    @ViewBuilder
+    private func sendRouteToScreen(
+        sendRoute: SendRoute,
+        manager: WalletManager
     ) -> some View {
         switch sendRoute {
         case let .setAmount(id: id, address: _, amount: amount):
@@ -78,64 +121,19 @@ public struct SendFlowContainer: View {
         }
     }
 
-    public var body: some View {
-        if let manager, let sendFlowManager, initCompleted {
-            let presenter = sendFlowManager.presenter
-
-            Group {
-                sendRouteToScreen(
-                    sendRoute: sendRoute, manager: manager, sendFlowManager: sendFlowManager
-                )
-            }
-            .environment(manager)
-            .environment(presenter)
-            .environment(sendFlowManager)
-            .onAppear {
-                // if zero balance, show alert and send back
-                if manager.balance.spendable().asSats() == 0 {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                        withAnimation(.easeInOut(duration: 0.4)) {
-                            presenter.focusField = .none
-                        }
-                    }
-
-                    presenter.alertState = .init(.error(.NoBalance))
-                    return
-                }
-            }
-            .alert(
-                alertTitle,
-                isPresented: showingAlert,
-                presenting: manager.sendFlowErrorAlert,
-                actions: { MyAlert($0).actions },
-                message: { MyAlert($0).message }
-            )
-            .onDisappear {
-                presenter.setDisappearing()
-            }
-
-        } else {
-            ProgressView()
-                .tint(.primary)
-                .onAppear(perform: initOnAppear)
-        }
-    }
-
-    // MARK: Alerts
-
     private var showingAlert: Binding<Bool> {
         Binding(
-            get: { manager?.sendFlowErrorAlert != nil },
-            set: { if !$0 { manager?.sendFlowErrorAlert = .none } }
+            get: { manager.sendFlowErrorAlert != nil },
+            set: { if !$0 { manager.sendFlowErrorAlert = .none } }
         )
     }
 
     private var alertTitle: String {
-        guard let alert = manager?.sendFlowErrorAlert else { return "Error!" }
-        return MyAlert(alert).title
+        guard let alert = manager.sendFlowErrorAlert else { return "Error!" }
+        return myAlert(alert).title
     }
 
-    private func MyAlert(_ alert: TaggedItem<SendFlowErrorAlert>) -> AnyAlertBuilder {
+    private func myAlert(_ alert: TaggedItem<SendFlowErrorAlert>) -> AnyAlertBuilder {
         let error =
             switch alert.item {
             case let .confirmDetails(error): error
@@ -147,8 +145,36 @@ public struct SendFlowContainer: View {
                 title: "Error!",
                 message: error,
                 actions: {
-                    Button("OK", action: { manager?.sendFlowErrorAlert = .none })
+                    Button("OK", action: { manager.sendFlowErrorAlert = .none })
                 }
             ).eraseToAny()
+    }
+
+    private func applyRouteArguments(to sendFlowManager: SendFlowManager) {
+        switch sendRoute {
+        case let .setAmount(id: _, address: address, amount: amount):
+            if let address { sendFlowManager.setAddress(address) }
+            if let amount { sendFlowManager.setAmount(amount) }
+        default:
+            ()
+        }
+    }
+
+    @MainActor
+    private func ensureSendFlowManagerInitialized() async {
+        let presenter = SendFlowPresenter(app: app, manager: manager)
+        let sendFlowManager = app.ensureSendFlowManager(manager, presenter: presenter)
+        let sendFlowManagerId = ObjectIdentifier(sendFlowManager)
+
+        guard initializedSendFlowManagerId != sendFlowManagerId else { return }
+
+        initializedSendFlowManagerId = sendFlowManagerId
+        initCompleted = false
+        applyRouteArguments(to: sendFlowManager)
+
+        // rust handles alert + popRoute on failure
+        if await sendFlowManager.rust.waitForInit() {
+            initCompleted = true
+        }
     }
 }

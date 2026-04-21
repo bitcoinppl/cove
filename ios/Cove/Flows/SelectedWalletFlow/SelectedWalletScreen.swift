@@ -508,8 +508,8 @@ struct SelectedWalletScreen: View {
             }
             .onAppear {
                 // Reset SendFlowManager so new send flow is fresh
-                app.sendFlowManager = nil
                 UIRefreshControl.appearance().tintColor = refreshControlTintColor
+                app.clearSendFlowManager(id: manager.id)
                 handleScrollToTransaction(proxy: proxy)
             }
             .onChange(of: colorScheme) {
