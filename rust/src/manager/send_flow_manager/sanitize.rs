@@ -1,7 +1,6 @@
 const FIAT_TOKENS: &[&str] = &[
     // fiat symbols
-    "$", "€", "£", "¥", "₹",
-    // fiat codes
+    "$", "€", "£", "¥", "₹", // fiat codes
     "USD", "EUR", "GBP", "JPY", "CAD", "AUD", "CHF", "INR", "MXN",
 ];
 
@@ -9,10 +8,8 @@ const BTC_TOKENS: &[&str] = &["BTC", "SAT", "SATS"];
 
 const CURRENCY_TOKENS: &[&str] = &[
     // fiat symbols
-    "$", "€", "£", "¥", "₹",
-    // fiat codes
-    "USD", "EUR", "GBP", "JPY", "CAD", "AUD", "CHF", "INR", "MXN",
-    // bitcoin units
+    "$", "€", "£", "¥", "₹", // fiat codes
+    "USD", "EUR", "GBP", "JPY", "CAD", "AUD", "CHF", "INR", "MXN", // bitcoin units
     "BTC", "SAT", "SATS",
 ];
 
