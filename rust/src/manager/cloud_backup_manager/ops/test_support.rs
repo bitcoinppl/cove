@@ -95,6 +95,7 @@ struct MockCloudState {
     wallet_backups: HashMap<(String, String), Vec<u8>>,
     wallet_backup_download_overrides: HashMap<(String, String), Vec<u8>>,
     list_wallet_files_error: Option<CloudStorageError>,
+    list_wallet_files_non_interactive_error: Option<CloudStorageError>,
     upload_master_key_error: Option<CloudStorageError>,
     next_upload_wallet_backup_error: Option<CloudStorageError>,
     upload_wallet_backup_error: Option<CloudStorageError>,
@@ -142,8 +143,13 @@ impl MockCloudStorage {
             Some(CloudStorageError::DownloadFailed(message.into()));
     }
 
-    pub(crate) fn clear_list_wallet_files_failure(&self) {
-        self.state.lock().list_wallet_files_error = None;
+    pub(crate) fn fail_list_wallet_files_non_interactive(&self, message: &str) {
+        self.state.lock().list_wallet_files_non_interactive_error =
+            Some(CloudStorageError::DownloadFailed(message.into()));
+    }
+
+    pub(crate) fn clear_list_wallet_files_non_interactive_failure(&self) {
+        self.state.lock().list_wallet_files_non_interactive_error = None;
     }
 
     pub(crate) fn fail_master_key_upload(&self, message: &str) {
@@ -309,6 +315,30 @@ impl CloudStorageAccess for MockCloudStorage {
     async fn list_wallet_files(&self, namespace: String) -> Result<Vec<String>, CloudStorageError> {
         let state = self.state.lock();
         if let Some(error) = state.list_wallet_files_error.clone() {
+            return Err(error);
+        }
+        let mut wallet_files = state.wallet_files.get(&namespace).cloned().unwrap_or_default();
+
+        if state.reflect_uploaded_wallets_in_listing {
+            for (uploaded_namespace, record_id) in &state.uploaded_wallet_backups {
+                if uploaded_namespace == &namespace {
+                    let filename = wallet_filename_from_record_id(record_id);
+                    if !wallet_files.contains(&filename) {
+                        wallet_files.push(filename);
+                    }
+                }
+            }
+        }
+
+        Ok(wallet_files)
+    }
+
+    async fn list_wallet_files_non_interactive(
+        &self,
+        namespace: String,
+    ) -> Result<Vec<String>, CloudStorageError> {
+        let state = self.state.lock();
+        if let Some(error) = state.list_wallet_files_non_interactive_error.clone() {
             return Err(error);
         }
         let mut wallet_files = state.wallet_files.get(&namespace).cloned().unwrap_or_default();

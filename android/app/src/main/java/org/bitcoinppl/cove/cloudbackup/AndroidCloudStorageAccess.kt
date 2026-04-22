@@ -19,6 +19,45 @@ import org.bitcoinppl.cove_core.device.CloudSyncHealth
 import org.json.JSONArray
 import org.json.JSONObject
 
+internal fun syncHealthForNamespaceFiles(
+    namespaceFiles: List<List<String>>,
+    hasUploadedBackupFiles: (List<String>) -> Boolean,
+): CloudSyncHealth =
+    if (namespaceFiles.any(hasUploadedBackupFiles)) {
+        CloudSyncHealth.AllUploaded
+    } else {
+        CloudSyncHealth.NoFiles
+    }
+
+internal fun hasUploadedBackupFiles(fileNames: List<String>): Boolean =
+    fileNames.any { it == DrivePaths.masterKeyFileName || DrivePaths.isWalletFile(it) }
+
+internal data class UploadMetadata(
+    val name: String,
+    val parents: List<String> = emptyList(),
+) {
+    fun toJson(): JSONObject =
+        JSONObject()
+            .put("name", name)
+            .apply {
+                if (parents.isNotEmpty()) {
+                    put("parents", JSONArray(parents))
+                }
+            }
+}
+
+internal fun createUploadMetadata(
+    fileName: String,
+    parentId: String,
+): UploadMetadata =
+    UploadMetadata(
+        name = fileName,
+        parents = listOf(parentId),
+    )
+
+internal fun overwriteUploadMetadata(fileName: String): UploadMetadata =
+    UploadMetadata(name = fileName)
+
 class AndroidCloudStorageAccess private constructor(
     context: Context,
     private val driveAuthorization: DriveAuthorizationHelper,
@@ -133,18 +172,10 @@ class AndroidCloudStorageAccess private constructor(
         }
 
     override suspend fun listWalletFiles(namespace: String): List<String> =
-        runDriveOperation(
-            interactive = true,
-            onError = { error -> mapListError(error) },
-        ) { token ->
-            val namespaceFolderId = requireNamespaceFolderId(token, namespace)
-            listChildren(
-                token = token,
-                parentId = namespaceFolderId,
-                foldersOnly = false,
-            ).map { it.name }
-                .filter(DrivePaths::isWalletFile)
-        }
+        listWalletFiles(namespace, interactive = true)
+
+    override suspend fun listWalletFilesNonInteractive(namespace: String): List<String> =
+        listWalletFiles(namespace, interactive = false)
 
     override suspend fun isBackupUploaded(
         namespace: String,
@@ -183,7 +214,20 @@ class AndroidCloudStorageAccess private constructor(
                 if (namespaces.isEmpty()) {
                     return@runDriveOperation CloudSyncHealth.NoFiles
                 }
-                CloudSyncHealth.AllUploaded
+
+                val namespaceFiles =
+                    namespaces.map { namespace ->
+                        listChildren(
+                            token = token,
+                            parentId = namespace.id,
+                            foldersOnly = false,
+                        ).map { it.name }
+                    }
+
+                syncHealthForNamespaceFiles(
+                    namespaceFiles = namespaceFiles,
+                    hasUploadedBackupFiles = ::hasUploadedBackupFiles,
+                )
             }
         } catch (error: Throwable) {
             when (mapListError(error)) {
@@ -272,9 +316,11 @@ class AndroidCloudStorageAccess private constructor(
             )
 
         val metadata =
-            JSONObject()
-                .put("name", fileName)
-                .put("parents", JSONArray().put(parentId))
+            if (existing == null) {
+                createUploadMetadata(fileName, parentId).toJson()
+            } else {
+                overwriteUploadMetadata(fileName).toJson()
+            }
 
         val boundary = "cove-${System.currentTimeMillis()}"
         val body = buildMultipartBody(boundary, metadata, data)
@@ -293,6 +339,23 @@ class AndroidCloudStorageAccess private constructor(
             contentType = "multipart/related; boundary=$boundary",
         )
     }
+
+    private suspend fun listWalletFiles(
+        namespace: String,
+        interactive: Boolean,
+    ): List<String> =
+        runDriveOperation(
+            interactive = interactive,
+            onError = { error -> mapListError(error) },
+        ) { token ->
+            val namespaceFolderId = requireNamespaceFolderId(token, namespace)
+            listChildren(
+                token = token,
+                parentId = namespaceFolderId,
+                foldersOnly = false,
+            ).map { it.name }
+                .filter(DrivePaths::isWalletFile)
+        }
 
     private fun buildMultipartBody(
         boundary: String,
