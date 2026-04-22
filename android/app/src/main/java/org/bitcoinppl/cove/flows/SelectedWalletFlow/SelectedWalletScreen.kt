@@ -133,7 +133,7 @@ fun SelectedWalletScreen(
         } ?: satsAmount
 
     val actualSatsPending =
-        remember(manager?.balance) {
+        remember(manager?.balance, manager?.walletMetadata?.selectedUnit) {
             manager?.let {
                 val pending = it.balance.untrustedPending()
                 if (pending.asSats() > 0UL) {
@@ -337,7 +337,7 @@ fun SelectedWalletScreen(
 
                 val pendingAmount =
                     when (fiatOrBtc) {
-                        FiatOrBtc.FIAT -> fiatBalancePending
+                        FiatOrBtc.FIAT -> fiatBalancePending ?: actualSatsPending
                         FiatOrBtc.BTC -> actualSatsPending
                     }
 

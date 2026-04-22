@@ -70,9 +70,10 @@ struct WalletBalanceHeaderView: View {
                         .font(.footnote)
                         .padding(.leading, 2)
                 } else {
-                    ProgressView()
-                        .tint(.white.opacity(0.6))
-                        .scaleEffect(0.7)
+                    Text("+ \(manager.amountFmtUnit(pending)) pending")
+                        .foregroundColor(.white.opacity(0.6))
+                        .font(.footnote)
+                        .padding(.leading, 2)
                 }
             } else {
                 Text("+ \(manager.amountFmtUnit(pending)) pending")

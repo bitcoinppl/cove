@@ -1824,6 +1824,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_balance_spendable(
     ): Short
+    external fun uniffi_cove_checksum_method_balance_untrusted_pending(
+    ): Short
     external fun uniffi_cove_checksum_method_fingerprint_as_lowercase(
     ): Short
     external fun uniffi_cove_checksum_method_fingerprint_as_uppercase(
@@ -3045,6 +3047,8 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_constructor_balance_zero(uniffi_out_err: UniffiRustCallStatus, 
     ): Long
     external fun uniffi_cove_fn_method_balance_spendable(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_fn_method_balance_untrusted_pending(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Long
     external fun uniffi_cove_fn_method_balance_uniffi_trait_eq_eq(`ptr`: Long,`other`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Byte
@@ -4689,6 +4693,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_balance_spendable() != 31487.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_balance_untrusted_pending() != 30274.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_fingerprint_as_lowercase() != 43161.toShort()) {
@@ -6916,6 +6923,8 @@ public interface BalanceInterface {
     
     fun `spendable`(): Amount
     
+    fun `untrustedPending`(): Amount
+    
     companion object
 }
 
@@ -7025,6 +7034,19 @@ open class Balance: Disposable, AutoCloseable, BalanceInterface
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_balance_spendable(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    override fun `untrustedPending`(): Amount {
+            return FfiConverterTypeAmount.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_balance_untrusted_pending(
         it,
         _status)
 }

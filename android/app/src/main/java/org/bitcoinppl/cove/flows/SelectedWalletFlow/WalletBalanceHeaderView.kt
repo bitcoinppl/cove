@@ -185,6 +185,7 @@ internal fun BalanceWidget(
             AmountDisplay(
                 amount = pendingAmount,
                 isHidden = isHidden,
+                hiddenText = "+ •••••• pending",
                 textContent = { text ->
                     Text(
                         text = text,
