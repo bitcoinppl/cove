@@ -71,6 +71,7 @@ pub struct WalletActor {
 
     seed: u64,
     transaction_watchers: HashMap<Txid, Addr<TransactionWatcher>>,
+    scan_task: Option<tokio::task::AbortHandle>,
 
     // cached values, source of truth is the redb database saved with wallet metadata
     last_scan_finished: Option<Duration>,
@@ -174,6 +175,7 @@ impl WalletActor {
             last_height_fetched: None,
             state: ActorState::Initial,
             transaction_watchers: HashMap::default(),
+            scan_task: None,
             db,
         })
     }
@@ -937,8 +939,11 @@ impl WalletActor {
 
     pub async fn stop_all_scans(&mut self) {
         debug!("stop_all_scans");
+        if let Some(handle) = self.scan_task.take() {
+            handle.abort();
+        }
+        self.state = ActorState::Initial;
         self.transaction_watchers = HashMap::default();
-        // TODO: stop the wallet scans too, need to save the task handle when we start the scan
     }
 
     async fn remove_watcher_for_txn(&mut self, tx_id: Txid) {
@@ -1150,7 +1155,7 @@ impl WalletActor {
         let (full_scan_request, graph, node_client) = self.get_for_full_scan().await?;
 
         let addr = self.addr.clone();
-        self.addr.send_fut(async move {
+        let handle = cove_tokio::task::spawn(async move {
             let start = UNIX_EPOCH.elapsed().unwrap().as_secs();
 
             let full_scan_result = node_client
@@ -1166,6 +1171,9 @@ impl WalletActor {
             // perform next scan
             send!(addr.maybe_perform_expanded_full_scan());
         });
+        if let Some(old) = self.scan_task.replace(handle.abort_handle()) {
+            old.abort();
+        }
 
         Produces::ok(())
     }
@@ -1177,7 +1185,7 @@ impl WalletActor {
         let (full_scan_request, graph, node_client) = self.get_for_full_scan().await?;
 
         let addr = self.addr.clone();
-        self.addr.send_fut(async move {
+        let handle = cove_tokio::task::spawn(async move {
             let start = UNIX_EPOCH.elapsed().unwrap().as_secs();
 
             let full_scan_result = node_client
@@ -1190,6 +1198,9 @@ impl WalletActor {
             // update wallet state
             send!(addr.handle_full_scan_complete(full_scan_result, FULL_SCAN_TYPE));
         });
+        if let Some(old) = self.scan_task.replace(handle.abort_handle()) {
+            old.abort();
+        }
 
         Produces::ok(())
     }
@@ -1217,7 +1228,7 @@ impl WalletActor {
         let graph = self.wallet.bdk.tx_graph().clone();
 
         let addr = self.addr.clone();
-        self.addr.send_fut(async move {
+        let handle = cove_tokio::task::spawn(async move {
             let scan_result =
                 node_client.start_wallet_scan(&graph, full_scan_request, GAP_LIMIT as usize).await;
 
@@ -1227,6 +1238,9 @@ impl WalletActor {
             // update wallet state
             send!(addr.handle_incremental_scan_complete(scan_result));
         });
+        if let Some(old) = self.scan_task.replace(handle.abort_handle()) {
+            old.abort();
+        }
 
         Produces::ok(())
     }
@@ -1438,6 +1452,9 @@ impl WalletActor {
 impl Drop for WalletActor {
     fn drop(&mut self) {
         debug!("[DROP] Wallet Actor for {}", self.wallet.id);
+        if let Some(handle) = self.scan_task.take() {
+            handle.abort();
+        }
     }
 }
 
