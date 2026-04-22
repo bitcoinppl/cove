@@ -19,11 +19,6 @@ import org.bitcoinppl.cove_core.OnboardingState
 import org.bitcoinppl.cove_core.RustOnboardingManager
 import org.bitcoinppl.cove_core.types.WalletId
 
-internal fun shouldStartOnboarding(
-    termsAccepted: Boolean,
-    hasWallets: Boolean,
-): Boolean = !termsAccepted || !hasWallets
-
 internal data class OnboardingSnapshot(
     val state: OnboardingState,
     val isComplete: Boolean,
