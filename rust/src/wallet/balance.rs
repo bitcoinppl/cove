@@ -26,4 +26,8 @@ impl Balance {
     pub fn spendable(&self) -> Amount {
         self.0.trusted_spendable().into()
     }
+    #[uniffi::method]
+    pub fn untrusted_pending(&self) -> Amount {
+        self.0.untrusted_pending.into()
+    }
 }

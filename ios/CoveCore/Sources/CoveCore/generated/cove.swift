@@ -1366,6 +1366,8 @@ public protocol BalanceProtocol: AnyObject, Sendable {
     
     func spendable()  -> Amount
     
+    func untrustedPending()  -> Amount
+    
 }
 open class Balance: BalanceProtocol, @unchecked Sendable, Equatable {
     fileprivate let handle: UInt64
@@ -1430,6 +1432,14 @@ public static func zero() -> Balance  {
 open func spendable() -> Amount  {
     return try!  FfiConverterTypeAmount_lift(try! rustCall() {
     uniffi_cove_fn_method_balance_spendable(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+open func untrustedPending() -> Amount  {
+    return try!  FfiConverterTypeAmount_lift(try! rustCall() {
+    uniffi_cove_fn_method_balance_untrusted_pending(
             self.uniffiCloneHandle(),$0
     )
 })
@@ -37150,6 +37160,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_balance_spendable() != 31487) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_balance_untrusted_pending() != 30274) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_fingerprint_as_lowercase() != 43161) {

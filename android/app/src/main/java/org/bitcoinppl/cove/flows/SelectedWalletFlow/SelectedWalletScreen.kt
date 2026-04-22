@@ -132,6 +132,14 @@ fun SelectedWalletScreen(
             it.displayAmount(spendable, showUnit = true)
         } ?: satsAmount
 
+    val actualSatsPending =
+        manager?.let {
+            val pending = it.balance.untrustedPending()
+            if (pending.asSats() > 0UL) {
+                "+ " + it.displayAmount(pending, showUnit = true) + " pending"
+            } else null
+        }
+
     val fiatBalance =
         remember(manager?.balance, app?.prices) {
             manager?.let {
@@ -140,6 +148,19 @@ fun SelectedWalletScreen(
                 }
             }
         }
+
+    val fiatBalancePending =
+        remember(manager?.balance, app?.prices) {
+            manager?.let {
+                val pending = it.balance.untrustedPending()
+                if (pending.asSats() > 0UL) {
+                    it.rust.amountInFiat(pending)?.let { fiat ->
+                        "+ " + it.rust.displayFiatAmount(fiat) + " pending"
+                    }
+                } else null
+            }
+        }
+
     val unsignedTransactions = manager?.unsignedTransactions ?: emptyList()
 
     LaunchedEffect(manager) {
@@ -312,6 +333,12 @@ fun SelectedWalletScreen(
                         FiatOrBtc.BTC -> actualSatsAmount to fiatBalance
                     }
 
+                val pendingAmount =
+                    when (fiatOrBtc) {
+                        FiatOrBtc.FIAT -> fiatBalancePending
+                        FiatOrBtc.BTC -> actualSatsPending
+                    }
+
                 val hasTransactions =
                     when (val loadState = manager?.loadState) {
                         is WalletLoadState.SCANNING -> loadState.txns.isNotEmpty() || unsignedTransactions.isNotEmpty()
@@ -414,6 +441,7 @@ fun SelectedWalletScreen(
                                     sensitiveVisible = sensitiveVisible,
                                     primaryAmount = primaryAmount,
                                     secondaryAmount = secondaryAmount,
+                                    pendingAmount = pendingAmount,
                                     onToggleUnit = { manager?.dispatch(WalletManagerAction.ToggleFiatBtcPrimarySecondary) },
                                     onToggleSensitive = { manager?.dispatch(WalletManagerAction.ToggleSensitiveVisibility) },
                                     onSend = onSend,

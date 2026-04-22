@@ -16,6 +16,7 @@ struct WalletBalanceHeaderView: View {
     // trusted spendable balance
     let balance: Amount
     @State var fiatBalance: Double? = nil
+    @State var fiatPendingBalance: Double? = nil
     let metadata: WalletMetadata
     let updater: (WalletManagerAction) -> Void
     let showReceiveSheet: () -> Void
@@ -50,6 +51,35 @@ struct WalletBalanceHeaderView: View {
             }
         } else {
             Text(manager.amountFmtUnit(balance))
+        }
+    }
+
+    @ViewBuilder
+    private var pendingBalanceView: some View {
+        let pending = manager.balance.untrustedPending()
+        if pending.asSats() > 0 {
+            if !metadata.sensitiveVisible {
+                Text("+ •••••• pending")
+                    .foregroundColor(.white.opacity(0.6))
+                    .font(.footnote)
+                    .padding(.leading, 2)
+            } else if metadata.fiatOrBtc == .fiat {
+                if let fiatPendingBalance {
+                    Text("+ \(manager.rust.displayFiatAmount(amount: fiatPendingBalance)) pending")
+                        .foregroundColor(.white.opacity(0.6))
+                        .font(.footnote)
+                        .padding(.leading, 2)
+                } else {
+                    ProgressView()
+                        .tint(.white.opacity(0.6))
+                        .scaleEffect(0.7)
+                }
+            } else {
+                Text("+ \(manager.amountFmtUnit(pending)) pending")
+                    .foregroundColor(.white.opacity(0.6))
+                    .font(.footnote)
+                    .padding(.leading, 2)
+            }
         }
     }
 
@@ -97,6 +127,11 @@ struct WalletBalanceHeaderView: View {
                     Image(systemName: eyeIcon)
                         .foregroundColor(.gray)
                         .onTapGesture { updater(.toggleSensitiveVisibility) }
+                }
+
+                HStack {
+                    pendingBalanceView
+                    Spacer()
                 }
             }
             .onTapGesture {
@@ -175,16 +210,18 @@ struct WalletBalanceHeaderView: View {
         )
         .background(.midnightBlue)
         .onAppear {
-            if fiatBalance != nil { return }
-            fiatBalance = manager.rust.amountInFiat(amount: balance)
+            if fiatBalance == nil { fiatBalance = manager.rust.amountInFiat(amount: balance) }
+            if fiatPendingBalance == nil { fiatPendingBalance = manager.rust.amountInFiat(amount: manager.balance.untrustedPending()) }
         }
         .onChange(of: manager.balance, initial: false) { _, newBalance in
             // recalculate fiat when balance changes
             fiatBalance = manager.rust.amountInFiat(amount: newBalance.spendable())
+            fiatPendingBalance = manager.rust.amountInFiat(amount: newBalance.untrustedPending())
         }
         .onChange(of: app.prices, initial: false) { _, _ in
             // recalculate fiat when prices are loaded/updated
             fiatBalance = manager.rust.amountInFiat(amount: balance)
+            fiatPendingBalance = manager.rust.amountInFiat(amount: manager.balance.untrustedPending())
         }
     }
 }
