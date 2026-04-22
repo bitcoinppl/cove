@@ -133,11 +133,13 @@ fun SelectedWalletScreen(
         } ?: satsAmount
 
     val actualSatsPending =
-        manager?.let {
-            val pending = it.balance.untrustedPending()
-            if (pending.asSats() > 0UL) {
-                "+ " + it.displayAmount(pending, showUnit = true) + " pending"
-            } else null
+        remember(manager?.balance) {
+            manager?.let {
+                val pending = it.balance.untrustedPending()
+                if (pending.asSats() > 0UL) {
+                    "+ " + it.displayAmount(pending, showUnit = true) + " pending"
+                } else null
+            }
         }
 
     val fiatBalance =
