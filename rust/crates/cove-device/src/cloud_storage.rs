@@ -72,8 +72,14 @@ pub trait CloudStorageAccess: Send + Sync + std::fmt::Debug + 'static {
     /// List all namespace IDs (subdirectories of cspp-namespaces/)
     async fn list_namespaces(&self) -> Result<Vec<String>, CloudStorageError>;
 
-    /// List wallet backup filenames within a namespace (e.g. "wallet-<hash>.json")
+    /// List wallet backup filenames within a namespace for user-driven flows
     async fn list_wallet_files(&self, namespace: String) -> Result<Vec<String>, CloudStorageError>;
+
+    /// List wallet backup filenames within a namespace without presenting consent UI
+    async fn list_wallet_files_non_interactive(
+        &self,
+        namespace: String,
+    ) -> Result<Vec<String>, CloudStorageError>;
 
     /// Check whether a blob has been fully uploaded to iCloud
     async fn is_backup_uploaded(
@@ -169,6 +175,13 @@ impl CloudStorage {
         self.0.list_wallet_files(namespace).await
     }
 
+    pub async fn list_wallet_files_non_interactive(
+        &self,
+        namespace: String,
+    ) -> Result<Vec<String>, CloudStorageError> {
+        self.0.list_wallet_files_non_interactive(namespace).await
+    }
+
     pub async fn is_backup_uploaded(
         &self,
         namespace: String,
@@ -186,6 +199,17 @@ impl CloudStorage {
         namespace: String,
     ) -> Result<Vec<String>, CloudStorageError> {
         let filenames = self.0.list_wallet_files(namespace).await?;
+        Ok(filenames
+            .iter()
+            .filter_map(|f| wallet_record_id_from_filename(f).map(String::from))
+            .collect())
+    }
+
+    pub async fn list_wallet_backups_non_interactive(
+        &self,
+        namespace: String,
+    ) -> Result<Vec<String>, CloudStorageError> {
+        let filenames = self.0.list_wallet_files_non_interactive(namespace).await?;
         Ok(filenames
             .iter()
             .filter_map(|f| wallet_record_id_from_filename(f).map(String::from))

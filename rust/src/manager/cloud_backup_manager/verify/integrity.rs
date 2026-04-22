@@ -98,14 +98,15 @@ impl RustCloudBackupManager {
         issues: &mut Vec<BackupIntegrityIssue>,
     ) {
         let cloud = CloudStorage::global();
-        let wallet_record_ids = match cloud.list_wallet_backups(namespace.clone()).await {
-            Ok(wallet_record_ids) => wallet_record_ids,
-            Err(error) => {
-                warn!("Backup integrity: wallet list check failed: {error}");
-                issues.push(BackupIntegrityIssue::RemoteWalletListUnreadable);
-                return;
-            }
-        };
+        let wallet_record_ids =
+            match cloud.list_wallet_backups_non_interactive(namespace.clone()).await {
+                Ok(wallet_record_ids) => wallet_record_ids,
+                Err(error) => {
+                    warn!("Backup integrity: wallet list check failed: {error}");
+                    issues.push(BackupIntegrityIssue::RemoteWalletListUnreadable);
+                    return;
+                }
+            };
 
         let remote_wallet_truth = match self.load_remote_wallet_truth(&wallet_record_ids).await {
             Ok(remote_wallet_truth) => remote_wallet_truth,
@@ -177,13 +178,14 @@ impl RustCloudBackupManager {
         fallback_wallet_record_ids: &[String],
     ) {
         let cloud = CloudStorage::global();
-        let wallet_record_ids = match cloud.list_wallet_backups(namespace.to_string()).await {
-            Ok(wallet_record_ids) => wallet_record_ids,
-            Err(error) => {
-                warn!("Backup integrity: detail relist failed: {error}");
-                fallback_wallet_record_ids.to_vec()
-            }
-        };
+        let wallet_record_ids =
+            match cloud.list_wallet_backups_non_interactive(namespace.to_string()).await {
+                Ok(wallet_record_ids) => wallet_record_ids,
+                Err(error) => {
+                    warn!("Backup integrity: detail relist failed: {error}");
+                    fallback_wallet_record_ids.to_vec()
+                }
+            };
 
         let remote_wallet_truth = match self.load_remote_wallet_truth(&wallet_record_ids).await {
             Ok(remote_wallet_truth) => remote_wallet_truth,

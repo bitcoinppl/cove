@@ -2346,7 +2346,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
-    async fn integrity_warns_when_wallet_list_fails() {
+    async fn integrity_warns_when_background_wallet_list_fails() {
         let _guard = test_lock().lock();
         cove_tokio::init();
         let globals = test_globals();
@@ -2357,13 +2357,55 @@ mod tests {
         Keychain::global()
             .save_cspp_passkey_and_namespace(&[1, 2, 3, 4], [9; 32], &namespace)
             .unwrap();
-        globals.cloud.fail_list_wallet_files("offline");
+        globals.cloud.fail_list_wallet_files_non_interactive("offline");
 
         let warning =
             manager.verify_backup_integrity_impl().await.expect("expected integrity warning");
 
         assert!(warning.contains("wallet backups could not be listed"));
-        globals.cloud.clear_list_wallet_files_failure();
+        globals.cloud.clear_list_wallet_files_non_interactive_failure();
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn refresh_cloud_backup_detail_uses_interactive_wallet_listing() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        let manager = RustCloudBackupManager::init();
+        configure_enabled_cloud_backup(&manager, globals, 1);
+
+        let metadata = xpub_only_wallet_metadata();
+        persist_xpub_wallets(vec![metadata.clone()]);
+
+        let keychain = Keychain::global();
+        let namespace = keychain.get(CSPP_NAMESPACE_ID_KEY.into()).unwrap();
+        keychain.save_cspp_passkey_and_namespace(&[1, 2, 3, 4], [9; 32], &namespace).unwrap();
+        let master_key =
+            cove_cspp::Cspp::new(keychain.clone()).load_master_key_from_store().unwrap().unwrap();
+        let record_id = cove_cspp::backup_data::wallet_record_id(metadata.id.as_ref());
+        globals.cloud.set_wallet_backup(
+            namespace.clone(),
+            record_id.clone(),
+            encrypted_wallet_backup_bytes(&metadata, &master_key, "interactive-revision", 1).await,
+        );
+        globals.cloud.set_wallet_files(namespace, vec![wallet_filename_from_record_id(&record_id)]);
+        globals.cloud.fail_list_wallet_files_non_interactive("offline");
+
+        let Some(CloudBackupDetailResult::Success(detail)) =
+            manager.refresh_cloud_backup_detail().await
+        else {
+            panic!("expected cloud backup detail");
+        };
+
+        assert_eq!(1, detail.up_to_date.len() + detail.needs_sync.len());
+        let listed_record_id = detail
+            .up_to_date
+            .first()
+            .map(|wallet| wallet.record_id.clone())
+            .or_else(|| detail.needs_sync.first().map(|wallet| wallet.record_id.clone()))
+            .expect("expected listed wallet");
+        assert_eq!(listed_record_id, record_id);
+        globals.cloud.clear_list_wallet_files_non_interactive_failure();
     }
 
     #[tokio::test(flavor = "current_thread")]

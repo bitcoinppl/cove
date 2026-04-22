@@ -20,11 +20,55 @@ import org.junit.Test
 
 class OnboardingHelpersTest {
     @Test
-    fun shouldStartOnboardingRequiresAcceptedTermsAndWallets() {
-        assertTrue(shouldStartOnboarding(termsAccepted = false, hasWallets = false))
-        assertTrue(shouldStartOnboarding(termsAccepted = false, hasWallets = true))
-        assertTrue(shouldStartOnboarding(termsAccepted = true, hasWallets = false))
-        assertFalse(shouldStartOnboarding(termsAccepted = true, hasWallets = true))
+    fun resolveStartupModeMirrorsIosStartupShell() {
+        assertEquals(
+            StartupMode.ONBOARDING,
+            resolveStartupMode(
+                termsAccepted = false,
+                hasWallets = false,
+                cloudBackupStatus = CloudBackupStatus.Disabled,
+            ),
+        )
+        assertEquals(
+            StartupMode.ONBOARDING,
+            resolveStartupMode(
+                termsAccepted = false,
+                hasWallets = true,
+                cloudBackupStatus = CloudBackupStatus.Enabled,
+            ),
+        )
+        assertEquals(
+            StartupMode.ONBOARDING,
+            resolveStartupMode(
+                termsAccepted = true,
+                hasWallets = false,
+                cloudBackupStatus = CloudBackupStatus.Disabled,
+            ),
+        )
+        assertEquals(
+            StartupMode.READY,
+            resolveStartupMode(
+                termsAccepted = true,
+                hasWallets = false,
+                cloudBackupStatus = CloudBackupStatus.Enabled,
+            ),
+        )
+        assertEquals(
+            StartupMode.READY,
+            resolveStartupMode(
+                termsAccepted = true,
+                hasWallets = false,
+                cloudBackupStatus = CloudBackupStatus.PasskeyMissing,
+            ),
+        )
+        assertEquals(
+            StartupMode.READY,
+            resolveStartupMode(
+                termsAccepted = true,
+                hasWallets = true,
+                cloudBackupStatus = CloudBackupStatus.Disabled,
+            ),
+        )
     }
 
     @Test

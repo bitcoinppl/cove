@@ -105,6 +105,10 @@ final class CloudStorageAccessImpl: CloudStorageAccess, @unchecked Sendable {
         }
     }
 
+    func listWalletFilesNonInteractive(namespace: String) async throws -> [String] {
+        try await listWalletFiles(namespace: namespace)
+    }
+
     func isBackupUploaded(namespace: String, recordId: String) async throws -> Bool {
         try await run {
             try self.helper.isBackupUploaded(namespace: namespace, recordId: recordId)

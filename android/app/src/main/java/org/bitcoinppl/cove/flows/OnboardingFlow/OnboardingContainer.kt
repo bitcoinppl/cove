@@ -16,7 +16,6 @@ internal fun OnboardingContainer(
     LaunchedEffect(manager.isComplete) {
         if (!manager.isComplete) return@LaunchedEffect
         manager.app.loadWallets()
-        manager.app.cloudBackupManager.runBackgroundIntegrityCheck()
         onComplete()
     }
 

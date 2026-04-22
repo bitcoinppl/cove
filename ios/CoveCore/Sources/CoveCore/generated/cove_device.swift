@@ -352,7 +352,7 @@ private func uniffiTraitInterfaceCallWithError<T, E>(
         callStatus.pointee.errorBuf = FfiConverterString.lower(String(describing: error))
     }
 }
-// Initial value and increment amount for handles. 
+// Initial value and increment amount for handles.
 // These ensure that SWIFT handles always have the lowest bit set
 fileprivate let UNIFFI_HANDLEMAP_INITIAL: UInt64 = 1
 fileprivate let UNIFFI_HANDLEMAP_DELTA: UInt64 = 2
@@ -509,12 +509,12 @@ fileprivate struct FfiConverterData: FfiConverterRustBuffer {
 
 
 public protocol CloudStorageProtocol: AnyObject, Sendable {
-    
+
     /**
      * Check if any cloud backup namespaces exist
      */
     func hasAnyCloudBackup() async throws  -> Bool
-    
+
 }
 open class CloudStorage: CloudStorageProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -574,9 +574,9 @@ public convenience init(cloudStorage: CloudStorageAccess) {
         try! rustCall { uniffi_cove_device_fn_free_cloudstorage(handle, $0) }
     }
 
-    
 
-    
+
+
     /**
      * Check if any cloud backup namespaces exist
      */
@@ -586,7 +586,7 @@ open func hasAnyCloudBackup()async throws  -> Bool  {
             rustFutureFunc: {
                 uniffi_cove_device_fn_method_cloudstorage_has_any_cloud_backup(
                     self.uniffiCloneHandle()
-                    
+
                 )
             },
             pollFunc: ffi_cove_device_rust_future_poll_i8,
@@ -596,9 +596,9 @@ open func hasAnyCloudBackup()async throws  -> Bool  {
             errorHandler: FfiConverterTypeCloudStorageError_lift
         )
 }
-    
 
-    
+
+
 }
 
 
@@ -648,7 +648,7 @@ public func FfiConverterTypeCloudStorage_lower(_ value: CloudStorage) -> UInt64 
 
 
 public protocol ConnectivityProtocol: AnyObject, Sendable {
-    
+
 }
 open class Connectivity: ConnectivityProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -708,11 +708,11 @@ public convenience init(connectivity: ConnectivityAccess) {
         try! rustCall { uniffi_cove_device_fn_free_connectivity(handle, $0) }
     }
 
-    
 
-    
 
-    
+
+
+
 }
 
 
@@ -762,7 +762,7 @@ public func FfiConverterTypeConnectivity_lower(_ value: Connectivity) -> UInt64 
 
 
 public protocol DeviceProtocol: AnyObject, Sendable {
-    
+
 }
 open class Device: DeviceProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -829,11 +829,11 @@ public convenience init(device: DeviceAccess) {
         try! rustCall { uniffi_cove_device_fn_free_device(handle, $0) }
     }
 
-    
 
-    
 
-    
+
+
+
 }
 
 
@@ -883,7 +883,7 @@ public func FfiConverterTypeDevice_lower(_ value: Device) -> UInt64 {
 
 
 public protocol KeychainProtocol: AnyObject, Sendable {
-    
+
 }
 open class Keychain: KeychainProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -950,11 +950,11 @@ public convenience init(keychain: KeychainAccess) {
         try! rustCall { uniffi_cove_device_fn_free_keychain(handle, $0) }
     }
 
-    
 
-    
 
-    
+
+
+
 }
 
 
@@ -1004,9 +1004,9 @@ public func FfiConverterTypeKeychain_lower(_ value: Keychain) -> UInt64 {
 
 
 public protocol PasskeyAccessProtocol: AnyObject, Sendable {
-    
+
     func isPrfSupported()  -> Bool
-    
+
 }
 open class PasskeyAccess: PasskeyAccessProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -1066,9 +1066,9 @@ public convenience init(provider: PasskeyProvider) {
         try! rustCall { uniffi_cove_device_fn_free_passkeyaccess(handle, $0) }
     }
 
-    
 
-    
+
+
 open func isPrfSupported() -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
     uniffi_cove_device_fn_method_passkeyaccess_is_prf_supported(
@@ -1076,9 +1076,9 @@ open func isPrfSupported() -> Bool  {
     )
 })
 }
-    
 
-    
+
+
 }
 
 
@@ -1143,7 +1143,7 @@ public struct DiscoveredPasskeyResult: Equatable, Hashable {
     public init(
         /**
          * 32-byte PRF key
-         */prfOutput: Data, 
+         */prfOutput: Data,
         /**
          * Discovered credential ID, persisted to local keychain
          */credentialId: Data) {
@@ -1151,9 +1151,9 @@ public struct DiscoveredPasskeyResult: Equatable, Hashable {
         self.credentialId = credentialId
     }
 
-    
 
-    
+
+
 }
 
 #if compiler(>=6)
@@ -1167,7 +1167,7 @@ public struct FfiConverterTypeDiscoveredPasskeyResult: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DiscoveredPasskeyResult {
         return
             try DiscoveredPasskeyResult(
-                prfOutput: FfiConverterData.read(from: &buf), 
+                prfOutput: FfiConverterData.read(from: &buf),
                 credentialId: FfiConverterData.read(from: &buf)
         )
     }
@@ -1194,11 +1194,11 @@ public func FfiConverterTypeDiscoveredPasskeyResult_lower(_ value: DiscoveredPas
 }
 
 
-public 
+public
 enum CloudStorageError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
-    
-    
+
+
     case NotAvailable(String
     )
     case Offline(String
@@ -1211,9 +1211,9 @@ enum CloudStorageError: Swift.Error, Equatable, Hashable, Foundation.LocalizedEr
     )
     case QuotaExceeded
 
-    
 
-    
+
+
 // The local Rust `Display` implementation.
 public var description: String {
     return try!  FfiConverterString.lift(
@@ -1225,11 +1225,11 @@ public var description: String {
     )
 }
 
-    
+
     public var errorDescription: String? {
         String(reflecting: self)
     }
-    
+
 }
 
 #if compiler(>=6)
@@ -1246,9 +1246,9 @@ public struct FfiConverterTypeCloudStorageError: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
 
-        
 
-        
+
+
         case 1: return .NotAvailable(
             try FfiConverterString.read(from: &buf)
             )
@@ -1273,38 +1273,38 @@ public struct FfiConverterTypeCloudStorageError: FfiConverterRustBuffer {
     public static func write(_ value: CloudStorageError, into buf: inout [UInt8]) {
         switch value {
 
-        
 
-        
-        
+
+
+
         case let .NotAvailable(v1):
             writeInt(&buf, Int32(1))
             FfiConverterString.write(v1, into: &buf)
-            
-        
+
+
         case let .Offline(v1):
             writeInt(&buf, Int32(2))
             FfiConverterString.write(v1, into: &buf)
-            
-        
+
+
         case let .UploadFailed(v1):
             writeInt(&buf, Int32(3))
             FfiConverterString.write(v1, into: &buf)
-            
-        
+
+
         case let .DownloadFailed(v1):
             writeInt(&buf, Int32(4))
             FfiConverterString.write(v1, into: &buf)
-            
-        
+
+
         case let .NotFound(v1):
             writeInt(&buf, Int32(5))
             FfiConverterString.write(v1, into: &buf)
-            
-        
+
+
         case .QuotaExceeded:
             writeInt(&buf, Int32(6))
-        
+
         }
     }
 }
@@ -1327,7 +1327,7 @@ public func FfiConverterTypeCloudStorageError_lower(_ value: CloudStorageError) 
 
 
 public enum CloudSyncHealth: Equatable, Hashable {
-    
+
     case unknown
     case allUploaded
     case uploading
@@ -1355,52 +1355,52 @@ public struct FfiConverterTypeCloudSyncHealth: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudSyncHealth {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .unknown
-        
+
         case 2: return .allUploaded
-        
+
         case 3: return .uploading
-        
+
         case 4: return .failed(try FfiConverterString.read(from: &buf)
         )
-        
+
         case 5: return .noFiles
-        
+
         case 6: return .unavailable
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: CloudSyncHealth, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .unknown:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .allUploaded:
             writeInt(&buf, Int32(2))
-        
-        
+
+
         case .uploading:
             writeInt(&buf, Int32(3))
-        
-        
+
+
         case let .failed(v1):
             writeInt(&buf, Int32(4))
             FfiConverterString.write(v1, into: &buf)
-            
-        
+
+
         case .noFiles:
             writeInt(&buf, Int32(5))
-        
-        
+
+
         case .unavailable:
             writeInt(&buf, Int32(6))
-        
+
         }
     }
 }
@@ -1422,11 +1422,11 @@ public func FfiConverterTypeCloudSyncHealth_lower(_ value: CloudSyncHealth) -> R
 
 
 
-public 
+public
 enum KeychainError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
-    
-    
+
+
     case Save
     case Delete
     case ParseSavedValue(String
@@ -1436,9 +1436,9 @@ enum KeychainError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError 
     case Decrypt(String
     )
 
-    
 
-    
+
+
 // The local Rust `Display` implementation.
 public var description: String {
     return try!  FfiConverterString.lift(
@@ -1450,11 +1450,11 @@ public var description: String {
     )
 }
 
-    
+
     public var errorDescription: String? {
         String(reflecting: self)
     }
-    
+
 }
 
 #if compiler(>=6)
@@ -1471,9 +1471,9 @@ public struct FfiConverterTypeKeychainError: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
 
-        
 
-        
+
+
         case 1: return .Save
         case 2: return .Delete
         case 3: return .ParseSavedValue(
@@ -1493,32 +1493,32 @@ public struct FfiConverterTypeKeychainError: FfiConverterRustBuffer {
     public static func write(_ value: KeychainError, into buf: inout [UInt8]) {
         switch value {
 
-        
 
-        
-        
+
+
+
         case .Save:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .Delete:
             writeInt(&buf, Int32(2))
-        
-        
+
+
         case let .ParseSavedValue(v1):
             writeInt(&buf, Int32(3))
             FfiConverterString.write(v1, into: &buf)
-            
-        
+
+
         case let .Encrypt(v1):
             writeInt(&buf, Int32(4))
             FfiConverterString.write(v1, into: &buf)
-            
-        
+
+
         case let .Decrypt(v1):
             writeInt(&buf, Int32(5))
             FfiConverterString.write(v1, into: &buf)
-            
+
         }
     }
 }
@@ -1541,7 +1541,7 @@ public func FfiConverterTypeKeychainError_lower(_ value: KeychainError) -> RustB
 
 
 public enum PasskeyCredentialPresence: Equatable, Hashable {
-    
+
     case present
     case missing
     case indeterminate
@@ -1565,32 +1565,32 @@ public struct FfiConverterTypePasskeyCredentialPresence: FfiConverterRustBuffer 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PasskeyCredentialPresence {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .present
-        
+
         case 2: return .missing
-        
+
         case 3: return .indeterminate
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: PasskeyCredentialPresence, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .present:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .missing:
             writeInt(&buf, Int32(2))
-        
-        
+
+
         case .indeterminate:
             writeInt(&buf, Int32(3))
-        
+
         }
     }
 }
@@ -1612,11 +1612,11 @@ public func FfiConverterTypePasskeyCredentialPresence_lower(_ value: PasskeyCred
 
 
 
-public 
+public
 enum PasskeyError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
-    
-    
+
+
     case NotSupported(String
     )
     case PrfUnsupportedProvider
@@ -1627,9 +1627,9 @@ enum PasskeyError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
     )
     case NoCredentialFound
 
-    
 
-    
+
+
 // The local Rust `Display` implementation.
 public var description: String {
     return try!  FfiConverterString.lift(
@@ -1641,11 +1641,11 @@ public var description: String {
     )
 }
 
-    
+
     public var errorDescription: String? {
         String(reflecting: self)
     }
-    
+
 }
 
 #if compiler(>=6)
@@ -1662,9 +1662,9 @@ public struct FfiConverterTypePasskeyError: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
 
-        
 
-        
+
+
         case 1: return .NotSupported(
             try FfiConverterString.read(from: &buf)
             )
@@ -1685,36 +1685,36 @@ public struct FfiConverterTypePasskeyError: FfiConverterRustBuffer {
     public static func write(_ value: PasskeyError, into buf: inout [UInt8]) {
         switch value {
 
-        
 
-        
-        
+
+
+
         case let .NotSupported(v1):
             writeInt(&buf, Int32(1))
             FfiConverterString.write(v1, into: &buf)
-            
-        
+
+
         case .PrfUnsupportedProvider:
             writeInt(&buf, Int32(2))
-        
-        
+
+
         case .UserCancelled:
             writeInt(&buf, Int32(3))
-        
-        
+
+
         case let .CreationFailed(v1):
             writeInt(&buf, Int32(4))
             FfiConverterString.write(v1, into: &buf)
-            
-        
+
+
         case let .AuthenticationFailed(v1):
             writeInt(&buf, Int32(5))
             FfiConverterString.write(v1, into: &buf)
-            
-        
+
+
         case .NoCredentialFound:
             writeInt(&buf, Int32(6))
-        
+
         }
     }
 }
@@ -1738,34 +1738,39 @@ public func FfiConverterTypePasskeyError_lower(_ value: PasskeyError) -> RustBuf
 
 
 public protocol CloudStorageAccess: AnyObject, Sendable {
-    
-    func uploadMasterKeyBackup(namespace: String, data: Data) async throws 
-    
-    func uploadWalletBackup(namespace: String, recordId: String, data: Data) async throws 
-    
+
+    func uploadMasterKeyBackup(namespace: String, data: Data) async throws
+
+    func uploadWalletBackup(namespace: String, recordId: String, data: Data) async throws
+
     func downloadMasterKeyBackup(namespace: String) async throws  -> Data
-    
+
     func downloadWalletBackup(namespace: String, recordId: String) async throws  -> Data
-    
-    func deleteWalletBackup(namespace: String, recordId: String) async throws 
-    
+
+    func deleteWalletBackup(namespace: String, recordId: String) async throws
+
     /**
      * List all namespace IDs (subdirectories of cspp-namespaces/)
      */
     func listNamespaces() async throws  -> [String]
-    
+
     /**
-     * List wallet backup filenames within a namespace (e.g. "wallet-<hash>.json")
+     * List wallet backup filenames within a namespace for user-driven flows
      */
     func listWalletFiles(namespace: String) async throws  -> [String]
-    
+
+    /**
+     * List wallet backup filenames within a namespace without presenting consent UI
+     */
+    func listWalletFilesNonInteractive(namespace: String) async throws  -> [String]
+
     /**
      * Check whether a blob has been fully uploaded to iCloud
      */
     func isBackupUploaded(namespace: String, recordId: String) async throws  -> Bool
-    
+
     func overallSyncHealth() async  -> CloudSyncHealth
-    
+
 }
 
 
@@ -2094,6 +2099,49 @@ fileprivate struct UniffiCallbackInterfaceCloudStorageAccess {
                 droppedCallback: uniffiOutDroppedCallback
             )
         },
+        listWalletFilesNonInteractive: { (
+            uniffiHandle: UInt64,
+            namespace: RustBuffer,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutDroppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
+        ) in
+            let makeCall = {
+                () async throws -> [String] in
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceCloudStorageAccess.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try await uniffiObj.listWalletFilesNonInteractive(
+                     namespace: try FfiConverterString.lift(namespace)
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: [String]) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: FfiConverterSequenceString.lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            uniffiTraitInterfaceCallAsyncWithError(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                lowerError: FfiConverterTypeCloudStorageError_lower,
+                droppedCallback: uniffiOutDroppedCallback
+            )
+        },
         isBackupUploaded: { (
             uniffiHandle: UInt64,
             namespace: RustBuffer,
@@ -2258,9 +2306,9 @@ public func FfiConverterCallbackInterfaceCloudStorageAccess_lower(_ v: CloudStor
 
 
 public protocol ConnectivityAccess: AnyObject, Sendable {
-    
+
     func isConnected()  -> Bool
-    
+
 }
 
 
@@ -2300,7 +2348,7 @@ fileprivate struct UniffiCallbackInterfaceConnectivityAccess {
                 )
             }
 
-            
+
             let writeReturn = { uniffiOutReturn.pointee = FfiConverterBool.lower($0) }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
@@ -2387,9 +2435,9 @@ public func FfiConverterCallbackInterfaceConnectivityAccess_lower(_ v: Connectiv
 
 
 public protocol DeviceAccess: AnyObject, Sendable {
-    
+
     func timezone()  -> String
-    
+
 }
 
 
@@ -2429,7 +2477,7 @@ fileprivate struct UniffiCallbackInterfaceDeviceAccess {
                 )
             }
 
-            
+
             let writeReturn = { uniffiOutReturn.pointee = FfiConverterString.lower($0) }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
@@ -2516,7 +2564,7 @@ public func FfiConverterCallbackInterfaceDeviceAccess_lower(_ v: DeviceAccess) -
 
 
 public protocol KeychainAccess: AnyObject, Sendable {
-    
+
     /**
      * Saves a key-value pair
      *
@@ -2524,12 +2572,12 @@ public protocol KeychainAccess: AnyObject, Sendable {
      *
      * Returns a `KeychainError` if the save operation fails
      */
-    func save(key: String, value: String) throws 
-    
+    func save(key: String, value: String) throws
+
     func get(key: String)  -> String?
-    
+
     func delete(key: String)  -> Bool
-    
+
 }
 
 
@@ -2573,7 +2621,7 @@ fileprivate struct UniffiCallbackInterfaceKeychainAccess {
                 )
             }
 
-            
+
             let writeReturn = { () }
             uniffiTraitInterfaceCallWithError(
                 callStatus: uniffiCallStatus,
@@ -2598,7 +2646,7 @@ fileprivate struct UniffiCallbackInterfaceKeychainAccess {
                 )
             }
 
-            
+
             let writeReturn = { uniffiOutReturn.pointee = FfiConverterOptionString.lower($0) }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
@@ -2622,7 +2670,7 @@ fileprivate struct UniffiCallbackInterfaceKeychainAccess {
                 )
             }
 
-            
+
             let writeReturn = { uniffiOutReturn.pointee = FfiConverterBool.lower($0) }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
@@ -2709,17 +2757,17 @@ public func FfiConverterCallbackInterfaceKeychainAccess_lower(_ v: KeychainAcces
 
 
 public protocol PasskeyProvider: AnyObject, Sendable {
-    
+
     /**
      * Create a new passkey credential
      */
     func createPasskey(rpId: String, userId: Data, challenge: Data) throws  -> Data
-    
+
     /**
      * Authenticate with a known credential_id (enable flow, re-enable)
      */
     func authenticateWithPrf(rpId: String, credentialId: Data, prfSalt: Data, challenge: Data) throws  -> Data
-    
+
     /**
      * Discoverable credential assertion — no credential_id needed
      *
@@ -2728,9 +2776,9 @@ public protocol PasskeyProvider: AnyObject, Sendable {
      * Returns both the 32-byte PRF output and the credential_id of the discovered passkey
      */
     func discoverAndAuthenticateWithPrf(rpId: String, prfSalt: Data, challenge: Data) throws  -> DiscoveredPasskeyResult
-    
+
     func isPrfSupported()  -> Bool
-    
+
     /**
      * Non-interactive check whether a passkey credential exists on the device
      *
@@ -2739,7 +2787,7 @@ public protocol PasskeyProvider: AnyObject, Sendable {
      * does not respond clearly enough to prove presence or absence
      */
     func checkPasskeyPresence(rpId: String, credentialId: Data)  -> PasskeyCredentialPresence
-    
+
 }
 
 
@@ -2785,7 +2833,7 @@ fileprivate struct UniffiCallbackInterfacePasskeyProvider {
                 )
             }
 
-            
+
             let writeReturn = { uniffiOutReturn.pointee = FfiConverterData.lower($0) }
             uniffiTraitInterfaceCallWithError(
                 callStatus: uniffiCallStatus,
@@ -2816,7 +2864,7 @@ fileprivate struct UniffiCallbackInterfacePasskeyProvider {
                 )
             }
 
-            
+
             let writeReturn = { uniffiOutReturn.pointee = FfiConverterData.lower($0) }
             uniffiTraitInterfaceCallWithError(
                 callStatus: uniffiCallStatus,
@@ -2845,7 +2893,7 @@ fileprivate struct UniffiCallbackInterfacePasskeyProvider {
                 )
             }
 
-            
+
             let writeReturn = { uniffiOutReturn.pointee = FfiConverterTypeDiscoveredPasskeyResult_lower($0) }
             uniffiTraitInterfaceCallWithError(
                 callStatus: uniffiCallStatus,
@@ -2868,7 +2916,7 @@ fileprivate struct UniffiCallbackInterfacePasskeyProvider {
                 )
             }
 
-            
+
             let writeReturn = { uniffiOutReturn.pointee = FfiConverterBool.lower($0) }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
@@ -2894,7 +2942,7 @@ fileprivate struct UniffiCallbackInterfacePasskeyProvider {
                 )
             }
 
-            
+
             let writeReturn = { uniffiOutReturn.pointee = FfiConverterTypePasskeyCredentialPresence_lower($0) }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
@@ -3218,13 +3266,16 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_device_checksum_method_cloudstorageaccess_list_namespaces() != 32218) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_cloudstorageaccess_list_wallet_files() != 43627) {
+    if (uniffi_cove_device_checksum_method_cloudstorageaccess_list_wallet_files() != 3349) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_cloudstorageaccess_is_backup_uploaded() != 15879) {
+    if (uniffi_cove_device_checksum_method_cloudstorageaccess_list_wallet_files_non_interactive() != 37365) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_cloudstorageaccess_overall_sync_health() != 51700) {
+    if (uniffi_cove_device_checksum_method_cloudstorageaccess_is_backup_uploaded() != 20126) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_device_checksum_method_cloudstorageaccess_overall_sync_health() != 18852) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_device_checksum_method_connectivityaccess_is_connected() != 15918) {

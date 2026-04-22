@@ -107,7 +107,27 @@ import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.TapSignerRoute
 import org.bitcoinppl.cove_core.Wallet
 import org.bitcoinppl.cove_core.WalletType
+import org.bitcoinppl.cove_core.CloudBackupStatus
 import org.bitcoinppl.cove_core.types.ColorSchemeSelection
+
+internal enum class StartupMode {
+    ONBOARDING,
+    READY,
+}
+
+internal fun resolveStartupMode(
+    termsAccepted: Boolean,
+    hasWallets: Boolean,
+    cloudBackupStatus: CloudBackupStatus,
+): StartupMode {
+    // mirror CoveApp.swift's app-shell onboarding decision while preserving Android auth and Drive constraints
+    val shouldStartStartupRestore = !hasWallets && cloudBackupStatus is CloudBackupStatus.Disabled
+    return if (!termsAccepted || shouldStartStartupRestore) {
+        StartupMode.ONBOARDING
+    } else {
+        StartupMode.READY
+    }
+}
 
 class MainActivity : FragmentActivity() {
     // view-based privacy cover - updates synchronously (unlike Compose state)
@@ -115,11 +135,6 @@ class MainActivity : FragmentActivity() {
     private var isBootstrapped = false
     private var authorizationLauncher: ActivityResultLauncher<IntentSenderRequest>? = null
     private var isPrivacyCoverVisible by mutableStateOf(false)
-
-    private enum class StartupMode {
-        ONBOARDING,
-        READY,
-    }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
@@ -232,6 +247,13 @@ class MainActivity : FragmentActivity() {
                             (application as CoveApplication).onBootstrapComplete()
                             val appInstance = AppManager.getInstance()
                             appInstance.asyncRuntimeReady = true
+
+                            runCatching {
+                                appInstance.cloudBackupManager.rust.syncPersistedState()
+                            }.onFailure { error ->
+                                Log.w(TAG, "[STARTUP] syncPersistedState failed before startup routing", error)
+                            }
+
                             isBootstrapped = true
                             bootstrapped = true
                             bdkMigrationWarning = warning
@@ -313,11 +335,11 @@ class MainActivity : FragmentActivity() {
             val snackbarHostState = remember { SnackbarHostState() }
             var startupMode by remember {
                 mutableStateOf(
-                    if (shouldStartOnboarding(app.isTermsAccepted, app.hasWallets)) {
-                        StartupMode.ONBOARDING
-                    } else {
-                        StartupMode.READY
-                    },
+                    resolveStartupMode(
+                        termsAccepted = app.isTermsAccepted,
+                        hasWallets = app.hasWallets,
+                        cloudBackupStatus = app.cloudBackupManager.rust.state().status,
+                    ),
                 )
             }
             val onboardingManager =
@@ -345,6 +367,12 @@ class MainActivity : FragmentActivity() {
                     }
                 }
 
+                LaunchedEffect(startupMode) {
+                    if (startupMode == StartupMode.READY) {
+                        app.cloudBackupManager.runBackgroundIntegrityCheck()
+                    }
+                }
+
                 CloudBackupPresentationHost(
                     app = app,
                     auth = auth,
@@ -361,23 +389,23 @@ class MainActivity : FragmentActivity() {
                         },
                     ) { _ ->
                         Box(modifier = Modifier.fillMaxSize()) {
-                            when (startupMode) {
-                                StartupMode.ONBOARDING -> {
-                                    if (onboardingManager != null) {
-                                        OnboardingContainer(
-                                            manager = onboardingManager,
-                                            onComplete = { startupMode = StartupMode.READY },
-                                        )
+                            LockView {
+                                when (startupMode) {
+                                    StartupMode.ONBOARDING -> {
+                                        if (onboardingManager != null) {
+                                            OnboardingContainer(
+                                                manager = onboardingManager,
+                                                onComplete = { startupMode = StartupMode.READY },
+                                            )
+                                        }
                                     }
-                                }
-                                StartupMode.READY ->
-                                    LockView {
+                                    StartupMode.READY ->
                                         SidebarContainer(app = app) {
                                             key(app.selectedNetwork, app.routeId) {
                                                 CoveNavDisplay(app = app)
                                             }
                                         }
-                                    }
+                                }
                             }
 
                             app.sheetState?.let { taggedState ->
