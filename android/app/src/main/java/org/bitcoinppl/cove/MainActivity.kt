@@ -379,12 +379,6 @@ class MainActivity : FragmentActivity() {
                     }
                 }
 
-                LaunchedEffect(startupMode) {
-                    if (startupMode == StartupMode.READY) {
-                        app.cloudBackupManager.runBackgroundIntegrityCheck()
-                    }
-                }
-
                 CloudBackupPresentationHost(
                     app = app,
                     auth = auth,

@@ -5,7 +5,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import java.io.Closeable
-import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -49,7 +48,6 @@ internal fun cloudBackupEnabledForStatus(
 class CloudBackupManager private constructor() : CloudBackupManagerReconciler, Closeable {
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val rustScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val integrityCheckRunning = AtomicBoolean(false)
 
     val rust: RustCloudBackupManager = RustCloudBackupManager()
 
@@ -173,29 +171,6 @@ class CloudBackupManager private constructor() : CloudBackupManagerReconciler, C
                 .onFailure { error ->
                     Log.w(TAG, "cloud storage refresh failed", error)
                 }
-        }
-    }
-
-    fun runBackgroundIntegrityCheck() {
-        if (!isCloudBackupEnabled) {
-            return
-        }
-
-        if (!integrityCheckRunning.compareAndSet(false, true)) {
-            return
-        }
-
-        rustScope.launch {
-            try {
-                rust.resumePendingCloudUploadVerification()
-                rust.verifyBackupIntegrity()?.let { warning ->
-                    Log.e(TAG, "backup integrity warning: $warning")
-                }
-            } catch (error: Exception) {
-                Log.w(TAG, "backup integrity verification failed", error)
-            } finally {
-                integrityCheckRunning.set(false)
-            }
         }
     }
 
