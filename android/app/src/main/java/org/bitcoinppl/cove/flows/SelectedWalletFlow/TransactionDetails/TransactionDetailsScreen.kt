@@ -130,6 +130,7 @@ fun TransactionDetailsScreen(
 
     // state for recovery lock and UTXO lock
     var lockState by remember { mutableStateOf(TransactionLockState.NONE) }
+    var isToggling by remember { mutableStateOf(false) }
 
     // immediately fetch fresh transaction details on screen load
     LaunchedEffect(manager, txId) {
@@ -348,29 +349,36 @@ fun TransactionDetailsScreen(
                 },
                 actions = {
                     if (lockState != TransactionLockState.NONE) {
-                        IconButton(onClick = {
-                            scope.launch {
-                                try {
-                                    manager.rust.toggleTransactionLock(txId = txId)
-                                    // refresh state after toggle
-                                    val newState = manager.rust.transactionLockState(txId = txId)
-                                    lockState = newState
+                        IconButton(
+                            onClick = {
+                                if (isToggling) return@IconButton
+                                isToggling = true
+                                scope.launch {
+                                    try {
+                                        manager.rust.toggleTransactionLock(txId = txId)
+                                        // refresh state after toggle
+                                        val newState = manager.rust.transactionLockState(txId = txId)
+                                        lockState = newState
 
-                                    val message = when (newState) {
-                                        TransactionLockState.LOCKED -> "Transaction outputs locked"
-                                        TransactionLockState.UNLOCKED -> "Transaction outputs unlocked"
-                                        TransactionLockState.MIXED -> "Remaining outputs locked"
-                                        else -> null
+                                        val message = when (newState) {
+                                            TransactionLockState.LOCKED -> "Transaction outputs locked"
+                                            TransactionLockState.UNLOCKED -> "Transaction outputs unlocked"
+                                            TransactionLockState.MIXED -> "Remaining outputs locked"
+                                            else -> null
+                                        }
+                                        if (message != null) {
+                                            snackbarHostState.showSnackbar(message)
+                                        }
+                                    } catch (e: Exception) {
+                                        android.util.Log.e("TransactionDetails", "error toggling lock", e)
+                                        snackbarHostState.showSnackbar("Failed to update lock state")
+                                    } finally {
+                                        isToggling = false
                                     }
-                                    if (message != null) {
-                                        snackbarHostState.showSnackbar(message)
-                                    }
-                                } catch (e: Exception) {
-                                    android.util.Log.e("TransactionDetails", "error toggling lock", e)
-                                    snackbarHostState.showSnackbar("Failed to update lock state")
                                 }
-                            }
-                        }) {
+                            },
+                            enabled = !isToggling
+                        ) {
                             androidx.compose.animation.AnimatedContent(
                                 targetState = lockState,
                                 transitionSpec = {

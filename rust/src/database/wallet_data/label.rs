@@ -211,13 +211,13 @@ impl LabelsTable {
 
     pub fn locked_outpoints(&self) -> Result<Vec<bitcoin::OutPoint>, Error> {
         let table = self.read_table(OUTPUT_TABLE)?;
-        let locked = table
-            .iter()?
-            .filter_map(|r| r.ok())
-            .map(|(_, v)| v.value())
-            .filter(|r| !r.item.spendable)
-            .map(|r| r.item.ref_)
-            .collect();
+        let mut locked = Vec::new();
+        for result in table.iter()? {
+            let (_, v) = result?;
+            if !v.value().item.spendable {
+                locked.push(v.value().item.ref_);
+            }
+        }
         Ok(locked)
     }
 
@@ -372,6 +372,11 @@ impl LabelsTable {
                 };
 
                 if record.item.spendable == spendable {
+                    continue;
+                }
+
+                if spendable && record.item.label.is_none() {
+                    table.remove(key)?;
                     continue;
                 }
 
