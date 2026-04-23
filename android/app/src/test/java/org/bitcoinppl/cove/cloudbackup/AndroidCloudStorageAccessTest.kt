@@ -63,6 +63,34 @@ class AndroidCloudStorageAccessTest {
     }
 
     @Test
+    fun driveFileNameForRecordIdUsesMasterKeyFileForMasterRecord() {
+        assertEquals(
+            "masterkey-hash.json",
+            driveFileNameForRecordId(
+                recordId = "cspp-master-key-v1",
+                masterKeyRecordId = "cspp-master-key-v1",
+                masterKeyFileName = { "masterkey-hash.json" },
+                walletFileName = { "wallet-$it.json" },
+            ),
+        )
+    }
+
+    @Test
+    fun driveFileNameForRecordIdUsesWalletFileForWalletRecord() {
+        val recordId = "wallet-record"
+
+        assertEquals(
+            "wallet-wallet-record.json",
+            driveFileNameForRecordId(
+                recordId = recordId,
+                masterKeyRecordId = "cspp-master-key-v1",
+                masterKeyFileName = { "masterkey-hash.json" },
+                walletFileName = { "wallet-$it.json" },
+            ),
+        )
+    }
+
+    @Test
     fun tokenAcquisitionFailuresAreMappedToCloudStorageExceptions() =
         runBlocking {
             val storage =
