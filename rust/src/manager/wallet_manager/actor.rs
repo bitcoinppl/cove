@@ -204,7 +204,8 @@ impl WalletActor {
     ) -> Result<Psbt, Error> {
         debug!("build_ephemeral_drain_tx for fee rate {}", fee.sat_per_vb());
         let script_pubkey = address.script_pubkey();
-        let locked_outpoints = self.db.labels.locked_outpoints().map_err_str(Error::UnknownError)?;
+        let locked_outpoints =
+            self.db.labels.locked_outpoints().map_err_str(Error::BuildTxError)?;
         let mut tx_builder = self.wallet.bdk.build_tx();
         tx_builder.unspendable(locked_outpoints);
 
@@ -227,7 +228,8 @@ impl WalletActor {
         let fee_rate = fee_rate.into();
         let script_pubkey = address.script_pubkey();
 
-        let locked_outpoints = self.db.labels.locked_outpoints().map_err_str(Error::UnknownError)?;
+        let locked_outpoints =
+            self.db.labels.locked_outpoints().map_err_str(Error::BuildTxError)?;
         let coin_selection = CoveDefaultCoinSelection::new(self.seed);
         let mut tx_builder = self.wallet.bdk.build_tx().coin_selection(coin_selection);
         tx_builder.unspendable(locked_outpoints);
