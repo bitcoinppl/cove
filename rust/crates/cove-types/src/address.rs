@@ -58,7 +58,7 @@ pub struct AddressInfoWithDerivation {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Record)]
 pub struct PayJoinParams {
     pub endpoint: String,
-    pub output_substitution: bool,
+    pub output_substitution_enabled: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Object)]
@@ -235,11 +235,11 @@ fn parse_bitcoin_uri(input: &str) -> Result<ParsedBitcoinUri, Error> {
         let payjoin = match checked.check_pj_supported() {
             Ok(pj_uri) => {
                 let endpoint = pj_uri.extras.endpoint();
-                let output_substitution = match pj_uri.extras.output_substitution() {
+                let output_substitution_enabled = match pj_uri.extras.output_substitution() {
                     payjoin::OutputSubstitution::Enabled => true,
                     payjoin::OutputSubstitution::Disabled => false,
                 };
-                Some(PayJoinParams { endpoint, output_substitution })
+                Some(PayJoinParams { endpoint, output_substitution_enabled })
             }
             Err(_) => None,
         };
@@ -652,7 +652,7 @@ mod tests {
         let pj = parsed.payjoin.as_ref().unwrap();
         assert_eq!(pj.endpoint, "https://example.com/payjoin");
         // pjos defaults to enabled when omitted
-        assert!(pj.output_substitution);
+        assert!(pj.output_substitution_enabled);
     }
 
     #[test]
@@ -661,7 +661,7 @@ mod tests {
         let parsed = parse_bitcoin_uri(a).unwrap();
         let pj = parsed.payjoin.as_ref().unwrap();
         assert_eq!(pj.endpoint, "https://example.com/payjoin");
-        assert!(!pj.output_substitution);
+        assert!(!pj.output_substitution_enabled);
     }
 
     #[test]
@@ -690,7 +690,7 @@ mod tests {
         // pjos=1 means output substitution is enabled
         let a = "bitcoin:bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm?pj=https://example.com/payjoin&pjos=1";
         let parsed = parse_bitcoin_uri(a).unwrap();
-        assert!(parsed.payjoin.as_ref().unwrap().output_substitution);
+        assert!(parsed.payjoin.as_ref().unwrap().output_substitution_enabled);
     }
 
     #[test]
@@ -729,7 +729,7 @@ mod tests {
 
         let pj = address_with_network.payjoin.as_ref().unwrap();
         assert_eq!(pj.endpoint, "https://example.com/payjoin");
-        assert!(!pj.output_substitution);
+        assert!(!pj.output_substitution_enabled);
         assert_eq!(address_with_network.amount, Some(Amount::from_btc(0.001).unwrap()));
     }
 

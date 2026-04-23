@@ -4354,13 +4354,13 @@ public func FfiConverterTypeBlockSizeLast_lower(_ value: BlockSizeLast) -> RustB
 
 public struct PayJoinParams: Equatable, Hashable {
     public var endpoint: String
-    public var outputSubstitution: Bool
+    public var outputSubstitutionEnabled: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(endpoint: String, outputSubstitution: Bool) {
+    public init(endpoint: String, outputSubstitutionEnabled: Bool) {
         self.endpoint = endpoint
-        self.outputSubstitution = outputSubstitution
+        self.outputSubstitutionEnabled = outputSubstitutionEnabled
     }
 
     
@@ -4380,13 +4380,13 @@ public struct FfiConverterTypePayJoinParams: FfiConverterRustBuffer {
         return
             try PayJoinParams(
                 endpoint: FfiConverterString.read(from: &buf), 
-                outputSubstitution: FfiConverterBool.read(from: &buf)
+                outputSubstitutionEnabled: FfiConverterBool.read(from: &buf)
         )
     }
 
     public static func write(_ value: PayJoinParams, into buf: inout [UInt8]) {
         FfiConverterString.write(value.endpoint, into: &buf)
-        FfiConverterBool.write(value.outputSubstitution, into: &buf)
+        FfiConverterBool.write(value.outputSubstitutionEnabled, into: &buf)
     }
 }
 
