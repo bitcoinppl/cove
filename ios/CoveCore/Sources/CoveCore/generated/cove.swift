@@ -10372,7 +10372,7 @@ public protocol TransactionDetailsProtocol: AnyObject, Sendable {
     /**
      * Whether this transaction can currently be fee-bumped via RBF.
      *
-     * Requires the transaction to be both unconfirmed and signaling opt-in RBF.
+     * Requires the transaction to be outgoing, unconfirmed, and signaling opt-in RBF.
      * Use this to gate the "Speed Up" action in the UI.
      */
     func canRbfBump()  -> Bool
@@ -10619,7 +10619,7 @@ open func blockNumberFmt() -> String?  {
     /**
      * Whether this transaction can currently be fee-bumped via RBF.
      *
-     * Requires the transaction to be both unconfirmed and signaling opt-in RBF.
+     * Requires the transaction to be outgoing, unconfirmed, and signaling opt-in RBF.
      * Use this to gate the "Speed Up" action in the UI.
      */
 open func canRbfBump() -> Bool  {
@@ -37118,7 +37118,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_transactiondetails_block_number_fmt() != 8381) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_transactiondetails_can_rbf_bump() != 57738) {
+    if (uniffi_cove_checksum_method_transactiondetails_can_rbf_bump() != 5315) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_transactiondetails_confirmation_date_time() != 59432) {

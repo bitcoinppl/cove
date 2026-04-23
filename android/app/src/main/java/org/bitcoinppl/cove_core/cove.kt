@@ -4615,7 +4615,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_transactiondetails_block_number_fmt() != 8381.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_transactiondetails_can_rbf_bump() != 57738.toShort()) {
+    if (lib.uniffi_cove_checksum_method_transactiondetails_can_rbf_bump() != 5315.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_transactiondetails_confirmation_date_time() != 59432.toShort()) {
@@ -23282,7 +23282,7 @@ public interface TransactionDetailsInterface {
     /**
      * Whether this transaction can currently be fee-bumped via RBF.
      *
-     * Requires the transaction to be both unconfirmed and signaling opt-in RBF.
+     * Requires the transaction to be outgoing, unconfirmed, and signaling opt-in RBF.
      * Use this to gate the "Speed Up" action in the UI.
      */
     fun `canRbfBump`(): kotlin.Boolean
@@ -23572,7 +23572,7 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
     /**
      * Whether this transaction can currently be fee-bumped via RBF.
      *
-     * Requires the transaction to be both unconfirmed and signaling opt-in RBF.
+     * Requires the transaction to be outgoing, unconfirmed, and signaling opt-in RBF.
      * Use this to gate the "Speed Up" action in the UI.
      */override fun `canRbfBump`(): kotlin.Boolean {
             return FfiConverterBoolean.lift(
