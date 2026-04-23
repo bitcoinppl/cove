@@ -377,7 +377,7 @@ impl WalletActor {
 
         let mut locked_count = 0;
         for outpoint in outputs {
-            if self.db.labels.get_output_record(outpoint)?.map_or(false, |r| !r.item.spendable) {
+            if self.db.labels.get_output_record(outpoint)?.is_some_and(|r| !r.item.spendable) {
                 locked_count += 1;
             }
         }
