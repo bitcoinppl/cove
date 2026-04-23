@@ -3,7 +3,7 @@ use tracing::{info, warn};
 
 use super::super::{
     BlockingCloudStep, CloudBackupDetailResult, CloudBackupStatus, RustCloudBackupManager,
-    cloud_inventory::RemoteWalletTruth,
+    SILENT_CLOUD_ACCESS, cloud_inventory::RemoteWalletTruth,
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{CloudBlobConfirmedState, PersistedCloudBlobState};
@@ -11,8 +11,8 @@ use crate::database::cloud_backup::{CloudBlobConfirmedState, PersistedCloudBlobS
 impl RustCloudBackupManager {
     /// List wallet backups in the current namespace and build detail
     ///
-    /// Returns None if disabled. On NotFound, re-uploads all wallets automatically.
-    /// On other errors, returns AccessError so the UI can offer a re-upload button
+    /// Returns None if disabled. On access errors, returns AccessError so the UI can
+    /// surface an explicit recovery action instead of mutating backup state during refresh
     pub(crate) async fn refresh_cloud_backup_detail(&self) -> Option<CloudBackupDetailResult> {
         let status = self.state.read().status.clone();
         if !matches!(status, CloudBackupStatus::Enabled | CloudBackupStatus::PasskeyMissing) {
@@ -33,39 +33,28 @@ impl RustCloudBackupManager {
 
         info!("refresh_cloud_backup_detail: listing wallets for namespace {namespace}");
         let cloud = CloudStorage::global();
-        let wallet_record_ids = match cloud.list_wallet_backups(namespace.clone()).await {
-            Ok(ids) => ids,
-            Err(CloudStorageError::NotFound(_)) => {
-                info!("No wallet backups found in namespace, re-uploading all wallets");
-                if let Err(error) = self.do_reupload_all_wallets().await {
-                    return Some(CloudBackupDetailResult::AccessError(format!(
-                        "Failed to re-upload wallets: {error}"
-                    )));
-                }
-
-                match cloud.list_wallet_backups(namespace.clone()).await {
-                    Ok(ids) => ids,
-                    Err(error) => {
-                        return Some(CloudBackupDetailResult::AccessError(error.to_string()));
+        let wallet_record_ids =
+            match cloud.list_wallet_backups(namespace.clone(), SILENT_CLOUD_ACCESS).await {
+                Ok(ids) => ids,
+                Err(CloudStorageError::NotFound(_)) => Vec::new(),
+                Err(error) => {
+                    if RustCloudBackupManager::is_connectivity_related_issue(
+                        RustCloudBackupManager::cloud_storage_issue(&error),
+                    ) {
+                        return Some(CloudBackupDetailResult::AccessError(
+                            self.offline_error_for_step(BlockingCloudStep::DetailRefresh)
+                                .to_string(),
+                        ));
                     }
+                    return Some(CloudBackupDetailResult::AccessError(error.to_string()));
                 }
-            }
-            Err(error) => {
-                if RustCloudBackupManager::is_connectivity_related_issue(
-                    RustCloudBackupManager::cloud_storage_issue(&error),
-                ) {
-                    return Some(CloudBackupDetailResult::AccessError(
-                        self.offline_error_for_step(BlockingCloudStep::DetailRefresh).to_string(),
-                    ));
-                }
-                return Some(CloudBackupDetailResult::AccessError(error.to_string()));
-            }
-        };
+            };
 
-        let remote_wallet_truth = match self.load_remote_wallet_truth(&wallet_record_ids).await {
-            Ok(remote_wallet_truth) => remote_wallet_truth,
-            Err(error) => return Some(CloudBackupDetailResult::AccessError(error.to_string())),
-        };
+        let remote_wallet_truth =
+            match self.load_remote_wallet_truth(&wallet_record_ids, SILENT_CLOUD_ACCESS).await {
+                Ok(remote_wallet_truth) => remote_wallet_truth,
+                Err(error) => return Some(CloudBackupDetailResult::AccessError(error.to_string())),
+            };
         self.cleanup_confirmed_pending_blobs(&remote_wallet_truth);
 
         match self

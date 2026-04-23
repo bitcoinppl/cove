@@ -13,7 +13,7 @@ use super::{
 use crate::database::Database;
 use crate::database::cloud_backup::{CloudBlobConfirmedState, PersistedCloudBlobState};
 use crate::manager::cloud_backup_manager::{
-    CloudBackupDetail, PendingVerificationUpload,
+    CloudBackupDetail, PendingVerificationUpload, SILENT_CLOUD_ACCESS,
     wallets::{WalletBackupLookup, WalletBackupReader},
 };
 
@@ -88,6 +88,7 @@ impl RustCloudBackupManager {
                 .download_wallet_backup(
                     completion.namespace_id().to_string(),
                     upload.record_id().to_string(),
+                    SILENT_CLOUD_ACCESS,
                 )
                 .await
                 .map(|_| true)
@@ -165,6 +166,7 @@ impl RustCloudBackupManager {
             CloudStorage::global().clone(),
             completion.namespace_id().to_string(),
             Zeroizing::new(*critical_key),
+            SILENT_CLOUD_ACCESS,
         );
 
         match reader.summary(record_id).await {
@@ -185,7 +187,7 @@ impl RustCloudBackupManager {
             Ok(WalletBackupLookup::UnsupportedVersion(_)) => {
                 Ok(PendingWalletVerificationOutcome::Unsupported)
             }
-            Err(CloudBackupError::Cloud(error)) => {
+            Err(error) if error.is_cloud_error() => {
                 warn!("Pending verification: wallet {record_id} is not ready yet: {error}");
                 Ok(PendingWalletVerificationOutcome::Pending)
             }

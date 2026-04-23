@@ -3,17 +3,20 @@ use std::sync::{Arc, Weak};
 use std::time::Duration;
 
 use act_zero::{Actor, ActorResult, Addr, Produces, WeakAddr, send};
-use cove_device::cloud_storage::{CloudStorage, CloudSyncHealth};
+use cove_device::cloud_storage::CloudSyncHealth;
 use cove_tokio::DebouncedTask;
 use tokio::sync::Notify;
 use tracing::{error, info, warn};
 
-use super::pending::{MAX_PENDING_UPLOAD_VERIFICATION_DELAY, build_pending_upload_backoff};
+use super::pending::{
+    MAX_PENDING_UPLOAD_VERIFICATION_DELAY, PendingUploadVerificationStatus,
+    build_pending_upload_backoff,
+};
 use super::{
     CloudBackupError, CloudBackupStatus, PendingVerificationCompletion, RustCloudBackupManager,
-    WalletId, live_upload_retry_delay_for_attempt,
+    SILENT_CLOUD_ACCESS, WalletId, live_upload_retry_delay_for_attempt,
 };
-use crate::database::cloud_backup::PersistedCloudBlobState;
+use crate::database::cloud_backup::{CloudBlobFailureIssue, PersistedCloudBlobState};
 use crate::manager::cloud_backup_detail_manager::RecoveryAction;
 
 #[derive(Debug, Clone)]
@@ -119,6 +122,7 @@ pub(crate) struct CloudBackupRuntimeActor {
     manager: Weak<RustCloudBackupManager>,
     pending_verification_completion: Option<PendingVerificationCompletion>,
     pending_upload_verifier_running: bool,
+    pending_upload_verifier_blocked_on_authorization: bool,
     pending_upload_verifier_wakeup: Arc<Notify>,
     sync_health_refresh_state: SyncHealthRefreshState,
     wallet_upload_debouncers: HashMap<WalletId, DebouncedTask<()>>,
@@ -142,6 +146,7 @@ impl CloudBackupRuntimeActor {
             manager,
             pending_verification_completion: None,
             pending_upload_verifier_running: false,
+            pending_upload_verifier_blocked_on_authorization: false,
             pending_upload_verifier_wakeup: Arc::new(Notify::new()),
             sync_health_refresh_state: SyncHealthRefreshState::Idle,
             wallet_upload_debouncers: HashMap::new(),
@@ -161,8 +166,12 @@ impl CloudBackupRuntimeActor {
 
     fn spawn_sync_health_refresh_task(&mut self, addr: Addr<Self>) {
         self.sync_health_refresh_state = SyncHealthRefreshState::Running;
+        let Some(manager) = self.manager() else {
+            self.sync_health_refresh_state = SyncHealthRefreshState::Idle;
+            return;
+        };
         cove_tokio::task::spawn(async move {
-            let sync_health = CloudStorage::global().overall_sync_health().await;
+            let sync_health = manager.compute_sync_health(SILENT_CLOUD_ACCESS).await;
             send!(addr.complete_sync_health_refresh(sync_health));
         });
     }
@@ -173,16 +182,21 @@ impl CloudBackupRuntimeActor {
         manager: Arc<RustCloudBackupManager>,
     ) {
         self.pending_upload_verifier_running = true;
+        self.pending_upload_verifier_blocked_on_authorization = false;
         let wakeup = Arc::clone(&self.pending_upload_verifier_wakeup);
         cove_tokio::task::spawn(async move {
             info!("Pending upload verification: started");
             let mut backoff = PendingUploadRetryBackoff::new();
+            let mut blocked_on_authorization = false;
 
             loop {
-                let has_pending = manager.verify_pending_uploads_once().await;
-
-                if !has_pending {
-                    break;
+                match manager.verify_pending_uploads_once().await {
+                    PendingUploadVerificationStatus::Idle => break,
+                    PendingUploadVerificationStatus::BlockedOnAuthorization => {
+                        blocked_on_authorization = true;
+                        break;
+                    }
+                    PendingUploadVerificationStatus::Pending => {}
                 }
 
                 let delay = backoff.next_delay();
@@ -192,7 +206,7 @@ impl CloudBackupRuntimeActor {
                 }
             }
 
-            send!(addr.pending_upload_verifier_finished());
+            send!(addr.pending_upload_verifier_finished(blocked_on_authorization));
         });
     }
 
@@ -438,12 +452,19 @@ impl CloudBackupRuntimeActor {
         cove_tokio::task::spawn(async move {
             let upload_result = manager.do_upload_wallet_if_dirty(&wallet_id).await;
             let deferred = matches!(upload_result, Err(super::CloudBackupError::Deferred(_)));
+            let authorization_required = upload_result.as_ref().err().is_some_and(|error| {
+                matches!(
+                    manager.cloud_backup_issue(error),
+                    super::CloudStorageIssue::AuthorizationRequired
+                )
+            });
             let error_message = upload_result.as_ref().err().map(ToString::to_string);
             send!(addr.complete_wallet_upload(
                 wallet_id,
                 upload_result.is_ok(),
                 error_message,
-                deferred
+                deferred,
+                authorization_required
             ));
         });
 
@@ -456,10 +477,18 @@ impl CloudBackupRuntimeActor {
         succeeded: bool,
         error_message: Option<String>,
         deferred: bool,
+        authorization_required: bool,
     ) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
 
-        self.finish_wallet_upload(&manager, wallet_id, succeeded, error_message, deferred);
+        self.finish_wallet_upload(
+            &manager,
+            wallet_id,
+            succeeded,
+            error_message,
+            deferred,
+            authorization_required,
+        );
         Produces::ok(())
     }
 
@@ -479,6 +508,12 @@ impl CloudBackupRuntimeActor {
 
         let upload_result = manager.do_upload_wallet_if_dirty(&wallet_id).await;
         let deferred = matches!(upload_result, Err(super::CloudBackupError::Deferred(_)));
+        let authorization_required = upload_result.as_ref().err().is_some_and(|error| {
+            matches!(
+                manager.cloud_backup_issue(error),
+                super::CloudStorageIssue::AuthorizationRequired
+            )
+        });
         let error_message = upload_result.err().map(|error| error.to_string());
         self.finish_wallet_upload(
             &manager,
@@ -486,6 +521,7 @@ impl CloudBackupRuntimeActor {
             error_message.is_none(),
             error_message,
             deferred,
+            authorization_required,
         );
         Produces::ok(())
     }
@@ -497,6 +533,7 @@ impl CloudBackupRuntimeActor {
         succeeded: bool,
         error_message: Option<String>,
         deferred: bool,
+        authorization_required: bool,
     ) {
         self.active_wallet_uploads.remove(&wallet_id);
 
@@ -511,6 +548,16 @@ impl CloudBackupRuntimeActor {
                 return;
             }
 
+            if authorization_required {
+                warn!(
+                    "Cloud backup upload paused until authorization is restored for wallet_id={wallet_id}: {error_message}"
+                );
+                self.reset_wallet_upload_retry_count(&wallet_id);
+                manager.set_sync_error(Some(error_message));
+                manager.refresh_sync_health();
+                return;
+            }
+
             error!("Cloud backup upload failed for wallet_id={wallet_id}: {error_message}");
             manager.set_sync_error(Some(error_message));
         } else if succeeded {
@@ -518,6 +565,7 @@ impl CloudBackupRuntimeActor {
             manager.clear_sync_error_if_no_failed_wallet_uploads();
         }
 
+        manager.refresh_sync_health();
         self.schedule_wallet_upload_follow_up(wallet_id);
     }
 
@@ -531,6 +579,7 @@ impl CloudBackupRuntimeActor {
         };
 
         let Some(addr) = self.addr() else { return Produces::ok(()) };
+        let manager = self.manager();
 
         for sync_state in states {
             let Some(wallet_id) = sync_state.wallet_id.clone() else {
@@ -542,10 +591,17 @@ impl CloudBackupRuntimeActor {
                     send!(addr.schedule_wallet_upload(wallet_id, true));
                 }
                 PersistedCloudBlobState::Failed(failed_state) if failed_state.retryable => {
+                    if failed_state.issue == Some(CloudBlobFailureIssue::AuthorizationRequired) {
+                        if let Some(manager) = &manager {
+                            manager.set_sync_error(Some(failed_state.error.clone()));
+                            manager.refresh_sync_health();
+                        }
+                        continue;
+                    }
                     send!(addr.schedule_wallet_upload(wallet_id, true));
                 }
                 PersistedCloudBlobState::Uploading(_) => {
-                    let Some(manager) = self.manager() else { continue };
+                    let Some(manager) = &manager else { continue };
                     if !manager.downgrade_interrupted_upload_to_dirty(&sync_state) {
                         continue;
                     }
@@ -581,8 +637,17 @@ impl CloudBackupRuntimeActor {
         Produces::ok(())
     }
 
-    pub async fn pending_upload_verifier_finished(&mut self) -> ActorResult<()> {
+    pub async fn pending_upload_verifier_finished(
+        &mut self,
+        blocked_on_authorization: bool,
+    ) -> ActorResult<()> {
         self.pending_upload_verifier_running = false;
+        self.pending_upload_verifier_blocked_on_authorization = blocked_on_authorization;
+
+        if blocked_on_authorization {
+            info!("Pending upload verification: paused until cloud authorization is restored");
+            return Produces::ok(());
+        }
 
         let Some(manager) = self.manager() else { return Produces::ok(()) };
         if manager.has_pending_cloud_upload_verification() {

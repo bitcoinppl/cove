@@ -2,7 +2,7 @@ use std::str::FromStr as _;
 
 use cove_cspp::backup_data::{EncryptedWalletBackup, WalletEntry};
 use cove_cspp::wallet_crypto;
-use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
+use cove_device::cloud_storage::{CloudAccessPolicy, CloudStorage, CloudStorageError};
 use cove_util::ResultExt as _;
 use tracing::{info, warn};
 use zeroize::Zeroizing;
@@ -27,6 +27,7 @@ pub(crate) struct WalletBackupReader {
     cloud: CloudStorage,
     namespace: String,
     critical_key: Zeroizing<[u8; 32]>,
+    access_policy: CloudAccessPolicy,
 }
 
 impl WalletBackupReader {
@@ -34,8 +35,9 @@ impl WalletBackupReader {
         cloud: CloudStorage,
         namespace: String,
         critical_key: Zeroizing<[u8; 32]>,
+        access_policy: CloudAccessPolicy,
     ) -> Self {
-        Self { cloud, namespace, critical_key }
+        Self { cloud, namespace, critical_key, access_policy }
     }
 
     pub(crate) async fn download(
@@ -111,13 +113,20 @@ impl WalletBackupReader {
     ) -> Result<WalletBackupLookup<EncryptedWalletBackup>, CloudBackupError> {
         let wallet_json = match self
             .cloud
-            .download_wallet_backup(self.namespace.clone(), record_id.to_string())
+            .download_wallet_backup(
+                self.namespace.clone(),
+                record_id.to_string(),
+                self.access_policy,
+            )
             .await
         {
             Ok(wallet_json) => wallet_json,
             Err(CloudStorageError::NotFound(_)) => return Ok(WalletBackupLookup::NotFound),
             Err(error) => {
-                return Err(CloudBackupError::Cloud(format!("download {record_id}: {error}")));
+                return Err(CloudBackupError::cloud_storage_context(
+                    format!("download {record_id}"),
+                    error,
+                ));
             }
         };
 
@@ -248,7 +257,9 @@ impl DownloadedWalletBackup {
 mod tests {
     use super::*;
     use cove_cspp::backup_data::WalletSecret;
-    use cove_device::cloud_storage::{CloudStorageAccess, CloudStorageError, CloudSyncHealth};
+    use cove_device::cloud_storage::{
+        CloudAccessPolicy, CloudStorageAccess, CloudStorageError, CloudSyncHealth,
+    };
 
     fn test_wallet_entry(metadata: &WalletMetadata) -> WalletEntry {
         WalletEntry {
@@ -276,6 +287,7 @@ mod tests {
             &self,
             _namespace: String,
             _data: Vec<u8>,
+            _policy: CloudAccessPolicy,
         ) -> Result<(), CloudStorageError> {
             Err(CloudStorageError::NotAvailable("unused in test".into()))
         }
@@ -285,6 +297,7 @@ mod tests {
             _namespace: String,
             _record_id: String,
             _data: Vec<u8>,
+            _policy: CloudAccessPolicy,
         ) -> Result<(), CloudStorageError> {
             Err(CloudStorageError::NotAvailable("unused in test".into()))
         }
@@ -292,6 +305,7 @@ mod tests {
         async fn download_master_key_backup(
             &self,
             _namespace: String,
+            _policy: CloudAccessPolicy,
         ) -> Result<Vec<u8>, CloudStorageError> {
             Err(CloudStorageError::NotAvailable("unused in test".into()))
         }
@@ -300,6 +314,7 @@ mod tests {
             &self,
             _namespace: String,
             _record_id: String,
+            _policy: CloudAccessPolicy,
         ) -> Result<Vec<u8>, CloudStorageError> {
             Err(CloudStorageError::NotAvailable("unused in test".into()))
         }
@@ -308,28 +323,22 @@ mod tests {
             &self,
             _namespace: String,
             _record_id: String,
+            _policy: CloudAccessPolicy,
         ) -> Result<(), CloudStorageError> {
             Err(CloudStorageError::NotAvailable("unused in test".into()))
         }
 
-        async fn list_namespaces(&self) -> Result<Vec<String>, CloudStorageError> {
-            Ok(Vec::new())
-        }
-
-        async fn list_namespaces_non_interactive(&self) -> Result<Vec<String>, CloudStorageError> {
+        async fn list_namespaces(
+            &self,
+            _policy: CloudAccessPolicy,
+        ) -> Result<Vec<String>, CloudStorageError> {
             Ok(Vec::new())
         }
 
         async fn list_wallet_files(
             &self,
             _namespace: String,
-        ) -> Result<Vec<String>, CloudStorageError> {
-            Ok(Vec::new())
-        }
-
-        async fn list_wallet_files_non_interactive(
-            &self,
-            _namespace: String,
+            _policy: CloudAccessPolicy,
         ) -> Result<Vec<String>, CloudStorageError> {
             Ok(Vec::new())
         }
@@ -338,11 +347,12 @@ mod tests {
             &self,
             _namespace: String,
             _record_id: String,
+            _policy: CloudAccessPolicy,
         ) -> Result<bool, CloudStorageError> {
             Ok(false)
         }
 
-        async fn overall_sync_health(&self) -> CloudSyncHealth {
+        async fn overall_sync_health(&self, _policy: CloudAccessPolicy) -> CloudSyncHealth {
             CloudSyncHealth::NoFiles
         }
     }
@@ -361,6 +371,7 @@ mod tests {
             test_cloud_storage(),
             "test-namespace".into(),
             Zeroizing::new(critical_key),
+            CloudAccessPolicy::ConsentAllowed,
         );
 
         let decrypted = reader.decrypt_entry(&encrypted).unwrap();
