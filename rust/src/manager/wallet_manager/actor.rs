@@ -204,7 +204,7 @@ impl WalletActor {
     ) -> Result<Psbt, Error> {
         debug!("build_ephemeral_drain_tx for fee rate {}", fee.sat_per_vb());
         let script_pubkey = address.script_pubkey();
-        let locked_outpoints = self.db.labels.locked_outpoints().unwrap_or_default();
+        let locked_outpoints = self.db.labels.locked_outpoints().map_err_str(Error::UnknownError)?;
         let mut tx_builder = self.wallet.bdk.build_tx();
         tx_builder.unspendable(locked_outpoints);
 
@@ -227,7 +227,7 @@ impl WalletActor {
         let fee_rate = fee_rate.into();
         let script_pubkey = address.script_pubkey();
 
-        let locked_outpoints = self.db.labels.locked_outpoints().unwrap_or_default();
+        let locked_outpoints = self.db.labels.locked_outpoints().map_err_str(Error::UnknownError)?;
         let coin_selection = CoveDefaultCoinSelection::new(self.seed);
         let mut tx_builder = self.wallet.bdk.build_tx().coin_selection(coin_selection);
         tx_builder.unspendable(locked_outpoints);
@@ -334,8 +334,7 @@ impl WalletActor {
         txid: TxId,
     ) -> Result<TransactionLockState, Error> {
         let outputs = self.wallet_unspent_outputs_for_tx(txid.0);
-        let state =
-            self.compute_lock_state(&outputs).map_err(|e| Error::UnknownError(e.to_string()))?;
+        let state = self.compute_lock_state(&outputs).map_err_str(Error::UnknownError)?;
         Ok(state)
     }
 
@@ -347,8 +346,7 @@ impl WalletActor {
             return Ok(());
         }
 
-        let current_state =
-            self.compute_lock_state(&outputs).map_err(|e| Error::UnknownError(e.to_string()))?;
+        let current_state = self.compute_lock_state(&outputs).map_err_str(Error::UnknownError)?;
 
         // unlocked or mixed -> lock all
         // locked -> unlock all
