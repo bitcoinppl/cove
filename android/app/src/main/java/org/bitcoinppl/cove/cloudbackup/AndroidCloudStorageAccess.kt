@@ -13,6 +13,7 @@ import java.net.UnknownHostException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.Log
+import org.bitcoinppl.cove_core.csppMasterKeyRecordId
 import org.bitcoinppl.cove_core.device.CloudAccessPolicy
 import org.bitcoinppl.cove_core.device.CloudStorageAccess
 import org.bitcoinppl.cove_core.device.CloudStorageException
@@ -37,6 +38,26 @@ internal fun hasUploadedBackupFiles(fileNames: List<String>): Boolean =
 internal fun hasCompleteNamespaceBackup(fileNames: List<String>): Boolean =
     fileNames.contains(DrivePaths.masterKeyFileName) &&
         fileNames.any(DrivePaths::isWalletFile)
+
+internal fun driveFileNameForRecordId(recordId: String): String =
+    driveFileNameForRecordId(
+        recordId = recordId,
+        masterKeyRecordId = csppMasterKeyRecordId(),
+        masterKeyFileName = { DrivePaths.masterKeyFileName },
+        walletFileName = DrivePaths::walletFileName,
+    )
+
+internal fun driveFileNameForRecordId(
+    recordId: String,
+    masterKeyRecordId: String,
+    masterKeyFileName: () -> String,
+    walletFileName: (String) -> String,
+): String =
+    if (recordId == masterKeyRecordId) {
+        masterKeyFileName()
+    } else {
+        walletFileName(recordId)
+    }
 
 internal data class UploadMetadata(
     val name: String,
@@ -276,7 +297,7 @@ class AndroidCloudStorageAccess internal constructor(
                 findChildByName(
                     token = token,
                     parentId = namespaceFolderId,
-                    fileName = DrivePaths.walletFileName(recordId),
+                    fileName = driveFileNameForRecordId(recordId),
                 ) ?: throw DriveHttpException(404, "wallet backup not found")
 
             driveRequest(
@@ -309,12 +330,7 @@ class AndroidCloudStorageAccess internal constructor(
             findChildByName(
                 token = token,
                 parentId = namespaceFolderId,
-                fileName =
-                    if (recordId == org.bitcoinppl.cove_core.csppMasterKeyRecordId()) {
-                        DrivePaths.masterKeyFileName
-                    } else {
-                        DrivePaths.walletFileName(recordId)
-                    },
+                fileName = driveFileNameForRecordId(recordId),
             ) != null
         }
 
