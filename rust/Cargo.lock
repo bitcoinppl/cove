@@ -5358,6 +5358,7 @@ dependencies = [
  "image",
  "minicbor 2.2.1",
  "qrcode",
+ "serde_json",
  "xshell",
 ]
 

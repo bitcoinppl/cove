@@ -1,0 +1,206 @@
+{
+  "common": {
+    "ok": "OK",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "save": "Save",
+    "done": "Done",
+    "next": "Next",
+    "goBack": "Go Back",
+    "copy": "Copy",
+    "copied": "Copied",
+    "areYouSure": "Are you sure?",
+    "loading": "loading…",
+    "continue": "Continue",
+    "back": "Back"
+  },
+  "wallet": {
+    "addNewWallet": "Add New Wallet",
+    "settings": {
+      "title": "Settings",
+      "walletInformation": "Wallet information",
+      "network": "Network",
+      "fingerprint": "Fingerprint",
+      "walletType": "Wallet type",
+      "walletName": "Name",
+      "changeName": "Change Name",
+      "walletColor": "Wallet color",
+      "showTransactionLabels": "Show transaction labels",
+      "dangerZone": "Danger zone",
+      "viewSecretWords": "View secret words",
+      "deleteWallet": "Delete wallet"
+    },
+    "warnings": {
+      "notBackedUp": "This wallet is not backed up. Make sure you have your secret words saved before deleting.",
+      "cannotUndo": "This action cannot be undone."
+    },
+    "backup": {
+      "title": "Backup your wallet"
+    },
+    "howToSecure": "How do you want to secure your Bitcoin?",
+    "onThisDevice": "On This Device",
+    "hardwareWallet": "Hardware Wallet",
+    "createNew": "Create new wallet",
+    "importExisting": "Import existing wallet",
+    "alreadyHaveWallet": "Do you already have a wallet?",
+    "saveWallet": "Save Wallet"
+  },
+  "send": {
+    "send": "Send",
+    "noBalance": "Can't send a transaction when you have no funds.",
+    "enterAmount": "Enter amount",
+    "howMuchToSend": "How much would you like to send?",
+    "enterAddress": "Enter address",
+    "whereSendTo": "Where do you want to send to?",
+    "swipeToSend": "Swipe to Send",
+    "totalSpending": "Total Spending",
+    "youAreSending": "You're sending",
+    "amountTheyReceive": "The amount they will receive",
+    "theyWillReceive": "They'll receive",
+    "youWillPay": "You'll pay",
+    "changeSpeed": "Change speed"
+  },
+  "receive": {
+    "receive": "Receive",
+    "addressUnavailable": "Address unavailable"
+  },
+  "transaction": {
+    "sent": "Sent",
+    "received": "Received",
+    "sending": "Sending",
+    "receiving": "Receiving",
+    "transactions": "Transactions",
+    "noTransactionsYet": "No transactions yet",
+    "goBuySomeBitcoin": "Go buy some bitcoin!",
+    "pending": "Pending",
+    "pendingSignature": "Pending Signature",
+    "unconfirmed": "Unconfirmed",
+    "transactionSent": "Transaction Sent",
+    "transactionReceived": "Transaction Received",
+    "transactionPending": "Transaction Pending",
+    "sentTo": "Sent to",
+    "receivedFrom": "Received from",
+    "networkFee": "Network Fee",
+    "recipientReceives": "Recipient Receives",
+    "totalSpent": "Total Spent",
+    "confirmations": "Confirmations",
+    "blockNumber": "Block Number",
+    "receivedAt": "Received At",
+    "fiatPrice": "Fiat Price",
+    "whenSent": "When sent",
+    "whenReceived": "When received",
+    "fiatPriceTooltip": "Price at time of transaction",
+    "viewInExplorer": "View in Explorer",
+    "showDetails": "Show Details",
+    "hideDetails": "Hide Details"
+  },
+  "fee": {
+    "title": "Network Fee",
+    "fast": "Fast",
+    "medium": "Medium",
+    "slow": "Slow",
+    "custom": "Custom",
+    "customizeFee": "Customize Fee",
+    "setCustomFee": "Set Custom Network Fee"
+  },
+  "utxo": {
+    "manageUtxos": "Manage UTXOs",
+    "searchUtxos": "Search UTXOs",
+    "listOfUtxos": "LIST OF UTXOS",
+    "selectAll": "Select All",
+    "deselectAll": "Deselect All",
+    "changeAddress": "Change Address",
+    "receiveAddress": "Receive Address",
+    "description": "Select UTXOs to manage or send. Unspent outputs will remain in your wallet for future use.",
+    "denotesChange": "Denotes UTXO change"
+  },
+  "label": {
+    "addLabel": "Add label",
+    "editLabel": "Edit",
+    "deleteLabel": "Delete"
+  },
+  "sort": {
+    "date": "Date",
+    "name": "Name",
+    "amount": "Amount",
+    "change": "Change"
+  },
+  "recoveryWords": {
+    "title": "Recovery Words",
+    "secureNote": "Please save these words in a secure location.",
+    "body": "Your secret recovery words are the only way to recover your wallet if you lose your phone or switch to a different wallet. Whoever has your recovery words, controls your Bitcoin.",
+    "showWords": "Show Words",
+    "skipVerification": "Skip Verification",
+    "verifyTitle": "Verify Recovery Words",
+    "verifyBody": "To confirm that you've securely saved your recovery phrase, please select the correct word"
+  },
+  "import": {
+    "title": "Import Wallet",
+    "action": "Import wallet",
+    "instructions": "Enter your recovery words below to restore your wallet. Make sure you're in a private location.",
+    "selectNumberOfWords": "Select Number of Words",
+    "scanQr": "Scan QR",
+    "nfc": "NFC",
+    "twelveWords": "12 Words",
+    "twentyFourWords": "24 Words"
+  },
+  "node": {
+    "changePrompt": "Would you like to select a different node?",
+    "yesChange": "Yes, Change Node",
+    "customElectrum": "Custom Electrum",
+    "customEsplora": "Custom Esplora",
+    "urlLabel": "URL",
+    "urlPlaceholder": "Enter URL",
+    "nameLabel": "Name",
+    "namePlaceholder": "Node Name (optional)",
+    "saveButton": "Save Custom Node",
+    "successTitle": "Success",
+    "errorTitle": "Error"
+  },
+  "settings": {
+    "title": "Settings",
+    "general": "General",
+    "network": "Network",
+    "appearance": "Appearance",
+    "node": "Node",
+    "currency": "Currency"
+  },
+  "errors": {
+    "loadFailed": "Failed to load wallet settings",
+    "nodeConnectionFailed": "Node Connection Failed"
+  },
+  "menu": {
+    "title": "More Options",
+    "scanNfc": "Scan NFC",
+    "importLabels": "Import Labels",
+    "exportLabels": "Export Labels",
+    "exportTransactions": "Export Transactions",
+    "changePin": "Change PIN",
+    "downloadBackup": "Download Backup",
+    "manageUtxos": "Manage UTXOs",
+    "walletSettings": "Wallet Settings"
+  },
+  "alert": {
+    "walletNotSavedTitle": "⚠️ Wallet Not Saved ⚠️",
+    "walletNotSavedMessage": "You will have to write down a new set of words.",
+    "yesGoBack": "Yes, Go Back",
+    "saveFailed": "Save Failed",
+    "wordsNotValid": "Words not valid",
+    "wordsNotValidMessage": "The words you entered do not create a valid wallet. Please check the words and try again.",
+    "importError": "Import Error",
+    "duplicateWallet": "Duplicate Wallet",
+    "duplicateWalletMessage": "This wallet has already been imported!",
+    "importedSuccessfully": "Wallet imported successfully"
+  },
+  "account": {
+    "account": "Account",
+    "main": "Main"
+  },
+  "details": {
+    "advancedTitle": "Advanced Details",
+    "advancedSubtitle": "View current transaction breakdown",
+    "utxosUsed": "UTXOs Used",
+    "sentToSelf": "Sent To Self",
+    "fee": "Fee"
+  }
+}

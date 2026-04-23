@@ -39,6 +39,14 @@ sign-psbt psbt:
 [private]
 alias sp := sign-psbt
 
+# Generate localization files from shared JSON
+[group('build')]
+generate-strings:
+    just xtask generate-strings
+
+[private]
+alias gs := generate-strings
+
 # ------------------------------------------------------------------------------
 # ci
 # ------------------------------------------------------------------------------

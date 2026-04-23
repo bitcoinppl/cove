@@ -4,6 +4,7 @@ use color_eyre::Result;
 mod android;
 mod common;
 mod ios;
+mod localization;
 mod util;
 mod version;
 
@@ -87,6 +88,10 @@ enum Commands {
     /// Install required build dependencies (cargo-ndk, etc.)
     #[command(name = "install-deps")]
     InstallDeps,
+
+    /// Generate localization files from shared JSON
+    #[command(name = "generate-strings")]
+    GenerateStrings,
 
     /// Utility commands for development and testing
     #[command(subcommand)]
@@ -179,6 +184,8 @@ fn main() -> Result<()> {
         }
 
         Commands::InstallDeps => install_deps(cli.verbose),
+
+        Commands::GenerateStrings => localization::generate_strings(cli.verbose),
 
         Commands::Util(util_cmd) => match util_cmd {
             UtilCommands::SignPsbt { mnemonic, psbt, network, format, output } => {
