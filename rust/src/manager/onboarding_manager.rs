@@ -7,7 +7,7 @@ use std::{
 };
 
 use backon::{FibonacciBuilder, Retryable as _};
-use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
+use cove_device::cloud_storage::{CloudAccessPolicy, CloudStorage, CloudStorageError};
 use cove_util::ResultExt as _;
 use flume::Receiver;
 use parking_lot::RwLock;
@@ -481,14 +481,17 @@ impl RustOnboardingManager {
             }
 
             let cloud = CloudStorage::global().clone();
-            let outcome = determine_cloud_check_outcome_async(
-                || {
-                    let cloud = cloud.clone();
-                    async move { cloud.has_any_cloud_backup().await }
-                },
-                |duration| tokio::time::sleep(duration),
-            )
-            .await;
+            let outcome =
+                determine_cloud_check_outcome_async(
+                    || {
+                        let cloud = cloud.clone();
+                        async move {
+                            cloud.has_any_cloud_backup(CloudAccessPolicy::ConsentAllowed).await
+                        }
+                    },
+                    |duration| tokio::time::sleep(duration),
+                )
+                .await;
             me.finish_cloud_check(outcome);
         });
     }
@@ -1570,6 +1573,9 @@ impl RestoreOrigin {
 
 fn classify_cloud_check_error(error: &CloudStorageError) -> CloudCheckIssue {
     match RustCloudBackupManager::cloud_storage_issue(error) {
+        crate::manager::cloud_backup_manager::CloudStorageIssue::AuthorizationRequired => {
+            CloudCheckIssue::CloudUnavailable
+        }
         crate::manager::cloud_backup_manager::CloudStorageIssue::Offline => {
             CloudCheckIssue::Offline
         }
@@ -1587,13 +1593,13 @@ fn classify_cloud_check_error(error: &CloudStorageError) -> CloudCheckIssue {
 fn cloud_check_inconclusive_message(issue: CloudCheckIssue) -> String {
     match issue {
         CloudCheckIssue::Offline => {
-            "You're offline, so Cove can't check for an iCloud backup right now. You can continue onboarding now and check Cloud Backup later in Settings.".into()
+            "You're offline, so Cove can't check for a cloud backup right now. You can continue onboarding now and check Cloud Backup later in Settings.".into()
         }
         CloudCheckIssue::CloudUnavailable => {
-            "We couldn't confirm whether an iCloud backup is available because iCloud may be unavailable. You can still try restoring with your passkey if you're reinstalling this device.".into()
+            "We couldn't confirm whether a cloud backup is available because cloud storage may be unavailable. You can still try restoring with your passkey if you're reinstalling this device.".into()
         }
         CloudCheckIssue::Unknown => {
-            "We couldn't confirm whether an iCloud backup is available. You can still try restoring with your passkey if you're reinstalling this device.".into()
+            "We couldn't confirm whether a cloud backup is available. You can still try restoring with your passkey if you're reinstalling this device.".into()
         }
     }
 }
