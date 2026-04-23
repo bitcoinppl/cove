@@ -94,6 +94,10 @@ final class CloudStorageAccessImpl: CloudStorageAccess, @unchecked Sendable {
         }
     }
 
+    func listNamespacesNonInteractive() async throws -> [String] {
+        try await listNamespaces()
+    }
+
     func listWalletFiles(namespace: String) async throws -> [String] {
         try await run {
             let namespacesRoot = try self.helper.namespacesRootReadURL()
