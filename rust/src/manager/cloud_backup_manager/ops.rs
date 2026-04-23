@@ -1,5 +1,5 @@
 use cove_cspp::master_key_crypto;
-use cove_device::cloud_storage::CloudStorage;
+use cove_device::cloud_storage::{CloudAccessPolicy, CloudStorage};
 use cove_device::keychain::{CSPP_NAMESPACE_ID_KEY, Keychain};
 use cove_device::passkey::PasskeyAccess;
 use cove_util::ResultExt as _;
@@ -32,6 +32,7 @@ const CLOUD_ONLY_RESTORE_RECOVERY_MESSAGE: &str =
 const RECREATE_MANIFEST_RECOVERY_MESSAGE: &str =
     "Cloud backup needs verification before the backup index can be recreated";
 const UNSUPPORTED_CLOUD_ONLY_WALLET_NAME: &str = "Unsupported wallet backup";
+const EXPLICIT_CLOUD_ACCESS: CloudAccessPolicy = CloudAccessPolicy::ConsentAllowed;
 
 enum FinalizeUploadStateMode {
     PreserveVerification,
@@ -119,7 +120,7 @@ impl RustCloudBackupManager {
     ) -> Result<(), CloudBackupError> {
         let db = Database::global();
         let wallet_count = cloud
-            .list_wallet_backups(namespace_id.to_owned())
+            .list_wallet_backups(namespace_id.to_owned(), EXPLICIT_CLOUD_ACCESS)
             .await
             .map(|ids| ids.len() as u32)
             .unwrap_or(uploaded_wallets.len() as u32);
@@ -151,13 +152,15 @@ impl RustCloudBackupManager {
         let namespace = self.current_namespace_id()?;
         info!("Sync: listing cloud wallet backups for namespace {namespace}");
         let cloud = CloudStorage::global();
-        let wallet_record_ids = cloud.list_wallet_backups(namespace).await.map_err(|error| {
-            self.blocking_cloud_error(
-                BlockingCloudStep::Sync,
-                CloudBackupError::Cloud(error.to_string()),
-            )
-        })?;
-        let remote_wallet_truth = self.load_remote_wallet_truth(&wallet_record_ids).await?;
+        let wallet_record_ids =
+            cloud.list_wallet_backups(namespace, EXPLICIT_CLOUD_ACCESS).await.map_err(|error| {
+                self.blocking_cloud_error(
+                    BlockingCloudStep::Sync,
+                    CloudBackupError::cloud_storage_context("list wallet backups", error),
+                )
+            })?;
+        let remote_wallet_truth =
+            self.load_remote_wallet_truth(&wallet_record_ids, EXPLICIT_CLOUD_ACCESS).await?;
         let inventory =
             CloudWalletInventory::load_with_remote_truth(&wallet_record_ids, remote_wallet_truth)
                 .await?;
@@ -182,11 +185,13 @@ impl RustCloudBackupManager {
         self.ensure_cloud_connectivity(BlockingCloudStep::FetchCloudOnly)?;
         let namespace = self.current_namespace_id()?;
         let cloud = CloudStorage::global();
-        let wallet_record_ids =
-            cloud.list_wallet_backups(namespace.clone()).await.map_err(|error| {
+        let wallet_record_ids = cloud
+            .list_wallet_backups(namespace.clone(), EXPLICIT_CLOUD_ACCESS)
+            .await
+            .map_err(|error| {
                 self.blocking_cloud_error(
                     BlockingCloudStep::FetchCloudOnly,
-                    CloudBackupError::Cloud(error.to_string()),
+                    CloudBackupError::cloud_storage_context("list wallet backups", error),
                 )
             })?;
 
@@ -220,6 +225,7 @@ impl RustCloudBackupManager {
             cloud.clone(),
             namespace.clone(),
             Zeroizing::new(master_key.critical_data_key()),
+            EXPLICIT_CLOUD_ACCESS,
         );
         let mut items = Vec::new();
         let mut lookups = stream::iter(
@@ -304,6 +310,7 @@ impl RustCloudBackupManager {
             cloud.clone(),
             namespace.clone(),
             Zeroizing::new(master_key.critical_data_key()),
+            EXPLICIT_CLOUD_ACCESS,
         );
 
         let db = Database::global();
@@ -334,24 +341,26 @@ impl RustCloudBackupManager {
         let namespace = self.current_namespace_id()?;
         let cloud = CloudStorage::global();
 
-        cloud.delete_wallet_backup(namespace.clone(), record_id.to_string()).await.map_err(
-            |error| {
+        cloud
+            .delete_wallet_backup(namespace.clone(), record_id.to_string(), EXPLICIT_CLOUD_ACCESS)
+            .await
+            .map_err(|error| {
                 self.blocking_cloud_error(
                     BlockingCloudStep::DeleteCloudWallet,
-                    CloudBackupError::Cloud(error.to_string()),
+                    CloudBackupError::cloud_storage_context("delete wallet backup", error),
                 )
-            },
-        )?;
+            })?;
         self.remove_blob_sync_states(std::iter::once(record_id.to_string())).map_err(|error| {
             self.blocking_cloud_error(BlockingCloudStep::DeleteCloudWallet, error)
         })?;
 
-        let wallet_record_ids = cloud.list_wallet_backups(namespace).await.map_err(|error| {
-            self.blocking_cloud_error(
-                BlockingCloudStep::DeleteCloudWallet,
-                CloudBackupError::Cloud(error.to_string()),
-            )
-        })?;
+        let wallet_record_ids =
+            cloud.list_wallet_backups(namespace, EXPLICIT_CLOUD_ACCESS).await.map_err(|error| {
+                self.blocking_cloud_error(
+                    BlockingCloudStep::DeleteCloudWallet,
+                    CloudBackupError::cloud_storage_context("list wallet backups", error),
+                )
+            })?;
         let wallet_count = wallet_record_ids.len() as u32;
         let db = Database::global();
         if let Ok(mut current) = db.cloud_backup_state.get() {
@@ -436,14 +445,15 @@ impl RustCloudBackupManager {
 
         // no local master key — check iCloud for existing namespaces to recover
         let namespaces = cloud
-            .list_namespaces()
+            .list_namespaces(EXPLICIT_CLOUD_ACCESS)
             .await
             .map_err(|error| {
                 self.blocking_cloud_error(
                     BlockingCloudStep::Enable,
-                    CloudBackupError::Cloud(format!(
-                        "could not check for existing cloud backups, please try again when iCloud is available: {error}"
-                    )),
+                    CloudBackupError::cloud_storage_context(
+                        "could not check for existing cloud backups, please try again when iCloud is available",
+                        error,
+                    ),
                 )
             })?;
 
@@ -620,12 +630,13 @@ impl RustCloudBackupManager {
         let existing_namespaces = if had_local_master_key {
             Vec::new()
         } else {
-            cloud.list_namespaces().await.map_err(|error| {
+            cloud.list_namespaces(EXPLICIT_CLOUD_ACCESS).await.map_err(|error| {
                 self.blocking_cloud_error(
                     BlockingCloudStep::Enable,
-                    CloudBackupError::Cloud(format!(
-                        "could not check for existing cloud backups, please try again when iCloud is available: {error}"
-                    )),
+                    CloudBackupError::cloud_storage_context(
+                        "could not check for existing cloud backups, please try again when iCloud is available",
+                        error,
+                    ),
                 )
             })?
         };
@@ -738,11 +749,13 @@ impl RustCloudBackupManager {
 
         // download and restore wallets
         self.ensure_current_restore_operation(operation)?;
-        let wallet_record_ids =
-            cloud.list_wallet_backups(namespace_id.clone()).await.map_err(|error| {
+        let wallet_record_ids = cloud
+            .list_wallet_backups(namespace_id.clone(), EXPLICIT_CLOUD_ACCESS)
+            .await
+            .map_err(|error| {
                 self.blocking_cloud_error(
                     BlockingCloudStep::Restore,
-                    CloudBackupError::Cloud(error.to_string()),
+                    CloudBackupError::cloud_storage_context("list wallet backups", error),
                 )
             })?;
 
@@ -750,6 +763,7 @@ impl RustCloudBackupManager {
             cloud.clone(),
             namespace_id.clone(),
             Zeroizing::new(master_key.critical_data_key()),
+            EXPLICIT_CLOUD_ACCESS,
         );
         let mut report = CloudBackupRestoreReport {
             wallets_restored: 0,
@@ -807,7 +821,7 @@ impl RustCloudBackupManager {
         }
 
         let wallet_count = cloud
-            .list_wallet_backups(namespace_id.clone())
+            .list_wallet_backups(namespace_id.clone(), EXPLICIT_CLOUD_ACCESS)
             .await
             .map(|record_ids| record_ids.len() as u32)
             .unwrap_or(wallet_record_ids.len() as u32);
@@ -925,14 +939,15 @@ impl RustCloudBackupManager {
             serde_json::to_vec(&encrypted_master).map_err_str(CloudBackupError::Internal)?;
 
         info!("Enable: uploading master key");
-        cloud.upload_master_key_backup(namespace_id.clone(), master_json).await.map_err(
-            |error| {
+        cloud
+            .upload_master_key_backup(namespace_id.clone(), master_json, EXPLICIT_CLOUD_ACCESS)
+            .await
+            .map_err(|error| {
                 self.blocking_cloud_error(
                     BlockingCloudStep::Enable,
-                    CloudBackupError::Cloud(error.to_string()),
+                    CloudBackupError::cloud_storage_context("upload master key backup", error),
                 )
-            },
-        )?;
+            })?;
 
         info!("Enable: uploading wallets");
         let critical_key = Zeroizing::new(master_key.critical_data_key());
@@ -985,10 +1000,10 @@ impl RustCloudBackupManager {
         cloud: &CloudStorage,
         passkey: &PasskeyAccess,
     ) -> Result<super::wallets::NamespaceMatch, CloudBackupError> {
-        let namespaces = cloud.list_namespaces().await.map_err(|error| {
+        let namespaces = cloud.list_namespaces(EXPLICIT_CLOUD_ACCESS).await.map_err(|error| {
             self.blocking_cloud_error(
                 BlockingCloudStep::Restore,
-                CloudBackupError::Cloud(error.to_string()),
+                CloudBackupError::cloud_storage_context("list cloud backup namespaces", error),
             )
         })?;
         if namespaces.is_empty() {
@@ -1041,10 +1056,10 @@ where
     let namespace_id = master_key.namespace_id();
 
     let has_wallets = cloud
-        .list_wallet_backups(namespace_id.clone())
+        .list_wallet_backups(namespace_id.clone(), EXPLICIT_CLOUD_ACCESS)
         .await
         .map(|ids| !ids.is_empty())
-        .map_err(|error| CloudBackupError::Cloud(error.to_string()))?;
+        .map_err(|error| CloudBackupError::cloud_storage_context("list wallet backups", error))?;
 
     if has_wallets {
         info!("Restore: found local master key with wallets, namespace_id={namespace_id}");
@@ -1107,7 +1122,7 @@ mod tests {
         WalletEntry, WalletMode as CloudWalletMode, WalletSecret, wallet_filename_from_record_id,
         wallet_record_id,
     };
-    use cove_device::cloud_storage::{CloudStorage, CloudStorageAccess};
+    use cove_device::cloud_storage::{CloudStorage, CloudStorageAccess, CloudStorageError};
     use cove_device::keychain::{
         CSPP_CREDENTIAL_ID_KEY, CSPP_NAMESPACE_ID_KEY, CSPP_PRF_SALT_KEY, Keychain,
     };
@@ -1117,9 +1132,10 @@ mod tests {
     use super::*;
     use crate::database::Database;
     use crate::database::cloud_backup::{
-        CloudBlobDirtyState, CloudBlobFailedState, CloudBlobUploadedPendingConfirmationState,
-        CloudBlobUploadingState, CloudUploadKind, PersistedCloudBackupState,
-        PersistedCloudBackupStatus, PersistedCloudBlobState, PersistedCloudBlobSyncState,
+        CloudBlobDirtyState, CloudBlobFailedState, CloudBlobFailureIssue,
+        CloudBlobUploadedPendingConfirmationState, CloudBlobUploadingState, CloudUploadKind,
+        PersistedCloudBackupState, PersistedCloudBackupStatus, PersistedCloudBlobState,
+        PersistedCloudBlobSyncState,
     };
     use crate::label_manager::LabelManager;
     use crate::manager::cloud_backup_manager::{
@@ -1253,12 +1269,17 @@ mod tests {
         globals
             .cloud
             .clone()
-            .upload_master_key_backup(namespace.clone(), uploaded.clone())
+            .upload_master_key_backup(namespace.clone(), uploaded.clone(), EXPLICIT_CLOUD_ACCESS)
             .await
             .unwrap();
 
         assert_eq!(
-            globals.cloud.clone().download_master_key_backup(namespace).await.unwrap(),
+            globals
+                .cloud
+                .clone()
+                .download_master_key_backup(namespace, EXPLICIT_CLOUD_ACCESS)
+                .await
+                .unwrap(),
             uploaded
         );
     }
@@ -1562,12 +1583,14 @@ mod tests {
     }
 
     #[test]
-    fn blocking_cloud_error_rewrites_unavailable_messages_to_offline() {
+    fn blocking_cloud_error_rewrites_unavailable_storage_errors_to_offline() {
         let manager = RustCloudBackupManager::init();
 
         let error = manager.blocking_cloud_error(
             BlockingCloudStep::Enable,
-            CloudBackupError::Cloud("iCloud Drive is not available".into()),
+            CloudBackupError::CloudStorage(CloudStorageError::NotAvailable(
+                "iCloud Drive is not available".into(),
+            )),
         );
 
         assert!(matches!(error, CloudBackupError::Offline(_)));
@@ -1587,9 +1610,13 @@ mod tests {
 
         let manager = RustCloudBackupManager::init();
         let error = manager.do_enable_cloud_backup_create_new().await.unwrap_err();
-        assert!(
-            matches!(error, CloudBackupError::Cloud(message) if message.contains("upload failed: boom"))
-        );
+        assert!(matches!(
+            error,
+            CloudBackupError::CloudStorageContext {
+                context,
+                source: CloudStorageError::UploadFailed(message),
+            } if context == "upload master key backup" && message == "boom"
+        ));
 
         let keychain = Keychain::global();
         assert!(keychain.get(CSPP_CREDENTIAL_ID_KEY.into()).is_none());
@@ -2041,6 +2068,7 @@ mod tests {
                     revision_hash: None,
                     error: "upload failed".into(),
                     retryable: false,
+                    issue: None,
                     failed_at: 1,
                 }),
             })
@@ -2086,6 +2114,7 @@ mod tests {
                     revision_hash: None,
                     error: "upload failed".into(),
                     retryable: false,
+                    issue: None,
                     failed_at: 1,
                 }),
             })
@@ -2144,6 +2173,46 @@ mod tests {
 
         clear_wallet_upload_runtime_for_test_async(&manager).await;
         globals.cloud.clear_wallet_backup_upload_failure();
+    }
+
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "tests serialize shared cloud backup globals across awaits"
+    )]
+    #[tokio::test(flavor = "current_thread")]
+    async fn startup_resume_pauses_retryable_authorization_failed_wallet_uploads() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        let manager = CLOUD_BACKUP_MANAGER.clone();
+        clear_wallet_upload_runtime_for_test_async(&manager).await;
+        configure_enabled_cloud_backup(&manager, globals, 0);
+
+        let metadata = xpub_only_wallet_metadata();
+        persist_xpub_wallets(vec![metadata.clone()]);
+        persist_failed_blob_state_with_issue(
+            metadata.id,
+            true,
+            Some(CloudBlobFailureIssue::AuthorizationRequired),
+        );
+        let initial_attempt_count = globals.cloud.wallet_backup_upload_attempt_count();
+
+        manager.resume_pending_cloud_upload_verification();
+
+        wait_for_test_condition(
+            Duration::from_secs(1),
+            "startup resume should set sync error for authorization failures",
+            || manager.state().sync_error.as_deref() == Some("failed"),
+        )
+        .await;
+        assert_test_condition_stays_true(
+            Duration::from_millis(250),
+            "startup resume should not retry authorization failures",
+            || globals.cloud.wallet_backup_upload_attempt_count() == initial_attempt_count,
+        )
+        .await;
+
+        clear_wallet_upload_runtime_for_test_async(&manager).await;
     }
 
     #[expect(

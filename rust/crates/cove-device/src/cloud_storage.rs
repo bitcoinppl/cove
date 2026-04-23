@@ -7,6 +7,9 @@ use tracing::warn;
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
 #[uniffi::export(Display)]
 pub enum CloudStorageError {
+    #[error("authorization required: {0}")]
+    AuthorizationRequired(String),
+
     #[error("not available: {0}")]
     NotAvailable(String),
 
@@ -26,6 +29,12 @@ pub enum CloudStorageError {
     QuotaExceeded,
 }
 
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum CloudAccessPolicy {
+    ConsentAllowed,
+    Silent,
+}
+
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum CloudSyncHealth {
     Unknown,
@@ -33,6 +42,7 @@ pub enum CloudSyncHealth {
     Uploading,
     Failed(String),
     NoFiles,
+    AuthorizationRequired,
     Unavailable,
 }
 
@@ -43,6 +53,7 @@ pub trait CloudStorageAccess: Send + Sync + std::fmt::Debug + 'static {
         &self,
         namespace: String,
         data: Vec<u8>,
+        policy: CloudAccessPolicy,
     ) -> Result<(), CloudStorageError>;
 
     async fn upload_wallet_backup(
@@ -50,38 +61,40 @@ pub trait CloudStorageAccess: Send + Sync + std::fmt::Debug + 'static {
         namespace: String,
         record_id: String,
         data: Vec<u8>,
+        policy: CloudAccessPolicy,
     ) -> Result<(), CloudStorageError>;
 
     async fn download_master_key_backup(
         &self,
         namespace: String,
+        policy: CloudAccessPolicy,
     ) -> Result<Vec<u8>, CloudStorageError>;
 
     async fn download_wallet_backup(
         &self,
         namespace: String,
         record_id: String,
+        policy: CloudAccessPolicy,
     ) -> Result<Vec<u8>, CloudStorageError>;
 
     async fn delete_wallet_backup(
         &self,
         namespace: String,
         record_id: String,
+        policy: CloudAccessPolicy,
     ) -> Result<(), CloudStorageError>;
 
     /// List all namespace IDs (subdirectories of cspp-namespaces/)
-    async fn list_namespaces(&self) -> Result<Vec<String>, CloudStorageError>;
+    async fn list_namespaces(
+        &self,
+        policy: CloudAccessPolicy,
+    ) -> Result<Vec<String>, CloudStorageError>;
 
-    /// List all namespace IDs without presenting consent UI
-    async fn list_namespaces_non_interactive(&self) -> Result<Vec<String>, CloudStorageError>;
-
-    /// List wallet backup filenames within a namespace for user-driven flows
-    async fn list_wallet_files(&self, namespace: String) -> Result<Vec<String>, CloudStorageError>;
-
-    /// List wallet backup filenames within a namespace without presenting consent UI
-    async fn list_wallet_files_non_interactive(
+    /// List wallet backup filenames within a namespace
+    async fn list_wallet_files(
         &self,
         namespace: String,
+        policy: CloudAccessPolicy,
     ) -> Result<Vec<String>, CloudStorageError>;
 
     /// Check whether a blob has been fully uploaded to iCloud
@@ -89,9 +102,10 @@ pub trait CloudStorageAccess: Send + Sync + std::fmt::Debug + 'static {
         &self,
         namespace: String,
         record_id: String,
+        policy: CloudAccessPolicy,
     ) -> Result<bool, CloudStorageError>;
 
-    async fn overall_sync_health(&self) -> CloudSyncHealth;
+    async fn overall_sync_health(&self, policy: CloudAccessPolicy) -> CloudSyncHealth;
 }
 
 static REF: OnceCell<CloudStorage> = OnceCell::new();
@@ -121,8 +135,11 @@ impl CloudStorage {
     }
 
     /// Check if any cloud backup namespaces exist
-    pub async fn has_any_cloud_backup(&self) -> Result<bool, CloudStorageError> {
-        Ok(!self.list_namespaces_non_interactive().await?.is_empty())
+    pub async fn has_any_cloud_backup(
+        &self,
+        policy: CloudAccessPolicy,
+    ) -> Result<bool, CloudStorageError> {
+        Ok(!self.list_namespaces(policy).await?.is_empty())
     }
 }
 
@@ -131,8 +148,9 @@ impl CloudStorage {
         &self,
         namespace: String,
         data: Vec<u8>,
+        policy: CloudAccessPolicy,
     ) -> Result<(), CloudStorageError> {
-        self.0.upload_master_key_backup(namespace, data).await
+        self.0.upload_master_key_backup(namespace, data, policy).await
     }
 
     pub async fn upload_wallet_backup(
@@ -140,83 +158,71 @@ impl CloudStorage {
         namespace: String,
         record_id: String,
         data: Vec<u8>,
+        policy: CloudAccessPolicy,
     ) -> Result<(), CloudStorageError> {
-        self.0.upload_wallet_backup(namespace, record_id, data).await
+        self.0.upload_wallet_backup(namespace, record_id, data, policy).await
     }
 
     pub async fn download_master_key_backup(
         &self,
         namespace: String,
+        policy: CloudAccessPolicy,
     ) -> Result<Vec<u8>, CloudStorageError> {
-        self.0.download_master_key_backup(namespace).await
+        self.0.download_master_key_backup(namespace, policy).await
     }
 
     pub async fn download_wallet_backup(
         &self,
         namespace: String,
         record_id: String,
+        policy: CloudAccessPolicy,
     ) -> Result<Vec<u8>, CloudStorageError> {
-        self.0.download_wallet_backup(namespace, record_id).await
+        self.0.download_wallet_backup(namespace, record_id, policy).await
     }
 
     pub async fn delete_wallet_backup(
         &self,
         namespace: String,
         record_id: String,
+        policy: CloudAccessPolicy,
     ) -> Result<(), CloudStorageError> {
-        self.0.delete_wallet_backup(namespace, record_id).await
+        self.0.delete_wallet_backup(namespace, record_id, policy).await
     }
 
-    pub async fn list_namespaces(&self) -> Result<Vec<String>, CloudStorageError> {
-        self.0.list_namespaces().await
-    }
-
-    pub async fn list_namespaces_non_interactive(&self) -> Result<Vec<String>, CloudStorageError> {
-        self.0.list_namespaces_non_interactive().await
+    pub async fn list_namespaces(
+        &self,
+        policy: CloudAccessPolicy,
+    ) -> Result<Vec<String>, CloudStorageError> {
+        self.0.list_namespaces(policy).await
     }
 
     pub async fn list_wallet_files(
         &self,
         namespace: String,
+        policy: CloudAccessPolicy,
     ) -> Result<Vec<String>, CloudStorageError> {
-        self.0.list_wallet_files(namespace).await
-    }
-
-    pub async fn list_wallet_files_non_interactive(
-        &self,
-        namespace: String,
-    ) -> Result<Vec<String>, CloudStorageError> {
-        self.0.list_wallet_files_non_interactive(namespace).await
+        self.0.list_wallet_files(namespace, policy).await
     }
 
     pub async fn is_backup_uploaded(
         &self,
         namespace: String,
         record_id: String,
+        policy: CloudAccessPolicy,
     ) -> Result<bool, CloudStorageError> {
-        self.0.is_backup_uploaded(namespace, record_id).await
+        self.0.is_backup_uploaded(namespace, record_id, policy).await
     }
 
-    pub async fn overall_sync_health(&self) -> CloudSyncHealth {
-        self.0.overall_sync_health().await
+    pub async fn overall_sync_health(&self, policy: CloudAccessPolicy) -> CloudSyncHealth {
+        self.0.overall_sync_health(policy).await
     }
 
     pub async fn list_wallet_backups(
         &self,
         namespace: String,
+        policy: CloudAccessPolicy,
     ) -> Result<Vec<String>, CloudStorageError> {
-        let filenames = self.0.list_wallet_files(namespace).await?;
-        Ok(filenames
-            .iter()
-            .filter_map(|f| wallet_record_id_from_filename(f).map(String::from))
-            .collect())
-    }
-
-    pub async fn list_wallet_backups_non_interactive(
-        &self,
-        namespace: String,
-    ) -> Result<Vec<String>, CloudStorageError> {
-        let filenames = self.0.list_wallet_files_non_interactive(namespace).await?;
+        let filenames = self.0.list_wallet_files(namespace, policy).await?;
         Ok(filenames
             .iter()
             .filter_map(|f| wallet_record_id_from_filename(f).map(String::from))
@@ -239,8 +245,8 @@ mod tests {
 
     #[derive(Debug)]
     struct TestCloudStorage {
-        interactive_namespaces_called: Arc<AtomicBool>,
-        non_interactive_namespaces: Vec<String>,
+        consent_allowed_namespaces_called: Arc<AtomicBool>,
+        silent_namespaces: Vec<String>,
     }
 
     #[async_trait::async_trait]
@@ -249,6 +255,7 @@ mod tests {
             &self,
             _namespace: String,
             _data: Vec<u8>,
+            _policy: CloudAccessPolicy,
         ) -> Result<(), CloudStorageError> {
             panic!("unused in test")
         }
@@ -258,6 +265,7 @@ mod tests {
             _namespace: String,
             _record_id: String,
             _data: Vec<u8>,
+            _policy: CloudAccessPolicy,
         ) -> Result<(), CloudStorageError> {
             panic!("unused in test")
         }
@@ -265,6 +273,7 @@ mod tests {
         async fn download_master_key_backup(
             &self,
             _namespace: String,
+            _policy: CloudAccessPolicy,
         ) -> Result<Vec<u8>, CloudStorageError> {
             panic!("unused in test")
         }
@@ -273,6 +282,7 @@ mod tests {
             &self,
             _namespace: String,
             _record_id: String,
+            _policy: CloudAccessPolicy,
         ) -> Result<Vec<u8>, CloudStorageError> {
             panic!("unused in test")
         }
@@ -281,29 +291,28 @@ mod tests {
             &self,
             _namespace: String,
             _record_id: String,
+            _policy: CloudAccessPolicy,
         ) -> Result<(), CloudStorageError> {
             panic!("unused in test")
         }
 
-        async fn list_namespaces(&self) -> Result<Vec<String>, CloudStorageError> {
-            self.interactive_namespaces_called.store(true, Ordering::Release);
-            panic!("interactive namespace listing should not be used")
-        }
-
-        async fn list_namespaces_non_interactive(&self) -> Result<Vec<String>, CloudStorageError> {
-            Ok(self.non_interactive_namespaces.clone())
+        async fn list_namespaces(
+            &self,
+            policy: CloudAccessPolicy,
+        ) -> Result<Vec<String>, CloudStorageError> {
+            match policy {
+                CloudAccessPolicy::ConsentAllowed => {
+                    self.consent_allowed_namespaces_called.store(true, Ordering::Release);
+                    panic!("consent-allowed namespace listing should not be used")
+                }
+                CloudAccessPolicy::Silent => Ok(self.silent_namespaces.clone()),
+            }
         }
 
         async fn list_wallet_files(
             &self,
             _namespace: String,
-        ) -> Result<Vec<String>, CloudStorageError> {
-            panic!("unused in test")
-        }
-
-        async fn list_wallet_files_non_interactive(
-            &self,
-            _namespace: String,
+            _policy: CloudAccessPolicy,
         ) -> Result<Vec<String>, CloudStorageError> {
             panic!("unused in test")
         }
@@ -312,11 +321,12 @@ mod tests {
             &self,
             _namespace: String,
             _record_id: String,
+            _policy: CloudAccessPolicy,
         ) -> Result<bool, CloudStorageError> {
             panic!("unused in test")
         }
 
-        async fn overall_sync_health(&self) -> CloudSyncHealth {
+        async fn overall_sync_health(&self, _policy: CloudAccessPolicy) -> CloudSyncHealth {
             panic!("unused in test")
         }
     }
@@ -332,14 +342,17 @@ mod tests {
     }
 
     #[test]
-    fn has_any_cloud_backup_uses_non_interactive_namespace_listing() {
-        let interactive_namespaces_called = Arc::new(AtomicBool::new(false));
+    fn has_any_cloud_backup_uses_silent_namespace_listing() {
+        let consent_allowed_namespaces_called = Arc::new(AtomicBool::new(false));
         let cloud = CloudStorage(Arc::new(Box::new(TestCloudStorage {
-            interactive_namespaces_called: interactive_namespaces_called.clone(),
-            non_interactive_namespaces: vec!["namespace-a".into()],
+            consent_allowed_namespaces_called: consent_allowed_namespaces_called.clone(),
+            silent_namespaces: vec!["namespace-a".into()],
         })));
 
-        assert!(block_on_ready(cloud.has_any_cloud_backup()).expect("cloud check should succeed"));
-        assert!(!interactive_namespaces_called.load(Ordering::Acquire));
+        assert!(
+            block_on_ready(cloud.has_any_cloud_backup(CloudAccessPolicy::Silent))
+                .expect("cloud check should succeed")
+        );
+        assert!(!consent_allowed_namespaces_called.load(Ordering::Acquire));
     }
 }

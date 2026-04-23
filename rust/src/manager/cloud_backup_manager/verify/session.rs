@@ -11,8 +11,9 @@ use zeroize::Zeroizing;
 
 use super::super::{
     CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupDetail, CloudBackupError, DeepVerificationFailure,
-    DeepVerificationReport, DeepVerificationResult, PASSKEY_RP_ID, PendingVerificationCompletion,
-    PendingVerificationUpload, RustCloudBackupManager, VerificationFailureKind,
+    DeepVerificationReport, DeepVerificationResult, EXPLICIT_CLOUD_ACCESS, PASSKEY_RP_ID,
+    PendingVerificationCompletion, PendingVerificationUpload, RustCloudBackupManager,
+    VerificationFailureKind,
     cloud_inventory::CloudWalletInventory,
     wallets::{WalletBackupLookup, WalletBackupReader, prepare_wallet_backup},
 };
@@ -130,9 +131,13 @@ impl VerificationSession {
     }
 
     async fn load_wallet_inventory(&mut self) -> Option<DeepVerificationResult> {
-        match self.cloud.list_wallet_backups(self.namespace.clone()).await {
+        match self.cloud.list_wallet_backups(self.namespace.clone(), EXPLICIT_CLOUD_ACCESS).await {
             Ok(ids) => {
-                let remote_wallet_truth = match self.manager.load_remote_wallet_truth(&ids).await {
+                let remote_wallet_truth = match self
+                    .manager
+                    .load_remote_wallet_truth(&ids, EXPLICIT_CLOUD_ACCESS)
+                    .await
+                {
                     Ok(remote_wallet_truth) => remote_wallet_truth,
                     Err(error) => return Some(self.remote_truth_retry_result(&error)),
                 };
@@ -163,7 +168,11 @@ impl VerificationSession {
     }
 
     async fn load_encrypted_master_key(&self) -> Result<EncryptedMasterKeyStep, CloudBackupError> {
-        match self.cloud.download_master_key_backup(self.namespace.clone()).await {
+        match self
+            .cloud
+            .download_master_key_backup(self.namespace.clone(), EXPLICIT_CLOUD_ACCESS)
+            .await
+        {
             Ok(json) => {
                 let encrypted: EncryptedMasterKeyBackup =
                     serde_json::from_slice(&json).map_err_str(CloudBackupError::Internal)?;
@@ -331,11 +340,14 @@ impl VerificationSession {
         self.report.wallets_verified = verified;
         self.report.wallets_failed = failed;
         self.report.wallets_unsupported = unsupported;
-        let remote_wallet_truth =
-            match self.manager.load_remote_wallet_truth(&wallet_record_ids).await {
-                Ok(remote_wallet_truth) => remote_wallet_truth,
-                Err(error) => return Some(self.remote_truth_retry_result(&error)),
-            };
+        let remote_wallet_truth = match self
+            .manager
+            .load_remote_wallet_truth(&wallet_record_ids, EXPLICIT_CLOUD_ACCESS)
+            .await
+        {
+            Ok(remote_wallet_truth) => remote_wallet_truth,
+            Err(error) => return Some(self.remote_truth_retry_result(&error)),
+        };
 
         let unsynced = match CloudWalletInventory::load_with_remote_truth(
             &wallet_record_ids,
@@ -382,7 +394,11 @@ impl VerificationSession {
             Err(error) => return Some(self.local_inventory_retry_result(&error)),
         };
 
-        let updated_ids = match self.cloud.list_wallet_backups(self.namespace.clone()).await {
+        let updated_ids = match self
+            .cloud
+            .list_wallet_backups(self.namespace.clone(), EXPLICIT_CLOUD_ACCESS)
+            .await
+        {
             Ok(updated_ids) => updated_ids,
             Err(error) => {
                 warn!("Deep verify: failed to re-check wallet backups after auto-sync: {error}");
@@ -392,7 +408,11 @@ impl VerificationSession {
             }
         };
 
-        let remote_wallet_truth = match self.manager.load_remote_wallet_truth(&updated_ids).await {
+        let remote_wallet_truth = match self
+            .manager
+            .load_remote_wallet_truth(&updated_ids, EXPLICIT_CLOUD_ACCESS)
+            .await
+        {
             Ok(remote_wallet_truth) => remote_wallet_truth,
             Err(error) => return Some(self.remote_truth_retry_result(&error)),
         };
@@ -458,6 +478,7 @@ impl VerificationSession {
             self.cloud.clone(),
             self.namespace.clone(),
             Zeroizing::new(*critical_key),
+            EXPLICIT_CLOUD_ACCESS,
         );
 
         let mut verified = 0u32;

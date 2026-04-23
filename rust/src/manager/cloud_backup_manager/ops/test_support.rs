@@ -10,7 +10,7 @@ use cove_cspp::backup_data::{
     wallet_filename_from_record_id,
 };
 use cove_device::cloud_storage::{
-    CloudStorage, CloudStorageAccess, CloudStorageError, CloudSyncHealth,
+    CloudAccessPolicy, CloudStorage, CloudStorageAccess, CloudStorageError, CloudSyncHealth,
 };
 use cove_device::keychain::{CSPP_NAMESPACE_ID_KEY, Keychain, KeychainAccess};
 use cove_device::passkey::{
@@ -24,9 +24,9 @@ use strum::IntoEnumIterator as _;
 use super::*;
 use crate::database::Database;
 use crate::database::cloud_backup::{
-    CloudBlobDirtyState, CloudBlobFailedState, CloudBlobUploadingState, CloudUploadKind,
-    PersistedCloudBackupState, PersistedCloudBackupStatus, PersistedCloudBlobState,
-    PersistedCloudBlobSyncState,
+    CloudBlobDirtyState, CloudBlobFailedState, CloudBlobFailureIssue, CloudBlobUploadingState,
+    CloudUploadKind, PersistedCloudBackupState, PersistedCloudBackupStatus,
+    PersistedCloudBlobState, PersistedCloudBlobSyncState,
 };
 use crate::manager::connectivity_manager::CONNECTIVITY_MANAGER;
 use crate::mnemonic::MnemonicExt as _;
@@ -212,6 +212,7 @@ impl CloudStorageAccess for MockCloudStorage {
         &self,
         namespace: String,
         data: Vec<u8>,
+        _policy: CloudAccessPolicy,
     ) -> Result<(), CloudStorageError> {
         if let Some(error) = self.state.lock().upload_master_key_error.clone() {
             return Err(error);
@@ -226,6 +227,7 @@ impl CloudStorageAccess for MockCloudStorage {
         namespace: String,
         record_id: String,
         data: Vec<u8>,
+        _policy: CloudAccessPolicy,
     ) -> Result<(), CloudStorageError> {
         let (dirty_wallet, changed_wallet) = {
             let mut state = self.state.lock();
@@ -256,6 +258,7 @@ impl CloudStorageAccess for MockCloudStorage {
     async fn download_master_key_backup(
         &self,
         namespace: String,
+        _policy: CloudAccessPolicy,
     ) -> Result<Vec<u8>, CloudStorageError> {
         self.state
             .lock()
@@ -269,6 +272,7 @@ impl CloudStorageAccess for MockCloudStorage {
         &self,
         namespace: String,
         record_id: String,
+        _policy: CloudAccessPolicy,
     ) -> Result<Vec<u8>, CloudStorageError> {
         let dirty_wallet = self.state.lock().dirty_wallet_on_next_backup_check.take();
         if let Some(wallet_id) = dirty_wallet {
@@ -294,6 +298,7 @@ impl CloudStorageAccess for MockCloudStorage {
         &self,
         namespace: String,
         record_id: String,
+        _policy: CloudAccessPolicy,
     ) -> Result<(), CloudStorageError> {
         let mut state = self.state.lock();
         if record_id == MASTER_KEY_RECORD_ID {
@@ -308,41 +313,25 @@ impl CloudStorageAccess for MockCloudStorage {
         Ok(())
     }
 
-    async fn list_namespaces(&self) -> Result<Vec<String>, CloudStorageError> {
+    async fn list_namespaces(
+        &self,
+        _policy: CloudAccessPolicy,
+    ) -> Result<Vec<String>, CloudStorageError> {
         Ok(self.state.lock().wallet_files.keys().cloned().collect())
     }
 
-    async fn list_namespaces_non_interactive(&self) -> Result<Vec<String>, CloudStorageError> {
-        Ok(self.state.lock().wallet_files.keys().cloned().collect())
-    }
-
-    async fn list_wallet_files(&self, namespace: String) -> Result<Vec<String>, CloudStorageError> {
-        let state = self.state.lock();
-        if let Some(error) = state.list_wallet_files_error.clone() {
-            return Err(error);
-        }
-        let mut wallet_files = state.wallet_files.get(&namespace).cloned().unwrap_or_default();
-
-        if state.reflect_uploaded_wallets_in_listing {
-            for (uploaded_namespace, record_id) in &state.uploaded_wallet_backups {
-                if uploaded_namespace == &namespace {
-                    let filename = wallet_filename_from_record_id(record_id);
-                    if !wallet_files.contains(&filename) {
-                        wallet_files.push(filename);
-                    }
-                }
-            }
-        }
-
-        Ok(wallet_files)
-    }
-
-    async fn list_wallet_files_non_interactive(
+    async fn list_wallet_files(
         &self,
         namespace: String,
+        policy: CloudAccessPolicy,
     ) -> Result<Vec<String>, CloudStorageError> {
         let state = self.state.lock();
-        if let Some(error) = state.list_wallet_files_non_interactive_error.clone() {
+        let error = if policy == CloudAccessPolicy::Silent {
+            state.list_wallet_files_non_interactive_error.clone()
+        } else {
+            state.list_wallet_files_error.clone()
+        };
+        if let Some(error) = error {
             return Err(error);
         }
         let mut wallet_files = state.wallet_files.get(&namespace).cloned().unwrap_or_default();
@@ -363,13 +352,19 @@ impl CloudStorageAccess for MockCloudStorage {
 
     async fn is_backup_uploaded(
         &self,
-        _namespace: String,
-        _record_id: String,
+        namespace: String,
+        record_id: String,
+        _policy: CloudAccessPolicy,
     ) -> Result<bool, CloudStorageError> {
-        Ok(true)
+        let state = self.state.lock();
+        if record_id == MASTER_KEY_RECORD_ID {
+            return Ok(state.master_key_backups.contains_key(&namespace));
+        }
+
+        Ok(state.wallet_backups.contains_key(&(namespace, record_id)))
     }
 
-    async fn overall_sync_health(&self) -> CloudSyncHealth {
+    async fn overall_sync_health(&self, _policy: CloudAccessPolicy) -> CloudSyncHealth {
         CloudSyncHealth::AllUploaded
     }
 }
@@ -545,6 +540,14 @@ fn mutate_wallet_and_persist_dirty(wallet_id: WalletId) {
 }
 
 pub(crate) fn persist_failed_blob_state(wallet_id: WalletId, retryable: bool) {
+    persist_failed_blob_state_with_issue(wallet_id, retryable, None);
+}
+
+pub(crate) fn persist_failed_blob_state_with_issue(
+    wallet_id: WalletId,
+    retryable: bool,
+    issue: Option<CloudBlobFailureIssue>,
+) {
     let namespace_id = Keychain::global().get(CSPP_NAMESPACE_ID_KEY.into()).unwrap();
     let record_id = cove_cspp::backup_data::wallet_record_id(wallet_id.as_ref());
     let failed_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
@@ -560,6 +563,7 @@ pub(crate) fn persist_failed_blob_state(wallet_id: WalletId, retryable: bool) {
                 revision_hash: Some("rev-1".into()),
                 retryable,
                 error: "failed".into(),
+                issue,
                 failed_at,
             }),
         })

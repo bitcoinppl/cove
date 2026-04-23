@@ -13,6 +13,7 @@ import java.net.UnknownHostException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.Log
+import org.bitcoinppl.cove_core.device.CloudAccessPolicy
 import org.bitcoinppl.cove_core.device.CloudStorageAccess
 import org.bitcoinppl.cove_core.device.CloudStorageException
 import org.bitcoinppl.cove_core.device.CloudSyncHealth
@@ -22,15 +23,20 @@ import org.json.JSONObject
 internal fun syncHealthForNamespaceFiles(
     namespaceFiles: List<List<String>>,
     hasUploadedBackupFiles: (List<String>) -> Boolean,
+    hasCompleteNamespaceBackup: (List<String>) -> Boolean,
 ): CloudSyncHealth =
-    if (namespaceFiles.any(hasUploadedBackupFiles)) {
-        CloudSyncHealth.AllUploaded
-    } else {
-        CloudSyncHealth.NoFiles
+    when {
+        namespaceFiles.none(hasUploadedBackupFiles) -> CloudSyncHealth.NoFiles
+        namespaceFiles.any(hasCompleteNamespaceBackup) -> CloudSyncHealth.AllUploaded
+        else -> CloudSyncHealth.Failed("cloud backup is incomplete")
     }
 
 internal fun hasUploadedBackupFiles(fileNames: List<String>): Boolean =
     fileNames.any { it == DrivePaths.masterKeyFileName || DrivePaths.isWalletFile(it) }
+
+internal fun hasCompleteNamespaceBackup(fileNames: List<String>): Boolean =
+    fileNames.contains(DrivePaths.masterKeyFileName) &&
+        fileNames.any(DrivePaths::isWalletFile)
 
 internal data class UploadMetadata(
     val name: String,
@@ -58,19 +64,136 @@ internal fun createUploadMetadata(
 internal fun overwriteUploadMetadata(fileName: String): UploadMetadata =
     UploadMetadata(name = fileName)
 
-class AndroidCloudStorageAccess private constructor(
-    context: Context,
-    private val driveAuthorization: DriveAuthorizationHelper,
+internal enum class DriveQuotaReason {
+    StorageQuotaExceeded,
+    QuotaExceeded,
+    UserRateLimitExceeded,
+    RateLimitExceeded,
+    DailyLimitExceeded;
+
+    companion object {
+        fun from(value: String): DriveQuotaReason? =
+            when (value) {
+                "storageQuotaExceeded" -> StorageQuotaExceeded
+                "quotaExceeded" -> QuotaExceeded
+                "userRateLimitExceeded" -> UserRateLimitExceeded
+                "rateLimitExceeded" -> RateLimitExceeded
+                "dailyLimitExceeded" -> DailyLimitExceeded
+                else -> null
+            }
+    }
+}
+
+internal fun driveQuotaReasons(body: String): Set<DriveQuotaReason> {
+    val root = runCatching { JSONObject(body) }.getOrNull() ?: return emptySet()
+    val error = root.optJSONObject("error") ?: return emptySet()
+    val reasons = mutableSetOf<DriveQuotaReason>()
+
+    DriveQuotaReason.from(error.optString("reason"))?.let(reasons::add)
+
+    val errors = error.optJSONArray("errors")
+    if (errors != null) {
+        for (index in 0 until errors.length()) {
+            val reason = errors.optJSONObject(index)?.optString("reason") ?: continue
+            DriveQuotaReason.from(reason)?.let(reasons::add)
+        }
+    }
+
+    return reasons
+}
+
+private fun DriveHttpException.isQuotaExceeded(): Boolean =
+    driveQuotaReasons(body).isNotEmpty()
+
+internal fun mapDriveUploadError(error: Throwable, target: String): CloudStorageException =
+    when (error) {
+        is AuthorizationRequiredException ->
+            CloudStorageException.AuthorizationRequired("google drive authorization is required")
+        is ApiException ->
+            if (error.statusCode == CommonStatusCodes.CANCELED) {
+                CloudStorageException.AuthorizationRequired("google drive authorization was cancelled")
+            } else {
+                CloudStorageException.NotAvailable(error.message ?: "google drive is unavailable")
+            }
+        is DriveHttpException ->
+            when (error.statusCode) {
+                HttpURLConnection.HTTP_NOT_FOUND -> CloudStorageException.NotFound(target)
+                HTTP_TOO_MANY_REQUESTS -> CloudStorageException.QuotaExceeded()
+                HttpURLConnection.HTTP_FORBIDDEN ->
+                    if (error.isQuotaExceeded()) {
+                        CloudStorageException.QuotaExceeded()
+                    } else {
+                        CloudStorageException.AuthorizationRequired("google drive access was rejected")
+                    }
+                else -> CloudStorageException.UploadFailed(error.body.ifBlank { "drive upload failed" })
+            }
+        is UnknownHostException, is SocketTimeoutException, is IOException ->
+            CloudStorageException.Offline(error.message ?: "offline")
+        else -> CloudStorageException.UploadFailed(error.message ?: "drive upload failed")
+    }
+
+internal fun mapDriveDownloadError(error: Throwable, target: String): CloudStorageException =
+    when (val mapped = mapDriveUploadError(error, target)) {
+        is CloudStorageException.UploadFailed ->
+            CloudStorageException.DownloadFailed(mapped.v1)
+        else -> mapped
+    }
+
+internal fun mapDriveDeleteError(error: Throwable, target: String): CloudStorageException =
+    when (val mapped = mapDriveUploadError(error, target)) {
+        is CloudStorageException.UploadFailed ->
+            CloudStorageException.NotAvailable(mapped.v1)
+        else -> mapped
+    }
+
+internal fun mapDriveListError(error: Throwable): CloudStorageException =
+    when (error) {
+        is AuthorizationRequiredException ->
+            CloudStorageException.AuthorizationRequired("google drive authorization is required")
+        is ApiException ->
+            if (error.statusCode == CommonStatusCodes.CANCELED) {
+                CloudStorageException.AuthorizationRequired("google drive authorization was cancelled")
+            } else {
+                CloudStorageException.NotAvailable(error.message ?: "google drive is unavailable")
+            }
+        is DriveHttpException ->
+            when (error.statusCode) {
+                HTTP_TOO_MANY_REQUESTS -> CloudStorageException.QuotaExceeded()
+                HttpURLConnection.HTTP_NOT_FOUND -> CloudStorageException.NotFound("drive file")
+                HttpURLConnection.HTTP_FORBIDDEN ->
+                    if (error.isQuotaExceeded()) {
+                        CloudStorageException.QuotaExceeded()
+                    } else {
+                        CloudStorageException.AuthorizationRequired("google drive access was rejected")
+                    }
+                else -> CloudStorageException.NotAvailable(error.body.ifBlank { "drive listing failed" })
+            }
+        is UnknownHostException, is SocketTimeoutException, is IOException ->
+            CloudStorageException.Offline(error.message ?: "offline")
+        else -> CloudStorageException.NotAvailable(error.message ?: "drive listing failed")
+    }
+
+internal class DriveHttpException(
+    val statusCode: Int,
+    val body: String,
+) : IOException("drive request failed with status=$statusCode")
+
+class AndroidCloudStorageAccess internal constructor(
+    private val driveAuthorization: DriveAuthorization,
 ) : CloudStorageAccess {
-    constructor(context: Context) : this(context, DriveAuthorizationHelper(context))
+    constructor(context: Context) : this(DriveAuthorizationHelper(context))
+
+    private fun CloudAccessPolicy.allowsConsent(): Boolean =
+        this == CloudAccessPolicy.CONSENT_ALLOWED
 
     override suspend fun uploadMasterKeyBackup(
         namespace: String,
         data: ByteArray,
+        policy: CloudAccessPolicy,
     ) {
         runDriveOperation(
-            interactive = true,
-            onError = { error -> mapUploadError(error, DrivePaths.masterKeyFileName) },
+            interactive = policy.allowsConsent(),
+            onError = { error -> mapDriveUploadError(error, DrivePaths.masterKeyFileName) },
         ) { token ->
             val namespaceFolderId = ensureNamespaceFolderId(token, namespace)
             upsertFile(
@@ -86,10 +209,11 @@ class AndroidCloudStorageAccess private constructor(
         namespace: String,
         recordId: String,
         data: ByteArray,
+        policy: CloudAccessPolicy,
     ) {
         runDriveOperation(
-            interactive = true,
-            onError = { error -> mapUploadError(error, recordId) },
+            interactive = policy.allowsConsent(),
+            onError = { error -> mapDriveUploadError(error, recordId) },
         ) { token ->
             val namespaceFolderId = ensureNamespaceFolderId(token, namespace)
             upsertFile(
@@ -101,10 +225,13 @@ class AndroidCloudStorageAccess private constructor(
         }
     }
 
-    override suspend fun downloadMasterKeyBackup(namespace: String): ByteArray =
+    override suspend fun downloadMasterKeyBackup(
+        namespace: String,
+        policy: CloudAccessPolicy,
+    ): ByteArray =
         runDriveOperation(
-            interactive = true,
-            onError = { error -> mapDownloadError(error, DrivePaths.masterKeyFileName) },
+            interactive = policy.allowsConsent(),
+            onError = { error -> mapDriveDownloadError(error, DrivePaths.masterKeyFileName) },
         ) { token ->
             val namespaceFolderId = requireNamespaceFolderId(token, namespace)
             val fileId =
@@ -119,10 +246,11 @@ class AndroidCloudStorageAccess private constructor(
     override suspend fun downloadWalletBackup(
         namespace: String,
         recordId: String,
+        policy: CloudAccessPolicy,
     ): ByteArray =
         runDriveOperation(
-            interactive = true,
-            onError = { error -> mapDownloadError(error, recordId) },
+            interactive = policy.allowsConsent(),
+            onError = { error -> mapDriveDownloadError(error, recordId) },
         ) { token ->
             val namespaceFolderId = requireNamespaceFolderId(token, namespace)
             val fileId =
@@ -137,10 +265,11 @@ class AndroidCloudStorageAccess private constructor(
     override suspend fun deleteWalletBackup(
         namespace: String,
         recordId: String,
+        policy: CloudAccessPolicy,
     ) {
         runDriveOperation(
-            interactive = true,
-            onError = { error -> mapDeleteError(error, recordId) },
+            interactive = policy.allowsConsent(),
+            onError = { error -> mapDriveDeleteError(error, recordId) },
         ) { token ->
             val namespaceFolderId = requireNamespaceFolderId(token, namespace)
             val file =
@@ -158,25 +287,23 @@ class AndroidCloudStorageAccess private constructor(
         }
     }
 
-    override suspend fun listNamespaces(): List<String> =
-        listNamespaces(interactive = true)
+    override suspend fun listNamespaces(policy: CloudAccessPolicy): List<String> =
+        listNamespaces(interactive = policy.allowsConsent())
 
-    override suspend fun listNamespacesNonInteractive(): List<String> =
-        listNamespaces(interactive = false)
-
-    override suspend fun listWalletFiles(namespace: String): List<String> =
-        listWalletFiles(namespace, interactive = true)
-
-    override suspend fun listWalletFilesNonInteractive(namespace: String): List<String> =
-        listWalletFiles(namespace, interactive = false)
+    override suspend fun listWalletFiles(
+        namespace: String,
+        policy: CloudAccessPolicy,
+    ): List<String> =
+        listWalletFiles(namespace, interactive = policy.allowsConsent())
 
     override suspend fun isBackupUploaded(
         namespace: String,
         recordId: String,
+        policy: CloudAccessPolicy,
     ): Boolean =
         runDriveOperation(
-            interactive = true,
-            onError = { error -> mapListError(error) },
+            interactive = policy.allowsConsent(),
+            onError = { error -> mapDriveListError(error) },
         ) { token ->
             val namespaceFolderId = requireNamespaceFolderId(token, namespace)
             findChildByName(
@@ -191,10 +318,10 @@ class AndroidCloudStorageAccess private constructor(
             ) != null
         }
 
-    override suspend fun overallSyncHealth(): CloudSyncHealth =
+    override suspend fun overallSyncHealth(policy: CloudAccessPolicy): CloudSyncHealth =
         try {
             runDriveOperation(
-                interactive = false,
+                interactive = policy.allowsConsent(),
                 onError = { error -> throw error },
             ) { token ->
                 val namespacesRootId = findNamespacesRootFolderId(token) ?: return@runDriveOperation CloudSyncHealth.NoFiles
@@ -220,10 +347,12 @@ class AndroidCloudStorageAccess private constructor(
                 syncHealthForNamespaceFiles(
                     namespaceFiles = namespaceFiles,
                     hasUploadedBackupFiles = ::hasUploadedBackupFiles,
+                    hasCompleteNamespaceBackup = ::hasCompleteNamespaceBackup,
                 )
             }
         } catch (error: Throwable) {
-            when (mapListError(error)) {
+            when (mapDriveListError(error)) {
+                is CloudStorageException.AuthorizationRequired -> CloudSyncHealth.AuthorizationRequired
                 is CloudStorageException.Offline -> CloudSyncHealth.Failed("offline")
                 is CloudStorageException.NotAvailable -> CloudSyncHealth.Unavailable
                 else -> CloudSyncHealth.Failed(error.message ?: "drive sync status failed")
@@ -339,7 +468,7 @@ class AndroidCloudStorageAccess private constructor(
     ): List<String> =
         runDriveOperation(
             interactive = interactive,
-            onError = { error -> mapListError(error) },
+            onError = { error -> mapDriveListError(error) },
         ) { token ->
             val namespaceFolderId = requireNamespaceFolderId(token, namespace)
             listChildren(
@@ -355,7 +484,7 @@ class AndroidCloudStorageAccess private constructor(
     ): List<String> =
         runDriveOperation(
             interactive = interactive,
-            onError = { error -> mapListError(error) },
+            onError = { error -> mapDriveListError(error) },
         ) { token ->
             val namespacesRootId = findNamespacesRootFolderId(token) ?: return@runDriveOperation emptyList()
             listChildren(
@@ -453,7 +582,13 @@ class AndroidCloudStorageAccess private constructor(
         onError: (Throwable) -> CloudStorageException,
         block: suspend (token: String) -> T,
     ): T {
-        val firstToken = driveAuthorization.accessToken(interactive)
+        val firstToken =
+            try {
+                driveAuthorization.accessToken(interactive)
+            } catch (error: Throwable) {
+                throw onError(error)
+            }
+
         try {
             return block(firstToken)
         } catch (error: Throwable) {
@@ -464,8 +599,14 @@ class AndroidCloudStorageAccess private constructor(
                     Log.w("AndroidCloudStorage", "failed to clear expired drive token", tokenError)
                 }
 
+                val retryToken =
+                    try {
+                        driveAuthorization.accessToken(interactive)
+                    } catch (retryTokenError: Throwable) {
+                        throw onError(retryTokenError)
+                    }
+
                 try {
-                    val retryToken = driveAuthorization.accessToken(interactive)
                     return block(retryToken)
                 } catch (retryError: Throwable) {
                     throw onError(retryError)
@@ -516,68 +657,6 @@ class AndroidCloudStorageAccess private constructor(
             DriveResponse(statusCode, responseBody)
         }
 
-    private fun mapUploadError(error: Throwable, target: String): CloudStorageException =
-        when (error) {
-            is AuthorizationRequiredException ->
-                CloudStorageException.NotAvailable("google drive authorization is required")
-            is ApiException ->
-                if (error.statusCode == CommonStatusCodes.CANCELED) {
-                    CloudStorageException.NotAvailable("google drive authorization was cancelled")
-                } else {
-                    CloudStorageException.NotAvailable(error.message ?: "google drive is unavailable")
-                }
-            is UnknownHostException, is SocketTimeoutException, is IOException ->
-                CloudStorageException.Offline(error.message ?: "offline")
-            is DriveHttpException ->
-                when (error.statusCode) {
-                    HttpURLConnection.HTTP_NOT_FOUND -> CloudStorageException.NotFound(target)
-                    HTTP_TOO_MANY_REQUESTS -> CloudStorageException.QuotaExceeded()
-                    HttpURLConnection.HTTP_FORBIDDEN ->
-                        if (error.body.contains("quota", ignoreCase = true)) {
-                            CloudStorageException.QuotaExceeded()
-                        } else {
-                            CloudStorageException.NotAvailable("google drive access was rejected")
-                        }
-                    else -> CloudStorageException.UploadFailed(error.body.ifBlank { "drive upload failed" })
-                }
-            else -> CloudStorageException.UploadFailed(error.message ?: "drive upload failed")
-        }
-
-    private fun mapDownloadError(error: Throwable, target: String): CloudStorageException =
-        when (val mapped = mapUploadError(error, target)) {
-            is CloudStorageException.UploadFailed ->
-                CloudStorageException.DownloadFailed(mapped.v1)
-            else -> mapped
-        }
-
-    private fun mapDeleteError(error: Throwable, target: String): CloudStorageException =
-        when (val mapped = mapUploadError(error, target)) {
-            is CloudStorageException.UploadFailed ->
-                CloudStorageException.NotAvailable(mapped.v1)
-            else -> mapped
-        }
-
-    private fun mapListError(error: Throwable): CloudStorageException =
-        when (error) {
-            is AuthorizationRequiredException ->
-                CloudStorageException.NotAvailable("google drive authorization is required")
-            is ApiException ->
-                if (error.statusCode == CommonStatusCodes.CANCELED) {
-                    CloudStorageException.NotAvailable("google drive authorization was cancelled")
-                } else {
-                    CloudStorageException.NotAvailable(error.message ?: "google drive is unavailable")
-                }
-            is UnknownHostException, is SocketTimeoutException, is IOException ->
-                CloudStorageException.Offline(error.message ?: "offline")
-            is DriveHttpException ->
-                when (error.statusCode) {
-                    HTTP_TOO_MANY_REQUESTS -> CloudStorageException.QuotaExceeded()
-                    HttpURLConnection.HTTP_NOT_FOUND -> CloudStorageException.NotFound("drive file")
-                    else -> CloudStorageException.NotAvailable(error.body.ifBlank { "drive listing failed" })
-                }
-            else -> CloudStorageException.NotAvailable(error.message ?: "drive listing failed")
-        }
-
     private fun DriveResponse.asJsonObject(): JSONObject =
         if (body.isEmpty()) {
             JSONObject()
@@ -596,11 +675,6 @@ class AndroidCloudStorageAccess private constructor(
         val mimeType: String,
     )
 
-    private class DriveHttpException(
-        val statusCode: Int,
-        val body: String,
-    ) : IOException("drive request failed with status=$statusCode")
-
     private object DriveApi {
         const val FILES_ENDPOINT = "https://www.googleapis.com/drive/v3/files"
         const val UPLOAD_ENDPOINT = "https://www.googleapis.com/upload/drive/v3/files"
@@ -611,6 +685,7 @@ class AndroidCloudStorageAccess private constructor(
         private const val NETWORK_TIMEOUT_MS = 30_000
         private const val APP_DATA_FOLDER = "appDataFolder"
         private const val APP_DATA_SPACE = "appDataFolder"
-        private const val HTTP_TOO_MANY_REQUESTS = 429
     }
 }
+
+private const val HTTP_TOO_MANY_REQUESTS = 429
