@@ -1896,6 +1896,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_constructor_rustwalletmanager_preview_new_wallet_with_metadata(
     ): Short
+    external fun uniffi_cove_checksum_constructor_rustwalletmanager_try_new_from_multisig_descriptor(
+    ): Short
     external fun uniffi_cove_checksum_constructor_rustwalletmanager_try_new_from_tap_signer(
     ): Short
     external fun uniffi_cove_checksum_constructor_rustwalletmanager_try_new_from_xpub(
@@ -1945,6 +1947,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_checksum_constructor_urresult_new(
     ): Short
     external fun uniffi_cove_checksum_constructor_wallet_new_from_export(
+    ): Short
+    external fun uniffi_cove_checksum_constructor_wallet_new_from_multisig_descriptor(
     ): Short
     external fun uniffi_cove_checksum_constructor_wallet_new_from_xpub(
     ): Short
@@ -2602,6 +2606,8 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_cove_fn_constructor_rustwalletmanager_preview_new_wallet_with_metadata(`metadata`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Long
+    external fun uniffi_cove_fn_constructor_rustwalletmanager_try_new_from_multisig_descriptor(`descriptor`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
     external fun uniffi_cove_fn_constructor_rustwalletmanager_try_new_from_tap_signer(`tapSigner`: Long,`deriveInfo`: RustBuffer.ByValue,`backup`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Long
     external fun uniffi_cove_fn_constructor_rustwalletmanager_try_new_from_xpub(`xpub`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -3031,6 +3037,8 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_free_wallet(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     external fun uniffi_cove_fn_constructor_wallet_new_from_export(`export`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_fn_constructor_wallet_new_from_multisig_descriptor(`descriptor`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Long
     external fun uniffi_cove_fn_constructor_wallet_new_from_xpub(`xpub`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Long
@@ -4799,6 +4807,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_constructor_rustwalletmanager_preview_new_wallet_with_metadata() != 41631.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_constructor_rustwalletmanager_try_new_from_multisig_descriptor() != 57425.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_constructor_rustwalletmanager_try_new_from_tap_signer() != 14372.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -4872,6 +4883,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_constructor_wallet_new_from_export() != 38500.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_constructor_wallet_new_from_multisig_descriptor() != 20465.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_constructor_wallet_new_from_xpub() != 12329.toShort()) {
@@ -21950,6 +21964,18 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     
 
         
+    @Throws(WalletManagerException::class) fun `tryNewFromMultisigDescriptor`(`descriptor`: kotlin.String): RustWalletManager {
+            return FfiConverterTypeRustWalletManager.lift(
+    uniffiRustCallWithError(WalletManagerException) { _status ->
+    UniffiLib.uniffi_cove_fn_constructor_rustwalletmanager_try_new_from_multisig_descriptor(
+    
+        FfiConverterString.lower(`descriptor`),_status)
+}
+    )
+    }
+    
+
+        
     @Throws(WalletManagerException::class) fun `tryNewFromTapSigner`(`tapSigner`: TapSigner, `deriveInfo`: DeriveInfo, `backup`: kotlin.ByteArray? = null): RustWalletManager {
             return FfiConverterTypeRustWalletManager.lift(
     uniffiRustCallWithError(WalletManagerException) { _status ->
@@ -25662,6 +25688,18 @@ open class Wallet: Disposable, AutoCloseable, WalletInterface
     UniffiLib.uniffi_cove_fn_constructor_wallet_new_from_export(
     
         FfiConverterTypeHardwareExport.lower(`export`),_status)
+}
+    )
+    }
+    
+
+        
+    @Throws(WalletException::class) fun `newFromMultisigDescriptor`(`descriptor`: kotlin.String): Wallet {
+            return FfiConverterTypeWallet.lift(
+    uniffiRustCallWithError(WalletException) { _status ->
+    UniffiLib.uniffi_cove_fn_constructor_wallet_new_from_multisig_descriptor(
+    
+        FfiConverterString.lower(`descriptor`),_status)
 }
     )
     }
