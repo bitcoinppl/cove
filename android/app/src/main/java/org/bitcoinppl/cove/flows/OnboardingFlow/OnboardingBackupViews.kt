@@ -82,6 +82,8 @@ internal enum class CloudBackupEnableOnboardingContext {
     HARDWARE_IMPORT,
 }
 
+internal const val RESTORE_TIMEOUT_MESSAGE = "Restore timed out. Please try again."
+
 internal sealed interface OnboardingRestorePhase {
     data object Restoring : OnboardingRestorePhase
 
@@ -130,6 +132,11 @@ internal fun resolveRestorePhase(
         }
         else -> currentPhase
     }
+
+internal fun shouldNotifyRestoreError(
+    currentPhase: OnboardingRestorePhase,
+    hasDeliveredError: Boolean,
+): Boolean = currentPhase is OnboardingRestorePhase.Restoring && !hasDeliveredError
 
 internal fun shouldCompleteOnboardingCloudBackup(
     status: CloudBackupStatus,
@@ -821,12 +828,23 @@ internal fun OnboardingRestoreView(
     var phase by remember { mutableStateOf<OnboardingRestorePhase>(OnboardingRestorePhase.Restoring) }
     var hasStartedRestore by remember { mutableStateOf(false) }
     var hasDeliveredCompletion by remember { mutableStateOf(false) }
+    var hasDeliveredError by remember { mutableStateOf(false) }
     var timeoutNonce by remember { mutableStateOf(0) }
+
+    fun failRestore(message: String) {
+        val shouldNotify = shouldNotifyRestoreError(phase, hasDeliveredError)
+        phase = OnboardingRestorePhase.Error(message)
+        if (shouldNotify) {
+            hasDeliveredError = true
+            onError(message)
+        }
+    }
 
     fun startRestore() {
         phase = OnboardingRestorePhase.Restoring
         hasStartedRestore = true
         hasDeliveredCompletion = false
+        hasDeliveredError = false
         timeoutNonce += 1
         backupManager.dispatch(CloudBackupManagerAction.RestoreFromCloudBackup)
     }
@@ -845,9 +863,10 @@ internal fun OnboardingRestoreView(
     LaunchedEffect(backupManager.status, backupManager.state.restoreReport) {
         val nextPhase = resolveRestorePhase(backupManager.status, backupManager.state.restoreReport, phase)
         if (nextPhase != phase) {
-            phase = nextPhase
             if (nextPhase is OnboardingRestorePhase.Error) {
-                onError(nextPhase.message)
+                failRestore(nextPhase.message)
+            } else {
+                phase = nextPhase
             }
         }
     }
@@ -857,7 +876,7 @@ internal fun OnboardingRestoreView(
         delay(120_000)
         if (phase != OnboardingRestorePhase.Restoring) return@LaunchedEffect
         backupManager.dispatch(CloudBackupManagerAction.CancelRestore)
-        phase = OnboardingRestorePhase.Error("Restore timed out. Please try again.")
+        failRestore(RESTORE_TIMEOUT_MESSAGE)
     }
 
     OnboardingRestoreContent(
