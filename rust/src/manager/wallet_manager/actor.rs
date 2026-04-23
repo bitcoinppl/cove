@@ -324,7 +324,10 @@ impl WalletActor {
         transactions
     }
 
-    pub async fn transaction_lock_state(&mut self, txid: TxId) -> ActorResult<TransactionLockState> {
+    pub async fn transaction_lock_state(
+        &mut self,
+        txid: TxId,
+    ) -> ActorResult<TransactionLockState> {
         let outputs = self.wallet_unspent_outputs_for_tx(txid.0);
         Produces::ok(self.compute_lock_state(&outputs))
     }

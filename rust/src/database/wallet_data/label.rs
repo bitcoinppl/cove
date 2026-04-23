@@ -367,11 +367,7 @@ impl LabelsTable {
                         if spendable {
                             continue;
                         }
-                        Record::new(OutputRecord {
-                            ref_: outpoint,
-                            label: None,
-                            spendable: true,
-                        })
+                        Record::new(OutputRecord { ref_: outpoint, label: None, spendable: true })
                     }
                 };
 
