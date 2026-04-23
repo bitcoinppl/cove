@@ -72,6 +72,9 @@ pub trait CloudStorageAccess: Send + Sync + std::fmt::Debug + 'static {
     /// List all namespace IDs (subdirectories of cspp-namespaces/)
     async fn list_namespaces(&self) -> Result<Vec<String>, CloudStorageError>;
 
+    /// List all namespace IDs without presenting consent UI
+    async fn list_namespaces_non_interactive(&self) -> Result<Vec<String>, CloudStorageError>;
+
     /// List wallet backup filenames within a namespace for user-driven flows
     async fn list_wallet_files(&self, namespace: String) -> Result<Vec<String>, CloudStorageError>;
 
@@ -119,7 +122,7 @@ impl CloudStorage {
 
     /// Check if any cloud backup namespaces exist
     pub async fn has_any_cloud_backup(&self) -> Result<bool, CloudStorageError> {
-        Ok(!self.list_namespaces().await?.is_empty())
+        Ok(!self.list_namespaces_non_interactive().await?.is_empty())
     }
 }
 
@@ -168,6 +171,10 @@ impl CloudStorage {
         self.0.list_namespaces().await
     }
 
+    pub async fn list_namespaces_non_interactive(&self) -> Result<Vec<String>, CloudStorageError> {
+        self.0.list_namespaces_non_interactive().await
+    }
+
     pub async fn list_wallet_files(
         &self,
         namespace: String,
@@ -214,5 +221,125 @@ impl CloudStorage {
             .iter()
             .filter_map(|f| wallet_record_id_from_filename(f).map(String::from))
             .collect())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        future::Future,
+        sync::{
+            Arc,
+            atomic::{AtomicBool, Ordering},
+        },
+        task::{Context, Poll, Waker},
+    };
+
+    use super::*;
+
+    #[derive(Debug)]
+    struct TestCloudStorage {
+        interactive_namespaces_called: Arc<AtomicBool>,
+        non_interactive_namespaces: Vec<String>,
+    }
+
+    #[async_trait::async_trait]
+    impl CloudStorageAccess for TestCloudStorage {
+        async fn upload_master_key_backup(
+            &self,
+            _namespace: String,
+            _data: Vec<u8>,
+        ) -> Result<(), CloudStorageError> {
+            panic!("unused in test")
+        }
+
+        async fn upload_wallet_backup(
+            &self,
+            _namespace: String,
+            _record_id: String,
+            _data: Vec<u8>,
+        ) -> Result<(), CloudStorageError> {
+            panic!("unused in test")
+        }
+
+        async fn download_master_key_backup(
+            &self,
+            _namespace: String,
+        ) -> Result<Vec<u8>, CloudStorageError> {
+            panic!("unused in test")
+        }
+
+        async fn download_wallet_backup(
+            &self,
+            _namespace: String,
+            _record_id: String,
+        ) -> Result<Vec<u8>, CloudStorageError> {
+            panic!("unused in test")
+        }
+
+        async fn delete_wallet_backup(
+            &self,
+            _namespace: String,
+            _record_id: String,
+        ) -> Result<(), CloudStorageError> {
+            panic!("unused in test")
+        }
+
+        async fn list_namespaces(&self) -> Result<Vec<String>, CloudStorageError> {
+            self.interactive_namespaces_called.store(true, Ordering::Release);
+            panic!("interactive namespace listing should not be used")
+        }
+
+        async fn list_namespaces_non_interactive(&self) -> Result<Vec<String>, CloudStorageError> {
+            Ok(self.non_interactive_namespaces.clone())
+        }
+
+        async fn list_wallet_files(
+            &self,
+            _namespace: String,
+        ) -> Result<Vec<String>, CloudStorageError> {
+            panic!("unused in test")
+        }
+
+        async fn list_wallet_files_non_interactive(
+            &self,
+            _namespace: String,
+        ) -> Result<Vec<String>, CloudStorageError> {
+            panic!("unused in test")
+        }
+
+        async fn is_backup_uploaded(
+            &self,
+            _namespace: String,
+            _record_id: String,
+        ) -> Result<bool, CloudStorageError> {
+            panic!("unused in test")
+        }
+
+        async fn overall_sync_health(&self) -> CloudSyncHealth {
+            panic!("unused in test")
+        }
+    }
+
+    fn block_on_ready<F: Future>(future: F) -> F::Output {
+        let waker = Waker::noop();
+        let mut context = Context::from_waker(waker);
+        let mut future = std::pin::pin!(future);
+        match future.as_mut().poll(&mut context) {
+            Poll::Ready(output) => output,
+            Poll::Pending => panic!("future unexpectedly pending"),
+        }
+    }
+
+    #[test]
+    fn has_any_cloud_backup_uses_non_interactive_namespace_listing() {
+        let interactive_namespaces_called = Arc::new(AtomicBool::new(false));
+        let cloud = CloudStorage(Arc::new(Box::new(TestCloudStorage {
+            interactive_namespaces_called: interactive_namespaces_called.clone(),
+            non_interactive_namespaces: vec!["namespace-a".into()],
+        })));
+
+        assert!(block_on_ready(cloud.has_any_cloud_backup()).expect("cloud check should succeed"));
+        assert!(!interactive_namespaces_called.load(Ordering::Acquire));
     }
 }

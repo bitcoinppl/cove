@@ -312,6 +312,10 @@ impl CloudStorageAccess for MockCloudStorage {
         Ok(self.state.lock().wallet_files.keys().cloned().collect())
     }
 
+    async fn list_namespaces_non_interactive(&self) -> Result<Vec<String>, CloudStorageError> {
+        Ok(self.state.lock().wallet_files.keys().cloned().collect())
+    }
+
     async fn list_wallet_files(&self, namespace: String) -> Result<Vec<String>, CloudStorageError> {
         let state = self.state.lock();
         if let Some(error) = state.list_wallet_files_error.clone() {
