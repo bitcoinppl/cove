@@ -94,6 +94,10 @@ import org.bitcoinppl.cove_core.WalletMetadata
 import org.bitcoinppl.cove_core.WalletSettingsRoute
 import org.bitcoinppl.cove_core.CloudBackupStatus
 
+internal fun shouldShowCloudBackupSettings(
+    isInDecoyMode: Boolean,
+): Boolean = !isInDecoyMode
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainSettingsScreen(
@@ -102,6 +106,7 @@ fun MainSettingsScreen(
 ) {
     val cloudBackupManager = remember { app.cloudBackupManager }
     val cloudBackupPresentationCoordinator = LocalCloudBackupPresentationCoordinator.current
+    val showCloudBackupSettings = shouldShowCloudBackupSettings(Auth.isInDecoyMode())
     var isBetaEnabled by remember { mutableStateOf(
         Database().globalFlag().getBoolConfig(GlobalFlagKey.BETA_FEATURES_ENABLED)
     ) }
@@ -237,17 +242,19 @@ fun MainSettingsScreen(
                     onVerify = { showBackupVerify = true },
                 )
 
-                SectionHeader("Cloud Backup")
-                MaterialSection {
-                    Column {
-                        MaterialSettingsItem(
-                            title = "Cloud Backup",
-                            subtitle = cloudBackupSettingsSubtitle(cloudBackupManager.status),
-                            icon = Icons.Default.CloudUpload,
-                            onClick = {
-                                app.pushRoute(Route.Settings(SettingsRoute.CloudBackup))
-                            },
-                        )
+                if (showCloudBackupSettings) {
+                    SectionHeader("Cloud Backup")
+                    MaterialSection {
+                        Column {
+                            MaterialSettingsItem(
+                                title = "Cloud Backup",
+                                subtitle = cloudBackupSettingsSubtitle(cloudBackupManager.status),
+                                icon = Icons.Default.CloudUpload,
+                                onClick = {
+                                    app.pushRoute(Route.Settings(SettingsRoute.CloudBackup))
+                                },
+                            )
+                        }
                     }
                 }
 
