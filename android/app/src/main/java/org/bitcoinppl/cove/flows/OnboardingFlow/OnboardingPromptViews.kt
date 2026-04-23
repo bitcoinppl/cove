@@ -81,7 +81,7 @@ internal fun CloudCheckContent() {
             Spacer(modifier = Modifier.size(10.dp))
 
             Text(
-                text = "This only takes a moment",
+                text = "Cove may ask for Google Drive access so it can check whether you already have a backup",
                 color = OnboardingTextSecondary,
                 style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center,

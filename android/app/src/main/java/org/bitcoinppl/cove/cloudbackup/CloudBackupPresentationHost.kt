@@ -77,6 +77,7 @@ internal sealed class CloudBackupRootPresentation {
 data class CloudBackupPresentationContext(
     val isActivityResumed: Boolean = false,
     val isUnlocked: Boolean = false,
+    val isInDecoyMode: Boolean = false,
     val isCoverPresented: Boolean = true,
     val appHasAlert: Boolean = false,
     val appHasSheet: Boolean = false,
@@ -86,6 +87,29 @@ data class CloudBackupPresentationContext(
 enum class CloudBackupPresentationBlocker {
     SETTINGS_LOCAL_MODAL,
     CLOUD_BACKUP_DETAIL_DIALOG,
+}
+
+internal fun isCloudBackupPresentationPresentable(
+    presentation: CloudBackupRootPresentation,
+    context: CloudBackupPresentationContext,
+    hasBlockers: Boolean,
+): Boolean {
+    if (!context.isActivityResumed) return false
+    if (!context.isUnlocked) return false
+    if (context.isInDecoyMode) return false
+    if (context.isCoverPresented) return false
+    if (context.appHasAlert) return false
+    if (context.appHasSheet) return false
+    if (hasBlockers) return false
+
+    return when (presentation) {
+        is CloudBackupRootPresentation.ExistingBackupFound,
+        is CloudBackupRootPresentation.PasskeyChoice,
+        -> true
+        CloudBackupRootPresentation.MissingPasskeyReminder,
+        CloudBackupRootPresentation.VerificationPrompt,
+        -> !context.isViewingCloudBackup
+    }
 }
 
 @Stable
@@ -217,21 +241,11 @@ class CloudBackupPresentationCoordinator {
     }
 
     private fun isPresentable(presentation: CloudBackupRootPresentation): Boolean {
-        if (!context.isActivityResumed) return false
-        if (!context.isUnlocked) return false
-        if (context.isCoverPresented) return false
-        if (context.appHasAlert) return false
-        if (context.appHasSheet) return false
-        if (blockers.isNotEmpty()) return false
-
-        return when (presentation) {
-            is CloudBackupRootPresentation.ExistingBackupFound,
-            is CloudBackupRootPresentation.PasskeyChoice,
-            -> true
-            CloudBackupRootPresentation.MissingPasskeyReminder,
-            CloudBackupRootPresentation.VerificationPrompt,
-            -> !context.isViewingCloudBackup
-        }
+        return isCloudBackupPresentationPresentable(
+            presentation = presentation,
+            context = context,
+            hasBlockers = blockers.isNotEmpty(),
+        )
     }
 
     companion object {
@@ -264,6 +278,7 @@ fun CloudBackupPresentationHost(
         CloudBackupPresentationContext(
             isActivityResumed = isActivityResumed,
             isUnlocked = !auth.isLocked,
+            isInDecoyMode = auth.isInDecoyMode(),
             isCoverPresented = isCoverPresented,
             appHasAlert = app.alertState != null,
             appHasSheet = app.sheetState != null,

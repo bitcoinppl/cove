@@ -105,9 +105,6 @@ internal fun cloudBackupDetailBodyState(
         else -> null
     }
 
-internal fun shouldFetchCloudOnly(cloudOnly: CloudOnlyState): Boolean =
-    cloudOnly is CloudOnlyState.NotFetched
-
 internal fun shouldShowFallbackVerificationSection(
     bodyState: CloudBackupDetailBodyState?,
 ): Boolean = bodyState == null
@@ -121,7 +118,6 @@ fun CloudBackupScreen(
     val manager = remember { CloudBackupManager.getInstance() }
     val coordinator = LocalCloudBackupPresentationCoordinator.current
 
-    var hasAutoVerified by remember { mutableStateOf(false) }
     var showRecreateConfirmation by remember { mutableStateOf(false) }
     var showReinitializeConfirmation by remember { mutableStateOf(false) }
 
@@ -144,11 +140,8 @@ fun CloudBackupScreen(
                 manager.isCloudBackupEnabled
 
         if (supportedStatus) {
+            manager.refreshCloudState()
             manager.dispatch(CloudBackupManagerAction.RefreshDetail)
-            if (!hasAutoVerified) {
-                hasAutoVerified = true
-                manager.dispatch(CloudBackupManagerAction.StartVerificationDiscoverable)
-            }
         }
     }
 
@@ -656,14 +649,21 @@ private fun CloudBackupHeaderSection(
     lastSync: ULong?,
     syncHealth: CloudSyncHealth,
 ) {
-    val (icon, tint, label) =
+    val statusUi =
         when (syncHealth) {
-            is CloudSyncHealth.Unknown -> Triple(Icons.Default.CloudOff, MaterialTheme.colorScheme.onSurfaceVariant, "Checking sync status")
-            is CloudSyncHealth.AllUploaded -> Triple(Icons.Default.CloudDone, Color(0xFF2E7D32), "All files synced to Google Drive")
-            is CloudSyncHealth.Uploading -> Triple(Icons.Default.CloudUpload, Color(0xFF1976D2), "Syncing to Google Drive")
-            is CloudSyncHealth.Failed -> Triple(Icons.Default.WarningAmber, MaterialTheme.colorScheme.error, "Sync error: ${syncHealth.v1}")
-            is CloudSyncHealth.NoFiles -> Triple(Icons.Default.CloudOff, MaterialTheme.colorScheme.onSurfaceVariant, "No cloud backup files uploaded yet")
-            is CloudSyncHealth.Unavailable -> Triple(Icons.Default.CloudOff, MaterialTheme.colorScheme.onSurfaceVariant, "Google Drive is unavailable")
+            is CloudSyncHealth.Unknown -> HeaderStatusUi(Icons.Default.CloudOff, MaterialTheme.colorScheme.onSurfaceVariant, "Checking sync status")
+            is CloudSyncHealth.AllUploaded -> HeaderStatusUi(Icons.Default.CloudDone, Color(0xFF2E7D32), "All files synced to Google Drive")
+            is CloudSyncHealth.Uploading -> HeaderStatusUi(Icons.Default.CloudUpload, Color(0xFF1976D2), "Syncing to Google Drive")
+            is CloudSyncHealth.Failed -> HeaderStatusUi(Icons.Default.WarningAmber, MaterialTheme.colorScheme.error, "Sync error: ${syncHealth.v1}")
+            is CloudSyncHealth.NoFiles -> HeaderStatusUi(Icons.Default.CloudOff, MaterialTheme.colorScheme.onSurfaceVariant, "No cloud backup files uploaded yet")
+            is CloudSyncHealth.AuthorizationRequired ->
+                HeaderStatusUi(
+                    Icons.Default.WarningAmber,
+                    Color(0xFFED6C02),
+                    "Google Drive access needs to be reconnected",
+                    "Use Verify Now or Sync Now to continue with cloud backup",
+                )
+            is CloudSyncHealth.Unavailable -> HeaderStatusUi(Icons.Default.CloudOff, MaterialTheme.colorScheme.onSurfaceVariant, "Google Drive is unavailable")
         }
 
     Card(
@@ -677,7 +677,7 @@ private fun CloudBackupHeaderSection(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Icon(icon, contentDescription = null, tint = tint)
+            Icon(statusUi.icon, contentDescription = null, tint = statusUi.tint)
             Text("Cloud Backup Active", fontWeight = FontWeight.SemiBold)
             lastSync?.let {
                 Text(
@@ -686,7 +686,18 @@ private fun CloudBackupHeaderSection(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Text(label, style = MaterialTheme.typography.bodySmall, color = tint)
+            Text(
+                statusUi.label,
+                style = MaterialTheme.typography.bodySmall,
+                color = statusUi.tint,
+            )
+            statusUi.guidance?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }
@@ -740,6 +751,13 @@ private data class GroupKey(
     override fun compareTo(other: GroupKey): Int =
         compareValuesBy(this, other, GroupKey::network, { it.walletMode?.ordinal ?: Int.MAX_VALUE })
 }
+
+private data class HeaderStatusUi(
+    val icon: androidx.compose.ui.graphics.vector.ImageVector,
+    val tint: Color,
+    val label: String,
+    val guidance: String? = null,
+)
 
 @Composable
 private fun WalletItemRow(
@@ -820,10 +838,12 @@ private fun CloudOnlySection(
         Column {
             when (val cloudOnly = manager.cloudOnly) {
                 is CloudOnlyState.NotFetched -> {
-                    LaunchedEffect(Unit) {
-                        manager.dispatch(CloudBackupManagerAction.FetchCloudOnly)
-                    }
-                    LoadingRow("Loading wallets not on this device")
+                    MaterialSettingsItem(
+                        title = "Load Cloud-Only Wallets",
+                        subtitle = "Check Google Drive for wallets that aren't on this device",
+                        onClick = { manager.dispatch(CloudBackupManagerAction.FetchCloudOnly) },
+                        leadingContent = { Icon(Icons.Default.CloudDone, contentDescription = null) },
+                    )
                 }
 
                 is CloudOnlyState.Loading -> {
