@@ -481,17 +481,13 @@ impl RustOnboardingManager {
             }
 
             let cloud = CloudStorage::global().clone();
+            let check_cloud_backup = || {
+                let cloud = cloud.clone();
+                async move { cloud.has_any_cloud_backup(CloudAccessPolicy::ConsentAllowed).await }
+            };
+
             let outcome =
-                determine_cloud_check_outcome_async(
-                    || {
-                        let cloud = cloud.clone();
-                        async move {
-                            cloud.has_any_cloud_backup(CloudAccessPolicy::ConsentAllowed).await
-                        }
-                    },
-                    |duration| tokio::time::sleep(duration),
-                )
-                .await;
+                determine_cloud_check_outcome(check_cloud_backup, tokio::time::sleep).await;
             me.finish_cloud_check(outcome);
         });
     }
@@ -1604,7 +1600,7 @@ fn cloud_check_inconclusive_message(issue: CloudCheckIssue) -> String {
     }
 }
 
-async fn determine_cloud_check_outcome_async<F, Fut, S>(
+async fn determine_cloud_check_outcome<F, Fut, S>(
     mut has_any_cloud_backup: F,
     sleep: S,
 ) -> CloudCheckOutcome
@@ -2530,7 +2526,7 @@ mod tests {
     async fn cloud_check_false_short_circuits_without_sleeping() {
         let slept = Arc::new(Mutex::new(Vec::new()));
         let sleep_log = Arc::clone(&slept);
-        let outcome = determine_cloud_check_outcome_async(
+        let outcome = determine_cloud_check_outcome(
             || async { Ok(false) },
             move |duration| {
                 let sleep_log = Arc::clone(&sleep_log);
@@ -2547,7 +2543,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn cloud_check_retries_errors_and_returns_inconclusive() {
-        let outcome = determine_cloud_check_outcome_async(
+        let outcome = determine_cloud_check_outcome(
             || async { Err(CloudStorageError::NotAvailable("network timed out".into())) },
             |_| async {},
         )
