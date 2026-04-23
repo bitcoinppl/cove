@@ -159,17 +159,10 @@ class AndroidCloudStorageAccess private constructor(
     }
 
     override suspend fun listNamespaces(): List<String> =
-        runDriveOperation(
-            interactive = true,
-            onError = { error -> mapListError(error) },
-        ) { token ->
-            val namespacesRootId = findNamespacesRootFolderId(token) ?: return@runDriveOperation emptyList()
-            listChildren(
-                token = token,
-                parentId = namespacesRootId,
-                foldersOnly = true,
-            ).map { it.name }
-        }
+        listNamespaces(interactive = true)
+
+    override suspend fun listNamespacesNonInteractive(): List<String> =
+        listNamespaces(interactive = false)
 
     override suspend fun listWalletFiles(namespace: String): List<String> =
         listWalletFiles(namespace, interactive = true)
@@ -355,6 +348,21 @@ class AndroidCloudStorageAccess private constructor(
                 foldersOnly = false,
             ).map { it.name }
                 .filter(DrivePaths::isWalletFile)
+        }
+
+    private suspend fun listNamespaces(
+        interactive: Boolean,
+    ): List<String> =
+        runDriveOperation(
+            interactive = interactive,
+            onError = { error -> mapListError(error) },
+        ) { token ->
+            val namespacesRootId = findNamespacesRootFolderId(token) ?: return@runDriveOperation emptyList()
+            listChildren(
+                token = token,
+                parentId = namespacesRootId,
+                foldersOnly = true,
+            ).map { it.name }
         }
 
     private fun buildMultipartBody(
