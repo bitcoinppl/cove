@@ -352,11 +352,11 @@ impl TransactionDetails {
 
     /// Whether this transaction can currently be fee-bumped via RBF.
     ///
-    /// Requires the transaction to be both unconfirmed and signaling opt-in RBF.
+    /// Requires the transaction to be outgoing, unconfirmed, and signaling opt-in RBF.
     /// Use this to gate the "Speed Up" action in the UI.
     #[uniffi::method]
     pub fn can_rbf_bump(&self) -> bool {
-        self.is_rbf_signaling && !self.is_confirmed()
+        self.is_sent() && self.is_rbf_signaling && !self.is_confirmed()
     }
 
     #[uniffi::method]

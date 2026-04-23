@@ -1666,6 +1666,10 @@ impl RustSendFlowManager {
             (state.metadata.wallet_type, state.metadata.id.clone())
         };
 
+        if matches!(wallet_type, WalletType::WatchOnly) {
+            return self.send_alert(SendFlowError::UnableToBuildTxn("watch only".to_string()));
+        }
+
         cove_tokio::task::spawn(async move {
             let raw_txid = *txid;
 
@@ -1678,12 +1682,6 @@ impl RustSendFlowManager {
                     return me.send_alert_async(error).await;
                 }
             };
-
-            // reject watch-only before touching UI state
-            if matches!(wallet_type, WalletType::WatchOnly) {
-                let error = SendFlowError::UnableToBuildTxn("watch only".to_string());
-                return me.send_alert_async(error).await;
-            }
 
             // save unsigned transaction for hardware wallets before routing
             if matches!(wallet_type, WalletType::Cold | WalletType::XpubOnly)
