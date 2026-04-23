@@ -2,15 +2,18 @@ package org.bitcoinppl.cove.cloudbackup
 
 import android.content.Context
 import android.os.Looper
-import android.util.Base64
 import androidx.credentials.CreatePublicKeyCredentialRequest
 import androidx.credentials.CreatePublicKeyCredentialResponse
 import androidx.credentials.CredentialManager
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.GetPublicKeyCredentialOption
 import androidx.credentials.PublicKeyCredential
+import androidx.credentials.exceptions.CreateCredentialCancellationException
 import androidx.credentials.exceptions.CreateCredentialException
+import androidx.credentials.exceptions.CreateCredentialUnsupportedException
+import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.credentials.exceptions.GetCredentialException
+import androidx.credentials.exceptions.GetCredentialUnsupportedException
 import androidx.credentials.exceptions.NoCredentialException
 import kotlinx.coroutines.runBlocking
 import org.bitcoinppl.cove.Log
@@ -21,6 +24,7 @@ import org.bitcoinppl.cove_core.device.PasskeyProvider
 import org.json.JSONArray
 import org.json.JSONObject
 import java.security.SecureRandom
+import java.util.Base64
 
 class AndroidPasskeyProvider(
     context: Context,
@@ -50,9 +54,10 @@ class AndroidPasskeyProvider(
                     response as? CreatePublicKeyCredentialResponse
                         ?: throw PasskeyException.CreationFailed("unexpected credential response type")
 
+                validatePasskeyRegistrationPrf(registration.registrationResponseJson)
                 extractCredentialId(registration.registrationResponseJson)
             } catch (error: Exception) {
-                throw mapCreateError(error)
+                throw mapPasskeyCreateError(error)
             }
         }
     }
@@ -82,7 +87,7 @@ class AndroidPasskeyProvider(
 
                 extractPrfOutput(credential.authenticationResponseJson)
             } catch (error: Exception) {
-                throw mapGetError(error)
+                throw mapPasskeyGetError(error)
             }
         }
     }
@@ -114,7 +119,7 @@ class AndroidPasskeyProvider(
                     credentialId = extractCredentialId(credential.authenticationResponseJson),
                 )
             } catch (error: Exception) {
-                throw mapGetError(error)
+                throw mapPasskeyGetError(error)
             }
         }
     }
@@ -153,33 +158,7 @@ class AndroidPasskeyProvider(
         rpId: String,
         userId: ByteArray,
         challenge: ByteArray,
-    ): String =
-        JSONObject()
-            .put("challenge", challenge.toBase64Url())
-            .put(
-                "rp",
-                JSONObject()
-                    .put("id", rpId)
-                    .put("name", "Cove Wallet"),
-            ).put(
-                "user",
-                JSONObject()
-                    .put("id", userId.toBase64Url())
-                    .put("name", "cloud-backup@covebitcoinwallet.com")
-                    .put("displayName", "Cove Wallet Backup"),
-            ).put(
-                "pubKeyCredParams",
-                JSONArray()
-                    .put(JSONObject().put("type", "public-key").put("alg", -7))
-                    .put(JSONObject().put("type", "public-key").put("alg", -257)),
-            ).put("timeout", 120_000)
-            .put("attestation", "none")
-            .put(
-                "authenticatorSelection",
-                JSONObject()
-                    .put("residentKey", "required")
-                    .put("userVerification", "preferred"),
-            ).toString()
+    ): String = buildPasskeyCreateRequestJson(rpId, userId, challenge)
 
     private fun buildAssertionRequestJson(
         rpId: String,
@@ -259,8 +238,7 @@ class AndroidPasskeyProvider(
     private fun extractPrfOutput(responseJson: String): ByteArray {
         val json = JSONObject(responseJson)
         val clientExtensionResults =
-            json.optJSONObject("clientExtensionResults")
-                ?: json.optJSONObject("response")?.optJSONObject("clientExtensionResults")
+            json.passkeyClientExtensionResults()
 
         val first =
             clientExtensionResults
@@ -280,57 +258,89 @@ class AndroidPasskeyProvider(
         return prfOutput.copyOf(32)
     }
 
-    private fun mapCreateError(error: Exception): PasskeyException {
-        if (error is PasskeyException) {
-            return error
-        }
-
-        if (error is CreateCredentialException) {
-            return when {
-                error.javaClass.simpleName.contains("Cancellation", ignoreCase = true) ->
-                    PasskeyException.UserCancelled()
-                error.javaClass.simpleName.contains("Unsupported", ignoreCase = true) ->
-                    PasskeyException.NotSupported(error.message ?: "credential manager is unavailable")
-                else ->
-                    PasskeyException.CreationFailed(error.message ?: "passkey creation failed")
-            }
-        }
-
-        return PasskeyException.CreationFailed(error.message ?: "passkey creation failed")
-    }
-
-    private fun mapGetError(error: Exception): PasskeyException {
-        if (error is PasskeyException) {
-            return error
-        }
-
-        if (error is NoCredentialException) {
-            return PasskeyException.NoCredentialFound()
-        }
-
-        if (error is GetCredentialException) {
-            return when {
-                error.javaClass.simpleName.contains("Cancellation", ignoreCase = true) ->
-                    PasskeyException.UserCancelled()
-                error.javaClass.simpleName.contains("Unsupported", ignoreCase = true) ->
-                    PasskeyException.NotSupported(error.message ?: "credential manager is unavailable")
-                else ->
-                    PasskeyException.AuthenticationFailed(error.message ?: "passkey authentication failed")
-            }
-        }
-
-        return PasskeyException.AuthenticationFailed(error.message ?: "passkey authentication failed")
-    }
-
     private fun enforceBackgroundThread(operation: String) {
         check(Looper.myLooper() != Looper.getMainLooper()) {
             "$operation must not run on the main thread"
         }
     }
 
-    private fun ByteArray.toBase64Url(): String =
-        Base64.encodeToString(this, Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP)
-
-    private fun String.fromBase64Url(): ByteArray =
-        Base64.decode(this, Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP)
 }
+
+internal fun mapPasskeyCreateError(error: Exception): PasskeyException =
+    when (error) {
+        is PasskeyException -> error
+        is CreateCredentialCancellationException -> PasskeyException.UserCancelled()
+        is CreateCredentialUnsupportedException ->
+            PasskeyException.NotSupported(error.message ?: "credential manager is unavailable")
+        is CreateCredentialException ->
+            PasskeyException.CreationFailed(error.message ?: "passkey creation failed")
+        else -> PasskeyException.CreationFailed(error.message ?: "passkey creation failed")
+    }
+
+internal fun mapPasskeyGetError(error: Exception): PasskeyException =
+    when (error) {
+        is PasskeyException -> error
+        is NoCredentialException -> PasskeyException.NoCredentialFound()
+        is GetCredentialCancellationException -> PasskeyException.UserCancelled()
+        is GetCredentialUnsupportedException ->
+            PasskeyException.NotSupported(error.message ?: "credential manager is unavailable")
+        is GetCredentialException ->
+            PasskeyException.AuthenticationFailed(error.message ?: "passkey authentication failed")
+        else -> PasskeyException.AuthenticationFailed(error.message ?: "passkey authentication failed")
+    }
+
+internal fun buildPasskeyCreateRequestJson(
+    rpId: String,
+    userId: ByteArray,
+    challenge: ByteArray,
+): String =
+    JSONObject()
+        .put("challenge", challenge.toBase64Url())
+        .put(
+            "rp",
+            JSONObject()
+                .put("id", rpId)
+                .put("name", "Cove Wallet"),
+        ).put(
+            "user",
+            JSONObject()
+                .put("id", userId.toBase64Url())
+                .put("name", "cloud-backup@covebitcoinwallet.com")
+                .put("displayName", "Cove Wallet Backup"),
+        ).put(
+            "pubKeyCredParams",
+            JSONArray()
+                .put(JSONObject().put("type", "public-key").put("alg", -7))
+                .put(JSONObject().put("type", "public-key").put("alg", -257)),
+        ).put("timeout", 120_000)
+        .put("attestation", "none")
+        .put(
+            "authenticatorSelection",
+            JSONObject()
+                .put("residentKey", "required")
+                .put("userVerification", "preferred"),
+        ).put(
+            "extensions",
+            JSONObject().put("prf", JSONObject()),
+        ).toString()
+
+internal fun validatePasskeyRegistrationPrf(responseJson: String) {
+    val prf =
+        JSONObject(responseJson)
+            .passkeyClientExtensionResults()
+            ?.optJSONObject("prf")
+
+    if (prf?.optBoolean("enabled", false) != true) {
+        throw PasskeyException.PrfUnsupportedProvider()
+    }
+}
+
+private fun JSONObject.passkeyClientExtensionResults(): JSONObject? =
+    optJSONObject("clientExtensionResults")
+        ?: optJSONObject("response")?.optJSONObject("clientExtensionResults")
+
+private fun ByteArray.toBase64Url(): String =
+    Base64.getUrlEncoder().withoutPadding().encodeToString(this)
+
+private fun String.fromBase64Url(): ByteArray =
+    Base64.getUrlDecoder().decode(this)

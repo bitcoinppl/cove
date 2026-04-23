@@ -335,21 +335,10 @@ mod tests {
             Ok(Vec::new())
         }
 
-        async fn list_namespaces_non_interactive(&self) -> Result<Vec<String>, CloudStorageError> {
-            Ok(Vec::new())
-        }
-
         async fn list_wallet_files(
             &self,
             _namespace: String,
             _policy: CloudAccessPolicy,
-        ) -> Result<Vec<String>, CloudStorageError> {
-            Ok(Vec::new())
-        }
-
-        async fn list_wallet_files_non_interactive(
-            &self,
-            _namespace: String,
         ) -> Result<Vec<String>, CloudStorageError> {
             Ok(Vec::new())
         }

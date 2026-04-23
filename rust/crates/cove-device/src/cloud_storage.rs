@@ -228,7 +228,6 @@ impl CloudStorage {
             .filter_map(|f| wallet_record_id_from_filename(f).map(String::from))
             .collect())
     }
-
 }
 
 #[cfg(test)]

@@ -350,30 +350,6 @@ impl CloudStorageAccess for MockCloudStorage {
         Ok(wallet_files)
     }
 
-    async fn list_wallet_files_non_interactive(
-        &self,
-        namespace: String,
-    ) -> Result<Vec<String>, CloudStorageError> {
-        let state = self.state.lock();
-        if let Some(error) = state.list_wallet_files_non_interactive_error.clone() {
-            return Err(error);
-        }
-        let mut wallet_files = state.wallet_files.get(&namespace).cloned().unwrap_or_default();
-
-        if state.reflect_uploaded_wallets_in_listing {
-            for (uploaded_namespace, record_id) in &state.uploaded_wallet_backups {
-                if uploaded_namespace == &namespace {
-                    let filename = wallet_filename_from_record_id(record_id);
-                    if !wallet_files.contains(&filename) {
-                        wallet_files.push(filename);
-                    }
-                }
-            }
-        }
-
-        Ok(wallet_files)
-    }
-
     async fn is_backup_uploaded(
         &self,
         namespace: String,
