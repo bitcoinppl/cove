@@ -21,7 +21,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AttachMoney
-import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.VerifiedUser
@@ -48,7 +47,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -69,8 +67,6 @@ import org.bitcoinppl.cove.ui.theme.MaterialSpacing
 import org.bitcoinppl.cove.Auth
 import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.R
-import org.bitcoinppl.cove.cloudbackup.CloudBackupPresentationBlocker
-import org.bitcoinppl.cove.cloudbackup.LocalCloudBackupPresentationCoordinator
 import org.bitcoinppl.cove.findFragmentActivity
 import org.bitcoinppl.cove.views.MaterialDivider
 import org.bitcoinppl.cove.views.MaterialSection
@@ -92,7 +88,6 @@ import org.bitcoinppl.cove_core.SecuritySheetState
 import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.WalletMetadata
 import org.bitcoinppl.cove_core.WalletSettingsRoute
-import org.bitcoinppl.cove_core.CloudBackupStatus
 
 internal fun shouldShowCloudBackupSettings(
     isInDecoyMode: Boolean,
@@ -118,25 +113,6 @@ fun MainSettingsScreen(
     var showBackupImport by remember { mutableStateOf(false) }
     var showBackupVerify by remember { mutableStateOf(false) }
     var showBackupExportAuth by remember { mutableStateOf(false) }
-    val isLocalModalPresented =
-        showImportExportWarning ||
-            showBackupExport ||
-            showBackupImport ||
-            showBackupVerify ||
-            showBackupExportAuth
-
-    DisposableEffect(cloudBackupPresentationCoordinator, isLocalModalPresented) {
-        cloudBackupPresentationCoordinator?.setBlocker(
-            CloudBackupPresentationBlocker.SETTINGS_LOCAL_MODAL,
-            isLocalModalPresented,
-        )
-        onDispose {
-            cloudBackupPresentationCoordinator?.setBlocker(
-                CloudBackupPresentationBlocker.SETTINGS_LOCAL_MODAL,
-                false,
-            )
-        }
-    }
 
     // refresh beta state when returning from About screen
     LaunchedEffect(Unit) {
@@ -360,17 +336,6 @@ fun MainSettingsScreen(
         )
     }
 }
-
-private fun cloudBackupSettingsSubtitle(status: CloudBackupStatus): String =
-    when (status) {
-        is CloudBackupStatus.Disabled -> "Off"
-        is CloudBackupStatus.Enabling -> "Setting up"
-        is CloudBackupStatus.Restoring -> "Restoring"
-        is CloudBackupStatus.Enabled -> "Active"
-        is CloudBackupStatus.PasskeyMissing -> "Passkey missing"
-        is CloudBackupStatus.UnsupportedPasskeyProvider -> "Passkey provider unsupported"
-        is CloudBackupStatus.Error -> status.v1
-    }
 
 @Composable
 private fun WalletSettingsSection(app: org.bitcoinppl.cove.AppManager) {

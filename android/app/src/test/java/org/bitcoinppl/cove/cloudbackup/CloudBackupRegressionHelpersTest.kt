@@ -2,6 +2,7 @@ package org.bitcoinppl.cove.cloudbackup
 
 import org.bitcoinppl.cove_core.CloudBackupPasskeyChoiceFlow
 import org.bitcoinppl.cove_core.CloudBackupStatus
+import org.bitcoinppl.cove_core.CloudOnlyState
 import org.bitcoinppl.cove_core.DeepVerificationFailure
 import org.bitcoinppl.cove_core.VerificationFailureKind
 import org.bitcoinppl.cove_core.VerificationState
@@ -56,17 +57,12 @@ class CloudBackupRegressionHelpersTest {
         val hasUploadedBackupFiles: (List<String>) -> Boolean = { fileNames ->
             fileNames.any { it == "master-key.json" || (it.startsWith("wallet-") && it.endsWith(".json")) }
         }
-        val hasCompleteNamespaceBackup: (List<String>) -> Boolean = { fileNames ->
-            fileNames.contains("master-key.json") &&
-                fileNames.any { it.startsWith("wallet-") && it.endsWith(".json") }
-        }
 
         assertEquals(
             CloudSyncHealth.NoFiles,
             syncHealthForNamespaceFiles(
                 namespaceFiles = emptyList(),
                 hasUploadedBackupFiles = hasUploadedBackupFiles,
-                hasCompleteNamespaceBackup = hasCompleteNamespaceBackup,
             ),
         )
         assertEquals(
@@ -74,38 +70,24 @@ class CloudBackupRegressionHelpersTest {
             syncHealthForNamespaceFiles(
                 namespaceFiles =
                     listOf(
-                    emptyList(),
-                    listOf("notes.txt", "placeholder"),
-                ),
+                        emptyList(),
+                        listOf("notes.txt", "placeholder"),
+                    ),
                 hasUploadedBackupFiles = hasUploadedBackupFiles,
-                hasCompleteNamespaceBackup = hasCompleteNamespaceBackup,
-            ),
-        )
-        assertEquals(
-            CloudSyncHealth.Failed("cloud backup is incomplete"),
-            syncHealthForNamespaceFiles(
-                namespaceFiles = listOf(listOf("master-key.json")),
-                hasUploadedBackupFiles = hasUploadedBackupFiles,
-                hasCompleteNamespaceBackup = hasCompleteNamespaceBackup,
-            ),
-        )
-        assertEquals(
-            CloudSyncHealth.Failed("cloud backup is incomplete"),
-            syncHealthForNamespaceFiles(
-                namespaceFiles = listOf(listOf("wallet-wallet-record.json")),
-                hasUploadedBackupFiles = hasUploadedBackupFiles,
-                hasCompleteNamespaceBackup = hasCompleteNamespaceBackup,
             ),
         )
         assertEquals(
             CloudSyncHealth.AllUploaded,
             syncHealthForNamespaceFiles(
-                namespaceFiles =
-                    listOf(
-                        listOf("master-key.json", "wallet-wallet-record.json"),
-                    ),
+                namespaceFiles = listOf(listOf("master-key.json")),
                 hasUploadedBackupFiles = hasUploadedBackupFiles,
-                hasCompleteNamespaceBackup = hasCompleteNamespaceBackup,
+            ),
+        )
+        assertEquals(
+            CloudSyncHealth.AllUploaded,
+            syncHealthForNamespaceFiles(
+                namespaceFiles = listOf(listOf("wallet-wallet-record.json")),
+                hasUploadedBackupFiles = hasUploadedBackupFiles,
             ),
         )
     }
@@ -149,6 +131,12 @@ class CloudBackupRegressionHelpersTest {
         assertNull(bodyState)
         assertTrue(shouldShowFallbackVerificationSection(bodyState))
         assertFalse(shouldShowFallbackVerificationSection(CloudBackupDetailBodyState.DETAIL))
+    }
+
+    @Test
+    fun cloudOnlyAutoFetchOnlyRunsFromNotFetched() {
+        assertTrue(shouldFetchCloudOnly(CloudOnlyState.NotFetched))
+        assertFalse(shouldFetchCloudOnly(CloudOnlyState.Loading))
     }
 
     @Test

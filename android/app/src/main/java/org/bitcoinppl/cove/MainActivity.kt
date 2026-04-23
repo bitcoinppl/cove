@@ -97,6 +97,7 @@ import org.bitcoinppl.cove_core.AppAction
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.ColdWalletRoute
 import org.bitcoinppl.cove_core.Database
+import org.bitcoinppl.cove_core.GlobalConfigKey
 import org.bitcoinppl.cove_core.HotWalletRoute
 import org.bitcoinppl.cove_core.ImportType
 import org.bitcoinppl.cove_core.NewWalletRoute
@@ -115,14 +116,19 @@ internal enum class StartupMode {
     READY,
 }
 
+internal fun hasPersistedOnboardingProgress(
+    persistedProgress: String?,
+): Boolean = !persistedProgress.isNullOrBlank()
+
 internal fun resolveStartupMode(
     termsAccepted: Boolean,
     hasWallets: Boolean,
     cloudBackupStatus: CloudBackupStatus,
+    hasPersistedOnboardingProgress: Boolean,
 ): StartupMode {
     // mirror CoveApp.swift's app-shell onboarding decision while preserving Android auth and Drive constraints
     val shouldStartStartupRestore = !hasWallets && cloudBackupStatus is CloudBackupStatus.Disabled
-    return if (!termsAccepted || shouldStartStartupRestore) {
+    return if (!termsAccepted || hasPersistedOnboardingProgress || shouldStartStartupRestore) {
         StartupMode.ONBOARDING
     } else {
         StartupMode.READY
@@ -178,7 +184,6 @@ class MainActivity : FragmentActivity() {
 
         val app = AppManager.getInstance()
         app.cloudBackupManager.refreshCloudState()
-        app.cloudBackupManager.runBackgroundIntegrityCheck()
 
         // refresh fees and prices in background (30-sec throttle protects against excessive requests)
         // only dispatch if async runtime is ready (initialized in LaunchedEffect)
@@ -333,12 +338,19 @@ class MainActivity : FragmentActivity() {
             val app = remember { AppManager.getInstance() }
             val auth = remember { AuthManager.getInstance() }
             val snackbarHostState = remember { SnackbarHostState() }
+            val persistedOnboardingProgress =
+                runCatching {
+                    Database().globalConfig().get(GlobalConfigKey.OnboardingProgress)
+                }.onFailure { error ->
+                    Log.w(TAG, "[STARTUP] failed to read persisted onboarding progress before routing", error)
+                }.getOrNull()
             var startupMode by remember {
                 mutableStateOf(
                     resolveStartupMode(
                         termsAccepted = app.isTermsAccepted,
                         hasWallets = app.hasWallets,
                         cloudBackupStatus = app.cloudBackupManager.rust.state().status,
+                        hasPersistedOnboardingProgress = hasPersistedOnboardingProgress(persistedOnboardingProgress),
                     ),
                 )
             }

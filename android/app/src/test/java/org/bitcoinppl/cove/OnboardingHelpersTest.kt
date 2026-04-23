@@ -27,6 +27,7 @@ class OnboardingHelpersTest {
                 termsAccepted = false,
                 hasWallets = false,
                 cloudBackupStatus = CloudBackupStatus.Disabled,
+                hasPersistedOnboardingProgress = false,
             ),
         )
         assertEquals(
@@ -35,6 +36,7 @@ class OnboardingHelpersTest {
                 termsAccepted = false,
                 hasWallets = true,
                 cloudBackupStatus = CloudBackupStatus.Enabled,
+                hasPersistedOnboardingProgress = false,
             ),
         )
         assertEquals(
@@ -43,6 +45,7 @@ class OnboardingHelpersTest {
                 termsAccepted = true,
                 hasWallets = false,
                 cloudBackupStatus = CloudBackupStatus.Disabled,
+                hasPersistedOnboardingProgress = false,
             ),
         )
         assertEquals(
@@ -51,6 +54,7 @@ class OnboardingHelpersTest {
                 termsAccepted = true,
                 hasWallets = false,
                 cloudBackupStatus = CloudBackupStatus.Enabled,
+                hasPersistedOnboardingProgress = false,
             ),
         )
         assertEquals(
@@ -59,6 +63,7 @@ class OnboardingHelpersTest {
                 termsAccepted = true,
                 hasWallets = false,
                 cloudBackupStatus = CloudBackupStatus.PasskeyMissing,
+                hasPersistedOnboardingProgress = false,
             ),
         )
         assertEquals(
@@ -67,8 +72,25 @@ class OnboardingHelpersTest {
                 termsAccepted = true,
                 hasWallets = true,
                 cloudBackupStatus = CloudBackupStatus.Disabled,
+                hasPersistedOnboardingProgress = false,
             ),
         )
+        assertEquals(
+            StartupMode.ONBOARDING,
+            resolveStartupMode(
+                termsAccepted = true,
+                hasWallets = true,
+                cloudBackupStatus = CloudBackupStatus.Enabled,
+                hasPersistedOnboardingProgress = true,
+            ),
+        )
+    }
+
+    @Test
+    fun persistedOnboardingProgressRequiresNonBlankState() {
+        assertFalse(hasPersistedOnboardingProgress(null))
+        assertFalse(hasPersistedOnboardingProgress(""))
+        assertTrue(hasPersistedOnboardingProgress("""{"step":"backup_wallet"}"""))
     }
 
     @Test
