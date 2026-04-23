@@ -223,28 +223,58 @@ fn parse_bitcoin_uri(input: &str) -> Result<ParsedBitcoinUri, Error> {
         _ => format!("bitcoin:{input}"),
     };
 
-    let uri = payjoin::Uri::try_from(normalized.as_str()).map_err(|_| Error::InvalidAddress)?;
+    // Try full payjoin URI parsing first
+    if let Ok(uri) = payjoin::Uri::try_from(normalized.as_str()) {
+        let amount = uri.amount.map(|a| Amount::from_sat(a.to_sat()));
 
+        // skip network check; try_new() validates later
+        let checked = uri.assume_checked();
+        let address = checked.address.to_string();
+
+        // Extract payjoin params if present
+        let payjoin = match checked.check_pj_supported() {
+            Ok(pj_uri) => {
+                let endpoint = pj_uri.extras.endpoint();
+                let output_substitution = match pj_uri.extras.output_substitution() {
+                    payjoin::OutputSubstitution::Enabled => true,
+                    payjoin::OutputSubstitution::Disabled => false,
+                };
+                Some(PayJoinParams { endpoint, output_substitution })
+            }
+            Err(_) => None,
+        };
+
+        return Ok(ParsedBitcoinUri { address, amount, payjoin });
+    }
+
+    // Fallback: strip payjoin params (pj, pjos) and re-parse as regular bitcoin URI.
+    // Per BIP 78 backward compatibility, non-payjoin senders should ignore pj/pjos
+    // and proceed with a normal payment.
+    let stripped = strip_payjoin_params(&normalized);
+    let uri = payjoin::Uri::try_from(stripped.as_str()).map_err(|_| Error::InvalidAddress)?;
     let amount = uri.amount.map(|a| Amount::from_sat(a.to_sat()));
-
-    // skip network check; try_new() validates later
     let checked = uri.assume_checked();
     let address = checked.address.to_string();
 
-    // Extract payjoin params if present
-    let payjoin = match checked.check_pj_supported() {
-        Ok(pj_uri) => {
-            let endpoint = pj_uri.extras.endpoint();
-            let output_substitution = match pj_uri.extras.output_substitution() {
-                payjoin::OutputSubstitution::Enabled => true,
-                payjoin::OutputSubstitution::Disabled => false,
-            };
-            Some(PayJoinParams { endpoint, output_substitution })
-        }
-        Err(_) => None,
+    Ok(ParsedBitcoinUri { address, amount, payjoin: None })
+}
+
+/// Strips `pj` and `pjos` query parameters from a `bitcoin:` URI string.
+fn strip_payjoin_params(uri: &str) -> String {
+    let (base, query) = match uri.split_once('?') {
+        Some((b, q)) => (b, q),
+        None => return uri.to_string(),
     };
 
-    Ok(ParsedBitcoinUri { address, amount, payjoin })
+    let filtered: Vec<&str> = query
+        .split('&')
+        .filter(|param| {
+            let key = param.split_once('=').map_or(*param, |(k, _)| k);
+            key != "pj" && key != "pjos"
+        })
+        .collect();
+
+    if filtered.is_empty() { base.to_string() } else { format!("{base}?{}", filtered.join("&")) }
 }
 
 #[uniffi::export]
@@ -636,16 +666,23 @@ mod tests {
 
     #[test]
     fn test_parse_bitcoin_uri_with_pjos_only() {
-        // pjos without pj is a malformed URI
+        // pjos without pj is ignored per BIP 78 backward compatibility
         let a = "bitcoin:bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm?pjos=0";
-        assert_eq!(parse_bitcoin_uri(a), Err(AddressError::InvalidAddress));
+        let parsed = parse_bitcoin_uri(a).unwrap();
+        assert_eq!(parsed.address, "bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm");
+        assert_eq!(parsed.amount, None);
+        assert_eq!(parsed.payjoin, None);
     }
 
     #[test]
     fn test_parse_bitcoin_uri_with_invalid_pj_url() {
-        // payjoin rejects the entire URI when pj is not a valid URL
+        // malformed pj is ignored per BIP 78 backward compatibility;
+        // address and amount are still extracted
         let a = "bitcoin:bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm?pj=not-a-url";
-        assert_eq!(parse_bitcoin_uri(a), Err(AddressError::InvalidAddress));
+        let parsed = parse_bitcoin_uri(a).unwrap();
+        assert_eq!(parsed.address, "bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm");
+        assert_eq!(parsed.amount, None);
+        assert_eq!(parsed.payjoin, None);
     }
 
     #[test]
@@ -658,14 +695,22 @@ mod tests {
 
     #[test]
     fn test_parse_bitcoin_uri_pjos_invalid_value() {
+        // invalid pjos value causes payjoin params to be ignored per BIP 78
         let a = "bitcoin:bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm?pj=https://example.com/payjoin&pjos=garbage";
-        assert_eq!(parse_bitcoin_uri(a), Err(AddressError::InvalidAddress));
+        let parsed = parse_bitcoin_uri(a).unwrap();
+        assert_eq!(parsed.address, "bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm");
+        assert_eq!(parsed.amount, None);
+        assert_eq!(parsed.payjoin, None);
     }
 
     #[test]
-    fn test_parse_bitcoin_uri_pjos_without_pj_is_error() {
+    fn test_parse_bitcoin_uri_pjos_without_pj_is_ignored() {
+        // pjos without pj is ignored per BIP 78 backward compatibility
         let a = "bitcoin:bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm?pjos=1";
-        assert_eq!(parse_bitcoin_uri(a), Err(AddressError::InvalidAddress));
+        let parsed = parse_bitcoin_uri(a).unwrap();
+        assert_eq!(parsed.address, "bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm");
+        assert_eq!(parsed.amount, None);
+        assert_eq!(parsed.payjoin, None);
     }
 
     #[test]
@@ -686,5 +731,16 @@ mod tests {
         assert_eq!(pj.endpoint, "https://example.com/payjoin");
         assert!(!pj.output_substitution);
         assert_eq!(address_with_network.amount, Some(Amount::from_btc(0.001).unwrap()));
+    }
+
+    #[test]
+    fn test_parse_bitcoin_uri_malformed_pj_falls_back() {
+        // BIP 78 backward compatibility: a malformed pj= URL should not prevent
+        // parsing the address and amount; payjoin is simply ignored.
+        let a = "bitcoin:bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm?amount=0.005&pj=http://not-https.example.com/payjoin";
+        let parsed = parse_bitcoin_uri(a).unwrap();
+        assert_eq!(parsed.address, "bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm");
+        assert_eq!(parsed.amount, Some(Amount::from_btc(0.005).unwrap()));
+        assert_eq!(parsed.payjoin, None);
     }
 }
