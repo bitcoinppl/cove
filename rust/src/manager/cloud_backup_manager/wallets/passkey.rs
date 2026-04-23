@@ -7,7 +7,7 @@ use cove_tokio::unblock;
 use rand::RngExt as _;
 use tracing::{info, warn};
 
-use super::super::{CloudBackupError, PASSKEY_RP_ID};
+use super::super::{CloudBackupError, EXPLICIT_CLOUD_ACCESS, PASSKEY_RP_ID};
 use super::UnpersistedPrfKey;
 
 async fn create_new_prf_key_with_mapper(
@@ -145,8 +145,10 @@ pub async fn try_match_namespace_with_passkey(
     let mut had_unsupported_versions = false;
 
     for namespace in namespaces {
-        let Ok(master_json) =
-            cloud.download_master_key_backup(namespace.clone()).await.inspect_err(|error| {
+        let Ok(master_json) = cloud
+            .download_master_key_backup(namespace.clone(), EXPLICIT_CLOUD_ACCESS)
+            .await
+            .inspect_err(|error| {
                 warn!("Failed to download master key for namespace {namespace}: {error}");
                 had_download_failures = true;
             })
