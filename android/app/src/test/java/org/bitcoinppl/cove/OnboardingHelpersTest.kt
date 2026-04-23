@@ -4,6 +4,7 @@ import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingRestorePhase
 import org.bitcoinppl.cove.flows.OnboardingFlow.combinedRestoreProgress
 import org.bitcoinppl.cove.flows.OnboardingFlow.resolveRestorePhase
 import org.bitcoinppl.cove.flows.OnboardingFlow.shouldCompleteOnboardingCloudBackup
+import org.bitcoinppl.cove.flows.OnboardingFlow.shouldNotifyRestoreError
 import org.bitcoinppl.cove_core.CloudBackupRestoreProgress
 import org.bitcoinppl.cove_core.CloudBackupRestoreReport
 import org.bitcoinppl.cove_core.CloudBackupRestoreStage
@@ -169,6 +170,18 @@ class OnboardingHelpersTest {
             )
         assertTrue(errorPhase is OnboardingRestorePhase.Error)
         assertEquals("restore failed", (errorPhase as OnboardingRestorePhase.Error).message)
+    }
+
+    @Test
+    fun shouldNotifyRestoreErrorOnlyForFirstRestoringError() {
+        assertTrue(shouldNotifyRestoreError(OnboardingRestorePhase.Restoring, hasDeliveredError = false))
+        assertFalse(shouldNotifyRestoreError(OnboardingRestorePhase.Restoring, hasDeliveredError = true))
+        assertFalse(
+            shouldNotifyRestoreError(
+                currentPhase = OnboardingRestorePhase.Error("restore failed"),
+                hasDeliveredError = false,
+            ),
+        )
     }
 
     @Test
