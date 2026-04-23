@@ -369,6 +369,17 @@ impl Wallet {
         let keychain = Keychain::global();
         let database = Database::global();
         let network = database.global_config.selected_network();
+        let mode = database.global_config.wallet_mode();
+
+        let external_str = external.to_string();
+        let existing = database.wallets.get_all(network, mode).unwrap_or_default();
+        for wm in existing {
+            if let Ok(Some((stored_ext, _))) = keychain.get_public_descriptor(&wm.id) {
+                if stored_ext.to_string() == external_str {
+                    return Err(WalletError::WalletAlreadyExists(wm.id));
+                }
+            }
+        }
 
         let id = WalletId::new();
         let mut metadata = WalletMetadata::new_for_hardware(id.clone(), name, None);
@@ -769,7 +780,7 @@ fn parse_multisig_descriptors(
     let parse = |s: &str| -> Result<ExtendedDescriptor, WalletError> {
         MiniscriptDescriptor::<DescriptorPublicKey>::parse_descriptor(&secp, s)
             .map(|(d, _)| d)
-            .map_err(|e| WalletError::DescriptorKeyParseError(e.to_string()))
+            .map_err_str(WalletError::DescriptorKeyParseError)
     };
 
     let lines: Vec<&str> = input.lines().map(str::trim).filter(|l| !l.is_empty()).collect();

@@ -396,12 +396,12 @@ impl RustWalletManager {
         let id = wallet.id.clone();
         let metadata = wallet.metadata.clone();
 
-        let scanner =
-            WalletScanner::try_new(metadata.clone(), sender.clone()).ok().map(spawn_actor);
-
         let wallet_actor = WalletActor::new(wallet, sender.clone())
             .map_err(|e| Error::DatabaseCorruption { id: id.clone(), error: e.to_string() })?;
         let actor = task::spawn_actor(wallet_actor);
+
+        let scanner =
+            WalletScanner::try_new(metadata.clone(), sender.clone()).ok().map(spawn_actor);
         let label_manager = LabelManager::new(id.clone()).into();
 
         Ok(Self {
