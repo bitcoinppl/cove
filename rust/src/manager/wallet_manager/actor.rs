@@ -205,8 +205,7 @@ impl WalletActor {
         debug!("build_ephemeral_drain_tx for fee rate {}", fee.sat_per_vb());
         let script_pubkey = address.script_pubkey();
         let locked_outpoints = self.db.labels.locked_outpoints().unwrap_or_default();
-        let mut tx_builder = self.wallet.bdk.build_tx();
-        tx_builder.unspendable(locked_outpoints);
+        let mut tx_builder = self.wallet.bdk.build_tx().unspendable(locked_outpoints);
 
         tx_builder.drain_wallet().drain_to(script_pubkey).fee_rate(fee.into());
         let psbt = tx_builder.finish().map_err_str(Error::BuildTxError)?;
@@ -229,8 +228,8 @@ impl WalletActor {
 
         let locked_outpoints = self.db.labels.locked_outpoints().unwrap_or_default();
         let coin_selection = CoveDefaultCoinSelection::new(self.seed);
-        let mut tx_builder = self.wallet.bdk.build_tx().coin_selection(coin_selection);
-        tx_builder.unspendable(locked_outpoints);
+        let mut tx_builder =
+            self.wallet.bdk.build_tx().coin_selection(coin_selection).unspendable(locked_outpoints);
 
         tx_builder.ordering(TxOrdering::Untouched);
         tx_builder.add_recipient(script_pubkey, amount);
@@ -334,7 +333,8 @@ impl WalletActor {
         txid: TxId,
     ) -> Result<TransactionLockState, Error> {
         let outputs = self.wallet_unspent_outputs_for_tx(txid.0);
-        let state = self.compute_lock_state(&outputs).map_err(|e| Error::UnknownError(e.to_string()))?;
+        let state =
+            self.compute_lock_state(&outputs).map_err(|e| Error::UnknownError(e.to_string()))?;
         Ok(state)
     }
 
@@ -346,7 +346,8 @@ impl WalletActor {
             return Ok(());
         }
 
-        let current_state = self.compute_lock_state(&outputs).map_err(|e| Error::UnknownError(e.to_string()))?;
+        let current_state =
+            self.compute_lock_state(&outputs).map_err(|e| Error::UnknownError(e.to_string()))?;
 
         // unlocked or mixed -> lock all
         // locked -> unlock all
@@ -365,7 +366,10 @@ impl WalletActor {
     }
 
     /// Compute the aggregate lock state for the given wallet-owned unspent outputs.
-    fn compute_lock_state(&self, outputs: &[OutPoint]) -> Result<TransactionLockState, crate::database::wallet_data::label::Error> {
+    fn compute_lock_state(
+        &self,
+        outputs: &[OutPoint],
+    ) -> Result<TransactionLockState, crate::database::wallet_data::label::Error> {
         if outputs.is_empty() {
             return Ok(TransactionLockState::None);
         }
