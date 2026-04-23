@@ -374,10 +374,10 @@ impl Wallet {
         let external_str = external.to_string();
         let existing = database.wallets.get_all(network, mode).unwrap_or_default();
         for wm in existing {
-            if let Ok(Some((stored_ext, _))) = keychain.get_public_descriptor(&wm.id) {
-                if stored_ext.to_string() == external_str {
-                    return Err(WalletError::WalletAlreadyExists(wm.id));
-                }
+            if let Ok(Some((stored_ext, _))) = keychain.get_public_descriptor(&wm.id)
+                && stored_ext.to_string() == external_str
+            {
+                return Err(WalletError::WalletAlreadyExists(wm.id));
             }
         }
 
