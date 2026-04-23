@@ -251,6 +251,10 @@ class SendFlowManager(
             is SendFlowManagerReconcileMessage.RefreshPresenters -> {
                 refreshPresenters()
             }
+
+            is SendFlowManagerReconcileMessage.FeeBumpConfirmDetails -> {
+                // fee bump confirmation screen wired in follow-up
+            }
         }
     }
 

@@ -1679,7 +1679,11 @@ impl RustSendFlowManager {
                 }
             };
 
-            me.reconciler.send_async(Message::FeeBumpConfirmDetails(details.clone())).await;
+            // reject watch-only before touching UI state
+            if matches!(wallet_type, WalletType::WatchOnly) {
+                let error = SendFlowError::UnableToBuildTxn("watch only".to_string());
+                return me.send_alert_async(error).await;
+            }
 
             // save unsigned transaction for hardware wallets before routing
             if matches!(wallet_type, WalletType::Cold | WalletType::XpubOnly)
@@ -1689,15 +1693,14 @@ impl RustSendFlowManager {
                 return me.send_alert_async(error).await;
             }
 
+            me.reconciler.send_async(Message::FeeBumpConfirmDetails(details.clone())).await;
+
             let next_route = match wallet_type {
                 WalletType::Hot => RouteFactory::new().send_confirm(wallet_id, details, None, None),
                 WalletType::Cold | WalletType::XpubOnly => {
                     RouteFactory::new().send_hardware_export(wallet_id, details)
                 }
-                WalletType::WatchOnly => {
-                    let error = SendFlowError::UnableToBuildTxn("watch only".to_string());
-                    return me.send_alert_async(error).await;
-                }
+                WalletType::WatchOnly => unreachable!("rejected above"),
             };
 
             let mut deferred = DeferredDispatch::<AppAction>::new();
