@@ -72,6 +72,7 @@ pub struct WalletActor {
     seed: u64,
     transaction_watchers: HashMap<Txid, Addr<TransactionWatcher>>,
     scan_task: Option<tokio::task::AbortHandle>,
+    scan_generation: u64,
 
     // cached values, source of truth is the redb database saved with wallet metadata
     last_scan_finished: Option<Duration>,
@@ -176,6 +177,7 @@ impl WalletActor {
             state: ActorState::Initial,
             transaction_watchers: HashMap::default(),
             scan_task: None,
+            scan_generation: 0,
             db,
         })
     }
@@ -942,6 +944,7 @@ impl WalletActor {
         if let Some(handle) = self.scan_task.take() {
             handle.abort();
         }
+        self.scan_generation += 1;
         self.state = ActorState::Initial;
         self.transaction_watchers = HashMap::default();
     }
@@ -952,6 +955,12 @@ impl WalletActor {
     }
 
     pub async fn perform_scan_for_single_tx_id(&mut self, tx_id: Txid) -> ActorResult<()> {
+        // if stop_all_scans was called, watchers are cleared — skip the scan
+        if !self.transaction_watchers.contains_key(&tx_id) {
+            debug!("skipping single tx scan, watcher already removed for {tx_id}");
+            return Produces::ok(());
+        }
+
         let start = UNIX_EPOCH.elapsed().unwrap().as_secs();
         let _ = self.update_height().await?.await;
 
@@ -967,6 +976,7 @@ impl WalletActor {
         debug!("done scan for spk in {}s", now - start);
 
         let addr = self.addr.clone();
+        let generation = self.scan_generation;
         self.addr.send_fut(async move {
             let scan_result = node_client.sync(&graph, sync_request).await;
 
@@ -974,7 +984,7 @@ impl WalletActor {
             debug!("done single txn id sync scan in {}s", now - start);
 
             // save updated txns and send to frontend
-            send!(addr.update_sync_state_and_send_transactions(scan_result));
+            send!(addr.update_sync_state_and_send_transactions(scan_result, generation));
         });
 
         Produces::ok(())
@@ -1155,6 +1165,7 @@ impl WalletActor {
         let (full_scan_request, graph, node_client) = self.get_for_full_scan().await?;
 
         let addr = self.addr.clone();
+        let generation = self.scan_generation;
         let handle = cove_tokio::task::spawn(async move {
             let start = UNIX_EPOCH.elapsed().unwrap().as_secs();
 
@@ -1166,7 +1177,9 @@ impl WalletActor {
             debug!("[initial] done initial full scan in {}s", now - start);
 
             // update wallet state
-            let _ = call!(addr.handle_full_scan_complete(full_scan_result, FULL_SCAN_TYPE)).await;
+            let _ =
+                call!(addr.handle_full_scan_complete(full_scan_result, FULL_SCAN_TYPE, generation))
+                    .await;
 
             // perform next scan
             send!(addr.maybe_perform_expanded_full_scan());
@@ -1185,6 +1198,7 @@ impl WalletActor {
         let (full_scan_request, graph, node_client) = self.get_for_full_scan().await?;
 
         let addr = self.addr.clone();
+        let generation = self.scan_generation;
         let handle = cove_tokio::task::spawn(async move {
             let start = UNIX_EPOCH.elapsed().unwrap().as_secs();
 
@@ -1196,7 +1210,7 @@ impl WalletActor {
             debug!("[expanded] done expanded full scan in {}s", now - start);
 
             // update wallet state
-            send!(addr.handle_full_scan_complete(full_scan_result, FULL_SCAN_TYPE));
+            send!(addr.handle_full_scan_complete(full_scan_result, FULL_SCAN_TYPE, generation));
         });
         if let Some(old) = self.scan_task.replace(handle.abort_handle()) {
             old.abort();
@@ -1228,6 +1242,7 @@ impl WalletActor {
         let graph = self.wallet.bdk.tx_graph().clone();
 
         let addr = self.addr.clone();
+        let generation = self.scan_generation;
         let handle = cove_tokio::task::spawn(async move {
             let scan_result =
                 node_client.start_wallet_scan(&graph, full_scan_request, GAP_LIMIT as usize).await;
@@ -1236,7 +1251,7 @@ impl WalletActor {
             debug!("done incremental scan in {}s", now - start);
 
             // update wallet state
-            send!(addr.handle_incremental_scan_complete(scan_result));
+            send!(addr.handle_incremental_scan_complete(scan_result, generation));
         });
         if let Some(old) = self.scan_task.replace(handle.abort_handle()) {
             old.abort();
@@ -1249,7 +1264,13 @@ impl WalletActor {
         &mut self,
         full_scan_result: Result<FullScanResponse<KeychainKind>, crate::node::client::Error>,
         full_scan_type: FullScanType,
+        generation: u64,
     ) -> ActorResult<()> {
+        if generation != self.scan_generation {
+            debug!("dropping stale full scan result (gen {generation} != {})", self.scan_generation);
+            return Produces::ok(());
+        }
+
         debug!("applying full scan result for {full_scan_type:?}");
 
         match full_scan_result {
@@ -1283,7 +1304,16 @@ impl WalletActor {
     async fn handle_incremental_scan_complete(
         &mut self,
         scan_result: Result<FullScanResponse<KeychainKind>, crate::node::client::Error>,
+        generation: u64,
     ) -> ActorResult<()> {
+        if generation != self.scan_generation {
+            debug!(
+                "dropping stale incremental scan result (gen {generation} != {})",
+                self.scan_generation
+            );
+            return Produces::ok(());
+        }
+
         if scan_result.is_err() {
             self.state = ActorState::FailedIncrementalScan;
         }
@@ -1301,7 +1331,16 @@ impl WalletActor {
     async fn update_sync_state_and_send_transactions(
         &mut self,
         scan_result: Result<SyncResponse, crate::node::client::Error>,
+        generation: u64,
     ) -> ActorResult<()> {
+        if generation != self.scan_generation {
+            debug!(
+                "dropping stale single tx scan result (gen {generation} != {})",
+                self.scan_generation
+            );
+            return Produces::ok(());
+        }
+
         if scan_result.is_err() {
             self.state = ActorState::FailedSyncScan;
         }
