@@ -123,7 +123,7 @@ fn generate_android_strings(strings: &Value, verbose: bool) -> Result<usize> {
 
     let mut output = String::new();
     output.push_str("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n");
-    output.push_str("<!-- Generated from localization/strings.json \u{2014} DO NOT EDIT -->\n");
+    output.push_str("<!-- Generated from localization/strings.json — DO NOT EDIT -->\n");
     output.push_str("<resources>\n");
 
     let mut count = 0;
