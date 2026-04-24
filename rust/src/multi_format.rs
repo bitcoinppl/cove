@@ -144,13 +144,22 @@ impl MultiFormat {
 
         // try and parse bip329 labels — tolerant: skip unparseable lines so a single
         // malformed entry doesn't discard all valid labels in the file
-        let parsed_labels: Vec<bip329::Label> = string
-            .trim()
-            .lines()
-            .filter_map(|line| bip329::Label::try_from_str(line.trim()).ok())
+        let lines: Vec<&str> = string.lines().map(str::trim).filter(|l| !l.is_empty()).collect();
+        let total = lines.len();
+        let parsed_labels: Vec<bip329::Label> = lines
+            .into_iter()
+            .filter_map(|line| {
+                bip329::Label::try_from_str(line)
+                    .inspect_err(|e| debug!("skipping bip329 line: {e}"))
+                    .ok()
+            })
             .collect();
         if !parsed_labels.is_empty() {
-            return Ok(Self::Bip329Labels(Arc::new(bip329::Labels::new(parsed_labels).into())));
+            let parse_skipped = (total - parsed_labels.len()) as u32;
+            return Ok(Self::Bip329Labels(Arc::new(Bip329Labels {
+                labels: bip329::Labels::new(parsed_labels),
+                parse_skipped,
+            })));
         }
 
         if string.contains("tapsigner.com/start") {
@@ -350,19 +359,36 @@ impl StringOrData {
     }
 }
 
-#[derive(
-    Debug,
-    Clone,
-    PartialEq,
-    Eq,
-    uniffi::Object,
-    derive_more::Into,
-    derive_more::From,
-    derive_more::Deref,
-    derive_more::AsRef,
-)]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Object)]
+pub struct Bip329Labels {
+    pub labels: bip329::Labels,
+    pub parse_skipped: u32,
+}
 
-pub struct Bip329Labels(pub bip329::Labels);
+impl From<bip329::Labels> for Bip329Labels {
+    fn from(labels: bip329::Labels) -> Self {
+        Self { labels, parse_skipped: 0 }
+    }
+}
+
+impl From<Bip329Labels> for bip329::Labels {
+    fn from(b: Bip329Labels) -> Self {
+        b.labels
+    }
+}
+
+impl std::ops::Deref for Bip329Labels {
+    type Target = bip329::Labels;
+    fn deref(&self) -> &Self::Target {
+        &self.labels
+    }
+}
+
+impl AsRef<bip329::Labels> for Bip329Labels {
+    fn as_ref(&self) -> &bip329::Labels {
+        &self.labels
+    }
+}
 
 impl From<cove_tap_card::TapSigner> for MultiFormat {
     fn from(tap_signer: cove_tap_card::TapSigner) -> Self {
@@ -688,5 +714,20 @@ mod tests {
             "Base64 path and UR path produce different PSBT bytes"
         );
         assert_eq!(original_bytes, path1_bytes, "Parsed PSBT differs from original bytes");
+    }
+
+    #[test]
+    fn bip329_mixed_payload_tracks_skipped_count() {
+        const VALID: &str = r#"{"type":"tx","ref":"f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd","label":"test"}"#;
+        const INVALID: &str = "this is not valid jsonl";
+        let payload = format!("{VALID}\n{INVALID}\n{VALID}");
+
+        let result = MultiFormat::try_from_string(&payload).expect("should parse with skipped");
+        let MultiFormat::Bip329Labels(labels) = result else {
+            panic!("expected Bip329Labels");
+        };
+
+        assert_eq!(labels.labels.len(), 2, "two valid labels parsed");
+        assert_eq!(labels.parse_skipped, 1, "one malformed line skipped");
     }
 }

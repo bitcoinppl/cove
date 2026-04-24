@@ -243,7 +243,10 @@ impl LabelManager {
         labels: Arc<Bip329Labels>,
     ) -> Result<LabelParseReport, LabelManagerError> {
         let labels = Arc::unwrap_or_clone(labels);
-        self.import_labels(labels.0)
+        let parse_skipped = labels.parse_skipped;
+        let mut report = self.import_labels(labels.labels)?;
+        report.skipped += parse_skipped;
+        Ok(report)
     }
 
     pub fn import(&self, jsonl: &str) -> Result<LabelParseReport, LabelManagerError> {
@@ -327,6 +330,9 @@ impl LabelManager {
             )
         };
         let supported = labels.iter().filter(is_supported).count() as u32;
+        if supported == 0 {
+            return Err(LabelManagerError::Parse("no supported labels found".to_string()));
+        }
         let skipped = labels.len() as u32 - supported;
         let report = LabelParseReport { imported: supported, skipped };
         self.save_imported_labels(labels, report, true)

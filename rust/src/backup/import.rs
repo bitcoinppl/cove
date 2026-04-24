@@ -1,6 +1,7 @@
 use std::str::FromStr as _;
 
 use bip39::Mnemonic;
+use cove_util::result_ext::ResultExt as _;
 use strum::IntoEnumIterator as _;
 use tracing::{error, info, warn};
 use zeroize::Zeroizing;
@@ -533,8 +534,7 @@ pub(crate) fn cleanup_failed_wallet(metadata: &WalletMetadata) -> Vec<String> {
 
 fn import_labels(id: &WalletId, jsonl: &str) -> Result<(), BackupError> {
     let manager = LabelManager::new(id.clone());
-    manager.import(jsonl).map_err(|e| BackupError::Restore(e.to_string()))?;
-    Ok(())
+    manager.import(jsonl).map(|_| ()).map_err_str(BackupError::Restore)
 }
 
 pub(crate) fn restore_wallet_labels(
@@ -552,8 +552,8 @@ pub(crate) fn restore_wallet_labels(
         LabelRestoreBehavior::MarkCloudBackupDirty => import_labels(wallet_id, jsonl),
         LabelRestoreBehavior::PreserveCloudBackupClean => manager
             .import_without_cloud_backup_dirty(jsonl)
-            .map_err(|error| BackupError::Restore(error.to_string()))
-            .map(|_| ()),
+            .map(|_| ())
+            .map_err_str(BackupError::Restore),
     };
 
     match import_result {
