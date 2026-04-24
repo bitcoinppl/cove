@@ -3,7 +3,7 @@ use tracing::{info, warn};
 
 use super::super::{
     BlockingCloudStep, CloudBackupDetailResult, CloudBackupStatus, EXPLICIT_CLOUD_ACCESS,
-    RustCloudBackupManager, SILENT_CLOUD_ACCESS, cloud_inventory::RemoteWalletTruth,
+    RustCloudBackupManager, cloud_inventory::RemoteWalletTruth,
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{CloudBlobConfirmedState, PersistedCloudBlobState};
@@ -51,7 +51,7 @@ impl RustCloudBackupManager {
             };
 
         let remote_wallet_truth =
-            match self.load_remote_wallet_truth(&wallet_record_ids, SILENT_CLOUD_ACCESS).await {
+            match self.load_remote_wallet_truth(&wallet_record_ids, EXPLICIT_CLOUD_ACCESS).await {
                 Ok(remote_wallet_truth) => remote_wallet_truth,
                 Err(error) => return Some(CloudBackupDetailResult::AccessError(error.to_string())),
             };
