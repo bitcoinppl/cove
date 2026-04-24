@@ -7,6 +7,7 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.with
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -383,7 +384,7 @@ fun TransactionDetailsScreen(
                                 targetState = lockState,
                                 transitionSpec = {
                                     (fadeIn() + androidx.compose.animation.scaleIn())
-                                        .togetherWith(fadeOut() + androidx.compose.animation.scaleOut())
+                                        .with(fadeOut() + androidx.compose.animation.scaleOut())
                                 },
                                 label = "lock_state_anim"
                             ) { state ->
