@@ -139,7 +139,7 @@ fun TransactionDetailsScreen(
         try {
             val freshDetails = manager.rust.transactionDetails(txId = txId)
             manager.updateTransactionDetailsCache(txId, freshDetails)
-            
+
             // also fetch lock state
             lockState = manager.rust.transactionLockState(txId = txId)
         } catch (e: Exception) {
@@ -432,7 +432,7 @@ fun TransactionDetailsScreen(
                             val confirmations = manager.rust.numberOfConfirmations(blockHeight = blockNumber)
                             numberOfConfirmations = confirmations.toInt()
                         }
-                        
+
                         lockState = manager.rust.transactionLockState(txId = txId)
                     } catch (e: Exception) {
                         android.util.Log.e("TransactionDetails", "error refreshing details", e)
