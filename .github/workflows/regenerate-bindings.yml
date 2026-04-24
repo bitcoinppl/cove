@@ -1,0 +1,108 @@
+name: Regenerate Bindings
+
+on:
+  workflow_dispatch: {}
+
+concurrency:
+  group: regenerate-bindings-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  regenerate-android-bindings:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 1
+
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Set up just
+        uses: extractions/setup-just@v1
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install build dependencies
+        run: cd rust && cargo xtask install-deps
+
+      - name: Build Rust FFI and generate Kotlin bindings
+        run: just build-android
+
+      - name: Show git status before commit
+        run: |
+          echo "=== Files changed after build ==="
+          git status
+          echo "=== Diff stat ==="
+          git diff --stat
+
+      - name: Commit regenerated Android bindings
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add android/app/src/main/java/org/bitcoinppl/cove_core/
+
+          if git diff --cached --quiet; then
+            echo "No Android binding changes to commit"
+          else
+            echo "Committing changes..."
+            git commit -m "chore: regenerate Android (Kotlin) UniFFI bindings"
+            git push origin HEAD:${{ github.ref_name }}
+          fi
+
+  regenerate-ios-bindings:
+    runs-on: macos-26
+    needs: regenerate-android-bindings
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 1
+
+      - name: Pull latest (includes Android binding commit)
+        run: git pull --rebase origin ${{ github.ref_name }}
+
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Set up just
+        uses: extractions/setup-just@v1
+
+      - name: Build Rust FFI and generate Swift bindings
+        run: just build-ios
+
+      - name: Show git status before commit
+        run: |
+          echo "=== Files changed after build ==="
+          git status
+          echo "=== Diff stat ==="
+          git diff --stat
+
+      - name: Commit regenerated iOS bindings
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add ios/CoveCore/Sources/CoveCore/generated/
+
+          if git diff --cached --quiet; then
+            echo "No iOS binding changes to commit"
+          else
+            echo "Committing changes..."
+            git commit -m "chore: regenerate iOS (Swift) UniFFI bindings"
+            git push origin HEAD:${{ github.ref_name }}
+          fi

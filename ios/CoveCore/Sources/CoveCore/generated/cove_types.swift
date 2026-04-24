@@ -1132,6 +1132,8 @@ public protocol AddressWithNetworkProtocol: AnyObject, Sendable {
     
     func network()  -> Network
     
+    func payjoin()  -> PayJoinParams?
+    
 }
 open class AddressWithNetwork: AddressWithNetworkProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -1228,6 +1230,14 @@ open func isValidForNetwork(network: Network) -> Bool  {
 open func network() -> Network  {
     return try!  FfiConverterTypeNetwork_lift(try! rustCall() {
     uniffi_cove_types_fn_method_addresswithnetwork_network(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+open func payjoin() -> PayJoinParams?  {
+    return try!  FfiConverterOptionTypePayJoinParams.lift(try! rustCall() {
+    uniffi_cove_types_fn_method_addresswithnetwork_payjoin(
             self.uniffiCloneHandle(),$0
     )
 })
@@ -4342,6 +4352,60 @@ public func FfiConverterTypeBlockSizeLast_lower(_ value: BlockSizeLast) -> RustB
 }
 
 
+public struct PayJoinParams: Equatable, Hashable {
+    public var endpoint: String
+    public var outputSubstitutionEnabled: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(endpoint: String, outputSubstitutionEnabled: Bool) {
+        self.endpoint = endpoint
+        self.outputSubstitutionEnabled = outputSubstitutionEnabled
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension PayJoinParams: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePayJoinParams: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PayJoinParams {
+        return
+            try PayJoinParams(
+                endpoint: FfiConverterString.read(from: &buf), 
+                outputSubstitutionEnabled: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PayJoinParams, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.endpoint, into: &buf)
+        FfiConverterBool.write(value.outputSubstitutionEnabled, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePayJoinParams_lift(_ buf: RustBuffer) throws -> PayJoinParams {
+    return try FfiConverterTypePayJoinParams.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePayJoinParams_lower(_ value: PayJoinParams) -> RustBuffer {
+    return FfiConverterTypePayJoinParams.lower(value)
+}
+
+
 public struct Rgb: Equatable, Hashable {
     public var r: UInt8
     public var g: UInt8
@@ -5744,6 +5808,30 @@ fileprivate struct FfiConverterOptionTypeFeeRateOptionWithTotalFee: FfiConverter
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypePayJoinParams: FfiConverterRustBuffer {
+    typealias SwiftType = PayJoinParams?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypePayJoinParams.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypePayJoinParams.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeUtxoType: FfiConverterRustBuffer {
     typealias SwiftType = UtxoType?
 
@@ -6206,6 +6294,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_addresswithnetwork_network() != 25441) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_types_checksum_method_addresswithnetwork_payjoin() != 1526) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_amount_as_btc() != 12153) {
