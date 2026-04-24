@@ -180,8 +180,8 @@ struct HeaderSection: View {
             Label("Sync error: \(message)", systemImage: "exclamationmark.triangle.fill")
                 .font(.caption)
                 .foregroundStyle(.red)
-        case let .authorizationRequired(message):
-            Label("iCloud authorization required: \(message)", systemImage: "exclamationmark.triangle.fill")
+        case .authorizationRequired:
+            Label("iCloud Drive access needs to be reconnected", systemImage: "exclamationmark.triangle.fill")
                 .font(.caption)
                 .foregroundStyle(.orange)
         case .noFiles, .unavailable:
