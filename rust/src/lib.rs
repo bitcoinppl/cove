@@ -17,7 +17,7 @@
 #![allow(clippy::trivially_copy_pass_by_ref)]
 #![allow(clippy::wildcard_imports)]
 #![allow(clippy::implicit_clone)]
-#![allow(clippy::unchecked_duration_subtraction)]
+#![allow(clippy::unchecked_time_subtraction)]
 #![allow(clippy::match_same_arms)]
 #![allow(clippy::default_trait_access)]
 #![allow(clippy::assigning_clones)]
