@@ -3,6 +3,7 @@ package org.bitcoinppl.cove.flows.SelectedWalletFlow.TransactionDetails
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -97,7 +98,7 @@ private const val CONFIRMATIONS_THRESHOLD = 3
  * Transaction details screen - now using manager-based pattern
  * Ported from iOS TransactionDetailsView.swift
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalAnimationApi::class)
 @Composable
 fun TransactionDetailsScreen(
     app: AppManager,
