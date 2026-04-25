@@ -60,15 +60,21 @@ struct WalletBalanceHeaderView: View {
         
         if metadata.fiatOrBtc == .fiat, let fiatPendingBalance,
            let pendingStr = manager.rust.displayFiatAmountPendingFmt(amount: fiatPendingBalance, withSuffix: true) {
-            Text(pendingStr)
-                .foregroundColor(.white.opacity(0.6))
-                .font(.footnote)
-                .padding(.leading, 2)
+            HStack {
+                Text(pendingStr)
+                    .foregroundColor(.white.opacity(0.6))
+                    .font(.footnote)
+                    .padding(.leading, 2)
+                Spacer()
+            }
         } else if let pendingStr = manager.rust.displayAmountPendingFmt(amount: pending) {
-            Text(pendingStr)
-                .foregroundColor(.white.opacity(0.6))
-                .font(.footnote)
-                .padding(.leading, 2)
+            HStack {
+                Text(pendingStr)
+                    .foregroundColor(.white.opacity(0.6))
+                    .font(.footnote)
+                    .padding(.leading, 2)
+                Spacer()
+            }
         }
     }
 
@@ -118,10 +124,7 @@ struct WalletBalanceHeaderView: View {
                         .onTapGesture { updater(.toggleSensitiveVisibility) }
                 }
 
-                HStack {
-                    pendingBalanceView
-                    Spacer()
-                }
+                pendingBalanceView
             }
             .onTapGesture {
                 manager.dispatch(action: .toggleFiatBtcPrimarySecondary)
