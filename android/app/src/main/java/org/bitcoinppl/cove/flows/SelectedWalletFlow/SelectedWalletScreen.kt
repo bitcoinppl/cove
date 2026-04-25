@@ -136,9 +136,7 @@ fun SelectedWalletScreen(
         remember(manager?.balance, manager?.walletMetadata?.selectedUnit) {
             manager?.let {
                 val pending = it.balance.untrustedPending()
-                if (pending.asSats() > 0UL) {
-                    "+ " + it.displayAmount(pending, showUnit = true) + " pending"
-                } else null
+                it.rust.displayAmountPendingFmt(pending)
             }
         }
 
@@ -155,11 +153,9 @@ fun SelectedWalletScreen(
         remember(manager?.balance, app?.prices) {
             manager?.let {
                 val pending = it.balance.untrustedPending()
-                if (pending.asSats() > 0UL) {
-                    it.rust.amountInFiat(pending)?.let { fiat ->
-                        "+ " + it.rust.displayFiatAmount(fiat) + " pending"
-                    }
-                } else null
+                it.rust.amountInFiat(pending)?.let { fiat ->
+                    it.rust.displayFiatAmountPendingFmt(fiat, withSuffix = true)
+                }
             }
         }
 

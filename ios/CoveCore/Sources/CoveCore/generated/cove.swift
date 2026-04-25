@@ -8713,6 +8713,12 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
     func displayAmount(amount: Amount, showUnit: Bool)  -> String
     
     /**
+     * Formats a pending BTC amount (e.g. "+ 0.00050000 BTC pending")
+     * Returns None if the amount is zero.
+     */
+    func displayAmountPendingFmt(amount: Amount)  -> String?
+    
+    /**
      * Formats a BTC amount with direction prefix (e.g., "-0.00050000 BTC")
      *
      * Includes "-" prefix for outgoing transactions, no prefix for incoming.
@@ -8721,6 +8727,12 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
     func displayAmountWithDirection(amount: Amount, direction: TransactionDirection)  -> String
     
     func displayFiatAmount(amount: Double, withSuffix: Bool)  -> String
+    
+    /**
+     * Formats a pending fiat amount (e.g. "+ $50.00 pending")
+     * Returns None if the amount is zero.
+     */
+    func displayFiatAmountPendingFmt(amount: Double, withSuffix: Bool)  -> String?
     
     /**
      * Formats a fiat amount with direction prefix (e.g., "-$50.00")
@@ -9127,6 +9139,19 @@ open func displayAmount(amount: Amount, showUnit: Bool = true) -> String  {
 }
     
     /**
+     * Formats a pending BTC amount (e.g. "+ 0.00050000 BTC pending")
+     * Returns None if the amount is zero.
+     */
+open func displayAmountPendingFmt(amount: Amount) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+    uniffi_cove_fn_method_rustwalletmanager_display_amount_pending_fmt(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeAmount_lower(amount),$0
+    )
+})
+}
+    
+    /**
      * Formats a BTC amount with direction prefix (e.g., "-0.00050000 BTC")
      *
      * Includes "-" prefix for outgoing transactions, no prefix for incoming.
@@ -9145,6 +9170,20 @@ open func displayAmountWithDirection(amount: Amount, direction: TransactionDirec
 open func displayFiatAmount(amount: Double, withSuffix: Bool = true) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_cove_fn_method_rustwalletmanager_display_fiat_amount(
+            self.uniffiCloneHandle(),
+        FfiConverterDouble.lower(amount),
+        FfiConverterBool.lower(withSuffix),$0
+    )
+})
+}
+    
+    /**
+     * Formats a pending fiat amount (e.g. "+ $50.00 pending")
+     * Returns None if the amount is zero.
+     */
+open func displayFiatAmountPendingFmt(amount: Double, withSuffix: Bool = true) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+    uniffi_cove_fn_method_rustwalletmanager_display_fiat_amount_pending_fmt(
             self.uniffiCloneHandle(),
         FfiConverterDouble.lower(amount),
         FfiConverterBool.lower(withSuffix),$0
@@ -36742,10 +36781,16 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustwalletmanager_display_amount() != 41368) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_rustwalletmanager_display_amount_pending_fmt() != 5678) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_rustwalletmanager_display_amount_with_direction() != 60498) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_display_fiat_amount() != 60595) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustwalletmanager_display_fiat_amount_pending_fmt() != 55764) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_display_fiat_amount_with_direction() != 5406) {

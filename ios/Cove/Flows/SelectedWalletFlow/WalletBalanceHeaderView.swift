@@ -57,30 +57,18 @@ struct WalletBalanceHeaderView: View {
     @ViewBuilder
     private var pendingBalanceView: some View {
         let pending = manager.balance.untrustedPending()
-        if pending.asSats() > 0 {
-            if !metadata.sensitiveVisible {
-                Text("+ •••••• pending")
-                    .foregroundColor(.white.opacity(0.6))
-                    .font(.footnote)
-                    .padding(.leading, 2)
-            } else if metadata.fiatOrBtc == .fiat {
-                if let fiatPendingBalance {
-                    Text("+ \(manager.rust.displayFiatAmount(amount: fiatPendingBalance)) pending")
-                        .foregroundColor(.white.opacity(0.6))
-                        .font(.footnote)
-                        .padding(.leading, 2)
-                } else {
-                    Text("+ \(manager.amountFmtUnit(pending)) pending")
-                        .foregroundColor(.white.opacity(0.6))
-                        .font(.footnote)
-                        .padding(.leading, 2)
-                }
-            } else {
-                Text("+ \(manager.amountFmtUnit(pending)) pending")
-                    .foregroundColor(.white.opacity(0.6))
-                    .font(.footnote)
-                    .padding(.leading, 2)
-            }
+        
+        if metadata.fiatOrBtc == .fiat, let fiatPendingBalance,
+           let pendingStr = manager.rust.displayFiatAmountPendingFmt(amount: fiatPendingBalance, withSuffix: true) {
+            Text(pendingStr)
+                .foregroundColor(.white.opacity(0.6))
+                .font(.footnote)
+                .padding(.leading, 2)
+        } else if let pendingStr = manager.rust.displayAmountPendingFmt(amount: pending) {
+            Text(pendingStr)
+                .foregroundColor(.white.opacity(0.6))
+                .font(.footnote)
+                .padding(.leading, 2)
         }
     }
 

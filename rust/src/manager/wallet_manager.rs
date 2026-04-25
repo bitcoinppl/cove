@@ -716,6 +716,18 @@ impl RustWalletManager {
         if show_unit { amount.fmt_string_with_unit(unit) } else { amount.fmt_string(unit) }
     }
 
+    /// Formats a pending BTC amount (e.g. "+ 0.00050000 BTC pending")
+    /// Returns None if the amount is zero.
+    #[uniffi::method]
+    pub fn display_amount_pending_fmt(&self, amount: Arc<Amount>) -> Option<String> {
+        if amount.as_sats() == 0 {
+            return None;
+        }
+
+        let formatted = self.display_amount(amount, true);
+        Some(format!("+ {formatted} pending"))
+    }
+
     /// Formats a BTC amount with direction prefix (e.g., "-0.00050000 BTC")
     ///
     /// Includes "-" prefix for outgoing transactions, no prefix for incoming.
@@ -773,6 +785,18 @@ impl RustWalletManager {
         }
 
         format!("{symbol}{fiat}")
+    }
+
+    /// Formats a pending fiat amount (e.g. "+ $50.00 pending")
+    /// Returns None if the amount is zero.
+    #[uniffi::method(default(with_suffix = true))]
+    pub fn display_fiat_amount_pending_fmt(&self, amount: f64, with_suffix: bool) -> Option<String> {
+        if amount <= 0.0 {
+            return None;
+        }
+
+        let formatted = self.display_fiat_amount(amount, with_suffix);
+        Some(format!("+ {formatted} pending"))
     }
 
     /// Formats a fiat amount with direction prefix (e.g., "-$50.00")
