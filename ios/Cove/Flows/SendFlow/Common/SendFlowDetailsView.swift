@@ -14,6 +14,7 @@ struct SendFlowDetailsView: View {
     // args
     let manager: WalletManager
     let details: ConfirmDetails
+    var isNewAddress: Bool = false
     @State var prices: PriceResponse?
 
     // private
@@ -52,6 +53,17 @@ struct SendFlowDetailsView: View {
                     .fontWeight(.medium)
                     .foregroundStyle(.secondary)
                     .foregroundColor(.primary)
+
+                if isNewAddress {
+                    Text("New Address")
+                        .font(.caption2)
+                        .fontWeight(.semibold)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.orange.opacity(0.2))
+                        .foregroundColor(.orange)
+                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                }
 
                 Spacer()
                 Spacer()

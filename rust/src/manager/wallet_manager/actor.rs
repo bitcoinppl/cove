@@ -331,6 +331,23 @@ impl WalletActor {
         Produces::ok(SplitOutput { external, internal })
     }
 
+    // Check whether this wallet has ever sent to the given address.
+    pub async fn has_sent_to_address(&mut self, address: Address) -> ActorResult<bool> {
+        let script_pubkey = address.script_pubkey();
+
+        let has_sent = self.wallet.bdk.transactions().any(|tx| {
+            let (sent, _received) = self.wallet.bdk.sent_and_received(&tx.tx_node.tx);
+            if sent.to_sat() == 0 {
+                return false; // incoming-only tx, skip
+            }
+
+            // Check if any output of the transaction has a matching script_pubkey
+            tx.tx_node.tx.output.iter().any(|output| output.script_pubkey == script_pubkey)
+        });
+
+        Produces::ok(has_sent)
+    }
+
     #[into_actor_result]
     pub async fn fee_rate_options_with_total_fee(
         &mut self,

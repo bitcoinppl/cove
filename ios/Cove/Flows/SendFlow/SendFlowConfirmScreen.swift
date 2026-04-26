@@ -11,6 +11,7 @@ import SwiftUI
 struct SendFlowConfirmScreen: View {
     @Environment(AppManager.self) private var app
     @Environment(AuthManager.self) private var auth
+    @Environment(SendFlowManager.self) private var sendFlowManager: SendFlowManager?
 
     let id: WalletId
     @State var manager: WalletManager
@@ -154,7 +155,7 @@ struct SendFlowConfirmScreen: View {
 
                         Divider()
 
-                        SendFlowDetailsView(manager: manager, details: details, prices: prices)
+                        SendFlowDetailsView(manager: manager, details: details, isNewAddress: sendFlowManager?.isNewAddress ?? false, prices: prices)
                     }
                 }
                 .scrollIndicators(.hidden)

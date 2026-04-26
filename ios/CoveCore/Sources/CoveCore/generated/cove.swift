@@ -27124,6 +27124,8 @@ public enum SendFlowManagerReconcileMessage {
     )
     case updateFeeRateOptions(FeeRateOptionsWithTotalFee
     )
+    case updateIsNewAddress(Bool
+    )
     case refreshPresenters
     case setAlert(SendFlowAlertState
     )
@@ -27181,12 +27183,15 @@ public struct FfiConverterTypeSendFlowManagerReconcileMessage: FfiConverterRustB
         case 11: return .updateFeeRateOptions(try FfiConverterTypeFeeRateOptionsWithTotalFee.read(from: &buf)
         )
         
-        case 12: return .refreshPresenters
-        
-        case 13: return .setAlert(try FfiConverterTypeSendFlowAlertState.read(from: &buf)
+        case 12: return .updateIsNewAddress(try FfiConverterBool.read(from: &buf)
         )
         
-        case 14: return .clearAlert
+        case 13: return .refreshPresenters
+        
+        case 14: return .setAlert(try FfiConverterTypeSendFlowAlertState.read(from: &buf)
+        )
+        
+        case 15: return .clearAlert
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -27250,17 +27255,22 @@ public struct FfiConverterTypeSendFlowManagerReconcileMessage: FfiConverterRustB
             FfiConverterTypeFeeRateOptionsWithTotalFee.write(v1, into: &buf)
             
         
-        case .refreshPresenters:
+        case let .updateIsNewAddress(v1):
             writeInt(&buf, Int32(12))
+            FfiConverterBool.write(v1, into: &buf)
+            
+        
+        case .refreshPresenters:
+            writeInt(&buf, Int32(13))
         
         
         case let .setAlert(v1):
-            writeInt(&buf, Int32(13))
+            writeInt(&buf, Int32(14))
             FfiConverterTypeSendFlowAlertState.write(v1, into: &buf)
             
         
         case .clearAlert:
-            writeInt(&buf, Int32(14))
+            writeInt(&buf, Int32(15))
         
         }
     }

@@ -106,6 +106,8 @@ pub enum SendFlowManagerReconcileMessage {
     UpdateSelectedFeeRate(Arc<FeeRateOptionWithTotalFee>),
     UpdateFeeRateOptions(Arc<FeeRateOptionsWithTotalFee>),
 
+    UpdateIsNewAddress(bool),
+
     RefreshPresenters,
 
     // side effects
@@ -891,7 +893,21 @@ impl RustSendFlowManager {
         // when we have a valid address, use that to get the fee rate options
         let me = self.clone();
         let is_max_selected = self.state.lock().max_selected.is_some();
+        let valid_address = address.clone();
         cove_tokio::task::spawn(async move {
+            if let Some(address) = valid_address {
+                let actor = me.wallet_actor();
+                let cloned_address = (*address).clone();
+
+                let has_sent =
+                    call!(actor.has_sent_to_address(cloned_address)).await.unwrap_or(true);
+
+                me.reconciler.send(Message::UpdateIsNewAddress(!has_sent));
+            } else {
+                // Clear the stale badge state if the input is invalid
+                me.reconciler.send(Message::UpdateIsNewAddress(false));
+            }
+
             me.get_or_update_fee_rate_options().await;
 
             if is_max_selected {
@@ -930,6 +946,7 @@ impl RustSendFlowManager {
         let mut sender = DeferredSender::new(self.reconciler.clone());
         self.state.lock().address = None;
         sender.queue(Message::UpdateAddress(None));
+        sender.queue(Message::UpdateIsNewAddress(false));
 
         self.state.lock().entering_address = String::new();
         sender.queue(Message::UpdateEnteringAddress(String::new()));

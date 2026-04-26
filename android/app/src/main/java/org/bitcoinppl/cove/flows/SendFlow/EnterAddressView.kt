@@ -8,10 +8,15 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import org.bitcoinppl.cove.ui.theme.CoveColor
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.QrCode2
@@ -43,6 +48,7 @@ import org.bitcoinppl.cove_core.types.addressStringSpacedOut
 fun EnterAddressView(
     onScanQr: () -> Unit,
     initialAddress: String,
+    isNewAddress: Boolean = false,
     onAddressChanged: (String) -> Unit,
     focusRequester: FocusRequester,
     onFocusChanged: (Boolean) -> Unit = {},
@@ -67,12 +73,26 @@ fun EnterAddressView(
         Spacer(Modifier.height(20.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    stringResource(R.string.label_enter_address),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        stringResource(R.string.label_enter_address),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    if (isNewAddress) {
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = "New Address",
+                            color = CoveColor.WarningOrange,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier
+                                .background(CoveColor.WarningOrange.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
                 Spacer(Modifier.height(4.dp))
                 Text(
                     stringResource(R.string.label_where_send_to),

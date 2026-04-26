@@ -168,6 +168,7 @@ fun SendFlowConfirmScreen(
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
                     SummaryWidget(
                         address = address,
+                        isNewAddress = sendFlowManager.isNewAddress,
                         networkFee = networkFee,
                         willReceive = willReceive,
                         willPay = willPay,
@@ -374,6 +375,7 @@ private fun AmountWidget(
 @Composable
 private fun SummaryWidget(
     address: String,
+    isNewAddress: Boolean = false,
     networkFee: String,
     willReceive: String,
     willPay: String,
@@ -389,6 +391,7 @@ private fun SummaryWidget(
             valueColor = MaterialTheme.colorScheme.onSurface,
             keyColor = MaterialTheme.colorScheme.onSurfaceVariant,
             boldValue = true,
+            showNewAddressBadge = isNewAddress,
             onClick = onAddressClick,
         )
         Spacer(Modifier.height(20.dp))
@@ -428,6 +431,7 @@ private fun KeyValueRow(
     valueColor: Color,
     boldValue: Boolean = false,
     boldKey: Boolean = false,
+    showNewAddressBadge: Boolean = false,
     onClick: (() -> Unit)? = null,
 ) {
     val rowModifier =
@@ -442,13 +446,26 @@ private fun KeyValueRow(
         modifier = rowModifier,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            key,
-            color = keyColor,
-            fontSize = 14.sp,
-            fontWeight = if (boldKey) FontWeight.SemiBold else FontWeight.Normal,
-            modifier = Modifier.weight(1f),
-        )
+        Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                key,
+                color = keyColor,
+                fontSize = 14.sp,
+                fontWeight = if (boldKey) FontWeight.SemiBold else FontWeight.Normal,
+            )
+            if (showNewAddressBadge) {
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = "New Address",
+                    color = CoveColor.WarningOrange,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier
+                        .background(CoveColor.WarningOrange.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                )
+            }
+        }
         Text(
             value,
             color = valueColor,

@@ -44447,6 +44447,15 @@ sealed class SendFlowManagerReconcileMessage: Disposable  {
         companion object
     }
     
+    data class UpdateIsNewAddress(
+        val v1: kotlin.Boolean) : SendFlowManagerReconcileMessage()
+        
+    {
+        
+
+        companion object
+    }
+    
     object RefreshPresenters : SendFlowManagerReconcileMessage()
     
     
@@ -44539,6 +44548,13 @@ sealed class SendFlowManagerReconcileMessage: Disposable  {
     )
                 
             }
+            is SendFlowManagerReconcileMessage.UpdateIsNewAddress -> {
+                
+    Disposable.destroy(
+        this.v1
+    )
+                
+            }
             is SendFlowManagerReconcileMessage.RefreshPresenters -> {// Nothing to destroy
             }
             is SendFlowManagerReconcileMessage.SetAlert -> {
@@ -44598,11 +44614,14 @@ public object FfiConverterTypeSendFlowManagerReconcileMessage : FfiConverterRust
             11 -> SendFlowManagerReconcileMessage.UpdateFeeRateOptions(
                 FfiConverterTypeFeeRateOptionsWithTotalFee.read(buf),
                 )
-            12 -> SendFlowManagerReconcileMessage.RefreshPresenters
-            13 -> SendFlowManagerReconcileMessage.SetAlert(
+            12 -> SendFlowManagerReconcileMessage.UpdateIsNewAddress(
+                FfiConverterBoolean.read(buf),
+                )
+            13 -> SendFlowManagerReconcileMessage.RefreshPresenters
+            14 -> SendFlowManagerReconcileMessage.SetAlert(
                 FfiConverterTypeSendFlowAlertState.read(buf),
                 )
-            14 -> SendFlowManagerReconcileMessage.ClearAlert
+            15 -> SendFlowManagerReconcileMessage.ClearAlert
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -44684,6 +44703,13 @@ public object FfiConverterTypeSendFlowManagerReconcileMessage : FfiConverterRust
                 + FfiConverterTypeFeeRateOptionsWithTotalFee.allocationSize(value.v1)
             )
         }
+        is SendFlowManagerReconcileMessage.UpdateIsNewAddress -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterBoolean.allocationSize(value.v1)
+            )
+        }
         is SendFlowManagerReconcileMessage.RefreshPresenters -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
@@ -44761,17 +44787,22 @@ public object FfiConverterTypeSendFlowManagerReconcileMessage : FfiConverterRust
                 FfiConverterTypeFeeRateOptionsWithTotalFee.write(value.v1, buf)
                 Unit
             }
-            is SendFlowManagerReconcileMessage.RefreshPresenters -> {
+            is SendFlowManagerReconcileMessage.UpdateIsNewAddress -> {
                 buf.putInt(12)
+                FfiConverterBoolean.write(value.v1, buf)
+                Unit
+            }
+            is SendFlowManagerReconcileMessage.RefreshPresenters -> {
+                buf.putInt(13)
                 Unit
             }
             is SendFlowManagerReconcileMessage.SetAlert -> {
-                buf.putInt(13)
+                buf.putInt(14)
                 FfiConverterTypeSendFlowAlertState.write(value.v1, buf)
                 Unit
             }
             is SendFlowManagerReconcileMessage.ClearAlert -> {
-                buf.putInt(14)
+                buf.putInt(15)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }

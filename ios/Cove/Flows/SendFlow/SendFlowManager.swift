@@ -24,6 +24,7 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
     var enteringBtcAmount: String = ""
     var enteringFiatAmount: String = ""
     private var _enteringAddress: String = ""
+    var isNewAddress: Bool = false
 
     var address: Address? = nil
     var amount: Amount? = nil
@@ -136,6 +137,9 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
 
         case let .updateEnteringAddress(address):
             self._enteringAddress = address
+
+        case let .updateIsNewAddress(isNewAddress):
+            self.isNewAddress = isNewAddress
 
         case let .updateEnteringFiatAmount(amount):
             self.enteringFiatAmount = amount

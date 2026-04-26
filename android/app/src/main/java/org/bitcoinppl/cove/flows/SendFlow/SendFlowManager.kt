@@ -46,6 +46,9 @@ class SendFlowManager(
     private var _enteringAddress by mutableStateOf("")
 
     // validated state
+    var isNewAddress by mutableStateOf(false)
+        private set
+
     var address by mutableStateOf<Address?>(null)
 
     var amount by mutableStateOf<Amount?>(null)
@@ -205,6 +208,10 @@ class SendFlowManager(
 
             is SendFlowManagerReconcileMessage.UpdateEnteringFiatAmount -> {
                 enteringFiatAmount = message.v1
+            }
+
+            is SendFlowManagerReconcileMessage.UpdateIsNewAddress -> {
+                isNewAddress = message.v1
             }
 
             is SendFlowManagerReconcileMessage.UpdateSelectedFeeRate -> {

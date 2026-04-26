@@ -143,7 +143,7 @@ struct SendFlowSetAmountScreen: View {
                         // Address Section
                         VStack {
                             Divider()
-                            EnterAddressView(address: sendFlowManager.enteringAddress)
+                            EnterAddressView(address: sendFlowManager.enteringAddress, isNewAddress: sendFlowManager.isNewAddress)
                             Divider()
                         }
 
