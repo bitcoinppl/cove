@@ -1,6 +1,5 @@
 package org.bitcoinppl.cove.cloudbackup
 
-import android.content.Intent
 import androidx.activity.result.ActivityResult
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.IntentSenderRequest
@@ -34,6 +33,8 @@ object ForegroundUiBridge {
 
     fun detach(activity: FragmentActivity) {
         if (currentActivity.value === activity) {
+            pendingAuthorizationResult?.cancel()
+            pendingAuthorizationResult = null
             currentActivity.value = null
             authorizationLauncher = null
         }
@@ -50,7 +51,7 @@ object ForegroundUiBridge {
 
     suspend fun launchAuthorization(
         request: IntentSenderRequest,
-    ): Intent? {
+    ): ActivityResult {
         val deferred = CompletableDeferred<ActivityResult>()
         val launcher = authorizationLauncher ?: error("authorization launcher is not attached")
 
@@ -65,7 +66,7 @@ object ForegroundUiBridge {
             withContext(Dispatchers.Main.immediate) {
                 launcher.launch(request)
             }
-            deferred.await().data
+            deferred.await()
         } finally {
             synchronized(this) {
                 if (pendingAuthorizationResult === deferred) {

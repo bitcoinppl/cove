@@ -47,6 +47,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
@@ -186,6 +187,7 @@ class CloudBackupPresentationCoordinator {
             transitionJob = null
             queuedPresentation = null
             requiresPresentationDelay = false
+            ignoreNextDismissEvent = false
             return
         }
 
@@ -197,6 +199,7 @@ class CloudBackupPresentationCoordinator {
                 scheduleQueuedPresentation()
             } else {
                 queuedPresentation = null
+                ignoreNextDismissEvent = false
                 currentPresentation = desired
             }
             return
@@ -235,9 +238,16 @@ class CloudBackupPresentationCoordinator {
                     return@launch
                 }
                 requiresPresentationDelay = false
+                ignoreNextDismissEvent = false
                 currentPresentation = queued
                 queuedPresentation = null
             }
+    }
+
+    fun dispose() {
+        transitionJob?.cancel()
+        transitionJob = null
+        scope.cancel()
     }
 
     private fun isPresentable(presentation: CloudBackupRootPresentation): Boolean {
@@ -298,6 +308,12 @@ fun CloudBackupPresentationHost(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    DisposableEffect(coordinator) {
+        onDispose {
+            coordinator.dispose()
         }
     }
 

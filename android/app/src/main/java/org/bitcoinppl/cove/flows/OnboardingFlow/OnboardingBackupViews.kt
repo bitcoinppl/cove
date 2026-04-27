@@ -1019,6 +1019,11 @@ internal fun OnboardingExchangeFundingView(
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(walletId) {
+        walletManager = null
+        addressRaw = null
+        addressText = null
+        errorMessage = null
+
         if (walletId == null) {
             errorMessage = "Unable to load a deposit address for this wallet."
             return@LaunchedEffect

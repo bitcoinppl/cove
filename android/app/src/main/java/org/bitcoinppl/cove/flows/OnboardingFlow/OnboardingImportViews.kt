@@ -65,6 +65,7 @@ import org.bitcoinppl.cove_core.WalletException
 import org.bitcoinppl.cove_core.multiFormatTryFromNfcMessage
 import org.bitcoinppl.cove_core.nfc.NfcMessage
 import org.bitcoinppl.cove_core.types.WalletId
+import org.bitcoinppl.cove_core.use
 
 private sealed interface SoftwareImportMode {
     data object Chooser : SoftwareImportMode
@@ -438,9 +439,10 @@ private fun OnboardingHardwareNfcImportView(
             when (result) {
                 is NfcScanResult.Success -> {
                     try {
-                        val message = NfcMessage.tryNew(result.text, result.data)
-                        val multiFormat = multiFormatTryFromNfcMessage(message)
-                        val walletId = importHardwareWalletFromMultiFormat(multiFormat)
+                        val walletId =
+                            NfcMessage.tryNew(result.text, result.data).use { message ->
+                                importHardwareWalletFromMultiFormat(multiFormatTryFromNfcMessage(message))
+                            }
                         nfcReader.reset()
                         onImported(walletId)
                     } catch (error: Exception) {
@@ -577,9 +579,14 @@ private fun importHardwareWalletFromPath(filePath: String): WalletId =
     }
 
 private fun importHardwareWalletFromMultiFormat(multiFormat: MultiFormat): WalletId =
-    when (multiFormat) {
-        is MultiFormat.HardwareExport -> importHardwareWalletFromExport(multiFormat.v1)
-        else -> throw IllegalArgumentException("That data doesn't contain a hardware wallet export.")
+    multiFormat.use { format ->
+        when (format) {
+            is MultiFormat.HardwareExport ->
+                format.v1.use { export ->
+                    importHardwareWalletFromExport(export)
+                }
+            else -> throw IllegalArgumentException("That data doesn't contain a hardware wallet export.")
+        }
     }
 
 private fun importHardwareWalletFromExport(export: HardwareExport): WalletId =
