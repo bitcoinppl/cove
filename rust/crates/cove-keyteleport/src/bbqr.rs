@@ -3,46 +3,48 @@
 /// BBQr format: `B$<encoding><file_type><num_parts_hex2><part_index_hex2><base32_data>`
 /// For single-frame packets: num_parts=01, part_index=00.
 /// Encoding byte `2` = Base32, no compression (as required by the COLDCARD spec).
+use bbqr::encode::Encoding;
 use data_encoding::BASE32_NOPAD;
 
 use crate::error::Error;
 
 /// Key Teleport BBQr file type codes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum KtFileType {
+pub enum KeyTeleportFileType {
     /// `R` — receiver packet (encrypted pubkey)
     Receiver,
     /// `S` — sender packet (sender pubkey + encrypted body)
     Sender,
 }
 
-impl KtFileType {
+impl KeyTeleportFileType {
     pub fn as_char(self) -> char {
         match self {
-            KtFileType::Receiver => 'R',
-            KtFileType::Sender => 'S',
+            KeyTeleportFileType::Receiver => 'R',
+            KeyTeleportFileType::Sender => 'S',
         }
     }
 
     fn from_char(c: char) -> Result<Self, Error> {
         match c {
-            'R' => Ok(KtFileType::Receiver),
-            'S' => Ok(KtFileType::Sender),
+            'R' => Ok(KeyTeleportFileType::Receiver),
+            'S' => Ok(KeyTeleportFileType::Sender),
             other => Err(Error::InvalidBbqr(format!("unknown Key Teleport type: '{other}'"))),
         }
     }
 }
 
 /// Encode binary data as a single-frame BBQr string with the given Key Teleport file type.
-pub fn encode(data: &[u8], file_type: KtFileType) -> String {
+pub fn encode(data: &[u8], file_type: KeyTeleportFileType) -> String {
     let b32 = BASE32_NOPAD.encode(data);
     // num_parts=01 (1 frame total), part_index=00 (first/only frame)
-    format!("B$2{}0100{}", file_type.as_char(), b32)
+    // Encoding::Base32 corresponds to byte '2' per the BBQr spec
+    format!("B${}{}0100{}", Encoding::Base32.as_byte() as char, file_type.as_char(), b32)
 }
 
 /// Decode a single-frame BBQr string, returning the file type and binary payload.
 /// Multi-frame packets are rejected — higher-level transport code handles reassembly.
-pub fn decode(s: &str) -> Result<(KtFileType, Vec<u8>), Error> {
+pub fn decode(s: &str) -> Result<(KeyTeleportFileType, Vec<u8>), Error> {
     let s = s.trim().to_uppercase();
 
     let rest =
@@ -53,14 +55,16 @@ pub fn decode(s: &str) -> Result<(KtFileType, Vec<u8>), Error> {
     }
 
     let mut chars = rest.chars();
-    let encoding = chars.next().unwrap();
-    if encoding != '2' {
+    let encoding_char = chars.next().unwrap();
+    let encoding = Encoding::from_byte(encoding_char as u8)
+        .ok_or_else(|| Error::InvalidBbqr(format!("unknown encoding '{encoding_char}'")))?;
+    if encoding != Encoding::Base32 {
         return Err(Error::InvalidBbqr(format!(
-            "unsupported encoding '{encoding}' (only Base32/'2' is supported)"
+            "unsupported encoding '{encoding_char}' (only Base32/'2' is supported)"
         )));
     }
 
-    let file_type = KtFileType::from_char(chars.next().unwrap())?;
+    let file_type = KeyTeleportFileType::from_char(chars.next().unwrap())?;
 
     // num_parts and part_index are 2 uppercase hex chars each
     let header_tail: String = chars.take(4).collect();
@@ -93,10 +97,10 @@ mod tests {
     #[test]
     fn encode_decode_roundtrip_receiver() {
         let data = vec![0xAAu8; 33];
-        let encoded = encode(&data, KtFileType::Receiver);
+        let encoded = encode(&data, KeyTeleportFileType::Receiver);
         assert!(encoded.starts_with("B$2R0100"));
         let (ft, decoded) = decode(&encoded).unwrap();
-        assert_eq!(ft, KtFileType::Receiver);
+        assert_eq!(ft, KeyTeleportFileType::Receiver);
         assert_eq!(decoded, data);
     }
 
@@ -104,10 +108,10 @@ mod tests {
     fn encode_decode_roundtrip_sender() {
         let mut data = vec![0x01u8; 33];
         data.extend_from_slice(&[0xBBu8; 80]);
-        let encoded = encode(&data, KtFileType::Sender);
+        let encoded = encode(&data, KeyTeleportFileType::Sender);
         assert!(encoded.starts_with("B$2S0100"));
         let (ft, decoded) = decode(&encoded).unwrap();
-        assert_eq!(ft, KtFileType::Sender);
+        assert_eq!(ft, KeyTeleportFileType::Sender);
         assert_eq!(decoded, data);
     }
 
@@ -116,7 +120,7 @@ mod tests {
         // From keyteleport.com: B$2R0100VHT2AGUUH7KUZUUSTOWOIWHJX3XM7GA2N4BHQOXDFHXLVHVA7K6ZO
         let s = "B$2R0100VHT2AGUUH7KUZUUSTOWOIWHJX3XM7GA2N4BHQOXDFHXLVHVA7K6ZO";
         let (ft, data) = decode(s).unwrap();
-        assert_eq!(ft, KtFileType::Receiver);
+        assert_eq!(ft, KeyTeleportFileType::Receiver);
         assert_eq!(data.len(), 33);
     }
 

@@ -1202,6 +1202,7 @@ name = "cove-keyteleport"
 version = "0.1.0"
 dependencies = [
  "aes",
+ "bbqr",
  "bip39",
  "bitcoin",
  "ctr",
