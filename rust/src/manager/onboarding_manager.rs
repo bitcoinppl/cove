@@ -1893,6 +1893,43 @@ mod tests {
     }
 
     #[test]
+    fn invalid_action_leaves_current_flow_unchanged() {
+        let mut flow = FlowState::SoftwareImport;
+        let mut restore_offer_allowed = true;
+
+        let command = flow.apply_user_action(
+            OnboardingAction::ContinueFromBackup,
+            CloudRestoreDiscovery::BackupFound,
+            &mut restore_offer_allowed,
+        );
+
+        assert_eq!(command, TransitionCommand::None);
+        assert!(matches!(flow, FlowState::SoftwareImport));
+        assert!(restore_offer_allowed);
+    }
+
+    #[test]
+    fn restoring_failure_returns_to_restore_offer_with_error() {
+        let mut flow = FlowState::Restoring { origin: RestoreOrigin::ReturningUserChoice };
+        let mut restore_offer_allowed = true;
+
+        let command = flow.apply_user_action(
+            OnboardingAction::RestoreFailed { error: "passkey verification failed".into() },
+            CloudRestoreDiscovery::BackupFound,
+            &mut restore_offer_allowed,
+        );
+
+        assert_eq!(command, TransitionCommand::None);
+        assert!(matches!(
+            flow,
+            FlowState::RestoreOffer {
+                origin: RestoreOrigin::ReturningUserChoice,
+                error_message: Some(message),
+            } if message == "passkey verification failed"
+        ));
+    }
+
+    #[test]
     fn explicit_restore_without_backup_goes_to_restore_unavailable() {
         let mut flow = FlowState::ReturningUserChoice;
         let mut restore_offer_allowed = true;
