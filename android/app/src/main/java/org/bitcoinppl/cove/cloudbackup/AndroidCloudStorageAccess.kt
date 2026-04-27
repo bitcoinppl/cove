@@ -82,26 +82,6 @@ internal fun driveFileNameForRecordId(
         walletFileName(recordId)
     }
 
-internal fun driveFileNameForRecordId(recordId: String): String =
-    driveFileNameForRecordId(
-        recordId = recordId,
-        masterKeyRecordId = csppMasterKeyRecordId(),
-        masterKeyFileName = { DrivePaths.masterKeyFileName },
-        walletFileName = DrivePaths::walletFileName,
-    )
-
-internal fun driveFileNameForRecordId(
-    recordId: String,
-    masterKeyRecordId: String,
-    masterKeyFileName: () -> String,
-    walletFileName: (String) -> String,
-): String =
-    if (recordId == masterKeyRecordId) {
-        masterKeyFileName()
-    } else {
-        walletFileName(recordId)
-    }
-
 internal data class UploadMetadata(
     val name: String,
     val parents: List<String> = emptyList(),
@@ -347,7 +327,7 @@ class AndroidCloudStorageAccess internal constructor(
                 findChildByName(
                     token = token,
                     parentId = namespaceFolderId,
-                    fileName = driveFileNameForRecordId(recordId),
+                    fileName = DrivePaths.walletFileName(recordId),
                 ) ?: throw DriveHttpException(404, "wallet backup not found")
 
             driveRequest(

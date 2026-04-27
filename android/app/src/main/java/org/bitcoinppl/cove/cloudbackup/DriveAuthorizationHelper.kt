@@ -23,12 +23,6 @@ internal interface DriveAuthorization {
     suspend fun clearToken(token: String)
 }
 
-internal interface DriveAuthorization {
-    suspend fun accessToken(interactive: Boolean): String
-
-    suspend fun clearToken(token: String)
-}
-
 internal class DriveAuthorizationHelper(
     context: Context,
 ) : DriveAuthorization {
