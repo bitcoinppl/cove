@@ -135,6 +135,12 @@ class WalletManager :
             android.util.Log.d("WalletManager", "Initialized WalletManager from TapSigner")
             return WalletManager(metadata.id, rust, metadata)
         }
+
+        internal fun previewNew(): WalletManager {
+            val rust = RustWalletManager.previewNewWallet()
+            val metadata = rust.walletMetadata()
+            return WalletManager(metadata.id, rust, metadata)
+        }
     }
 
     private fun logDebug(message: String) {

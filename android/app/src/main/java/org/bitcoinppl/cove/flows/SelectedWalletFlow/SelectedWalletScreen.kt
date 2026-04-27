@@ -54,6 +54,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.tooling.preview.PreviewParameter
+import androidx.compose.ui.tooling.preview.PreviewParameterProvider
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.async
@@ -80,32 +82,23 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 @Preview(showBackground = true, backgroundColor = 0xFF0D1B2A)
 @Composable
-private fun SelectedWalletLightPreview() {
-    val snack = remember { SnackbarHostState() }
+private fun SelectedWalletFunctionalPreview(
+    @PreviewParameter(SelectedWalletPreviewModeProvider::class) isDarkList: Boolean,
+) {
     SelectedWalletScreen(
         onBack = {},
         onSend = {},
         onReceive = {},
         onQrCode = {},
         onMore = {},
-        isDarkList = false,
-        snackbarHostState = snack,
+        isDarkList = isDarkList,
+        manager = remember { WalletManager.previewNew() },
+        app = remember { AppManager.getInstance() },
     )
 }
 
-@Preview(showBackground = true, backgroundColor = 0xFF0D1B2A)
-@Composable
-private fun SelectedWalletDarkPreview() {
-    val snack = remember { SnackbarHostState() }
-    SelectedWalletScreen(
-        onBack = {},
-        onSend = {},
-        onReceive = {},
-        onQrCode = {},
-        onMore = {},
-        isDarkList = true,
-        snackbarHostState = snack,
-    )
+private class SelectedWalletPreviewModeProvider : PreviewParameterProvider<Boolean> {
+    override val values: Sequence<Boolean> = sequenceOf(false, true)
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -118,51 +111,38 @@ fun SelectedWalletScreen(
     onQrCode: () -> Unit,
     onMore: () -> Unit,
     isDarkList: Boolean,
-    manager: WalletManager? = null,
-    app: AppManager? = null,
-    satsAmount: String = "1,166,369 SATS",
-    walletName: String = "Main",
+    manager: WalletManager,
+    app: AppManager,
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
-    // extract real data from manager if available
-    val actualWalletName = manager?.walletMetadata?.name ?: walletName
-    val actualSatsAmount =
-        manager?.let {
-            val spendable = it.balance.spendable()
-            it.displayAmount(spendable, showUnit = true)
-        } ?: satsAmount
+    val actualWalletName = manager.walletMetadata?.name ?: "Wallet"
+    val actualSatsAmount = manager.displayAmount(manager.balance.spendable(), showUnit = true)
 
     val actualSatsPending =
-        remember(manager?.balance, manager?.walletMetadata?.selectedUnit) {
-            manager?.let {
-                val pending = it.balance.untrustedPending()
-                it.rust.displayAmountPendingFmt(pending)
-            }
+        remember(manager.balance, manager.walletMetadata?.selectedUnit) {
+            val pending = manager.balance.untrustedPending()
+            manager.rust.displayAmountPendingFmt(pending)
         }
 
     val fiatBalance =
-        remember(manager?.balance, app?.prices) {
-            manager?.let {
-                it.rust.amountInFiat(it.balance.spendable())?.let { fiat ->
-                    it.rust.displayFiatAmount(fiat)
-                }
+        remember(manager.balance, app.prices) {
+            manager.rust.amountInFiat(manager.balance.spendable())?.let { fiat ->
+                manager.rust.displayFiatAmount(fiat)
             }
         }
 
     val fiatBalancePending =
-        remember(manager?.balance, app?.prices) {
-            manager?.let {
-                val pending = it.balance.untrustedPending()
-                it.rust.amountInFiat(pending)?.let { fiat ->
-                    it.rust.displayFiatAmountPendingFmt(fiat, withSuffix = true)
-                }
+        remember(manager.balance, app.prices) {
+            val pending = manager.balance.untrustedPending()
+            manager.rust.amountInFiat(pending)?.let { fiat ->
+                manager.rust.displayFiatAmountPendingFmt(fiat, withSuffix = true)
             }
         }
 
-    val unsignedTransactions = manager?.unsignedTransactions ?: emptyList()
+    val unsignedTransactions = manager.unsignedTransactions
 
     LaunchedEffect(manager) {
-        manager?.validateMetadata()
+        manager.validateMetadata()
     }
 
     // use Material Design system colors for native Android feel
@@ -194,8 +174,8 @@ fun SelectedWalletScreen(
 
     // state for wallet name rename dropdown
     var showRenameMenu by remember { mutableStateOf(false) }
-    val isColdWallet = manager?.walletMetadata?.walletType == WalletType.COLD
-    val isWatchOnly = manager?.walletMetadata?.walletType == WalletType.WATCH_ONLY
+    val isColdWallet = manager.walletMetadata?.walletType == WalletType.COLD
+    val isWatchOnly = manager.walletMetadata?.walletType == WalletType.WATCH_ONLY
 
     // force white status bar icons for midnight blue background
     ForceLightStatusBarIcons()
@@ -254,8 +234,8 @@ fun SelectedWalletScreen(
                                 text = { Text(stringResource(R.string.change_name)) },
                                 onClick = {
                                     showRenameMenu = false
-                                    manager?.walletMetadata?.id?.let { id ->
-                                        app?.pushRoute(
+                                    manager.walletMetadata?.id?.let { id ->
+                                        app.pushRoute(
                                             Route.Settings(
                                                 SettingsRoute.Wallet(
                                                     id = id,
@@ -319,8 +299,8 @@ fun SelectedWalletScreen(
                     .fillMaxSize()
                     .padding(bottom = padding.calculateBottomPadding()),
         ) {
-            val fiatOrBtc = manager?.walletMetadata?.fiatOrBtc ?: FiatOrBtc.BTC
-            val sensitiveVisible = manager?.walletMetadata?.sensitiveVisible ?: true
+            val fiatOrBtc = manager.walletMetadata?.fiatOrBtc ?: FiatOrBtc.BTC
+            val sensitiveVisible = manager.walletMetadata?.sensitiveVisible ?: true
 
             Column(
                 modifier = Modifier.fillMaxSize(),
@@ -338,23 +318,23 @@ fun SelectedWalletScreen(
                     }
 
                 val hasTransactions =
-                    when (val loadState = manager?.loadState) {
+                    when (val loadState = manager.loadState) {
                         is WalletLoadState.SCANNING -> loadState.txns.isNotEmpty() || unsignedTransactions.isNotEmpty()
                         is WalletLoadState.LOADED -> loadState.txns.isNotEmpty() || unsignedTransactions.isNotEmpty()
                         else -> false
                     }
 
-                val isVerified = manager?.isVerified ?: true
-                val walletId = manager?.walletMetadata?.id
-                val showLabels = manager?.walletMetadata?.showLabels ?: false
-                val loadState = manager?.loadState
+                val isVerified = manager.isVerified
+                val walletId = manager.walletMetadata?.id
+                val showLabels = manager.walletMetadata?.showLabels ?: false
+                val loadState = manager.loadState
 
                 // determine transaction data based on load state
                 val (transactions, isScanning, isFirstScan) =
                     when (loadState) {
                         is WalletLoadState.SCANNING -> {
                             val txns = loadState.txns
-                            val firstScan = manager?.walletMetadata?.internal?.lastScanFinished == null
+                            val firstScan = manager.walletMetadata?.internal?.lastScanFinished == null
                             Triple(txns, true, firstScan)
                         }
                         is WalletLoadState.LOADED -> Triple(loadState.txns, false, false)
@@ -362,16 +342,16 @@ fun SelectedWalletScreen(
                     }
 
                 // transfer pending scroll ID to active when returning from details screen
-                LaunchedEffect(Unit) {
-                    manager?.pendingScrollTransactionId?.let { id ->
+                LaunchedEffect(manager.pendingScrollTransactionId) {
+                    manager.pendingScrollTransactionId?.let { id ->
                         manager.scrolledTransactionId = id
                         manager.pendingScrollTransactionId = null
                     }
                 }
 
                 // scroll to saved transaction when returning from details
-                LaunchedEffect(manager?.scrolledTransactionId, hasTransactions) {
-                    val targetId = manager?.scrolledTransactionId ?: return@LaunchedEffect
+                LaunchedEffect(manager.scrolledTransactionId, hasTransactions) {
+                    val targetId = manager.scrolledTransactionId ?: return@LaunchedEffect
                     if (!hasTransactions) return@LaunchedEffect
 
                     // account for header items:
@@ -385,7 +365,7 @@ fun SelectedWalletScreen(
                     val unsignedIndex = unsignedTransactions.indexOfFirst { it.id().toString() == targetId }
                     if (unsignedIndex >= 0) {
                         listState.animateScrollToItem(baseOffset + unsignedIndex)
-                        manager?.scrolledTransactionId = null
+                        manager.scrolledTransactionId = null
                         return@LaunchedEffect
                     }
 
@@ -398,7 +378,7 @@ fun SelectedWalletScreen(
                         }
                     if (txIndex >= 0) {
                         listState.animateScrollToItem(baseOffset + unsignedTransactions.size + txIndex)
-                        manager?.scrolledTransactionId = null
+                        manager.scrolledTransactionId = null
                     }
                 }
 
@@ -406,8 +386,7 @@ fun SelectedWalletScreen(
                     PullToRefreshBox(
                         isRefreshing = isRefreshing,
                         onRefresh = {
-                            if (manager != null &&
-                                manager.loadState is WalletLoadState.LOADED &&
+                            if (manager.loadState is WalletLoadState.LOADED &&
                                 isRefreshInProgress.compareAndSet(false, true)
                             ) {
                                 scope.launch {
@@ -440,8 +419,8 @@ fun SelectedWalletScreen(
                                     primaryAmount = primaryAmount,
                                     secondaryAmount = secondaryAmount,
                                     pendingAmount = pendingAmount,
-                                    onToggleUnit = { manager?.dispatch(WalletManagerAction.ToggleFiatBtcPrimarySecondary) },
-                                    onToggleSensitive = { manager?.dispatch(WalletManagerAction.ToggleSensitiveVisibility) },
+                                    onToggleUnit = { manager.dispatch(WalletManagerAction.ToggleFiatBtcPrimarySecondary) },
+                                    onToggleSensitive = { manager.dispatch(WalletManagerAction.ToggleSensitiveVisibility) },
                                     onSend = onSend,
                                     onReceive = onReceive,
                                     isWatchOnly = isWatchOnly,
@@ -459,7 +438,7 @@ fun SelectedWalletScreen(
 
                             // transaction items
                             when {
-                                loadState is WalletLoadState.LOADING || loadState == null -> {
+                                loadState is WalletLoadState.LOADING -> {
                                     item(key = "loading") {
                                         TransactionsLoadingView(
                                             secondaryText = secondaryText,
@@ -514,7 +493,7 @@ fun SelectedWalletScreen(
 private fun VerifyReminder(
     walletId: WalletId?,
     isVerified: Boolean,
-    app: AppManager?,
+    app: AppManager,
 ) {
     if (!isVerified && walletId != null) {
         Box(
@@ -522,7 +501,7 @@ private fun VerifyReminder(
                 Modifier
                     .fillMaxWidth()
                     .clickable {
-                        app?.pushRoute(
+                        app.pushRoute(
                             Route.NewWallet(
                                 NewWalletRoute.HotWallet(
                                     HotWalletRoute.VerifyWords(walletId),
