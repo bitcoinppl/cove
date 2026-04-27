@@ -108,7 +108,7 @@ struct SendFlowCoinControlSetAmountScreen: View {
                     .padding(.horizontal, 30)
                     .frame(height: UIFont.boldSystemFont(ofSize: 48).lineHeight)
                     .onTapGesture {
-                        guard selectedFeeRate != nil else { return }
+                        guard sendFlowManager.feeSelection != nil else { return }
                         customAmountSheetIsPresented = true
                     }
 
@@ -191,7 +191,7 @@ struct SendFlowCoinControlSetAmountScreen: View {
                         // Account Section
                         AccountSection
 
-                        if sendFlowManager.feeRateOptions != nil,
+                        if sendFlowManager.feeSelection != nil,
                            sendFlowManager.address != nil
                         {
                             // Network Fee Section
@@ -547,17 +547,16 @@ struct SendFlowCoinControlSetAmountScreen: View {
             QrCodeAddressView(app: _app, scannedCode: $scannedCode)
                 .presentationDetents([.large])
         case .fee:
-            if let localFeeOptions = sendFlowManager.feeRateOptions {
+            if let localFeeSelection = sendFlowManager.feeSelection {
                 SendFlowSelectFeeRateView(
                     manager: manager,
                     feeOptions: Binding(
-                        get: { sendFlowManager.feeRateOptions ?? localFeeOptions },
+                        get: { sendFlowManager.feeSelection?.options ?? localFeeSelection.options },
                         set: { sendFlowManager.dispatch(action: .changeFeeRateOptions($0)) }
                     ),
                     selectedOption: Binding(
                         get: {
-                            let feeOptions = sendFlowManager.feeRateOptions ?? localFeeOptions
-                            return sendFlowManager.selectedFeeRate ?? feeOptions.medium()
+                            sendFlowManager.feeSelection?.selected ?? localFeeSelection.selected
                         },
                         set: { newValue in
                             sendFlowManager.dispatch(action: .selectFeeRate(newValue))

@@ -144,6 +144,25 @@ internal fun parseSignedImport(input: String): Pair<UnsignedTransactionRecord, S
     return Pair(record, parsed)
 }
 
+private fun signedImportRoute(
+    txnRecord: UnsignedTransactionRecord,
+    parsed: SignedTransactionOrPsbt,
+): Route =
+    when (parsed) {
+        is SignedTransactionOrPsbt.Transaction ->
+            RouteFactory().sendConfirmSignedTransaction(
+                id = txnRecord.walletId(),
+                details = txnRecord.confirmDetails(),
+                transaction = parsed.v1,
+            )
+        is SignedTransactionOrPsbt.SignedPsbt ->
+            RouteFactory().sendConfirmSignedPsbt(
+                id = txnRecord.walletId(),
+                details = txnRecord.confirmDetails(),
+                psbt = parsed.v1,
+            )
+    }
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SendFlowHardwareScreen(
@@ -190,13 +209,7 @@ fun SendFlowHardwareScreen(
 
                         val (txnRecord, parsed) = parseSignedImport(fileContents.trim())
 
-                        val route =
-                            RouteFactory().sendConfirm(
-                                id = txnRecord.walletId(),
-                                details = txnRecord.confirmDetails(),
-                                signedTransaction = parsed.transaction(),
-                                signedPsbt = parsed.psbt(),
-                            )
+                        val route = signedImportRoute(txnRecord, parsed)
 
                         app.pushRoute(route)
                     } catch (e: Exception) {
@@ -561,13 +574,7 @@ fun SendFlowHardwareScreen(
                                         try {
                                             val (txnRecord, parsed) = parseSignedImport(code.trim())
 
-                                            val route =
-                                                RouteFactory().sendConfirm(
-                                                    id = txnRecord.walletId(),
-                                                    details = txnRecord.confirmDetails(),
-                                                    signedTransaction = parsed.transaction(),
-                                                    signedPsbt = parsed.psbt(),
-                                                )
+                                            val route = signedImportRoute(txnRecord, parsed)
 
                                             app.pushRoute(route)
                                         } catch (e: Exception) {
@@ -657,20 +664,21 @@ private fun BalanceHeader(
 ) {
     val metadata = walletManager.walletMetadata
     val balance = walletManager.balance.spendable()
+    val selectedUnit = metadata?.selectedUnit
     val isHidden = metadata?.sensitiveVisible != true
 
     val balanceString =
         if (isHidden) {
             "••••••"
         } else {
-            when (metadata?.selectedUnit) {
+            when (selectedUnit) {
                 BitcoinUnit.BTC -> balance.btcString()
                 else -> balance.satsString()
             }
         }
 
     val denomination =
-        when (metadata?.selectedUnit) {
+        when (selectedUnit) {
             BitcoinUnit.BTC -> "btc"
             else -> "sats"
         }

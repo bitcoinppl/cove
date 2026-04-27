@@ -203,10 +203,10 @@ class ScanManager private constructor() {
         }
 
         val route =
-            RouteFactory().sendConfirm(
+            RouteFactory().sendConfirmSignedTransaction(
                 id = txnRecord.walletId(),
                 details = txnRecord.confirmDetails(),
-                signedTransaction = transaction,
+                transaction = transaction,
             )
 
         app.pushRoute(route)
@@ -225,10 +225,10 @@ class ScanManager private constructor() {
         }
 
         val route =
-            RouteFactory().sendConfirm(
+            RouteFactory().sendConfirmSignedPsbt(
                 id = txnRecord.walletId(),
                 details = txnRecord.confirmDetails(),
-                signedPsbt = psbt,
+                psbt = psbt,
             )
 
         app.pushRoute(route)

@@ -150,7 +150,7 @@ struct SendFlowSetAmountScreen: View {
                         // Account Section
                         AccountSection
 
-                        if sendFlowManager.feeRateOptions != nil,
+                        if sendFlowManager.feeSelection != nil,
                            sendFlowManager.address != nil
                         {
                             // Network Fee Section
@@ -480,7 +480,7 @@ struct SendFlowSetAmountScreen: View {
                 .fontWeight(.medium)
 
             HStack {
-                Text(selectedFeeRate?.duration() ?? "2 hours")
+                Text(selectedFeeRate?.duration() ?? "")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                 Button("Change speed") {
@@ -585,19 +585,12 @@ struct SendFlowSetAmountScreen: View {
             SendFlowSelectFeeRateView(
                 manager: manager,
                 feeOptions: Binding(
-                    get: { sendFlowManager.feeRateOptions! },
+                    get: { sendFlowManager.feeSelection!.options },
                     set: { sendFlowManager.dispatch(action: .changeFeeRateOptions($0)) }
                 ),
                 selectedOption: Binding(
                     get: {
-                        guard let selectedFeeRate = sendFlowManager.selectedFeeRate else {
-                            // Default to medium if nothing selected
-                            if let options = sendFlowManager.feeRateOptions {
-                                return options.medium()
-                            }
-                            return FeeRateOptionsWithTotalFee.previewNew().medium()
-                        }
-                        return selectedFeeRate
+                        sendFlowManager.feeSelection!.selected
                     },
                     set: { newValue in
                         sendFlowManager.dispatch(action: .selectFeeRate(newValue))

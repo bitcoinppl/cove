@@ -46,8 +46,13 @@ pub struct SendFlowManagerState {
     pub address: Option<Arc<Address>>,
     pub focus_field: Option<SetAmountFocusField>,
 
-    pub selected_fee_rate: Option<Arc<FeeRateOptionWithTotalFee>>,
-    pub fee_rate_options: Option<Arc<FeeRateOptionsWithTotalFee>>,
+    pub fee_selection: Option<FeeSelection>,
+}
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
+pub struct FeeSelection {
+    pub options: Arc<FeeRateOptionsWithTotalFee>,
+    pub selected: Arc<FeeRateOptionWithTotalFee>,
 }
 
 // define types this way so uniffi generates unique named types but the rust code just uses the abbreviated name
@@ -135,13 +140,21 @@ impl SendFlowManagerState {
             max_selected: None,
             focus_field: None,
             address: None,
-            selected_fee_rate: None,
             wallet_balance: Some(balance),
-            fee_rate_options: None,
+            fee_selection: None,
             btc_price_in_fiat,
             selected_fiat_currency,
             has_base_fees: false,
         }
+    }
+}
+
+impl FeeSelection {
+    pub fn new(
+        options: impl Into<Arc<FeeRateOptionsWithTotalFee>>,
+        selected: impl Into<Arc<FeeRateOptionWithTotalFee>>,
+    ) -> Self {
+        Self { options: options.into(), selected: selected.into() }
     }
 }
 

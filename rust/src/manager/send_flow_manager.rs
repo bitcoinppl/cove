@@ -43,7 +43,7 @@ use error::SendFlowError;
 use fiat_on_change::FiatOnChangeHandler;
 use flume::Receiver;
 use parking_lot::Mutex;
-use state::{CoinControlMode, EnterMode, SendFlowManagerState, State};
+use state::{CoinControlMode, EnterMode, FeeSelection, SendFlowManagerState, State};
 use tracing::{debug, error, trace, warn};
 
 use super::{
@@ -65,6 +65,24 @@ type DeferredSender = deferred_sender::DeferredSender<Message>;
 pub enum SetAmountFocusField {
     Amount,
     Address,
+}
+
+fn selected_fee_rate_for_options(
+    fee_options: &FeeRateOptionsWithTotalFee,
+    selected_fee_rate: Option<&Arc<FeeRateOptionWithTotalFee>>,
+) -> Arc<FeeRateOptionWithTotalFee> {
+    let Some(selected_fee_rate) = selected_fee_rate else {
+        return Arc::new(fee_options.medium);
+    };
+
+    match selected_fee_rate.fee_speed {
+        FeeSpeed::Custom { .. } => {
+            fee_options.custom().unwrap_or_else(|| fee_options.medium.into())
+        }
+        FeeSpeed::Fast => fee_options.fast.into(),
+        FeeSpeed::Medium => fee_options.medium.into(),
+        FeeSpeed::Slow => fee_options.slow.into(),
+    }
 }
 
 #[uniffi::export(callback_interface)]
@@ -103,8 +121,7 @@ pub enum SendFlowManagerReconcileMessage {
 
     UpdateFocusField(Option<SetAmountFocusField>),
 
-    UpdateSelectedFeeRate(Arc<FeeRateOptionWithTotalFee>),
-    UpdateFeeRateOptions(Arc<FeeRateOptionsWithTotalFee>),
+    UpdateFeeSelection(FeeSelection),
 
     RefreshPresenters,
 
@@ -168,10 +185,12 @@ impl RustSendFlowManager {
         let has_base_fees = if let Some(fee_response) = FEE_CLIENT.fees() {
             let base_options = FeeRateOptions::from(fee_response);
             let fee_options = FeeRateOptionsWithTotalFee::without_totals(base_options);
+            let selected = Arc::new(fee_options.medium);
+            let fee_selection = FeeSelection::new(Arc::new(fee_options), selected);
 
             let mut state_guard = state.lock();
             state_guard.fee_rate_options_base = Some(Arc::new(base_options));
-            state_guard.fee_rate_options = Some(Arc::new(fee_options));
+            state_guard.fee_selection = Some(fee_selection);
             state_guard.has_base_fees = true;
             true
         } else {
@@ -381,7 +400,7 @@ impl RustSendFlowManager {
 
     #[uniffi::method]
     pub fn total_fee_string(&self) -> Option<String> {
-        let selected_fee_rate = self.state.lock().selected_fee_rate.clone()?;
+        let selected_fee_rate = self.selected_fee_rate()?;
         let total_fee = selected_fee_rate.total_fee()?;
 
         let string = match self.state.lock().metadata.selected_unit {
@@ -433,7 +452,7 @@ impl RustSendFlowManager {
     #[uniffi::method(default(display_alert = false))]
     pub fn validate_fee_percentage(self: &Arc<Self>, display_alert: bool) -> bool {
         let Some(amount) = self.state.lock().amount_sats else { return false };
-        let Some(fee_rate) = self.state.lock().selected_fee_rate.clone() else { return false };
+        let Some(fee_rate) = self.selected_fee_rate() else { return false };
         let Some(total_fee) = fee_rate.total_fee() else { return false };
 
         let fee_sats = total_fee.as_sats();
@@ -653,8 +672,9 @@ impl RustSendFlowManager {
             }
 
             Action::ChangeFeeRateOptions(fee_options) => {
-                self.state.lock().fee_rate_options = Some(fee_options.clone());
-                self.reconciler.send(Message::UpdateFeeRateOptions(fee_options));
+                let selection = self.fee_selection_for_options(fee_options);
+                self.state.lock().fee_selection = Some(selection.clone());
+                self.reconciler.send(Message::UpdateFeeSelection(selection));
             }
 
             Action::ChangeEnteringAddress(string) => {
@@ -676,6 +696,23 @@ impl RustSendFlowManager {
 
 // MARK: Private getters
 impl RustSendFlowManager {
+    fn selected_fee_rate(&self) -> Option<Arc<FeeRateOptionWithTotalFee>> {
+        self.state.lock().fee_selection.as_ref().map(|selection| selection.selected.clone())
+    }
+
+    fn fee_rate_options(&self) -> Option<Arc<FeeRateOptionsWithTotalFee>> {
+        self.state.lock().fee_selection.as_ref().map(|selection| selection.options.clone())
+    }
+
+    fn fee_selection_for_options(
+        &self,
+        fee_options: Arc<FeeRateOptionsWithTotalFee>,
+    ) -> FeeSelection {
+        let selected = self.selected_fee_rate();
+        let selected = selected_fee_rate_for_options(&fee_options, selected.as_ref());
+        FeeSelection::new(fee_options, selected)
+    }
+
     pub fn send_amount(&self) -> Option<Amount> {
         let amount_sats = self.state.lock().amount_sats?;
         Some(Amount::from_sat(amount_sats))
@@ -688,9 +725,7 @@ impl RustSendFlowManager {
         };
 
         let total_fee_sats = self
-            .state
-            .lock()
-            .selected_fee_rate
+            .selected_fee_rate()
             .as_ref()
             .and_then(|f| f.total_fee.map(|fee| fee.as_sats()))
             .unwrap_or(1000);
@@ -938,8 +973,11 @@ impl RustSendFlowManager {
     fn selected_fee_rate_changed(self: &Arc<Self>, fee_rate: Arc<FeeRateOptionWithTotalFee>) {
         debug!("selected_fee_rate_changed: {fee_rate:?}");
         let mut sender = DeferredSender::new(self.reconciler.clone());
-        self.state.lock().selected_fee_rate = Some(fee_rate.clone());
-        sender.queue(Message::UpdateSelectedFeeRate(fee_rate.clone()));
+        if let Some(options) = self.fee_rate_options() {
+            let selection = FeeSelection::new(options, fee_rate.clone());
+            self.state.lock().fee_selection = Some(selection.clone());
+            sender.queue(Message::UpdateFeeSelection(selection));
+        }
 
         // max was selected before, so we need to update it to match the new fee rate
         let max_selected = self.state.lock().max_selected.clone();
@@ -1169,9 +1207,9 @@ impl RustSendFlowManager {
         let total_minus_fees = {
             let mut state = self.state.lock();
             let total_fee_sats = state
-                .selected_fee_rate
+                .fee_selection
                 .as_ref()
-                .and_then(|fee_rate| fee_rate.total_fee.map(|f| f.as_sats()));
+                .and_then(|selection| selection.selected.total_fee.map(|f| f.as_sats()));
 
             state.mode = EnterMode::coin_control_max(utxo_list.clone());
             let total_minus_fees =
@@ -1326,8 +1364,10 @@ impl RustSendFlowManager {
                 .or_else(|| state.first_address.clone().map(Arc::unwrap_or_clone));
 
             let selected_fee_rate_base = state.fee_rate_options_base.clone();
-            let fee_rate_options = state.fee_rate_options.clone();
-            let selected_fee_rate = state.selected_fee_rate.clone();
+            let fee_rate_options =
+                state.fee_selection.as_ref().map(|selection| selection.options.clone());
+            let selected_fee_rate =
+                state.fee_selection.as_ref().map(|selection| selection.selected.clone());
             let address = address.ok_or(Error::InvalidAddress(address_string.to_string()))?;
 
             (address, fee_rate_options, selected_fee_rate, selected_fee_rate_base)
@@ -1573,7 +1613,7 @@ impl RustSendFlowManager {
             return self.send_alert(SendFlowError::InvalidAddress(invalid_address));
         };
 
-        let Some(selected_fee_rate) = self.state.lock().selected_fee_rate.clone() else {
+        let Some(selected_fee_rate) = self.selected_fee_rate() else {
             return self.send_alert(SendFlowError::UnableToGetFeeRate);
         };
 
@@ -1628,7 +1668,7 @@ impl RustSendFlowManager {
 
             // update the route send the frontend to the proper next screen
             let next_route = match wallet_type {
-                WalletType::Hot => RouteFactory::new().send_confirm(wallet_id, details, None, None),
+                WalletType::Hot => RouteFactory::new().send_confirm(wallet_id, details),
                 WalletType::Cold | WalletType::XpubOnly => {
                     RouteFactory::new().send_hardware_export(wallet_id, details)
                 }
@@ -1691,7 +1731,7 @@ impl RustSendFlowManager {
 
     fn total_spent_btc_amount(self: &Arc<Self>) -> Option<Amount> {
         let send_amount = self.send_amount()?;
-        let total_fee = self.state.lock().selected_fee_rate.as_ref()?.total_fee?;
+        let total_fee = self.selected_fee_rate()?.total_fee?;
         Some(send_amount + total_fee)
     }
 
@@ -1727,7 +1767,8 @@ impl RustSendFlowManager {
 
             let base_options = FeeRateOptions::from(fee_response);
             let fee_options = FeeRateOptionsWithTotalFee::without_totals(base_options);
-            let previous_selected = state.lock().selected_fee_rate.clone();
+            let previous_selected =
+                state.lock().fee_selection.as_ref().map(|selection| selection.selected.clone());
             let selected = previous_selected
                 .and_then(|selected| match selected.fee_speed {
                     FeeSpeed::Fast => Some(Arc::new(fee_options.fast)),
@@ -1738,11 +1779,11 @@ impl RustSendFlowManager {
                     }
                 })
                 .unwrap_or_else(|| Arc::new(fee_options.medium));
+            let fee_selection = FeeSelection::new(Arc::new(fee_options), selected);
 
             let mut state_guard = state.lock();
             state_guard.fee_rate_options_base = Some(Arc::new(base_options));
-            state_guard.fee_rate_options = Some(Arc::new(fee_options));
-            state_guard.selected_fee_rate = Some(selected);
+            state_guard.fee_selection = Some(fee_selection);
             state_guard.has_base_fees = true;
         });
     }
@@ -1846,13 +1887,13 @@ impl RustSendFlowManager {
         };
 
         // if user had a custom speed selected, re-apply it
-        let selected_fee_rate = state.lock().selected_fee_rate.clone();
+        let selected_fee_rate = self.selected_fee_rate();
         if let Some(updated_options) = self
             .updated_custom_fee_option(
                 address.clone(),
                 amount_for_fee_calc,
                 fee_rate_options,
-                selected_fee_rate,
+                selected_fee_rate.clone(),
             )
             .await
         {
@@ -1861,40 +1902,22 @@ impl RustSendFlowManager {
 
         // update the state
         let fee_rate_options_with_total_fee = Arc::new(fee_rate_options);
-        state.lock().fee_rate_options = Some(fee_rate_options_with_total_fee.clone());
-
-        // if no fee rate is selected, then set the default to medium
-        let selected_fee_rate = self.state.lock().selected_fee_rate.clone();
-        if let Some(selected_fee_rate) = selected_fee_rate.clone() {
-            let new_selected_fee_rate = match selected_fee_rate.fee_speed {
-                FeeSpeed::Custom { .. } => {
-                    fee_rate_options.custom().unwrap_or_else(|| fee_rate_options.medium.into())
-                }
-                FeeSpeed::Fast => fee_rate_options.fast.into(),
-                FeeSpeed::Medium => fee_rate_options.medium.into(),
-                FeeSpeed::Slow => fee_rate_options.slow.into(),
-            };
-
-            if new_selected_fee_rate != selected_fee_rate {
-                self.state.lock().selected_fee_rate = Some(new_selected_fee_rate.clone());
-                sender.queue(Message::UpdateSelectedFeeRate(new_selected_fee_rate));
-            }
-        } else {
-            let medium = Arc::new(fee_rate_options_with_total_fee.clone().medium);
-            self.state.lock().selected_fee_rate = Some(medium.clone());
-            sender.queue(Message::UpdateSelectedFeeRate(medium));
-        }
+        let selected = selected_fee_rate_for_options(
+            &fee_rate_options_with_total_fee,
+            selected_fee_rate.as_ref(),
+        );
+        let fee_selection = FeeSelection::new(fee_rate_options_with_total_fee, selected);
+        state.lock().fee_selection = Some(fee_selection.clone());
 
         // update the amount if in coin control max send
         match &mode {
             EnterMode::CoinControl(cc) if cc.is_max_selected => {
                 let max = cc.max_send();
-                let total_fee = selected_fee_rate
-                    .as_ref()
-                    .and_then(|fee_rate| fee_rate.total_fee.map(|f| f.as_sats()))
-                    .or_else(|| {
-                        fee_rate_options_with_total_fee.medium.total_fee.map(|f| f.as_sats())
-                    })
+                let total_fee = fee_selection
+                    .selected
+                    .total_fee
+                    .map(|fee| fee.as_sats())
+                    .or_else(|| fee_selection.options.medium.total_fee.map(|fee| fee.as_sats()))
                     .unwrap_or(0);
 
                 let send_amount = max.as_sats() - total_fee;
@@ -1905,7 +1928,7 @@ impl RustSendFlowManager {
             _ => {}
         }
 
-        sender.queue(Message::UpdateFeeRateOptions(fee_rate_options_with_total_fee));
+        sender.queue(Message::UpdateFeeSelection(fee_selection));
     }
 
     /// Returns the fee rate options with the updated custom fee

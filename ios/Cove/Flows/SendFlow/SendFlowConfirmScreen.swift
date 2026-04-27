@@ -15,12 +15,12 @@ struct SendFlowConfirmScreen: View {
     let id: WalletId
     @State var manager: WalletManager
     let details: ConfirmDetails
-    @State var signedTransaction: BitcoinTransaction?
-    let signedPsbt: Psbt?
+    let input: SendConfirmationInput
 
     let prices: PriceResponse? = nil
 
     // private
+    @State private var finalizedTransaction: BitcoinTransaction? = nil
     @State private var isShowingAlert = false
     @State private var sendState: SendState = .idle
     @State private var isShowingErrorAlert = false
@@ -47,11 +47,11 @@ struct SendFlowConfirmScreen: View {
 
     var body: some View {
         // signed psbt has not been finalized yet
-        if let psbt = signedPsbt, signedTransaction == nil {
+        if case let .signedPsbt(psbt) = input, finalizedTransaction == nil {
             FullPageLoadingView()
                 .task {
                     do {
-                        signedTransaction = try await manager.rust.finalizePsbt(psbt: psbt)
+                        finalizedTransaction = try await manager.rust.finalizePsbt(psbt: psbt)
                     } catch let error as WalletManagerError {
                         app.alertState = .init(.general(title: "Unable to finalize transaction", message: error.description))
                     } catch {
@@ -166,11 +166,17 @@ struct SendFlowConfirmScreen: View {
                     sendState = .sending
                     Task {
                         do {
-                            if let txn = signedTransaction {
+                            switch input {
+                            case let .signedTransaction(txn):
                                 _ = try await manager.rust.broadcastTransaction(
                                     signedTransaction: txn
                                 )
-                            } else {
+                            case .signedPsbt:
+                                guard let finalizedTransaction else { return }
+                                _ = try await manager.rust.broadcastTransaction(
+                                    signedTransaction: finalizedTransaction
+                                )
+                            case .unsigned:
                                 _ = try await manager.rust.signAndBroadcastTransaction(
                                     psbt: details.psbt()
                                 )
@@ -265,8 +271,7 @@ struct SendFlowConfirmScreen: View {
                                     id: WalletId(),
                                     manager: manager,
                                     details: confirmDetailsPreviewNew(),
-                                    signedTransaction: nil,
-                                    signedPsbt: nil
+                                    input: .unsigned
                                 )
                                 .environment(AppManager.shared)
                                 .environment(AuthManager.shared)
@@ -291,7 +296,7 @@ struct SendFlowConfirmScreen: View {
             id: WalletId(),
             manager: WalletManager(preview: "preview_only"),
             details: confirmDetailsPreviewNew(),
-            signedTransaction: nil, signedPsbt: nil
+            input: .unsigned
         )
         .environment(AppManager.shared)
         .environment(AuthManager.shared)

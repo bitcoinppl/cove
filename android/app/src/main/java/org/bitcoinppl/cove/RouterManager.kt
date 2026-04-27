@@ -80,9 +80,19 @@ object RouteHelpers {
     fun sendConfirm(
         id: WalletId,
         details: ConfirmDetails,
-        signedTransaction: BitcoinTransaction? = null,
-        signedPsbt: Psbt? = null,
-    ): Route = RouteFactory().sendConfirm(id, details, signedTransaction, signedPsbt)
+    ): Route = RouteFactory().sendConfirm(id, details)
+
+    fun sendConfirmSignedTransaction(
+        id: WalletId,
+        details: ConfirmDetails,
+        transaction: BitcoinTransaction,
+    ): Route = RouteFactory().sendConfirmSignedTransaction(id, details, transaction)
+
+    fun sendConfirmSignedPsbt(
+        id: WalletId,
+        details: ConfirmDetails,
+        psbt: Psbt,
+    ): Route = RouteFactory().sendConfirmSignedPsbt(id, details, psbt)
 
     /**
      * create a coin control send route
