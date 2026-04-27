@@ -24,7 +24,9 @@ jobs:
           toolchain: stable
 
       - name: Set up just
-        uses: extractions/setup-just@v4
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just
 
       - name: Setup Java
         uses: actions/setup-java@v5
@@ -80,7 +82,9 @@ jobs:
           toolchain: stable
 
       - name: Set up just
-        uses: extractions/setup-just@v4
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just
 
       - name: Build Rust FFI and generate Swift bindings
         run: just build-ios
