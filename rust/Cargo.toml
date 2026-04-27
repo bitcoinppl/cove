@@ -21,6 +21,7 @@ arc-swap = "1.7"
 
 # async
 tokio = { version = "1.43" }
+async-trait = "0.1.81"
 
 # encoding / decoding 
 hex = "0.4.3"
@@ -56,6 +57,7 @@ bitcoin = { version = "0.32" }
 bdk_wallet = { version = "2.3", features = ["keys-bip39", "file_store", "rusqlite"] }
 bip39 = { version = "2.2", features = ["zeroize"] }
 bip329 = { version = "0.4" }
+payjoin = { version = "0.25", default-features = false, features = ["v1"] }
 pubport = { version = "0.5" }
 
 # bitcoin nodes
@@ -151,7 +153,7 @@ act-zero-ext = "0.2.0"
 
 # async 
 tokio = { workspace = true, features = ["rt"] }
-async-trait = "0.1.81"
+async-trait = { workspace = true }
 futures = "0.3.30"
 backon = "1.6"
 

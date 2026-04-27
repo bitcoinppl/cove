@@ -33,6 +33,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.Scanner
 import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.findActivity
@@ -89,7 +90,7 @@ fun NfcScanSheet(
 
                         // convert to MultiFormat and handle
                         val multiFormat = multiFormatTryFromNfcMessage(nfcMessage)
-                        app.handleMultiFormat(multiFormat)
+                        Scanner.handleMultiFormat(multiFormat)
                     } catch (e: Exception) {
                         Log.e(TAG, "Failed to process NFC data: ${e.message}", e)
                         app.alertState =

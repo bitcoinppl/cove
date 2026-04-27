@@ -3,14 +3,15 @@ use std::sync::{Arc, Weak};
 use std::time::Duration;
 
 use act_zero::{Actor, ActorResult, Addr, Produces, WeakAddr, send};
+use cove_device::cloud_storage::{CloudStorage, CloudSyncHealth};
 use cove_tokio::DebouncedTask;
 use tokio::sync::Notify;
 use tracing::{error, info, warn};
 
 use super::pending::{MAX_PENDING_UPLOAD_VERIFICATION_DELAY, build_pending_upload_backoff};
 use super::{
-    CloudBackupError, CloudBackupStatus, PendingEnableSession, PendingVerificationCompletion,
-    RustCloudBackupManager, WalletId, live_upload_retry_delay_for_attempt,
+    CloudBackupError, CloudBackupStatus, PendingVerificationCompletion, RustCloudBackupManager,
+    WalletId, live_upload_retry_delay_for_attempt,
 };
 use crate::database::cloud_backup::PersistedCloudBlobState;
 use crate::manager::cloud_backup_detail_manager::RecoveryAction;
@@ -105,14 +106,21 @@ impl RestoreOperationCoordinator {
     }
 }
 
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+enum SyncHealthRefreshState {
+    Idle,
+    Running,
+    RunningQueued,
+}
+
 #[derive(Debug)]
 pub(crate) struct CloudBackupRuntimeActor {
     addr: WeakAddr<Self>,
     manager: Weak<RustCloudBackupManager>,
-    pending_enable_session: Option<PendingEnableSession>,
     pending_verification_completion: Option<PendingVerificationCompletion>,
     pending_upload_verifier_running: bool,
     pending_upload_verifier_wakeup: Arc<Notify>,
+    sync_health_refresh_state: SyncHealthRefreshState,
     wallet_upload_debouncers: HashMap<WalletId, DebouncedTask<()>>,
     wallet_upload_retry_counts: HashMap<WalletId, u32>,
     active_wallet_uploads: HashSet<WalletId>,
@@ -132,10 +140,10 @@ impl CloudBackupRuntimeActor {
         Self {
             addr: WeakAddr::default(),
             manager,
-            pending_enable_session: None,
             pending_verification_completion: None,
             pending_upload_verifier_running: false,
             pending_upload_verifier_wakeup: Arc::new(Notify::new()),
+            sync_health_refresh_state: SyncHealthRefreshState::Idle,
             wallet_upload_debouncers: HashMap::new(),
             wallet_upload_retry_counts: HashMap::new(),
             active_wallet_uploads: HashSet::new(),
@@ -151,6 +159,14 @@ impl CloudBackupRuntimeActor {
         Some(self.addr.upgrade())
     }
 
+    fn spawn_sync_health_refresh_task(&mut self, addr: Addr<Self>) {
+        self.sync_health_refresh_state = SyncHealthRefreshState::Running;
+        cove_tokio::task::spawn(async move {
+            let sync_health = CloudStorage::global().overall_sync_health().await;
+            send!(addr.complete_sync_health_refresh(sync_health));
+        });
+    }
+
     fn spawn_pending_upload_verification_loop_task(
         &mut self,
         addr: Addr<Self>,
@@ -163,15 +179,7 @@ impl CloudBackupRuntimeActor {
             let mut backoff = PendingUploadRetryBackoff::new();
 
             loop {
-                let manager_for_pass = Arc::clone(&manager);
-                let has_pending = cove_tokio::task::spawn_blocking(move || {
-                    manager_for_pass.verify_pending_uploads_once()
-                })
-                .await
-                .unwrap_or_else(|error| {
-                    error!("Pending upload verification task failed: {error}");
-                    true
-                });
+                let has_pending = manager.verify_pending_uploads_once().await;
 
                 if !has_pending {
                     break;
@@ -267,8 +275,8 @@ impl CloudBackupRuntimeActor {
                 ) {
                     return;
                 }
-                cove_tokio::task::spawn_blocking(move || {
-                    if let Err(error) = manager.do_enable_cloud_backup() {
+                cove_tokio::task::spawn(async move {
+                    if let Err(error) = manager.do_enable_cloud_backup().await {
                         error!("enable_cloud_backup failed: {error}");
                         manager.finish_background_operation_error(&error);
                     }
@@ -281,8 +289,8 @@ impl CloudBackupRuntimeActor {
                 ) {
                     return;
                 }
-                cove_tokio::task::spawn_blocking(move || {
-                    if let Err(error) = manager.do_enable_cloud_backup_force_new() {
+                cove_tokio::task::spawn(async move {
+                    if let Err(error) = manager.do_enable_cloud_backup_force_new().await {
                         error!("enable_cloud_backup_force_new failed: {error}");
                         manager.finish_background_operation_error(&error);
                     }
@@ -295,46 +303,46 @@ impl CloudBackupRuntimeActor {
                 ) {
                     return;
                 }
-                cove_tokio::task::spawn_blocking(move || {
-                    if let Err(error) = manager.do_enable_cloud_backup_no_discovery() {
+                cove_tokio::task::spawn(async move {
+                    if let Err(error) = manager.do_enable_cloud_backup_no_discovery().await {
                         error!("enable_cloud_backup_no_discovery failed: {error}");
                         manager.finish_background_operation_error(&error);
                     }
                 });
             }
             CloudBackupOperation::Verification { force_discoverable } => {
-                cove_tokio::task::spawn_blocking(move || {
-                    manager.handle_start_verification(force_discoverable);
+                cove_tokio::task::spawn(async move {
+                    manager.handle_start_verification(force_discoverable).await;
                 });
             }
             CloudBackupOperation::Recovery { action } => {
-                cove_tokio::task::spawn_blocking(move || manager.handle_recovery(action));
+                cove_tokio::task::spawn(async move { manager.handle_recovery(action).await });
             }
             CloudBackupOperation::RepairPasskey { no_discovery } => {
-                cove_tokio::task::spawn_blocking(move || {
-                    manager.handle_repair_passkey(no_discovery)
+                cove_tokio::task::spawn(async move {
+                    manager.handle_repair_passkey(no_discovery).await
                 });
             }
             CloudBackupOperation::Sync => {
-                cove_tokio::task::spawn_blocking(move || manager.handle_sync());
+                cove_tokio::task::spawn(async move { manager.handle_sync().await });
             }
             CloudBackupOperation::FetchCloudOnly => {
-                cove_tokio::task::spawn_blocking(move || manager.handle_fetch_cloud_only());
+                cove_tokio::task::spawn(async move { manager.handle_fetch_cloud_only().await });
             }
             CloudBackupOperation::RestoreCloudWallet => {
                 let Some(record_id) = record_id else { return };
-                cove_tokio::task::spawn_blocking(move || {
-                    manager.handle_restore_cloud_wallet(&record_id)
+                cove_tokio::task::spawn(async move {
+                    manager.handle_restore_cloud_wallet(&record_id).await
                 });
             }
             CloudBackupOperation::DeleteCloudWallet => {
                 let Some(record_id) = record_id else { return };
-                cove_tokio::task::spawn_blocking(move || {
-                    manager.handle_delete_cloud_wallet(&record_id)
+                cove_tokio::task::spawn(async move {
+                    manager.handle_delete_cloud_wallet(&record_id).await
                 });
             }
             CloudBackupOperation::RefreshDetail => {
-                cove_tokio::task::spawn_blocking(move || manager.handle_refresh_detail());
+                cove_tokio::task::spawn(async move { manager.handle_refresh_detail().await });
             }
         }
     }
@@ -348,31 +356,40 @@ impl CloudBackupRuntimeActor {
         Produces::ok(())
     }
 
-    pub async fn replace_pending_enable_session(
-        &mut self,
-        session: PendingEnableSession,
-    ) -> ActorResult<()> {
-        self.pending_enable_session = Some(session);
-        Produces::ok(())
-    }
-
-    pub async fn take_pending_enable_session(
-        &mut self,
-    ) -> ActorResult<Option<PendingEnableSession>> {
-        Produces::ok(self.pending_enable_session.take())
-    }
-
-    pub async fn clear_pending_enable_session(&mut self) -> ActorResult<()> {
-        self.pending_enable_session = None;
-        Produces::ok(())
-    }
-
-    pub async fn discard_pending_enable_session(&mut self) -> ActorResult<()> {
-        if self.pending_enable_session.take().is_some() {
-            cove_cspp::Cspp::new(cove_device::keychain::Keychain::global().clone())
-                .delete_master_key();
+    pub async fn request_sync_health_refresh(&mut self) -> ActorResult<()> {
+        match self.sync_health_refresh_state {
+            SyncHealthRefreshState::Idle => {}
+            SyncHealthRefreshState::Running => {
+                self.sync_health_refresh_state = SyncHealthRefreshState::RunningQueued;
+                return Produces::ok(());
+            }
+            SyncHealthRefreshState::RunningQueued => return Produces::ok(()),
         }
 
+        let Some(addr) = self.addr() else { return Produces::ok(()) };
+        let Some(_) = self.manager() else { return Produces::ok(()) };
+        self.spawn_sync_health_refresh_task(addr);
+        Produces::ok(())
+    }
+
+    pub async fn complete_sync_health_refresh(
+        &mut self,
+        sync_health: CloudSyncHealth,
+    ) -> ActorResult<()> {
+        let rerun_queued =
+            matches!(self.sync_health_refresh_state, SyncHealthRefreshState::RunningQueued);
+        self.sync_health_refresh_state = SyncHealthRefreshState::Idle;
+        if let Some(manager) = self.manager() {
+            manager.set_sync_health(sync_health);
+        }
+
+        if !rerun_queued {
+            return Produces::ok(());
+        }
+
+        let Some(addr) = self.addr() else { return Produces::ok(()) };
+        let Some(_) = self.manager() else { return Produces::ok(()) };
+        self.spawn_sync_health_refresh_task(addr);
         Produces::ok(())
     }
 
@@ -418,8 +435,8 @@ impl CloudBackupRuntimeActor {
             return Produces::ok(());
         };
 
-        cove_tokio::task::spawn_blocking(move || {
-            let upload_result = manager.do_upload_wallet_if_dirty(&wallet_id);
+        cove_tokio::task::spawn(async move {
+            let upload_result = manager.do_upload_wallet_if_dirty(&wallet_id).await;
             let deferred = matches!(upload_result, Err(super::CloudBackupError::Deferred(_)));
             let error_message = upload_result.as_ref().err().map(ToString::to_string);
             send!(addr.complete_wallet_upload(
@@ -460,7 +477,7 @@ impl CloudBackupRuntimeActor {
             return Produces::ok(());
         };
 
-        let upload_result = manager.do_upload_wallet_if_dirty(&wallet_id);
+        let upload_result = manager.do_upload_wallet_if_dirty(&wallet_id).await;
         let deferred = matches!(upload_result, Err(super::CloudBackupError::Deferred(_)));
         let error_message = upload_result.err().map(|error| error.to_string());
         self.finish_wallet_upload(
@@ -598,9 +615,9 @@ impl CloudBackupRuntimeActor {
         }
 
         let operation = RestoreOperation::new(self.restore_operations.clone());
-        cove_tokio::task::spawn_blocking(move || {
+        cove_tokio::task::spawn(async move {
             info!("restore_from_cloud_backup: task started");
-            match manager.do_restore_from_cloud_backup(&operation) {
+            match manager.do_restore_from_cloud_backup(&operation).await {
                 Ok(()) => {}
                 Err(CloudBackupError::Cancelled) => {
                     info!("restore_from_cloud_backup: task cancelled");
@@ -637,6 +654,7 @@ impl CloudBackupRuntimeActor {
         self.wallet_upload_debouncers.clear();
         self.wallet_upload_retry_counts.clear();
         self.active_wallet_uploads.clear();
+        self.sync_health_refresh_state = SyncHealthRefreshState::Idle;
         Produces::ok(())
     }
 }

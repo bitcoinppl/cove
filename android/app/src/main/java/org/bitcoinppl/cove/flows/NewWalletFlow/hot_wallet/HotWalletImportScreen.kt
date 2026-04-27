@@ -37,6 +37,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -45,6 +46,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
+import android.view.WindowManager
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -62,6 +65,7 @@ import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.ImportWalletManager
 import org.bitcoinppl.cove.Log
+import org.bitcoinppl.cove.ScreenSecurity
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
@@ -106,6 +110,23 @@ fun HotWalletImportScreen(
     importType: ImportType,
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
+    // block screenshots unconditionally — import screen contains seed words
+    val context = LocalContext.current
+    DisposableEffect(Unit) {
+        val window = (context as? android.app.Activity)?.window
+        ScreenSecurity.enter()
+        window?.setFlags(
+            WindowManager.LayoutParams.FLAG_SECURE,
+            WindowManager.LayoutParams.FLAG_SECURE,
+        )
+        onDispose {
+            ScreenSecurity.exit()
+            if (!ScreenSecurity.isSensitiveScreen) {
+                window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            }
+        }
+    }
+
     // use local state so we can update when paste changes word count
     var currentNumberOfWords by remember { mutableStateOf(numberOfWords) }
 

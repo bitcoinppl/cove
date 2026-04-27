@@ -47,8 +47,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
+import android.view.WindowManager
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.Auth
+import org.bitcoinppl.cove.ScreenSecurity
 import org.bitcoinppl.cove.QrCodeGenerator
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
@@ -75,6 +78,23 @@ fun SecretWordsScreen(
 
     // get auth manager
     val auth = remember { Auth }
+
+    // block screenshots unconditionally on seed phrase screen
+    val context = LocalContext.current
+    DisposableEffect(Unit) {
+        val window = (context as? android.app.Activity)?.window
+        ScreenSecurity.enter()
+        window?.setFlags(
+            WindowManager.LayoutParams.FLAG_SECURE,
+            WindowManager.LayoutParams.FLAG_SECURE,
+        )
+        onDispose {
+            ScreenSecurity.exit()
+            if (!ScreenSecurity.isSensitiveScreen) {
+                window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            }
+        }
+    }
 
     // lock on appear and reload when walletId changes
     LaunchedEffect(walletId) {

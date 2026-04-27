@@ -1,6 +1,4 @@
 import Foundation
-
-@_exported import CoveCore
 import SwiftUI
 
 extension WeakReconciler: CloudBackupManagerReconciler where Reconciler == CloudBackupManager {}
@@ -30,6 +28,8 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
         }
         rust.listenForUpdates(reconciler: WeakReconciler(self))
         syncHealthObserver.start()
+        // Keep the initial iCloud health probe off the main startup path.
+        rustBridge.async { rust.cloudStorageDidChange() }
     }
 
     var status: CloudBackupStatus {
@@ -38,10 +38,6 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
 
     var promptIntent: CloudBackupPromptIntent {
         state.promptIntent
-    }
-
-    var connectivityHint: CloudConnectivityHint {
-        state.connectivityHint
     }
 
     var syncHealth: CloudSyncHealth {
@@ -144,8 +140,6 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
         switch message {
         case let .status(status):
             state.status = status
-        case let .connectivityHint(connectivityHint):
-            state.connectivityHint = connectivityHint
         case let .syncHealth(syncHealth):
             state.syncHealth = syncHealth
         case let .promptIntent(promptIntent):

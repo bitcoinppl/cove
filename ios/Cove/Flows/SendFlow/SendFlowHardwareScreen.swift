@@ -442,17 +442,7 @@ struct SendFlowHardwareScreen: View {
         }
 
         Button("More...") {
-            // Defer presentation until the confirmationDialog's dismissal
-            // animation completes. A SwiftUI `ShareLink` presented directly
-            // from a confirmationDialog action races the dialog's dismissal
-            // and either fails silently (Save to Files) or surfaces extension
-            // errors (Signal). See issues #449 and #313.
-            let psbtBytes = details.psbtBytes()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                ShareSheet.present(data: psbtBytes, filename: "transaction.psbt") { success in
-                    if !success { Log.warn("PSBT export cancelled or failed") }
-                }
-            }
+            ShareSheet.presentFromMenu(data: details.psbtBytes(), filename: "transaction.psbt")
         }
     }
 

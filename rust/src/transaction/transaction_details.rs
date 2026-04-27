@@ -68,6 +68,11 @@ pub struct TransactionDetails {
     pub network: Network,
     // for outgoing transactions we might have a change address
     pub change_address: Option<Address>,
+    /// Whether the transaction signals opt-in RBF (BIP 125).
+    ///
+    /// `true` when at least one input has `nSequence < 0xFFFFFFFE`,
+    /// meaning the transaction can be replaced while unconfirmed.
+    pub is_rbf_signaling: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Enum)]
@@ -149,6 +154,9 @@ impl TransactionDetails {
             .map(|(index, _output)| index as u32)
             .collect();
 
+        // BIP 125: a transaction signals RBF if any input has nSequence < 0xFFFFFFFE
+        let is_rbf_signaling = tx.tx_node.tx.input.iter().any(|input| input.sequence.is_rbf());
+
         let me = Self {
             tx_id: txid.into(),
             network,
@@ -161,6 +169,7 @@ impl TransactionDetails {
             input_indexes,
             output_indexes,
             change_address,
+            is_rbf_signaling,
         };
 
         Ok(me)
@@ -332,6 +341,15 @@ impl TransactionDetails {
         self.pending_or_confirmed.is_confirmed()
     }
 
+    /// Whether the transaction signals opt-in Replace-By-Fee (BIP 125).
+    ///
+    /// Returns `true` when at least one input has `nSequence < 0xFFFFFFFE`,
+    /// indicating the sender opted in to fee replacement while unconfirmed.
+    #[uniffi::method]
+    pub fn is_rbf_signaling(&self) -> bool {
+        self.is_rbf_signaling
+    }
+
     #[uniffi::method]
     pub fn confirmation_date_time(&self) -> Option<String> {
         let confirm_time = match &self.pending_or_confirmed {
@@ -461,6 +479,7 @@ impl TransactionDetails {
             input_indexes: vec![],
             output_indexes: vec![],
             change_address: None,
+            is_rbf_signaling: false,
         }
     }
 
@@ -535,4 +554,59 @@ fn fmt_historical_fiat(amount: f64) -> String {
     let suffix = currency.suffix();
 
     format!("{symbol}{amount_fmt} {suffix}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bitcoin::Sequence;
+
+    /// Mirrors the detection logic in `try_new`: returns `true` when any input
+    /// sequence signals opt-in RBF (nSequence < 0xFFFFFFFE, per BIP 125).
+    fn compute_is_rbf_signaling(sequences: &[Sequence]) -> bool {
+        sequences.iter().any(|seq| seq.is_rbf())
+    }
+
+    #[test]
+    fn sequence_below_threshold_signals_rbf() {
+        // 0xFFFFFFFD is the highest value that still signals RBF
+        assert!(compute_is_rbf_signaling(&[Sequence(0xFFFFFFFD)]));
+    }
+
+    #[test]
+    fn sequence_at_threshold_does_not_signal_rbf() {
+        // 0xFFFFFFFE (Sequence::ENABLE_LOCKTIME_NO_RBF) does NOT signal RBF
+        assert!(!compute_is_rbf_signaling(&[Sequence(0xFFFFFFFE)]));
+    }
+
+    #[test]
+    fn final_sequence_does_not_signal_rbf() {
+        // 0xFFFFFFFF (Sequence::MAX) is fully final
+        assert!(!compute_is_rbf_signaling(&[Sequence::MAX]));
+    }
+
+    #[test]
+    fn zero_sequence_signals_rbf() {
+        // Sequence(0) is commonly used by wallets to signal RBF
+        assert!(compute_is_rbf_signaling(&[Sequence::ZERO]));
+    }
+
+    #[test]
+    fn any_rbf_input_makes_tx_replaceable() {
+        // BIP 125: a tx is replaceable if *any* input signals RBF
+        let sequences = vec![Sequence::MAX, Sequence(0xFFFFFFFD), Sequence::MAX];
+        assert!(compute_is_rbf_signaling(&sequences));
+    }
+
+    #[test]
+    fn all_final_inputs_means_not_replaceable() {
+        let sequences = vec![Sequence::MAX, Sequence(0xFFFFFFFE), Sequence::MAX];
+        assert!(!compute_is_rbf_signaling(&sequences));
+    }
+
+    #[test]
+    fn preview_constructors_default_to_not_rbf() {
+        assert!(!TransactionDetails::preview_new_confirmed().is_rbf_signaling);
+        assert!(!TransactionDetails::preview_pending_sent().is_rbf_signaling);
+    }
 }

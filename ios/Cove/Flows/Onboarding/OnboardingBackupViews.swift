@@ -172,12 +172,86 @@ struct OnboardingSecretWordsView: View {
 }
 
 struct OnboardingCloudBackupStepView: View {
+    let branch: OnboardingBranch?
+    let onEnabled: () -> Void
+    let onSkip: () -> Void
+
+    var body: some View {
+        switch branch {
+        case .softwareImport:
+            OnboardingSoftwareImportCloudBackupStepView(
+                onEnabled: onEnabled,
+                onSkip: onSkip
+            )
+
+        case .hardware:
+            OnboardingHardwareImportCloudBackupStepView(
+                onEnabled: onEnabled,
+                onSkip: onSkip
+            )
+
+        case .newUser, .exchange, .softwareCreate, nil:
+            OnboardingCloudBackupDetailsStepView(
+                onEnabled: onEnabled,
+                onSkip: onSkip,
+                context: .standard
+            )
+        }
+    }
+}
+
+private struct OnboardingSoftwareImportCloudBackupStepView: View {
+    @State private var showingDetails = false
+
+    let onEnabled: () -> Void
+    let onSkip: () -> Void
+
+    var body: some View {
+        if showingDetails {
+            OnboardingCloudBackupDetailsStepView(
+                onEnabled: onEnabled,
+                onSkip: { showingDetails = false },
+                context: .standard
+            )
+        } else {
+            OnboardingSoftwareImportCloudBackupChoiceView(
+                onEnable: { showingDetails = true },
+                onSkip: onSkip
+            )
+        }
+    }
+}
+
+private struct OnboardingHardwareImportCloudBackupStepView: View {
+    @State private var showingDetails = false
+
+    let onEnabled: () -> Void
+    let onSkip: () -> Void
+
+    var body: some View {
+        if showingDetails {
+            OnboardingCloudBackupDetailsStepView(
+                onEnabled: onEnabled,
+                onSkip: { showingDetails = false },
+                context: .hardwareImport
+            )
+        } else {
+            OnboardingHardwareImportCloudBackupChoiceView(
+                onEnable: { showingDetails = true },
+                onSkip: onSkip
+            )
+        }
+    }
+}
+
+private struct OnboardingCloudBackupDetailsStepView: View {
     @State private var backupManager = CloudBackupManager.shared
     @State private var didComplete = false
     @State private var isStartingEnable = false
 
     let onEnabled: () -> Void
     let onSkip: () -> Void
+    let context: CloudBackupEnableOnboardingContext
 
     private var onboardingMessage: String? {
         switch backupManager.status {
@@ -206,7 +280,8 @@ struct OnboardingCloudBackupStepView: View {
                 },
                 onCancel: onSkip,
                 message: onboardingMessage,
-                isBusy: isBusy
+                isBusy: isBusy,
+                context: context
             )
 
             if isBusy {
@@ -266,6 +341,102 @@ struct OnboardingCloudBackupStepView: View {
         guard isEnabled else { return }
         didComplete = true
         onEnabled()
+    }
+}
+
+private struct OnboardingSoftwareImportCloudBackupChoiceView: View {
+    let onEnable: () -> Void
+    let onSkip: () -> Void
+
+    var body: some View {
+        OnboardingPromptScreen(
+            icon: "icloud.and.arrow.up",
+            title: "Protect this wallet with Cloud Backup?",
+            subtitle: "Cloud Backup makes it easier to recover this wallet if you lose this device."
+        ) {
+            VStack(spacing: 14) {
+                VStack(alignment: .leading, spacing: 14) {
+                    Text("Your wallet backup is end-to-end encrypted before it leaves your device, stored in iCloud, and locked with a passkey only you control.")
+                        .font(.footnote)
+                        .foregroundStyle(.coveLightGray.opacity(0.78))
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text("You can skip this now and enable it later from Settings.")
+                        .font(.footnote)
+                        .foregroundStyle(.coveLightGray.opacity(0.64))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(18)
+                .background(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(Color.duskBlue.opacity(0.5))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(Color.coveLightGray.opacity(0.14), lineWidth: 1)
+                )
+
+                Button("Enable Cloud Backup", action: onEnable)
+                    .buttonStyle(OnboardingPrimaryButtonStyle())
+
+                Button("Not Now", action: onSkip)
+                    .buttonStyle(OnboardingSecondaryButtonStyle())
+            }
+        }
+    }
+}
+
+private struct OnboardingHardwareImportCloudBackupChoiceView: View {
+    let onEnable: () -> Void
+    let onSkip: () -> Void
+
+    var body: some View {
+        OnboardingPromptScreen(
+            icon: "icloud.and.arrow.up",
+            title: "Protect this hardware wallet with Cloud Backup?",
+            subtitle: "Cloud Backup makes it easier to restore this wallet's configuration and labels if you lose this device."
+        ) {
+            VStack(spacing: 14) {
+                VStack(alignment: .leading, spacing: 14) {
+                    Text("This backs up the imported hardware wallet configuration and labels stored in Cove so you can restore this wallet view later.")
+                        .font(.footnote)
+                        .foregroundStyle(.coveLightGray.opacity(0.78))
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text("Enabling this also turns on Cloud Backup for Cove more broadly, so compatible wallets you create later, as well as wallet labels, will be backed up.")
+                        .font(.footnote)
+                        .foregroundStyle(.coveLightGray.opacity(0.72))
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text("This does not back up your hardware wallet seed or private keys.")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.86))
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text("You can skip this now and enable it later from Settings.")
+                        .font(.footnote)
+                        .foregroundStyle(.coveLightGray.opacity(0.64))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(18)
+                .background(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(Color.duskBlue.opacity(0.5))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(Color.coveLightGray.opacity(0.14), lineWidth: 1)
+                )
+
+                Button("Enable Cloud Backup", action: onEnable)
+                    .buttonStyle(OnboardingPrimaryButtonStyle())
+
+                Button("Not Now", action: onSkip)
+                    .buttonStyle(OnboardingSecondaryButtonStyle())
+            }
+        }
     }
 }
 

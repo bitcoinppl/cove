@@ -36,7 +36,7 @@ impl RustCloudBackupManager {
     /// Deep verification of cloud backup integrity
     ///
     /// Checks state, runs do_deep_verify, wraps errors, persists result
-    pub(crate) fn deep_verify_cloud_backup(
+    pub(crate) async fn deep_verify_cloud_backup(
         &self,
         force_discoverable: bool,
     ) -> DeepVerificationResult {
@@ -46,7 +46,7 @@ impl RustCloudBackupManager {
         }
 
         self.clear_pending_verification_completion();
-        let result = match self.do_deep_verify_cloud_backup(force_discoverable) {
+        let result = match self.do_deep_verify_cloud_backup(force_discoverable).await {
             Ok(result) => result,
             Err(error) => {
                 error!("Deep verification unexpected error: {error}");
@@ -119,17 +119,19 @@ impl RustCloudBackupManager {
         }
     }
 
-    pub(crate) fn do_repair_passkey_wrapper(&self) -> Result<(), CloudBackupError> {
+    pub(crate) async fn do_repair_passkey_wrapper(&self) -> Result<(), CloudBackupError> {
         self.ensure_cloud_connectivity(BlockingCloudStep::RepairPasskey)?;
-        self.do_repair_passkey_wrapper_with_strategy(WrapperRepairStrategy::DiscoverOrCreate)
+        self.do_repair_passkey_wrapper_with_strategy(WrapperRepairStrategy::DiscoverOrCreate).await
     }
 
-    pub(crate) fn do_repair_passkey_wrapper_no_discovery(&self) -> Result<(), CloudBackupError> {
+    pub(crate) async fn do_repair_passkey_wrapper_no_discovery(
+        &self,
+    ) -> Result<(), CloudBackupError> {
         self.ensure_cloud_connectivity(BlockingCloudStep::RepairPasskey)?;
-        self.do_repair_passkey_wrapper_with_strategy(WrapperRepairStrategy::CreateNew)
+        self.do_repair_passkey_wrapper_with_strategy(WrapperRepairStrategy::CreateNew).await
     }
 
-    fn do_repair_passkey_wrapper_with_strategy(
+    async fn do_repair_passkey_wrapper_with_strategy(
         &self,
         strategy: WrapperRepairStrategy,
     ) -> Result<(), CloudBackupError> {
@@ -144,7 +146,7 @@ impl RustCloudBackupManager {
             .map_err_prefix("load local master key", CloudBackupError::Internal)?
             .ok_or_else(|| CloudBackupError::Internal("no local master key".into()))?;
 
-        let wallet_record_ids = match cloud.list_wallet_backups(namespace.clone()) {
+        let wallet_record_ids = match cloud.list_wallet_backups(namespace.clone()).await {
             Ok(ids) => ids,
             Err(CloudStorageError::NotFound(_)) => Vec::new(),
             Err(error) => {
@@ -155,17 +157,18 @@ impl RustCloudBackupManager {
         let repair = WrapperRepairOperation::new(self, keychain, cloud, passkey, &namespace);
         repair
             .run(&local_master_key, &wallet_record_ids, strategy)
+            .await
             .map_err(|error| error.into_cloud_backup_error())?;
 
         info!("Repaired cloud master key wrapper with repaired passkey association");
         Ok(())
     }
 
-    pub(crate) fn finalize_passkey_repair(&self) -> Result<(), CloudBackupError> {
+    pub(crate) async fn finalize_passkey_repair(&self) -> Result<(), CloudBackupError> {
         self.ensure_cloud_connectivity(BlockingCloudStep::RepairPasskey)?;
         let namespace = self.current_namespace_id()?;
         let cloud = CloudStorage::global();
-        let wallet_count = match cloud.list_wallet_backups(namespace) {
+        let wallet_count = match cloud.list_wallet_backups(namespace).await {
             Ok(wallet_record_ids) => wallet_record_ids.len() as u32,
             Err(error) => {
                 warn!("Repair passkey: failed to refresh wallet backups after repair: {error}");
@@ -181,7 +184,7 @@ impl RustCloudBackupManager {
         persist_enabled_cloud_backup_state(&Database::global(), wallet_count)?;
         self.set_status(CloudBackupStatus::Enabled);
 
-        match self.refresh_cloud_backup_detail() {
+        match self.refresh_cloud_backup_detail().await {
             Some(CloudBackupDetailResult::Success(detail)) => {
                 self.set_detail(Some(detail));
             }
@@ -194,15 +197,15 @@ impl RustCloudBackupManager {
         Ok(())
     }
 
-    pub(crate) fn do_deep_verify_cloud_backup(
+    pub(crate) async fn do_deep_verify_cloud_backup(
         &self,
         force_discoverable: bool,
     ) -> Result<DeepVerificationResult, CloudBackupError> {
         self.ensure_cloud_connectivity(BlockingCloudStep::Verify)?;
-        VerificationSession::new(self, force_discoverable)?.run()
+        VerificationSession::new(self, force_discoverable)?.run().await
     }
 
-    pub(crate) fn recover_local_master_key_from_cloud(
+    pub(crate) async fn recover_local_master_key_from_cloud(
         &self,
         namespace: &str,
         recovery_message: &str,
@@ -212,9 +215,10 @@ impl RustCloudBackupManager {
             recovery_message,
             PasskeyAuthPolicy::StoredThenDiscover,
         )
+        .await
     }
 
-    pub(crate) fn recover_local_master_key_from_cloud_without_discovery(
+    pub(crate) async fn recover_local_master_key_from_cloud_without_discovery(
         &self,
         namespace: &str,
         recovery_message: &str,
@@ -224,9 +228,10 @@ impl RustCloudBackupManager {
             recovery_message,
             PasskeyAuthPolicy::StoredOnly,
         )
+        .await
     }
 
-    fn recover_local_master_key_from_cloud_with_policy(
+    async fn recover_local_master_key_from_cloud_with_policy(
         &self,
         namespace: &str,
         recovery_message: &str,
@@ -237,7 +242,7 @@ impl RustCloudBackupManager {
         let cloud = CloudStorage::global();
         let passkey = PasskeyAccess::global();
 
-        let master_json = match cloud.download_master_key_backup(namespace.to_string()) {
+        let master_json = match cloud.download_master_key_backup(namespace.to_string()).await {
             Ok(json) => json,
             Err(CloudStorageError::NotFound(_)) => {
                 return Err(CloudBackupError::RecoveryRequired(recovery_message.into()));
@@ -259,7 +264,9 @@ impl RustCloudBackupManager {
         }
 
         let authenticated =
-            match authenticate_with_policy(keychain, passkey, &encrypted.prf_salt, auth_policy)? {
+            match authenticate_with_policy(keychain, passkey, &encrypted.prf_salt, auth_policy)
+                .await?
+            {
                 PasskeyAuthOutcome::Authenticated(result) => result,
                 PasskeyAuthOutcome::UserCancelled => {
                     return Err(CloudBackupError::Passkey("user cancelled".into()));

@@ -24,3 +24,4 @@ upload_certificate.pem
 *.o
 /ios/build
 .DS_Store
+ios/Cove.xcodeproj/xcuserdata/

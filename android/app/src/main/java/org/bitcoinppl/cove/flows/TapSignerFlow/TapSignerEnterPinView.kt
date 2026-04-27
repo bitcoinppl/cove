@@ -119,7 +119,7 @@ fun TapSignerEnterPinView(
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             Text(
-                text = "Enter PIN",
+                text = "Enter TAPSIGNER PIN",
                 style = MaterialTheme.typography.headlineLarge,
                 fontWeight = FontWeight.Bold,
             )

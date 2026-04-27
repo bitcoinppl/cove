@@ -212,6 +212,14 @@ final class ICloudDriveHelper: @unchecked Sendable {
         return try walletFileURL(namespace: namespace, recordId: recordId)
     }
 
+    func backupFileReadURL(namespace: String, recordId: String) throws -> URL {
+        if recordId == csppMasterKeyRecordId() {
+            return try masterKeyFileReadURL(namespace: namespace)
+        }
+
+        return try walletFileReadURL(namespace: namespace, recordId: recordId)
+    }
+
     // MARK: - File coordination
 
     /// Coordinates iCloud-backed filesystem access because ubiquitous items may

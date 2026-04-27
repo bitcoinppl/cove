@@ -1,7 +1,5 @@
 import SwiftUI
 
-@_exported import CoveCore
-
 struct CatastrophicErrorView: View {
     let onRestoreFromCloud: () -> Void
     let onWipeOnly: () -> Void
@@ -49,7 +47,7 @@ struct CatastrophicErrorView: View {
         Task.detached {
             let cloud = CloudStorage(cloudStorage: CloudStorageAccessImpl())
             do {
-                let exists = try cloud.hasAnyCloudBackup()
+                let exists = try await cloud.hasAnyCloudBackup()
                 await MainActor.run {
                     cloudProbeState = exists ? .available : .unavailable
                 }

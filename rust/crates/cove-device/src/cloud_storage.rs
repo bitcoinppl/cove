@@ -28,6 +28,7 @@ pub enum CloudStorageError {
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum CloudSyncHealth {
+    Unknown,
     AllUploaded,
     Uploading,
     Failed(String),
@@ -36,48 +37,52 @@ pub enum CloudSyncHealth {
 }
 
 #[uniffi::export(callback_interface)]
+#[async_trait::async_trait]
 pub trait CloudStorageAccess: Send + Sync + std::fmt::Debug + 'static {
-    fn upload_master_key_backup(
+    async fn upload_master_key_backup(
         &self,
         namespace: String,
         data: Vec<u8>,
     ) -> Result<(), CloudStorageError>;
 
-    fn upload_wallet_backup(
+    async fn upload_wallet_backup(
         &self,
         namespace: String,
         record_id: String,
         data: Vec<u8>,
     ) -> Result<(), CloudStorageError>;
 
-    fn download_master_key_backup(&self, namespace: String) -> Result<Vec<u8>, CloudStorageError>;
+    async fn download_master_key_backup(
+        &self,
+        namespace: String,
+    ) -> Result<Vec<u8>, CloudStorageError>;
 
-    fn download_wallet_backup(
+    async fn download_wallet_backup(
         &self,
         namespace: String,
         record_id: String,
     ) -> Result<Vec<u8>, CloudStorageError>;
 
-    fn delete_wallet_backup(
+    async fn delete_wallet_backup(
         &self,
         namespace: String,
         record_id: String,
     ) -> Result<(), CloudStorageError>;
 
     /// List all namespace IDs (subdirectories of cspp-namespaces/)
-    fn list_namespaces(&self) -> Result<Vec<String>, CloudStorageError>;
+    async fn list_namespaces(&self) -> Result<Vec<String>, CloudStorageError>;
 
     /// List wallet backup filenames within a namespace (e.g. "wallet-<hash>.json")
-    fn list_wallet_files(&self, namespace: String) -> Result<Vec<String>, CloudStorageError>;
+    async fn list_wallet_files(&self, namespace: String) -> Result<Vec<String>, CloudStorageError>;
 
     /// Check whether a blob has been fully uploaded to iCloud
-    fn is_backup_uploaded(
+    async fn is_backup_uploaded(
         &self,
         namespace: String,
         record_id: String,
     ) -> Result<bool, CloudStorageError>;
 
-    fn overall_sync_health(&self) -> CloudSyncHealth;
+    async fn overall_sync_health(&self) -> CloudSyncHealth;
 }
 
 static REF: OnceCell<CloudStorage> = OnceCell::new();
@@ -107,74 +112,80 @@ impl CloudStorage {
     }
 
     /// Check if any cloud backup namespaces exist
-    pub fn has_any_cloud_backup(&self) -> Result<bool, CloudStorageError> {
-        Ok(!self.list_namespaces()?.is_empty())
+    pub async fn has_any_cloud_backup(&self) -> Result<bool, CloudStorageError> {
+        Ok(!self.list_namespaces().await?.is_empty())
     }
 }
 
 impl CloudStorage {
-    pub fn upload_master_key_backup(
+    pub async fn upload_master_key_backup(
         &self,
         namespace: String,
         data: Vec<u8>,
     ) -> Result<(), CloudStorageError> {
-        self.0.upload_master_key_backup(namespace, data)
+        self.0.upload_master_key_backup(namespace, data).await
     }
 
-    pub fn upload_wallet_backup(
+    pub async fn upload_wallet_backup(
         &self,
         namespace: String,
         record_id: String,
         data: Vec<u8>,
     ) -> Result<(), CloudStorageError> {
-        self.0.upload_wallet_backup(namespace, record_id, data)
+        self.0.upload_wallet_backup(namespace, record_id, data).await
     }
 
-    pub fn download_master_key_backup(
+    pub async fn download_master_key_backup(
         &self,
         namespace: String,
     ) -> Result<Vec<u8>, CloudStorageError> {
-        self.0.download_master_key_backup(namespace)
+        self.0.download_master_key_backup(namespace).await
     }
 
-    pub fn download_wallet_backup(
+    pub async fn download_wallet_backup(
         &self,
         namespace: String,
         record_id: String,
     ) -> Result<Vec<u8>, CloudStorageError> {
-        self.0.download_wallet_backup(namespace, record_id)
+        self.0.download_wallet_backup(namespace, record_id).await
     }
 
-    pub fn delete_wallet_backup(
+    pub async fn delete_wallet_backup(
         &self,
         namespace: String,
         record_id: String,
     ) -> Result<(), CloudStorageError> {
-        self.0.delete_wallet_backup(namespace, record_id)
+        self.0.delete_wallet_backup(namespace, record_id).await
     }
 
-    pub fn list_namespaces(&self) -> Result<Vec<String>, CloudStorageError> {
-        self.0.list_namespaces()
+    pub async fn list_namespaces(&self) -> Result<Vec<String>, CloudStorageError> {
+        self.0.list_namespaces().await
     }
 
-    pub fn list_wallet_files(&self, namespace: String) -> Result<Vec<String>, CloudStorageError> {
-        self.0.list_wallet_files(namespace)
+    pub async fn list_wallet_files(
+        &self,
+        namespace: String,
+    ) -> Result<Vec<String>, CloudStorageError> {
+        self.0.list_wallet_files(namespace).await
     }
 
-    pub fn is_backup_uploaded(
+    pub async fn is_backup_uploaded(
         &self,
         namespace: String,
         record_id: String,
     ) -> Result<bool, CloudStorageError> {
-        self.0.is_backup_uploaded(namespace, record_id)
+        self.0.is_backup_uploaded(namespace, record_id).await
     }
 
-    pub fn overall_sync_health(&self) -> CloudSyncHealth {
-        self.0.overall_sync_health()
+    pub async fn overall_sync_health(&self) -> CloudSyncHealth {
+        self.0.overall_sync_health().await
     }
 
-    pub fn list_wallet_backups(&self, namespace: String) -> Result<Vec<String>, CloudStorageError> {
-        let filenames = self.0.list_wallet_files(namespace)?;
+    pub async fn list_wallet_backups(
+        &self,
+        namespace: String,
+    ) -> Result<Vec<String>, CloudStorageError> {
+        let filenames = self.0.list_wallet_files(namespace).await?;
         Ok(filenames
             .iter()
             .filter_map(|f| wallet_record_id_from_filename(f).map(String::from))

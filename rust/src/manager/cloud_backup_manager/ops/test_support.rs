@@ -6,7 +6,8 @@ use act_zero::call;
 use bip39::Mnemonic;
 use cove_cspp::CsppStore;
 use cove_cspp::backup_data::{
-    WalletEntry, WalletMode as CloudWalletMode, WalletSecret, wallet_filename_from_record_id,
+    MASTER_KEY_RECORD_ID, WalletEntry, WalletMode as CloudWalletMode, WalletSecret,
+    wallet_filename_from_record_id,
 };
 use cove_device::cloud_storage::{
     CloudStorage, CloudStorageAccess, CloudStorageError, CloudSyncHealth,
@@ -27,6 +28,7 @@ use crate::database::cloud_backup::{
     PersistedCloudBackupState, PersistedCloudBackupStatus, PersistedCloudBlobState,
     PersistedCloudBlobSyncState,
 };
+use crate::manager::connectivity_manager::CONNECTIVITY_MANAGER;
 use crate::mnemonic::MnemonicExt as _;
 use crate::network::Network;
 use crate::wallet::metadata::{WalletId, WalletMetadata, WalletMode, WalletType};
@@ -177,6 +179,10 @@ impl MockCloudStorage {
         self.state.lock().uploaded_wallet_backups.len()
     }
 
+    pub(crate) fn has_master_key_backup(&self, namespace: &str) -> bool {
+        self.state.lock().master_key_backups.contains_key(namespace)
+    }
+
     pub(crate) fn wallet_backup_upload_attempt_count(&self) -> usize {
         self.state.lock().wallet_backup_upload_attempts
     }
@@ -194,8 +200,9 @@ impl MockCloudStorage {
     }
 }
 
+#[async_trait::async_trait]
 impl CloudStorageAccess for MockCloudStorage {
-    fn upload_master_key_backup(
+    async fn upload_master_key_backup(
         &self,
         namespace: String,
         data: Vec<u8>,
@@ -208,7 +215,7 @@ impl CloudStorageAccess for MockCloudStorage {
         Ok(())
     }
 
-    fn upload_wallet_backup(
+    async fn upload_wallet_backup(
         &self,
         namespace: String,
         record_id: String,
@@ -240,7 +247,10 @@ impl CloudStorageAccess for MockCloudStorage {
         Ok(())
     }
 
-    fn download_master_key_backup(&self, namespace: String) -> Result<Vec<u8>, CloudStorageError> {
+    async fn download_master_key_backup(
+        &self,
+        namespace: String,
+    ) -> Result<Vec<u8>, CloudStorageError> {
         self.state
             .lock()
             .master_key_backups
@@ -249,7 +259,7 @@ impl CloudStorageAccess for MockCloudStorage {
             .ok_or(CloudStorageError::NotFound(namespace))
     }
 
-    fn download_wallet_backup(
+    async fn download_wallet_backup(
         &self,
         namespace: String,
         record_id: String,
@@ -274,19 +284,29 @@ impl CloudStorageAccess for MockCloudStorage {
             .ok_or(CloudStorageError::NotFound(format!("{namespace}/{record_id}")))
     }
 
-    fn delete_wallet_backup(
+    async fn delete_wallet_backup(
         &self,
-        _namespace: String,
-        _record_id: String,
+        namespace: String,
+        record_id: String,
     ) -> Result<(), CloudStorageError> {
+        let mut state = self.state.lock();
+        if record_id == MASTER_KEY_RECORD_ID {
+            state.master_key_backups.remove(&namespace);
+            return Ok(());
+        }
+
+        state.wallet_backups.remove(&(namespace.clone(), record_id.clone()));
+        state.uploaded_wallet_backups.retain(|(uploaded_namespace, uploaded_record_id)| {
+            uploaded_namespace != &namespace || uploaded_record_id != &record_id
+        });
         Ok(())
     }
 
-    fn list_namespaces(&self) -> Result<Vec<String>, CloudStorageError> {
+    async fn list_namespaces(&self) -> Result<Vec<String>, CloudStorageError> {
         Ok(self.state.lock().wallet_files.keys().cloned().collect())
     }
 
-    fn list_wallet_files(&self, namespace: String) -> Result<Vec<String>, CloudStorageError> {
+    async fn list_wallet_files(&self, namespace: String) -> Result<Vec<String>, CloudStorageError> {
         let state = self.state.lock();
         if let Some(error) = state.list_wallet_files_error.clone() {
             return Err(error);
@@ -307,7 +327,7 @@ impl CloudStorageAccess for MockCloudStorage {
         Ok(wallet_files)
     }
 
-    fn is_backup_uploaded(
+    async fn is_backup_uploaded(
         &self,
         _namespace: String,
         _record_id: String,
@@ -315,7 +335,7 @@ impl CloudStorageAccess for MockCloudStorage {
         Ok(true)
     }
 
-    fn overall_sync_health(&self) -> CloudSyncHealth {
+    async fn overall_sync_health(&self) -> CloudSyncHealth {
         CloudSyncHealth::AllUploaded
     }
 }
@@ -432,6 +452,7 @@ impl TestGlobals {
         self.cloud.reset();
         self.passkey.reset();
         cove_cspp::Cspp::<Keychain>::clear_cached_master_key();
+        CONNECTIVITY_MANAGER.set_connection_state(true);
     }
 }
 
@@ -534,6 +555,14 @@ pub(crate) fn reset_cloud_backup_test_state(
     manager: &RustCloudBackupManager,
     globals: &TestGlobals,
 ) {
+    reset_cloud_backup_test_state_with_hook(manager, globals, || {});
+}
+
+pub(crate) fn reset_cloud_backup_test_state_with_hook(
+    manager: &RustCloudBackupManager,
+    globals: &TestGlobals,
+    before_reconnect: impl FnOnce(),
+) {
     init_test_runtime();
     globals.reset();
     clear_local_wallets();
@@ -541,7 +570,18 @@ pub(crate) fn reset_cloud_backup_test_state(
     std::thread::spawn(move || reset_manager.debug_reset_cloud_backup_state())
         .join()
         .expect("reset cloud backup test state thread");
-    manager.clear_wallet_upload_debouncers_for_test();
+    let runtime = manager.runtime.clone();
+    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+    let _task = cove_tokio::task::spawn(async move {
+        let result = call!(runtime.clear_upload_runtime_state()).await;
+        sender.send(result).expect("send clear upload runtime state result");
+    });
+    receiver
+        .recv()
+        .expect("receive clear upload runtime state result")
+        .expect("clear upload runtime state");
+    before_reconnect();
+    CONNECTIVITY_MANAGER.set_connection_state(true);
 }
 
 pub(crate) async fn wait_for_test_condition(
@@ -656,7 +696,7 @@ pub(crate) fn persist_xpub_wallets(wallets: Vec<WalletMetadata>) {
     }
 }
 
-pub(crate) fn encrypted_wallet_backup_bytes(
+pub(crate) async fn encrypted_wallet_backup_bytes(
     metadata: &WalletMetadata,
     master_key: &cove_cspp::master_key::MasterKey,
     revision_hash: &str,
@@ -666,6 +706,7 @@ pub(crate) fn encrypted_wallet_backup_bytes(
         metadata,
         metadata.wallet_mode,
     )
+    .await
     .unwrap();
     prepared.entry.content_revision_hash = revision_hash.to_string();
 
@@ -782,16 +823,10 @@ pub(crate) async fn run_wallet_upload_for_test_async(
         .expect("run wallet upload");
 }
 
-pub(crate) fn new_restore_operation_for_test(
+pub(crate) async fn new_restore_operation_for_test(
     manager: &RustCloudBackupManager,
 ) -> super::super::runtime_actor::RestoreOperation {
-    let runtime = manager.runtime.clone();
-    std::thread::spawn(move || {
-        cove_tokio::task::block_on(call!(runtime.new_restore_operation()))
-            .expect("create restore operation")
-    })
-    .join()
-    .expect("restore operation thread")
+    call!(manager.runtime.new_restore_operation()).await.expect("create restore operation")
 }
 
 #[cfg(test)]

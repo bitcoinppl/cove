@@ -163,7 +163,7 @@ struct TapSignerEnterPin: View {
                 }
 
                 VStack(spacing: 20) {
-                    Text("Enter PIN")
+                    Text("Enter TAPSIGNER PIN")
                         .font(.largeTitle)
                         .fontWeight(.bold)
 

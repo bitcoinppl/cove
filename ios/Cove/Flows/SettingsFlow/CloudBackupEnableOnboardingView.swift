@@ -1,15 +1,35 @@
 import SwiftUI
 
+enum CloudBackupEnableOnboardingContext {
+    case standard
+    case hardwareImport
+}
+
 struct CloudBackupEnableOnboardingView: View {
     let onEnable: () -> Void
     let onCancel: () -> Void
     let message: String?
     let isBusy: Bool
+    let context: CloudBackupEnableOnboardingContext
 
     @State private var checks: [Bool] = Array(repeating: false, count: 3)
 
     private var allChecked: Bool {
         checks.allSatisfy(\.self)
+    }
+
+    init(
+        onEnable: @escaping () -> Void,
+        onCancel: @escaping () -> Void,
+        message: String?,
+        isBusy: Bool,
+        context: CloudBackupEnableOnboardingContext = .standard
+    ) {
+        self.onEnable = onEnable
+        self.onCancel = onCancel
+        self.message = message
+        self.isBusy = isBusy
+        self.context = context
     }
 
     var body: some View {
@@ -122,7 +142,7 @@ struct CloudBackupEnableOnboardingView: View {
                 Spacer()
             }
 
-            Text("Your wallet backup is end-to-end encrypted before upload and stored in iCloud Drive. Only your passkey can decrypt it, so both are needed to restore your wallets.")
+            Text(infoCardBody)
                 .font(.caption)
                 .foregroundStyle(.coveLightGray.opacity(0.60))
                 .fixedSize(horizontal: false, vertical: true)
@@ -141,19 +161,47 @@ struct CloudBackupEnableOnboardingView: View {
     private var checkboxSection: some View {
         VStack(spacing: 6) {
             Toggle(isOn: $checks[0]) {
-                Text("I understand that my passkey is required to access my Cloud Backup. I must not delete my passkey.")
+                Text(firstCheckboxText)
             }
             .toggleStyle(DarkCheckboxToggleStyle())
 
             Toggle(isOn: $checks[1]) {
-                Text("I understand that I need access to my iCloud account. If I lose access to my passkey or my iCloud account, my Cloud Backup won't be recoverable.")
+                Text(secondCheckboxText)
             }
             .toggleStyle(DarkCheckboxToggleStyle())
 
             Toggle(isOn: $checks[2]) {
-                Text("I understand that for maximum safety, I should still manually back up my 12 or 24 words offline on pen and paper.")
+                Text(thirdCheckboxText)
             }
             .toggleStyle(DarkCheckboxToggleStyle())
+        }
+    }
+
+    private var infoCardBody: String {
+        switch context {
+        case .standard:
+            "Your wallet backup is end-to-end encrypted before upload and stored in iCloud Drive. Only your passkey can decrypt it, so both are needed to restore your wallets."
+
+        case .hardwareImport:
+            "This backs up your imported hardware wallet configuration and labels in iCloud Drive, and it also enables backup for compatible wallets you create in Cove later. Your hardware wallet seed and private keys are not backed up by Cove."
+        }
+    }
+
+    private var firstCheckboxText: String {
+        "I understand that my passkey is required to access my Cloud Backup. I must not delete my passkey."
+    }
+
+    private var secondCheckboxText: String {
+        "I understand that I need access to my iCloud account. If I lose access to my passkey or my iCloud account, my Cloud Backup won't be recoverable."
+    }
+
+    private var thirdCheckboxText: String {
+        switch context {
+        case .standard:
+            "I understand that for maximum safety, I should still manually back up my 12 or 24 words offline on pen and paper."
+
+        case .hardwareImport:
+            "I understand that Cloud Backup does not replace the offline backup for my hardware wallet seed or recovery phrase."
         }
     }
 

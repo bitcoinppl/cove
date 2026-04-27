@@ -30,14 +30,14 @@ enum FinalizePendingVerificationResult {
 }
 
 impl RustCloudBackupManager {
-    pub(crate) fn finalize_pending_verification_if_ready(&self) {
+    pub(crate) async fn finalize_pending_verification_if_ready(&self) {
         let Some(completion) = self.pending_verification_completion() else { return };
 
-        if !self.pending_verification_uploads_confirmed(&completion) {
+        if !self.pending_verification_uploads_confirmed(&completion).await {
             return;
         }
 
-        match self.finalize_pending_verification(completion.clone()) {
+        match self.finalize_pending_verification(completion.clone()).await {
             Ok(FinalizePendingVerificationResult::Pending) => return,
             Ok(FinalizePendingVerificationResult::Completed(report)) => {
                 self.apply_verified_report(report)
@@ -48,7 +48,7 @@ impl RustCloudBackupManager {
         self.clear_pending_verification_completion();
     }
 
-    fn pending_verification_uploads_confirmed(
+    async fn pending_verification_uploads_confirmed(
         &self,
         completion: &PendingVerificationCompletion,
     ) -> bool {
@@ -62,14 +62,17 @@ impl RustCloudBackupManager {
             .map(|state| (state.record_id.clone(), state.state))
             .collect();
 
-        completion.uploads().iter().all(|upload| {
+        for upload in completion.uploads() {
             let sync_state = sync_states_by_record_id.get(upload.record_id());
+            if !self.is_pending_upload_confirmed(completion, upload, sync_state).await {
+                return false;
+            }
+        }
 
-            self.is_pending_upload_confirmed(completion, upload, sync_state)
-        })
+        true
     }
 
-    fn is_pending_upload_confirmed(
+    async fn is_pending_upload_confirmed(
         &self,
         completion: &PendingVerificationCompletion,
         upload: &PendingVerificationUpload,
@@ -86,6 +89,7 @@ impl RustCloudBackupManager {
                     completion.namespace_id().to_string(),
                     upload.record_id().to_string(),
                 )
+                .await
                 .map(|_| true)
                 .or_else(|error| match error {
                     CloudStorageError::NotFound(_) => Ok(false),
@@ -96,7 +100,7 @@ impl RustCloudBackupManager {
         }
     }
 
-    fn finalize_pending_verification(
+    async fn finalize_pending_verification(
         &self,
         completion: PendingVerificationCompletion,
     ) -> Result<FinalizePendingVerificationResult, Box<DeepVerificationFailure>> {
@@ -126,12 +130,15 @@ impl RustCloudBackupManager {
             .collect();
 
         for upload in completion.uploads() {
-            match self.verify_pending_wallet_backup(
-                &completion,
-                upload,
-                sync_states_by_record_id.get(upload.record_id()),
-                &critical_key,
-            )? {
+            match self
+                .verify_pending_wallet_backup(
+                    &completion,
+                    upload,
+                    sync_states_by_record_id.get(upload.record_id()),
+                    &critical_key,
+                )
+                .await?
+            {
                 PendingWalletVerificationOutcome::Pending => {
                     return Ok(FinalizePendingVerificationResult::Pending);
                 }
@@ -141,11 +148,11 @@ impl RustCloudBackupManager {
             }
         }
 
-        report.detail = self.pending_verification_detail(&completion);
+        report.detail = self.pending_verification_detail(&completion).await;
         Ok(FinalizePendingVerificationResult::Completed(report))
     }
 
-    fn verify_pending_wallet_backup(
+    async fn verify_pending_wallet_backup(
         &self,
         completion: &PendingVerificationCompletion,
         upload: &PendingVerificationUpload,
@@ -160,7 +167,7 @@ impl RustCloudBackupManager {
             Zeroizing::new(*critical_key),
         );
 
-        match reader.summary(record_id) {
+        match reader.summary(record_id).await {
             Ok(WalletBackupLookup::Found(summary))
                 if summary.revision_hash != expected_revision =>
             {
@@ -189,11 +196,11 @@ impl RustCloudBackupManager {
         }
     }
 
-    fn pending_verification_detail(
+    async fn pending_verification_detail(
         &self,
         completion: &PendingVerificationCompletion,
     ) -> Option<CloudBackupDetail> {
-        match self.refresh_cloud_backup_detail() {
+        match self.refresh_cloud_backup_detail().await {
             Some(CloudBackupDetailResult::Success(detail)) => Some(detail),
             Some(CloudBackupDetailResult::AccessError(error)) => {
                 warn!("Pending verification: failed to refresh detail: {error}");
@@ -211,7 +218,7 @@ impl RustCloudBackupManager {
         DeepVerificationFailure {
             kind: VerificationFailureKind::Retry,
             message: message.into(),
-            detail: self.pending_verification_detail(completion),
+            detail: completion.report().detail.clone(),
         }
     }
 

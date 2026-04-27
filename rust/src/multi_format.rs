@@ -16,6 +16,7 @@ use tracing::{debug, warn};
 use crate::{
     hardware_export::HardwareExport,
     mnemonic::ParseMnemonic as _,
+    signed_import::SignedImportError,
     transaction::ffi::BitcoinTransaction,
     wallet::{AddressWithNetwork, address::AddressError},
 };
@@ -62,6 +63,9 @@ pub enum MultiFormatError {
 
     #[error("Taproot wallets are not supported yet")]
     TaprootNotSupported,
+
+    #[error("PSBT has no signatures — sign it with your hardware wallet before importing")]
+    PsbtNotSigned,
 }
 
 type Result<T, E = MultiFormatError> = std::result::Result<T, E>;
@@ -158,14 +162,21 @@ impl MultiFormat {
             }
         }
 
-        // try to parse as PSBT (base64 or hex)
-        if let Ok(parsed) = crate::signed_import::SignedTransactionOrPsbt::try_parse(string) {
-            if let Some(psbt) = parsed.psbt() {
-                return Ok(Self::SignedPsbt(psbt));
+        // try to parse as PSBT (base64 or hex); if it fails for any reason other than NotSigned,
+        // keep trying other formats — but NotSigned means it's definitely a PSBT so stop here
+        match crate::signed_import::SignedTransactionOrPsbt::try_parse(string) {
+            Ok(parsed) => {
+                if let Some(psbt) = parsed.psbt() {
+                    return Ok(Self::SignedPsbt(psbt));
+                }
+                if let Some(txn) = parsed.transaction() {
+                    return Ok(Self::Transaction(txn));
+                }
             }
-            if let Some(txn) = parsed.transaction() {
-                return Ok(Self::Transaction(txn));
+            Err(SignedImportError::NotSigned) => {
+                return Err(MultiFormatError::PsbtNotSigned);
             }
+            Err(_) => {}
         }
 
         warn!("could not parse string as MultiFormat: {string}");
@@ -188,12 +199,13 @@ impl MultiFormat {
 
         match ur_type {
             UrType::CryptoPsbt => {
-                // decode crypto-psbt CBOR structure
                 let crypto_psbt = cove_ur::CryptoPsbt::decode(data.to_vec())
                     .map_err(|_| MultiFormatError::UnrecognizedFormat)?;
 
-                // return as SignedPsbt to preserve signature data
                 let psbt = Psbt::from(crypto_psbt.psbt().clone());
+                if !crate::signed_import::psbt_has_signatures(&psbt) {
+                    return Err(MultiFormatError::PsbtNotSigned);
+                }
                 Ok(Self::SignedPsbt(Arc::new(psbt)))
             }
 
@@ -437,19 +449,33 @@ mod tests {
 
     #[test]
     fn test_crypto_psbt_ur() {
-        // use same test PSBT as cove-ur crate
-        const TEST_PSBT_HEX: &str = "70736274ff01009a020000000258e87a21b56daf0c23be8e7070456c336f7cbaa5c8757924f545887bb2abdd750000000000ffffffff838d0427d0ec650a68aa46bb0b098aea4422c071b2ca78352a077959d07cea1d0100000000ffffffff0270aaf00800000000160014d85c2b71d0060b09c9886aeb815e50991dda124d00e1f5050000000016001400aea9a2e5f0f876a588df5546e8742d1d87008f000000000000000000";
+        let crypto_psbt = cove_ur::CryptoPsbt::from_psbt_bytes(make_signed_psbt_bytes()).unwrap();
+        let ur_string = crypto_psbt.to_ur().unwrap();
+        let result = MultiFormat::try_from_ur_string(&ur_string).unwrap();
+        assert!(matches!(result, MultiFormat::SignedPsbt(_)));
+    }
 
+    #[test]
+    fn test_unsigned_psbt_ur_returns_not_signed() {
         let psbt_bytes = hex::decode(TEST_PSBT_HEX).unwrap();
         let crypto_psbt = cove_ur::CryptoPsbt::from_psbt_bytes(psbt_bytes).unwrap();
         let ur_string = crypto_psbt.to_ur().unwrap();
+        let result = MultiFormat::try_from_ur_string(&ur_string);
+        assert!(matches!(result, Err(MultiFormatError::PsbtNotSigned)), "{result:?}");
+    }
 
-        let result = MultiFormat::try_from_ur_string(&ur_string).unwrap();
+    #[test]
+    fn test_unsigned_psbt_hex_returns_not_signed_via_multi_format() {
+        let result = MultiFormat::try_from_string(TEST_PSBT_HEX);
+        assert!(matches!(result, Err(MultiFormatError::PsbtNotSigned)), "{result:?}");
+    }
 
-        match result {
-            MultiFormat::SignedPsbt(_) => {} // success - returns full PSBT
-            _ => panic!("Expected SignedPsbt variant"),
-        }
+    #[test]
+    fn test_unsigned_psbt_base64_returns_not_signed_via_multi_format() {
+        use base64::{Engine as _, prelude::BASE64_STANDARD};
+        let base64 = BASE64_STANDARD.encode(hex::decode(TEST_PSBT_HEX).unwrap());
+        let result = MultiFormat::try_from_string(&base64);
+        assert!(matches!(result, Err(MultiFormatError::PsbtNotSigned)), "{result:?}");
     }
 
     #[test]
@@ -545,13 +571,23 @@ mod tests {
         assert!(matches!(result.unwrap(), MultiFormat::HardwareExport(_)));
     }
 
-    // same test PSBT from signed_import tests
+    // unsigned PSBT, used for BBQr/UR transport tests that bypass the signature check
     const TEST_PSBT_HEX: &str = "70736274ff01009a020000000258e87a21b56daf0c23be8e7070456c336f7cbaa5c8757924f545887bb2abdd750000000000ffffffff838d0427d0ec650a68aa46bb0b098aea4422c071b2ca78352a077959d07cea1d0100000000ffffffff0270aaf00800000000160014d85c2b71d0060b09c9886aeb815e50991dda124d00e1f5050000000016001400aea9a2e5f0f876a588df5546e8742d1d87008f000000000000000000";
+
+    fn make_signed_psbt_bytes() -> Vec<u8> {
+        let mut psbt = Psbt::try_new(hex::decode(TEST_PSBT_HEX).unwrap()).unwrap();
+        for input in &mut psbt.0.inputs {
+            let mut witness = bitcoin::Witness::new();
+            witness.push([0x01u8]);
+            input.final_script_witness = Some(witness);
+        }
+        psbt.0.serialize()
+    }
 
     #[test]
     fn test_multi_format_hex_psbt() {
-        let result = MultiFormat::try_from_string(TEST_PSBT_HEX);
-        assert!(result.is_ok(), "Failed to parse hex PSBT: {:?}", result);
+        let result = MultiFormat::try_from_string(&hex::encode(make_signed_psbt_bytes()));
+        assert!(result.is_ok(), "{result:?}");
         assert!(matches!(result.unwrap(), MultiFormat::SignedPsbt(_)));
     }
 
@@ -559,20 +595,19 @@ mod tests {
     fn test_multi_format_base64_psbt() {
         use base64::{Engine as _, prelude::BASE64_STANDARD};
 
-        let bytes = hex::decode(TEST_PSBT_HEX).unwrap();
-        let base64 = BASE64_STANDARD.encode(&bytes);
-
-        let result = MultiFormat::try_from_string(&base64);
-        assert!(result.is_ok(), "Failed to parse base64 PSBT: {:?}", result);
+        let result =
+            MultiFormat::try_from_string(&BASE64_STANDARD.encode(make_signed_psbt_bytes()));
+        assert!(result.is_ok(), "{result:?}");
         assert!(matches!(result.unwrap(), MultiFormat::SignedPsbt(_)));
     }
 
     #[test]
     fn test_multi_format_psbt_with_whitespace() {
-        // QR scanners may add leading/trailing whitespace
-        let psbt_with_whitespace = format!("  {}  \n", TEST_PSBT_HEX);
-        let result = MultiFormat::try_from_string(&psbt_with_whitespace);
-        assert!(result.is_ok(), "Should handle whitespace: {:?}", result);
+        let result = MultiFormat::try_from_string(&format!(
+            "  {}  \n",
+            hex::encode(make_signed_psbt_bytes())
+        ));
+        assert!(result.is_ok(), "{result:?}");
         assert!(matches!(result.unwrap(), MultiFormat::SignedPsbt(_)));
     }
 
@@ -592,7 +627,8 @@ mod tests {
             split::{Split, SplitOptions},
         };
 
-        let original_bytes = hex::decode(TEST_PSBT_HEX).unwrap();
+        // path 1 goes through signed_import which validates signatures
+        let original_bytes = make_signed_psbt_bytes();
 
         // PATH 1: Base64 text parsing
         let base64_input = BASE64_STANDARD.encode(&original_bytes);

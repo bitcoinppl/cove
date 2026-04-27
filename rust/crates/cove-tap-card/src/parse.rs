@@ -184,6 +184,11 @@ fn message_and_signature_to_pubkeys(
     signature: &str,
 ) -> Result<Vec<PublicKey>, SignatureParseError> {
     let signature = hex::decode(signature.as_bytes()).map_err(SignatureParseError::HexDecode)?;
+
+    if signature.len() != 64 {
+        return Err(SignatureParseError::InvalidSignatureLength(signature.len() as u32));
+    }
+
     let mut pubkeys = Vec::with_capacity(4);
 
     for rec_id in 0..4 {
@@ -320,5 +325,146 @@ mod tests {
 
         let readable_ident = &ts.full_card_ident();
         assert_eq!(readable_ident, "XUFC5-2SWY2-PX24Q-IZC7W")
+    }
+
+    /// Canonical SATSCARD query fragment (sealed) — same as `test_parses_sats_card`.
+    const SATSCARD_SEALED_FRAGMENT: &str = "u=S&o=0&r=95kesdwq&n=ab78fd50637f8f5a&s=26d1a0684f99fe43b223dca75081bb05bd0233b901139cdd33a4d0a2e61666ed1470d7c53d90f6ae4c60a6cbc7a0f4ded5f13461092b24604ad476bbcf1dd913";
+
+    fn satscard_https(fragment: &str) -> String {
+        format!("https://getsatscard.com/start#{fragment}")
+    }
+
+    #[test]
+    fn test_sats_card_missing_nonce_errors() {
+        let fragment = SATSCARD_SEALED_FRAGMENT.replace("n=ab78fd50637f8f5a&", "");
+        let err = TapCard::parse(&satscard_https(&fragment)).unwrap_err();
+        assert!(matches!(err, Error::MissingField(Field::Nonce)));
+    }
+
+    #[test]
+    fn test_sats_card_missing_signature_errors() {
+        // Strip everything from the last `&` (removes `&s=...`).
+        let fragment =
+            SATSCARD_SEALED_FRAGMENT[..SATSCARD_SEALED_FRAGMENT.rfind('&').unwrap()].to_string();
+        let err = TapCard::parse(&satscard_https(&fragment)).unwrap_err();
+        assert!(matches!(err, Error::MissingField(Field::Signature)));
+    }
+
+    #[test]
+    fn test_sats_card_missing_state_errors() {
+        let fragment = SATSCARD_SEALED_FRAGMENT.replacen("u=S&", "", 1);
+        let err = TapCard::parse(&satscard_https(&fragment)).unwrap_err();
+        assert!(matches!(err, Error::MissingField(Field::State)));
+    }
+
+    #[test]
+    fn test_sats_card_missing_address_errors() {
+        let fragment = SATSCARD_SEALED_FRAGMENT.replace("r=95kesdwq&", "");
+        let err = TapCard::parse(&satscard_https(&fragment)).unwrap_err();
+        assert!(matches!(err, Error::MissingField(Field::Address)));
+    }
+
+    #[test]
+    fn test_sats_card_missing_slot_number_errors() {
+        let fragment = SATSCARD_SEALED_FRAGMENT.replace("o=0&", "");
+        let err = TapCard::parse(&satscard_https(&fragment)).unwrap_err();
+        assert!(matches!(err, Error::MissingField(Field::SlotNumber)));
+    }
+
+    #[test]
+    fn test_sats_card_empty_state_errors() {
+        let fragment = SATSCARD_SEALED_FRAGMENT.replacen("u=S", "u=", 1);
+        let err = TapCard::parse(&satscard_https(&fragment)).unwrap_err();
+        assert!(matches!(err, Error::EmptyCardState));
+    }
+
+    #[test]
+    fn test_sats_card_unknown_state_errors() {
+        let fragment = SATSCARD_SEALED_FRAGMENT.replacen("u=S", "u=Z", 1);
+        let err = TapCard::parse(&satscard_https(&fragment)).unwrap_err();
+        assert!(matches!(err, Error::UnknownCardState('Z')));
+    }
+
+    #[test]
+    fn test_sats_card_invalid_slot_number_errors() {
+        let fragment = SATSCARD_SEALED_FRAGMENT.replace("o=0", "o=xyz");
+        let err = TapCard::parse(&satscard_https(&fragment)).unwrap_err();
+        let Error::UnableToParseSlot(parse_err) = err else {
+            panic!("expected UnableToParseSlot, got {err:?}");
+        };
+        assert_eq!(*parse_err.kind(), std::num::IntErrorKind::InvalidDigit);
+    }
+
+    #[test]
+    fn test_parses_unsealed_sats_card() {
+        // The active/imported slot is the interesting SATSCARD state for Cove's
+        // sweep-and-import flow. SATSCARD parsing does not do signature recovery,
+        // so flipping only the state char on an otherwise-valid fragment is enough.
+        let fragment = SATSCARD_SEALED_FRAGMENT.replacen("u=S", "u=U", 1);
+        let TapCard::SatsCard(sats_card) = TapCard::parse(&satscard_https(&fragment)).unwrap()
+        else {
+            panic!("not a sats card");
+        };
+        assert_eq!(sats_card.state, SatsCardState::Unsealed);
+        assert_eq!(sats_card.slot_number, 0);
+        assert_eq!(sats_card.address_suffix, "95kesdwq");
+    }
+
+    #[test]
+    fn test_parses_http_satscard_url() {
+        let url = format!("http://getsatscard.com/start#{SATSCARD_SEALED_FRAGMENT}");
+        assert!(matches!(TapCard::parse(&url).unwrap(), TapCard::SatsCard(_)));
+    }
+
+    #[test]
+    fn test_parse_rejects_unknown_host() {
+        let url = format!("https://example.com/start#{SATSCARD_SEALED_FRAGMENT}");
+        assert!(matches!(TapCard::parse(&url).unwrap_err(), Error::InvalidUrl(_)));
+    }
+
+    #[test]
+    fn test_sats_card_url_message_for_digest() {
+        let fragment = SATSCARD_SEALED_FRAGMENT;
+        let expected = "u=S&o=0&r=95kesdwq&n=ab78fd50637f8f5a&s=";
+        assert_eq!(url_message_for_digest(fragment), expected);
+    }
+
+    #[test]
+    fn test_card_pubkey_to_full_ident_wrong_length() {
+        let err = card_pubkey_to_full_ident(&[0u8; 32]).unwrap_err();
+        assert!(matches!(err, SignatureParseError::InvalidPubkeyLength(32)));
+    }
+
+    #[test]
+    fn test_card_pubkey_to_full_ident_literal() {
+        let url = "https://tapsigner.com/start#t=1&u=S&c=04d74fb1dfee7a4d&n=8940dc9808088820&s=6bda376546b7074b5a52f3264fe118d38889f49501b591b0b9e90a2ff2e07d26572898aaeb0f963a52cf707e7483203520ce40bdf5071e8f80262d587b41b99f";
+        let TapCard::TapSigner(ts) = TapCard::parse(url).unwrap() else {
+            panic!("tap signer");
+        };
+        let ident = card_pubkey_to_full_ident(&ts.pubkey.serialize()).unwrap();
+        assert_eq!(ident, "XUFC5-2SWY2-PX24Q-IZC7W");
+    }
+
+    #[test]
+    fn test_tap_signer_missing_ident_errors() {
+        let url = "https://tapsigner.com/start#t=1&u=S&n=8940dc9808088820&s=6bda376546b7074b5a52f3264fe118d38889f49501b591b0b9e90a2ff2e07d26572898aaeb0f963a52cf707e7483203520ce40bdf5071e8f80262d587b41b99f";
+        let err = TapCard::parse(url).unwrap_err();
+        assert!(matches!(err, Error::MissingField(Field::Ident)));
+    }
+
+    #[test]
+    fn test_tap_signer_signature_too_short_errors() {
+        let url = "https://tapsigner.com/start#t=1&u=S&c=04d74fb1dfee7a4d&n=8940dc9808088820&s=00";
+        let err = TapCard::parse(url).unwrap_err();
+        assert!(matches!(
+            err,
+            Error::UnableToParseSignature(SignatureParseError::InvalidSignatureLength(1))
+        ));
+    }
+
+    #[test]
+    fn test_parse_trims_leading_whitespace() {
+        let url = format!("  \n\t{}", satscard_https(SATSCARD_SEALED_FRAGMENT));
+        assert!(matches!(TapCard::parse(&url).unwrap(), TapCard::SatsCard(_)));
     }
 }

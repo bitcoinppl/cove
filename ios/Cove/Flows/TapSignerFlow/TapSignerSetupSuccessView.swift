@@ -74,13 +74,13 @@ struct TapSignerSetupSuccess: View {
                 .fixedSize(horizontal: false, vertical: true)
             }
 
-            ShareLink(
-                item: BackupExport(
-                    content: hexEncode(bytes: setup.backup),
-                    filename: "\(tapSigner.identFileNamePrefix())_backup.txt"
-                ),
-                preview: SharePreview("\(tapSigner.identFileNamePrefix())_backup.txt")
-            ) {
+            Button(action: {
+                let content = hexEncode(bytes: setup.backup)
+                let filename = "\(tapSigner.identFileNamePrefix())_backup.txt"
+                ShareSheet.present(data: content, filename: filename) { success in
+                    if !success { Log.warn("Backup export cancelled or failed") }
+                }
+            }) {
                 HStack {
                     VStack(spacing: 4) {
                         HStack {

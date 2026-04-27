@@ -1,7 +1,5 @@
 import SwiftUI
 
-@_exported import CoveCore
-
 private extension CloudOnlyOperation {
     var operatingRecordId: String? {
         if case let .operating(recordId) = self { return recordId }
@@ -122,9 +120,9 @@ struct HeaderSection: View {
                     Text("Last synced \(formatDate(lastSync))")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-
-                    syncHealthLabel
                 }
+
+                syncHealthLabel
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
@@ -134,6 +132,9 @@ struct HeaderSection: View {
     @ViewBuilder
     private var headerIcon: some View {
         switch syncHealth {
+        case .unknown:
+            Image(systemName: "icloud")
+                .foregroundColor(.secondary)
         case .allUploaded, .noFiles:
             Image(systemName: "checkmark.icloud.fill")
                 .foregroundColor(.green)
@@ -152,6 +153,14 @@ struct HeaderSection: View {
     @ViewBuilder
     private var syncHealthLabel: some View {
         switch syncHealth {
+        case .unknown:
+            HStack(spacing: 4) {
+                ProgressView()
+                    .controlSize(.mini)
+                Text("Checking iCloud sync status...")
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
         case .allUploaded:
             Label("All files synced to iCloud", systemImage: "checkmark.circle.fill")
                 .font(.caption)
@@ -343,15 +352,12 @@ private struct CloudOnlyActionDialogs: ViewModifier {
 struct WalletSections: View {
     let wallets: [CloudBackupWalletItem]
 
-    private let groupedWallets: GroupedWalletSections
-
-    init(wallets: [CloudBackupWalletItem]) {
-        self.wallets = wallets
-        groupedWallets = GroupedWalletSections(wallets: wallets)
+    private var groupedWallets: [GroupedWalletSections.Section] {
+        GroupedWalletSections(wallets: wallets).sections
     }
 
     var body: some View {
-        ForEach(groupedWallets.sections) { group in
+        ForEach(groupedWallets) { group in
             Section(header: sectionHeader(for: group.key)) {
                 ForEach(group.items, id: \.recordId) { item in
                     WalletItemRow(item: item)

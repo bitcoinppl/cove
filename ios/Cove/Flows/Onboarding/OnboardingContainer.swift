@@ -1,15 +1,9 @@
 import SwiftUI
 
 struct OnboardingContainer: View {
-    @State private var manager: OnboardingManager
+    let manager: OnboardingManager
     let auth: AuthManager
     let onComplete: () -> Void
-
-    init(manager: OnboardingManager, auth: AuthManager, onComplete: @escaping () -> Void) {
-        _manager = State(initialValue: manager)
-        self.auth = auth
-        self.onComplete = onComplete
-    }
 
     var body: some View {
         CloudBackupPresentationHost(
@@ -34,6 +28,14 @@ struct OnboardingContainer: View {
         }
     }
 
+    private var restoreWarningMessage: String? {
+        guard manager.state.step == .restoreOffer,
+              manager.state.cloudRestoreState == .inconclusive
+        else { return nil }
+
+        return manager.state.cloudRestoreMessage
+    }
+
     @ViewBuilder
     private func stepView(for step: OnboardingStep) -> some View {
         switch step {
@@ -48,15 +50,19 @@ struct OnboardingContainer: View {
         case .restoreOffer:
             CloudRestoreOfferView(
                 onRestore: {
-                    manager.cloudCheckWarning = nil
                     manager.dispatch(.startRestore)
                 },
                 onSkip: {
-                    manager.cloudCheckWarning = nil
                     manager.dispatch(.skipRestore)
                 },
-                warningMessage: manager.cloudCheckWarning,
-                errorMessage: manager.cloudCheckWarning == nil ? manager.state.errorMessage : nil
+                warningMessage: restoreWarningMessage,
+                errorMessage: manager.state.errorMessage
+            )
+
+        case .restoreOffline:
+            OnboardingRestoreOfflineScreen(
+                onContinue: { manager.dispatch(.continueWithoutCloudRestore) },
+                onBack: { manager.dispatch(.back) }
             )
 
         case .restoreUnavailable:
@@ -78,6 +84,7 @@ struct OnboardingContainer: View {
 
         case .bitcoinChoice:
             OnboardingBitcoinChoiceScreen(
+                errorMessage: manager.state.errorMessage,
                 onNewHere: { manager.dispatch(.selectHasBitcoin(hasBitcoin: false)) },
                 onHasBitcoin: { manager.dispatch(.selectHasBitcoin(hasBitcoin: true)) }
             )
@@ -97,6 +104,7 @@ struct OnboardingContainer: View {
 
         case .storageChoice:
             OnboardingStorageChoiceScreen(
+                errorMessage: manager.state.errorMessage,
                 onRestoreFromCoveBackup: onOpenCloudRestore,
                 onSelectStorage: { selection in
                     manager.dispatch(.selectStorage(selection: selection))
@@ -106,6 +114,7 @@ struct OnboardingContainer: View {
 
         case .softwareChoice:
             OnboardingSoftwareChoiceScreen(
+                errorMessage: manager.state.errorMessage,
                 onRestoreFromCoveBackup: onOpenCloudRestore,
                 onSelectSoftwareAction: { selection in
                     manager.dispatch(.selectSoftwareAction(selection: selection))
@@ -131,6 +140,7 @@ struct OnboardingContainer: View {
 
         case .cloudBackup:
             OnboardingCloudBackupStepView(
+                branch: manager.state.branch,
                 onEnabled: { manager.dispatch(.cloudBackupEnabled) },
                 onSkip: { manager.dispatch(.skipCloudBackup) }
             )
@@ -142,38 +152,14 @@ struct OnboardingContainer: View {
                 onSaved: { manager.dispatch(.secretWordsSaved) }
             )
 
-        case .verifyWords:
-            if let walletId = manager.rust.currentWalletId() {
-                VerifyWordsContainer(
-                    id: walletId,
-                    onVerified: { manager.dispatch(.verifyWordsCompleted) }
-                )
-            } else {
-                OnboardingErrorScreen(
-                    title: "Unable to verify words",
-                    message: "The wallet was created, but the verification state could not be loaded."
-                )
-            }
-
         case .exchangeFunding:
             OnboardingExchangeFundingView(
                 walletId: manager.rust.currentWalletId(),
                 onContinue: { manager.dispatch(.continueFromExchangeFunding) }
             )
 
-        case .hardwareDeviceSelection:
-            OnboardingHardwareDeviceSelectionScreen(
-                selectedDevice: manager.state.hardwareDevice,
-                onRestoreFromCoveBackup: onOpenCloudRestore,
-                onSelect: { device in
-                    manager.dispatch(.selectHardwareDevice(device: device))
-                },
-                onBack: { manager.dispatch(.back) }
-            )
-
         case .hardwareImport:
             OnboardingHardwareImportFlowView(
-                device: manager.state.hardwareDevice,
                 onImported: { walletId in
                     manager.dispatch(.hardwareImportCompleted(walletId: walletId))
                 },

@@ -35,6 +35,9 @@ pub enum DescriptorKeyParseError {
     #[error("unsupported descriptor type: {0:?}")]
     UnsupportedDescriptorType(DescriptorType),
 
+    #[error("multisig descriptors are not yet supported")]
+    MultisigNotSupported,
+
     #[error("no origin found")]
     NoOrigin,
 
@@ -278,6 +281,7 @@ impl From<cove_bdk::descriptor_ext::Error> for DescriptorKeyParseError {
             E::NotMatchingPair => Self::UnsupportedDescriptor(
                 "descriptors are not a matching external/internal pair".to_string(),
             ),
+            E::MultisigNotSupported => Self::MultisigNotSupported,
         }
     }
 }

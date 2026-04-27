@@ -7,6 +7,7 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import org.bitcoinppl.cove_core.AuthType
+import org.bitcoinppl.cove_core.device.Connectivity
 import org.bitcoinppl.cove_core.RustCloudBackupManager
 import org.bitcoinppl.cove_core.device.Device
 import org.bitcoinppl.cove_core.device.Keychain
@@ -22,6 +23,8 @@ class CoveApplication : Application() {
     // hold references to FFI objects for proper cleanup
     private var keychain: Keychain? = null
     private var device: Device? = null
+    private var connectivity: Connectivity? = null
+    private var connectivityMonitor: ConnectivityMonitor? = null
     private var bootstrapCompleted = false
 
     override fun onCreate() {
@@ -43,6 +46,8 @@ class CoveApplication : Application() {
         try {
             keychain = Keychain(KeychainAccessor(this))
             device = Device(DeviceAccessor())
+            connectivityMonitor = ConnectivityMonitor(this)
+            connectivity = Connectivity(connectivityMonitor!!)
             Log.d(TAG, "Keychain and device initialized")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize keychain and device", e)
@@ -58,6 +63,7 @@ class CoveApplication : Application() {
         bootstrapCompleted = true
 
         AppManager.getInstance()
+        connectivityMonitor?.start()
         RustCloudBackupManager().use { rustCloudBackupManager ->
             rustCloudBackupManager.resumePendingCloudUploadVerification()
         }
@@ -80,11 +86,27 @@ class CoveApplication : Application() {
      */
     private fun cleanupFfiObjects() {
         try {
+            connectivityMonitor?.stop()
+            connectivityMonitor = null
+            Log.d(TAG, "Connectivity monitor stopped")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error stopping connectivity monitor", e)
+        }
+
+        try {
             device?.close()
             device = null
             Log.d(TAG, "Device FFI object closed")
         } catch (e: Exception) {
             Log.e(TAG, "Error closing Device FFI object", e)
+        }
+
+        try {
+            connectivity?.close()
+            connectivity = null
+            Log.d(TAG, "Connectivity FFI object closed")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error closing Connectivity FFI object", e)
         }
 
         try {

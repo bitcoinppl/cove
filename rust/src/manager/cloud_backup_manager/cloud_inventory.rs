@@ -1,9 +1,13 @@
 use std::collections::{HashMap, HashSet};
 
 use cove_util::ResultExt as _;
+use futures::stream::{self, StreamExt as _, TryStreamExt as _};
 
 use super::wallets::{RemoteWalletBackupSummary, all_local_wallets, prepare_wallet_backup};
-use super::{CloudBackupDetail, CloudBackupError, CloudBackupWalletItem, CloudBackupWalletStatus};
+use super::{
+    CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupDetail, CloudBackupError, CloudBackupWalletItem,
+    CloudBackupWalletStatus,
+};
 use crate::database::Database;
 use crate::database::cloud_backup::{
     CloudBlobFailedState, PersistedCloudBackupStatus, PersistedCloudBlobState,
@@ -49,12 +53,12 @@ pub(super) struct CloudWalletInventory {
 }
 
 impl CloudWalletInventory {
-    pub(super) fn load_with_remote_truth(
+    pub(super) async fn load_with_remote_truth(
         wallet_record_ids: &[String],
         remote_wallet_truth: RemoteWalletTruth,
     ) -> Result<Self, CloudBackupError> {
         let db = Database::global();
-        let local_wallets = all_local_wallet_snapshots(&db)?;
+        let local_wallets = all_local_wallet_snapshots(&db).await?;
         let last_sync = last_sync(&db);
         let sync_states_by_record_id = sync_states_by_record_id(&db)?;
 
@@ -228,12 +232,12 @@ fn wallet_item_bucket(item: &CloudBackupWalletItem) -> Option<WalletItemBucket> 
     }
 }
 
-fn all_local_wallet_snapshots(db: &Database) -> Result<Vec<LocalWalletSnapshot>, CloudBackupError> {
-    all_local_wallets(db)?
-        .into_iter()
-        .map(|wallet| {
-            let prepared = prepare_wallet_backup(&wallet, wallet.wallet_mode)?;
-
+async fn all_local_wallet_snapshots(
+    db: &Database,
+) -> Result<Vec<LocalWalletSnapshot>, CloudBackupError> {
+    stream::iter(all_local_wallets(db)?)
+        .map(|wallet| async move {
+            let prepared = prepare_wallet_backup(&wallet, wallet.wallet_mode).await?;
             Ok(LocalWalletSnapshot {
                 metadata: wallet,
                 record_id: prepared.record_id,
@@ -241,7 +245,9 @@ fn all_local_wallet_snapshots(db: &Database) -> Result<Vec<LocalWalletSnapshot>,
                 local_label_count: prepared.entry.labels_count,
             })
         })
-        .collect()
+        .buffered(CLOUD_BACKUP_IO_CONCURRENCY)
+        .try_collect()
+        .await
 }
 
 fn sync_status_from_state(

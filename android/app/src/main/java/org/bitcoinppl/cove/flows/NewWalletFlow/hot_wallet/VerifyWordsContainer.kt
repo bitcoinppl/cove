@@ -4,6 +4,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import android.view.WindowManager
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -11,8 +12,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.Log
+import org.bitcoinppl.cove.ScreenSecurity
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.components.FullPageLoadingView
 import org.bitcoinppl.cove_core.Route
@@ -35,6 +38,23 @@ fun VerifyWordsContainer(
     var loading by remember { mutableStateOf(true) }
     var verificationComplete by remember { mutableStateOf(false) }
     var showSecretWordsAlert by remember { mutableStateOf(false) }
+
+    // block screenshots — verify screen shows/references seed words
+    val context = LocalContext.current
+    DisposableEffect(Unit) {
+        val window = (context as? android.app.Activity)?.window
+        ScreenSecurity.enter()
+        window?.setFlags(
+            WindowManager.LayoutParams.FLAG_SECURE,
+            WindowManager.LayoutParams.FLAG_SECURE,
+        )
+        onDispose {
+            ScreenSecurity.exit()
+            if (!ScreenSecurity.isSensitiveScreen) {
+                window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            }
+        }
+    }
 
     LaunchedEffect(id) {
         loading = true

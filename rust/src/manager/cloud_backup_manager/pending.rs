@@ -167,8 +167,8 @@ impl RustCloudBackupManager {
         send!(self.runtime.ensure_pending_upload_verification_loop());
     }
 
-    pub(crate) fn verify_pending_uploads_once(&self) -> bool {
-        PendingUploadVerifier(self.clone()).run_once()
+    pub(crate) async fn verify_pending_uploads_once(&self) -> bool {
+        PendingUploadVerifier(self.clone()).run_once().await
     }
 
     pub(crate) fn wake_pending_upload_verifier(&self) {
