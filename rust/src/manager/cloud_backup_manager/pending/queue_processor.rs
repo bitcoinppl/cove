@@ -400,7 +400,7 @@ mod tests {
 
         let current = match &blob.state {
             PersistedCloudBlobState::UploadedPendingConfirmation(state) => state.clone(),
-            _ => unreachable!(),
+            _ => panic!("expected uploaded pending confirmation state"),
         };
 
         let blob =
@@ -428,7 +428,7 @@ mod tests {
 
         let current = match &blob.state {
             PersistedCloudBlobState::UploadedPendingConfirmation(state) => state.clone(),
-            _ => unreachable!(),
+            _ => panic!("expected uploaded pending confirmation state"),
         };
 
         let blob = PendingUploadVerifier::apply_blob_result(
@@ -464,7 +464,7 @@ mod tests {
 
         let current = match &blob.state {
             PersistedCloudBlobState::UploadedPendingConfirmation(state) => state.clone(),
-            _ => unreachable!(),
+            _ => panic!("expected uploaded pending confirmation state"),
         };
 
         let blob = PendingUploadVerifier::apply_blob_result(
@@ -501,7 +501,7 @@ mod tests {
 
         let current = match &blob.state {
             PersistedCloudBlobState::UploadedPendingConfirmation(state) => state.clone(),
-            _ => unreachable!(),
+            _ => panic!("expected uploaded pending confirmation state"),
         };
 
         let blob = PendingUploadVerifier::apply_blob_result(
@@ -532,7 +532,7 @@ mod tests {
 
         let current = match &blob.state {
             PersistedCloudBlobState::UploadedPendingConfirmation(state) => state.clone(),
-            _ => unreachable!(),
+            _ => panic!("expected uploaded pending confirmation state"),
         };
 
         let blob = PendingUploadVerifier::apply_blob_result(
@@ -563,7 +563,7 @@ mod tests {
 
         let current = match &blob.state {
             PersistedCloudBlobState::UploadedPendingConfirmation(state) => state.clone(),
-            _ => unreachable!(),
+            _ => panic!("expected uploaded pending confirmation state"),
         };
 
         let blob = PendingUploadVerifier::apply_blob_result(

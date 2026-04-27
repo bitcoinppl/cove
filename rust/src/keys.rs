@@ -162,25 +162,11 @@ impl Descriptor {
         keychain_kind: KeychainKind,
         network: Network,
     ) -> Self {
-        let derivable_key = &secret_key.0;
+        let (extended_descriptor, key_map, _) = Bip84(secret_key.xprv(), keychain_kind)
+            .build(network.into())
+            .expect("bip84 descriptor template should build from mnemonic xprv");
 
-        match derivable_key {
-            BdkDescriptorSecretKey::XPrv(descriptor_x_key) => {
-                let derivable_key = descriptor_x_key.xkey;
-                let (extended_descriptor, key_map, _) =
-                    Bip84(derivable_key, keychain_kind).build(network.into()).unwrap();
-
-                Self { extended_descriptor, key_map }
-            }
-
-            BdkDescriptorSecretKey::MultiXPrv(_) => {
-                unreachable!()
-            }
-
-            BdkDescriptorSecretKey::Single(_) => {
-                unreachable!()
-            }
-        }
+        Self { extended_descriptor, key_map }
     }
 
     /// BIP49 for P2WPKH-nested-in-P2SH (Wrapped Segwit)
@@ -189,22 +175,10 @@ impl Descriptor {
         keychain_kind: KeychainKind,
         network: Network,
     ) -> Self {
-        let derivable_key = &secret_key.0;
-
-        match derivable_key {
-            BdkDescriptorSecretKey::Single(_) => {
-                unreachable!()
-            }
-            BdkDescriptorSecretKey::XPrv(descriptor_x_key) => {
-                let derivable_key = descriptor_x_key.xkey;
-                let (extended_descriptor, key_map, _) =
-                    Bip49(derivable_key, keychain_kind).build(network.into()).unwrap();
-                Self { extended_descriptor, key_map }
-            }
-            BdkDescriptorSecretKey::MultiXPrv(_) => {
-                unreachable!()
-            }
-        }
+        let (extended_descriptor, key_map, _) = Bip49(secret_key.xprv(), keychain_kind)
+            .build(network.into())
+            .expect("bip49 descriptor template should build from mnemonic xprv");
+        Self { extended_descriptor, key_map }
     }
 
     /// BIP44 for P2PKH (Legacy)
@@ -213,22 +187,10 @@ impl Descriptor {
         keychain_kind: KeychainKind,
         network: Network,
     ) -> Self {
-        let derivable_key = &secret_key.0;
-
-        match derivable_key {
-            BdkDescriptorSecretKey::Single(_) => {
-                unreachable!()
-            }
-            BdkDescriptorSecretKey::XPrv(descriptor_x_key) => {
-                let derivable_key = descriptor_x_key.xkey;
-                let (extended_descriptor, key_map, _) =
-                    Bip44(derivable_key, keychain_kind).build(network.into()).unwrap();
-                Self { extended_descriptor, key_map }
-            }
-            BdkDescriptorSecretKey::MultiXPrv(_) => {
-                unreachable!()
-            }
-        }
+        let (extended_descriptor, key_map, _) = Bip44(secret_key.xprv(), keychain_kind)
+            .build(network.into())
+            .expect("bip44 descriptor template should build from mnemonic xprv");
+        Self { extended_descriptor, key_map }
     }
 
     pub fn into_tuple(self) -> (ExtendedDescriptor, KeyMap) {
@@ -237,6 +199,14 @@ impl Descriptor {
 }
 
 impl DescriptorSecretKey {
+    fn xprv(&self) -> bitcoin::bip32::Xpriv {
+        let BdkDescriptorSecretKey::XPrv(descriptor_x_key) = &self.0 else {
+            panic!("descriptor secret key must be an xprv")
+        };
+
+        descriptor_x_key.xkey
+    }
+
     pub(crate) fn new(network: Network, mnemonic: Mnemonic, passphrase: Option<String>) -> Self {
         let seed: Seed = mnemonic.to_seed(passphrase.as_deref().unwrap_or(""));
         let xkey: ExtendedKey = seed.into_extended_key().unwrap();

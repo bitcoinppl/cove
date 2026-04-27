@@ -228,7 +228,7 @@ fun SendFlowHardwareScreen(
         topBar = {
             CenterAlignedTopAppBar(
                 colors =
-                    TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    TopAppBarDefaults.topAppBarColors(
                         containerColor = Color.Transparent,
                         navigationIconContentColor = Color.White,
                         actionIconContentColor = Color.White,

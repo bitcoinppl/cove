@@ -191,7 +191,7 @@ fun SelectedWalletScreen(
                         }
                     },
                 colors =
-                    TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    TopAppBarDefaults.topAppBarColors(
                         // gradual fade from transparent to midnight blue based on scroll progress
                         containerColor = CoveColor.midnightBlue.copy(alpha = scrollProgress),
                         titleContentColor = Color.White,

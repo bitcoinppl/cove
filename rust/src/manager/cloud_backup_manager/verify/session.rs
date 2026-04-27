@@ -104,14 +104,16 @@ impl VerificationSession {
                 master_key
             }
             MasterKeyResolution::NeedsWrapperRepair { reuse_credential_id } => {
-                let master_key =
-                    match self.repair_wrapper_from_local_key(reuse_credential_id).await? {
-                        MasterKeyResolution::VerifiedCloudMasterKey(master_key) => master_key,
-                        MasterKeyResolution::Finished(result) => return Ok(result),
-                        MasterKeyResolution::NeedsWrapperRepair { .. } => {
-                            unreachable!("wrapper repair must resolve master key")
-                        }
-                    };
+                let master_key = match self
+                    .repair_wrapper_from_local_key(reuse_credential_id)
+                    .await?
+                {
+                    MasterKeyResolution::VerifiedCloudMasterKey(master_key) => master_key,
+                    MasterKeyResolution::Finished(result) => return Ok(result),
+                    MasterKeyResolution::NeedsWrapperRepair { .. } => {
+                        return Ok(self.retry_result("cloud master key wrapper still needs repair"));
+                    }
+                };
 
                 if self.wallets_missing {
                     return Ok(self.recreate_manifest_result());
