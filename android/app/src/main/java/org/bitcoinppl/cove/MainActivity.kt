@@ -639,7 +639,7 @@ private fun GlobalAlertDialog(
                     TextButton(onClick = {
                         onDismiss()
                         try {
-                            app.rust.selectWallet(state.walletId)
+                            app.selectWalletOrThrow(state.walletId)
                             app.resetRoute(Route.SelectedWallet(state.walletId))
                         } catch (e: Exception) {
                             Log.e("GlobalAlert", "Failed to select wallet", e)
@@ -821,7 +821,7 @@ private fun GlobalAlertDialog(
                     TextButton(onClick = {
                         onDismiss()
                         try {
-                            app.rust.selectWallet(state.walletId)
+                            app.selectWalletOrThrow(state.walletId)
                             app.resetRoute(Route.SelectedWallet(state.walletId))
                         } catch (e: Exception) {
                             Log.e("GlobalAlert", "Failed to select wallet", e)
@@ -994,7 +994,7 @@ private fun GlobalAlertDialog(
                                 try {
                                     Wallet.newFromXpub(xpub = text.trim()).use { wallet ->
                                         val id = wallet.id()
-                                        app.rust.selectWallet(id)
+                                        app.selectWalletOrThrow(id)
                                         app.resetRoute(Route.SelectedWallet(id))
                                     }
                                 } catch (e: Exception) {
@@ -1055,7 +1055,7 @@ private fun GlobalAlertDialog(
                         }
                         TextButton(onClick = {
                             onDismiss()
-                            app.rust.selectLatestOrNewWallet()
+                            app.selectLatestOrNewWallet()
                         }) { Text("Cancel") }
                     }
                 },

@@ -784,7 +784,7 @@ private fun SecurityAlertDialog(
                     TextButton(
                         onClick = {
                             try {
-                                app.rust.selectWallet(state.walletId)
+                                app.selectWalletOrThrow(state.walletId)
                             } catch (e: Exception) {
                                 Log.e("SecuritySection", "Failed to select wallet ${state.walletId}", e)
                             }

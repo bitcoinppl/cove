@@ -115,7 +115,7 @@ fun NewWalletSelectScreen(
                 val id = wallet.id()
                 android.util.Log.d("NewWalletSelectScreen", "Imported Wallet: $id")
 
-                app.rust.selectWallet(id = id)
+                app.selectWalletOrThrow(id)
                 app.popRoute()
                 app.alertState = TaggedItem(AppAlertState.ImportedSuccessfully)
             }

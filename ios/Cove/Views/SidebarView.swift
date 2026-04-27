@@ -139,13 +139,8 @@ struct SidebarView: View {
     }
 
     func goTo(_ route: Route) {
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-            app.isSidebarVisible = false
-        }
-
-        Task {
-            try? await Task.sleep(for: .milliseconds(200))
-            await navigateRoute(route)
+        app.closeSidebarAndNavigate {
+            navigateRoute(route)
         }
     }
 
@@ -153,19 +148,15 @@ struct SidebarView: View {
         navigate(route)
     }
 
-    private func navigateRoute(_ route: Route) async {
-        do {
-            if case let Route.selectedWallet(id: id) = route {
-                try app.rust.selectWallet(id: id)
-                return
-            }
+    private func navigateRoute(_ route: Route) {
+        if case let Route.selectedWallet(id: id) = route {
+            app.selectWallet(id)
+            return
+        }
 
-            if !app.hasWallets, route == Route.newWallet(.select) {
-                app.resetRoute(to: [RouteFactory().newWalletSelect()])
-                return
-            }
-        } catch {
-            Log.error("Failed to select wallet \(error)")
+        if !app.hasWallets, route == Route.newWallet(.select) {
+            app.resetRoute(to: [RouteFactory().newWalletSelect()])
+            return
         }
 
         navigateRouteOnMain(route)

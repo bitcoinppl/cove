@@ -8,6 +8,10 @@ private let walletModeChangeDelayMs = 250
     static let shared = makeShared()
 
     private let logger = Log(id: "AppManager")
+    @ObservationIgnored
+    private var navigationGeneration: UInt64 = 0
+    @ObservationIgnored
+    private var pendingSidebarNavigationTask: Task<Void, Never>?
 
     var rust: FfiApp
     var router: Router
@@ -176,11 +180,21 @@ private let walletModeChangeDelayMs = 250
     /// this will select the wallet and reset the route to the selectedWalletRoute
     func selectWallet(_ id: WalletId) {
         do {
-            try rust.selectWallet(id: id)
-            isSidebarVisible = false
+            try selectWalletOrThrow(id)
         } catch {
             Log.error("Unable to select wallet \(id), error: \(error)")
         }
+    }
+
+    func selectWalletOrThrow(_ id: WalletId) throws {
+        beginNavigationIntent()
+        try rust.selectWallet(id: id)
+        isSidebarVisible = false
+    }
+
+    func selectLatestOrNewWallet() {
+        beginNavigationIntent()
+        rust.selectLatestOrNewWallet()
     }
 
     func toggleSidebar() {
@@ -192,20 +206,24 @@ private let walletModeChangeDelayMs = 250
     }
 
     func pushRoute(_ route: Route) {
+        beginNavigationIntent()
         isSidebarVisible = false
         router.routes.append(route)
     }
 
     func pushRoutes(_ routes: [Route]) {
+        beginNavigationIntent()
         isSidebarVisible = false
         router.routes.append(contentsOf: routes)
     }
 
     func popRoute() {
+        beginNavigationIntent()
         router.routes.removeLast()
     }
 
     func setRoute(_ routes: [Route]) {
+        beginNavigationIntent()
         router.routes = routes
     }
 
@@ -215,17 +233,65 @@ private let walletModeChangeDelayMs = 250
 
     @MainActor
     func resetRoute(to routes: [Route]) {
-        guard routes.count > 1 else { return resetRoute(to: routes[0]) }
-        rust.resetNestedRoutesTo(defaultRoute: routes[0], nestedRoutes: Array(routes[1...]))
+        beginNavigationIntent()
+        if routes.count > 1 {
+            rust.resetNestedRoutesTo(defaultRoute: routes[0], nestedRoutes: Array(routes[1...]))
+        } else if let route = routes.first {
+            rust.resetDefaultRouteTo(route: route)
+        }
     }
 
     func resetRoute(to route: Route) {
+        beginNavigationIntent()
         rust.resetDefaultRouteTo(route: route)
     }
 
     @MainActor
     func loadAndReset(to route: Route) {
+        beginNavigationIntent()
         rust.loadAndResetDefaultRoute(route: route)
+    }
+
+    @discardableResult
+    private func beginNavigationIntent() -> UInt64 {
+        navigationGeneration &+= 1
+        return navigationGeneration
+    }
+
+    func closeSidebarAndNavigate(_ action: @escaping @MainActor () -> Void) {
+        pendingSidebarNavigationTask?.cancel()
+        let generation = beginNavigationIntent()
+
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            isSidebarVisible = false
+        }
+
+        pendingSidebarNavigationTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: .milliseconds(200))
+            } catch {
+                return
+            }
+
+            guard isNavigationGenerationCurrent(generation) else { return }
+            action()
+        }
+    }
+
+    @MainActor
+    func captureLoadAndResetGeneration() -> UInt64 {
+        navigationGeneration
+    }
+
+    @MainActor
+    func resetAfterLoadingIfCurrent(generation: UInt64, route: Route, nextRoute: [Route]) {
+        guard isNavigationGenerationCurrent(generation) else { return }
+        guard router.default == route else { return }
+        rust.resetAfterLoading(to: nextRoute)
+    }
+
+    private func isNavigationGenerationCurrent(_ generation: UInt64) -> Bool {
+        generation == navigationGeneration
     }
 
     func agreeToTerms() {

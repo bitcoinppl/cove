@@ -538,7 +538,7 @@ struct MainSettingsScreen: View {
                 """,
                 actions: {
                     Button("Go To Wallet") {
-                        try? app.rust.selectWallet(id: walletId)
+                        try? app.selectWalletOrThrow(walletId)
                     }
 
                     Button("Cancel", role: .cancel) { alertState = .none }

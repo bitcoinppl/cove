@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
@@ -29,6 +30,8 @@ class AppManager private constructor() : FfiReconcile {
 
     // Scope for UI-bound work; reconcile() hops to Main here
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var navigationGeneration = 0L
+    private var pendingSidebarNavigationJob: Job? = null
 
     // rust bridge - not observable
     internal var rust: FfiApp = FfiApp()
@@ -221,11 +224,22 @@ class AppManager private constructor() : FfiReconcile {
      */
     fun selectWallet(id: WalletId) {
         try {
-            rust.selectWallet(id)
-            isSidebarVisible = false
+            selectWalletOrThrow(id)
         } catch (e: Exception) {
             Log.e(tag, "Unable to select wallet $id", e)
         }
+    }
+
+    @Throws(Exception::class)
+    fun selectWalletOrThrow(id: WalletId) {
+        beginNavigationIntent()
+        rust.selectWallet(id)
+        isSidebarVisible = false
+    }
+
+    fun selectLatestOrNewWallet() {
+        beginNavigationIntent()
+        rust.selectLatestOrNewWallet()
     }
 
     fun toggleSidebar() {
@@ -237,14 +251,18 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     fun closeSidebarAndNavigate(action: suspend () -> Unit) {
+        pendingSidebarNavigationJob?.cancel()
+        val generation = beginNavigationIntent()
         isSidebarVisible = false
-        mainScope.launch {
+        pendingSidebarNavigationJob = mainScope.launch {
             kotlinx.coroutines.delay(SIDEBAR_NAVIGATION_DELAY_MS)
+            if (!isNavigationGenerationCurrent(generation)) return@launch
             action()
         }
     }
 
     fun pushRoute(route: Route) {
+        beginNavigationIntent()
         Log.d(tag, "pushRoute: $route")
         isSidebarVisible = false
         val newRoutes = router.routes.toMutableList().apply { add(route) }
@@ -257,6 +275,7 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     fun pushRoutes(routes: List<Route>) {
+        beginNavigationIntent()
         Log.d(tag, "pushRoutes: ${routes.size} routes")
         isSidebarVisible = false
         val newRoutes = router.routes.toMutableList().apply { addAll(routes) }
@@ -269,6 +288,7 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     fun popRoute() {
+        beginNavigationIntent()
         Log.d(tag, "popRoute")
         if (rust.canGoBack()) {
             val newRoutes = router.routes.dropLast(1)
@@ -282,6 +302,7 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     fun setRoute(routes: List<Route>) {
+        beginNavigationIntent()
         Log.d(tag, "setRoute: ${routes.size} routes")
 
         // only dispatch if routes actually changed
@@ -300,6 +321,7 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     fun resetRoute(to: List<Route>) {
+        beginNavigationIntent()
         if (to.size > 1) {
             rust.resetNestedRoutesTo(to[0], to.drop(1))
         } else if (to.isNotEmpty()) {
@@ -308,12 +330,33 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     fun resetRoute(to: Route) {
+        beginNavigationIntent()
         rust.resetDefaultRouteTo(to)
     }
 
     fun loadAndReset(to: Route) {
+        beginNavigationIntent()
         rust.loadAndResetDefaultRoute(to)
     }
+
+    fun captureLoadAndResetGeneration(): Long = navigationGeneration
+
+    fun resetAfterLoadingIfCurrent(
+        generation: Long,
+        route: Route.LoadAndReset,
+        nextRoutes: List<Route>,
+    ) {
+        if (!isNavigationGenerationCurrent(generation)) return
+        if (router.default != route) return
+        rust.resetAfterLoading(nextRoutes)
+    }
+
+    private fun beginNavigationIntent(): Long {
+        navigationGeneration += 1
+        return navigationGeneration
+    }
+
+    private fun isNavigationGenerationCurrent(generation: Long): Boolean = generation == navigationGeneration
 
     fun agreeToTerms() {
         dispatch(AppAction.AcceptTerms)

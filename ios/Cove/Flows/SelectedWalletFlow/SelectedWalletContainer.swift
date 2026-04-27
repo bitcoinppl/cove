@@ -33,7 +33,7 @@ struct SelectedWalletContainer: View {
                 let wallet = wallets.first(where: { $0.id != id })
 
                 if let wallet {
-                    try app.rust.selectWallet(id: wallet.id)
+                    try app.selectWalletOrThrow(wallet.id)
                 } else {
                     app.loadAndReset(to: Route.newWallet(.select))
                 }

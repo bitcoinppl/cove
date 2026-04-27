@@ -123,7 +123,7 @@ fun SidebarView(
                     wallet = wallet,
                     onClick = {
                         app.closeSidebarAndNavigate {
-                            app.rust.selectWallet(wallet.id)
+                            app.selectWallet(wallet.id)
                         }
                     },
                 )

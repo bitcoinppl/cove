@@ -275,11 +275,10 @@ fun HotWalletImportScreen(
     fun importWallet() {
         try {
             val walletMetadata = manager.importWallet(enteredWords)
+            app.selectWalletOrThrow(walletMetadata.id)
             app.clearWalletManager()
-            if (onImported != null) {
-                onImported.invoke(walletMetadata.id)
-            } else {
-                app.rust.selectWallet(walletMetadata.id)
+            onImported?.invoke(walletMetadata.id) ?: run {
+                app.selectWalletOrThrow(walletMetadata.id)
                 app.resetRoute(Route.SelectedWallet(walletMetadata.id))
             }
         } catch (e: ImportWalletException.InvalidWordGroup) {
@@ -520,7 +519,7 @@ fun HotWalletImportScreen(
                                     app.clearWalletManager()
                                     manager.close()
                                     onImported?.invoke(walletId) ?: run {
-                                        app.rust.selectWallet(walletId)
+                                        app.selectWalletOrThrow(walletId)
                                         app.resetRoute(Route.SelectedWallet(walletId))
                                     }
                                 }

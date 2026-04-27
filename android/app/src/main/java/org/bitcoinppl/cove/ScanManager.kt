@@ -100,7 +100,7 @@ class ScanManager private constructor() {
         val manager = ImportWalletManager()
         try {
             val walletMetadata = manager.rust.importWallet(listOf(words))
-            app.rust.selectWallet(walletMetadata.id)
+            app.selectWalletOrThrow(walletMetadata.id)
         } catch (e: ImportWalletException.InvalidWordGroup) {
             Log.d(tag, "Invalid word group detected")
             app.alertState = TaggedItem(AppAlertState.InvalidWordGroup)
@@ -108,7 +108,7 @@ class ScanManager private constructor() {
             Log.w(tag, "Attempted to import words for an existing hot wallet: ${e.v1}")
             app.alertState = TaggedItem(AppAlertState.DuplicateWallet(e.v1))
             try {
-                app.rust.selectWallet(e.v1)
+                app.selectWalletOrThrow(e.v1)
             } catch (selectError: Exception) {
                 Log.e(tag, "Unable to select existing wallet", selectError)
             }
@@ -132,7 +132,7 @@ class ScanManager private constructor() {
                 app.alertState = TaggedItem(AppAlertState.ImportedSuccessfully)
 
                 if (app.walletManager?.id != id) {
-                    app.rust.selectWallet(id)
+                    app.selectWalletOrThrow(id)
                 }
 
                 if (app.walletManager?.id == id && app.walletManager?.walletMetadata?.walletType != WalletType.HOT) {
@@ -148,7 +148,7 @@ class ScanManager private constructor() {
         } catch (e: WalletException.WalletAlreadyExists) {
             app.alertState = TaggedItem(AppAlertState.DuplicateWallet(e.v1))
             try {
-                app.rust.selectWallet(e.v1)
+                app.selectWalletOrThrow(e.v1)
             } catch (selectError: Exception) {
                 Log.e(tag, "Unable to select existing wallet", selectError)
                 app.alertState = TaggedItem(AppAlertState.UnableToSelectWallet)

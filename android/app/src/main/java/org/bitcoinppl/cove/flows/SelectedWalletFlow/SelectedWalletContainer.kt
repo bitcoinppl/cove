@@ -91,7 +91,7 @@ fun SelectedWalletContainer(
                 val otherWallet = wallets.firstOrNull { it.id != id }
 
                 if (otherWallet != null) {
-                    app.rust.selectWallet(otherWallet.id)
+                    app.selectWalletOrThrow(otherWallet.id)
                 } else {
                     app.loadAndReset(RouteFactory().newWalletSelect())
                 }
