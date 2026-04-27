@@ -1761,6 +1761,36 @@ mod tests {
     }
 
     #[test]
+    fn skipping_cloud_backup_after_software_import_goes_to_terms() {
+        let wallet_id = WalletId::new();
+        let mut flow = FlowState::CloudBackup(CloudBackupFlow::SoftwareImport {
+            wallet_id: wallet_id.clone(),
+        });
+        let mut restore_offer_allowed = false;
+
+        let command = flow.apply_user_action(
+            OnboardingAction::SkipCloudBackup,
+            CloudRestoreDiscovery::Checking,
+            &mut restore_offer_allowed,
+        );
+
+        assert_eq!(command, TransitionCommand::None);
+        match flow {
+            FlowState::Terms {
+                context:
+                    TermsContext::SelectWallet {
+                        wallet_id: id,
+                        post_onboarding: PostOnboardingDestination::None,
+                    },
+                ..
+            } => {
+                assert_eq!(id, wallet_id)
+            }
+            other => panic!("unexpected flow state: {other:?}"),
+        }
+    }
+
+    #[test]
     fn skipping_cloud_backup_after_hardware_import_goes_to_terms() {
         let wallet_id = WalletId::new();
         let mut flow = FlowState::CloudBackup(CloudBackupFlow::HardwareImport {
@@ -1799,6 +1829,150 @@ mod tests {
 
         assert_eq!(state.step, OnboardingStep::CloudBackup);
         assert_eq!(state.branch, Some(OnboardingBranch::Hardware));
+    }
+
+    #[test]
+    fn new_user_saved_words_flow_completes_with_verify_destination() {
+        let preview = preview_created_wallet_flow(OnboardingBranch::NewUser);
+        let wallet_id = preview.wallet_id.clone();
+        let mut flow = FlowState::BackupWallet(preview);
+
+        assert_eq!(
+            apply_action(&mut flow, OnboardingAction::ShowSecretWords),
+            TransitionCommand::None
+        );
+        assert!(matches!(flow, FlowState::SecretWords(_)));
+
+        assert_eq!(
+            apply_action(&mut flow, OnboardingAction::SecretWordsSaved),
+            TransitionCommand::None
+        );
+        assert!(matches!(
+            flow,
+            FlowState::BackupWallet(CreatedWalletFlow { secret_words_saved: true, .. })
+        ));
+
+        assert_eq!(
+            apply_action(&mut flow, OnboardingAction::ContinueFromBackup),
+            TransitionCommand::None
+        );
+        assert_terms_select_wallet(&flow, &wallet_id, PostOnboardingDestination::VerifyWords);
+
+        assert_eq!(
+            apply_action(&mut flow, OnboardingAction::AcceptTerms),
+            TransitionCommand::CompleteOnboarding(CompletionTarget::SelectWallet {
+                wallet_id,
+                post_onboarding: PostOnboardingDestination::VerifyWords,
+            })
+        );
+    }
+
+    #[test]
+    fn exchange_created_wallet_flow_completes_after_funding_screen() {
+        let mut preview = preview_created_wallet_flow(OnboardingBranch::Exchange);
+        preview.secret_words_saved = true;
+        let wallet_id = preview.wallet_id.clone();
+        let mut flow = FlowState::BackupWallet(preview);
+
+        assert_eq!(
+            apply_action(&mut flow, OnboardingAction::ContinueFromBackup),
+            TransitionCommand::None
+        );
+        assert!(matches!(flow, FlowState::ExchangeFunding(_)));
+
+        assert_eq!(
+            apply_action(&mut flow, OnboardingAction::ContinueFromExchangeFunding),
+            TransitionCommand::None
+        );
+        assert_terms_select_wallet(&flow, &wallet_id, PostOnboardingDestination::VerifyWords);
+
+        assert_eq!(
+            apply_action(&mut flow, OnboardingAction::AcceptTerms),
+            TransitionCommand::CompleteOnboarding(CompletionTarget::SelectWallet {
+                wallet_id,
+                post_onboarding: PostOnboardingDestination::VerifyWords,
+            })
+        );
+    }
+
+    #[test]
+    fn software_create_saved_words_flow_completes_with_verify_destination() {
+        let mut preview = preview_created_wallet_flow(OnboardingBranch::SoftwareCreate);
+        preview.secret_words_saved = true;
+        let wallet_id = preview.wallet_id.clone();
+        let mut flow = FlowState::BackupWallet(preview);
+
+        assert_eq!(
+            apply_action(&mut flow, OnboardingAction::ContinueFromBackup),
+            TransitionCommand::None
+        );
+        assert_terms_select_wallet(&flow, &wallet_id, PostOnboardingDestination::VerifyWords);
+
+        assert_eq!(
+            apply_action(&mut flow, OnboardingAction::AcceptTerms),
+            TransitionCommand::CompleteOnboarding(CompletionTarget::SelectWallet {
+                wallet_id,
+                post_onboarding: PostOnboardingDestination::VerifyWords,
+            })
+        );
+    }
+
+    #[test]
+    fn software_import_skip_cloud_backup_flow_completes_selected_wallet() {
+        let wallet_id = WalletId::new();
+        let mut flow = FlowState::SoftwareImport;
+
+        assert_eq!(
+            apply_action(
+                &mut flow,
+                OnboardingAction::SoftwareImportCompleted { wallet_id: wallet_id.clone() },
+            ),
+            TransitionCommand::None
+        );
+        assert!(matches!(flow, FlowState::CloudBackup(CloudBackupFlow::SoftwareImport { .. })));
+
+        assert_eq!(
+            apply_action(&mut flow, OnboardingAction::SkipCloudBackup),
+            TransitionCommand::None
+        );
+        assert_terms_select_wallet(&flow, &wallet_id, PostOnboardingDestination::None);
+
+        assert_eq!(
+            apply_action(&mut flow, OnboardingAction::AcceptTerms),
+            TransitionCommand::CompleteOnboarding(CompletionTarget::SelectWallet {
+                wallet_id,
+                post_onboarding: PostOnboardingDestination::None,
+            })
+        );
+    }
+
+    #[test]
+    fn hardware_import_skip_cloud_backup_flow_completes_selected_wallet() {
+        let wallet_id = WalletId::new();
+        let mut flow = FlowState::HardwareImport;
+
+        assert_eq!(
+            apply_action(
+                &mut flow,
+                OnboardingAction::HardwareImportCompleted { wallet_id: wallet_id.clone() },
+            ),
+            TransitionCommand::None
+        );
+        assert!(matches!(flow, FlowState::CloudBackup(CloudBackupFlow::HardwareImport { .. })));
+
+        assert_eq!(
+            apply_action(&mut flow, OnboardingAction::SkipCloudBackup),
+            TransitionCommand::None
+        );
+        assert_terms_select_wallet(&flow, &wallet_id, PostOnboardingDestination::None);
+
+        assert_eq!(
+            apply_action(&mut flow, OnboardingAction::AcceptTerms),
+            TransitionCommand::CompleteOnboarding(CompletionTarget::SelectWallet {
+                wallet_id,
+                post_onboarding: PostOnboardingDestination::None,
+            })
+        );
     }
 
     #[test]
@@ -2721,6 +2895,28 @@ mod tests {
 
     fn assert_no_reconcile_messages(manager: &RustOnboardingManager) {
         assert!(matches!(manager.reconcile_receiver.try_recv(), Err(flume::TryRecvError::Empty)));
+    }
+
+    fn apply_action(flow: &mut FlowState, action: OnboardingAction) -> TransitionCommand {
+        let mut restore_offer_allowed = false;
+        flow.apply_user_action(action, CloudRestoreDiscovery::Checking, &mut restore_offer_allowed)
+    }
+
+    fn assert_terms_select_wallet(
+        flow: &FlowState,
+        expected_wallet_id: &WalletId,
+        expected_destination: PostOnboardingDestination,
+    ) {
+        match flow {
+            FlowState::Terms {
+                context: TermsContext::SelectWallet { wallet_id, post_onboarding },
+                ..
+            } => {
+                assert_eq!(wallet_id, expected_wallet_id);
+                assert_eq!(*post_onboarding, expected_destination);
+            }
+            other => panic!("unexpected flow state: {other:?}"),
+        }
     }
 
     fn prepare_offline_cloud_check_retry(state: &mut InternalState) -> bool {
