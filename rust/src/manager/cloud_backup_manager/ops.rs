@@ -1893,7 +1893,7 @@ mod tests {
         let record_id = cove_cspp::backup_data::wallet_record_id(metadata.id.as_ref());
         persist_xpub_wallets(vec![metadata.clone()]);
         persist_dirty_blob_state(metadata.id.clone());
-        globals.cloud.fail_next_wallet_backup_upload("offline");
+        globals.cloud.fail_next_wallet_backup_upload_offline("offline");
 
         run_wallet_upload_for_test_async(&manager, metadata.id.clone()).await;
 
