@@ -2,8 +2,8 @@ use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
 use tracing::{info, warn};
 
 use super::super::{
-    BlockingCloudStep, CloudBackupDetailResult, CloudBackupStatus, RustCloudBackupManager,
-    SILENT_CLOUD_ACCESS, cloud_inventory::RemoteWalletTruth,
+    BlockingCloudStep, CloudBackupDetailResult, CloudBackupStatus, EXPLICIT_CLOUD_ACCESS,
+    RustCloudBackupManager, SILENT_CLOUD_ACCESS, cloud_inventory::RemoteWalletTruth,
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{CloudBlobConfirmedState, PersistedCloudBlobState};
@@ -34,7 +34,7 @@ impl RustCloudBackupManager {
         info!("refresh_cloud_backup_detail: listing wallets for namespace {namespace}");
         let cloud = CloudStorage::global();
         let wallet_record_ids =
-            match cloud.list_wallet_backups(namespace.clone(), SILENT_CLOUD_ACCESS).await {
+            match cloud.list_wallet_backups(namespace.clone(), EXPLICIT_CLOUD_ACCESS).await {
                 Ok(ids) => ids,
                 Err(CloudStorageError::NotFound(_)) => Vec::new(),
                 Err(error) => {

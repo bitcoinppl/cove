@@ -166,9 +166,9 @@ impl MockCloudStorage {
         self.state.lock().upload_wallet_backup_error = Some(CloudStorageError::QuotaExceeded);
     }
 
-    pub(crate) fn fail_next_wallet_backup_upload(&self, message: &str) {
+    pub(crate) fn fail_next_wallet_backup_upload_offline(&self, message: &str) {
         self.state.lock().next_upload_wallet_backup_error =
-            Some(CloudStorageError::UploadFailed(message.into()));
+            Some(CloudStorageError::Offline(message.into()));
     }
 
     pub(crate) fn clear_wallet_backup_upload_failure(&self) {
