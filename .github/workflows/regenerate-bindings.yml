@@ -13,7 +13,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ github.ref_name }}
           fetch-depth: 1
@@ -24,10 +24,10 @@ jobs:
           toolchain: stable
 
       - name: Set up just
-        uses: extractions/setup-just@v1
+        uses: extractions/setup-just@v4
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: 'temurin'
           java-version: '17'
@@ -66,7 +66,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ github.ref_name }}
           fetch-depth: 1
@@ -80,7 +80,7 @@ jobs:
           toolchain: stable
 
       - name: Set up just
-        uses: extractions/setup-just@v1
+        uses: extractions/setup-just@v4
 
       - name: Build Rust FFI and generate Swift bindings
         run: just build-ios
