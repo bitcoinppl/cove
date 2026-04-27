@@ -9,11 +9,7 @@ import com.google.android.gms.auth.api.identity.ClearTokenRequest
 import com.google.android.gms.auth.api.identity.Identity
 import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.common.api.Scope
-import com.google.android.gms.tasks.Task
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
-import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.coroutines.isActive
+import kotlinx.coroutines.tasks.await
 
 internal class AuthorizationRequiredException(message: String) : Exception(message)
 
@@ -70,39 +66,21 @@ internal class DriveAuthorizationHelper(
             authorizationResult.pendingIntent
                 ?: throw AuthorizationRequiredException("authorization resolution is missing a pending intent")
 
-        val result =
+        val activityResult =
             ForegroundUiBridge.launchAuthorization(
                 IntentSenderRequest.Builder(pendingIntent.intentSender).build(),
             )
 
-        if (result.resultCode != Activity.RESULT_OK) {
+        if (activityResult.resultCode != Activity.RESULT_OK) {
             throw AuthorizationRequiredException("google drive authorization was cancelled")
         }
 
         val resultIntent =
-            result.data
+            activityResult.data
                 ?: throw AuthorizationRequiredException("authorization result is missing data")
 
         return client.getAuthorizationResultFromIntent(resultIntent)
     }
-
-    private suspend fun <T> Task<T>.await(): T =
-        suspendCancellableCoroutine { continuation ->
-            addOnSuccessListener { result ->
-                if (!continuation.isActive) return@addOnSuccessListener
-                continuation.resume(result)
-            }
-            addOnFailureListener { error ->
-                if (!continuation.isActive) return@addOnFailureListener
-                continuation.resumeWithException(error)
-            }
-            addOnCanceledListener {
-                if (!continuation.isActive) return@addOnCanceledListener
-                continuation.resumeWithException(
-                    ApiException(com.google.android.gms.common.api.Status.RESULT_CANCELED),
-                )
-            }
-        }
 
     companion object {
         internal const val DRIVE_APP_DATA_SCOPE =
