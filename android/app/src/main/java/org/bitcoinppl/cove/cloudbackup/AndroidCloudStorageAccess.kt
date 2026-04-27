@@ -558,6 +558,7 @@ class AndroidCloudStorageAccess internal constructor(
 
         val children = mutableListOf<DriveFileMetadata>()
         var pageToken: String? = null
+
         do {
             val builder =
                 Uri
@@ -567,6 +568,7 @@ class AndroidCloudStorageAccess internal constructor(
                     .appendQueryParameter("fields", "nextPageToken,files(id,name,mimeType)")
                     .appendQueryParameter("pageSize", "1000")
                     .appendQueryParameter("q", query)
+
             pageToken?.let { builder.appendQueryParameter("pageToken", it) }
 
             val response =
@@ -587,7 +589,8 @@ class AndroidCloudStorageAccess internal constructor(
                     ),
                 )
             }
-            pageToken = response.optString("nextPageToken").takeIf { it.isNotBlank() }
+
+            pageToken = response.optString("nextPageToken").takeIf(String::isNotBlank)
         } while (pageToken != null)
 
         return children

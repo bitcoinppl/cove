@@ -451,7 +451,7 @@ impl RustCloudBackupManager {
                 self.blocking_cloud_error(
                     BlockingCloudStep::Enable,
                     CloudBackupError::cloud_storage_context(
-                        "could not check for existing cloud backups, please try again when iCloud is available",
+                        "could not check for existing cloud backups, please try again when cloud storage is available",
                         error,
                     ),
                 )
@@ -634,7 +634,7 @@ impl RustCloudBackupManager {
                 self.blocking_cloud_error(
                     BlockingCloudStep::Enable,
                     CloudBackupError::cloud_storage_context(
-                        "could not check for existing cloud backups, please try again when iCloud is available",
+                        "could not check for existing cloud backups, please try again when cloud storage is available",
                         error,
                     ),
                 )

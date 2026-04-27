@@ -31,6 +31,7 @@ class AndroidPasskeyProvider(
 ) : PasskeyProvider {
     private val appContext = context.applicationContext
     private val credentialManager by lazy { CredentialManager.create(appContext) }
+    private val secureRandom = SecureRandom()
 
     override fun createPasskey(
         rpId: String,
@@ -201,7 +202,7 @@ class AndroidPasskeyProvider(
         credentialId: ByteArray,
     ): String =
         JSONObject()
-            .put("challenge", ByteArray(32).also { SecureRandom().nextBytes(it) }.toBase64Url())
+            .put("challenge", randomChallenge().toBase64Url())
             .put("rpId", rpId)
             .put("timeout", 1_000)
             .put(
@@ -212,6 +213,9 @@ class AndroidPasskeyProvider(
                         .put("id", credentialId.toBase64Url()),
                 ),
             ).toString()
+
+    private fun randomChallenge(): ByteArray =
+        ByteArray(32).also(secureRandom::nextBytes)
 
     private fun buildGetCredentialRequest(
         requestJson: String,

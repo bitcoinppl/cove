@@ -36,6 +36,8 @@ object ForegroundUiBridge {
             pendingAuthorizationResult?.cancel()
             pendingAuthorizationResult = null
             currentActivity.value = null
+            pendingAuthorizationResult?.cancel()
+            pendingAuthorizationResult = null
             authorizationLauncher = null
         }
     }
