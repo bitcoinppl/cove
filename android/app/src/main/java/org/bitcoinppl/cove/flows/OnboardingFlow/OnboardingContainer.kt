@@ -19,7 +19,12 @@ internal fun OnboardingContainer(
         onComplete()
     }
 
-    val onOpenCloudRestore = { manager.dispatch(OnboardingAction.OpenCloudRestore) }
+    val onOpenCloudRestore =
+        if (manager.state.cloudRestoreState != OnboardingCloudRestoreState.NO_BACKUP_FOUND) {
+            { manager.dispatch(OnboardingAction.OpenCloudRestore) }
+        } else {
+            null
+        }
 
     val restoreWarningMessage =
         if (manager.state.step == OnboardingStep.RESTORE_OFFER &&
