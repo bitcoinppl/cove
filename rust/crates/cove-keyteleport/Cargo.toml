@@ -23,6 +23,7 @@ pbkdf2 = "0.12"
 
 # encoding
 data-encoding = { workspace = true }
+bbqr = { workspace = true }
 
 # error handling
 thiserror = { workspace = true }

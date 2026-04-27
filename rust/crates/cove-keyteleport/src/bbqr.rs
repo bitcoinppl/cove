@@ -3,6 +3,7 @@
 /// BBQr format: `B$<encoding><file_type><num_parts_hex2><part_index_hex2><base32_data>`
 /// For single-frame packets: num_parts=01, part_index=00.
 /// Encoding byte `2` = Base32, no compression (as required by the COLDCARD spec).
+use bbqr::encode::Encoding;
 use data_encoding::BASE32_NOPAD;
 
 use crate::error::Error;
@@ -37,7 +38,8 @@ impl KeyTeleportFileType {
 pub fn encode(data: &[u8], file_type: KeyTeleportFileType) -> String {
     let b32 = BASE32_NOPAD.encode(data);
     // num_parts=01 (1 frame total), part_index=00 (first/only frame)
-    format!("B$2{}0100{}", file_type.as_char(), b32)
+    // Encoding::Base32 corresponds to byte '2' per the BBQr spec
+    format!("B${}{}0100{}", Encoding::Base32.as_byte() as char, file_type.as_char(), b32)
 }
 
 /// Decode a single-frame BBQr string, returning the file type and binary payload.
@@ -53,10 +55,13 @@ pub fn decode(s: &str) -> Result<(KeyTeleportFileType, Vec<u8>), Error> {
     }
 
     let mut chars = rest.chars();
-    let encoding = chars.next().unwrap();
-    if encoding != '2' {
+    let encoding_char = chars.next().unwrap();
+    let encoding = Encoding::from_byte(encoding_char as u8).ok_or_else(|| {
+        Error::InvalidBbqr(format!("unknown encoding '{encoding_char}'"))
+    })?;
+    if encoding != Encoding::Base32 {
         return Err(Error::InvalidBbqr(format!(
-            "unsupported encoding '{encoding}' (only Base32/'2' is supported)"
+            "unsupported encoding '{encoding_char}' (only Base32/'2' is supported)"
         )));
     }
 
