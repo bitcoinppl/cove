@@ -94,7 +94,10 @@ class OnboardingManager internal constructor(
 
     fun dispatch(action: OnboardingAction) {
         rustScope.launch {
-            rust.dispatch(action)
+            runCatching { rust.dispatch(action) }
+                .onFailure { error ->
+                    Log.e(TAG, "onboarding action failed: $action", error)
+                }
         }
     }
 
@@ -113,5 +116,9 @@ class OnboardingManager internal constructor(
         mainScope.cancel()
         rustScope.cancel()
         rust.close()
+    }
+
+    companion object {
+        private const val TAG = "OnboardingManager"
     }
 }

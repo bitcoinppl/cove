@@ -47,7 +47,7 @@ struct CatastrophicErrorView: View {
         Task.detached {
             let cloud = CloudStorage(cloudStorage: CloudStorageAccessImpl())
             do {
-                let exists = try await cloud.hasAnyCloudBackup(policy: .consentAllowed)
+                let exists = try await cloud.hasAnyCloudBackup()
                 await MainActor.run {
                     cloudProbeState = exists ? .available : .unavailable
                 }

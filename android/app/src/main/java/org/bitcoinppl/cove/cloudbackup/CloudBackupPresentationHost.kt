@@ -311,6 +311,12 @@ fun CloudBackupPresentationHost(
         }
     }
 
+    DisposableEffect(coordinator) {
+        onDispose {
+            coordinator.dispose()
+        }
+    }
+
     LaunchedEffect(context) {
         coordinator.update(context)
     }
