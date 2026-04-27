@@ -23,6 +23,7 @@ import org.bitcoinppl.cove_core.device.PasskeyException
 import org.bitcoinppl.cove_core.device.PasskeyProvider
 import org.json.JSONArray
 import org.json.JSONObject
+import java.security.SecureRandom
 import java.util.Base64
 
 class AndroidPasskeyProvider(
@@ -200,7 +201,7 @@ class AndroidPasskeyProvider(
         credentialId: ByteArray,
     ): String =
         JSONObject()
-            .put("challenge", ByteArray(32).toBase64Url())
+            .put("challenge", ByteArray(32).also { SecureRandom().nextBytes(it) }.toBase64Url())
             .put("rpId", rpId)
             .put("timeout", 1_000)
             .put(

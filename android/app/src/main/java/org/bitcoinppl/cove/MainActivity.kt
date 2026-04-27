@@ -74,7 +74,9 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.cloudbackup.CloudBackupPresentationHost
 import org.bitcoinppl.cove.cloudbackup.ForegroundUiBridge
 import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingContainer
@@ -225,6 +227,7 @@ class MainActivity : FragmentActivity() {
             var bootstrapped by remember { mutableStateOf(false) }
             var bootstrapError by remember { mutableStateOf<String?>(null) }
             var bdkMigrationWarning by remember { mutableStateOf<String?>(null) }
+            var resolvedStartupMode by remember { mutableStateOf<StartupMode?>(null) }
 
             if (!bootstrapped) {
                 if (bootstrapError != null) {
@@ -246,7 +249,7 @@ class MainActivity : FragmentActivity() {
                     }
 
                     LaunchedEffect(Unit) {
-                        fun completeBootstrap(warning: String? = null) {
+                        suspend fun completeBootstrap(warning: String? = null) {
                             splashStatus = null
                             encryptionProgress = null
                             (application as CoveApplication).onBootstrapComplete()
@@ -254,11 +257,26 @@ class MainActivity : FragmentActivity() {
                             appInstance.asyncRuntimeReady = true
 
                             runCatching {
-                                appInstance.cloudBackupManager.rust.syncPersistedState()
+                                withContext(Dispatchers.IO) {
+                                    appInstance.cloudBackupManager.rust.syncPersistedState()
+                                }
                             }.onFailure { error ->
                                 Log.w(TAG, "[STARTUP] syncPersistedState failed before startup routing", error)
                             }
 
+                            val persistedOnboardingProgress =
+                                runCatching {
+                                    Database().globalConfig().get(GlobalConfigKey.OnboardingProgress)
+                                }.onFailure { error ->
+                                    Log.w(TAG, "[STARTUP] failed to read persisted onboarding progress before routing", error)
+                                }.getOrNull()
+                            resolvedStartupMode =
+                                resolveStartupMode(
+                                    termsAccepted = appInstance.isTermsAccepted,
+                                    hasWallets = appInstance.hasWallets,
+                                    cloudBackupStatus = appInstance.cloudBackupManager.rust.state().status,
+                                    hasPersistedOnboardingProgress = hasPersistedOnboardingProgress(persistedOnboardingProgress),
+                                )
                             isBootstrapped = true
                             bootstrapped = true
                             bdkMigrationWarning = warning
@@ -338,21 +356,8 @@ class MainActivity : FragmentActivity() {
             val app = remember { AppManager.getInstance() }
             val auth = remember { AuthManager.getInstance() }
             val snackbarHostState = remember { SnackbarHostState() }
-            val persistedOnboardingProgress =
-                runCatching {
-                    Database().globalConfig().get(GlobalConfigKey.OnboardingProgress)
-                }.onFailure { error ->
-                    Log.w(TAG, "[STARTUP] failed to read persisted onboarding progress before routing", error)
-                }.getOrNull()
             var startupMode by remember {
-                mutableStateOf(
-                    resolveStartupMode(
-                        termsAccepted = app.isTermsAccepted,
-                        hasWallets = app.hasWallets,
-                        cloudBackupStatus = app.cloudBackupManager.rust.state().status,
-                        hasPersistedOnboardingProgress = hasPersistedOnboardingProgress(persistedOnboardingProgress),
-                    ),
-                )
+                mutableStateOf(resolvedStartupMode ?: StartupMode.READY)
             }
             val onboardingManager =
                 remember(startupMode) {

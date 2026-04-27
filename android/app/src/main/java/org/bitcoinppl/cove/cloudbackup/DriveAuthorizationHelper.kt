@@ -1,7 +1,7 @@
 package org.bitcoinppl.cove.cloudbackup
 
+import android.app.Activity
 import android.content.Context
-import android.content.Intent
 import androidx.activity.result.IntentSenderRequest
 import com.google.android.gms.auth.api.identity.AuthorizationRequest
 import com.google.android.gms.auth.api.identity.AuthorizationResult
@@ -13,6 +13,7 @@ import com.google.android.gms.tasks.Task
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.isActive
 
 internal class AuthorizationRequiredException(message: String) : Exception(message)
 
@@ -69,10 +70,18 @@ internal class DriveAuthorizationHelper(
             authorizationResult.pendingIntent
                 ?: throw AuthorizationRequiredException("authorization resolution is missing a pending intent")
 
-        val resultIntent =
+        val result =
             ForegroundUiBridge.launchAuthorization(
                 IntentSenderRequest.Builder(pendingIntent.intentSender).build(),
-            ) ?: Intent()
+            )
+
+        if (result.resultCode != Activity.RESULT_OK) {
+            throw AuthorizationRequiredException("google drive authorization was cancelled")
+        }
+
+        val resultIntent =
+            result.data
+                ?: throw AuthorizationRequiredException("authorization result is missing data")
 
         return client.getAuthorizationResultFromIntent(resultIntent)
     }
@@ -80,12 +89,15 @@ internal class DriveAuthorizationHelper(
     private suspend fun <T> Task<T>.await(): T =
         suspendCancellableCoroutine { continuation ->
             addOnSuccessListener { result ->
+                if (!continuation.isActive) return@addOnSuccessListener
                 continuation.resume(result)
             }
             addOnFailureListener { error ->
+                if (!continuation.isActive) return@addOnFailureListener
                 continuation.resumeWithException(error)
             }
             addOnCanceledListener {
+                if (!continuation.isActive) return@addOnCanceledListener
                 continuation.resumeWithException(
                     ApiException(com.google.android.gms.common.api.Status.RESULT_CANCELED),
                 )

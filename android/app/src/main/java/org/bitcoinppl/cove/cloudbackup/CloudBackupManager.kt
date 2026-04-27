@@ -8,6 +8,7 @@ import java.io.Closeable
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove_core.CloudBackupDetail
@@ -214,6 +215,8 @@ class CloudBackupManager private constructor() : CloudBackupManagerReconciler, C
     }
 
     override fun close() {
+        mainScope.cancel()
+        rustScope.cancel()
         rust.close()
     }
 

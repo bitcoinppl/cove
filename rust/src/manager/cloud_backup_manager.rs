@@ -1126,6 +1126,15 @@ impl RustCloudBackupManager {
                 ));
             }
         };
+
+        if let Some(sync_health) = Self::sync_health_from_local_failures(&sync_states) {
+            return sync_health;
+        }
+
+        if Self::sync_health_has_pending_upload(&sync_states) {
+            return CloudSyncHealth::Uploading;
+        }
+
         let cloud = CloudStorage::global();
         let remote_wallet_record_ids =
             match cloud.list_wallet_backups(namespace.clone(), access_policy).await {
@@ -1141,14 +1150,6 @@ impl RustCloudBackupManager {
             Err(CloudStorageError::NotFound(_)) => false,
             Err(error) => return Self::sync_health_from_cloud_error(error),
         };
-
-        if let Some(sync_health) = Self::sync_health_from_local_failures(&sync_states) {
-            return sync_health;
-        }
-
-        if Self::sync_health_has_pending_upload(&sync_states) {
-            return CloudSyncHealth::Uploading;
-        }
 
         if expected_wallet_record_ids.is_empty() {
             if !master_key_uploaded && remote_wallet_record_ids.is_empty() {
