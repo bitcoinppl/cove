@@ -896,15 +896,9 @@ struct MainSettingsScreen: View {
             }
 
         case .cloudBackupOnboarding:
-            CloudBackupEnableOnboardingView(
-                onEnable: {
-                    sheetState = .none
-                    CloudBackupManager.shared.dispatch(action: .enableCloudBackup)
-                },
-                onCancel: { sheetState = .none },
-                message: nil,
-                isBusy: false
-            )
+            SettingsCloudBackupEnableSheet(onDismiss: {
+                sheetState = .none
+            })
         }
     }
 
@@ -942,6 +936,70 @@ struct MainSettingsScreen: View {
         do { try auth.rust.setDecoyPin(pin: pin) } catch {
             let error = error as! AuthManagerError
             alertState = .init(.extraSetPinError(error.description))
+        }
+    }
+}
+
+private struct SettingsCloudBackupEnableSheet: View {
+    @State private var manager = CloudBackupManager.shared
+    @State private var isStartingEnable = false
+
+    let onDismiss: () -> Void
+
+    private var message: String? {
+        switch manager.status {
+        case .unsupportedPasskeyProvider:
+            "This passkey provider did not confirm PRF support for Cloud Backup. Try Apple Passwords (iCloud Keychain) or another supported provider such as 1Password"
+        case let .error(message):
+            message
+        default:
+            nil
+        }
+    }
+
+    private var isBusy: Bool {
+        isStartingEnable || {
+            if case .enabling = manager.status { true } else { false }
+        }()
+    }
+
+    private var shouldDismissForPrompt: Bool {
+        if case .none = manager.promptIntent { return false }
+        return true
+    }
+
+    var body: some View {
+        ZStack {
+            CloudBackupEnableOnboardingView(
+                onEnable: {
+                    guard !isBusy else { return }
+                    isStartingEnable = true
+                    manager.dispatch(action: .enableCloudBackup)
+                },
+                onCancel: onDismiss,
+                message: message,
+                isBusy: isBusy
+            )
+
+            if isBusy {
+                CloudBackupEnableBusyOverlay()
+            }
+        }
+        .onChange(of: manager.status, initial: true) { _, status in
+            if case .enabling = status {
+                isStartingEnable = false
+            } else if isStartingEnable {
+                isStartingEnable = false
+            }
+
+            if case .enabled = status {
+                onDismiss()
+            }
+        }
+        .onChange(of: manager.promptIntent, initial: true) { _, _ in
+            if shouldDismissForPrompt {
+                onDismiss()
+            }
         }
     }
 }

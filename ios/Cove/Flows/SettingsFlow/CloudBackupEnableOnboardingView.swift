@@ -278,6 +278,40 @@ struct DarkCheckboxToggleStyle: ToggleStyle {
     }
 }
 
+struct CloudBackupEnableBusyOverlay: View {
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.55)
+                .ignoresSafeArea()
+
+            VStack(spacing: 14) {
+                ProgressView()
+                    .tint(.white)
+                Text("Waiting for your new passkey to become available...")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                    .multilineTextAlignment(.center)
+                Text("Cloud Backup will continue automatically")
+                    .font(.subheadline)
+                    .foregroundStyle(.coveLightGray)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 20)
+            .frame(maxWidth: 320)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(Color.midnightBlue.opacity(0.96))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.35), radius: 20, y: 10)
+        }
+    }
+}
+
 #Preview {
     CloudBackupEnableOnboardingView(
         onEnable: {},
