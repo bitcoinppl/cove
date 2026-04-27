@@ -790,7 +790,11 @@ impl RustWalletManager {
     /// Formats a pending fiat amount (e.g. "+ $50.00 pending")
     /// Returns None if the amount is zero.
     #[uniffi::method(default(with_suffix = true))]
-    pub fn display_fiat_amount_pending_fmt(&self, amount: f64, with_suffix: bool) -> Option<String> {
+    pub fn display_fiat_amount_pending_fmt(
+        &self,
+        amount: f64,
+        with_suffix: bool,
+    ) -> Option<String> {
         if amount <= 0.0 {
             return None;
         }

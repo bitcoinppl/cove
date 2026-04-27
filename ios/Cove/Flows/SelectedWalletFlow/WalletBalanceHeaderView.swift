@@ -57,9 +57,10 @@ struct WalletBalanceHeaderView: View {
     @ViewBuilder
     private var pendingBalanceView: some View {
         let pending = manager.balance.untrustedPending()
-        
+
         if metadata.fiatOrBtc == .fiat, let fiatPendingBalance,
-           let pendingStr = manager.rust.displayFiatAmountPendingFmt(amount: fiatPendingBalance, withSuffix: true) {
+           let pendingStr = manager.rust.displayFiatAmountPendingFmt(amount: fiatPendingBalance, withSuffix: true)
+        {
             HStack {
                 Text(pendingStr)
                     .foregroundColor(.white.opacity(0.6))
