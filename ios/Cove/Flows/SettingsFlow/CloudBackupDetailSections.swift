@@ -144,6 +144,9 @@ struct HeaderSection: View {
         case .failed:
             Image(systemName: "exclamationmark.icloud.fill")
                 .foregroundColor(.red)
+        case .authorizationRequired:
+            Image(systemName: "exclamationmark.icloud.fill")
+                .foregroundColor(.orange)
         case .unavailable:
             Image(systemName: "checkmark.icloud.fill")
                 .foregroundColor(.green)
@@ -177,6 +180,10 @@ struct HeaderSection: View {
             Label("Sync error: \(message)", systemImage: "exclamationmark.triangle.fill")
                 .font(.caption)
                 .foregroundStyle(.red)
+        case .authorizationRequired:
+            Label("iCloud authorization required", systemImage: "exclamationmark.triangle.fill")
+                .font(.caption)
+                .foregroundStyle(.orange)
         case .noFiles, .unavailable:
             EmptyView()
         }
