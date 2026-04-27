@@ -61,15 +61,19 @@ impl FiatOnChangeHandler {
 
     pub fn on_change(&self, old_value: &str, new_value: &str) -> Result<Changeset> {
         let old_value = old_value.trim();
-        let new_value = new_value.trim();
+        let new_value_trimmed = new_value.trim();
 
         // strip fiat tokens from pasted amounts (e.g. "$12.50", "12.50 USD"); rejects BTC/SATS
-        let Some(new_value) = sanitize::sanitize_fiat_amount(new_value) else {
+        let Some(new_value) = sanitize::sanitize_fiat_amount(new_value_trimmed) else {
             return Ok(Changeset {
                 entering_fiat_amount: Some(old_value.to_string()),
                 ..Default::default()
             });
         };
+
+        // If sanitization stripped tokens (e.g. "100 CHF" → "100"), early exits must still
+        // emit the cleaned string so the raw pasted text doesn't stay visible in the UI.
+        let sanitization_changed = new_value != new_value_trimmed;
 
         let symbol = self.selected_currency.symbol();
 
@@ -88,11 +92,17 @@ impl FiatOnChangeHandler {
 
         // early exit if same value is passed in
         if old_value == new_value {
-            return Ok(Changeset::default());
+            return Ok(Changeset {
+                entering_fiat_amount: sanitization_changed.then_some(old_value.to_string()),
+                ..Default::default()
+            });
         }
 
         if old_value_raw == new_value_raw {
-            return Ok(Changeset::default());
+            return Ok(Changeset {
+                entering_fiat_amount: sanitization_changed.then_some(old_value.to_string()),
+                ..Default::default()
+            });
         }
 
         // start entering with a period
@@ -105,7 +115,10 @@ impl FiatOnChangeHandler {
 
         // if old value is the same as the new value, then we don't need to do anything
         if old_value == new_value {
-            return Ok(Changeset::default());
+            return Ok(Changeset {
+                entering_fiat_amount: sanitization_changed.then_some(old_value.to_string()),
+                ..Default::default()
+            });
         }
 
         // don't allow adding more than 1 decimal point
@@ -118,7 +131,10 @@ impl FiatOnChangeHandler {
 
         // if the only change was formatting (adding ,) then we don't need to do anything
         if old_value_raw == new_value_raw {
-            return Ok(Changeset::default());
+            return Ok(Changeset {
+                entering_fiat_amount: sanitization_changed.then_some(old_value.to_string()),
+                ..Default::default()
+            });
         }
 
         // convert the fiat amount to btc amount
@@ -285,6 +301,20 @@ mod tests {
         assert_eq!(result.entering_fiat_amount.as_deref(), Some("$0"));
         assert!(result.fiat_value.is_none());
         assert!(result.btc_amount.is_none());
+    }
+
+    #[test]
+    fn pasting_fiat_code_over_same_numeric_value_rewrites_field() {
+        let h = handler();
+        // "100 CHF" over "$100" — numeric value unchanged, but display must be rewritten
+        let result = h.on_change("$100", "100 CHF").unwrap();
+        assert_eq!(result.entering_fiat_amount.as_deref(), Some("$100"));
+        assert!(result.fiat_value.is_none()); // amount didn't change, no re-parse needed
+
+        // "USD 100" over "$100" — same case with prefix code
+        let result = h.on_change("$100", "USD 100").unwrap();
+        assert_eq!(result.entering_fiat_amount.as_deref(), Some("$100"));
+        assert!(result.fiat_value.is_none());
     }
 
     #[test]
