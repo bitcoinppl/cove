@@ -319,15 +319,14 @@ private fun SendFlowRouteToScreen(
                         }
                     }
                     is SendFlowPresenter.SheetState.Fee -> {
-                        sendFlowManager.feeRateOptions?.let { feeOptions ->
-                            sendFlowManager.selectedFeeRate?.let { selectedRate ->
+                        sendFlowManager.feeSelection?.let { feeSelection ->
                                 FeeRateSelectorSheet(
                                     app = app,
                                     walletManager = walletManager,
                                     sendFlowManager = sendFlowManager,
                                     presenter = presenter,
-                                    feeOptions = feeOptions,
-                                    selectedOption = selectedRate,
+                                    feeOptions = feeSelection.options,
+                                    selectedOption = feeSelection.selected,
                                     onSelectFee = { newFeeOption ->
                                         sendFlowManager.dispatch(
                                             SendFlowManagerAction.SelectFeeRate(newFeeOption),
@@ -340,7 +339,6 @@ private fun SendFlowRouteToScreen(
                                     },
                                     onDismiss = { presenter.sheetState = null },
                                 )
-                            }
                         }
                     }
                     else -> {}
@@ -408,11 +406,10 @@ private fun SendFlowRouteToScreen(
         }
         is SendRoute.Confirm -> {
             val details = sendRoute.v1.details
-            val signedTransaction = sendRoute.v1.signedTransaction
-            val signedPsbt = sendRoute.v1.signedPsbt
+            val input = sendRoute.v1.input
 
             var sendState by remember { mutableStateOf<SendState>(SendState.Idle) }
-            var finalizedTransaction by remember { mutableStateOf(signedTransaction) }
+            var finalizedTransaction by remember { mutableStateOf<BitcoinTransaction?>(null) }
             var showSuccessAlert by remember { mutableStateOf(false) }
             var showErrorAlert by remember { mutableStateOf(false) }
             val scope = rememberCoroutineScope()
@@ -440,9 +437,9 @@ private fun SendFlowRouteToScreen(
             }
 
             // finalize signed PSBT from TapSigner
-            LaunchedEffect(signedPsbt) {
-                finalizedTransaction = signedTransaction
-                if (signedPsbt != null && signedTransaction == null) {
+            LaunchedEffect(input) {
+                val signedPsbt = (input as? SendConfirmationInput.SignedPsbt)?.v1
+                if (signedPsbt != null && finalizedTransaction == null) {
                     try {
                         finalizedTransaction = walletManager.rust.finalizePsbt(signedPsbt)
                     } catch (e: WalletManagerException) {
@@ -469,7 +466,8 @@ private fun SendFlowRouteToScreen(
 
             // show loading while PSBT is being finalized (matches iOS pattern)
             // this prevents user from swiping before finalization completes
-            val needsFinalization = signedPsbt != null && signedTransaction == null && finalizedTransaction == null
+            val needsFinalization =
+                input is SendConfirmationInput.SignedPsbt && finalizedTransaction == null
             if (needsFinalization) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -491,14 +489,19 @@ private fun SendFlowRouteToScreen(
                     sendState = SendState.Sending
                     scope.launch {
                         try {
-                            // finalization is guaranteed complete by loading screen above
-                            val txnToBroadcast = finalizedTransaction ?: signedTransaction
-
-                            if (txnToBroadcast != null) {
-                                walletManager.rust.broadcastTransaction(txnToBroadcast)
-                            } else {
-                                // sign and broadcast (hot wallet)
-                                walletManager.rust.signAndBroadcastTransaction(details.psbt())
+                            when (input) {
+                                is SendConfirmationInput.SignedTransaction -> {
+                                    walletManager.rust.broadcastTransaction(input.v1)
+                                }
+                                is SendConfirmationInput.SignedPsbt -> {
+                                    val txnToBroadcast =
+                                        finalizedTransaction
+                                            ?: error("Unable to finalize transaction")
+                                    walletManager.rust.broadcastTransaction(txnToBroadcast)
+                                }
+                                SendConfirmationInput.Unsigned -> {
+                                    walletManager.rust.signAndBroadcastTransaction(details.psbt())
+                                }
                             }
                             sendState = SendState.Sent
                             showSuccessAlert = true

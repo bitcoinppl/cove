@@ -1692,6 +1692,10 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_routefactory_send_confirm(
     ): Short
+    external fun uniffi_cove_checksum_method_routefactory_send_confirm_signed_psbt(
+    ): Short
+    external fun uniffi_cove_checksum_method_routefactory_send_confirm_signed_transaction(
+    ): Short
     external fun uniffi_cove_checksum_method_routefactory_send_hardware_export(
     ): Short
     external fun uniffi_cove_checksum_method_routefactory_send_set_amount(
@@ -2830,7 +2834,11 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_routefactory_send(`ptr`: Long,`send`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
-    external fun uniffi_cove_fn_method_routefactory_send_confirm(`ptr`: Long,`id`: RustBufferWalletId.ByValue,`details`: Long,`signedTransaction`: RustBuffer.ByValue,`signedPsbt`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_fn_method_routefactory_send_confirm(`ptr`: Long,`id`: RustBufferWalletId.ByValue,`details`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_routefactory_send_confirm_signed_psbt(`ptr`: Long,`id`: RustBufferWalletId.ByValue,`details`: Long,`psbt`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_routefactory_send_confirm_signed_transaction(`ptr`: Long,`id`: RustBufferWalletId.ByValue,`details`: Long,`transaction`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_routefactory_send_hardware_export(`ptr`: Long,`id`: RustBufferWalletId.ByValue,`details`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -4502,7 +4510,13 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_routefactory_send() != 47898.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_routefactory_send_confirm() != 50845.toShort()) {
+    if (lib.uniffi_cove_checksum_method_routefactory_send_confirm() != 22813.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_routefactory_send_confirm_signed_psbt() != 57735.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_routefactory_send_confirm_signed_transaction() != 58855.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_routefactory_send_hardware_export() != 49069.toShort()) {
@@ -16608,7 +16622,11 @@ public interface RouteFactoryInterface {
     
     fun `send`(`send`: SendRoute): Route
     
-    fun `sendConfirm`(`id`: WalletId, `details`: ConfirmDetails, `signedTransaction`: BitcoinTransaction? = null, `signedPsbt`: Psbt? = null): Route
+    fun `sendConfirm`(`id`: WalletId, `details`: ConfirmDetails): Route
+    
+    fun `sendConfirmSignedPsbt`(`id`: WalletId, `details`: ConfirmDetails, `psbt`: Psbt): Route
+    
+    fun `sendConfirmSignedTransaction`(`id`: WalletId, `details`: ConfirmDetails, `transaction`: BitcoinTransaction): Route
     
     fun `sendHardwareExport`(`id`: WalletId, `details`: ConfirmDetails): Route
     
@@ -16936,13 +16954,39 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
     }
     
 
-    override fun `sendConfirm`(`id`: WalletId, `details`: ConfirmDetails, `signedTransaction`: BitcoinTransaction?, `signedPsbt`: Psbt?): Route {
+    override fun `sendConfirm`(`id`: WalletId, `details`: ConfirmDetails): Route {
             return FfiConverterTypeRoute.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_routefactory_send_confirm(
         it,
-        FfiConverterTypeWalletId.lower(`id`),FfiConverterTypeConfirmDetails.lower(`details`),FfiConverterOptionalTypeBitcoinTransaction.lower(`signedTransaction`),FfiConverterOptionalTypePsbt.lower(`signedPsbt`),_status)
+        FfiConverterTypeWalletId.lower(`id`),FfiConverterTypeConfirmDetails.lower(`details`),_status)
+}
+    }
+    )
+    }
+    
+
+    override fun `sendConfirmSignedPsbt`(`id`: WalletId, `details`: ConfirmDetails, `psbt`: Psbt): Route {
+            return FfiConverterTypeRoute.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_routefactory_send_confirm_signed_psbt(
+        it,
+        FfiConverterTypeWalletId.lower(`id`),FfiConverterTypeConfirmDetails.lower(`details`),FfiConverterTypePsbt.lower(`psbt`),_status)
+}
+    }
+    )
+    }
+    
+
+    override fun `sendConfirmSignedTransaction`(`id`: WalletId, `details`: ConfirmDetails, `transaction`: BitcoinTransaction): Route {
+            return FfiConverterTypeRoute.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_routefactory_send_confirm_signed_transaction(
+        it,
+        FfiConverterTypeWalletId.lower(`id`),FfiConverterTypeConfirmDetails.lower(`details`),FfiConverterTypeBitcoinTransaction.lower(`transaction`),_status)
 }
     }
     )
@@ -28577,6 +28621,53 @@ public object FfiConverterTypeFeeResponse: FfiConverterRustBuffer<FeeResponse> {
 
 
 
+data class FeeSelection (
+    var `options`: FeeRateOptionsWithTotalFee
+    , 
+    var `selected`: FeeRateOptionWithTotalFee
+    
+): Disposable{
+    
+
+    
+
+    
+    @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
+    override fun destroy() {
+        
+    Disposable.destroy(
+        this.`options`,
+        this.`selected`
+    )
+    }
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeFeeSelection: FfiConverterRustBuffer<FeeSelection> {
+    override fun read(buf: ByteBuffer): FeeSelection {
+        return FeeSelection(
+            FfiConverterTypeFeeRateOptionsWithTotalFee.read(buf),
+            FfiConverterTypeFeeRateOptionWithTotalFee.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FeeSelection) = (
+            FfiConverterTypeFeeRateOptionsWithTotalFee.allocationSize(value.`options`) +
+            FfiConverterTypeFeeRateOptionWithTotalFee.allocationSize(value.`selected`)
+    )
+
+    override fun write(value: FeeSelection, buf: ByteBuffer) {
+            FfiConverterTypeFeeRateOptionsWithTotalFee.write(value.`options`, buf)
+            FfiConverterTypeFeeRateOptionWithTotalFee.write(value.`selected`, buf)
+    }
+}
+
+
+
 data class FiatAmount (
     var `amount`: kotlin.Double
     , 
@@ -29270,9 +29361,7 @@ data class SendRouteConfirmArgs (
     , 
     var `details`: ConfirmDetails
     , 
-    var `signedTransaction`: BitcoinTransaction?
-    , 
-    var `signedPsbt`: Psbt?
+    var `input`: SendConfirmationInput
     
 ): Disposable{
     
@@ -29286,8 +29375,7 @@ data class SendRouteConfirmArgs (
     Disposable.destroy(
         this.`id`,
         this.`details`,
-        this.`signedTransaction`,
-        this.`signedPsbt`
+        this.`input`
     )
     }
     
@@ -29302,23 +29390,20 @@ public object FfiConverterTypeSendRouteConfirmArgs: FfiConverterRustBuffer<SendR
         return SendRouteConfirmArgs(
             FfiConverterTypeWalletId.read(buf),
             FfiConverterTypeConfirmDetails.read(buf),
-            FfiConverterOptionalTypeBitcoinTransaction.read(buf),
-            FfiConverterOptionalTypePsbt.read(buf),
+            FfiConverterTypeSendConfirmationInput.read(buf),
         )
     }
 
     override fun allocationSize(value: SendRouteConfirmArgs) = (
             FfiConverterTypeWalletId.allocationSize(value.`id`) +
             FfiConverterTypeConfirmDetails.allocationSize(value.`details`) +
-            FfiConverterOptionalTypeBitcoinTransaction.allocationSize(value.`signedTransaction`) +
-            FfiConverterOptionalTypePsbt.allocationSize(value.`signedPsbt`)
+            FfiConverterTypeSendConfirmationInput.allocationSize(value.`input`)
     )
 
     override fun write(value: SendRouteConfirmArgs, buf: ByteBuffer) {
             FfiConverterTypeWalletId.write(value.`id`, buf)
             FfiConverterTypeConfirmDetails.write(value.`details`, buf)
-            FfiConverterOptionalTypeBitcoinTransaction.write(value.`signedTransaction`, buf)
-            FfiConverterOptionalTypePsbt.write(value.`signedPsbt`, buf)
+            FfiConverterTypeSendConfirmationInput.write(value.`input`, buf)
     }
 }
 
@@ -43439,6 +43524,125 @@ public object FfiConverterTypeSeedQrError : FfiConverterRustBuffer<SeedQrExcepti
 
 
 
+sealed class SendConfirmationInput: Disposable  {
+    
+    object Unsigned : SendConfirmationInput()
+    
+    
+    data class SignedTransaction(
+        val v1: org.bitcoinppl.cove_core.BitcoinTransaction) : SendConfirmationInput()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class SignedPsbt(
+        val v1: org.bitcoinppl.cove_core.types.Psbt) : SendConfirmationInput()
+        
+    {
+        
+
+        companion object
+    }
+    
+
+    
+    @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
+    override fun destroy() {
+        when(this) {
+            is SendConfirmationInput.Unsigned -> {// Nothing to destroy
+            }
+            is SendConfirmationInput.SignedTransaction -> {
+                
+    Disposable.destroy(
+        this.v1
+    )
+                
+            }
+            is SendConfirmationInput.SignedPsbt -> {
+                
+    Disposable.destroy(
+        this.v1
+    )
+                
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+    
+
+    
+    
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeSendConfirmationInput : FfiConverterRustBuffer<SendConfirmationInput>{
+    override fun read(buf: ByteBuffer): SendConfirmationInput {
+        return when(buf.getInt()) {
+            1 -> SendConfirmationInput.Unsigned
+            2 -> SendConfirmationInput.SignedTransaction(
+                FfiConverterTypeBitcoinTransaction.read(buf),
+                )
+            3 -> SendConfirmationInput.SignedPsbt(
+                FfiConverterTypePsbt.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: SendConfirmationInput): ULong = when(value) {
+        is SendConfirmationInput.Unsigned -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is SendConfirmationInput.SignedTransaction -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeBitcoinTransaction.allocationSize(value.v1)
+            )
+        }
+        is SendConfirmationInput.SignedPsbt -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypePsbt.allocationSize(value.v1)
+            )
+        }
+    }
+
+    override fun write(value: SendConfirmationInput, buf: ByteBuffer) {
+        when(value) {
+            is SendConfirmationInput.Unsigned -> {
+                buf.putInt(1)
+                Unit
+            }
+            is SendConfirmationInput.SignedTransaction -> {
+                buf.putInt(2)
+                FfiConverterTypeBitcoinTransaction.write(value.v1, buf)
+                Unit
+            }
+            is SendConfirmationInput.SignedPsbt -> {
+                buf.putInt(3)
+                FfiConverterTypePsbt.write(value.v1, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
 sealed class SendFlowAlertState {
     
     data class Error(
@@ -44856,17 +45060,8 @@ sealed class SendFlowManagerReconcileMessage: Disposable  {
         companion object
     }
     
-    data class UpdateSelectedFeeRate(
-        val v1: org.bitcoinppl.cove_core.types.FeeRateOptionWithTotalFee) : SendFlowManagerReconcileMessage()
-        
-    {
-        
-
-        companion object
-    }
-    
-    data class UpdateFeeRateOptions(
-        val v1: org.bitcoinppl.cove_core.types.FeeRateOptionsWithTotalFee) : SendFlowManagerReconcileMessage()
+    data class UpdateFeeSelection(
+        val v1: org.bitcoinppl.cove_core.FeeSelection) : SendFlowManagerReconcileMessage()
         
     {
         
@@ -44952,14 +45147,7 @@ sealed class SendFlowManagerReconcileMessage: Disposable  {
     )
                 
             }
-            is SendFlowManagerReconcileMessage.UpdateSelectedFeeRate -> {
-                
-    Disposable.destroy(
-        this.v1
-    )
-                
-            }
-            is SendFlowManagerReconcileMessage.UpdateFeeRateOptions -> {
+            is SendFlowManagerReconcileMessage.UpdateFeeSelection -> {
                 
     Disposable.destroy(
         this.v1
@@ -45019,17 +45207,14 @@ public object FfiConverterTypeSendFlowManagerReconcileMessage : FfiConverterRust
             9 -> SendFlowManagerReconcileMessage.UpdateFocusField(
                 FfiConverterOptionalTypeSetAmountFocusField.read(buf),
                 )
-            10 -> SendFlowManagerReconcileMessage.UpdateSelectedFeeRate(
-                FfiConverterTypeFeeRateOptionWithTotalFee.read(buf),
+            10 -> SendFlowManagerReconcileMessage.UpdateFeeSelection(
+                FfiConverterTypeFeeSelection.read(buf),
                 )
-            11 -> SendFlowManagerReconcileMessage.UpdateFeeRateOptions(
-                FfiConverterTypeFeeRateOptionsWithTotalFee.read(buf),
-                )
-            12 -> SendFlowManagerReconcileMessage.RefreshPresenters
-            13 -> SendFlowManagerReconcileMessage.SetAlert(
+            11 -> SendFlowManagerReconcileMessage.RefreshPresenters
+            12 -> SendFlowManagerReconcileMessage.SetAlert(
                 FfiConverterTypeSendFlowAlertState.read(buf),
                 )
-            14 -> SendFlowManagerReconcileMessage.ClearAlert
+            13 -> SendFlowManagerReconcileMessage.ClearAlert
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -45097,18 +45282,11 @@ public object FfiConverterTypeSendFlowManagerReconcileMessage : FfiConverterRust
                 + FfiConverterOptionalTypeSetAmountFocusField.allocationSize(value.v1)
             )
         }
-        is SendFlowManagerReconcileMessage.UpdateSelectedFeeRate -> {
+        is SendFlowManagerReconcileMessage.UpdateFeeSelection -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
-                + FfiConverterTypeFeeRateOptionWithTotalFee.allocationSize(value.v1)
-            )
-        }
-        is SendFlowManagerReconcileMessage.UpdateFeeRateOptions -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterTypeFeeRateOptionsWithTotalFee.allocationSize(value.v1)
+                + FfiConverterTypeFeeSelection.allocationSize(value.v1)
             )
         }
         is SendFlowManagerReconcileMessage.RefreshPresenters -> {
@@ -45178,27 +45356,22 @@ public object FfiConverterTypeSendFlowManagerReconcileMessage : FfiConverterRust
                 FfiConverterOptionalTypeSetAmountFocusField.write(value.v1, buf)
                 Unit
             }
-            is SendFlowManagerReconcileMessage.UpdateSelectedFeeRate -> {
+            is SendFlowManagerReconcileMessage.UpdateFeeSelection -> {
                 buf.putInt(10)
-                FfiConverterTypeFeeRateOptionWithTotalFee.write(value.v1, buf)
-                Unit
-            }
-            is SendFlowManagerReconcileMessage.UpdateFeeRateOptions -> {
-                buf.putInt(11)
-                FfiConverterTypeFeeRateOptionsWithTotalFee.write(value.v1, buf)
+                FfiConverterTypeFeeSelection.write(value.v1, buf)
                 Unit
             }
             is SendFlowManagerReconcileMessage.RefreshPresenters -> {
-                buf.putInt(12)
+                buf.putInt(11)
                 Unit
             }
             is SendFlowManagerReconcileMessage.SetAlert -> {
-                buf.putInt(13)
+                buf.putInt(12)
                 FfiConverterTypeSendFlowAlertState.write(value.v1, buf)
                 Unit
             }
             is SendFlowManagerReconcileMessage.ClearAlert -> {
-                buf.putInt(14)
+                buf.putInt(13)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }

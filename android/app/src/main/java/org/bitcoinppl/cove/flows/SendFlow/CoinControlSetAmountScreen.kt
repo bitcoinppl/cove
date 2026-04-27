@@ -252,9 +252,8 @@ fun CoinControlSetAmountScreen(
                 }
             }
             is SendFlowPresenter.SheetState.Fee -> {
-                val feeOptions = sendFlowManager.feeRateOptions
-                val selectedRate = sendFlowManager.selectedFeeRate
-                if (feeOptions == null || selectedRate == null) {
+                val feeSelection = sendFlowManager.feeSelection
+                if (feeSelection == null) {
                     presenter.sheetState = null
                 } else {
                     FeeRateSelectorSheet(
@@ -262,8 +261,8 @@ fun CoinControlSetAmountScreen(
                         walletManager = walletManager,
                         sendFlowManager = sendFlowManager,
                         presenter = presenter,
-                        feeOptions = feeOptions,
-                        selectedOption = selectedRate,
+                        feeOptions = feeSelection.options,
+                        selectedOption = feeSelection.selected,
                         onSelectFee = { newFeeOption ->
                             sendFlowManager.dispatch(
                                 SendFlowManagerAction.SelectFeeRate(newFeeOption),

@@ -356,10 +356,10 @@ private suspend fun signAction(
         val txId = psbt.txId()
         val record = db.getTxThrow(txId = txId)
         val route =
-            org.bitcoinppl.cove_core.RouteFactory().sendConfirm(
+            org.bitcoinppl.cove_core.RouteFactory().sendConfirmSignedPsbt(
                 id = record.walletId(),
                 details = record.confirmDetails(),
-                signedPsbt = signedPsbt,
+                psbt = signedPsbt,
             )
 
         app.sheetState = null

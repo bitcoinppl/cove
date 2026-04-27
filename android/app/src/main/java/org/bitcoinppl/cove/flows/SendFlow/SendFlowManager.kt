@@ -54,11 +54,14 @@ class SendFlowManager(
         private set
 
     // fee state
-    var selectedFeeRate by mutableStateOf<FeeRateOptionWithTotalFee?>(null)
+    var feeSelection by mutableStateOf<FeeSelection?>(null)
         private set
 
-    var feeRateOptions by mutableStateOf<FeeRateOptionsWithTotalFee?>(null)
-        private set
+    val selectedFeeRate: FeeRateOptionWithTotalFee?
+        get() = feeSelection?.selected
+
+    val feeRateOptions: FeeRateOptionsWithTotalFee?
+        get() = feeSelection?.options
 
     var maxSelected by mutableStateOf<Amount?>(null)
         private set
@@ -186,9 +189,9 @@ class SendFlowManager(
                 amount = Amount.fromSat(message.v1)
             }
 
-            is SendFlowManagerReconcileMessage.UpdateFeeRateOptions -> {
+            is SendFlowManagerReconcileMessage.UpdateFeeSelection -> {
                 refreshPresenters()
-                feeRateOptions = message.v1
+                feeSelection = message.v1
             }
 
             is SendFlowManagerReconcileMessage.UpdateAddress -> {
@@ -205,11 +208,6 @@ class SendFlowManager(
 
             is SendFlowManagerReconcileMessage.UpdateEnteringFiatAmount -> {
                 enteringFiatAmount = message.v1
-            }
-
-            is SendFlowManagerReconcileMessage.UpdateSelectedFeeRate -> {
-                refreshPresenters()
-                selectedFeeRate = message.v1
             }
 
             is SendFlowManagerReconcileMessage.UpdateFocusField -> {

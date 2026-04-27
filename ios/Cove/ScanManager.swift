@@ -228,9 +228,10 @@ extension ScanManager {
             return
         }
 
-        let route = RouteFactory().sendConfirm(
-            id: txnRecord.walletId(), details: txnRecord.confirmDetails(),
-            signedTransaction: transaction
+        let route = RouteFactory().sendConfirmSignedTransaction(
+            id: txnRecord.walletId(),
+            details: txnRecord.confirmDetails(),
+            transaction: transaction
         )
 
         app.pushRoute(route)
@@ -249,9 +250,10 @@ extension ScanManager {
             return
         }
 
-        let route = RouteFactory().sendConfirm(
-            id: txnRecord.walletId(), details: txnRecord.confirmDetails(),
-            signedPsbt: psbt
+        let route = RouteFactory().sendConfirmSignedPsbt(
+            id: txnRecord.walletId(),
+            details: txnRecord.confirmDetails(),
+            psbt: psbt
         )
 
         app.pushRoute(route)
