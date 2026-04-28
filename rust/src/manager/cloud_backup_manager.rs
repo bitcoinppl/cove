@@ -15,7 +15,7 @@ use act_zero::{Addr, send};
 use cove_cspp::CsppStore as _;
 use cove_cspp::backup_data::{MASTER_KEY_RECORD_ID, wallet_record_id};
 use cove_device::cloud_storage::{
-    CloudAccessPolicy, CloudStorage, CloudStorageError, CloudSyncHealth,
+    CloudStorage, CloudStorageClient, CloudStorageError, CloudSyncHealth,
 };
 use cove_tokio::task::spawn_actor;
 use cove_util::ResultExt as _;
@@ -58,8 +58,6 @@ type LocalWalletSecret = crate::backup::model::WalletSecret;
 
 const PASSKEY_RP_ID: &str = "covebitcoinwallet.com";
 pub(super) const CLOUD_BACKUP_IO_CONCURRENCY: usize = 4;
-pub(crate) const EXPLICIT_CLOUD_ACCESS: CloudAccessPolicy = CloudAccessPolicy::ConsentAllowed;
-pub(crate) const SILENT_CLOUD_ACCESS: CloudAccessPolicy = CloudAccessPolicy::Silent;
 type Message = CloudBackupReconcileMessage;
 
 pub static CLOUD_BACKUP_MANAGER: LazyLock<Arc<RustCloudBackupManager>> =
@@ -1094,10 +1092,7 @@ impl RustCloudBackupManager {
             .ok_or_else(|| CloudBackupError::Internal("namespace_id not found in keychain".into()))
     }
 
-    pub(crate) async fn compute_sync_health(
-        &self,
-        access_policy: CloudAccessPolicy,
-    ) -> CloudSyncHealth {
+    pub(crate) async fn compute_sync_health(&self) -> CloudSyncHealth {
         if !Self::load_persisted_state().is_configured() {
             return CloudSyncHealth::Unknown;
         }
@@ -1134,21 +1129,18 @@ impl RustCloudBackupManager {
             return CloudSyncHealth::Uploading;
         }
 
-        let cloud = CloudStorage::global();
-        let remote_wallet_record_ids =
-            match cloud.list_wallet_backups(namespace.clone(), access_policy).await {
-                Ok(record_ids) => record_ids.into_iter().collect::<HashSet<_>>(),
-                Err(CloudStorageError::NotFound(_)) => HashSet::new(),
-                Err(error) => return Self::sync_health_from_cloud_error(error),
-            };
-        let master_key_uploaded = match cloud
-            .is_backup_uploaded(namespace, MASTER_KEY_RECORD_ID.to_string(), access_policy)
-            .await
-        {
-            Ok(is_uploaded) => is_uploaded,
-            Err(CloudStorageError::NotFound(_)) => false,
+        let cloud = CloudStorage::global_silent_client();
+        let remote_wallet_record_ids = match cloud.list_wallet_backups(namespace.clone()).await {
+            Ok(record_ids) => record_ids.into_iter().collect::<HashSet<_>>(),
+            Err(CloudStorageError::NotFound(_)) => HashSet::new(),
             Err(error) => return Self::sync_health_from_cloud_error(error),
         };
+        let master_key_uploaded =
+            match cloud.is_backup_uploaded(namespace, MASTER_KEY_RECORD_ID.to_string()).await {
+                Ok(is_uploaded) => is_uploaded,
+                Err(CloudStorageError::NotFound(_)) => false,
+                Err(error) => return Self::sync_health_from_cloud_error(error),
+            };
 
         if expected_wallet_record_ids.is_empty() {
             if !master_key_uploaded && remote_wallet_record_ids.is_empty() {
@@ -1382,7 +1374,7 @@ impl RustCloudBackupManager {
     async fn load_remote_wallet_truth(
         &self,
         wallet_record_ids: &[String],
-        access_policy: CloudAccessPolicy,
+        cloud: CloudStorageClient,
     ) -> Result<RemoteWalletTruth, CloudBackupError> {
         let namespace = self.current_namespace_id()?;
         let db = Database::global();
@@ -1398,7 +1390,6 @@ impl RustCloudBackupManager {
             });
         };
 
-        let cloud = CloudStorage::global().clone();
         let critical_key = master_key.critical_data_key();
         let mut remote_wallet_truth = RemoteWalletTruth::default();
 
@@ -1409,12 +1400,8 @@ impl RustCloudBackupManager {
 
                 async move {
                     let record_id = wallet_record_id(wallet.id.as_ref());
-                    let reader = WalletBackupReader::new(
-                        cloud,
-                        namespace,
-                        Zeroizing::new(critical_key),
-                        access_policy,
-                    );
+                    let reader =
+                        WalletBackupReader::new(cloud, namespace, Zeroizing::new(critical_key));
                     let result = reader.summary(&record_id).await;
                     (record_id, result)
                 }
@@ -1706,12 +1693,8 @@ impl RustCloudBackupManager {
 
             if should_delete_remote {
                 cove_tokio::task::spawn(async move {
-                    if let Err(error) = CloudStorage::global()
-                        .delete_wallet_backup(
-                            namespace_id,
-                            MASTER_KEY_RECORD_ID.to_string(),
-                            EXPLICIT_CLOUD_ACCESS,
-                        )
+                    if let Err(error) = CloudStorage::global_explicit_client()
+                        .delete_wallet_backup(namespace_id, MASTER_KEY_RECORD_ID.to_string())
                         .await
                     {
                         warn!("Discard pending enable failed to delete remote master key: {error}");

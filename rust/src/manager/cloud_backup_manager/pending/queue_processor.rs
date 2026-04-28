@@ -4,8 +4,8 @@ use cove_device::keychain::Keychain;
 use tracing::{error, info, warn};
 use zeroize::Zeroizing;
 
+use super::super::RustCloudBackupManager;
 use super::super::wallets::WalletBackupReader;
-use super::super::{RustCloudBackupManager, SILENT_CLOUD_ACCESS};
 use super::PendingUploadVerificationStatus;
 use crate::database::Database;
 use crate::database::cloud_backup::{
@@ -145,9 +145,8 @@ impl PendingUploadVerifier {
     }
 
     async fn check_master_key_wrapper(&self, namespace_id: &str) -> BlobCheckResult {
-        let cloud = CloudStorage::global();
-        match cloud.download_master_key_backup(namespace_id.to_string(), SILENT_CLOUD_ACCESS).await
-        {
+        let cloud = CloudStorage::global_silent_client();
+        match cloud.download_master_key_backup(namespace_id.to_string()).await {
             Ok(_) => BlobCheckResult::Confirmed,
             Err(CloudStorageError::NotFound(_)) => BlobCheckResult::NotYetUploaded,
             Err(error) => cloud_storage_failure_result(error),
@@ -169,17 +168,12 @@ impl PendingUploadVerifier {
         };
 
         let reader = WalletBackupReader::new(
-            CloudStorage::global().clone(),
+            CloudStorage::global_silent_client(),
             sync_state.namespace_id.clone(),
             Zeroizing::new(master_key.critical_data_key()),
-            SILENT_CLOUD_ACCESS,
         );
-        let wallet_json = match CloudStorage::global()
-            .download_wallet_backup(
-                sync_state.namespace_id.clone(),
-                sync_state.record_id.clone(),
-                SILENT_CLOUD_ACCESS,
-            )
+        let wallet_json = match CloudStorage::global_silent_client()
+            .download_wallet_backup(sync_state.namespace_id.clone(), sync_state.record_id.clone())
             .await
         {
             Ok(wallet_json) => wallet_json,

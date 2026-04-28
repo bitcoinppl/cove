@@ -1,6 +1,6 @@
 use cove_cspp::master_key::MasterKey;
 use cove_cspp::master_key_crypto;
-use cove_device::cloud_storage::CloudStorage;
+use cove_device::cloud_storage::CloudStorageClient;
 use cove_device::keychain::Keychain;
 use cove_device::passkey::PasskeyAccess;
 use cove_tokio::unblock;
@@ -10,8 +10,7 @@ use tracing::info;
 use zeroize::Zeroizing;
 
 use super::super::{
-    CloudBackupError, EXPLICIT_CLOUD_ACCESS, PASSKEY_RP_ID, RustCloudBackupManager,
-    cspp_master_key_record_id,
+    CloudBackupError, PASSKEY_RP_ID, RustCloudBackupManager, cspp_master_key_record_id,
 };
 use crate::manager::cloud_backup_manager::wallets::{
     WalletBackupLookup, WalletBackupReader, create_prf_key_without_persisting,
@@ -61,12 +60,12 @@ struct WrapperRepairCredentials {
 }
 
 struct LocalKeyVerifier {
-    cloud: CloudStorage,
+    cloud: CloudStorageClient,
     namespace: String,
 }
 
 impl LocalKeyVerifier {
-    fn new(cloud: &CloudStorage, namespace: &str) -> Self {
+    fn new(cloud: &CloudStorageClient, namespace: &str) -> Self {
         Self { cloud: cloud.clone(), namespace: namespace.to_owned() }
     }
 
@@ -75,7 +74,6 @@ impl LocalKeyVerifier {
             self.cloud.clone(),
             self.namespace.clone(),
             Zeroizing::new(master_key.critical_data_key()),
-            EXPLICIT_CLOUD_ACCESS,
         );
         let mut had_wrong_key = false;
         let mut verified = false;
@@ -114,7 +112,7 @@ impl LocalKeyVerifier {
 pub(super) struct WrapperRepairOperation {
     manager: RustCloudBackupManager,
     keychain: Keychain,
-    cloud: CloudStorage,
+    cloud: CloudStorageClient,
     passkey: PasskeyAccess,
     namespace: String,
 }
@@ -123,7 +121,7 @@ impl WrapperRepairOperation {
     pub(super) fn new(
         manager: &RustCloudBackupManager,
         keychain: &Keychain,
-        cloud: &CloudStorage,
+        cloud: &CloudStorageClient,
         passkey: &PasskeyAccess,
         namespace: &str,
     ) -> Self {
@@ -159,7 +157,7 @@ impl WrapperRepairOperation {
             .map_err(WrapperRepairError::Operation)?;
 
         self.cloud
-            .upload_master_key_backup(self.namespace.clone(), backup_json, EXPLICIT_CLOUD_ACCESS)
+            .upload_master_key_backup(self.namespace.clone(), backup_json)
             .await
             .map_err(CloudBackupError::CloudStorage)
             .map_err(WrapperRepairError::Operation)?;

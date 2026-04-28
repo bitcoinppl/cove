@@ -14,7 +14,7 @@ use super::pending::{
 };
 use super::{
     CloudBackupError, CloudBackupStatus, PendingVerificationCompletion, RustCloudBackupManager,
-    SILENT_CLOUD_ACCESS, WalletId, live_upload_retry_delay_for_attempt,
+    WalletId, live_upload_retry_delay_for_attempt,
 };
 use crate::database::cloud_backup::{CloudBlobFailureIssue, PersistedCloudBlobState};
 use crate::manager::cloud_backup_detail_manager::RecoveryAction;
@@ -171,7 +171,7 @@ impl CloudBackupRuntimeActor {
             return;
         };
         cove_tokio::task::spawn(async move {
-            let sync_health = manager.compute_sync_health(SILENT_CLOUD_ACCESS).await;
+            let sync_health = manager.compute_sync_health().await;
             send!(addr.complete_sync_health_refresh(sync_health));
         });
     }

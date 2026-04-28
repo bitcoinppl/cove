@@ -8,7 +8,7 @@ use cove_cspp::CsppStore as _;
 use cove_cspp::backup_data::EncryptedMasterKeyBackup;
 use cove_cspp::master_key::MasterKey;
 use cove_cspp::master_key_crypto;
-use cove_device::cloud_storage::{CloudAccessPolicy, CloudStorage, CloudStorageError};
+use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
 use cove_device::keychain::{CSPP_CREDENTIAL_ID_KEY, Keychain};
 use cove_device::passkey::PasskeyAccess;
 use cove_util::ResultExt as _;
@@ -20,9 +20,8 @@ use self::wrapper_repair::{WrapperRepairOperation, WrapperRepairStrategy};
 use super::wallets::persist_enabled_cloud_backup_state;
 use super::{
     BlockingCloudStep, CloudBackupDetailResult, CloudBackupError, CloudBackupStatus,
-    DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult, EXPLICIT_CLOUD_ACCESS,
-    PendingVerificationCompletion, RustCloudBackupManager, SILENT_CLOUD_ACCESS,
-    VerificationFailureKind,
+    DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
+    PendingVerificationCompletion, RustCloudBackupManager, VerificationFailureKind,
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{PersistedCloudBackupState, PersistedCloudBackupStatus};
@@ -138,7 +137,7 @@ impl RustCloudBackupManager {
     ) -> Result<(), CloudBackupError> {
         let keychain = Keychain::global();
         let cspp = cove_cspp::Cspp::new(keychain.clone());
-        let cloud = CloudStorage::global();
+        let cloud = CloudStorage::global_explicit_client();
         let passkey = PasskeyAccess::global();
         let namespace = self.current_namespace_id()?;
 
@@ -147,10 +146,7 @@ impl RustCloudBackupManager {
             .map_err_prefix("load local master key", CloudBackupError::Internal)?
             .ok_or_else(|| CloudBackupError::Internal("no local master key".into()))?;
 
-        let wallet_record_ids = match cloud
-            .list_wallet_backups(namespace.clone(), EXPLICIT_CLOUD_ACCESS)
-            .await
-        {
+        let wallet_record_ids = match cloud.list_wallet_backups(namespace.clone()).await {
             Ok(ids) => ids,
             Err(CloudStorageError::NotFound(_)) => Vec::new(),
             Err(error) => {
@@ -158,7 +154,7 @@ impl RustCloudBackupManager {
             }
         };
 
-        let repair = WrapperRepairOperation::new(self, keychain, cloud, passkey, &namespace);
+        let repair = WrapperRepairOperation::new(self, keychain, &cloud, passkey, &namespace);
         repair
             .run(&local_master_key, &wallet_record_ids, strategy)
             .await
@@ -171,8 +167,8 @@ impl RustCloudBackupManager {
     pub(crate) async fn finalize_passkey_repair(&self) -> Result<(), CloudBackupError> {
         self.ensure_cloud_connectivity(BlockingCloudStep::RepairPasskey)?;
         let namespace = self.current_namespace_id()?;
-        let cloud = CloudStorage::global();
-        let wallet_count = match cloud.list_wallet_backups(namespace, EXPLICIT_CLOUD_ACCESS).await {
+        let cloud = CloudStorage::global_explicit_client();
+        let wallet_count = match cloud.list_wallet_backups(namespace).await {
             Ok(wallet_record_ids) => wallet_record_ids.len() as u32,
             Err(error) => {
                 warn!("Repair passkey: failed to refresh wallet backups after repair: {error}");
@@ -218,7 +214,7 @@ impl RustCloudBackupManager {
             namespace,
             recovery_message,
             PasskeyAuthPolicy::StoredThenDiscover,
-            EXPLICIT_CLOUD_ACCESS,
+            CloudStorage::global_explicit_client(),
         )
         .await
     }
@@ -232,7 +228,7 @@ impl RustCloudBackupManager {
             namespace,
             recovery_message,
             PasskeyAuthPolicy::StoredOnly,
-            SILENT_CLOUD_ACCESS,
+            CloudStorage::global_silent_client(),
         )
         .await
     }
@@ -242,26 +238,24 @@ impl RustCloudBackupManager {
         namespace: &str,
         recovery_message: &str,
         auth_policy: PasskeyAuthPolicy,
-        access_policy: CloudAccessPolicy,
+        cloud: cove_device::cloud_storage::CloudStorageClient,
     ) -> Result<MasterKey, CloudBackupError> {
         let keychain = Keychain::global();
         let cspp = cove_cspp::Cspp::new(keychain.clone());
-        let cloud = CloudStorage::global();
         let passkey = PasskeyAccess::global();
 
-        let master_json =
-            match cloud.download_master_key_backup(namespace.to_string(), access_policy).await {
-                Ok(json) => json,
-                Err(CloudStorageError::NotFound(_)) => {
-                    return Err(CloudBackupError::RecoveryRequired(recovery_message.into()));
-                }
-                Err(error) => {
-                    return Err(CloudBackupError::cloud_storage_context(
-                        "download master key backup",
-                        error,
-                    ));
-                }
-            };
+        let master_json = match cloud.download_master_key_backup(namespace.to_string()).await {
+            Ok(json) => json,
+            Err(CloudStorageError::NotFound(_)) => {
+                return Err(CloudBackupError::RecoveryRequired(recovery_message.into()));
+            }
+            Err(error) => {
+                return Err(CloudBackupError::cloud_storage_context(
+                    "download master key backup",
+                    error,
+                ));
+            }
+        };
 
         let encrypted: EncryptedMasterKeyBackup =
             serde_json::from_slice(&master_json).map_err_str(CloudBackupError::Internal)?;

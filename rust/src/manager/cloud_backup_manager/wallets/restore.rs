@@ -2,7 +2,7 @@ use std::str::FromStr as _;
 
 use cove_cspp::backup_data::{EncryptedWalletBackup, WalletEntry};
 use cove_cspp::wallet_crypto;
-use cove_device::cloud_storage::{CloudAccessPolicy, CloudStorage, CloudStorageError};
+use cove_device::cloud_storage::{CloudStorageClient, CloudStorageError};
 use cove_util::ResultExt as _;
 use tracing::{info, warn};
 use zeroize::Zeroizing;
@@ -24,20 +24,18 @@ type ExistingFingerprints = Vec<(Fingerprint, cove_types::network::Network, Loca
 
 #[derive(Clone)]
 pub(crate) struct WalletBackupReader {
-    cloud: CloudStorage,
+    cloud: CloudStorageClient,
     namespace: String,
     critical_key: Zeroizing<[u8; 32]>,
-    access_policy: CloudAccessPolicy,
 }
 
 impl WalletBackupReader {
     pub(crate) fn new(
-        cloud: CloudStorage,
+        cloud: CloudStorageClient,
         namespace: String,
         critical_key: Zeroizing<[u8; 32]>,
-        access_policy: CloudAccessPolicy,
     ) -> Self {
-        Self { cloud, namespace, critical_key, access_policy }
+        Self { cloud, namespace, critical_key }
     }
 
     pub(crate) async fn download(
@@ -113,11 +111,7 @@ impl WalletBackupReader {
     ) -> Result<WalletBackupLookup<EncryptedWalletBackup>, CloudBackupError> {
         let wallet_json = match self
             .cloud
-            .download_wallet_backup(
-                self.namespace.clone(),
-                record_id.to_string(),
-                self.access_policy,
-            )
+            .download_wallet_backup(self.namespace.clone(), record_id.to_string())
             .await
         {
             Ok(wallet_json) => wallet_json,
@@ -258,7 +252,7 @@ mod tests {
     use super::*;
     use cove_cspp::backup_data::WalletSecret;
     use cove_device::cloud_storage::{
-        CloudAccessPolicy, CloudStorageAccess, CloudStorageError, CloudSyncHealth,
+        CloudAccessPolicy, CloudStorage, CloudStorageAccess, CloudStorageError, CloudSyncHealth,
     };
 
     fn test_wallet_entry(metadata: &WalletMetadata) -> WalletEntry {
@@ -367,11 +361,11 @@ mod tests {
         let entry = test_wallet_entry(&metadata);
         let critical_key = [7; 32];
         let encrypted = wallet_crypto::encrypt_wallet_entry(&entry, &critical_key).unwrap();
+        let _ = test_cloud_storage();
         let reader = WalletBackupReader::new(
-            test_cloud_storage(),
+            cove_device::cloud_storage::CloudStorage::global_explicit_client(),
             "test-namespace".into(),
             Zeroizing::new(critical_key),
-            CloudAccessPolicy::ConsentAllowed,
         );
 
         let decrypted = reader.decrypt_entry(&encrypted).unwrap();

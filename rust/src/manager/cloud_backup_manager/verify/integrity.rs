@@ -10,7 +10,6 @@ use super::{
     load_stored_credential_id,
 };
 use crate::database::Database;
-use crate::manager::cloud_backup_manager::SILENT_CLOUD_ACCESS;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum BackupIntegrityIssue {
@@ -98,19 +97,18 @@ impl RustCloudBackupManager {
         namespace: String,
         issues: &mut Vec<BackupIntegrityIssue>,
     ) {
-        let cloud = CloudStorage::global();
-        let wallet_record_ids =
-            match cloud.list_wallet_backups(namespace.clone(), SILENT_CLOUD_ACCESS).await {
-                Ok(wallet_record_ids) => wallet_record_ids,
-                Err(error) => {
-                    warn!("Backup integrity: wallet list check failed: {error}");
-                    issues.push(BackupIntegrityIssue::RemoteWalletListUnreadable);
-                    return;
-                }
-            };
+        let cloud = CloudStorage::global_silent_client();
+        let wallet_record_ids = match cloud.list_wallet_backups(namespace.clone()).await {
+            Ok(wallet_record_ids) => wallet_record_ids,
+            Err(error) => {
+                warn!("Backup integrity: wallet list check failed: {error}");
+                issues.push(BackupIntegrityIssue::RemoteWalletListUnreadable);
+                return;
+            }
+        };
 
         let remote_wallet_truth =
-            match self.load_remote_wallet_truth(&wallet_record_ids, SILENT_CLOUD_ACCESS).await {
+            match self.load_remote_wallet_truth(&wallet_record_ids, cloud.clone()).await {
                 Ok(remote_wallet_truth) => remote_wallet_truth,
                 Err(error) => {
                     warn!("Backup integrity: remote truth refresh failed: {error}");
@@ -179,18 +177,17 @@ impl RustCloudBackupManager {
         namespace: &str,
         fallback_wallet_record_ids: &[String],
     ) {
-        let cloud = CloudStorage::global();
-        let wallet_record_ids =
-            match cloud.list_wallet_backups(namespace.to_string(), SILENT_CLOUD_ACCESS).await {
-                Ok(wallet_record_ids) => wallet_record_ids,
-                Err(error) => {
-                    warn!("Backup integrity: detail relist failed: {error}");
-                    fallback_wallet_record_ids.to_vec()
-                }
-            };
+        let cloud = CloudStorage::global_silent_client();
+        let wallet_record_ids = match cloud.list_wallet_backups(namespace.to_string()).await {
+            Ok(wallet_record_ids) => wallet_record_ids,
+            Err(error) => {
+                warn!("Backup integrity: detail relist failed: {error}");
+                fallback_wallet_record_ids.to_vec()
+            }
+        };
 
         let remote_wallet_truth =
-            match self.load_remote_wallet_truth(&wallet_record_ids, SILENT_CLOUD_ACCESS).await {
+            match self.load_remote_wallet_truth(&wallet_record_ids, cloud.clone()).await {
                 Ok(remote_wallet_truth) => remote_wallet_truth,
                 Err(error) => {
                     warn!("Backup integrity: detail remote truth refresh failed: {error}");

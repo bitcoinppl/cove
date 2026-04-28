@@ -113,9 +113,34 @@ static REF: OnceCell<CloudStorage> = OnceCell::new();
 #[derive(Debug, Clone, uniffi::Object)]
 pub struct CloudStorage(Arc<Box<dyn CloudStorageAccess>>);
 
+#[derive(Debug, Clone)]
+pub struct CloudStorageClient(CloudStorage, CloudAccessPolicy);
+
 impl CloudStorage {
     pub fn global() -> &'static Self {
         REF.get().expect("cloud storage is not initialized")
+    }
+
+    pub fn global_explicit_client() -> CloudStorageClient {
+        Self::global().client(CloudAccessPolicy::ConsentAllowed)
+    }
+
+    pub fn global_silent_client() -> CloudStorageClient {
+        Self::global().client(CloudAccessPolicy::Silent)
+    }
+
+    fn client(&self, policy: CloudAccessPolicy) -> CloudStorageClient {
+        CloudStorageClient(self.clone(), policy)
+    }
+
+    #[cfg(test)]
+    fn explicit_client(&self) -> CloudStorageClient {
+        CloudStorageClient(self.clone(), CloudAccessPolicy::ConsentAllowed)
+    }
+
+    #[cfg(test)]
+    fn silent_client(&self) -> CloudStorageClient {
+        CloudStorageClient(self.clone(), CloudAccessPolicy::Silent)
     }
 }
 
@@ -139,18 +164,17 @@ impl CloudStorage {
         &self,
         policy: CloudAccessPolicy,
     ) -> Result<bool, CloudStorageError> {
-        Ok(!self.list_namespaces(policy).await?.is_empty())
+        Ok(!self.0.list_namespaces(policy).await?.is_empty())
     }
 }
 
-impl CloudStorage {
+impl CloudStorageClient {
     pub async fn upload_master_key_backup(
         &self,
         namespace: String,
         data: Vec<u8>,
-        policy: CloudAccessPolicy,
     ) -> Result<(), CloudStorageError> {
-        self.0.upload_master_key_backup(namespace, data, policy).await
+        self.0.0.upload_master_key_backup(namespace, data, self.1).await
     }
 
     pub async fn upload_wallet_backup(
@@ -158,75 +182,69 @@ impl CloudStorage {
         namespace: String,
         record_id: String,
         data: Vec<u8>,
-        policy: CloudAccessPolicy,
     ) -> Result<(), CloudStorageError> {
-        self.0.upload_wallet_backup(namespace, record_id, data, policy).await
+        self.0.0.upload_wallet_backup(namespace, record_id, data, self.1).await
     }
 
     pub async fn download_master_key_backup(
         &self,
         namespace: String,
-        policy: CloudAccessPolicy,
     ) -> Result<Vec<u8>, CloudStorageError> {
-        self.0.download_master_key_backup(namespace, policy).await
+        self.0.0.download_master_key_backup(namespace, self.1).await
     }
 
     pub async fn download_wallet_backup(
         &self,
         namespace: String,
         record_id: String,
-        policy: CloudAccessPolicy,
     ) -> Result<Vec<u8>, CloudStorageError> {
-        self.0.download_wallet_backup(namespace, record_id, policy).await
+        self.0.0.download_wallet_backup(namespace, record_id, self.1).await
     }
 
     pub async fn delete_wallet_backup(
         &self,
         namespace: String,
         record_id: String,
-        policy: CloudAccessPolicy,
     ) -> Result<(), CloudStorageError> {
-        self.0.delete_wallet_backup(namespace, record_id, policy).await
+        self.0.0.delete_wallet_backup(namespace, record_id, self.1).await
     }
 
-    pub async fn list_namespaces(
-        &self,
-        policy: CloudAccessPolicy,
-    ) -> Result<Vec<String>, CloudStorageError> {
-        self.0.list_namespaces(policy).await
+    pub async fn list_namespaces(&self) -> Result<Vec<String>, CloudStorageError> {
+        self.0.0.list_namespaces(self.1).await
     }
 
     pub async fn list_wallet_files(
         &self,
         namespace: String,
-        policy: CloudAccessPolicy,
     ) -> Result<Vec<String>, CloudStorageError> {
-        self.0.list_wallet_files(namespace, policy).await
+        self.0.0.list_wallet_files(namespace, self.1).await
     }
 
     pub async fn is_backup_uploaded(
         &self,
         namespace: String,
         record_id: String,
-        policy: CloudAccessPolicy,
     ) -> Result<bool, CloudStorageError> {
-        self.0.is_backup_uploaded(namespace, record_id, policy).await
+        self.0.0.is_backup_uploaded(namespace, record_id, self.1).await
     }
 
-    pub async fn overall_sync_health(&self, policy: CloudAccessPolicy) -> CloudSyncHealth {
-        self.0.overall_sync_health(policy).await
+    pub async fn overall_sync_health(&self) -> CloudSyncHealth {
+        self.0.0.overall_sync_health(self.1).await
     }
 
     pub async fn list_wallet_backups(
         &self,
         namespace: String,
-        policy: CloudAccessPolicy,
     ) -> Result<Vec<String>, CloudStorageError> {
-        let filenames = self.0.list_wallet_files(namespace, policy).await?;
+        let filenames = self.0.0.list_wallet_files(namespace, self.1).await?;
         Ok(filenames
             .iter()
             .filter_map(|f| wallet_record_id_from_filename(f).map(String::from))
             .collect())
+    }
+
+    pub async fn has_any_cloud_backup(&self) -> Result<bool, CloudStorageError> {
+        Ok(!self.list_namespaces().await?.is_empty())
     }
 }
 
@@ -245,8 +263,8 @@ mod tests {
 
     #[derive(Debug)]
     struct TestCloudStorage {
-        consent_allowed_namespaces_called: Arc<AtomicBool>,
-        silent_namespaces: Vec<String>,
+        expected_policy: CloudAccessPolicy,
+        expected_policy_used: Arc<AtomicBool>,
     }
 
     #[async_trait::async_trait]
@@ -300,12 +318,11 @@ mod tests {
             &self,
             policy: CloudAccessPolicy,
         ) -> Result<Vec<String>, CloudStorageError> {
-            match policy {
-                CloudAccessPolicy::ConsentAllowed => {
-                    self.consent_allowed_namespaces_called.store(true, Ordering::Release);
-                    panic!("consent-allowed namespace listing should not be used")
-                }
-                CloudAccessPolicy::Silent => Ok(self.silent_namespaces.clone()),
+            if policy == self.expected_policy {
+                self.expected_policy_used.store(true, Ordering::Release);
+                Ok(vec!["namespace-a".into()])
+            } else {
+                panic!("unexpected cloud access policy")
             }
         }
 
@@ -342,17 +359,32 @@ mod tests {
     }
 
     #[test]
-    fn has_any_cloud_backup_uses_silent_namespace_listing() {
-        let consent_allowed_namespaces_called = Arc::new(AtomicBool::new(false));
+    fn silent_client_forwards_silent_policy() {
+        let expected_policy_used = Arc::new(AtomicBool::new(false));
         let cloud = CloudStorage(Arc::new(Box::new(TestCloudStorage {
-            consent_allowed_namespaces_called: consent_allowed_namespaces_called.clone(),
-            silent_namespaces: vec!["namespace-a".into()],
+            expected_policy: CloudAccessPolicy::Silent,
+            expected_policy_used: expected_policy_used.clone(),
         })));
 
         assert!(
-            block_on_ready(cloud.has_any_cloud_backup(CloudAccessPolicy::Silent))
+            block_on_ready(cloud.silent_client().has_any_cloud_backup())
                 .expect("cloud check should succeed")
         );
-        assert!(!consent_allowed_namespaces_called.load(Ordering::Acquire));
+        assert!(expected_policy_used.load(Ordering::Acquire));
+    }
+
+    #[test]
+    fn explicit_client_forwards_consent_allowed_policy() {
+        let expected_policy_used = Arc::new(AtomicBool::new(false));
+        let cloud = CloudStorage(Arc::new(Box::new(TestCloudStorage {
+            expected_policy: CloudAccessPolicy::ConsentAllowed,
+            expected_policy_used: expected_policy_used.clone(),
+        })));
+
+        assert!(
+            block_on_ready(cloud.explicit_client().has_any_cloud_backup())
+                .expect("cloud check should succeed")
+        );
+        assert!(expected_policy_used.load(Ordering::Acquire));
     }
 }

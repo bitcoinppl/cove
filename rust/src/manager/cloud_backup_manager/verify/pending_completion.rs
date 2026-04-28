@@ -13,7 +13,7 @@ use super::{
 use crate::database::Database;
 use crate::database::cloud_backup::{CloudBlobConfirmedState, PersistedCloudBlobState};
 use crate::manager::cloud_backup_manager::{
-    CloudBackupDetail, PendingVerificationUpload, SILENT_CLOUD_ACCESS,
+    CloudBackupDetail, PendingVerificationUpload,
     wallets::{WalletBackupLookup, WalletBackupReader},
 };
 
@@ -84,19 +84,20 @@ impl RustCloudBackupManager {
                 ..
             })) => revision_hash.as_str() == upload.target_revision(sync_state),
             Some(PersistedCloudBlobState::Failed(_)) => true,
-            Some(PersistedCloudBlobState::UploadedPendingConfirmation(_)) => CloudStorage::global()
-                .download_wallet_backup(
-                    completion.namespace_id().to_string(),
-                    upload.record_id().to_string(),
-                    SILENT_CLOUD_ACCESS,
-                )
-                .await
-                .map(|_| true)
-                .or_else(|error| match error {
-                    CloudStorageError::NotFound(_) => Ok(false),
-                    other => Err(other),
-                })
-                .unwrap_or(false),
+            Some(PersistedCloudBlobState::UploadedPendingConfirmation(_)) => {
+                CloudStorage::global_silent_client()
+                    .download_wallet_backup(
+                        completion.namespace_id().to_string(),
+                        upload.record_id().to_string(),
+                    )
+                    .await
+                    .map(|_| true)
+                    .or_else(|error| match error {
+                        CloudStorageError::NotFound(_) => Ok(false),
+                        other => Err(other),
+                    })
+                    .unwrap_or(false)
+            }
             _ => false,
         }
     }
@@ -163,10 +164,9 @@ impl RustCloudBackupManager {
         let record_id = upload.record_id();
         let expected_revision = upload.target_revision(sync_state);
         let reader = WalletBackupReader::new(
-            CloudStorage::global().clone(),
+            CloudStorage::global_silent_client(),
             completion.namespace_id().to_string(),
             Zeroizing::new(*critical_key),
-            SILENT_CLOUD_ACCESS,
         );
 
         match reader.summary(record_id).await {

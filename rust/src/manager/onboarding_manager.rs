@@ -7,7 +7,7 @@ use std::{
 };
 
 use backon::{FibonacciBuilder, Retryable as _};
-use cove_device::cloud_storage::{CloudAccessPolicy, CloudStorage, CloudStorageError};
+use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
 use cove_util::ResultExt as _;
 use flume::Receiver;
 use parking_lot::RwLock;
@@ -480,10 +480,10 @@ impl RustOnboardingManager {
                 return;
             }
 
-            let cloud = CloudStorage::global().clone();
+            let cloud = CloudStorage::global_silent_client();
             let check_cloud_backup = || {
                 let cloud = cloud.clone();
-                async move { cloud.has_any_cloud_backup(CloudAccessPolicy::Silent).await }
+                async move { cloud.has_any_cloud_backup().await }
             };
 
             let outcome =

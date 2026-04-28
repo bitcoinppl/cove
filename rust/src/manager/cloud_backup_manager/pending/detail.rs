@@ -2,8 +2,8 @@ use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
 use tracing::{info, warn};
 
 use super::super::{
-    BlockingCloudStep, CloudBackupDetailResult, CloudBackupStatus, EXPLICIT_CLOUD_ACCESS,
-    RustCloudBackupManager, cloud_inventory::RemoteWalletTruth,
+    BlockingCloudStep, CloudBackupDetailResult, CloudBackupStatus, RustCloudBackupManager,
+    cloud_inventory::RemoteWalletTruth,
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{CloudBlobConfirmedState, PersistedCloudBlobState};
@@ -32,26 +32,24 @@ impl RustCloudBackupManager {
         }
 
         info!("refresh_cloud_backup_detail: listing wallets for namespace {namespace}");
-        let cloud = CloudStorage::global();
-        let wallet_record_ids =
-            match cloud.list_wallet_backups(namespace.clone(), EXPLICIT_CLOUD_ACCESS).await {
-                Ok(ids) => ids,
-                Err(CloudStorageError::NotFound(_)) => Vec::new(),
-                Err(error) => {
-                    if RustCloudBackupManager::is_connectivity_related_issue(
-                        RustCloudBackupManager::cloud_storage_issue(&error),
-                    ) {
-                        return Some(CloudBackupDetailResult::AccessError(
-                            self.offline_error_for_step(BlockingCloudStep::DetailRefresh)
-                                .to_string(),
-                        ));
-                    }
-                    return Some(CloudBackupDetailResult::AccessError(error.to_string()));
+        let cloud = CloudStorage::global_explicit_client();
+        let wallet_record_ids = match cloud.list_wallet_backups(namespace.clone()).await {
+            Ok(ids) => ids,
+            Err(CloudStorageError::NotFound(_)) => Vec::new(),
+            Err(error) => {
+                if RustCloudBackupManager::is_connectivity_related_issue(
+                    RustCloudBackupManager::cloud_storage_issue(&error),
+                ) {
+                    return Some(CloudBackupDetailResult::AccessError(
+                        self.offline_error_for_step(BlockingCloudStep::DetailRefresh).to_string(),
+                    ));
                 }
-            };
+                return Some(CloudBackupDetailResult::AccessError(error.to_string()));
+            }
+        };
 
         let remote_wallet_truth =
-            match self.load_remote_wallet_truth(&wallet_record_ids, EXPLICIT_CLOUD_ACCESS).await {
+            match self.load_remote_wallet_truth(&wallet_record_ids, cloud.clone()).await {
                 Ok(remote_wallet_truth) => remote_wallet_truth,
                 Err(error) => return Some(CloudBackupDetailResult::AccessError(error.to_string())),
             };
