@@ -101,6 +101,7 @@ enum UnlockMode {
                     do {
                         try app.rust.selectWallet(id: selectedWalletId)
                     } catch {
+                        logger.error("Failed to select decoy wallet after auth fallback: \(error)")
                         app.isLoading = false
                         app.loadAndReset(to: RouteFactory().newWalletSelect())
                     }
@@ -145,6 +146,7 @@ enum UnlockMode {
             do {
                 try app.rust.selectWallet(id: selectedWalletId)
             } catch {
+                logger.error("Failed to select main wallet after auth fallback: \(error)")
                 app.isLoading = false
                 app.loadAndReset(to: RouteFactory().newWalletSelect())
             }

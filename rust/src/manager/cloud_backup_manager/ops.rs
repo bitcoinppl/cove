@@ -1107,7 +1107,7 @@ mod tests {
         WalletEntry, WalletMode as CloudWalletMode, WalletSecret, wallet_filename_from_record_id,
         wallet_record_id,
     };
-    use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
+    use cove_device::cloud_storage::{CloudStorage, CloudStorageError, CloudSyncHealth};
     use cove_device::keychain::{
         CSPP_CREDENTIAL_ID_KEY, CSPP_NAMESPACE_ID_KEY, CSPP_PRF_SALT_KEY, Keychain,
     };
@@ -2164,7 +2164,7 @@ mod tests {
         reason = "tests serialize shared cloud backup globals across awaits"
     )]
     #[tokio::test(flavor = "current_thread")]
-    async fn startup_resume_pauses_retryable_authorization_failed_wallet_uploads() {
+    async fn startup_resume_retries_retryable_authorization_failed_wallet_uploads() {
         let _guard = test_lock().lock();
         cove_tokio::init();
         let globals = test_globals();
@@ -2189,12 +2189,38 @@ mod tests {
             || manager.state().sync_error.as_deref() == Some("failed"),
         )
         .await;
-        assert_test_condition_stays_true(
-            Duration::from_millis(250),
-            "startup resume should not retry authorization failures",
-            || globals.cloud.wallet_backup_upload_attempt_count() == initial_attempt_count,
+        wait_for_test_condition(
+            Duration::from_secs(1),
+            "startup resume should retry authorization failures",
+            || globals.cloud.wallet_backup_upload_attempt_count() > initial_attempt_count,
         )
         .await;
+
+        clear_wallet_upload_runtime_for_test_async(&manager).await;
+    }
+
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "tests serialize shared cloud backup globals across awaits"
+    )]
+    #[tokio::test(flavor = "current_thread")]
+    async fn sync_health_reports_authorization_required_for_persisted_auth_failures() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        let manager = CLOUD_BACKUP_MANAGER.clone();
+        clear_wallet_upload_runtime_for_test_async(&manager).await;
+        configure_enabled_cloud_backup(&manager, globals, 0);
+
+        let metadata = xpub_only_wallet_metadata();
+        persist_xpub_wallets(vec![metadata.clone()]);
+        persist_failed_blob_state_with_issue(
+            metadata.id,
+            true,
+            Some(CloudBlobFailureIssue::AuthorizationRequired),
+        );
+
+        assert_eq!(manager.compute_sync_health().await, CloudSyncHealth::AuthorizationRequired,);
 
         clear_wallet_upload_runtime_for_test_async(&manager).await;
     }

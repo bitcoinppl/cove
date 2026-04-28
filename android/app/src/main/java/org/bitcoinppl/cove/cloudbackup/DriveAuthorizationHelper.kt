@@ -79,7 +79,11 @@ internal class DriveAuthorizationHelper(
         val resultIntent =
             activityResult.data ?: Intent()
 
-        return client.getAuthorizationResultFromIntent(resultIntent)
+        return try {
+            client.getAuthorizationResultFromIntent(resultIntent)
+        } catch (error: Exception) {
+            throw AuthorizationRequiredException(error.message ?: "google drive authorization result could not be parsed")
+        }
     }
 
     companion object {

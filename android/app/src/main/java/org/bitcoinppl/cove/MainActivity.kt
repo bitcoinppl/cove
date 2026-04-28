@@ -976,10 +976,11 @@ private fun GlobalAlertDialog(
                                     ?.toString()
                             if (!text.isNullOrBlank()) {
                                 try {
-                                    val wallet = Wallet.newFromXpub(xpub = text.trim())
-                                    val id = wallet.id()
-                                    app.rust.selectWallet(id)
-                                    app.resetRoute(Route.SelectedWallet(id))
+                                    Wallet.newFromXpub(xpub = text.trim()).use { wallet ->
+                                        val id = wallet.id()
+                                        app.rust.selectWallet(id)
+                                        app.resetRoute(Route.SelectedWallet(id))
+                                    }
                                 } catch (e: Exception) {
                                     app.alertState =
                                         TaggedItem(

@@ -1191,6 +1191,10 @@ impl RustCloudBackupManager {
                 return None;
             };
 
+            if failed_state.issue == Some(CloudBlobFailureIssue::AuthorizationRequired) {
+                return Some(CloudSyncHealth::AuthorizationRequired);
+            }
+
             Some(CloudSyncHealth::Failed(sync_health_failed_message(sync_state, failed_state)))
         })
     }

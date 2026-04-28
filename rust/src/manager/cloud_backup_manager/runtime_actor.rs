@@ -591,12 +591,11 @@ impl CloudBackupRuntimeActor {
                     send!(addr.schedule_wallet_upload(wallet_id, true));
                 }
                 PersistedCloudBlobState::Failed(failed_state) if failed_state.retryable => {
-                    if failed_state.issue == Some(CloudBlobFailureIssue::AuthorizationRequired) {
-                        if let Some(manager) = &manager {
-                            manager.set_sync_error(Some(failed_state.error.clone()));
-                            manager.refresh_sync_health();
-                        }
-                        continue;
+                    if failed_state.issue == Some(CloudBlobFailureIssue::AuthorizationRequired)
+                        && let Some(manager) = &manager
+                    {
+                        manager.set_sync_error(Some(failed_state.error.clone()));
+                        manager.refresh_sync_health();
                     }
                     send!(addr.schedule_wallet_upload(wallet_id, true));
                 }

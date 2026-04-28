@@ -111,13 +111,14 @@ fun NewWalletSelectScreen(
 
     fun importWallet(content: String) {
         try {
-            val wallet = Wallet.newFromXpub(xpub = content.trim())
-            val id = wallet.id()
-            android.util.Log.d("NewWalletSelectScreen", "Imported Wallet: $id")
+            Wallet.newFromXpub(xpub = content.trim()).use { wallet ->
+                val id = wallet.id()
+                android.util.Log.d("NewWalletSelectScreen", "Imported Wallet: $id")
 
-            app.rust.selectWallet(id = id)
-            app.popRoute()
-            app.alertState = TaggedItem(AppAlertState.ImportedSuccessfully)
+                app.rust.selectWallet(id = id)
+                app.popRoute()
+                app.alertState = TaggedItem(AppAlertState.ImportedSuccessfully)
+            }
         } catch (e: WalletException.MultiFormat) {
             app.popRoute()
             app.alertState =

@@ -10,8 +10,11 @@ import java.net.HttpURLConnection
 import java.net.SocketTimeoutException
 import java.net.URL
 import java.net.UnknownHostException
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove_core.csppMasterKeyRecordId
@@ -158,6 +161,8 @@ internal fun mapDriveUploadError(error: Throwable, target: String): CloudStorage
             }
         is DriveHttpException ->
             when (error.statusCode) {
+                HttpURLConnection.HTTP_UNAUTHORIZED ->
+                    CloudStorageException.AuthorizationRequired("google drive authorization is required")
                 HttpURLConnection.HTTP_NOT_FOUND -> CloudStorageException.NotFound(target)
                 HTTP_TOO_MANY_REQUESTS -> CloudStorageException.QuotaExceeded()
                 HttpURLConnection.HTTP_FORBIDDEN ->
@@ -199,6 +204,8 @@ internal fun mapDriveListError(error: Throwable): CloudStorageException =
             }
         is DriveHttpException ->
             when (error.statusCode) {
+                HttpURLConnection.HTTP_UNAUTHORIZED ->
+                    CloudStorageException.AuthorizationRequired("google drive authorization is required")
                 HTTP_TOO_MANY_REQUESTS -> CloudStorageException.QuotaExceeded()
                 HttpURLConnection.HTTP_NOT_FOUND -> CloudStorageException.NotFound("drive file")
                 HttpURLConnection.HTTP_FORBIDDEN ->
@@ -223,6 +230,9 @@ class AndroidCloudStorageAccess internal constructor(
     private val driveAuthorization: DriveAuthorization,
 ) : CloudStorageAccess {
     constructor(context: Context) : this(DriveAuthorizationHelper(context))
+
+    private val namespacesRootFolderMutex = Mutex()
+    private val namespaceFolderMutexes = ConcurrentHashMap<String, Mutex>()
 
     private fun CloudAccessPolicy.allowsConsent(): Boolean =
         this == CloudAccessPolicy.CONSENT_ALLOWED
@@ -346,7 +356,7 @@ class AndroidCloudStorageAccess internal constructor(
             interactive = policy.allowsConsent(),
             onError = { error -> mapDriveListError(error) },
         ) { token ->
-            val namespaceFolderId = requireNamespaceFolderId(token, namespace)
+            val namespaceFolderId = findNamespaceFolderId(token, namespace) ?: return@runDriveOperation false
             findChildByName(
                 token = token,
                 parentId = namespaceFolderId,
@@ -405,24 +415,54 @@ class AndroidCloudStorageAccess internal constructor(
         )?.id
 
     private suspend fun ensureNamespacesRootFolderId(token: String): String =
-        findNamespacesRootFolderId(token)
-            ?: createFolder(
-                token = token,
-                parentId = APP_DATA_FOLDER,
-                folderName = DrivePaths.namespacesRootFolderName,
-            )
+        namespacesRootFolderMutex.withLock {
+            findNamespacesRootFolderId(token)
+                ?: run {
+                    val createdId =
+                        createFolder(
+                            token = token,
+                            parentId = APP_DATA_FOLDER,
+                            folderName = DrivePaths.namespacesRootFolderName,
+                        )
+                    findNamespacesRootFolderId(token) ?: createdId
+                }
+        }
 
     private suspend fun ensureNamespaceFolderId(
         token: String,
         namespace: String,
     ): String {
         val rootId = ensureNamespacesRootFolderId(token)
+        val mutex = namespaceFolderMutexes.getOrPut(namespace) { Mutex() }
+        return mutex.withLock {
+            findChildByName(
+                token = token,
+                parentId = rootId,
+                fileName = namespace,
+                foldersOnly = true,
+            )?.id ?: run {
+                val createdId = createFolder(token, rootId, namespace)
+                findChildByName(
+                    token = token,
+                    parentId = rootId,
+                    fileName = namespace,
+                    foldersOnly = true,
+                )?.id ?: createdId
+            }
+        }
+    }
+
+    private suspend fun findNamespaceFolderId(
+        token: String,
+        namespace: String,
+    ): String? {
+        val rootId = findNamespacesRootFolderId(token) ?: return null
         return findChildByName(
             token = token,
             parentId = rootId,
             fileName = namespace,
             foldersOnly = true,
-        )?.id ?: createFolder(token, rootId, namespace)
+        )?.id
     }
 
     private suspend fun requireNamespaceFolderId(

@@ -2,6 +2,8 @@ use std::str::FromStr as _;
 
 use cove_cspp::backup_data::{EncryptedWalletBackup, WalletEntry};
 use cove_cspp::wallet_crypto;
+#[cfg(test)]
+use cove_device::cloud_storage::CloudStorage;
 use cove_device::cloud_storage::{CloudStorageClient, CloudStorageError};
 use cove_util::ResultExt as _;
 use tracing::{info, warn};
@@ -24,7 +26,9 @@ type ExistingFingerprints = Vec<(Fingerprint, cove_types::network::Network, Loca
 
 #[derive(Clone)]
 pub(crate) struct WalletBackupReader {
-    cloud: CloudStorageClient,
+    cloud: Option<CloudStorageClient>,
+    #[cfg(test)]
+    _local_cloud: Option<CloudStorage>,
     namespace: String,
     critical_key: Zeroizing<[u8; 32]>,
 }
@@ -35,7 +39,22 @@ impl WalletBackupReader {
         namespace: String,
         critical_key: Zeroizing<[u8; 32]>,
     ) -> Self {
-        Self { cloud, namespace, critical_key }
+        Self {
+            cloud: Some(cloud),
+            #[cfg(test)]
+            _local_cloud: None,
+            namespace,
+            critical_key,
+        }
+    }
+
+    #[cfg(test)]
+    fn new_with_local_storage(
+        cloud: CloudStorage,
+        namespace: String,
+        critical_key: Zeroizing<[u8; 32]>,
+    ) -> Self {
+        Self { cloud: None, _local_cloud: Some(cloud), namespace, critical_key }
     }
 
     pub(crate) async fn download(
@@ -109,11 +128,7 @@ impl WalletBackupReader {
         &self,
         record_id: &str,
     ) -> Result<WalletBackupLookup<EncryptedWalletBackup>, CloudBackupError> {
-        let wallet_json = match self
-            .cloud
-            .download_wallet_backup(self.namespace.clone(), record_id.to_string())
-            .await
-        {
+        let wallet_json = match self.download_wallet_json(record_id).await {
             Ok(wallet_json) => wallet_json,
             Err(CloudStorageError::NotFound(_)) => return Ok(WalletBackupLookup::NotFound),
             Err(error) => {
@@ -136,6 +151,15 @@ impl WalletBackupReader {
         }
 
         Ok(WalletBackupLookup::Found(encrypted))
+    }
+
+    async fn download_wallet_json(&self, record_id: &str) -> Result<Vec<u8>, CloudStorageError> {
+        let Some(cloud) = &self.cloud else {
+            return Err(CloudStorageError::NotAvailable(
+                "test cloud storage cannot download wallet backups".into(),
+            ));
+        };
+        cloud.download_wallet_backup(self.namespace.clone(), record_id.to_string()).await
     }
 
     pub(crate) fn decrypt_entry(
@@ -361,9 +385,8 @@ mod tests {
         let entry = test_wallet_entry(&metadata);
         let critical_key = [7; 32];
         let encrypted = wallet_crypto::encrypt_wallet_entry(&entry, &critical_key).unwrap();
-        let _ = test_cloud_storage();
-        let reader = WalletBackupReader::new(
-            cove_device::cloud_storage::CloudStorage::global_explicit_client(),
+        let reader = WalletBackupReader::new_with_local_storage(
+            test_cloud_storage(),
             "test-namespace".into(),
             Zeroizing::new(critical_key),
         );

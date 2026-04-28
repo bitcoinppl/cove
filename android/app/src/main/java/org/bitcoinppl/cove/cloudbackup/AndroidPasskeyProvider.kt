@@ -41,8 +41,8 @@ class AndroidPasskeyProvider(
     ): ByteArray {
         enforceBackgroundThread("createPasskey")
         return runBlocking {
-            val activity = ForegroundUiBridge.requireActivity()
             try {
+                val activity = ForegroundUiBridge.requireActivity()
                 val response =
                     credentialManager.createCredential(
                         activity,
@@ -56,7 +56,7 @@ class AndroidPasskeyProvider(
                         ?: throw PasskeyException.CreationFailed("unexpected credential response type")
 
                 validatePasskeyRegistrationPrf(registration.registrationResponseJson)
-                extractCredentialId(registration.registrationResponseJson)
+                extractCreatedCredentialId(registration.registrationResponseJson)
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
                 throw mapPasskeyCreateError(error)
@@ -72,8 +72,8 @@ class AndroidPasskeyProvider(
     ): ByteArray {
         enforceBackgroundThread("authenticateWithPrf")
         return runBlocking {
-            val activity = ForegroundUiBridge.requireActivity()
             try {
+                val activity = ForegroundUiBridge.requireActivity()
                 val response =
                     credentialManager.getCredential(
                         activity,
@@ -102,8 +102,8 @@ class AndroidPasskeyProvider(
     ): DiscoveredPasskeyResult {
         enforceBackgroundThread("discoverAndAuthenticateWithPrf")
         return runBlocking {
-            val activity = ForegroundUiBridge.requireActivity()
             try {
+                val activity = ForegroundUiBridge.requireActivity()
                 val response =
                     credentialManager.getCredential(
                         activity,
@@ -137,8 +137,8 @@ class AndroidPasskeyProvider(
     ): PasskeyCredentialPresence {
         enforceBackgroundThread("checkPasskeyPresence")
         return runBlocking {
-            val activity = ForegroundUiBridge.requireActivity()
             try {
+                val activity = ForegroundUiBridge.requireActivity()
                 credentialManager.getCredential(
                     activity,
                     buildGetCredentialRequest(
@@ -237,6 +237,15 @@ class AndroidPasskeyProvider(
         val rawId = json.optString("rawId").ifBlank { json.optString("id") }
         if (rawId.isBlank()) {
             throw PasskeyException.AuthenticationFailed("credential id was missing from the passkey response")
+        }
+        return rawId.fromBase64Url()
+    }
+
+    private fun extractCreatedCredentialId(responseJson: String): ByteArray {
+        val json = JSONObject(responseJson)
+        val rawId = json.optString("rawId").ifBlank { json.optString("id") }
+        if (rawId.isBlank()) {
+            throw PasskeyException.CreationFailed("credential id was missing from the passkey response")
         }
         return rawId.fromBase64Url()
     }

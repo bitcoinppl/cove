@@ -1001,15 +1001,17 @@ package org.bitcoinppl.cove.cloudbackup
                  )
              }
  
-             MaterialDivider()
-             MaterialSettingsItem(
-                 title = "Verify Again",
-                 onClick = { manager.dispatch(CloudBackupManagerAction.StartVerification) },
-                 leadingContent = { Icon(Icons.Default.Security, contentDescription = null) },
-             )
-         }
-     }
- }
+            if (manager.verification is VerificationState.Verified) {
+                MaterialDivider()
+                MaterialSettingsItem(
+                    title = "Verify Again",
+                    onClick = { manager.dispatch(CloudBackupManagerAction.StartVerification) },
+                    leadingContent = { Icon(Icons.Default.Security, contentDescription = null) },
+                )
+            }
+        }
+    }
+}
  
  @Composable
  private fun CancelledVerificationActions(

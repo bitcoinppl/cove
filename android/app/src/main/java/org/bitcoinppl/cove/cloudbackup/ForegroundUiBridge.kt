@@ -73,7 +73,7 @@ object ForegroundUiBridge {
 
     suspend fun launchAuthorization(
         request: IntentSenderRequest,
-    ): ActivityResult {
+    ): ActivityResult = withContext(Dispatchers.Main.immediate) {
         val deferred = CompletableDeferred<ActivityResult>()
         synchronized(authorizationLock) {
             val launcher = authorizationLauncher ?: error("authorization launcher is not attached")
@@ -84,7 +84,7 @@ object ForegroundUiBridge {
             launcher.launch(request)
         }
 
-        return try {
+        try {
             deferred.await()
         } finally {
             synchronized(authorizationLock) {

@@ -10,13 +10,33 @@ import androidx.core.app.ActivityOptionsCompat
 import androidx.fragment.app.FragmentActivity
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.setMain
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Before
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class ForegroundUiBridgeTest {
+    private val mainDispatcher = UnconfinedTestDispatcher()
+
+    @Before
+    fun setUp() {
+        Dispatchers.setMain(mainDispatcher)
+    }
+
+    @After
+    fun tearDown() {
+        Dispatchers.resetMain()
+    }
+
     @Test
     fun pauseKeepsPendingAuthorizationResultDeliverable() =
         runBlocking {

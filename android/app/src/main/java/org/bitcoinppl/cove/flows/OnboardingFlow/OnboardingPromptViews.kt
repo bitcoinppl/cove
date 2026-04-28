@@ -41,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -50,6 +51,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove_core.OnboardingSoftwareSelection
 import org.bitcoinppl.cove_core.OnboardingStorageSelection
@@ -284,9 +286,13 @@ private fun OnboardingTermsAgreementCard(
                 lineHeight = 18.sp,
             ),
             onClick = { offset ->
-                text.getStringAnnotations(tag = "URL", start = offset, end = offset)
+                val url = text.getStringAnnotations(tag = "URL", start = offset, end = offset)
                     .firstOrNull()
-                    ?.let { onOpenUrl(it.item) }
+                if (url == null) {
+                    onCheckedChange(!checked)
+                } else {
+                    onOpenUrl(url.item)
+                }
             },
         )
     }
@@ -514,8 +520,8 @@ internal fun OnboardingReturningUserChoiceScreen(
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             OnboardingChoiceCard(
-                title = "Restore from Cove backup",
-                subtitle = "Use your passkey to restore from Google Drive",
+                title = stringResource(R.string.onboarding_restore_card_title),
+                subtitle = stringResource(R.string.onboarding_restore_card_subtitle),
                 icon = Icons.Default.CloudDownload,
                 onClick = onRestoreFromCoveBackup,
             )

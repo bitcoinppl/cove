@@ -67,6 +67,7 @@ import org.bitcoinppl.cove.ImportWalletManager
 import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.ScreenSecurity
 import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.findActivity
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
 import org.bitcoinppl.cove.views.DotMenuView
@@ -116,7 +117,7 @@ fun HotWalletImportScreen(
     // block screenshots unconditionally — import screen contains seed words
     val context = LocalContext.current
     DisposableEffect(Unit) {
-        val window = (context as? android.app.Activity)?.window
+        val window = context.findActivity()?.window
         ScreenSecurity.enter()
         window?.setFlags(
             WindowManager.LayoutParams.FLAG_SECURE,
@@ -516,6 +517,7 @@ fun HotWalletImportScreen(
                             onClick = {
                                 alertState = AlertState.None
                                 duplicateWalletId?.let { walletId ->
+                                    manager.close()
                                     onImported?.invoke(walletId) ?: run {
                                         app.rust.selectWallet(walletId)
                                         app.resetRoute(Route.SelectedWallet(walletId))

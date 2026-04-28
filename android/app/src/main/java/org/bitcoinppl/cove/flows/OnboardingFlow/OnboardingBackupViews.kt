@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -54,6 +55,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -67,6 +69,7 @@ import org.bitcoinppl.cove.QrCodeGenerator
 import org.bitcoinppl.cove.ScreenSecurity
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
+import org.bitcoinppl.cove.findActivity
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupRestoreProgress
@@ -268,7 +271,7 @@ internal fun OnboardingSecretWordsView(
     val context = LocalContext.current
 
     DisposableEffect(Unit) {
-        val window = (context as? android.app.Activity)?.window
+        val window = context.findActivity()?.window
         ScreenSecurity.enter()
         window?.setFlags(
             WindowManager.LayoutParams.FLAG_SECURE,
@@ -785,7 +788,11 @@ private fun OnboardingToggleCard(
                 .fillMaxWidth()
                 .background(OnboardingCardFill, RoundedCornerShape(16.dp))
                 .clip(RoundedCornerShape(16.dp))
-                .clickable(onClick = { onCheckedChange(!checked) })
+                .toggleable(
+                    value = checked,
+                    role = Role.Checkbox,
+                    onValueChange = onCheckedChange,
+                )
                 .padding(horizontal = 16.dp, vertical = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(18.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -858,6 +865,12 @@ internal fun OnboardingRestoreView(
     LaunchedEffect(Unit) {
         if (hasStartedRestore) return@LaunchedEffect
         startRestore()
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            backupManager.dispatch(CloudBackupManagerAction.CancelRestore)
+        }
     }
 
     LaunchedEffect(backupManager.status, backupManager.state.restoreReport) {

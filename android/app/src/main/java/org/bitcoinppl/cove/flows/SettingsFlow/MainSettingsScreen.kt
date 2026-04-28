@@ -233,11 +233,11 @@ fun MainSettingsScreen(
                 )
 
                 if (showCloudBackupSettings) {
-                    SectionHeader("Cloud Backup")
+                    SectionHeader(stringResource(R.string.title_cloud_backup))
                     MaterialSection {
                         Column {
                             MaterialSettingsItem(
-                                title = "Cloud Backup",
+                                title = stringResource(R.string.title_cloud_backup),
                                 subtitle = cloudBackupSettingsSubtitle(cloudBackupManager.status),
                                 icon = Icons.Default.CloudUpload,
                                 onClick = {

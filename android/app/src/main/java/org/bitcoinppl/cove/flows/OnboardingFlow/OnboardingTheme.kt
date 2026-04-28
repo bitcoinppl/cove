@@ -46,8 +46,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
 
@@ -525,8 +527,8 @@ internal fun OnboardingCloudRestoreChoiceCard(
     modifier: Modifier = Modifier,
 ) {
     OnboardingChoiceCard(
-        title = "Restore from Cove backup",
-        subtitle = "Use your passkey to restore from Google Drive",
+        title = stringResource(R.string.onboarding_restore_card_title),
+        subtitle = stringResource(R.string.onboarding_restore_card_subtitle),
         icon = Icons.Default.CloudDownload,
         onClick = onClick,
         modifier = modifier,

@@ -551,12 +551,13 @@ struct SendFlowCoinControlSetAmountScreen: View {
                 SendFlowSelectFeeRateView(
                     manager: manager,
                     feeOptions: Binding(
-                        get: { localFeeOptions },
+                        get: { sendFlowManager.feeRateOptions ?? localFeeOptions },
                         set: { sendFlowManager.dispatch(action: .changeFeeRateOptions($0)) }
                     ),
                     selectedOption: Binding(
                         get: {
-                            sendFlowManager.selectedFeeRate ?? localFeeOptions.medium()
+                            let feeOptions = sendFlowManager.feeRateOptions ?? localFeeOptions
+                            return sendFlowManager.selectedFeeRate ?? feeOptions.medium()
                         },
                         set: { newValue in
                             sendFlowManager.dispatch(action: .selectFeeRate(newValue))
