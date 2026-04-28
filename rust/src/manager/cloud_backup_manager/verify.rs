@@ -20,11 +20,11 @@ use super::wallets::persist_enabled_cloud_backup_state;
 use super::{
     BlockingCloudStep, CloudBackupDetailResult, CloudBackupError, CloudBackupStatus,
     DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
-    PendingVerificationCompletion, RustCloudBackupManager, VerificationFailureKind,
+    PendingVerificationCompletion, RecoveryState, RustCloudBackupManager, VerificationFailureKind,
+    VerificationState,
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{PersistedCloudBackupState, PersistedCloudBackupStatus};
-use crate::manager::cloud_backup_detail_manager::{RecoveryState, VerificationState};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum IntegrityDowngrade {

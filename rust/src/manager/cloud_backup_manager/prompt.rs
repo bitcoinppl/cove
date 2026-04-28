@@ -1,9 +1,6 @@
-use crate::manager::cloud_backup_detail_manager::{
-    RecoveryAction, RecoveryState, VerificationState,
-};
-
 use super::{
     CloudBackupPasskeyChoiceFlow, CloudBackupPromptIntent, CloudBackupState, CloudBackupStatus,
+    RecoveryAction, RecoveryState, VerificationState,
 };
 
 #[derive(Debug, Clone, Default)]
@@ -74,13 +71,9 @@ impl CloudBackupPromptState {
 
 #[cfg(test)]
 mod tests {
-    use crate::manager::cloud_backup_detail_manager::{
-        RecoveryAction, RecoveryState, VerificationState,
-    };
-
     use super::{
         CloudBackupPasskeyChoiceFlow, CloudBackupPromptIntent, CloudBackupPromptState,
-        CloudBackupState, CloudBackupStatus,
+        CloudBackupState, CloudBackupStatus, RecoveryAction, RecoveryState, VerificationState,
     };
     use crate::manager::cloud_backup_manager::{DeepVerificationFailure, VerificationFailureKind};
 

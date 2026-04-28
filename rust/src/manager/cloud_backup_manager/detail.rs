@@ -1,7 +1,7 @@
 use act_zero::send;
 use tracing::error;
 
-use super::cloud_backup_manager::{
+use super::{
     CLOUD_BACKUP_MANAGER, CloudBackupError, CloudBackupManagerAction, CloudBackupPasskeyChoiceFlow,
     CloudBackupWalletItem, DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
     RustCloudBackupManager, runtime_actor::CloudBackupOperation,
@@ -224,10 +224,7 @@ impl RustCloudBackupManager {
         };
         let should_auto_verify = match action {
             RecoveryAction::ReinitializeBackup => {
-                matches!(
-                    self.current_status(),
-                    super::cloud_backup_manager::CloudBackupStatus::Enabled
-                )
+                matches!(self.current_status(), super::CloudBackupStatus::Enabled)
             }
             RecoveryAction::RecreateManifest | RecoveryAction::RepairPasskey => true,
         };
@@ -295,7 +292,7 @@ impl RustCloudBackupManager {
     async fn run_reinitialize_backup(&self) -> Result<(), CloudBackupError> {
         if !self.begin_background_operation(
             "reinitialize_cloud_backup",
-            Some(super::cloud_backup_manager::CloudBackupStatus::Enabling),
+            Some(super::CloudBackupStatus::Enabling),
         ) {
             return Err(CloudBackupError::RecoveryRequired(
                 "cloud backup operation already running".into(),
@@ -405,10 +402,10 @@ impl RustCloudBackupManager {
         self.refresh_sync_health();
         if let Some(result) = self.refresh_cloud_backup_detail().await {
             match result {
-                super::cloud_backup_manager::CloudBackupDetailResult::Success(detail) => {
+                super::CloudBackupDetailResult::Success(detail) => {
                     self.set_detail(Some(detail));
                 }
-                super::cloud_backup_manager::CloudBackupDetailResult::AccessError(error) => {
+                super::CloudBackupDetailResult::AccessError(error) => {
                     error!("Failed to refresh detail: {error}");
                 }
             }

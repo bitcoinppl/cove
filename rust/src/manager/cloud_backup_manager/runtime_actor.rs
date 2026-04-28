@@ -13,13 +13,12 @@ use super::pending::{
     build_pending_upload_backoff,
 };
 use super::{
-    CloudBackupError, CloudBackupStatus, PendingVerificationCompletion, RustCloudBackupManager,
-    WalletId, live_upload_retry_delay_for_attempt,
+    CloudBackupError, CloudBackupStatus, PendingVerificationCompletion, RecoveryAction,
+    RustCloudBackupManager, WalletId, live_upload_retry_delay_for_attempt,
 };
 use crate::database::cloud_backup::{
     CloudBlobFailedState, CloudBlobFailureIssue, PersistedCloudBlobState,
 };
-use crate::manager::cloud_backup_detail_manager::RecoveryAction;
 
 #[derive(Debug, Clone)]
 pub(crate) enum CloudBackupOperation {
