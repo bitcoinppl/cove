@@ -18,6 +18,8 @@ object ForegroundUiBridge {
     private val currentActivity = MutableStateFlow<FragmentActivity?>(null)
     private val authorizationLock = Any()
 
+    private var attachedActivity: FragmentActivity? = null
+
     private var authorizationLauncher: ActivityResultLauncher<IntentSenderRequest>? = null
 
     private var pendingAuthorizationResult: CompletableDeferred<ActivityResult>? = null
@@ -27,17 +29,34 @@ object ForegroundUiBridge {
         launcher: ActivityResultLauncher<IntentSenderRequest>,
     ) {
         synchronized(authorizationLock) {
+            attachedActivity = activity
             currentActivity.value = activity
             authorizationLauncher = launcher
         }
     }
 
+    fun pause(activity: FragmentActivity) {
+        detach(activity, cancelPendingAuthorization = false)
+    }
+
     fun detach(activity: FragmentActivity) {
+        detach(activity, cancelPendingAuthorization = true)
+    }
+
+    private fun detach(
+        activity: FragmentActivity,
+        cancelPendingAuthorization: Boolean,
+    ) {
         synchronized(authorizationLock) {
-            if (currentActivity.value === activity) {
+            if (attachedActivity === activity) {
+                if (cancelPendingAuthorization) {
+                    attachedActivity = null
+                }
                 currentActivity.value = null
-                pendingAuthorizationResult?.cancel()
-                pendingAuthorizationResult = null
+                if (cancelPendingAuthorization) {
+                    pendingAuthorizationResult?.cancel()
+                    pendingAuthorizationResult = null
+                }
                 authorizationLauncher = null
             }
         }

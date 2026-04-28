@@ -159,7 +159,7 @@ class MainActivity : FragmentActivity() {
 
     override fun onPause() {
         super.onPause()
-        ForegroundUiBridge.detach(this)
+        ForegroundUiBridge.pause(this)
         if (!isBootstrapped) return
         // show cover only on actual app transitions (not internal popups like DropdownMenu)
         if (Auth.isAuthEnabled) {
