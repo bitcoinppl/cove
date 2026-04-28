@@ -325,12 +325,6 @@ fun CloudBackupPresentationHost(
         coordinator.reconcile()
     }
 
-    DisposableEffect(coordinator) {
-        onDispose {
-            coordinator.dispose()
-        }
-    }
-
     androidx.compose.runtime.CompositionLocalProvider(
         LocalCloudBackupPresentationCoordinator provides coordinator,
     ) {

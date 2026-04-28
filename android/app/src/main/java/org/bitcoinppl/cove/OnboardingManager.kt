@@ -1,5 +1,6 @@
 package org.bitcoinppl.cove
 
+import android.util.Log
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -96,7 +97,8 @@ class OnboardingManager internal constructor(
         rustScope.launch {
             runCatching { rust.dispatch(action) }
                 .onFailure { error ->
-                    Log.e(TAG, "onboarding action failed: $action", error)
+                    val actionType = action::class.simpleName ?: "Unknown"
+                    Log.e(TAG, "onboarding action failed: $actionType", error)
                 }
         }
     }

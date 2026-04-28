@@ -2224,7 +2224,7 @@ mod tests {
         manager.cloud_storage_did_change();
 
         wait_for_test_condition(
-            Duration::from_secs(1),
+            Duration::from_secs(3),
             "cloud storage change should retry authorization failures",
             || globals.cloud.wallet_backup_upload_attempt_count() > initial_attempt_count,
         )

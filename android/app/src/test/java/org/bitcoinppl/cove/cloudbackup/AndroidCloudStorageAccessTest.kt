@@ -4,6 +4,7 @@ import kotlinx.coroutines.runBlocking
 import org.bitcoinppl.cove_core.device.CloudAccessPolicy
 import org.bitcoinppl.cove_core.device.CloudStorageException
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.IOException
@@ -15,6 +16,10 @@ class AndroidCloudStorageAccessTest {
 
         assertEquals("wallet-record.json", metadata.name)
         assertEquals(listOf("folder-123"), metadata.parents)
+
+        val json = metadata.toJson()
+        assertEquals("wallet-record.json", json.getString("name"))
+        assertEquals("folder-123", json.getJSONArray("parents").getString(0))
     }
 
     @Test
@@ -23,6 +28,10 @@ class AndroidCloudStorageAccessTest {
 
         assertEquals("wallet-record.json", metadata.name)
         assertEquals(emptyList<String>(), metadata.parents)
+
+        val json = metadata.toJson()
+        assertEquals("wallet-record.json", json.getString("name"))
+        assertFalse(json.has("parents"))
     }
 
     @Test
@@ -95,6 +104,12 @@ class AndroidCloudStorageAccessTest {
         assertTrue(forbiddenQuota is CloudStorageException.QuotaExceeded)
         assertTrue(forbiddenAuthorization is CloudStorageException.AuthorizationRequired)
         assertTrue(offline is CloudStorageException.Offline)
+        assertEquals("wallet-record", (notFound as CloudStorageException.NotFound).v1)
+        assertEquals(
+            "google drive access was rejected",
+            (forbiddenAuthorization as CloudStorageException.AuthorizationRequired).v1,
+        )
+        assertEquals("network unavailable", (offline as CloudStorageException.Offline).v1)
     }
 
     @Test
@@ -112,6 +127,12 @@ class AndroidCloudStorageAccessTest {
         assertTrue(forbiddenQuota is CloudStorageException.QuotaExceeded)
         assertTrue(forbiddenAuthorization is CloudStorageException.AuthorizationRequired)
         assertTrue(offline is CloudStorageException.Offline)
+        assertEquals("drive file", (notFound as CloudStorageException.NotFound).v1)
+        assertEquals(
+            "google drive access was rejected",
+            (forbiddenAuthorization as CloudStorageException.AuthorizationRequired).v1,
+        )
+        assertEquals("network unavailable", (offline as CloudStorageException.Offline).v1)
     }
 
     @Test

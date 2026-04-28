@@ -91,6 +91,7 @@ class OnboardingHelpersTest {
     fun persistedOnboardingProgressRequiresNonBlankState() {
         assertFalse(hasPersistedOnboardingProgress(null))
         assertFalse(hasPersistedOnboardingProgress(""))
+        assertFalse(hasPersistedOnboardingProgress("   "))
         assertTrue(hasPersistedOnboardingProgress("""{"step":"backup_wallet"}"""))
     }
 
