@@ -44,8 +44,10 @@ import org.bitcoinppl.cove_core.device.FfiConverterTypeKeychainError
 import org.bitcoinppl.cove_core.device.KeychainException
 import org.bitcoinppl.cove_core.nfc.FfiConverterTypeNfcMessage
 import org.bitcoinppl.cove_core.nfc.NfcMessage
+import org.bitcoinppl.cove_core.tapcard.FfiConverterTypeSatsCard
 import org.bitcoinppl.cove_core.tapcard.FfiConverterTypeTapCardParseError
 import org.bitcoinppl.cove_core.tapcard.FfiConverterTypeTapSigner
+import org.bitcoinppl.cove_core.tapcard.SatsCard
 import org.bitcoinppl.cove_core.tapcard.TapCardParseException
 import org.bitcoinppl.cove_core.tapcard.TapSigner
 import org.bitcoinppl.cove_core.types.Address
@@ -115,6 +117,7 @@ import org.bitcoinppl.cove_core.ur.UrException
 import org.bitcoinppl.cove_core.device.RustBuffer as RustBufferCloudSyncHealth
 import org.bitcoinppl.cove_core.device.RustBuffer as RustBufferKeychainError
 import org.bitcoinppl.cove_core.nfc.RustBuffer as RustBufferNfcMessage
+import org.bitcoinppl.cove_core.tapcard.RustBuffer as RustBufferSatsCard
 import org.bitcoinppl.cove_core.tapcard.RustBuffer as RustBufferTapCardParseError
 import org.bitcoinppl.cove_core.tapcard.RustBuffer as RustBufferTapSigner
 import org.bitcoinppl.cove_core.types.RustBuffer as RustBufferAddress
@@ -39771,7 +39774,7 @@ sealed class MultiFormat: Disposable  {
     }
     
     /**
-     * TAPSIGNER has not been initialized yet
+     * TAPSIGNER is initialized and ready to import.
      */
     data class TapSignerReady(
         val v1: org.bitcoinppl.cove_core.tapcard.TapSigner) : MultiFormat()
@@ -39793,10 +39796,32 @@ sealed class MultiFormat: Disposable  {
     }
     
     /**
-     * TAPSIGNER has not been initialized yet
+     * TAPSIGNER is uninitialized and still needs setup.
      */
     data class TapSignerUnused(
         val v1: org.bitcoinppl.cove_core.tapcard.TapSigner) : MultiFormat()
+        
+    {
+        
+
+    // The local Rust `Eq` implementation - only `eq` is used.
+    override fun equals(other: Any?): Boolean {
+        if (other !is MultiFormat) return false
+        return FfiConverterBoolean.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_multiformat_uniffi_trait_eq_eq(FfiConverterTypeMultiFormat.lower(this),
+        FfiConverterTypeMultiFormat.lower(`other`),_status)
+}
+    )
+    }
+        companion object
+    }
+    
+    /**
+     * SATSCARD detected via NFC/QR
+     */
+    data class SatsCard(
+        val v1: org.bitcoinppl.cove_core.tapcard.SatsCard) : MultiFormat()
         
     {
         
@@ -39890,6 +39915,13 @@ sealed class MultiFormat: Disposable  {
     )
                 
             }
+            is MultiFormat.SatsCard -> {
+                
+    Disposable.destroy(
+        this.v1
+    )
+                
+            }
             is MultiFormat.SignedPsbt -> {
                 
     Disposable.destroy(
@@ -39945,7 +39977,10 @@ public object FfiConverterTypeMultiFormat : FfiConverterRustBuffer<MultiFormat>{
             7 -> MultiFormat.TapSignerUnused(
                 FfiConverterTypeTapSigner.read(buf),
                 )
-            8 -> MultiFormat.SignedPsbt(
+            8 -> MultiFormat.SatsCard(
+                FfiConverterTypeSatsCard.read(buf),
+                )
+            9 -> MultiFormat.SignedPsbt(
                 FfiConverterTypePsbt.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -40002,6 +40037,13 @@ public object FfiConverterTypeMultiFormat : FfiConverterRustBuffer<MultiFormat>{
                 + FfiConverterTypeTapSigner.allocationSize(value.v1)
             )
         }
+        is MultiFormat.SatsCard -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeSatsCard.allocationSize(value.v1)
+            )
+        }
         is MultiFormat.SignedPsbt -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
@@ -40048,8 +40090,13 @@ public object FfiConverterTypeMultiFormat : FfiConverterRustBuffer<MultiFormat>{
                 FfiConverterTypeTapSigner.write(value.v1, buf)
                 Unit
             }
-            is MultiFormat.SignedPsbt -> {
+            is MultiFormat.SatsCard -> {
                 buf.putInt(8)
+                FfiConverterTypeSatsCard.write(value.v1, buf)
+                Unit
+            }
+            is MultiFormat.SignedPsbt -> {
+                buf.putInt(9)
                 FfiConverterTypePsbt.write(value.v1, buf)
                 Unit
             }
@@ -40086,6 +40133,14 @@ sealed class MultiFormatException: kotlin.Exception() {
     }
     
     class InvalidTapSigner(
+        
+        val v1: TapCardParseException
+        ) : MultiFormatException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+    
+    class InvalidSatsCard(
         
         val v1: TapCardParseException
         ) : MultiFormatException() {
@@ -40141,8 +40196,11 @@ public object FfiConverterTypeMultiFormatError : FfiConverterRustBuffer<MultiFor
             4 -> MultiFormatException.InvalidTapSigner(
                 FfiConverterTypeTapCardParseError.read(buf),
                 )
-            5 -> MultiFormatException.TaprootNotSupported()
-            6 -> MultiFormatException.PsbtNotSigned()
+            5 -> MultiFormatException.InvalidSatsCard(
+                FfiConverterTypeTapCardParseError.read(buf),
+                )
+            6 -> MultiFormatException.TaprootNotSupported()
+            7 -> MultiFormatException.PsbtNotSigned()
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
@@ -40163,6 +40221,11 @@ public object FfiConverterTypeMultiFormatError : FfiConverterRustBuffer<MultiFor
                 4UL
             )
             is MultiFormatException.InvalidTapSigner -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterTypeTapCardParseError.allocationSize(value.v1)
+            )
+            is MultiFormatException.InvalidSatsCard -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
                 + FfiConverterTypeTapCardParseError.allocationSize(value.v1)
@@ -40198,12 +40261,17 @@ public object FfiConverterTypeMultiFormatError : FfiConverterRustBuffer<MultiFor
                 FfiConverterTypeTapCardParseError.write(value.v1, buf)
                 Unit
             }
-            is MultiFormatException.TaprootNotSupported -> {
+            is MultiFormatException.InvalidSatsCard -> {
                 buf.putInt(5)
+                FfiConverterTypeTapCardParseError.write(value.v1, buf)
+                Unit
+            }
+            is MultiFormatException.TaprootNotSupported -> {
+                buf.putInt(6)
                 Unit
             }
             is MultiFormatException.PsbtNotSigned -> {
-                buf.putInt(6)
+                buf.putInt(7)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -54577,6 +54645,8 @@ public object FfiConverterSequenceTypeWalletId: FfiConverterRustBuffer<List<Wall
  */
 public typealias Timestamp = kotlin.ULong
 public typealias FfiConverterTypeTimestamp = FfiConverterULong
+
+
 
 
 

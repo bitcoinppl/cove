@@ -29,6 +29,12 @@ import SwiftUI
                 } else {
                     app.alertState = .init(.initializedTapSigner(tapSigner: tapSigner))
                 }
+            case let .satsCard(satsCard):
+                Log.debug("SATSCARD detected: slot \(satsCard.slotNumber) state \(satsCard.state)")
+                app.alertState = .init(.general(
+                    title: "SATSCARD Detected",
+                    message: "SATSCARD support is coming soon. Slot \(satsCard.slotNumber) was scanned."
+                ))
             case let .bip329Labels(labels):
                 guard let manager = app.walletManager else { return setInvalidLabels() }
                 guard let selectedWallet = Database().globalConfig().selectedWallet() else {
@@ -108,6 +114,12 @@ import SwiftUI
                 )
             case let .signedPsbt(psbt):
                 handleSignedPsbt(psbt)
+            case let .satsCard(satsCard):
+                Log.debug("SATSCARD detected via file: slot \(satsCard.slotNumber) state \(satsCard.state)")
+                app.alertState = .init(.general(
+                    title: "SATSCARD Detected",
+                    message: "SATSCARD support is coming soon. Slot \(satsCard.slotNumber) was scanned."
+                ))
             }
         } catch {
             switch error {

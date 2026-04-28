@@ -10,6 +10,7 @@
 use std::sync::Arc;
 
 use cove_nfc::message::NfcMessage;
+use cove_tap_card::parse::Error as TapCardError;
 use cove_types::psbt::Psbt;
 use tracing::{debug, warn};
 
@@ -36,10 +37,12 @@ pub enum MultiFormat {
     Mnemonic(Arc<crate::mnemonic::Mnemonic>),
     Transaction(Arc<crate::transaction::ffi::BitcoinTransaction>),
     Bip329Labels(Arc<Bip329Labels>),
-    /// TAPSIGNER has not been initialized yet
+    /// TAPSIGNER is initialized and ready to import.
     TapSignerReady(Arc<cove_tap_card::TapSigner>),
-    /// TAPSIGNER has not been initialized yet
+    /// TAPSIGNER is uninitialized and still needs setup.
     TapSignerUnused(Arc<cove_tap_card::TapSigner>),
+    /// SATSCARD detected via NFC/QR
+    SatsCard(cove_tap_card::SatsCard),
     /// A signed but un-finalized PSBT
     SignedPsbt(Arc<Psbt>),
 }
@@ -61,6 +64,9 @@ pub enum MultiFormatError {
     #[error("Invalid TapSigner {0}")]
     InvalidTapSigner(cove_tap_card::TapCardParseError),
 
+    #[error("Invalid SatsCard {0}")]
+    InvalidSatsCard(cove_tap_card::TapCardParseError),
+
     #[error("Taproot wallets are not supported yet")]
     TaprootNotSupported,
 
@@ -71,6 +77,14 @@ pub enum MultiFormatError {
 type Result<T, E = MultiFormatError> = std::result::Result<T, E>;
 
 impl MultiFormat {
+    fn invalid_tap_signer(error: TapCardError) -> MultiFormatError {
+        MultiFormatError::InvalidTapSigner(error.into())
+    }
+
+    fn invalid_sats_card(error: TapCardError) -> MultiFormatError {
+        MultiFormatError::InvalidSatsCard(error.into())
+    }
+
     pub fn try_from_data(data: &[u8]) -> Result<Self> {
         debug!("MultiFormat::try_from_data");
 
@@ -147,9 +161,11 @@ impl MultiFormat {
             return Ok(Self::Bip329Labels(Arc::new(labels.into())));
         }
 
-        if string.contains("tapsigner.com/start") {
-            let tap_card = cove_tap_card::TapCard::parse(string)
-                .map_err(|e| MultiFormatError::InvalidTapSigner(e.into()))?;
+        let normalized = string.trim().trim_start_matches("https://").trim_start_matches("http://");
+
+        if normalized.starts_with("tapsigner.com/start") {
+            let tap_card =
+                cove_tap_card::TapCard::parse(string).map_err(Self::invalid_tap_signer)?;
 
             match tap_card {
                 cove_tap_card::TapCard::TapSigner(card) => {
@@ -157,7 +173,26 @@ impl MultiFormat {
                 }
 
                 cove_tap_card::TapCard::SatsCard(_card) => {
-                    unreachable!("tap card should not be a sats card");
+                    return Err(Self::invalid_tap_signer(TapCardError::InvalidUrl(
+                        string.to_string(),
+                    )));
+                }
+            }
+        }
+
+        if normalized.starts_with("getsatscard.com/start") {
+            let tap_card =
+                cove_tap_card::TapCard::parse(string).map_err(Self::invalid_sats_card)?;
+
+            match tap_card {
+                cove_tap_card::TapCard::SatsCard(card) => {
+                    return Ok(Self::SatsCard(card));
+                }
+
+                cove_tap_card::TapCard::TapSigner(_card) => {
+                    return Err(Self::invalid_sats_card(TapCardError::InvalidUrl(
+                        string.to_string(),
+                    )));
                 }
             }
         }

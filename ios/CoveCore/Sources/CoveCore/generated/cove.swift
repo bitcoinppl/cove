@@ -23414,14 +23414,19 @@ public enum MultiFormat: Equatable {
     case bip329Labels(Bip329Labels
     )
     /**
-     * TAPSIGNER has not been initialized yet
+     * TAPSIGNER is initialized and ready to import.
      */
     case tapSignerReady(TapSigner
     )
     /**
-     * TAPSIGNER has not been initialized yet
+     * TAPSIGNER is uninitialized and still needs setup.
      */
     case tapSignerUnused(TapSigner
+    )
+    /**
+     * SATSCARD detected via NFC/QR
+     */
+    case satsCard(SatsCard
     )
     /**
      * A signed but un-finalized PSBT
@@ -23481,7 +23486,10 @@ public struct FfiConverterTypeMultiFormat: FfiConverterRustBuffer {
         case 7: return .tapSignerUnused(try FfiConverterTypeTapSigner.read(from: &buf)
         )
         
-        case 8: return .signedPsbt(try FfiConverterTypePsbt.read(from: &buf)
+        case 8: return .satsCard(try FfiConverterTypeSatsCard.read(from: &buf)
+        )
+        
+        case 9: return .signedPsbt(try FfiConverterTypePsbt.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -23527,8 +23535,13 @@ public struct FfiConverterTypeMultiFormat: FfiConverterRustBuffer {
             FfiConverterTypeTapSigner.write(v1, into: &buf)
             
         
-        case let .signedPsbt(v1):
+        case let .satsCard(v1):
             writeInt(&buf, Int32(8))
+            FfiConverterTypeSatsCard.write(v1, into: &buf)
+            
+        
+        case let .signedPsbt(v1):
+            writeInt(&buf, Int32(9))
             FfiConverterTypePsbt.write(v1, into: &buf)
             
         }
@@ -23562,6 +23575,8 @@ enum MultiFormatError: Swift.Error, Equatable, Hashable, Foundation.LocalizedErr
     case UnsupportedNetworkAddress
     case UnrecognizedFormat
     case InvalidTapSigner(TapCardParseError
+    )
+    case InvalidSatsCard(TapCardParseError
     )
     case TaprootNotSupported
     case PsbtNotSigned
@@ -23612,8 +23627,11 @@ public struct FfiConverterTypeMultiFormatError: FfiConverterRustBuffer {
         case 4: return .InvalidTapSigner(
             try FfiConverterTypeTapCardParseError.read(from: &buf)
             )
-        case 5: return .TaprootNotSupported
-        case 6: return .PsbtNotSigned
+        case 5: return .InvalidSatsCard(
+            try FfiConverterTypeTapCardParseError.read(from: &buf)
+            )
+        case 6: return .TaprootNotSupported
+        case 7: return .PsbtNotSigned
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -23644,12 +23662,17 @@ public struct FfiConverterTypeMultiFormatError: FfiConverterRustBuffer {
             FfiConverterTypeTapCardParseError.write(v1, into: &buf)
             
         
-        case .TaprootNotSupported:
+        case let .InvalidSatsCard(v1):
             writeInt(&buf, Int32(5))
+            FfiConverterTypeTapCardParseError.write(v1, into: &buf)
+            
+        
+        case .TaprootNotSupported:
+            writeInt(&buf, Int32(6))
         
         
         case .PsbtNotSigned:
-            writeInt(&buf, Int32(6))
+            writeInt(&buf, Int32(7))
         
         }
     }
