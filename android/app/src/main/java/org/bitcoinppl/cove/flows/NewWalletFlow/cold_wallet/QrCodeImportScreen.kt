@@ -69,8 +69,8 @@ fun QrCodeImportScreen(app: AppManager, modifier: Modifier = Modifier) {
                                 wallet.close()
                                 Log.d("QrCodeImportScreen", "Imported Wallet: $id")
 
-                                app.popRoute()
                                 app.rust.selectWallet(id = id)
+                                app.popRoute()
                                 app.alertState = TaggedItem(AppAlertState.ImportedSuccessfully)
                             } catch (e: WalletException.WalletAlreadyExists) {
                                 app.popRoute()

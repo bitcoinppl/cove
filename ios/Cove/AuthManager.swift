@@ -98,7 +98,12 @@ enum UnlockMode {
 
                 let db = Database()
                 if let selectedWalletId = db.globalConfig().selectedWallet() {
-                    try? app.rust.selectWallet(id: selectedWalletId)
+                    do {
+                        try app.rust.selectWallet(id: selectedWalletId)
+                    } catch {
+                        app.isLoading = false
+                        app.loadAndReset(to: RouteFactory().newWalletSelect())
+                    }
                 } else {
                     app.loadAndReset(to: RouteFactory().newWalletSelect())
                 }
@@ -137,7 +142,12 @@ enum UnlockMode {
 
         let db = Database()
         if let selectedWalletId = db.globalConfig().selectedWallet() {
-            try? app.rust.selectWallet(id: selectedWalletId)
+            do {
+                try app.rust.selectWallet(id: selectedWalletId)
+            } catch {
+                app.isLoading = false
+                app.loadAndReset(to: RouteFactory().newWalletSelect())
+            }
         } else {
             app.loadAndReset(to: RouteFactory().newWalletSelect())
         }

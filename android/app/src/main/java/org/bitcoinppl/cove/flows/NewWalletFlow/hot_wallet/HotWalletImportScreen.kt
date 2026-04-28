@@ -275,7 +275,9 @@ fun HotWalletImportScreen(
         try {
             val walletMetadata = manager.importWallet(enteredWords)
             app.clearWalletManager()
-            onImported?.invoke(walletMetadata.id) ?: run {
+            if (onImported != null) {
+                onImported.invoke(walletMetadata.id)
+            } else {
                 app.rust.selectWallet(walletMetadata.id)
                 app.resetRoute(Route.SelectedWallet(walletMetadata.id))
             }

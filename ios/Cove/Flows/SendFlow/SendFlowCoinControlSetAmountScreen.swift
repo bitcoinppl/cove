@@ -438,7 +438,7 @@ struct SendFlowCoinControlSetAmountScreen: View {
                 .fontWeight(.medium)
 
             HStack {
-                Text(selectedFeeRate?.duration() ?? "2 hours")
+                Text(selectedFeeRate?.duration() ?? "")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                 Button("Change speed") {
@@ -547,33 +547,28 @@ struct SendFlowCoinControlSetAmountScreen: View {
             QrCodeAddressView(app: _app, scannedCode: $scannedCode)
                 .presentationDetents([.large])
         case .fee:
-            SendFlowSelectFeeRateView(
-                manager: manager,
-                feeOptions: Binding(
-                    get: { sendFlowManager.feeRateOptions! },
-                    set: { sendFlowManager.dispatch(action: .changeFeeRateOptions($0)) }
-                ),
-                selectedOption: Binding(
-                    get: {
-                        guard let selectedFeeRate = sendFlowManager.selectedFeeRate else {
-                            // Default to medium if nothing selected
-                            if let options = sendFlowManager.feeRateOptions {
-                                return options.medium()
-                            }
-                            return FeeRateOptionsWithTotalFee.previewNew().medium()
+            if let localFeeOptions = sendFlowManager.feeRateOptions {
+                SendFlowSelectFeeRateView(
+                    manager: manager,
+                    feeOptions: Binding(
+                        get: { localFeeOptions },
+                        set: { sendFlowManager.dispatch(action: .changeFeeRateOptions($0)) }
+                    ),
+                    selectedOption: Binding(
+                        get: {
+                            sendFlowManager.selectedFeeRate ?? localFeeOptions.medium()
+                        },
+                        set: { newValue in
+                            sendFlowManager.dispatch(action: .selectFeeRate(newValue))
                         }
-                        return selectedFeeRate
-                    },
-                    set: { newValue in
-                        sendFlowManager.dispatch(action: .selectFeeRate(newValue))
-                    }
-                ),
-                selectedPresentationDetent: $selectedPresentationDetent
-            )
-            .presentationDetents(
-                [.height(440), .height(550), .large],
-                selection: $selectedPresentationDetent
-            )
+                    ),
+                    selectedPresentationDetent: $selectedPresentationDetent
+                )
+                .presentationDetents(
+                    [.height(440), .height(550), .large],
+                    selection: $selectedPresentationDetent
+                )
+            }
         }
     }
 }

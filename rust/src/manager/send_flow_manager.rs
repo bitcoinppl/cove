@@ -1727,10 +1727,22 @@ impl RustSendFlowManager {
 
             let base_options = FeeRateOptions::from(fee_response);
             let fee_options = FeeRateOptionsWithTotalFee::without_totals(base_options);
+            let previous_selected = state.lock().selected_fee_rate.clone();
+            let selected = previous_selected
+                .and_then(|selected| match selected.fee_speed {
+                    FeeSpeed::Fast => Some(Arc::new(fee_options.fast)),
+                    FeeSpeed::Medium => Some(Arc::new(fee_options.medium)),
+                    FeeSpeed::Slow => Some(Arc::new(fee_options.slow)),
+                    FeeSpeed::Custom { .. } => {
+                        fee_options.get_fee_rate_with(selected.fee_rate.sat_per_vb())
+                    }
+                })
+                .unwrap_or_else(|| Arc::new(fee_options.medium));
 
             let mut state_guard = state.lock();
             state_guard.fee_rate_options_base = Some(Arc::new(base_options));
             state_guard.fee_rate_options = Some(Arc::new(fee_options));
+            state_guard.selected_fee_rate = Some(selected);
             state_guard.has_base_fees = true;
         });
     }

@@ -441,7 +441,8 @@ private fun SendFlowRouteToScreen(
 
             // finalize signed PSBT from TapSigner
             LaunchedEffect(signedPsbt) {
-                if (signedPsbt != null && signedTransaction == null && finalizedTransaction == null) {
+                finalizedTransaction = signedTransaction
+                if (signedPsbt != null && signedTransaction == null) {
                     try {
                         finalizedTransaction = walletManager.rust.finalizePsbt(signedPsbt)
                     } catch (e: WalletManagerException) {

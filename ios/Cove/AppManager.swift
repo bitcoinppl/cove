@@ -179,7 +179,7 @@ private let walletModeChangeDelayMs = 250
             try rust.selectWallet(id: id)
             isSidebarVisible = false
         } catch {
-            Log.error("Unabel to select wallet \(id), error: \(error)")
+            Log.error("Unable to select wallet \(id), error: \(error)")
         }
     }
 

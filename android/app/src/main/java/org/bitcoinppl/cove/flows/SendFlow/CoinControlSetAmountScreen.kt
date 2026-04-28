@@ -252,28 +252,30 @@ fun CoinControlSetAmountScreen(
                 }
             }
             is SendFlowPresenter.SheetState.Fee -> {
-                sendFlowManager.feeRateOptions?.let { feeOptions ->
-                    sendFlowManager.selectedFeeRate?.let { selectedRate ->
-                        FeeRateSelectorSheet(
-                            app = app,
-                            walletManager = walletManager,
-                            sendFlowManager = sendFlowManager,
-                            presenter = presenter,
-                            feeOptions = feeOptions,
-                            selectedOption = selectedRate,
-                            onSelectFee = { newFeeOption ->
-                                sendFlowManager.dispatch(
-                                    SendFlowManagerAction.SelectFeeRate(newFeeOption),
-                                )
-                            },
-                            onUpdateFeeOptions = { newOptions ->
-                                sendFlowManager.dispatch(
-                                    SendFlowManagerAction.ChangeFeeRateOptions(newOptions),
-                                )
-                            },
-                            onDismiss = { presenter.sheetState = null },
-                        )
-                    }
+                val feeOptions = sendFlowManager.feeRateOptions
+                val selectedRate = sendFlowManager.selectedFeeRate
+                if (feeOptions == null || selectedRate == null) {
+                    presenter.sheetState = null
+                } else {
+                    FeeRateSelectorSheet(
+                        app = app,
+                        walletManager = walletManager,
+                        sendFlowManager = sendFlowManager,
+                        presenter = presenter,
+                        feeOptions = feeOptions,
+                        selectedOption = selectedRate,
+                        onSelectFee = { newFeeOption ->
+                            sendFlowManager.dispatch(
+                                SendFlowManagerAction.SelectFeeRate(newFeeOption),
+                            )
+                        },
+                        onUpdateFeeOptions = { newOptions ->
+                            sendFlowManager.dispatch(
+                                SendFlowManagerAction.ChangeFeeRateOptions(newOptions),
+                            )
+                        },
+                        onDismiss = { presenter.sheetState = null },
+                    )
                 }
             }
         }
