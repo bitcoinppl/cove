@@ -4,10 +4,9 @@ use cove_device::keychain::{CSPP_PRF_SALT_KEY, Keychain};
 use tracing::{error, info, warn};
 
 use super::super::cloud_inventory::CloudWalletInventory;
-use super::super::wallets::{count_all_wallets, persist_enabled_cloud_backup_state};
+use super::super::wallets::count_all_wallets;
 use super::{
     CloudBackupStatus, IntegrityDowngrade, RustCloudBackupManager, downgrade_cloud_backup_state,
-    load_stored_credential_id,
 };
 use crate::database::Database;
 
@@ -63,7 +62,7 @@ impl RustCloudBackupManager {
 
         let mut downgrade = None;
         let has_prf_salt = keychain.get(CSPP_PRF_SALT_KEY.into()).is_some();
-        let stored_credential_id = load_stored_credential_id(keychain);
+        let stored_credential_id = keychain.load_cspp_credential_id();
 
         // keep launch integrity checks non-interactive so app startup never presents passkey UI
         if stored_credential_id.is_none() {
@@ -88,15 +87,16 @@ impl RustCloudBackupManager {
             return self.finish_backup_integrity_check(&issues, downgrade);
         }
 
-        self.verify_wallet_backups(namespace, &mut issues).await;
+        self.verify_wallet_backups_for_integrity_check(namespace, &mut issues).await;
         self.finish_backup_integrity_check(&issues, downgrade)
     }
 
-    async fn verify_wallet_backups(
+    async fn verify_wallet_backups_for_integrity_check(
         &self,
         namespace: String,
         issues: &mut Vec<BackupIntegrityIssue>,
     ) {
+        // use a silent client because startup integrity checks must not present iCloud UI
         let cloud = CloudStorage::global_silent_client();
         let wallet_record_ids = match cloud.list_wallet_backups(namespace.clone()).await {
             Ok(wallet_record_ids) => wallet_record_ids,
@@ -135,10 +135,11 @@ impl RustCloudBackupManager {
 
         let unsynced = inventory.upload_candidate_wallets();
         let handled_unsynced = !unsynced.is_empty();
+
         let mut backup_failed = false;
         if handled_unsynced {
             let backup_result = self.do_backup_wallets(&unsynced).await;
-            self.refresh_integrity_detail(&namespace, &wallet_record_ids).await;
+            self.refresh_integrity_check_detail(&namespace, &wallet_record_ids).await;
             if let Err(error) = backup_result {
                 error!("Backup integrity: auto-sync failed: {error}");
                 issues.push(BackupIntegrityIssue::WalletsNotBackedUp);
@@ -146,25 +147,22 @@ impl RustCloudBackupManager {
             }
         }
 
-        let db = Database::global();
-        if db.cloud_backup_state.get().ok().and_then(|state| state.wallet_count).is_none() {
-            match count_all_wallets(&db) {
-                Ok(local_count) => {
-                    let _ = persist_enabled_cloud_backup_state(&db, local_count);
-                }
-                Err(error) => {
-                    warn!("Backup integrity: local wallet count failed: {error}");
-                }
-            }
+        if backup_failed || handled_unsynced || !wallet_record_ids.is_empty() {
+            return;
         }
 
-        if !backup_failed
-            && !handled_unsynced
-            && wallet_record_ids.is_empty()
-            && count_all_wallets(&db).unwrap_or_default() > 0
-        {
+        let db = Database::global();
+        let has_local_wallets = match count_all_wallets(&db) {
+            Ok(local_count) => local_count > 0,
+            Err(error) => {
+                warn!("Backup integrity: local wallet count failed: {error}");
+                false
+            }
+        };
+
+        if has_local_wallets {
             let sync_result = self.do_sync_unsynced_wallets().await;
-            self.refresh_integrity_detail(&namespace, &wallet_record_ids).await;
+            self.refresh_integrity_check_detail(&namespace, &wallet_record_ids).await;
             if let Err(error) = sync_result {
                 error!("Backup integrity: auto-sync failed: {error}");
                 issues.push(BackupIntegrityIssue::WalletsNotBackedUp);
@@ -172,11 +170,12 @@ impl RustCloudBackupManager {
         }
     }
 
-    async fn refresh_integrity_detail(
+    async fn refresh_integrity_check_detail(
         &self,
         namespace: &str,
         fallback_wallet_record_ids: &[String],
     ) {
+        // use a silent client because startup integrity checks must not present iCloud UI
         let cloud = CloudStorage::global_silent_client();
         let wallet_record_ids = match cloud.list_wallet_backups(namespace.to_string()).await {
             Ok(wallet_record_ids) => wallet_record_ids,
@@ -224,6 +223,7 @@ impl RustCloudBackupManager {
         self.persist_integrity_downgrade(downgrade);
         let message =
             issues.iter().map(BackupIntegrityIssue::message).collect::<Vec<_>>().join("; ");
+
         error!("Backup integrity issues: {message}");
         Some(message)
     }

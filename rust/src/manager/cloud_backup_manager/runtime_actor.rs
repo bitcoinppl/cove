@@ -64,6 +64,7 @@ impl RestoreOperation {
     }
 }
 
+// serializes restore cancellation against restore state mutations in spawned tasks
 #[derive(Clone, Debug, Default)]
 struct RestoreOperationCoordinator(Arc<parking_lot::Mutex<u64>>);
 

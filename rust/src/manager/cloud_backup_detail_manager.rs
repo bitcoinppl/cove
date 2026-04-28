@@ -60,53 +60,54 @@ pub enum CloudOnlyOperation {
 impl RustCloudBackupManager {
     #[uniffi::method]
     pub fn dispatch(&self, action: Action) {
+        use Action as A;
         match action {
-            Action::EnableCloudBackup => {
+            A::EnableCloudBackup => {
                 self.clear_passkey_choice_prompt();
                 self.enable_cloud_backup();
             }
-            Action::EnableCloudBackupForceNew => {
+            A::EnableCloudBackupForceNew => {
                 self.clear_existing_backup_found_prompt();
                 self.enable_cloud_backup_force_new();
             }
-            Action::EnableCloudBackupNoDiscovery => {
+            A::EnableCloudBackupNoDiscovery => {
                 self.clear_existing_backup_found_prompt();
                 self.clear_passkey_choice_prompt();
                 self.enable_cloud_backup_no_discovery();
             }
-            Action::DiscardPendingEnableCloudBackup => {
+            A::DiscardPendingEnableCloudBackup => {
                 self.discard_pending_enable_cloud_backup();
             }
-            Action::DismissPasskeyChoicePrompt => self.clear_passkey_choice_prompt(),
-            Action::DismissMissingPasskeyReminder => self.dismiss_missing_passkey_prompt(),
-            Action::RestoreFromCloudBackup => self.restore_from_cloud_backup(),
-            Action::CancelRestore => self.cancel_restore(),
-            Action::StartVerification => self.start_verification(),
-            Action::StartVerificationDiscoverable => self.start_verification_discoverable(),
-            Action::DismissVerificationPrompt => self.dismiss_verification_prompt(),
-            Action::RecreateManifest => {
+            A::DismissPasskeyChoicePrompt => self.clear_passkey_choice_prompt(),
+            A::DismissMissingPasskeyReminder => self.dismiss_missing_passkey_prompt(),
+            A::RestoreFromCloudBackup => self.restore_from_cloud_backup(),
+            A::CancelRestore => self.cancel_restore(),
+            A::StartVerification => self.start_verification(),
+            A::StartVerificationDiscoverable => self.start_verification_discoverable(),
+            A::DismissVerificationPrompt => self.dismiss_verification_prompt(),
+            A::RecreateManifest => {
                 CLOUD_BACKUP_MANAGER.clone().spawn_recovery(RecoveryAction::RecreateManifest);
             }
-            Action::ReinitializeBackup => {
+            A::ReinitializeBackup => {
                 CLOUD_BACKUP_MANAGER.clone().spawn_recovery(RecoveryAction::ReinitializeBackup);
             }
-            Action::RepairPasskey => {
+            A::RepairPasskey => {
                 self.clear_passkey_choice_prompt();
                 CLOUD_BACKUP_MANAGER.clone().spawn_repair_passkey(false);
             }
-            Action::RepairPasskeyNoDiscovery => {
+            A::RepairPasskeyNoDiscovery => {
                 self.clear_passkey_choice_prompt();
                 CLOUD_BACKUP_MANAGER.clone().spawn_repair_passkey(true);
             }
-            Action::SyncUnsynced => CLOUD_BACKUP_MANAGER.clone().spawn_sync(),
-            Action::FetchCloudOnly => CLOUD_BACKUP_MANAGER.clone().spawn_fetch_cloud_only(),
-            Action::RestoreCloudWallet { record_id } => {
+            A::SyncUnsynced => CLOUD_BACKUP_MANAGER.clone().spawn_sync(),
+            A::FetchCloudOnly => CLOUD_BACKUP_MANAGER.clone().spawn_fetch_cloud_only(),
+            A::RestoreCloudWallet { record_id } => {
                 CLOUD_BACKUP_MANAGER.clone().spawn_restore_cloud_wallet(record_id);
             }
-            Action::DeleteCloudWallet { record_id } => {
+            A::DeleteCloudWallet { record_id } => {
                 CLOUD_BACKUP_MANAGER.clone().spawn_delete_cloud_wallet(record_id);
             }
-            Action::RefreshDetail => CLOUD_BACKUP_MANAGER.clone().spawn_refresh_detail(),
+            A::RefreshDetail => CLOUD_BACKUP_MANAGER.clone().spawn_refresh_detail(),
         }
     }
 }

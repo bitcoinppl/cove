@@ -28,11 +28,12 @@ enum PendingUploadRunOutcome {
     StillPending,
     Confirmed,
     Failed,
+    BlockedOnAuthorization,
 }
 
-pub(super) struct PendingUploadVerifier(pub(super) RustCloudBackupManager);
-
 const MAX_PENDING_WALLET_UPLOAD_CONFIRMATION_ATTEMPTS: u32 = 3;
+
+pub(super) struct PendingUploadVerifier(pub(super) RustCloudBackupManager);
 
 impl PendingUploadVerifier {
     pub(super) async fn run_once(&self) -> PendingUploadVerificationStatus {
@@ -48,15 +49,16 @@ impl PendingUploadVerifier {
         let mut had_pending = false;
         let mut any_failed = false;
         let mut blocked_on_authorization = false;
+
         for sync_state in &states {
-            let PersistedCloudBlobState::UploadedPendingConfirmation(state) = &sync_state.state
-            else {
-                continue;
+            let current_state = match &sync_state.state {
+                PersistedCloudBlobState::UploadedPendingConfirmation(state) => state.clone(),
+                _ => continue,
             };
-            let current_state = state.clone();
 
             had_pending = true;
             let result = self.check_blob(sync_state, &current_state).await;
+
             if let BlobCheckResult::AuthorizationRequired { error } = &result {
                 warn!(
                     "Pending upload verification: paused until cloud authorization is restored record_id={} error={error}",
@@ -65,6 +67,7 @@ impl PendingUploadVerifier {
                 blocked_on_authorization = true;
                 break;
             }
+
             let next_state = Self::apply_blob_result(sync_state, &current_state, &result);
             let persisted = match table.set_if_current(sync_state, &next_state) {
                 Ok(persisted) => persisted,
@@ -73,6 +76,7 @@ impl PendingUploadVerifier {
                     return PendingUploadVerificationStatus::Pending;
                 }
             };
+
             if !persisted {
                 continue;
             }
@@ -88,13 +92,14 @@ impl PendingUploadVerifier {
         if !blocked_on_authorization {
             self.0.finalize_pending_verification_if_ready().await;
         }
+
         let has_pending = self.0.has_pending_cloud_upload_verification();
         self.send_pending_state(has_pending);
         self.0.refresh_sync_health();
-        if blocked_on_authorization {
-            return PendingUploadVerificationStatus::BlockedOnAuthorization;
-        }
-        match Self::run_outcome(had_pending, has_pending, any_failed) {
+
+        let outcome =
+            Self::run_outcome(blocked_on_authorization, had_pending, has_pending, any_failed);
+        match outcome {
             PendingUploadRunOutcome::Idle => {
                 info!("Pending upload verification: no pending blobs");
             }
@@ -107,29 +112,43 @@ impl PendingUploadVerifier {
             PendingUploadRunOutcome::Failed => {
                 warn!("Pending upload verification: completed with failures");
             }
+            PendingUploadRunOutcome::BlockedOnAuthorization => {}
         }
 
-        if has_pending {
-            PendingUploadVerificationStatus::Pending
-        } else {
-            PendingUploadVerificationStatus::Idle
+        match outcome {
+            PendingUploadRunOutcome::BlockedOnAuthorization => {
+                PendingUploadVerificationStatus::BlockedOnAuthorization
+            }
+            PendingUploadRunOutcome::StillPending => PendingUploadVerificationStatus::Pending,
+            PendingUploadRunOutcome::Idle
+            | PendingUploadRunOutcome::Confirmed
+            | PendingUploadRunOutcome::Failed => PendingUploadVerificationStatus::Idle,
         }
     }
 
     fn run_outcome(
+        blocked_on_authorization: bool,
         had_pending: bool,
         has_pending: bool,
         any_failed: bool,
     ) -> PendingUploadRunOutcome {
-        if has_pending {
-            PendingUploadRunOutcome::StillPending
-        } else if any_failed {
-            PendingUploadRunOutcome::Failed
-        } else if had_pending {
-            PendingUploadRunOutcome::Confirmed
-        } else {
-            PendingUploadRunOutcome::Idle
+        if blocked_on_authorization {
+            return PendingUploadRunOutcome::BlockedOnAuthorization;
         }
+
+        if has_pending {
+            return PendingUploadRunOutcome::StillPending;
+        }
+
+        if any_failed {
+            return PendingUploadRunOutcome::Failed;
+        }
+
+        if had_pending {
+            return PendingUploadRunOutcome::Confirmed;
+        }
+
+        PendingUploadRunOutcome::Idle
     }
 
     async fn check_blob(
@@ -172,10 +191,12 @@ impl PendingUploadVerifier {
             sync_state.namespace_id.clone(),
             Zeroizing::new(master_key.critical_data_key()),
         );
-        let wallet_json = match CloudStorage::global_silent_client()
+
+        let wallt_download_result = CloudStorage::global_silent_client()
             .download_wallet_backup(sync_state.namespace_id.clone(), sync_state.record_id.clone())
-            .await
-        {
+            .await;
+
+        let wallet_json = match wallt_download_result {
             Ok(wallet_json) => wallet_json,
             Err(CloudStorageError::NotFound(_)) => return BlobCheckResult::NotYetUploaded,
             Err(error) => return cloud_storage_failure_result(error),
@@ -585,16 +606,20 @@ mod tests {
     #[test]
     fn run_outcome_treats_failures_as_distinct_from_confirmed() {
         assert_eq!(
-            PendingUploadVerifier::run_outcome(true, false, true),
+            PendingUploadVerifier::run_outcome(false, true, false, true),
             PendingUploadRunOutcome::Failed
         );
         assert_eq!(
-            PendingUploadVerifier::run_outcome(true, false, false),
+            PendingUploadVerifier::run_outcome(false, true, false, false),
             PendingUploadRunOutcome::Confirmed
         );
         assert_eq!(
-            PendingUploadVerifier::run_outcome(false, false, false),
+            PendingUploadVerifier::run_outcome(false, false, false, false),
             PendingUploadRunOutcome::Idle
+        );
+        assert_eq!(
+            PendingUploadVerifier::run_outcome(true, true, true, true),
+            PendingUploadRunOutcome::BlockedOnAuthorization
         );
     }
 }

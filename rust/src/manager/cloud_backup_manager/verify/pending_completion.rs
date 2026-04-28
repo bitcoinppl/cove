@@ -83,7 +83,9 @@ impl RustCloudBackupManager {
                 revision_hash,
                 ..
             })) => revision_hash.as_str() == upload.target_revision(sync_state),
+
             Some(PersistedCloudBlobState::Failed(_)) => true,
+
             Some(PersistedCloudBlobState::UploadedPendingConfirmation(_)) => {
                 CloudStorage::global_silent_client()
                     .download_wallet_backup(
@@ -98,6 +100,7 @@ impl RustCloudBackupManager {
                     })
                     .unwrap_or(false)
             }
+
             _ => false,
         }
     }
