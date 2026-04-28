@@ -660,12 +660,12 @@ package org.bitcoinppl.cove.cloudbackup
          when (syncHealth) {
              is CloudSyncHealth.Unknown -> Triple(Icons.Default.CloudOff, MaterialTheme.colorScheme.onSurfaceVariant, "Checking sync status")
              is CloudSyncHealth.AllUploaded -> Triple(Icons.Default.CloudDone, Color(0xFF2E7D32), "All files synced to Google Drive")
-             is CloudSyncHealth.Uploading -> Triple(Icons.Default.CloudUpload, Color(0xFF1976D2), "Syncing to Google Drive")
-             is CloudSyncHealth.Failed -> Triple(Icons.Default.WarningAmber, MaterialTheme.colorScheme.error, "Sync error: ${syncHealth.v1}")
-             is CloudSyncHealth.NoFiles -> Triple(Icons.Default.CloudOff, MaterialTheme.colorScheme.onSurfaceVariant, "No cloud backup files uploaded yet")
-             is CloudSyncHealth.AuthorizationRequired -> Triple(Icons.Default.WarningAmber, MaterialTheme.colorScheme.error, "Google Drive access needs to be reconnected")
-             is CloudSyncHealth.Unavailable -> Triple(Icons.Default.CloudOff, MaterialTheme.colorScheme.onSurfaceVariant, "Google Drive is unavailable")
-         }
+            is CloudSyncHealth.Uploading -> Triple(Icons.Default.CloudUpload, Color(0xFF1976D2), "Syncing to Google Drive")
+            is CloudSyncHealth.Failed -> Triple(Icons.Default.WarningAmber, MaterialTheme.colorScheme.error, "Sync error: ${syncHealth.v1}")
+            is CloudSyncHealth.NoFiles -> Triple(Icons.Default.CloudOff, MaterialTheme.colorScheme.onSurfaceVariant, "No cloud backup files uploaded yet")
+            is CloudSyncHealth.AuthorizationRequired -> Triple(Icons.Default.WarningAmber, MaterialTheme.colorScheme.error, "Google Drive access needs to be reconnected: ${syncHealth.v1}")
+            is CloudSyncHealth.Unavailable -> Triple(Icons.Default.CloudOff, MaterialTheme.colorScheme.onSurfaceVariant, "Google Drive is unavailable")
+        }
  
      Card(
          modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -821,7 +821,7 @@ package org.bitcoinppl.cove.cloudbackup
          Column {
              when (val cloudOnly = manager.cloudOnly) {
                  is CloudOnlyState.NotFetched -> {
-                     LaunchedEffect(Unit) {
+                     LaunchedEffect(cloudOnly) {
                          manager.dispatch(CloudBackupManagerAction.FetchCloudOnly)
                      }
                      LoadingRow("Loading wallets not on this device")

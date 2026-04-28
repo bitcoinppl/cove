@@ -16,7 +16,9 @@ use super::{
     CloudBackupError, CloudBackupStatus, PendingVerificationCompletion, RustCloudBackupManager,
     WalletId, live_upload_retry_delay_for_attempt,
 };
-use crate::database::cloud_backup::{CloudBlobFailureIssue, PersistedCloudBlobState};
+use crate::database::cloud_backup::{
+    CloudBlobFailedState, CloudBlobFailureIssue, PersistedCloudBlobState,
+};
 use crate::manager::cloud_backup_detail_manager::RecoveryAction;
 
 #[derive(Debug, Clone)]
@@ -107,6 +109,14 @@ impl RestoreOperationCoordinator {
 
         update()
     }
+}
+
+fn is_authorization_failed_blob(failed_state: &CloudBlobFailedState) -> bool {
+    failed_state.issue == Some(CloudBlobFailureIssue::AuthorizationRequired)
+}
+
+fn should_retry_failed_blob(failed_state: &CloudBlobFailedState) -> bool {
+    failed_state.retryable || is_authorization_failed_blob(failed_state)
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -260,7 +270,9 @@ impl CloudBackupRuntimeActor {
         }
 
         match sync_state.state {
-            PersistedCloudBlobState::Failed(failed_state) if failed_state.retryable => {
+            PersistedCloudBlobState::Failed(failed_state)
+                if should_retry_failed_blob(&failed_state) =>
+            {
                 let delay = self.next_wallet_upload_retry_delay(&wallet_id);
                 self.schedule_wallet_upload_after(wallet_id, delay);
             }
@@ -590,8 +602,10 @@ impl CloudBackupRuntimeActor {
                 PersistedCloudBlobState::Dirty(_) => {
                     send!(addr.schedule_wallet_upload(wallet_id, true));
                 }
-                PersistedCloudBlobState::Failed(failed_state) if failed_state.retryable => {
-                    if failed_state.issue == Some(CloudBlobFailureIssue::AuthorizationRequired)
+                PersistedCloudBlobState::Failed(failed_state)
+                    if should_retry_failed_blob(failed_state) =>
+                {
+                    if is_authorization_failed_blob(failed_state)
                         && let Some(manager) = &manager
                     {
                         manager.set_sync_error(Some(failed_state.error.clone()));

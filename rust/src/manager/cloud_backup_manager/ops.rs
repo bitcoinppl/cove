@@ -2164,7 +2164,7 @@ mod tests {
         reason = "tests serialize shared cloud backup globals across awaits"
     )]
     #[tokio::test(flavor = "current_thread")]
-    async fn startup_resume_retries_retryable_authorization_failed_wallet_uploads() {
+    async fn startup_resume_retries_authorization_failed_wallet_uploads() {
         let _guard = test_lock().lock();
         cove_tokio::init();
         let globals = test_globals();
@@ -2176,7 +2176,7 @@ mod tests {
         persist_xpub_wallets(vec![metadata.clone()]);
         persist_failed_blob_state_with_issue(
             metadata.id,
-            true,
+            false,
             Some(CloudBlobFailureIssue::AuthorizationRequired),
         );
         let initial_attempt_count = globals.cloud.wallet_backup_upload_attempt_count();
@@ -2220,7 +2220,10 @@ mod tests {
             Some(CloudBlobFailureIssue::AuthorizationRequired),
         );
 
-        assert_eq!(manager.compute_sync_health().await, CloudSyncHealth::AuthorizationRequired,);
+        assert_eq!(
+            manager.compute_sync_health().await,
+            CloudSyncHealth::AuthorizationRequired("failed".into()),
+        );
 
         clear_wallet_upload_runtime_for_test_async(&manager).await;
     }

@@ -1192,7 +1192,10 @@ impl RustCloudBackupManager {
             };
 
             if failed_state.issue == Some(CloudBlobFailureIssue::AuthorizationRequired) {
-                return Some(CloudSyncHealth::AuthorizationRequired);
+                return Some(CloudSyncHealth::AuthorizationRequired(sync_health_failed_message(
+                    sync_state,
+                    failed_state,
+                )));
             }
 
             Some(CloudSyncHealth::Failed(sync_health_failed_message(sync_state, failed_state)))
@@ -1212,7 +1215,9 @@ impl RustCloudBackupManager {
 
     fn sync_health_from_cloud_error(error: CloudStorageError) -> CloudSyncHealth {
         match error {
-            CloudStorageError::AuthorizationRequired(_) => CloudSyncHealth::AuthorizationRequired,
+            CloudStorageError::AuthorizationRequired(message) => {
+                CloudSyncHealth::AuthorizationRequired(message)
+            }
             CloudStorageError::NotAvailable(_) => CloudSyncHealth::Unavailable,
             CloudStorageError::Offline(message) => CloudSyncHealth::Failed(message),
             CloudStorageError::QuotaExceeded => {

@@ -3170,8 +3170,14 @@ sealed class CloudSyncHealth {
     object NoFiles : CloudSyncHealth()
     
     
-    object AuthorizationRequired : CloudSyncHealth()
-    
+    data class AuthorizationRequired(
+        val v1: kotlin.String) : CloudSyncHealth()
+        
+    {
+        
+
+        companion object
+    }
     
     object Unavailable : CloudSyncHealth()
     
@@ -3199,7 +3205,9 @@ public object FfiConverterTypeCloudSyncHealth : FfiConverterRustBuffer<CloudSync
                 FfiConverterString.read(buf),
                 )
             5 -> CloudSyncHealth.NoFiles
-            6 -> CloudSyncHealth.AuthorizationRequired
+            6 -> CloudSyncHealth.AuthorizationRequired(
+                FfiConverterString.read(buf),
+                )
             7 -> CloudSyncHealth.Unavailable
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
@@ -3241,6 +3249,7 @@ public object FfiConverterTypeCloudSyncHealth : FfiConverterRustBuffer<CloudSync
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
+                + FfiConverterString.allocationSize(value.v1)
             )
         }
         is CloudSyncHealth.Unavailable -> {
@@ -3276,6 +3285,7 @@ public object FfiConverterTypeCloudSyncHealth : FfiConverterRustBuffer<CloudSync
             }
             is CloudSyncHealth.AuthorizationRequired -> {
                 buf.putInt(6)
+                FfiConverterString.write(value.v1, buf)
                 Unit
             }
             is CloudSyncHealth.Unavailable -> {

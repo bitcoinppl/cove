@@ -399,7 +399,8 @@ class AndroidCloudStorageAccess internal constructor(
         } catch (error: Throwable) {
             if (error is CancellationException) throw error
             when (mapDriveListError(error)) {
-                is CloudStorageException.AuthorizationRequired -> CloudSyncHealth.AuthorizationRequired
+                is CloudStorageException.AuthorizationRequired ->
+                    CloudSyncHealth.AuthorizationRequired(error.message ?: "google drive authorization is required")
                 is CloudStorageException.Offline -> CloudSyncHealth.Failed("offline")
                 is CloudStorageException.NotAvailable -> CloudSyncHealth.Unavailable
                 else -> CloudSyncHealth.Failed(error.message ?: "drive sync status failed")

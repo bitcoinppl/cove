@@ -42,7 +42,7 @@ pub enum CloudSyncHealth {
     Uploading,
     Failed(String),
     NoFiles,
-    AuthorizationRequired,
+    AuthorizationRequired(String),
     Unavailable,
 }
 

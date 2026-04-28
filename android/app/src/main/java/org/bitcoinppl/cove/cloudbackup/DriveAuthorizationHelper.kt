@@ -12,7 +12,10 @@ import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.common.api.Scope
 import kotlinx.coroutines.tasks.await
 
-internal class AuthorizationRequiredException(message: String) : Exception(message)
+internal class AuthorizationRequiredException(
+    message: String,
+    cause: Throwable? = null,
+) : Exception(message, cause)
 
 internal interface DriveAuthorization {
     suspend fun accessToken(interactive: Boolean): String
@@ -81,8 +84,10 @@ internal class DriveAuthorizationHelper(
 
         return try {
             client.getAuthorizationResultFromIntent(resultIntent)
-        } catch (error: Exception) {
-            throw AuthorizationRequiredException(error.message ?: "google drive authorization result could not be parsed")
+        } catch (error: ApiException) {
+            throw AuthorizationRequiredException("google drive authorization result could not be parsed", error)
+        } catch (error: RuntimeException) {
+            throw AuthorizationRequiredException("google drive authorization result could not be parsed", error)
         }
     }
 
