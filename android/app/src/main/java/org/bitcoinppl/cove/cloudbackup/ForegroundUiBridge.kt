@@ -75,16 +75,16 @@ object ForegroundUiBridge {
         request: IntentSenderRequest,
     ): ActivityResult = withContext(Dispatchers.Main.immediate) {
         val deferred = CompletableDeferred<ActivityResult>()
-        synchronized(authorizationLock) {
-            val launcher = authorizationLauncher ?: error("authorization launcher is not attached")
-            check(pendingAuthorizationResult == null) {
-                "another authorization flow is already in progress"
-            }
-            pendingAuthorizationResult = deferred
-            launcher.launch(request)
-        }
-
         try {
+            synchronized(authorizationLock) {
+                val launcher = authorizationLauncher ?: error("authorization launcher is not attached")
+                check(pendingAuthorizationResult == null) {
+                    "another authorization flow is already in progress"
+                }
+                pendingAuthorizationResult = deferred
+                launcher.launch(request)
+            }
+
             deferred.await()
         } finally {
             synchronized(authorizationLock) {

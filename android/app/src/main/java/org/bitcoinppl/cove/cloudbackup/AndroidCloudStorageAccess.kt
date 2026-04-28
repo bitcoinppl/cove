@@ -398,12 +398,13 @@ class AndroidCloudStorageAccess internal constructor(
             }
         } catch (error: Throwable) {
             if (error is CancellationException) throw error
-            when (mapDriveListError(error)) {
+            val mapped = mapDriveListError(error)
+            when (mapped) {
                 is CloudStorageException.AuthorizationRequired ->
-                    CloudSyncHealth.AuthorizationRequired(error.message ?: "google drive authorization is required")
-                is CloudStorageException.Offline -> CloudSyncHealth.Failed("offline")
+                    CloudSyncHealth.AuthorizationRequired(mapped.message)
+                is CloudStorageException.Offline -> CloudSyncHealth.Failed(mapped.message)
                 is CloudStorageException.NotAvailable -> CloudSyncHealth.Unavailable
-                else -> CloudSyncHealth.Failed(error.message ?: "drive sync status failed")
+                else -> CloudSyncHealth.Failed(mapped.message ?: "drive sync status failed")
             }
         }
 
