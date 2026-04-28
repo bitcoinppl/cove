@@ -302,6 +302,7 @@ fun SendFlowSetAmountScreen(
                         EnterAddressView(
                             onScanQr = onScanQr,
                             initialAddress = initialAddress,
+                            isNewAddress = sendFlowManager.isNewAddress,
                             onAddressChanged = { newAddress ->
                                 sendFlowManager.enteringAddress = newAddress
                             },

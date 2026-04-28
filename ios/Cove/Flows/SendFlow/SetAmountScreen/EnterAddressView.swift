@@ -15,6 +15,7 @@ struct EnterAddressView: View {
 
     /// args
     @Binding var address: String
+    var isNewAddress: Bool = false
 
     /// private
     @FocusState private var focusField: SendFlowPresenter.FocusField?
@@ -25,6 +26,17 @@ struct EnterAddressView: View {
                 Text("Enter address")
                     .font(.headline)
                     .fontWeight(.bold)
+
+                if isNewAddress {
+                    Text("New Address")
+                        .font(.caption2)
+                        .fontWeight(.semibold)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.orange.opacity(0.2))
+                        .foregroundColor(.orange)
+                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                }
 
                 Spacer()
 
