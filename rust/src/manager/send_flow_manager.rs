@@ -16,7 +16,7 @@ use crate::{
     fee_client::FEE_CLIENT,
     fiat::client::PriceResponse,
     router::RouteFactory,
-    transaction::FeeRate,
+    transaction::{FeeRate, TxId},
     wallet::{
         Address,
         balance::Balance,
@@ -33,6 +33,7 @@ use cove_types::{
     WalletId,
     address::AddressWithNetwork,
     amount::Amount,
+    confirm::ConfirmDetails,
     fees::{FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee, FeeSpeed},
     psbt::Psbt,
     unit::BitcoinUnit,
@@ -111,6 +112,9 @@ pub enum SendFlowManagerReconcileMessage {
     // side effects
     SetAlert(SendFlowAlertState),
     ClearAlert,
+
+    // fee bump
+    FeeBumpConfirmDetails(Arc<ConfirmDetails>),
 }
 
 #[derive(Debug, Clone, PartialEq, uniffi::Enum)]
@@ -152,6 +156,9 @@ pub enum SendFlowManagerAction {
     ChangeFeeRateOptions(Arc<FeeRateOptionsWithTotalFee>),
 
     FinalizeAndGoToNextScreen,
+
+    // fee bump: replace a pending RBF transaction with a higher fee rate
+    ConfirmFeeBump { txid: Arc<TxId>, fee_rate: Arc<FeeRate> },
 }
 
 impl RustSendFlowManager {
@@ -669,6 +676,10 @@ impl RustSendFlowManager {
             }
             Action::NotifyCoinControlEnteredAmountChanged(amount, is_focused) => {
                 self.handle_coin_control_entered_amount_changed(amount, is_focused);
+            }
+
+            Action::ConfirmFeeBump { txid, fee_rate } => {
+                self.confirm_fee_bump(*txid, *fee_rate);
             }
         }
     }
@@ -1637,6 +1648,57 @@ impl RustSendFlowManager {
                         .send_alert_async(SendFlowError::UnableToBuildTxn("watch only".to_string()))
                         .await;
                 }
+            };
+
+            let mut deferred = DeferredDispatch::<AppAction>::new();
+            deferred.queue(AppAction::PushRoute(next_route));
+        });
+    }
+}
+
+/// MARK: fee bump
+impl RustSendFlowManager {
+    fn confirm_fee_bump(self: &Arc<Self>, txid: TxId, fee_rate: FeeRate) {
+        let me = self.clone();
+        let manager = self.wallet_manager.clone();
+        let (wallet_type, wallet_id) = {
+            let state = self.state.lock();
+            (state.metadata.wallet_type, state.metadata.id.clone())
+        };
+
+        if matches!(wallet_type, WalletType::WatchOnly) {
+            return self.send_alert(SendFlowError::UnableToBuildTxn("watch only".to_string()));
+        }
+
+        cove_tokio::task::spawn(async move {
+            let raw_txid = *txid;
+
+            let confirm_details = manager.confirm_fee_bump_txn(raw_txid, fee_rate).await;
+
+            let details = match confirm_details {
+                Ok(details) => Arc::new(details),
+                Err(error) => {
+                    let error = SendFlowError::UnableToBuildTxn(error.to_string());
+                    return me.send_alert_async(error).await;
+                }
+            };
+
+            // save unsigned transaction for hardware wallets before routing
+            if matches!(wallet_type, WalletType::Cold | WalletType::XpubOnly)
+                && let Err(e) = manager.save_unsigned_transaction(details.clone())
+            {
+                let error = SendFlowError::UnableToSaveUnsignedTransaction(e.to_string());
+                return me.send_alert_async(error).await;
+            }
+
+            me.reconciler.send_async(Message::FeeBumpConfirmDetails(details.clone())).await;
+
+            let next_route = match wallet_type {
+                WalletType::Hot => RouteFactory::new().send_confirm(wallet_id, details, None, None),
+                WalletType::Cold | WalletType::XpubOnly => {
+                    RouteFactory::new().send_hardware_export(wallet_id, details)
+                }
+                WalletType::WatchOnly => unreachable!("rejected above"),
             };
 
             let mut deferred = DeferredDispatch::<AppAction>::new();

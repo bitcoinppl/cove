@@ -170,6 +170,9 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
 
         case .refreshPresenters:
             self.refreshPresenters()
+
+        case .feeBumpConfirmDetails:
+            break
         }
     }
 

@@ -1772,6 +1772,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_transactiondetails_block_number_fmt(
     ): Short
+    external fun uniffi_cove_checksum_method_transactiondetails_can_rbf_bump(
+    ): Short
     external fun uniffi_cove_checksum_method_transactiondetails_confirmation_date_time(
     ): Short
     external fun uniffi_cove_checksum_method_transactiondetails_fee_fiat_fmt(
@@ -1941,6 +1943,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_checksum_constructor_transactiondetails_preview_new_confirmed(
     ): Short
     external fun uniffi_cove_checksum_constructor_transactiondetails_preview_new_with_label(
+    ): Short
+    external fun uniffi_cove_checksum_constructor_transactiondetails_preview_pending_rbf(
     ): Short
     external fun uniffi_cove_checksum_constructor_transactiondetails_preview_pending_received(
     ): Short
@@ -2950,6 +2954,8 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_cove_fn_constructor_transactiondetails_preview_new_with_label(`label`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Long
+    external fun uniffi_cove_fn_constructor_transactiondetails_preview_pending_rbf(uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
     external fun uniffi_cove_fn_constructor_transactiondetails_preview_pending_received(uniffi_out_err: UniffiRustCallStatus, 
     ): Long
     external fun uniffi_cove_fn_constructor_transactiondetails_preview_pending_sent(uniffi_out_err: UniffiRustCallStatus, 
@@ -2972,6 +2978,8 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_transactiondetails_block_number_fmt(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_transactiondetails_can_rbf_bump(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
     external fun uniffi_cove_fn_method_transactiondetails_confirmation_date_time(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_transactiondetails_fee_fiat_fmt(`ptr`: Long,
@@ -4625,6 +4633,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_transactiondetails_block_number_fmt() != 8381.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_method_transactiondetails_can_rbf_bump() != 5315.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_method_transactiondetails_confirmation_date_time() != 59432.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -4878,6 +4889,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_constructor_transactiondetails_preview_new_with_label() != 51427.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_constructor_transactiondetails_preview_pending_rbf() != 25399.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_constructor_transactiondetails_preview_pending_received() != 18117.toShort()) {
@@ -23347,6 +23361,14 @@ public interface TransactionDetailsInterface {
     
     fun `blockNumberFmt`(): kotlin.String?
     
+    /**
+     * Whether this transaction can currently be fee-bumped via RBF.
+     *
+     * Requires the transaction to be outgoing, unconfirmed, and signaling opt-in RBF.
+     * Use this to gate the "Speed Up" action in the UI.
+     */
+    fun `canRbfBump`(): kotlin.Boolean
+    
     fun `confirmationDateTime`(): kotlin.String?
     
     suspend fun `feeFiatFmt`(): kotlin.String
@@ -23620,6 +23642,25 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_transactiondetails_block_number_fmt(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Whether this transaction can currently be fee-bumped via RBF.
+     *
+     * Requires the transaction to be outgoing, unconfirmed, and signaling opt-in RBF.
+     * Use this to gate the "Speed Up" action in the UI.
+     */override fun `canRbfBump`(): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_transactiondetails_can_rbf_bump(
         it,
         _status)
 }
@@ -23918,6 +23959,17 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
     UniffiLib.uniffi_cove_fn_constructor_transactiondetails_preview_new_with_label(
     
         FfiConverterString.lower(`label`),_status)
+}
+    )
+    }
+    
+
+         fun `previewPendingRbf`(): TransactionDetails {
+            return FfiConverterTypeTransactionDetails.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_constructor_transactiondetails_preview_pending_rbf(
+    
+        _status)
 }
     )
     }
@@ -44281,6 +44333,16 @@ sealed class SendFlowManagerAction: Disposable  {
     object FinalizeAndGoToNextScreen : SendFlowManagerAction()
     
     
+    data class ConfirmFeeBump(
+        val `txid`: org.bitcoinppl.cove_core.types.TxId, 
+        val `feeRate`: org.bitcoinppl.cove_core.types.FeeRate) : SendFlowManagerAction()
+        
+    {
+        
+
+        companion object
+    }
+    
 
     
     @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
@@ -44420,6 +44482,14 @@ sealed class SendFlowManagerAction: Disposable  {
             }
             is SendFlowManagerAction.FinalizeAndGoToNextScreen -> {// Nothing to destroy
             }
+            is SendFlowManagerAction.ConfirmFeeBump -> {
+                
+    Disposable.destroy(
+        this.`txid`,
+        this.`feeRate`
+    )
+                
+            }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
     
@@ -44498,6 +44568,10 @@ public object FfiConverterTypeSendFlowManagerAction : FfiConverterRustBuffer<Sen
                 FfiConverterTypeFeeRateOptionsWithTotalFee.read(buf),
                 )
             22 -> SendFlowManagerAction.FinalizeAndGoToNextScreen
+            23 -> SendFlowManagerAction.ConfirmFeeBump(
+                FfiConverterTypeTxId.read(buf),
+                FfiConverterTypeFeeRate.read(buf),
+                )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -44657,6 +44731,14 @@ public object FfiConverterTypeSendFlowManagerAction : FfiConverterRustBuffer<Sen
                 4UL
             )
         }
+        is SendFlowManagerAction.ConfirmFeeBump -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeTxId.allocationSize(value.`txid`)
+                + FfiConverterTypeFeeRate.allocationSize(value.`feeRate`)
+            )
+        }
     }
 
     override fun write(value: SendFlowManagerAction, buf: ByteBuffer) {
@@ -44769,6 +44851,12 @@ public object FfiConverterTypeSendFlowManagerAction : FfiConverterRustBuffer<Sen
             }
             is SendFlowManagerAction.FinalizeAndGoToNextScreen -> {
                 buf.putInt(22)
+                Unit
+            }
+            is SendFlowManagerAction.ConfirmFeeBump -> {
+                buf.putInt(23)
+                FfiConverterTypeTxId.write(value.`txid`, buf)
+                FfiConverterTypeFeeRate.write(value.`feeRate`, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -44889,6 +44977,15 @@ sealed class SendFlowManagerReconcileMessage: Disposable  {
     object ClearAlert : SendFlowManagerReconcileMessage()
     
     
+    data class FeeBumpConfirmDetails(
+        val v1: org.bitcoinppl.cove_core.types.ConfirmDetails) : SendFlowManagerReconcileMessage()
+        
+    {
+        
+
+        companion object
+    }
+    
 
     
     @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
@@ -44977,6 +45074,13 @@ sealed class SendFlowManagerReconcileMessage: Disposable  {
             }
             is SendFlowManagerReconcileMessage.ClearAlert -> {// Nothing to destroy
             }
+            is SendFlowManagerReconcileMessage.FeeBumpConfirmDetails -> {
+                
+    Disposable.destroy(
+        this.v1
+    )
+                
+            }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
     
@@ -45030,6 +45134,9 @@ public object FfiConverterTypeSendFlowManagerReconcileMessage : FfiConverterRust
                 FfiConverterTypeSendFlowAlertState.read(buf),
                 )
             14 -> SendFlowManagerReconcileMessage.ClearAlert
+            15 -> SendFlowManagerReconcileMessage.FeeBumpConfirmDetails(
+                FfiConverterTypeConfirmDetails.read(buf),
+                )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -45130,6 +45237,13 @@ public object FfiConverterTypeSendFlowManagerReconcileMessage : FfiConverterRust
                 4UL
             )
         }
+        is SendFlowManagerReconcileMessage.FeeBumpConfirmDetails -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeConfirmDetails.allocationSize(value.v1)
+            )
+        }
     }
 
     override fun write(value: SendFlowManagerReconcileMessage, buf: ByteBuffer) {
@@ -45199,6 +45313,11 @@ public object FfiConverterTypeSendFlowManagerReconcileMessage : FfiConverterRust
             }
             is SendFlowManagerReconcileMessage.ClearAlert -> {
                 buf.putInt(14)
+                Unit
+            }
+            is SendFlowManagerReconcileMessage.FeeBumpConfirmDetails -> {
+                buf.putInt(15)
+                FfiConverterTypeConfirmDetails.write(value.v1, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }

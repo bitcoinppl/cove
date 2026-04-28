@@ -10418,6 +10418,14 @@ public protocol TransactionDetailsProtocol: AnyObject, Sendable {
     
     func blockNumberFmt()  -> String?
     
+    /**
+     * Whether this transaction can currently be fee-bumped via RBF.
+     *
+     * Requires the transaction to be outgoing, unconfirmed, and signaling opt-in RBF.
+     * Use this to gate the "Speed Up" action in the UI.
+     */
+    func canRbfBump()  -> Bool
+    
     func confirmationDateTime()  -> String?
     
     func feeFiatFmt() async throws  -> String
@@ -10543,6 +10551,13 @@ public static func previewNewWithLabel(label: String = "bike payment") -> Transa
 })
 }
     
+public static func previewPendingRbf() -> TransactionDetails  {
+    return try!  FfiConverterTypeTransactionDetails_lift(try! rustCall() {
+    uniffi_cove_fn_constructor_transactiondetails_preview_pending_rbf($0
+    )
+})
+}
+    
 public static func previewPendingReceived() -> TransactionDetails  {
     return try!  FfiConverterTypeTransactionDetails_lift(try! rustCall() {
     uniffi_cove_fn_constructor_transactiondetails_preview_pending_received($0
@@ -10645,6 +10660,20 @@ open func blockNumber() -> UInt32?  {
 open func blockNumberFmt() -> String?  {
     return try!  FfiConverterOptionString.lift(try! rustCall() {
     uniffi_cove_fn_method_transactiondetails_block_number_fmt(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+    /**
+     * Whether this transaction can currently be fee-bumped via RBF.
+     *
+     * Requires the transaction to be outgoing, unconfirmed, and signaling opt-in RBF.
+     * Use this to gate the "Speed Up" action in the UI.
+     */
+open func canRbfBump() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_method_transactiondetails_can_rbf_bump(
             self.uniffiCloneHandle(),$0
     )
 })
@@ -27127,6 +27156,8 @@ public enum SendFlowManagerAction {
     case changeFeeRateOptions(FeeRateOptionsWithTotalFee
     )
     case finalizeAndGoToNextScreen
+    case confirmFeeBump(txid: TxId, feeRate: FeeRate
+    )
 
 
 
@@ -27208,6 +27239,9 @@ public struct FfiConverterTypeSendFlowManagerAction: FfiConverterRustBuffer {
         )
         
         case 22: return .finalizeAndGoToNextScreen
+        
+        case 23: return .confirmFeeBump(txid: try FfiConverterTypeTxId.read(from: &buf), feeRate: try FfiConverterTypeFeeRate.read(from: &buf)
+        )
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -27326,6 +27360,12 @@ public struct FfiConverterTypeSendFlowManagerAction: FfiConverterRustBuffer {
         case .finalizeAndGoToNextScreen:
             writeInt(&buf, Int32(22))
         
+        
+        case let .confirmFeeBump(txid,feeRate):
+            writeInt(&buf, Int32(23))
+            FfiConverterTypeTxId.write(txid, into: &buf)
+            FfiConverterTypeFeeRate.write(feeRate, into: &buf)
+            
         }
     }
 }
@@ -27375,6 +27415,8 @@ public enum SendFlowManagerReconcileMessage {
     case setAlert(SendFlowAlertState
     )
     case clearAlert
+    case feeBumpConfirmDetails(ConfirmDetails
+    )
 
 
 
@@ -27434,6 +27476,9 @@ public struct FfiConverterTypeSendFlowManagerReconcileMessage: FfiConverterRustB
         )
         
         case 14: return .clearAlert
+        
+        case 15: return .feeBumpConfirmDetails(try FfiConverterTypeConfirmDetails.read(from: &buf)
+        )
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -27509,6 +27554,11 @@ public struct FfiConverterTypeSendFlowManagerReconcileMessage: FfiConverterRustB
         case .clearAlert:
             writeInt(&buf, Int32(14))
         
+        
+        case let .feeBumpConfirmDetails(v1):
+            writeInt(&buf, Int32(15))
+            FfiConverterTypeConfirmDetails.write(v1, into: &buf)
+            
         }
     }
 }
@@ -37123,6 +37173,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_transactiondetails_block_number_fmt() != 8381) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_transactiondetails_can_rbf_bump() != 5315) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_transactiondetails_confirmation_date_time() != 59432) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -37376,6 +37429,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_transactiondetails_preview_new_with_label() != 51427) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_constructor_transactiondetails_preview_pending_rbf() != 25399) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_transactiondetails_preview_pending_received() != 18117) {

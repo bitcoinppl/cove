@@ -1383,6 +1383,21 @@ impl RustWalletManager {
         let details = call!(self.actor.get_confirm_details(psbt, fee_rate)).await.unwrap()?;
         Ok(details)
     }
+
+    pub async fn confirm_fee_bump_txn(
+        &self,
+        txid: bitcoin::Txid,
+        fee_rate: FeeRate,
+    ) -> Result<ConfirmDetails, Error> {
+        debug!("confirm_fee_bump_txn txid: {txid}  fee_rate: {:?}", fee_rate.sat_per_vb());
+        let actor = self.actor.clone();
+        let fee_rate = fee_rate.into();
+
+        let psbt = call!(actor.build_fee_bump_tx(txid, fee_rate)).await.unwrap()?;
+        let details = call!(self.actor.get_confirm_details(psbt, fee_rate)).await.unwrap()?;
+
+        Ok(details)
+    }
 }
 
 #[uniffi::export]

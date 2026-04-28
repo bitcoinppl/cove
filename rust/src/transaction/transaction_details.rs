@@ -350,6 +350,15 @@ impl TransactionDetails {
         self.is_rbf_signaling
     }
 
+    /// Whether this transaction can currently be fee-bumped via RBF.
+    ///
+    /// Requires the transaction to be outgoing, unconfirmed, and signaling opt-in RBF.
+    /// Use this to gate the "Speed Up" action in the UI.
+    #[uniffi::method]
+    pub fn can_rbf_bump(&self) -> bool {
+        self.is_sent() && self.is_rbf_signaling && !self.is_confirmed()
+    }
+
     #[uniffi::method]
     pub fn confirmation_date_time(&self) -> Option<String> {
         let confirm_time = match &self.pending_or_confirmed {
@@ -517,6 +526,13 @@ impl TransactionDetails {
         me
     }
 
+    #[uniffi::constructor]
+    pub fn preview_pending_rbf() -> Self {
+        let mut me = Self::preview_pending_sent();
+        me.is_rbf_signaling = true;
+        me
+    }
+
     #[uniffi::constructor(default(label = "bike payment"))]
     pub fn preview_new_with_label(label: String) -> Self {
         let mut me = Self::preview_new_confirmed();
@@ -608,5 +624,24 @@ mod tests {
     fn preview_constructors_default_to_not_rbf() {
         assert!(!TransactionDetails::preview_new_confirmed().is_rbf_signaling);
         assert!(!TransactionDetails::preview_pending_sent().is_rbf_signaling);
+    }
+
+    #[test]
+    fn can_rbf_bump_requires_pending_and_rbf_signaling() {
+        let rbf_pending = TransactionDetails::preview_pending_rbf();
+        assert!(rbf_pending.can_rbf_bump());
+    }
+
+    #[test]
+    fn can_rbf_bump_false_when_confirmed() {
+        let mut confirmed = TransactionDetails::preview_new_confirmed();
+        confirmed.is_rbf_signaling = true;
+        assert!(!confirmed.can_rbf_bump());
+    }
+
+    #[test]
+    fn can_rbf_bump_false_when_pending_without_rbf() {
+        let pending_no_rbf = TransactionDetails::preview_pending_sent();
+        assert!(!pending_no_rbf.can_rbf_bump());
     }
 }
