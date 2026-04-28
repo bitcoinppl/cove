@@ -254,9 +254,9 @@ class MainActivity : FragmentActivity() {
                             appInstance.asyncRuntimeReady = true
 
                             runCatching {
-                                appInstance.cloudBackupManager.rust.syncPersistedState()
+                                appInstance.cloudBackupManager.rust.resumePendingCloudUploadVerification()
                             }.onFailure { error ->
-                                Log.w(TAG, "[STARTUP] syncPersistedState failed before startup routing", error)
+                                Log.w(TAG, "[STARTUP] resumePendingCloudUploadVerification failed before startup routing", error)
                             }
 
                             isBootstrapped = true

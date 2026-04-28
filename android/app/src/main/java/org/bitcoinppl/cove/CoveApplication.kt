@@ -69,9 +69,7 @@ class CoveApplication : Application() {
         if (bootstrapCompleted) return
         bootstrapCompleted = true
 
-        val app = AppManager.getInstance()
         connectivityMonitor?.start()
-        app.cloudBackupManager.resumePendingCloudUploadVerification()
         setupLifecycleObserver()
         setupMemoryCallbacks()
     }
