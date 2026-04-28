@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use cove_cspp::backup_data::EncryptedMasterKeyBackup;
+use cove_cspp::backup_data::{EncryptedMasterKeyBackup, MasterKeyBackupVersion};
 use cove_device::cloud_storage::CloudStorageClient;
 use cove_device::passkey::{PasskeyAccess, PasskeyError};
 use cove_tokio::unblock;
@@ -189,9 +189,12 @@ impl NamespacePasskeyMatcher {
                 continue;
             };
 
-            if encrypted.version != 1 {
-                had_unsupported_versions = true;
-                continue;
+            match encrypted.backup_version() {
+                Ok(MasterKeyBackupVersion::V1) => {}
+                Err(_) => {
+                    had_unsupported_versions = true;
+                    continue;
+                }
             }
 
             downloaded.push((namespace.clone(), encrypted));
@@ -222,6 +225,9 @@ impl NamespacePasskeyMatcher {
             Ok(discovered) => discovered,
             Err(PasskeyError::UserCancelled) => return Ok(NamespaceMatchOutcome::UserDeclined),
             Err(PasskeyError::NoCredentialFound) => return Ok(NamespaceMatchOutcome::NoMatch),
+            Err(PasskeyError::PrfUnsupportedProvider) => {
+                return Err(CloudBackupError::UnsupportedPasskeyProvider);
+            }
             Err(error) => return Err(CloudBackupError::Passkey(error.to_string())),
         };
 
@@ -255,6 +261,9 @@ impl NamespacePasskeyMatcher {
             let prf_output = match prf_output_result {
                 Ok(prf_output) => prf_output,
                 Err(PasskeyError::UserCancelled) => return Ok(NamespaceMatchOutcome::UserDeclined),
+                Err(PasskeyError::PrfUnsupportedProvider) => {
+                    return Err(CloudBackupError::UnsupportedPasskeyProvider);
+                }
                 Err(error) => {
                     warn!("Failed targeted passkey auth for namespace {namespace_id}: {error}");
                     had_download_failures = true;

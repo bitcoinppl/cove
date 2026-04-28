@@ -459,6 +459,7 @@ fn is_upload_preparation_failure_retryable(error: &CloudBackupError) -> bool {
         | CloudBackupError::Passkey(_)
         | CloudBackupError::Crypto(_)
         | CloudBackupError::Internal(_)
+        | CloudBackupError::Compatibility(_)
         | CloudBackupError::PasskeyMismatch
         | CloudBackupError::PasskeyDiscoveryCancelled
         | CloudBackupError::Cancelled => false,

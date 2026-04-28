@@ -156,6 +156,7 @@ private let walletModeChangeDelayMs = 250
         beginNavigationIntent()
 
         rust = FfiApp()
+        rust.listenForUpdates(updater: self)
         database = Database()
         walletManager = nil
 

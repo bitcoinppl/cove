@@ -92,6 +92,7 @@ impl RustCloudBackupManager {
                 PersistedCloudBlobState::UploadedPendingConfirmation(pending_state) => {
                     pending_state
                 }
+
                 _ => continue,
             };
 

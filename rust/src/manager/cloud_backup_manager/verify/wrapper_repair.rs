@@ -208,12 +208,9 @@ impl WrapperRepairOperation {
             WrapperRepairStrategy::CreateNew => {
                 let new_prf =
                     PasskeyMaterialAcquirer::new(&self.passkey).create_for_wrapper_repair().await?;
+                let (prf_key, prf_salt, credential_id) = new_prf.into_parts();
 
-                Ok(WrapperRepairCredentials {
-                    prf_key: new_prf.prf_key,
-                    prf_salt: new_prf.prf_salt,
-                    credential_id: new_prf.credential_id.clone(),
-                })
+                Ok(WrapperRepairCredentials { prf_key, prf_salt, credential_id })
             }
 
             WrapperRepairStrategy::DiscoverOrCreate => {
@@ -221,12 +218,9 @@ impl WrapperRepairOperation {
                     .discover_or_create_for_wrapper_repair()
                     .await?;
                 info!("Using discovered-or-new passkey for wrapper repair");
+                let (prf_key, prf_salt, credential_id) = passkey.into_parts();
 
-                Ok(WrapperRepairCredentials {
-                    prf_key: passkey.prf_key,
-                    prf_salt: passkey.prf_salt,
-                    credential_id: passkey.credential_id.clone(),
-                })
+                Ok(WrapperRepairCredentials { prf_key, prf_salt, credential_id })
             }
 
             WrapperRepairStrategy::ReuseExisting(credential_id) => {

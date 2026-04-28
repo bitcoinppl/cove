@@ -262,7 +262,7 @@ impl RustCloudBackupManager {
             Ok(MasterKeyBackupVersion::V1) => {}
             Err(unsupported) => {
                 let version = unsupported.0;
-                return Err(CloudBackupError::Internal(format!(
+                return Err(CloudBackupError::Compatibility(format!(
                     "master key backup version {version} is not supported",
                 )));
             }

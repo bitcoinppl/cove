@@ -545,6 +545,9 @@ pub(crate) enum CloudBackupError {
     #[error("internal error: {0}")]
     Internal(String),
 
+    #[error("compatibility error: {0}")]
+    Compatibility(String),
+
     #[error("Passkey didn't match any backups, please try a new one")]
     PasskeyMismatch,
 
@@ -650,6 +653,7 @@ impl RustCloudBackupManager {
             | CloudBackupError::Passkey(_)
             | CloudBackupError::Crypto(_)
             | CloudBackupError::Internal(_)
+            | CloudBackupError::Compatibility(_)
             | CloudBackupError::PasskeyMismatch
             | CloudBackupError::PasskeyDiscoveryCancelled
             | CloudBackupError::Cancelled => CloudStorageIssue::Other,

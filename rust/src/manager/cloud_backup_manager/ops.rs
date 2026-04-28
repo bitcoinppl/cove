@@ -1251,6 +1251,82 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
+    async fn passkey_match_discovery_propagates_unsupported_provider() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        globals.reset();
+
+        let master_key = cove_cspp::master_key::MasterKey::generate();
+        let namespace = master_key.namespace_id();
+        let encrypted_master =
+            cove_cspp::master_key_crypto::encrypt_master_key(&master_key, &[7; 32], &[9; 32])
+                .unwrap();
+        globals.cloud.set_master_key_backup(
+            namespace.clone(),
+            serde_json::to_vec(&encrypted_master).unwrap(),
+        );
+        globals.passkey.set_discover_result(Err(PasskeyError::PrfUnsupportedProvider));
+
+        let result = NamespacePasskeyMatcher::new(
+            &CloudStorage::global_explicit_client(),
+            PasskeyAccess::global(),
+        )
+        .match_namespaces(&[namespace])
+        .await;
+        let error = match result {
+            Ok(_) => panic!("expected unsupported passkey provider error"),
+            Err(error) => error,
+        };
+
+        assert!(matches!(error, CloudBackupError::UnsupportedPasskeyProvider));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn passkey_match_targeted_auth_propagates_unsupported_provider() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        globals.reset();
+
+        let master_key = cove_cspp::master_key::MasterKey::generate();
+        let first_namespace = format!("{}-first", master_key.namespace_id());
+        let second_namespace = format!("{}-second", master_key.namespace_id());
+        let first_encrypted =
+            cove_cspp::master_key_crypto::encrypt_master_key(&master_key, &[7; 32], &[9; 32])
+                .unwrap();
+        let second_encrypted =
+            cove_cspp::master_key_crypto::encrypt_master_key(&master_key, &[8; 32], &[9; 32])
+                .unwrap();
+        globals.cloud.set_master_key_backup(
+            first_namespace.clone(),
+            serde_json::to_vec(&first_encrypted).unwrap(),
+        );
+        globals.cloud.set_master_key_backup(
+            second_namespace.clone(),
+            serde_json::to_vec(&second_encrypted).unwrap(),
+        );
+        globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
+            prf_output: vec![1; 32],
+            credential_id: vec![1, 2, 3],
+        }));
+        globals.passkey.set_authenticate_result(Err(PasskeyError::PrfUnsupportedProvider));
+
+        let result = NamespacePasskeyMatcher::new(
+            &CloudStorage::global_explicit_client(),
+            PasskeyAccess::global(),
+        )
+        .match_namespaces(&[first_namespace, second_namespace])
+        .await;
+        let error = match result {
+            Ok(_) => panic!("expected unsupported passkey provider error"),
+            Err(error) => error,
+        };
+
+        assert!(matches!(error, CloudBackupError::UnsupportedPasskeyProvider));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
     async fn mock_master_key_upload_persists_uploaded_bytes() {
         let _guard = test_lock().lock();
         cove_tokio::init();
@@ -3236,6 +3312,49 @@ mod tests {
                 ..
             })
         ));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn failed_pending_upload_without_remote_backup_remains_pending() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        let manager = RustCloudBackupManager::init();
+        let metadata = prepare_deep_verify_with_unsynced_wallet(&manager, globals);
+        let namespace_id = Keychain::global().get(CSPP_NAMESPACE_ID_KEY.into()).unwrap();
+        let record_id = cove_cspp::backup_data::wallet_record_id(metadata.id.as_ref());
+
+        let result = manager.deep_verify_cloud_backup(true).await;
+
+        assert!(matches!(result, DeepVerificationResult::AwaitingUploadConfirmation(_)));
+        assert!(manager.pending_verification_completion().is_some());
+
+        CloudStorage::global_silent_client()
+            .delete_wallet_backup(namespace_id.clone(), record_id.clone())
+            .await
+            .unwrap();
+        Database::global()
+            .cloud_blob_sync_states
+            .set(&PersistedCloudBlobSyncState {
+                kind: CloudUploadKind::BackupBlob,
+                namespace_id,
+                wallet_id: Some(metadata.id),
+                record_id: record_id.clone(),
+                state: PersistedCloudBlobState::Failed(CloudBlobFailedState {
+                    revision_hash: Some("rev-1".into()),
+                    retryable: false,
+                    error: "terminal upload failure".into(),
+                    issue: None,
+                    failed_at: 10,
+                }),
+            })
+            .unwrap();
+
+        let has_more_pending = manager.verify_pending_uploads_once_for_test().await;
+
+        assert!(has_more_pending);
+        assert!(manager.pending_verification_completion().is_some());
+        assert!(manager.has_pending_cloud_upload_verification());
     }
 
     #[tokio::test(flavor = "current_thread")]

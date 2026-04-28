@@ -749,6 +749,19 @@ mod tests {
     }
 
     #[test]
+    fn load_cspp_credential_id_returns_none_for_invalid_hex_and_decodes_valid_hex() {
+        let kc = make_keychain(MockKeychain::new());
+        kc.0.save(CSPP_CREDENTIAL_ID_KEY.into(), "not-hex".into()).unwrap();
+
+        assert!(kc.load_cspp_credential_id().is_none());
+
+        let credential_id = vec![1, 2, 3, 254, 255];
+        kc.0.save(CSPP_CREDENTIAL_ID_KEY.into(), hex::encode(&credential_id)).unwrap();
+
+        assert_eq!(kc.load_cspp_credential_id(), Some(credential_id));
+    }
+
+    #[test]
     fn clear_cspp_passkey_removes_credential_and_salt_only() {
         let kc = make_keychain(MockKeychain::with_entries(vec![
             (CSPP_CREDENTIAL_ID_KEY, "credential"),

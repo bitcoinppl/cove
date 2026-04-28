@@ -32,6 +32,12 @@ impl UnpersistedPrfKey {
             credential_id: self.credential_id.clone(),
         }
     }
+
+    pub(crate) fn into_parts(mut self) -> ([u8; 32], [u8; 32], Vec<u8>) {
+        let credential_id = std::mem::take(&mut self.credential_id);
+
+        (self.prf_key, self.prf_salt, credential_id)
+    }
 }
 
 pub(super) struct DownloadedWalletBackup {

@@ -8,21 +8,21 @@ use super::super::{CloudBackupError, PASSKEY_RP_ID};
 use super::session::VerificationSession;
 
 #[derive(Debug, PartialEq)]
-pub(super) struct AuthenticatedPasskey {
-    pub(super) prf_key: [u8; 32],
-    pub(super) credential_id: Vec<u8>,
-    pub(super) credential_recovered: bool,
+pub(crate) struct AuthenticatedPasskey {
+    pub(crate) prf_key: [u8; 32],
+    pub(crate) credential_id: Vec<u8>,
+    pub(crate) credential_recovered: bool,
 }
 
 #[derive(Debug, PartialEq)]
-pub(super) enum PasskeyAuthOutcome {
+pub(crate) enum PasskeyAuthOutcome {
     Authenticated(AuthenticatedPasskey),
     UserCancelled,
     NoCredentialFound,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum PasskeyAuthPolicy {
+pub(crate) enum PasskeyAuthPolicy {
     StoredOnly,
     StoredThenDiscover,
     DiscoverOnly,
@@ -36,19 +36,19 @@ enum StoredPasskeyAuthOutcome {
 }
 
 /// Authenticates backup passkeys against the PRF salt from a master-key backup
-pub(super) struct PasskeyAuthenticator {
+pub(crate) struct PasskeyAuthenticator {
     keychain: Keychain,
     passkey: PasskeyAccess,
 }
 
 impl PasskeyAuthenticator {
     /// Builds an authenticator from cheap device-service handles
-    pub(super) fn new(keychain: &Keychain, passkey: &PasskeyAccess) -> Self {
+    pub(crate) fn new(keychain: &Keychain, passkey: &PasskeyAccess) -> Self {
         Self { keychain: keychain.clone(), passkey: passkey.clone() }
     }
 
     /// Authenticates according to the caller's stored/discoverable credential policy
-    pub(super) async fn authenticate_with_policy(
+    pub(crate) async fn authenticate_with_policy(
         &self,
         prf_salt: &[u8; 32],
         policy: PasskeyAuthPolicy,
@@ -186,7 +186,7 @@ impl PasskeyAuthenticator {
 }
 
 impl VerificationSession {
-    pub(super) async fn authenticate_with_fallback(
+    pub(crate) async fn authenticate_with_fallback(
         &self,
         prf_salt: &[u8; 32],
     ) -> Result<PasskeyAuthOutcome, CloudBackupError> {
