@@ -1143,17 +1143,11 @@ impl RustCloudBackupManager {
             };
 
         if expected_wallet_record_ids.is_empty() {
-            if !master_key_uploaded && remote_wallet_record_ids.is_empty() {
-                return CloudSyncHealth::NoFiles;
-            }
-
             if master_key_uploaded {
                 return CloudSyncHealth::AllUploaded;
             }
 
-            return CloudSyncHealth::Failed(
-                "master key backup is missing from cloud storage".into(),
-            );
+            return CloudSyncHealth::NoFiles;
         }
 
         if !master_key_uploaded {
