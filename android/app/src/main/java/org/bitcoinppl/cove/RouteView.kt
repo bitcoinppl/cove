@@ -78,8 +78,6 @@ fun RouteView(app: AppManager, route: Route) {
                 LoadAndResetContainer(
                     app = app,
                     route = route,
-                    nextRoutes = route.resetTo.map { it.route() },
-                    loadingTimeMs = route.afterMillis.toLong(),
                 )
             }
         }
@@ -94,9 +92,10 @@ fun RouteView(app: AppManager, route: Route) {
 private fun LoadAndResetContainer(
     app: AppManager,
     route: Route.LoadAndReset,
-    nextRoutes: List<Route>,
-    loadingTimeMs: Long,
 ) {
+    val nextRoutes = route.resetTo.map { it.route() }
+    val loadingTimeMs = route.afterMillis.toLong()
+
     // show loading indicator
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         CircularProgressIndicator()

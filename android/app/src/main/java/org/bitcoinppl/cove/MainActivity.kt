@@ -819,12 +819,13 @@ private fun GlobalAlertDialog(
                 text = { Text(state.message()) },
                 confirmButton = {
                     TextButton(onClick = {
-                        onDismiss()
                         try {
                             app.selectWalletOrThrow(state.walletId)
+                            onDismiss()
                             app.resetRoute(Route.SelectedWallet(state.walletId))
                         } catch (e: Exception) {
                             Log.e("GlobalAlert", "Failed to select wallet", e)
+                            app.alertState = TaggedItem(AppAlertState.UnableToSelectWallet)
                         }
                     }) { Text("Yes") }
                 },

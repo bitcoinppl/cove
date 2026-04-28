@@ -14,7 +14,7 @@ struct LoadAndResetContainer: View {
 
     var body: some View {
         ProgressView()
-            .task {
+            .task(id: route) {
                 do {
                     let generation = await app.captureLoadAndResetGeneration()
                     try await Task.sleep(for: .milliseconds(loadingTimeMs))

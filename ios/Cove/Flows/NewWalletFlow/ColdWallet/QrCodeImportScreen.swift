@@ -156,8 +156,8 @@ struct QrCodeImportScreen: View {
                 if let onImported {
                     onImported(id)
                 } else {
-                    app.alertState = TaggedItem(.importedSuccessfully)
                     try app.selectWalletOrThrow(id)
+                    app.alertState = TaggedItem(.importedSuccessfully)
                 }
             } catch let WalletError.MultiFormat(error) {
                 app.popRoute()

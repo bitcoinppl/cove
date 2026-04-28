@@ -198,6 +198,10 @@ class AppManager private constructor() : FfiReconcile {
      * clears all cached data and reinitializes
      */
     fun reset() {
+        pendingSidebarNavigationJob?.cancel()
+        pendingSidebarNavigationJob = null
+        beginNavigationIntent()
+
         // close managers before clearing them
         walletManager?.close()
         sendFlowManager?.close()

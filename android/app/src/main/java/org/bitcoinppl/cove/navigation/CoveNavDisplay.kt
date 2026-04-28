@@ -178,8 +178,6 @@ private fun RouteContent(app: AppManager, route: Route) {
             LoadAndResetContent(
                 app = app,
                 route = route,
-                nextRoutes = route.resetTo.map { it.route() },
-                loadingTimeMs = route.afterMillis.toLong(),
             )
         }
     }
@@ -192,9 +190,10 @@ private fun RouteContent(app: AppManager, route: Route) {
 private fun LoadAndResetContent(
     app: AppManager,
     route: Route.LoadAndReset,
-    nextRoutes: List<Route>,
-    loadingTimeMs: Long,
 ) {
+    val nextRoutes = route.resetTo.map { it.route() }
+    val loadingTimeMs = route.afterMillis.toLong()
+
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         CircularProgressIndicator()
     }

@@ -62,15 +62,19 @@ import org.bitcoinppl.cove.ui.theme.isLight
 import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.FiatOrBtc
+import org.bitcoinppl.cove_core.FiatAmount
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.RouteFactory
 import org.bitcoinppl.cove_core.Transaction
 import org.bitcoinppl.cove_core.UnsignedTransaction
+import org.bitcoinppl.cove_core.types.SentAndReceived
 import org.bitcoinppl.cove_core.types.TransactionDirection
 
 private const val SCROLL_THRESHOLD_INDEX = 5
 
 enum class TransactionType { SENT, RECEIVED }
+
+private enum class AmountPosition { PRIMARY, SECONDARY }
 
 /**
  * Displays the list of transactions with a header
@@ -298,31 +302,10 @@ internal fun TransactionItem(
                     )
                 }
 
-            val formattedAmount: String =
-                when (fiatOrBtc) {
-                    FiatOrBtc.BTC -> manager.rust.displaySentAndReceivedAmount(txn.v1.sentAndReceived())
-                    FiatOrBtc.FIAT -> {
-                        val fiatAmount = txn.v1.fiatAmount()
-                        if (fiatAmount != null) {
-                            manager.rust.displayFiatAmountWithDirection(fiatAmount.amount, direction)
-                        } else {
-                            "---"
-                        }
-                    }
-                }
-
-            val secondaryAmount: String =
-                when (fiatOrBtc) {
-                    FiatOrBtc.BTC -> {
-                        val fiatAmount = txn.v1.fiatAmount()
-                        if (fiatAmount != null) {
-                            manager.rust.displayFiatAmountWithDirection(fiatAmount.amount, direction)
-                        } else {
-                            "---"
-                        }
-                    }
-                    FiatOrBtc.FIAT -> manager.rust.displaySentAndReceivedAmount(txn.v1.sentAndReceived())
-                }
+            val formattedAmount =
+                formatAmountFor(fiatOrBtc, AmountPosition.PRIMARY, txn.v1.sentAndReceived(), txn.v1.fiatAmount(), direction, manager)
+            val secondaryAmount =
+                formatAmountFor(fiatOrBtc, AmountPosition.SECONDARY, txn.v1.sentAndReceived(), txn.v1.fiatAmount(), direction, manager)
 
             ConfirmedTransactionWidget(
                 type = txType,
@@ -360,31 +343,10 @@ internal fun TransactionItem(
                     )
                 }
 
-            val formattedAmount: String =
-                when (fiatOrBtc) {
-                    FiatOrBtc.BTC -> manager.rust.displaySentAndReceivedAmount(txn.v1.sentAndReceived())
-                    FiatOrBtc.FIAT -> {
-                        val fiatAmount = txn.v1.fiatAmount()
-                        if (fiatAmount != null) {
-                            manager.rust.displayFiatAmountWithDirection(fiatAmount.amount, direction)
-                        } else {
-                            "---"
-                        }
-                    }
-                }
-
-            val secondaryAmount: String =
-                when (fiatOrBtc) {
-                    FiatOrBtc.BTC -> {
-                        val fiatAmount = txn.v1.fiatAmount()
-                        if (fiatAmount != null) {
-                            manager.rust.displayFiatAmountWithDirection(fiatAmount.amount, direction)
-                        } else {
-                            "---"
-                        }
-                    }
-                    FiatOrBtc.FIAT -> manager.rust.displaySentAndReceivedAmount(txn.v1.sentAndReceived())
-                }
+            val formattedAmount =
+                formatAmountFor(fiatOrBtc, AmountPosition.PRIMARY, txn.v1.sentAndReceived(), txn.v1.fiatAmount(), direction, manager)
+            val secondaryAmount =
+                formatAmountFor(fiatOrBtc, AmountPosition.SECONDARY, txn.v1.sentAndReceived(), txn.v1.fiatAmount(), direction, manager)
 
             UnconfirmedTransactionWidget(
                 type = txType,
@@ -400,6 +362,27 @@ internal fun TransactionItem(
                 sensitiveVisible = sensitiveVisible,
             )
         }
+    }
+}
+
+private fun formatAmountFor(
+    fiatOrBtc: FiatOrBtc,
+    position: AmountPosition,
+    sentAndReceived: SentAndReceived,
+    fiatAmount: FiatAmount?,
+    direction: TransactionDirection,
+    manager: WalletManager,
+): String {
+    val showFiat =
+        when (position) {
+            AmountPosition.PRIMARY -> fiatOrBtc == FiatOrBtc.FIAT
+            AmountPosition.SECONDARY -> fiatOrBtc == FiatOrBtc.BTC
+        }
+
+    return if (showFiat) {
+        fiatAmount?.let { manager.rust.displayFiatAmountWithDirection(it.amount, direction) } ?: "---"
+    } else {
+        manager.rust.displaySentAndReceivedAmount(sentAndReceived)
     }
 }
 

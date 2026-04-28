@@ -513,8 +513,15 @@ struct HotWalletImportScreen: View {
                             return
                         }
 
-                        try? app.selectWalletOrThrow(walletId)
-                        app.resetRoute(to: .selectedWallet(walletId))
+                        do {
+                            try app.selectWalletOrThrow(walletId)
+                            app.resetRoute(to: .selectedWallet(walletId))
+                        } catch {
+                            app.alertState = TaggedItem(.general(
+                                title: "Unable to Select Wallet",
+                                message: error.localizedDescription
+                            ))
+                        }
                     }
                 }
             )

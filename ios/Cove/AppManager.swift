@@ -151,6 +151,10 @@ private let walletModeChangeDelayMs = 250
 
     /// Reset the manager state
     public func reset() {
+        pendingSidebarNavigationTask?.cancel()
+        pendingSidebarNavigationTask = nil
+        beginNavigationIntent()
+
         rust = FfiApp()
         database = Database()
         walletManager = nil
