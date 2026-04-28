@@ -1186,7 +1186,7 @@ impl RustCloudBackupManager {
     fn sync_health_from_local_failures(
         sync_states: &[PersistedCloudBlobSyncState],
     ) -> Option<CloudSyncHealth> {
-        sync_states.iter().find_map(|sync_state| {
+        if let Some(sync_health) = sync_states.iter().find_map(|sync_state| {
             let PersistedCloudBlobState::Failed(failed_state) = &sync_state.state else {
                 return None;
             };
@@ -1197,6 +1197,16 @@ impl RustCloudBackupManager {
                     failed_state,
                 )));
             }
+
+            None
+        }) {
+            return Some(sync_health);
+        }
+
+        sync_states.iter().find_map(|sync_state| {
+            let PersistedCloudBlobState::Failed(failed_state) = &sync_state.state else {
+                return None;
+            };
 
             Some(CloudSyncHealth::Failed(sync_health_failed_message(sync_state, failed_state)))
         })
@@ -1564,6 +1574,10 @@ impl RustCloudBackupManager {
     }
 
     pub fn cloud_storage_did_change(&self) {
+        self.clear_sync_error_if_no_failed_wallet_uploads();
+        send!(self.runtime.resume_wallet_uploads_from_persisted_state());
+        send!(self.runtime.wake_pending_upload_verifier());
+        self.start_pending_upload_verification_loop();
         self.refresh_sync_health();
     }
 
@@ -2040,6 +2054,48 @@ mod tests {
                 "authorization required".into()
             )),
             CloudStorageIssue::Other
+        );
+    }
+
+    #[test]
+    fn sync_health_from_local_failures_prefers_authorization_required() {
+        let generic_failure = PersistedCloudBlobSyncState {
+            kind: CloudUploadKind::BackupBlob,
+            namespace_id: "namespace".into(),
+            wallet_id: None,
+            record_id: "generic".into(),
+            state: PersistedCloudBlobState::Failed(
+                crate::database::cloud_backup::CloudBlobFailedState {
+                    revision_hash: None,
+                    retryable: true,
+                    error: "generic failure".into(),
+                    issue: None,
+                    failed_at: 1,
+                },
+            ),
+        };
+        let authorization_failure = PersistedCloudBlobSyncState {
+            kind: CloudUploadKind::BackupBlob,
+            namespace_id: "namespace".into(),
+            wallet_id: None,
+            record_id: "authorization".into(),
+            state: PersistedCloudBlobState::Failed(
+                crate::database::cloud_backup::CloudBlobFailedState {
+                    revision_hash: None,
+                    retryable: true,
+                    error: "authorization required".into(),
+                    issue: Some(CloudBlobFailureIssue::AuthorizationRequired),
+                    failed_at: 2,
+                },
+            ),
+        };
+
+        assert_eq!(
+            RustCloudBackupManager::sync_health_from_local_failures(&[
+                generic_failure,
+                authorization_failure
+            ]),
+            Some(CloudSyncHealth::AuthorizationRequired("authorization required".into())),
         );
     }
 
