@@ -54,19 +54,30 @@ class CloudBackupRegressionHelpersTest {
 
     @Test
     fun syncHealthRequiresUploadedBackupFiles() {
-        val hasUploadedBackupFiles: (List<String>) -> Boolean = { fileNames ->
-            fileNames.any { it == "master-key.json" || (it.startsWith("wallet-") && it.endsWith(".json")) }
+        val masterKeyFileName = "master-key.json"
+        val isWalletFile: (String) -> Boolean = { fileName ->
+            fileName.startsWith("wallet-") && fileName.endsWith(".json")
         }
-        val hasCompleteNamespaceBackup: (List<String>) -> Boolean = { fileNames ->
-            fileNames.contains("master-key.json")
+        val hasUploadedBackupFileNames: (List<String>) -> Boolean = { fileNames ->
+            hasUploadedBackupFiles(
+                fileNames = fileNames,
+                masterKeyFileName = masterKeyFileName,
+                isWalletFile = isWalletFile,
+            )
+        }
+        val hasMasterKeyBackupFile: (List<String>) -> Boolean = { fileNames ->
+            hasMasterKeyBackup(
+                fileNames = fileNames,
+                masterKeyFileName = masterKeyFileName,
+            )
         }
 
         assertEquals(
             CloudSyncHealth.NoFiles,
             syncHealthForNamespaceFiles(
                 namespaceFiles = emptyList(),
-                hasUploadedBackupFiles = hasUploadedBackupFiles,
-                hasCompleteNamespaceBackup = hasCompleteNamespaceBackup,
+                hasUploadedBackupFiles = hasUploadedBackupFileNames,
+                hasMasterKeyBackup = hasMasterKeyBackupFile,
             ),
         )
         assertEquals(
@@ -77,24 +88,24 @@ class CloudBackupRegressionHelpersTest {
                         emptyList(),
                         listOf("notes.txt", "placeholder"),
                     ),
-                hasUploadedBackupFiles = hasUploadedBackupFiles,
-                hasCompleteNamespaceBackup = hasCompleteNamespaceBackup,
+                hasUploadedBackupFiles = hasUploadedBackupFileNames,
+                hasMasterKeyBackup = hasMasterKeyBackupFile,
             ),
         )
         assertEquals(
             CloudSyncHealth.AllUploaded,
             syncHealthForNamespaceFiles(
-                namespaceFiles = listOf(listOf("master-key.json")),
-                hasUploadedBackupFiles = hasUploadedBackupFiles,
-                hasCompleteNamespaceBackup = hasCompleteNamespaceBackup,
+                namespaceFiles = listOf(listOf(masterKeyFileName)),
+                hasUploadedBackupFiles = hasUploadedBackupFileNames,
+                hasMasterKeyBackup = hasMasterKeyBackupFile,
             ),
         )
         assertEquals(
             CloudSyncHealth.Failed("cloud backup is incomplete"),
             syncHealthForNamespaceFiles(
                 namespaceFiles = listOf(listOf("wallet-wallet-record.json")),
-                hasUploadedBackupFiles = hasUploadedBackupFiles,
-                hasCompleteNamespaceBackup = hasCompleteNamespaceBackup,
+                hasUploadedBackupFiles = hasUploadedBackupFileNames,
+                hasMasterKeyBackup = hasMasterKeyBackupFile,
             ),
         )
     }

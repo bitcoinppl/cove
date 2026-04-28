@@ -25,19 +25,39 @@ import org.json.JSONObject
 internal fun syncHealthForNamespaceFiles(
     namespaceFiles: List<List<String>>,
     hasUploadedBackupFiles: (List<String>) -> Boolean,
-    hasCompleteNamespaceBackup: (List<String>) -> Boolean,
+    hasMasterKeyBackup: (List<String>) -> Boolean,
 ): CloudSyncHealth =
     when {
         namespaceFiles.none(hasUploadedBackupFiles) -> CloudSyncHealth.NoFiles
-        namespaceFiles.all(hasCompleteNamespaceBackup) -> CloudSyncHealth.AllUploaded
+        namespaceFiles.all(hasMasterKeyBackup) -> CloudSyncHealth.AllUploaded
         else -> CloudSyncHealth.Failed("cloud backup is incomplete")
     }
 
 internal fun hasUploadedBackupFiles(fileNames: List<String>): Boolean =
-    fileNames.any { it == DrivePaths.masterKeyFileName || DrivePaths.isWalletFile(it) }
+    hasUploadedBackupFiles(
+        fileNames = fileNames,
+        masterKeyFileName = DrivePaths.masterKeyFileName,
+        isWalletFile = DrivePaths::isWalletFile,
+    )
 
-internal fun hasCompleteNamespaceBackup(fileNames: List<String>): Boolean =
-    fileNames.contains(DrivePaths.masterKeyFileName)
+internal fun hasUploadedBackupFiles(
+    fileNames: List<String>,
+    masterKeyFileName: String,
+    isWalletFile: (String) -> Boolean,
+): Boolean =
+    fileNames.any { it == masterKeyFileName || isWalletFile(it) }
+
+internal fun hasMasterKeyBackup(fileNames: List<String>): Boolean =
+    hasMasterKeyBackup(
+        fileNames = fileNames,
+        masterKeyFileName = DrivePaths.masterKeyFileName,
+    )
+
+internal fun hasMasterKeyBackup(
+    fileNames: List<String>,
+    masterKeyFileName: String,
+): Boolean =
+    fileNames.contains(masterKeyFileName)
 
 internal fun driveFileNameForRecordId(recordId: String): String =
     driveFileNameForRecordId(
@@ -363,7 +383,7 @@ class AndroidCloudStorageAccess internal constructor(
                 syncHealthForNamespaceFiles(
                     namespaceFiles = namespaceFiles,
                     hasUploadedBackupFiles = ::hasUploadedBackupFiles,
-                    hasCompleteNamespaceBackup = ::hasCompleteNamespaceBackup,
+                    hasMasterKeyBackup = ::hasMasterKeyBackup,
                 )
             }
         } catch (error: Throwable) {
