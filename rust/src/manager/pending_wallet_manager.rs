@@ -199,15 +199,21 @@ impl From<crate::wallet::WalletError> for WalletCreationError {
                 Self::Import(format!("wallet already exists: {id}"))
             }
 
-            WalletError::WalletNotFound => Self::Import("wallet not found".to_string()),
-            WalletError::LoadError(error) => Self::Import(error),
-            WalletError::MetadataNotFound => Self::Import("wallet metadata not found".to_string()),
+            WalletError::WalletNotFound => {
+                Self::Import("unexpected wallet not found during creation".to_string())
+            }
+            WalletError::LoadError(error) => {
+                Self::Import(format!("unexpected load error during creation: {error}"))
+            }
+            WalletError::MetadataNotFound => {
+                Self::Import("unexpected wallet metadata not found during creation".to_string())
+            }
             WalletError::UnsupportedWallet(error) => {
-                Self::Import(format!("unsupported wallet: {error}"))
+                Self::Import(format!("unexpected unsupported wallet during creation: {error}"))
             }
-            WalletError::DescriptorKeyParseError(error) => {
-                Self::Import(format!("descriptor key parse error: {error}"))
-            }
+            WalletError::DescriptorKeyParseError(error) => Self::Import(format!(
+                "unexpected descriptor key parse error during creation: {error}"
+            )),
         }
     }
 }
