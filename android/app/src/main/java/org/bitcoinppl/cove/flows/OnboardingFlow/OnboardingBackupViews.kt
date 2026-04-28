@@ -69,7 +69,6 @@ import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.OnboardingManager
 import org.bitcoinppl.cove.QrCodeGenerator
 import org.bitcoinppl.cove.ScreenSecurity
-import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
 import org.bitcoinppl.cove.findActivity
 import org.bitcoinppl.cove.ui.theme.CoveColor
@@ -874,7 +873,9 @@ internal fun OnboardingRestoreView(
 
     DisposableEffect(Unit) {
         onDispose {
-            backupManager.dispatch(CloudBackupManagerAction.CancelRestore)
+            if (backupManager.status is CloudBackupStatus.Restoring) {
+                backupManager.dispatch(CloudBackupManagerAction.CancelRestore)
+            }
         }
     }
 
@@ -1031,13 +1032,11 @@ internal fun OnboardingExchangeFundingView(
 ) {
     val walletId = manager.currentWalletId()
     val clipboard = LocalContext.current.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    var walletManager by remember(walletId) { mutableStateOf<WalletManager?>(null) }
     var addressRaw by remember { mutableStateOf<String?>(null) }
     var addressText by remember { mutableStateOf<String?>(null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(walletId) {
-        walletManager = null
         addressRaw = null
         addressText = null
         errorMessage = null
@@ -1049,7 +1048,6 @@ internal fun OnboardingExchangeFundingView(
 
         try {
             val currentWalletManager = app.getWalletManager(walletId)
-            walletManager = currentWalletManager
             currentWalletManager.firstAddress().use { addressInfo ->
                 addressRaw = addressInfo.addressUnformatted()
                 addressText =

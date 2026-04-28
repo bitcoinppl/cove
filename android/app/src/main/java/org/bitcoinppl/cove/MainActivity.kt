@@ -194,7 +194,9 @@ class MainActivity : FragmentActivity() {
     }
 
     override fun onDestroy() {
-        ForegroundUiBridge.detach(this)
+        if (isFinishing && !isChangingConfigurations) {
+            ForegroundUiBridge.detach(this)
+        }
         super.onDestroy()
     }
 
@@ -338,21 +340,35 @@ class MainActivity : FragmentActivity() {
             val app = remember { AppManager.getInstance() }
             val auth = remember { AuthManager.getInstance() }
             val snackbarHostState = remember { SnackbarHostState() }
-            val persistedOnboardingProgress =
+            val cloudBackupStatus = app.cloudBackupManager.state.status
+            val hasWallets = app.wallets.isNotEmpty() || app.hasWallets
+            val readPersistedOnboardingProgress = {
                 runCatching {
                     Database().globalConfig().get(GlobalConfigKey.OnboardingProgress)
                 }.onFailure { error ->
                     Log.w(TAG, "[STARTUP] failed to read persisted onboarding progress before routing", error)
                 }.getOrNull()
+            }
+            var persistedOnboardingProgress by remember { mutableStateOf(readPersistedOnboardingProgress()) }
             var startupMode by remember {
                 mutableStateOf(
                     resolveStartupMode(
                         termsAccepted = app.isTermsAccepted,
-                        hasWallets = app.hasWallets,
-                        cloudBackupStatus = app.cloudBackupManager.rust.state().status,
+                        hasWallets = hasWallets,
+                        cloudBackupStatus = cloudBackupStatus,
                         hasPersistedOnboardingProgress = hasPersistedOnboardingProgress(persistedOnboardingProgress),
                     ),
                 )
+            }
+            LaunchedEffect(app.isTermsAccepted, hasWallets, cloudBackupStatus, persistedOnboardingProgress) {
+                persistedOnboardingProgress = readPersistedOnboardingProgress()
+                startupMode =
+                    resolveStartupMode(
+                        termsAccepted = app.isTermsAccepted,
+                        hasWallets = hasWallets,
+                        cloudBackupStatus = cloudBackupStatus,
+                        hasPersistedOnboardingProgress = hasPersistedOnboardingProgress(persistedOnboardingProgress),
+                    )
             }
             val onboardingManager =
                 remember(startupMode) {

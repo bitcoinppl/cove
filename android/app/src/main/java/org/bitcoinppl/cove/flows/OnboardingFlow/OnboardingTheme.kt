@@ -307,7 +307,15 @@ internal fun OnboardingPrimaryButton(
                     .clip(RoundedCornerShape(16.dp))
                     .background(
                         Brush.horizontalGradient(
-                            colors = listOf(OnboardingGradientLight, OnboardingGradientDark),
+                            colors =
+                                if (enabled) {
+                                    listOf(OnboardingGradientLight, OnboardingGradientDark)
+                                } else {
+                                    listOf(
+                                        OnboardingGradientLight.copy(alpha = 0.24f),
+                                        OnboardingGradientDark.copy(alpha = 0.24f),
+                                    )
+                                },
                         ),
                     )
                     .padding(vertical = 18.dp, horizontal = 18.dp),
