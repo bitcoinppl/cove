@@ -10,8 +10,7 @@ use tracing::info;
 use zeroize::Zeroizing;
 
 use super::super::{
-    CloudBackupError, EXPLICIT_CLOUD_ACCESS, PASSKEY_RP_ID, RustCloudBackupManager,
-    cspp_master_key_record_id,
+    CloudBackupError, PASSKEY_RP_ID, RustCloudBackupManager, cspp_master_key_record_id,
 };
 use crate::manager::cloud_backup_manager::wallets::{
     WalletBackupLookup, WalletBackupReader, create_prf_key_without_persisting,
@@ -75,7 +74,6 @@ impl LocalKeyVerifier {
             self.cloud.clone(),
             self.namespace.clone(),
             Zeroizing::new(master_key.critical_data_key()),
-            EXPLICIT_CLOUD_ACCESS,
         );
         let mut had_wrong_key = false;
         let mut verified = false;
@@ -159,7 +157,7 @@ impl WrapperRepairOperation {
             .map_err(WrapperRepairError::Operation)?;
 
         self.cloud
-            .upload_master_key_backup(self.namespace.clone(), backup_json, EXPLICIT_CLOUD_ACCESS)
+            .upload_master_key_backup(self.namespace.clone(), backup_json)
             .await
             .map_err(CloudBackupError::CloudStorage)
             .map_err(WrapperRepairError::Operation)?;

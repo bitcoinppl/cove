@@ -15,9 +15,7 @@ use tracing::info;
 use zeroize::Zeroizing;
 
 use super::super::ops::load_master_key_for_cloud_action;
-use super::super::{
-    CloudBackupError, EXPLICIT_CLOUD_ACCESS, RustCloudBackupManager, SILENT_CLOUD_ACCESS,
-};
+use super::super::{CloudBackupError, RustCloudBackupManager};
 use super::{
     PreparedWalletBackup, UPLOAD_WALLET_RECOVERY_MESSAGE, all_local_wallets,
     persist_enabled_cloud_backup_state, prepare_wallet_backup,
@@ -75,7 +73,7 @@ impl RustCloudBackupManager {
         let critical_key = Zeroizing::new(master_key.critical_data_key());
         let cloud = CloudStorage::global_explicit_client();
         let existing_cloud_record_ids = cloud
-            .list_wallet_backups(namespace.clone(), EXPLICIT_CLOUD_ACCESS)
+            .list_wallet_backups(namespace.clone())
             .await
             .ok()
             .map(|record_ids| record_ids.into_iter().collect::<HashSet<_>>());
@@ -96,12 +94,7 @@ impl RustCloudBackupManager {
                 serde_json::to_vec(&encrypted).map_err_str(CloudBackupError::Internal)?;
 
             cloud
-                .upload_wallet_backup(
-                    namespace.clone(),
-                    prepared.record_id.clone(),
-                    wallet_json,
-                    EXPLICIT_CLOUD_ACCESS,
-                )
+                .upload_wallet_backup(namespace.clone(), prepared.record_id.clone(), wallet_json)
                 .await
                 .map_err(CloudBackupError::CloudStorage)?;
 
@@ -144,7 +137,7 @@ impl RustCloudBackupManager {
             });
 
         let listed_wallet_count = cloud
-            .list_wallet_backups(namespace, EXPLICIT_CLOUD_ACCESS)
+            .list_wallet_backups(namespace)
             .await
             .ok()
             .map(|record_ids| record_ids.len() as u32);
@@ -234,14 +227,8 @@ impl RustCloudBackupManager {
             return Ok(());
         }
 
-        if let Err(error) = cloud
-            .upload_wallet_backup(
-                namespace.clone(),
-                record_id.clone(),
-                wallet_json,
-                SILENT_CLOUD_ACCESS,
-            )
-            .await
+        if let Err(error) =
+            cloud.upload_wallet_backup(namespace.clone(), record_id.clone(), wallet_json).await
         {
             return self.handle_dirty_wallet_upload_cloud_error(
                 &uploading_state,
@@ -449,12 +436,7 @@ pub async fn upload_all_wallets(
         let wallet_json = serde_json::to_vec(&encrypted).map_err_str(CloudBackupError::Internal)?;
 
         cloud
-            .upload_wallet_backup(
-                namespace.to_string(),
-                prepared.record_id.clone(),
-                wallet_json,
-                EXPLICIT_CLOUD_ACCESS,
-            )
+            .upload_wallet_backup(namespace.to_string(), prepared.record_id.clone(), wallet_json)
             .await
             .map_err(CloudBackupError::CloudStorage)?;
 
