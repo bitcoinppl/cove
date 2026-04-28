@@ -2,6 +2,7 @@ package org.bitcoinppl.cove.cloudbackup
 
 import android.app.Activity
 import android.content.Context
+import android.content.Intent
 import androidx.activity.result.IntentSenderRequest
 import com.google.android.gms.auth.api.identity.AuthorizationRequest
 import com.google.android.gms.auth.api.identity.AuthorizationResult
@@ -37,7 +38,7 @@ internal class DriveAuthorizationHelper(
 
         val resolved = resolveIfNeeded(authorizationResult, interactive)
         return resolved.accessToken?.takeIf { it.isNotBlank() }
-            ?: throw ApiException(com.google.android.gms.common.api.Status.RESULT_INTERNAL_ERROR)
+            ?: throw IllegalStateException("drive authorization succeeded but returned a blank access token")
     }
 
     override suspend fun clearToken(token: String) {
@@ -76,8 +77,7 @@ internal class DriveAuthorizationHelper(
         }
 
         val resultIntent =
-            activityResult.data
-                ?: throw AuthorizationRequiredException("authorization result is missing data")
+            activityResult.data ?: Intent()
 
         return client.getAuthorizationResultFromIntent(resultIntent)
     }

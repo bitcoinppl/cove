@@ -15,6 +15,7 @@ import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.credentials.exceptions.GetCredentialException
 import androidx.credentials.exceptions.GetCredentialUnsupportedException
 import androidx.credentials.exceptions.NoCredentialException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove_core.device.DiscoveredPasskeyResult
@@ -57,6 +58,7 @@ class AndroidPasskeyProvider(
                 validatePasskeyRegistrationPrf(registration.registrationResponseJson)
                 extractCredentialId(registration.registrationResponseJson)
             } catch (error: Exception) {
+                if (error is CancellationException) throw error
                 throw mapPasskeyCreateError(error)
             }
         }
@@ -87,6 +89,7 @@ class AndroidPasskeyProvider(
 
                 extractPrfOutput(credential.authenticationResponseJson)
             } catch (error: Exception) {
+                if (error is CancellationException) throw error
                 throw mapPasskeyGetError(error)
             }
         }
@@ -119,11 +122,13 @@ class AndroidPasskeyProvider(
                     credentialId = extractCredentialId(credential.authenticationResponseJson),
                 )
             } catch (error: Exception) {
+                if (error is CancellationException) throw error
                 throw mapPasskeyGetError(error)
             }
         }
     }
 
+    // prf support is verified lazily when registration and authentication responses are parsed
     override fun isPrfSupported(): Boolean = true
 
     override fun checkPasskeyPresence(
@@ -143,6 +148,7 @@ class AndroidPasskeyProvider(
                 )
                 PasskeyCredentialPresence.PRESENT
             } catch (error: Exception) {
+                if (error is CancellationException) throw error
                 when (error) {
                     is NoCredentialException -> PasskeyCredentialPresence.MISSING
                     else -> {

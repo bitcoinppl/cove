@@ -10,6 +10,7 @@ import java.net.HttpURLConnection
 import java.net.SocketTimeoutException
 import java.net.URL
 import java.net.UnknownHostException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.Log
@@ -28,7 +29,7 @@ internal fun syncHealthForNamespaceFiles(
 ): CloudSyncHealth =
     when {
         namespaceFiles.none(hasUploadedBackupFiles) -> CloudSyncHealth.NoFiles
-        namespaceFiles.any(hasCompleteNamespaceBackup) -> CloudSyncHealth.AllUploaded
+        namespaceFiles.all(hasCompleteNamespaceBackup) -> CloudSyncHealth.AllUploaded
         else -> CloudSyncHealth.Failed("cloud backup is incomplete")
     }
 
@@ -297,7 +298,7 @@ class AndroidCloudStorageAccess internal constructor(
                 findChildByName(
                     token = token,
                     parentId = namespaceFolderId,
-                    fileName = driveFileNameForRecordId(recordId),
+                    fileName = DrivePaths.walletFileName(recordId),
                 ) ?: throw DriveHttpException(404, "wallet backup not found")
 
             driveRequest(
@@ -367,6 +368,7 @@ class AndroidCloudStorageAccess internal constructor(
                 )
             }
         } catch (error: Throwable) {
+            if (error is CancellationException) throw error
             when (mapDriveListError(error)) {
                 is CloudStorageException.AuthorizationRequired -> CloudSyncHealth.AuthorizationRequired
                 is CloudStorageException.Offline -> CloudSyncHealth.Failed("offline")
@@ -611,12 +613,14 @@ class AndroidCloudStorageAccess internal constructor(
             try {
                 driveAuthorization.accessToken(interactive)
             } catch (error: Throwable) {
+                if (error is CancellationException) throw error
                 throw onError(error)
             }
 
         try {
             return block(firstToken)
         } catch (error: Throwable) {
+            if (error is CancellationException) throw error
             if (error is DriveHttpException && error.statusCode == HttpURLConnection.HTTP_UNAUTHORIZED) {
                 runCatching {
                     driveAuthorization.clearToken(firstToken)
@@ -628,12 +632,14 @@ class AndroidCloudStorageAccess internal constructor(
                     try {
                         driveAuthorization.accessToken(interactive)
                     } catch (retryTokenError: Throwable) {
+                        if (retryTokenError is CancellationException) throw retryTokenError
                         throw onError(retryTokenError)
                     }
 
                 try {
                     return block(retryToken)
                 } catch (retryError: Throwable) {
+                    if (retryError is CancellationException) throw retryError
                     throw onError(retryError)
                 }
             }

@@ -16,27 +16,30 @@ object ForegroundUiBridge {
     private const val FOREGROUND_ACTIVITY_TIMEOUT_MS = 30_000L
 
     private val currentActivity = MutableStateFlow<FragmentActivity?>(null)
+    private val authorizationLock = Any()
 
-    @Volatile
     private var authorizationLauncher: ActivityResultLauncher<IntentSenderRequest>? = null
 
-    @Volatile
     private var pendingAuthorizationResult: CompletableDeferred<ActivityResult>? = null
 
     fun attach(
         activity: FragmentActivity,
         launcher: ActivityResultLauncher<IntentSenderRequest>,
     ) {
-        currentActivity.value = activity
-        authorizationLauncher = launcher
+        synchronized(authorizationLock) {
+            currentActivity.value = activity
+            authorizationLauncher = launcher
+        }
     }
 
     fun detach(activity: FragmentActivity) {
-        if (currentActivity.value === activity) {
-            currentActivity.value = null
-            pendingAuthorizationResult?.cancel()
-            pendingAuthorizationResult = null
-            authorizationLauncher = null
+        synchronized(authorizationLock) {
+            if (currentActivity.value === activity) {
+                currentActivity.value = null
+                pendingAuthorizationResult?.cancel()
+                pendingAuthorizationResult = null
+                authorizationLauncher = null
+            }
         }
     }
 
@@ -53,22 +56,19 @@ object ForegroundUiBridge {
         request: IntentSenderRequest,
     ): ActivityResult {
         val deferred = CompletableDeferred<ActivityResult>()
-        val launcher = authorizationLauncher ?: error("authorization launcher is not attached")
-
-        synchronized(this) {
+        synchronized(authorizationLock) {
+            val launcher = authorizationLauncher ?: error("authorization launcher is not attached")
             check(pendingAuthorizationResult == null) {
                 "another authorization flow is already in progress"
             }
             pendingAuthorizationResult = deferred
+            launcher.launch(request)
         }
 
         return try {
-            withContext(Dispatchers.Main.immediate) {
-                launcher.launch(request)
-            }
             deferred.await()
         } finally {
-            synchronized(this) {
+            synchronized(authorizationLock) {
                 if (pendingAuthorizationResult === deferred) {
                     pendingAuthorizationResult = null
                 }
@@ -77,7 +77,7 @@ object ForegroundUiBridge {
     }
 
     fun handleAuthorizationResult(result: ActivityResult) {
-        synchronized(this) {
+        synchronized(authorizationLock) {
             pendingAuthorizationResult?.complete(result)
             pendingAuthorizationResult = null
         }

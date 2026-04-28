@@ -47,8 +47,7 @@ use self::prompt::CloudBackupPromptState;
 use self::runtime_actor::{CloudBackupOperation, CloudBackupRuntimeActor, RestoreOperation};
 use self::wallets::wallet_metadata_change_requires_upload;
 use self::wallets::{
-    UnpersistedPrfKey, WalletBackupLookup, WalletBackupReader, all_local_wallets,
-    count_all_wallets, prepare_wallet_backup,
+    UnpersistedPrfKey, WalletBackupLookup, WalletBackupReader, all_local_wallets, count_all_wallets,
 };
 use super::cloud_backup_detail_manager::{
     CloudOnlyOperation, CloudOnlyState, RecoveryState, SyncState, VerificationState,
@@ -1156,7 +1155,7 @@ impl RustCloudBackupManager {
                 return CloudSyncHealth::NoFiles;
             }
 
-            if master_key_uploaded && !remote_wallet_record_ids.is_empty() {
+            if master_key_uploaded {
                 return CloudSyncHealth::AllUploaded;
             }
 
@@ -1189,15 +1188,14 @@ impl RustCloudBackupManager {
 
     async fn expected_wallet_record_ids(&self) -> Result<HashSet<String>, CloudBackupError> {
         let local_wallets = all_local_wallets(&Database::global())?;
-        let record_ids = stream::iter(local_wallets)
-            .map(|wallet| async move {
-                prepare_wallet_backup(&wallet, wallet.wallet_mode)
-                    .await
-                    .map(|prepared| prepared.record_id)
-            })
-            .buffered(CLOUD_BACKUP_IO_CONCURRENCY)
-            .try_collect::<Vec<_>>()
-            .await?;
+        let record_ids =
+            stream::iter(local_wallets)
+                .map(|wallet| async move {
+                    Ok::<_, CloudBackupError>(wallet_record_id(wallet.id.as_ref()))
+                })
+                .buffered(CLOUD_BACKUP_IO_CONCURRENCY)
+                .try_collect::<Vec<_>>()
+                .await?;
 
         Ok(record_ids.into_iter().collect())
     }
@@ -1231,7 +1229,7 @@ impl RustCloudBackupManager {
             CloudStorageError::NotAvailable(_) => CloudSyncHealth::Unavailable,
             CloudStorageError::Offline(message) => CloudSyncHealth::Failed(message),
             CloudStorageError::QuotaExceeded => {
-                CloudSyncHealth::Failed("google drive storage quota was exceeded".into())
+                CloudSyncHealth::Failed("cloud storage quota was exceeded".into())
             }
             CloudStorageError::UploadFailed(message)
             | CloudStorageError::DownloadFailed(message)
