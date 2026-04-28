@@ -5,7 +5,6 @@ use rand::RngExt as _;
 use tracing::info;
 
 use super::super::{CloudBackupError, PASSKEY_RP_ID};
-use super::load_stored_credential_id;
 use super::session::VerificationSession;
 
 #[derive(Debug, PartialEq)]
@@ -29,87 +28,161 @@ pub(super) enum PasskeyAuthPolicy {
     DiscoverOnly,
 }
 
-pub(super) async fn authenticate_with_policy(
-    keychain: &Keychain,
-    passkey: &PasskeyAccess,
-    prf_salt: &[u8; 32],
-    policy: PasskeyAuthPolicy,
-) -> Result<PasskeyAuthOutcome, CloudBackupError> {
-    if matches!(policy, PasskeyAuthPolicy::StoredOnly | PasskeyAuthPolicy::StoredThenDiscover) {
-        if let Some(ref credential_id) = load_stored_credential_id(keychain) {
-            let passkey = passkey.clone();
-            let credential_id = credential_id.clone();
-            let auth_credential_id = credential_id.clone();
-            let prf_salt = *prf_salt;
-            let auth_result = unblock::run_blocking(move || {
-                passkey.authenticate_with_prf(
-                    PASSKEY_RP_ID.to_string(),
-                    auth_credential_id,
-                    prf_salt.to_vec(),
-                    rand::rng().random::<[u8; 32]>().to_vec(),
-                )
-            })
-            .await;
+enum StoredPasskeyAuthOutcome {
+    Authenticated(AuthenticatedPasskey),
+    UserCancelled,
+    Failed(PasskeyError),
+    NoCredentialFound,
+}
 
-            match auth_result {
-                Ok(prf_output) => {
-                    let prf_key: [u8; 32] = prf_output.try_into().map_err(|_| {
-                        CloudBackupError::Internal("PRF output is not 32 bytes".into())
-                    })?;
+/// Authenticates backup passkeys against the PRF salt from a master-key backup
+pub(super) struct PasskeyAuthenticator {
+    keychain: Keychain,
+    passkey: PasskeyAccess,
+}
 
-                    return Ok(PasskeyAuthOutcome::Authenticated(AuthenticatedPasskey {
-                        prf_key,
-                        credential_id,
-                        credential_recovered: false,
-                    }));
-                }
-                Err(PasskeyError::UserCancelled) => {
-                    return Ok(PasskeyAuthOutcome::UserCancelled);
-                }
-                Err(error) => {
-                    info!("Stored credential auth failed ({error})");
-                    if matches!(policy, PasskeyAuthPolicy::StoredOnly) {
-                        return Ok(PasskeyAuthOutcome::NoCredentialFound);
-                    }
+impl PasskeyAuthenticator {
+    /// Builds an authenticator from cheap device-service handles
+    pub(super) fn new(keychain: &Keychain, passkey: &PasskeyAccess) -> Self {
+        Self { keychain: keychain.clone(), passkey: passkey.clone() }
+    }
 
-                    info!("Trying discovery after stored credential auth failed");
-                }
+    /// Authenticates according to the caller's stored/discoverable credential policy
+    pub(super) async fn authenticate_with_policy(
+        &self,
+        prf_salt: &[u8; 32],
+        policy: PasskeyAuthPolicy,
+    ) -> Result<PasskeyAuthOutcome, CloudBackupError> {
+        match policy {
+            PasskeyAuthPolicy::StoredOnly => self.authenticate_stored_only(prf_salt).await,
+            PasskeyAuthPolicy::DiscoverOnly => self.authenticate_by_discovery(prf_salt).await,
+
+            PasskeyAuthPolicy::StoredThenDiscover => {
+                self.authenticate_stored_then_discover(prf_salt).await
             }
-        } else if matches!(policy, PasskeyAuthPolicy::StoredOnly) {
-            return Ok(PasskeyAuthOutcome::NoCredentialFound);
         }
     }
 
-    if matches!(policy, PasskeyAuthPolicy::StoredOnly) {
-        return Ok(PasskeyAuthOutcome::NoCredentialFound);
+    async fn authenticate_stored_only(
+        &self,
+        prf_salt: &[u8; 32],
+    ) -> Result<PasskeyAuthOutcome, CloudBackupError> {
+        // try the known credential first so normal restores do not show an account picker
+        let stored_outcome = self.authenticate_by_stored_credential(prf_salt).await?;
+        match stored_outcome {
+            StoredPasskeyAuthOutcome::Authenticated(authenticated) => {
+                Ok(PasskeyAuthOutcome::Authenticated(authenticated))
+            }
+
+            StoredPasskeyAuthOutcome::UserCancelled => Ok(PasskeyAuthOutcome::UserCancelled),
+
+            StoredPasskeyAuthOutcome::NoCredentialFound => {
+                Ok(PasskeyAuthOutcome::NoCredentialFound)
+            }
+
+            StoredPasskeyAuthOutcome::Failed(error) => {
+                info!("Stored credential auth failed ({error})");
+                Ok(PasskeyAuthOutcome::NoCredentialFound)
+            }
+        }
     }
 
-    let passkey = passkey.clone();
-    let prf_salt = *prf_salt;
-    let discovered_result = unblock::run_blocking(move || {
-        passkey.discover_and_authenticate_with_prf(
-            PASSKEY_RP_ID.to_string(),
-            prf_salt.to_vec(),
-            rand::rng().random::<[u8; 32]>().to_vec(),
-        )
-    })
-    .await;
+    async fn authenticate_stored_then_discover(
+        &self,
+        prf_salt: &[u8; 32],
+    ) -> Result<PasskeyAuthOutcome, CloudBackupError> {
+        // try the known credential first so normal restores do not show an account picker
+        let stored_outcome = self.authenticate_by_stored_credential(prf_salt).await?;
+        match stored_outcome {
+            StoredPasskeyAuthOutcome::Authenticated(authenticated) => {
+                Ok(PasskeyAuthOutcome::Authenticated(authenticated))
+            }
 
-    let discovered = match discovered_result {
-        Ok(discovered) => discovered,
-        Err(error) => return map_discovery_error(error),
-    };
+            StoredPasskeyAuthOutcome::UserCancelled => Ok(PasskeyAuthOutcome::UserCancelled),
 
-    let prf_key: [u8; 32] = discovered
-        .prf_output
-        .try_into()
-        .map_err(|_| CloudBackupError::Internal("PRF output is not 32 bytes".into()))?;
+            // stored-then-discover falls back when the stored credential is missing
+            StoredPasskeyAuthOutcome::NoCredentialFound => {
+                info!("Trying discovery after stored credential auth failed");
+                self.authenticate_by_discovery(prf_salt).await
+            }
 
-    Ok(PasskeyAuthOutcome::Authenticated(AuthenticatedPasskey {
-        prf_key,
-        credential_id: discovered.credential_id,
-        credential_recovered: true,
-    }))
+            StoredPasskeyAuthOutcome::Failed(error) => {
+                info!("Stored credential auth failed ({error})");
+                info!("Trying discovery after stored credential auth failed");
+                self.authenticate_by_discovery(prf_salt).await
+            }
+        }
+    }
+
+    async fn authenticate_by_stored_credential(
+        &self,
+        prf_salt: &[u8; 32],
+    ) -> Result<StoredPasskeyAuthOutcome, CloudBackupError> {
+        let Some(credential_id) = self.keychain.load_cspp_credential_id() else {
+            return Ok(StoredPasskeyAuthOutcome::NoCredentialFound);
+        };
+
+        let passkey = self.passkey.clone();
+        let auth_credential_id = credential_id.clone();
+        let prf_salt = *prf_salt;
+        let auth_result = unblock::run_blocking(move || {
+            passkey.authenticate_with_prf(
+                PASSKEY_RP_ID.to_string(),
+                auth_credential_id,
+                prf_salt.to_vec(),
+                rand::rng().random::<[u8; 32]>().to_vec(),
+            )
+        })
+        .await;
+
+        let prf_output = match auth_result {
+            Ok(prf_output) => prf_output,
+            Err(PasskeyError::UserCancelled) => return Ok(StoredPasskeyAuthOutcome::UserCancelled),
+            Err(error) => return Ok(StoredPasskeyAuthOutcome::Failed(error)),
+        };
+
+        let prf_key: [u8; 32] = prf_output
+            .try_into()
+            .map_err(|_| CloudBackupError::Internal("PRF output is not 32 bytes".into()))?;
+
+        Ok(StoredPasskeyAuthOutcome::Authenticated(AuthenticatedPasskey {
+            prf_key,
+            credential_id,
+            credential_recovered: false,
+        }))
+    }
+
+    async fn authenticate_by_discovery(
+        &self,
+        prf_salt: &[u8; 32],
+    ) -> Result<PasskeyAuthOutcome, CloudBackupError> {
+        let passkey = self.passkey.clone();
+        let prf_salt = *prf_salt;
+        let discovered_result = unblock::run_blocking(move || {
+            passkey.discover_and_authenticate_with_prf(
+                PASSKEY_RP_ID.to_string(),
+                prf_salt.to_vec(),
+                rand::rng().random::<[u8; 32]>().to_vec(),
+            )
+        })
+        .await;
+
+        let discovered = match discovered_result {
+            Ok(discovered) => discovered,
+            Err(error) => return map_discovery_error(error),
+        };
+
+        let prf_key: [u8; 32] = discovered
+            .prf_output
+            .try_into()
+            .map_err(|_| CloudBackupError::Internal("PRF output is not 32 bytes".into()))?;
+
+        Ok(PasskeyAuthOutcome::Authenticated(AuthenticatedPasskey {
+            prf_key,
+            credential_id: discovered.credential_id,
+            credential_recovered: true,
+        }))
+    }
 }
 
 impl VerificationSession {
@@ -123,7 +196,9 @@ impl VerificationSession {
             PasskeyAuthPolicy::StoredThenDiscover
         };
 
-        authenticate_with_policy(&self.keychain, &self.passkey, prf_salt, policy).await
+        PasskeyAuthenticator::new(&self.keychain, &self.passkey)
+            .authenticate_with_policy(prf_salt, policy)
+            .await
     }
 }
 

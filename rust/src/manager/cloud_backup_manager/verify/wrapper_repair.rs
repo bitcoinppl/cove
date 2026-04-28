@@ -13,8 +13,7 @@ use super::super::{
     CloudBackupError, PASSKEY_RP_ID, RustCloudBackupManager, cspp_master_key_record_id,
 };
 use crate::manager::cloud_backup_manager::wallets::{
-    WalletBackupLookup, WalletBackupReader, create_prf_key_without_persisting,
-    discover_or_create_prf_key_without_persisting,
+    PasskeyMaterialAcquirer, WalletBackupLookup, WalletBackupReader,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -45,6 +44,7 @@ impl WrapperRepairError {
     }
 }
 
+/// Chooses how wrapper repair should acquire passkey material
 #[derive(Debug)]
 pub(super) enum WrapperRepairStrategy {
     CreateNew,
@@ -109,6 +109,7 @@ impl LocalKeyVerifier {
     }
 }
 
+/// Repairs the cloud master-key wrapper after proving the local master key is valid
 pub(super) struct WrapperRepairOperation {
     manager: RustCloudBackupManager,
     keychain: Keychain,
@@ -134,6 +135,7 @@ impl WrapperRepairOperation {
         }
     }
 
+    /// Verifies the local key, uploads a repaired wrapper, then persists the selected credential
     pub(super) async fn run(
         &self,
         local_master_key: &MasterKey,
@@ -144,6 +146,7 @@ impl WrapperRepairOperation {
 
         let credentials =
             self.credentials(strategy).await.map_err(WrapperRepairError::Operation)?;
+
         let encrypted_backup = master_key_crypto::encrypt_master_key(
             local_master_key,
             &credentials.prf_key,
@@ -166,6 +169,7 @@ impl WrapperRepairOperation {
             .save_cspp_passkey(&credentials.credential_id, credentials.prf_salt)
             .map_err_prefix("save cspp credentials", CloudBackupError::Internal)
             .map_err(WrapperRepairError::Operation)?;
+
         self.manager
             .mark_blob_uploaded_pending_confirmation(
                 self.namespace.as_str(),
@@ -202,7 +206,8 @@ impl WrapperRepairOperation {
     ) -> Result<WrapperRepairCredentials, CloudBackupError> {
         match strategy {
             WrapperRepairStrategy::CreateNew => {
-                let new_prf = create_prf_key_without_persisting(&self.passkey).await?;
+                let new_prf =
+                    PasskeyMaterialAcquirer::new(&self.passkey).create_for_wrapper_repair().await?;
 
                 Ok(WrapperRepairCredentials {
                     prf_key: new_prf.prf_key,
@@ -210,8 +215,11 @@ impl WrapperRepairOperation {
                     credential_id: new_prf.credential_id.clone(),
                 })
             }
+
             WrapperRepairStrategy::DiscoverOrCreate => {
-                let passkey = discover_or_create_prf_key_without_persisting(&self.passkey).await?;
+                let passkey = PasskeyMaterialAcquirer::new(&self.passkey)
+                    .discover_or_create_for_wrapper_repair()
+                    .await?;
                 info!("Using discovered-or-new passkey for wrapper repair");
 
                 Ok(WrapperRepairCredentials {
@@ -220,6 +228,7 @@ impl WrapperRepairOperation {
                     credential_id: passkey.credential_id.clone(),
                 })
             }
+
             WrapperRepairStrategy::ReuseExisting(credential_id) => {
                 let prf_salt: [u8; 32] = rand::rng().random();
                 let passkey = self.passkey.clone();

@@ -45,6 +45,36 @@ pub fn wallet_record_id_from_filename(filename: &str) -> Option<&str> {
     filename.strip_prefix(WALLET_FILE_PREFIX).and_then(|rest| rest.strip_suffix(".json"))
 }
 
+/// Supported encrypted master key backup versions
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MasterKeyBackupVersion {
+    V1,
+}
+
+impl MasterKeyBackupVersion {
+    /// Returns the serialized backup version
+    pub const fn as_u32(self) -> u32 {
+        match self {
+            Self::V1 => 1,
+        }
+    }
+}
+
+/// Encrypted master key backup version not supported by this app
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct UnsupportedMasterKeyBackupVersion(pub u32);
+
+impl TryFrom<u32> for MasterKeyBackupVersion {
+    type Error = UnsupportedMasterKeyBackupVersion;
+
+    fn try_from(version: u32) -> Result<Self, Self::Error> {
+        match version {
+            1 => Ok(Self::V1),
+            version => Err(UnsupportedMasterKeyBackupVersion(version)),
+        }
+    }
+}
+
 /// Wallet data to be encrypted and uploaded to cloud backup
 #[derive(Debug, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
 pub struct WalletEntry {
@@ -127,6 +157,15 @@ pub struct EncryptedMasterKeyBackup {
     /// Encrypted master key bytes
     #[serde(with = "base64_serde")]
     pub ciphertext: Vec<u8>,
+}
+
+impl EncryptedMasterKeyBackup {
+    /// Returns the parsed backup version when supported by this app
+    pub fn backup_version(
+        &self,
+    ) -> Result<MasterKeyBackupVersion, UnsupportedMasterKeyBackupVersion> {
+        self.version.try_into()
+    }
 }
 
 #[cfg(test)]

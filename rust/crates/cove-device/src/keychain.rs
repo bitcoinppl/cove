@@ -218,6 +218,15 @@ impl Keychain {
         ])
     }
 
+    /// Loads the stored CSPP passkey credential ID from the keychain
+    pub fn load_cspp_credential_id(&self) -> Option<Vec<u8>> {
+        self.get(CSPP_CREDENTIAL_ID_KEY.into()).and_then(|hex_str| {
+            hex::decode(hex_str)
+                .inspect_err(|error| warn!("Failed to decode stored credential_id: {error}"))
+                .ok()
+        })
+    }
+
     /// Saves CSPP passkey credentials and namespace ID to the keychain
     pub fn save_cspp_passkey_and_namespace(
         &self,

@@ -4,17 +4,16 @@ mod pending_completion;
 mod session;
 mod wrapper_repair;
 
-use cove_cspp::CsppStore as _;
-use cove_cspp::backup_data::EncryptedMasterKeyBackup;
+use cove_cspp::backup_data::{EncryptedMasterKeyBackup, MasterKeyBackupVersion};
 use cove_cspp::master_key::MasterKey;
 use cove_cspp::master_key_crypto;
 use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
-use cove_device::keychain::{CSPP_CREDENTIAL_ID_KEY, Keychain};
+use cove_device::keychain::Keychain;
 use cove_device::passkey::PasskeyAccess;
 use cove_util::ResultExt as _;
 use tracing::{error, info, warn};
 
-use self::passkey_auth::{PasskeyAuthOutcome, PasskeyAuthPolicy, authenticate_with_policy};
+use self::passkey_auth::{PasskeyAuthOutcome, PasskeyAuthPolicy, PasskeyAuthenticator};
 use self::session::VerificationSession;
 use self::wrapper_repair::{WrapperRepairOperation, WrapperRepairStrategy};
 use super::wallets::persist_enabled_cloud_backup_state;
@@ -259,25 +258,28 @@ impl RustCloudBackupManager {
 
         let encrypted: EncryptedMasterKeyBackup =
             serde_json::from_slice(&master_json).map_err_str(CloudBackupError::Internal)?;
-        if encrypted.version != 1 {
-            let version = encrypted.version;
-            return Err(CloudBackupError::Internal(format!(
-                "master key backup version {version} is not supported",
-            )));
+        match encrypted.backup_version() {
+            Ok(MasterKeyBackupVersion::V1) => {}
+            Err(unsupported) => {
+                let version = unsupported.0;
+                return Err(CloudBackupError::Internal(format!(
+                    "master key backup version {version} is not supported",
+                )));
+            }
         }
 
-        let authenticated =
-            match authenticate_with_policy(keychain, passkey, &encrypted.prf_salt, auth_policy)
-                .await?
-            {
-                PasskeyAuthOutcome::Authenticated(result) => result,
-                PasskeyAuthOutcome::UserCancelled => {
-                    return Err(CloudBackupError::Passkey("user cancelled".into()));
-                }
-                PasskeyAuthOutcome::NoCredentialFound => {
-                    return Err(CloudBackupError::RecoveryRequired(recovery_message.into()));
-                }
-            };
+        let authenticator = PasskeyAuthenticator::new(keychain, passkey);
+        let auth_outcome =
+            authenticator.authenticate_with_policy(&encrypted.prf_salt, auth_policy).await?;
+        let authenticated = match auth_outcome {
+            PasskeyAuthOutcome::Authenticated(result) => result,
+            PasskeyAuthOutcome::UserCancelled => {
+                return Err(CloudBackupError::Passkey("user cancelled".into()));
+            }
+            PasskeyAuthOutcome::NoCredentialFound => {
+                return Err(CloudBackupError::RecoveryRequired(recovery_message.into()));
+            }
+        };
 
         let master_key = master_key_crypto::decrypt_master_key(&encrypted, &authenticated.prf_key)
             .map_err(|_| match auth_policy {
@@ -300,14 +302,6 @@ impl RustCloudBackupManager {
         info!("Recovered local master key from cloud");
         Ok(master_key)
     }
-}
-
-pub(super) fn load_stored_credential_id(keychain: &Keychain) -> Option<Vec<u8>> {
-    keychain.get(CSPP_CREDENTIAL_ID_KEY.into()).and_then(|hex_str| {
-        hex::decode(hex_str)
-            .inspect_err(|error| warn!("Failed to decode stored credential_id: {error}"))
-            .ok()
-    })
 }
 
 fn downgrade_cloud_backup_state(

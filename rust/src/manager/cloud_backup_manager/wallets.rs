@@ -54,8 +54,7 @@ pub(crate) struct PreparedWalletBackup {
 }
 
 pub(crate) use passkey::{
-    NamespaceMatch, NamespaceMatchOutcome, create_new_prf_key, create_prf_key_without_persisting,
-    discover_or_create_prf_key_without_persisting, try_match_namespace_with_passkey,
+    NamespaceMatch, NamespaceMatchOutcome, NamespacePasskeyMatcher, PasskeyMaterialAcquirer,
 };
 #[cfg(test)]
 pub(crate) use payload::convert_cloud_secret;
@@ -65,6 +64,7 @@ pub(crate) use payload::{
 pub(crate) use restore::{
     WalletBackupLookup, WalletBackupReader, WalletRestoreOutcome, WalletRestoreSession,
 };
+
 pub(crate) use upload::upload_all_wallets;
 
 pub(super) fn persist_enabled_cloud_backup_state(

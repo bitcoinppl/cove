@@ -9,11 +9,10 @@ use zeroize::Zeroizing;
 
 use super::cloud_inventory::CloudWalletInventory;
 use super::wallets::{
-    DownloadedWalletBackup, NamespaceMatchOutcome, UnpersistedPrfKey, WalletBackupLookup,
-    WalletBackupReader, WalletRestoreSession, all_local_wallets, create_new_prf_key,
-    discover_or_create_prf_key_without_persisting, persist_enabled_cloud_backup_state,
-    persist_enabled_cloud_backup_state_reset_verification, try_match_namespace_with_passkey,
-    upload_all_wallets,
+    DownloadedWalletBackup, NamespaceMatchOutcome, NamespacePasskeyMatcher,
+    PasskeyMaterialAcquirer, UnpersistedPrfKey, WalletBackupLookup, WalletBackupReader,
+    WalletRestoreSession, all_local_wallets, persist_enabled_cloud_backup_state,
+    persist_enabled_cloud_backup_state_reset_verification, upload_all_wallets,
 };
 
 use super::{
@@ -454,7 +453,9 @@ impl RustCloudBackupManager {
 
         info!("Enable: found {} existing namespace(s), attempting recovery", namespaces.len());
 
-        match try_match_namespace_with_passkey(&cloud, passkey, &namespaces).await? {
+        let matcher = NamespacePasskeyMatcher::new(&cloud, passkey);
+        let match_outcome = matcher.match_namespaces(&namespaces).await?;
+        match match_outcome {
             NamespaceMatchOutcome::Matched(matched) => {
                 self.complete_recovery(keychain, &cloud, &cspp, matched).await
             }
@@ -561,7 +562,10 @@ impl RustCloudBackupManager {
                 had_local_master_key,
                 "Enable cancelled before passkey setup finished",
                 "Enable failed before passkey setup finished",
-                || discover_or_create_prf_key_without_persisting(passkey_access),
+                || {
+                    let acquirer = PasskeyMaterialAcquirer::new(passkey_access);
+                    async move { acquirer.discover_or_create_for_wrapper_repair().await }
+                },
             )
             .await?
         {
@@ -645,7 +649,10 @@ impl RustCloudBackupManager {
                 had_local_master_key,
                 "Enable (no discovery) cancelled before passkey setup finished",
                 "Enable (no discovery) failed before passkey setup finished",
-                || create_new_prf_key(passkey_access, "Creating new passkey"),
+                || {
+                    let acquirer = PasskeyMaterialAcquirer::new(passkey_access);
+                    async move { acquirer.create_new("Creating new passkey").await }
+                },
             )
             .await?
         {
@@ -998,7 +1005,9 @@ impl RustCloudBackupManager {
 
         info!("Restore: authenticating with passkey across {} namespace(s)", namespaces.len());
 
-        match try_match_namespace_with_passkey(cloud, passkey, &namespaces).await? {
+        let matcher = NamespacePasskeyMatcher::new(cloud, passkey);
+        let match_outcome = matcher.match_namespaces(&namespaces).await?;
+        match match_outcome {
             NamespaceMatchOutcome::Matched(m) => {
                 info!("Restore: matched namespace {}", m.namespace_id);
                 Ok(m)
@@ -1093,7 +1102,6 @@ where
 }
 
 #[cfg(test)]
-#[path = "ops/test_support.rs"]
 mod test_support;
 
 #[cfg(test)]
@@ -1160,11 +1168,11 @@ mod tests {
         );
         globals.passkey.set_discover_result(Err(PasskeyError::NoCredentialFound));
 
-        let outcome = try_match_namespace_with_passkey(
+        let outcome = NamespacePasskeyMatcher::new(
             &CloudStorage::global_explicit_client(),
             PasskeyAccess::global(),
-            &[namespace],
         )
+        .match_namespaces(&[namespace])
         .await
         .unwrap();
 
@@ -1189,11 +1197,11 @@ mod tests {
         );
         globals.passkey.set_discover_result(Err(PasskeyError::UserCancelled));
 
-        let outcome = try_match_namespace_with_passkey(
+        let outcome = NamespacePasskeyMatcher::new(
             &CloudStorage::global_explicit_client(),
             PasskeyAccess::global(),
-            &[namespace],
         )
+        .match_namespaces(&[namespace])
         .await
         .unwrap();
 
@@ -1231,11 +1239,11 @@ mod tests {
             credential_id: vec![1, 2, 3],
         }));
 
-        let outcome = try_match_namespace_with_passkey(
+        let outcome = NamespacePasskeyMatcher::new(
             &CloudStorage::global_explicit_client(),
             PasskeyAccess::global(),
-            &[supported_namespace, unsupported_namespace],
         )
+        .match_namespaces(&[supported_namespace, unsupported_namespace])
         .await
         .unwrap();
 
@@ -1311,11 +1319,12 @@ mod tests {
         globals.reset();
         globals.passkey.set_discover_result(Err(PasskeyError::PrfUnsupportedProvider));
 
-        let error =
-            match discover_or_create_prf_key_without_persisting(PasskeyAccess::global()).await {
-                Ok(_) => panic!("expected unsupported passkey provider error"),
-                Err(error) => error,
-            };
+        let acquirer = PasskeyMaterialAcquirer::new(PasskeyAccess::global());
+        let discovery_result = acquirer.discover_or_create_for_wrapper_repair().await;
+        let error = match discovery_result {
+            Ok(_) => panic!("expected unsupported passkey provider error"),
+            Err(error) => error,
+        };
 
         assert!(matches!(error, CloudBackupError::UnsupportedPasskeyProvider));
     }
