@@ -7077,8 +7077,6 @@ public func FfiConverterTypeRustAuthManager_lower(_ value: RustAuthManager) -> U
 
 public protocol RustCloudBackupManagerProtocol: AnyObject, Sendable {
     
-    func dispatch(action: CloudBackupManagerAction) 
-    
     /**
      * Back up a newly created wallet, fire-and-forget
      *
@@ -7142,6 +7140,8 @@ public protocol RustCloudBackupManagerProtocol: AnyObject, Sendable {
      */
     func verifyBackupIntegrity() async  -> String?
     
+    func dispatch(action: CloudBackupManagerAction) 
+    
 }
 open class RustCloudBackupManager: RustCloudBackupManagerProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -7202,14 +7202,6 @@ public convenience init() {
 
     
 
-    
-open func dispatch(action: CloudBackupManagerAction)  {try! rustCall() {
-    uniffi_cove_fn_method_rustcloudbackupmanager_dispatch(
-            self.uniffiCloneHandle(),
-        FfiConverterTypeCloudBackupManagerAction_lower(action),$0
-    )
-}
-}
     
     /**
      * Back up a newly created wallet, fire-and-forget
@@ -7373,6 +7365,14 @@ open func verifyBackupIntegrity()async  -> String?  {
             errorHandler: nil
             
         )
+}
+    
+open func dispatch(action: CloudBackupManagerAction)  {try! rustCall() {
+    uniffi_cove_fn_method_rustcloudbackupmanager_dispatch(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeCloudBackupManagerAction_lower(action),$0
+    )
+}
 }
     
 
@@ -36681,9 +36681,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustauthmanager_validate_security_action() != 4302) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustcloudbackupmanager_dispatch() != 54131) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_cove_checksum_method_rustcloudbackupmanager_backup_new_wallet() != 25342) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -36730,6 +36727,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustcloudbackupmanager_verify_backup_integrity() != 35162) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustcloudbackupmanager_dispatch() != 23570) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustcoincontrolmanager_button_presentation() != 24764) {
