@@ -275,7 +275,6 @@ fun HotWalletImportScreen(
     fun importWallet() {
         try {
             val walletMetadata = manager.importWallet(enteredWords)
-            app.selectWalletOrThrow(walletMetadata.id)
             app.clearWalletManager()
             onImported?.invoke(walletMetadata.id) ?: run {
                 app.selectWalletOrThrow(walletMetadata.id)
