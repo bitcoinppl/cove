@@ -19,12 +19,7 @@ internal fun OnboardingContainer(
         onComplete()
     }
 
-    val onOpenCloudRestore =
-        if (manager.state.cloudRestoreState != OnboardingCloudRestoreState.NO_BACKUP_FOUND) {
-            { manager.dispatch(OnboardingAction.OpenCloudRestore) }
-        } else {
-            null
-        }
+    val onOpenCloudRestore = { manager.dispatch(OnboardingAction.OpenCloudRestore) }
 
     val restoreWarningMessage =
         if (manager.state.step == OnboardingStep.RESTORE_OFFER &&
@@ -35,7 +30,7 @@ internal fun OnboardingContainer(
             null
         }
 
-    when (manager.state.step) {
+    val stepContent: Unit = when (manager.state.step) {
         OnboardingStep.TERMS ->
             OnboardingTermsScreen(
                 errorMessage = manager.state.errorMessage,
@@ -175,4 +170,5 @@ internal fun OnboardingContainer(
                 onBack = { manager.dispatch(OnboardingAction.Back) },
             )
     }
+    stepContent
 }

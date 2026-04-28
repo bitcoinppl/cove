@@ -164,7 +164,7 @@ internal fun OnboardingSoftwareImportFlowView(
 
         SoftwareImportMode.Qr ->
             OnboardingHotWalletImportView(
-                numberOfWords = NumberOfBip39Words.TWELVE,
+                numberOfWords = NumberOfBip39Words.TWENTY_FOUR,
                 importType = ImportType.QR,
                 onBack = { mode = SoftwareImportMode.Chooser },
                 onImported = onImported,
@@ -191,6 +191,7 @@ private fun OnboardingHotWalletImportView(
             manager = newManager
         } catch (error: Exception) {
             Log.e("OnboardingHotWalletImport", "failed to initialize import manager", error)
+            manager?.close()
             manager = null
         } finally {
             loading = false
@@ -438,9 +439,10 @@ private fun OnboardingHardwareNfcImportView(
             when (result) {
                 is NfcScanResult.Success -> {
                     try {
-                        val message = NfcMessage.tryNew(result.text, result.data)
-                        val multiFormat = multiFormatTryFromNfcMessage(message)
-                        val walletId = importHardwareWalletFromMultiFormat(multiFormat)
+                        val walletId =
+                            NfcMessage.tryNew(result.text, result.data).use { message ->
+                                importHardwareWalletFromMultiFormat(multiFormatTryFromNfcMessage(message))
+                            }
                         nfcReader.reset()
                         onImported(walletId)
                     } catch (error: Exception) {
@@ -578,7 +580,7 @@ private fun importHardwareWalletFromPath(filePath: String): WalletId =
 
 private fun importHardwareWalletFromMultiFormat(multiFormat: MultiFormat): WalletId =
     when (multiFormat) {
-        is MultiFormat.HardwareExport -> importHardwareWalletFromExport(multiFormat.v1)
+        is MultiFormat.HardwareExport -> multiFormat.v1.use(::importHardwareWalletFromExport)
         else -> throw IllegalArgumentException("That data doesn't contain a hardware wallet export.")
     }
 

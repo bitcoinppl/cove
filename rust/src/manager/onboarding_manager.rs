@@ -483,7 +483,7 @@ impl RustOnboardingManager {
             let cloud = CloudStorage::global().clone();
             let check_cloud_backup = || {
                 let cloud = cloud.clone();
-                async move { cloud.has_any_cloud_backup(CloudAccessPolicy::ConsentAllowed).await }
+                async move { cloud.has_any_cloud_backup(CloudAccessPolicy::Silent).await }
             };
 
             let outcome =
