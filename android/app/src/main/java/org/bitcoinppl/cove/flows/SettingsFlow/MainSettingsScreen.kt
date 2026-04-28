@@ -21,9 +21,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AttachMoney
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
-import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Hub
 import androidx.compose.material.icons.filled.ImportExport
@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.TheaterComedy
+import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -67,6 +68,7 @@ import org.bitcoinppl.cove.ui.theme.MaterialSpacing
 import org.bitcoinppl.cove.Auth
 import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.cloudbackup.LocalCloudBackupPresentationCoordinator
 import org.bitcoinppl.cove.findFragmentActivity
 import org.bitcoinppl.cove.views.MaterialDivider
 import org.bitcoinppl.cove.views.MaterialSection
@@ -78,6 +80,7 @@ import org.bitcoinppl.cove_core.AppAction
 import org.bitcoinppl.cove_core.AuthManagerAction
 import org.bitcoinppl.cove_core.AuthManagerException
 import org.bitcoinppl.cove_core.AuthType
+import org.bitcoinppl.cove_core.CloudBackupStatus
 import org.bitcoinppl.cove_core.Database
 import org.bitcoinppl.cove_core.GlobalFlagKey
 import org.bitcoinppl.cove_core.Route
@@ -92,6 +95,17 @@ import org.bitcoinppl.cove_core.WalletSettingsRoute
 internal fun shouldShowCloudBackupSettings(
     isInDecoyMode: Boolean,
 ): Boolean = !isInDecoyMode
+
+private fun cloudBackupSettingsSubtitle(status: CloudBackupStatus): String =
+    when (status) {
+        is CloudBackupStatus.Disabled -> "Off"
+        is CloudBackupStatus.Enabling -> "Setting up"
+        is CloudBackupStatus.Restoring -> "Restoring"
+        is CloudBackupStatus.Enabled -> "Active"
+        is CloudBackupStatus.PasskeyMissing -> "Passkey missing"
+        is CloudBackupStatus.UnsupportedPasskeyProvider -> "Passkey provider unsupported"
+        is CloudBackupStatus.Error -> status.v1
+    }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
