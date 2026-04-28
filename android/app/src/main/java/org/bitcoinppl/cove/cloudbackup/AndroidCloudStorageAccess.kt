@@ -37,8 +37,7 @@ internal fun hasUploadedBackupFiles(fileNames: List<String>): Boolean =
     fileNames.any { it == DrivePaths.masterKeyFileName || DrivePaths.isWalletFile(it) }
 
 internal fun hasCompleteNamespaceBackup(fileNames: List<String>): Boolean =
-    fileNames.contains(DrivePaths.masterKeyFileName) &&
-        fileNames.any(DrivePaths::isWalletFile)
+    fileNames.contains(DrivePaths.masterKeyFileName)
 
 internal fun driveFileNameForRecordId(recordId: String): String =
     driveFileNameForRecordId(

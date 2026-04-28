@@ -71,7 +71,6 @@ class CoveApplication : Application() {
 
         val app = AppManager.getInstance()
         connectivityMonitor?.start()
-        app.cloudBackupManager.syncPersistedState()
         app.cloudBackupManager.resumePendingCloudUploadVerification()
         setupLifecycleObserver()
         setupMemoryCallbacks()

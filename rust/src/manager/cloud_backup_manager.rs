@@ -1159,12 +1159,9 @@ impl RustCloudBackupManager {
                 return CloudSyncHealth::AllUploaded;
             }
 
-            let message = if master_key_uploaded {
-                "cloud backup is incomplete because wallet backups are missing"
-            } else {
-                "master key backup is missing from cloud storage"
-            };
-            return CloudSyncHealth::Failed(message.into());
+            return CloudSyncHealth::Failed(
+                "master key backup is missing from cloud storage".into(),
+            );
         }
 
         if !master_key_uploaded {

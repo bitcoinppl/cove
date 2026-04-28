@@ -57,12 +57,16 @@ class CloudBackupRegressionHelpersTest {
         val hasUploadedBackupFiles: (List<String>) -> Boolean = { fileNames ->
             fileNames.any { it == "master-key.json" || (it.startsWith("wallet-") && it.endsWith(".json")) }
         }
+        val hasCompleteNamespaceBackup: (List<String>) -> Boolean = { fileNames ->
+            fileNames.contains("master-key.json")
+        }
 
         assertEquals(
             CloudSyncHealth.NoFiles,
             syncHealthForNamespaceFiles(
                 namespaceFiles = emptyList(),
                 hasUploadedBackupFiles = hasUploadedBackupFiles,
+                hasCompleteNamespaceBackup = hasCompleteNamespaceBackup,
             ),
         )
         assertEquals(
@@ -74,6 +78,7 @@ class CloudBackupRegressionHelpersTest {
                         listOf("notes.txt", "placeholder"),
                     ),
                 hasUploadedBackupFiles = hasUploadedBackupFiles,
+                hasCompleteNamespaceBackup = hasCompleteNamespaceBackup,
             ),
         )
         assertEquals(
@@ -81,13 +86,15 @@ class CloudBackupRegressionHelpersTest {
             syncHealthForNamespaceFiles(
                 namespaceFiles = listOf(listOf("master-key.json")),
                 hasUploadedBackupFiles = hasUploadedBackupFiles,
+                hasCompleteNamespaceBackup = hasCompleteNamespaceBackup,
             ),
         )
         assertEquals(
-            CloudSyncHealth.AllUploaded,
+            CloudSyncHealth.Failed("cloud backup is incomplete"),
             syncHealthForNamespaceFiles(
                 namespaceFiles = listOf(listOf("wallet-wallet-record.json")),
                 hasUploadedBackupFiles = hasUploadedBackupFiles,
+                hasCompleteNamespaceBackup = hasCompleteNamespaceBackup,
             ),
         )
     }
