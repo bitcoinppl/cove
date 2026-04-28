@@ -517,6 +517,7 @@ fun HotWalletImportScreen(
                             onClick = {
                                 alertState = AlertState.None
                                 duplicateWalletId?.let { walletId ->
+                                    app.clearWalletManager()
                                     manager.close()
                                     onImported?.invoke(walletId) ?: run {
                                         app.rust.selectWallet(walletId)

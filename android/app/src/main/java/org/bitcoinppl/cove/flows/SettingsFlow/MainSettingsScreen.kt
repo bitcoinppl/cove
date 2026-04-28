@@ -96,15 +96,17 @@ internal fun shouldShowCloudBackupSettings(
     isInDecoyMode: Boolean,
 ): Boolean = !isInDecoyMode
 
+@Composable
 private fun cloudBackupSettingsSubtitle(status: CloudBackupStatus): String =
     when (status) {
-        is CloudBackupStatus.Disabled -> "Off"
-        is CloudBackupStatus.Enabling -> "Setting up"
-        is CloudBackupStatus.Restoring -> "Restoring"
-        is CloudBackupStatus.Enabled -> "Active"
-        is CloudBackupStatus.PasskeyMissing -> "Passkey missing"
-        is CloudBackupStatus.UnsupportedPasskeyProvider -> "Passkey provider unsupported"
-        is CloudBackupStatus.Error -> status.v1
+        is CloudBackupStatus.Disabled -> stringResource(R.string.cloud_backup_status_off)
+        is CloudBackupStatus.Enabling -> stringResource(R.string.cloud_backup_status_setting_up)
+        is CloudBackupStatus.Restoring -> stringResource(R.string.cloud_backup_status_restoring)
+        is CloudBackupStatus.Enabled -> stringResource(R.string.cloud_backup_status_active)
+        is CloudBackupStatus.PasskeyMissing -> stringResource(R.string.cloud_backup_status_passkey_missing)
+        is CloudBackupStatus.UnsupportedPasskeyProvider ->
+            stringResource(R.string.cloud_backup_status_passkey_provider_unsupported)
+        is CloudBackupStatus.Error -> stringResource(R.string.cloud_backup_status_error, status.v1)
     }
 
 @OptIn(ExperimentalMaterial3Api::class)
