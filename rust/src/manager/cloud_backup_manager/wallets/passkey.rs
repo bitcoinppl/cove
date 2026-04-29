@@ -31,6 +31,16 @@ pub enum NamespaceMatchOutcome {
     UnsupportedVersions,
 }
 
+struct PasskeyMaterialDiscoveryContext {
+    fallback_context: &'static str,
+    attempt_message: &'static str,
+    discovered_message: &'static str,
+    cancelled_message: &'static str,
+    missing_message: &'static str,
+    failed_message: &'static str,
+    create_for_enable: bool,
+}
+
 /// Acquires passkey PRF material without persisting it to the keychain
 pub struct PasskeyMaterialAcquirer {
     passkey: PasskeyAccess,
@@ -48,11 +58,50 @@ impl PasskeyMaterialAcquirer {
         self.create_new_prf_key_with_mapper(map_wrapper_repair_passkey_error).await
     }
 
+    /// Creates a passkey for enabling cloud backup without persisting keychain state
+    pub async fn create_for_enable(&self) -> Result<UnpersistedPrfKey, CloudBackupError> {
+        info!("Creating new passkey for cloud backup enable");
+        self.create_new_prf_key_with_mapper(map_enable_passkey_error).await
+    }
+
     /// Discovers an existing passkey for wrapper repair or creates a new one
     pub async fn discover_or_create_for_wrapper_repair(
         &self,
     ) -> Result<UnpersistedPrfKey, CloudBackupError> {
-        info!("Attempting passkey discovery before creating new wrapper-repair passkey");
+        self.discover_or_create(PasskeyMaterialDiscoveryContext {
+            fallback_context: "wrapper repair",
+            attempt_message: "Attempting passkey discovery before creating new wrapper-repair passkey",
+            discovered_message: "Discovered existing passkey for wrapper repair",
+            cancelled_message: "User cancelled passkey discovery for wrapper repair",
+            missing_message: "No existing passkey found for wrapper repair, creating new",
+            failed_message: "Wrapper-repair discovery failed",
+            create_for_enable: false,
+        })
+        .await
+    }
+
+    /// Discovers an existing passkey for enabling cloud backup or creates a new one
+    pub async fn discover_or_create_for_enable(
+        &self,
+    ) -> Result<UnpersistedPrfKey, CloudBackupError> {
+        self.discover_or_create(PasskeyMaterialDiscoveryContext {
+            fallback_context: "cloud backup enable",
+            attempt_message:
+                "Attempting passkey discovery before creating new cloud backup enable passkey",
+            discovered_message: "Discovered existing passkey for cloud backup enable",
+            cancelled_message: "User cancelled passkey discovery for cloud backup enable",
+            missing_message: "No existing passkey found for cloud backup enable, creating new",
+            failed_message: "Cloud backup enable discovery failed",
+            create_for_enable: true,
+        })
+        .await
+    }
+
+    async fn discover_or_create(
+        &self,
+        context: PasskeyMaterialDiscoveryContext,
+    ) -> Result<UnpersistedPrfKey, CloudBackupError> {
+        info!("{}", context.attempt_message);
         let prf_salt: [u8; 32] = rand::rng().random();
 
         let discovery = {
@@ -70,35 +119,39 @@ impl PasskeyMaterialAcquirer {
         match discovery {
             Ok(discovered) => {
                 let prf_key = prf_output_to_key(discovered.prf_output)?;
-                info!("Discovered existing passkey for wrapper repair");
+                info!("{}", context.discovered_message);
 
                 Ok(UnpersistedPrfKey { prf_key, prf_salt, credential_id: discovered.credential_id })
             }
             Err(PasskeyError::UserCancelled) => {
-                info!("User cancelled passkey discovery for wrapper repair");
+                info!("{}", context.cancelled_message);
                 Err(CloudBackupError::PasskeyDiscoveryCancelled)
             }
             Err(PasskeyError::NoCredentialFound) => {
-                info!("No existing passkey found for wrapper repair, creating new");
-                self.create_for_wrapper_repair().await
+                info!("{}", context.missing_message);
+                self.create_for_context(context.create_for_enable).await
             }
             Err(PasskeyError::PrfUnsupportedProvider) => {
                 Err(CloudBackupError::UnsupportedPasskeyProvider)
             }
             Err(error) => {
-                warn!("Wrapper-repair discovery failed ({error}), falling back to create");
-                self.create_for_wrapper_repair().await
+                let failed_message = context.failed_message;
+                let fallback_context = context.fallback_context;
+                warn!("{failed_message} ({error}), falling back to create for {fallback_context}");
+                self.create_for_context(context.create_for_enable).await
             }
         }
     }
 
-    /// Creates passkey material for enabling cloud backup
-    pub async fn create_new(
+    async fn create_for_context(
         &self,
-        log_message: &str,
+        create_for_enable: bool,
     ) -> Result<UnpersistedPrfKey, CloudBackupError> {
-        info!("{log_message}");
-        self.create_new_prf_key_with_mapper(map_enable_passkey_error).await
+        if create_for_enable {
+            return self.create_for_enable().await;
+        }
+
+        self.create_for_wrapper_repair().await
     }
 
     async fn create_new_prf_key_with_mapper(

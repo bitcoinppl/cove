@@ -2,7 +2,7 @@ use ahash::HashMap;
 use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
 use cove_device::keychain::Keychain;
 use cove_util::ResultExt as _;
-use tracing::warn;
+use tracing::{error, warn};
 use zeroize::Zeroizing;
 
 use super::{
@@ -85,14 +85,32 @@ impl RustCloudBackupManager {
             })) => revision_hash.as_str() == upload.target_revision(sync_state),
 
             Some(PersistedCloudBlobState::Failed(_)) => {
-                Self::remote_pending_upload_exists(completion, upload).await.unwrap_or(false)
+                Self::remote_pending_upload_exists_or_log(completion, upload).await
             }
 
             Some(PersistedCloudBlobState::UploadedPendingConfirmation(_)) => {
-                Self::remote_pending_upload_exists(completion, upload).await.unwrap_or(false)
+                Self::remote_pending_upload_exists_or_log(completion, upload).await
             }
 
             _ => false,
+        }
+    }
+
+    async fn remote_pending_upload_exists_or_log(
+        completion: &PendingVerificationCompletion,
+        upload: &PendingVerificationUpload,
+    ) -> bool {
+        match Self::remote_pending_upload_exists(completion, upload).await {
+            Ok(exists) => exists,
+            Err(error) => {
+                let namespace_id = completion.namespace_id();
+                let record_id = upload.record_id();
+                let expected_revision = upload.expected_revision();
+                error!(
+                    "remote_pending_upload_exists failed for namespace_id={namespace_id} record_id={record_id} expected_revision={expected_revision}: {error:?}"
+                );
+                false
+            }
         }
     }
 

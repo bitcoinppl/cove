@@ -564,7 +564,7 @@ impl RustCloudBackupManager {
                 "Enable failed before passkey setup finished",
                 || {
                     let acquirer = PasskeyMaterialAcquirer::new(passkey_access);
-                    async move { acquirer.discover_or_create_for_wrapper_repair().await }
+                    async move { acquirer.discover_or_create_for_enable().await }
                 },
             )
             .await?
@@ -651,7 +651,7 @@ impl RustCloudBackupManager {
                 "Enable (no discovery) failed before passkey setup finished",
                 || {
                     let acquirer = PasskeyMaterialAcquirer::new(passkey_access);
-                    async move { acquirer.create_new("Creating new passkey").await }
+                    async move { acquirer.create_for_enable().await }
                 },
             )
             .await?

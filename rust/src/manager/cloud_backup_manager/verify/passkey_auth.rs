@@ -81,6 +81,10 @@ impl PasskeyAuthenticator {
             }
 
             StoredPasskeyAuthOutcome::Failed(error) => {
+                if matches!(error, PasskeyError::PrfUnsupportedProvider) {
+                    return Err(CloudBackupError::UnsupportedPasskeyProvider);
+                }
+
                 info!("Stored credential auth failed ({error})");
                 Ok(PasskeyAuthOutcome::NoCredentialFound)
             }
@@ -107,6 +111,10 @@ impl PasskeyAuthenticator {
             }
 
             StoredPasskeyAuthOutcome::Failed(error) => {
+                if matches!(error, PasskeyError::PrfUnsupportedProvider) {
+                    return Err(CloudBackupError::UnsupportedPasskeyProvider);
+                }
+
                 info!("Stored credential auth failed ({error})");
                 info!("Trying discovery after stored credential auth failed");
                 self.authenticate_by_discovery(prf_salt).await
@@ -206,6 +214,7 @@ fn map_discovery_error(error: PasskeyError) -> Result<PasskeyAuthOutcome, CloudB
     match error {
         PasskeyError::UserCancelled => Ok(PasskeyAuthOutcome::UserCancelled),
         PasskeyError::NoCredentialFound => Ok(PasskeyAuthOutcome::NoCredentialFound),
+        PasskeyError::PrfUnsupportedProvider => Err(CloudBackupError::UnsupportedPasskeyProvider),
         other => Err(CloudBackupError::Passkey(other.to_string())),
     }
 }
@@ -233,5 +242,11 @@ mod tests {
         assert!(
             matches!(error, CloudBackupError::Passkey(message) if message == "authentication failed: boom")
         );
+    }
+
+    #[test]
+    fn map_discovery_error_preserves_unsupported_provider() {
+        let error = map_discovery_error(PasskeyError::PrfUnsupportedProvider).unwrap_err();
+        assert!(matches!(error, CloudBackupError::UnsupportedPasskeyProvider));
     }
 }
