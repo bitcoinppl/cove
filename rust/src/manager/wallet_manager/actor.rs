@@ -1458,10 +1458,17 @@ impl WalletActor {
             .get(&self.wallet.id, self.wallet.network, self.wallet.metadata.wallet_mode)
             .ok()??;
 
-        metadata.internal.last_height_fetched =
-            Some(BlockSizeLast { block_height: block_height as u64, last_seen: now });
+        let last_height_fetched =
+            BlockSizeLast { block_height: block_height as u64, last_seen: now };
 
+        metadata.internal.last_height_fetched = Some(last_height_fetched);
         wallets.update_internal_metadata(&metadata).ok();
+
+        Database::global()
+            .global_cache
+            .set_block_height(self.wallet.network, last_height_fetched)
+            .ok();
+
         self.wallet.metadata = metadata.clone();
 
         Some(())

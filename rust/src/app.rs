@@ -3,7 +3,10 @@
 pub mod alert_state;
 pub mod reconcile;
 
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::Arc,
+    time::{Duration, UNIX_EPOCH},
+};
 
 use backon::{ConstantBuilder, Retryable as _};
 
@@ -20,11 +23,12 @@ use crate::{
     manager::cloud_backup_manager::CLOUD_BACKUP_MANAGER,
     manager::deferred_dispatch::{DeferredDispatch, Dispatchable},
     network::Network,
-    node::Node,
+    node::{Node, client::NodeClient},
     router::{LOAD_AND_RESET_DELAY_MS, NewWalletRoute, Route, RouteFactory, Router},
     wallet::metadata::{WalletId, WalletMetadata, WalletType},
 };
 use cove_macros::impl_default_for;
+use cove_types::BlockSizeLast;
 use cove_util::ResultExt as _;
 use flume::{Receiver, Sender};
 use once_cell::sync::OnceCell;
@@ -167,6 +171,8 @@ impl App {
                     .global_config
                     .set_selected_network(network)
                     .expect("failed to set network, please report this bug");
+
+                refresh_selected_block_height();
             }
 
             AppAction::ChangeColorScheme(color_scheme) => {
@@ -182,7 +188,7 @@ impl App {
                 debug!("selected node change, new: {:?}", node);
 
                 match Database::global().global_config.set_selected_node(&node) {
-                    Ok(()) => {}
+                    Ok(()) => refresh_selected_block_height(),
                     Err(error) => {
                         error!("Unable to set selected node: {error}");
                     }
@@ -618,7 +624,34 @@ impl FfiApp {
             // init fees from database cache or network and update the UI
             crate::fee_client::init_and_update_fees().await;
         });
+
+        refresh_selected_block_height();
     }
+}
+
+fn refresh_selected_block_height() {
+    cove_tokio::task::spawn(async move {
+        if let Err(error) = update_selected_block_height().await {
+            warn!("unable to update block height: {error}");
+        }
+    });
+}
+
+async fn update_selected_block_height() -> Result<(), String> {
+    let db = Database::global();
+    let node = db.global_config.selected_node();
+    let client = NodeClient::new(&node).await.map_err_str(std::convert::identity)?;
+    let block_height = client.get_height().await.map_err_str(std::convert::identity)?;
+    let last_seen = UNIX_EPOCH.elapsed().unwrap_or_default();
+
+    db.global_cache
+        .set_block_height(
+            node.network,
+            BlockSizeLast { block_height: block_height as u64, last_seen },
+        )
+        .map_err_str(std::convert::identity)?;
+
+    Ok(())
 }
 
 impl FfiApp {

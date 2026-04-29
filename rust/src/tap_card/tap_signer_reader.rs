@@ -369,12 +369,8 @@ impl TapSignerReader {
             return response;
         }
 
-        let birthday = tap_signer_setup_birthday(
-            derive_info.network,
-            Database::global().global_config.wallet_mode(),
-            derive_info.birth_height,
-        )
-        .unwrap_or(WalletBirthday::BlockHeight(TAP_SIGNER_ANNOUNCEMENT_HEIGHT));
+        let birthday = tap_signer_setup_birthday(derive_info.network, derive_info.birth_height)
+            .unwrap_or(WalletBirthday::BlockHeight(TAP_SIGNER_ANNOUNCEMENT_HEIGHT));
 
         let complete = TapSignerSetupComplete { backup, derive_info, birthday };
 

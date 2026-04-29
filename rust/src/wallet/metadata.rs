@@ -252,17 +252,15 @@ impl WalletMetadata {
     }
 
     pub fn set_creation_birthday(&mut self) {
-        self.birthday = created_wallet_birthday(self.network, self.wallet_mode);
+        self.birthday = created_wallet_birthday(self.network);
     }
 
     pub fn set_tap_signer_setup_birthday(&mut self, card_birth_height: Option<u64>) {
-        self.birthday =
-            tap_signer_setup_birthday(self.network, self.wallet_mode, card_birth_height);
+        self.birthday = tap_signer_setup_birthday(self.network, card_birth_height);
     }
 
     pub fn set_tap_signer_import_birthday(&mut self, card_birth_height: Option<u64>) {
-        self.birthday =
-            tap_signer_import_birthday(self.network, self.wallet_mode, card_birth_height);
+        self.birthday = tap_signer_import_birthday(self.network, card_birth_height);
     }
 
     pub fn matches_fingerprint(&self, fingerprint: Fingerprint) -> bool {
@@ -300,36 +298,34 @@ const MAINNET_COVE_RELEASE_BIRTHDAY_HEIGHT: u64 = 947_178;
 // block height at the time of the TapSigner announcement
 pub(crate) const TAP_SIGNER_ANNOUNCEMENT_HEIGHT: u64 = 720_102;
 
-pub fn created_wallet_birthday(network: Network, mode: WalletMode) -> Option<WalletBirthday> {
+pub fn created_wallet_birthday(network: Network) -> Option<WalletBirthday> {
     created_wallet_birthday_from_sources(
         network,
-        cheap_current_block_height(network, mode),
+        cheap_current_block_height(network),
         current_timestamp(),
     )
 }
 
 pub fn tap_signer_setup_birthday(
     network: Network,
-    mode: WalletMode,
     card_birth_height: Option<u64>,
 ) -> Option<WalletBirthday> {
     tap_signer_birthday_from_sources(
         network,
         card_birth_height,
-        cheap_current_block_height(network, mode),
+        cheap_current_block_height(network),
         current_timestamp(),
     )
 }
 
 pub fn tap_signer_import_birthday(
     network: Network,
-    mode: WalletMode,
     card_birth_height: Option<u64>,
 ) -> Option<WalletBirthday> {
     tap_signer_birthday_from_sources(
         network,
         card_birth_height,
-        cheap_current_block_height(network, mode),
+        cheap_current_block_height(network),
         current_timestamp(),
     )
 }
@@ -376,14 +372,12 @@ fn mainnet_tap_signer_fallback_birthday(network: Network) -> Option<WalletBirthd
         .then_some(WalletBirthday::BlockHeight(TAP_SIGNER_ANNOUNCEMENT_HEIGHT))
 }
 
-fn cheap_current_block_height(network: Network, mode: WalletMode) -> Option<u64> {
+fn cheap_current_block_height(network: Network) -> Option<u64> {
     Database::global()
-        .wallets
-        .get_all(network, mode)
+        .global_cache
+        .get_block_height(network)
         .ok()?
-        .into_iter()
-        .filter_map(|wallet| wallet.internal.last_height_fetched.map(|height| height.block_height))
-        .max()
+        .map(|height| height.block_height)
 }
 
 impl InternalOnlyMetadata {
