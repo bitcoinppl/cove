@@ -8922,12 +8922,13 @@ public static func previewNewWalletWithMetadata(metadata: WalletMetadata) -> Rus
 })
 }
     
-public static func tryNewFromTapSigner(tapSigner: TapSigner, deriveInfo: DeriveInfo, backup: Data? = nil)throws  -> RustWalletManager  {
+public static func tryNewFromTapSigner(tapSigner: TapSigner, deriveInfo: DeriveInfo, backup: Data? = nil, birthday: WalletBirthday? = nil)throws  -> RustWalletManager  {
     return try  FfiConverterTypeRustWalletManager_lift(try rustCallWithError(FfiConverterTypeWalletManagerError_lift) {
     uniffi_cove_fn_constructor_rustwalletmanager_try_new_from_tap_signer(
         FfiConverterTypeTapSigner_lower(tapSigner),
         FfiConverterTypeDeriveInfo_lower(deriveInfo),
-        FfiConverterOptionData.lower(backup),$0
+        FfiConverterOptionData.lower(backup),
+        FfiConverterOptionTypeWalletBirthday.lower(birthday),$0
     )
 })
 }
@@ -13913,15 +13914,17 @@ public struct DeriveInfo: Equatable, Hashable {
     public var chainCode: Data
     public var path: [UInt32]
     public var network: Network
+    public var birthHeight: UInt64?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(masterPubkey: Data, pubkey: Data, chainCode: Data, path: [UInt32], network: Network) {
+    public init(masterPubkey: Data, pubkey: Data, chainCode: Data, path: [UInt32], network: Network, birthHeight: UInt64?) {
         self.masterPubkey = masterPubkey
         self.pubkey = pubkey
         self.chainCode = chainCode
         self.path = path
         self.network = network
+        self.birthHeight = birthHeight
     }
 
     
@@ -13944,7 +13947,8 @@ public struct FfiConverterTypeDeriveInfo: FfiConverterRustBuffer {
                 pubkey: FfiConverterData.read(from: &buf), 
                 chainCode: FfiConverterData.read(from: &buf), 
                 path: FfiConverterSequenceUInt32.read(from: &buf), 
-                network: FfiConverterTypeNetwork.read(from: &buf)
+                network: FfiConverterTypeNetwork.read(from: &buf), 
+                birthHeight: FfiConverterOptionUInt64.read(from: &buf)
         )
     }
 
@@ -13954,6 +13958,7 @@ public struct FfiConverterTypeDeriveInfo: FfiConverterRustBuffer {
         FfiConverterData.write(value.chainCode, into: &buf)
         FfiConverterSequenceUInt32.write(value.path, into: &buf)
         FfiConverterTypeNetwork.write(value.network, into: &buf)
+        FfiConverterOptionUInt64.write(value.birthHeight, into: &buf)
     }
 }
 
@@ -15250,12 +15255,14 @@ public func FfiConverterTypeTapSignerNewPinArgs_lower(_ value: TapSignerNewPinAr
 public struct TapSignerSetupComplete: Equatable, Hashable {
     public var backup: Data
     public var deriveInfo: DeriveInfo
+    public var birthday: WalletBirthday
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(backup: Data, deriveInfo: DeriveInfo) {
+    public init(backup: Data, deriveInfo: DeriveInfo, birthday: WalletBirthday) {
         self.backup = backup
         self.deriveInfo = deriveInfo
+        self.birthday = birthday
     }
 
     
@@ -15275,13 +15282,15 @@ public struct FfiConverterTypeTapSignerSetupComplete: FfiConverterRustBuffer {
         return
             try TapSignerSetupComplete(
                 backup: FfiConverterData.read(from: &buf), 
-                deriveInfo: FfiConverterTypeDeriveInfo.read(from: &buf)
+                deriveInfo: FfiConverterTypeDeriveInfo.read(from: &buf), 
+                birthday: FfiConverterTypeWalletBirthday.read(from: &buf)
         )
     }
 
     public static func write(_ value: TapSignerSetupComplete, into buf: inout [UInt8]) {
         FfiConverterData.write(value.backup, into: &buf)
         FfiConverterTypeDeriveInfo.write(value.deriveInfo, into: &buf)
+        FfiConverterTypeWalletBirthday.write(value.birthday, into: &buf)
     }
 }
 
@@ -15425,6 +15434,7 @@ public struct WalletMetadata: Equatable, Hashable {
     public var addressType: WalletAddressType
     public var fiatOrBtc: FiatOrBtc
     public var origin: String?
+    public var birthday: WalletBirthday?
     /**
      * Metadata data specific to different hardware wallets
      */
@@ -15438,7 +15448,7 @@ public struct WalletMetadata: Equatable, Hashable {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: WalletId, name: String, color: WalletColor, verified: Bool, network: Network, masterFingerprint: Fingerprint?, selectedUnit: BitcoinUnit, sensitiveVisible: Bool, detailsExpanded: Bool, walletType: WalletType, walletMode: WalletMode, discoveryState: DiscoveryState, addressType: WalletAddressType, fiatOrBtc: FiatOrBtc, origin: String?, 
+    public init(id: WalletId, name: String, color: WalletColor, verified: Bool, network: Network, masterFingerprint: Fingerprint?, selectedUnit: BitcoinUnit, sensitiveVisible: Bool, detailsExpanded: Bool, walletType: WalletType, walletMode: WalletMode, discoveryState: DiscoveryState, addressType: WalletAddressType, fiatOrBtc: FiatOrBtc, origin: String?, birthday: WalletBirthday?, 
         /**
          * Metadata data specific to different hardware wallets
          */hardwareMetadata: HardwareWalletMetadata?, 
@@ -15461,6 +15471,7 @@ public struct WalletMetadata: Equatable, Hashable {
         self.addressType = addressType
         self.fiatOrBtc = fiatOrBtc
         self.origin = origin
+        self.birthday = birthday
         self.hardwareMetadata = hardwareMetadata
         self.showLabels = showLabels
         self.`internal` = `internal`
@@ -15536,6 +15547,7 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
                 addressType: FfiConverterTypeWalletAddressType.read(from: &buf), 
                 fiatOrBtc: FfiConverterTypeFiatOrBtc.read(from: &buf), 
                 origin: FfiConverterOptionString.read(from: &buf), 
+                birthday: FfiConverterOptionTypeWalletBirthday.read(from: &buf), 
                 hardwareMetadata: FfiConverterOptionTypeHardwareWalletMetadata.read(from: &buf), 
                 showLabels: FfiConverterBool.read(from: &buf), 
                 internal: FfiConverterTypeInternalOnlyMetadata.read(from: &buf)
@@ -15558,6 +15570,7 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
         FfiConverterTypeWalletAddressType.write(value.addressType, into: &buf)
         FfiConverterTypeFiatOrBtc.write(value.fiatOrBtc, into: &buf)
         FfiConverterOptionString.write(value.origin, into: &buf)
+        FfiConverterOptionTypeWalletBirthday.write(value.birthday, into: &buf)
         FfiConverterOptionTypeHardwareWalletMetadata.write(value.hardwareMetadata, into: &buf)
         FfiConverterBool.write(value.showLabels, into: &buf)
         FfiConverterTypeInternalOnlyMetadata.write(value.`internal`, into: &buf)
@@ -30271,6 +30284,78 @@ public func FfiConverterTypeWalletAddressType_lower(_ value: WalletAddressType) 
 
 
 
+public enum WalletBirthday: Equatable, Hashable {
+    
+    case blockHeight(UInt64
+    )
+    case timestamp(UInt64
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension WalletBirthday: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeWalletBirthday: FfiConverterRustBuffer {
+    typealias SwiftType = WalletBirthday
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WalletBirthday {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .blockHeight(try FfiConverterUInt64.read(from: &buf)
+        )
+        
+        case 2: return .timestamp(try FfiConverterUInt64.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: WalletBirthday, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .blockHeight(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterUInt64.write(v1, into: &buf)
+            
+        
+        case let .timestamp(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterUInt64.write(v1, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWalletBirthday_lift(_ buf: RustBuffer) throws -> WalletBirthday {
+    return try FfiConverterTypeWalletBirthday.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWalletBirthday_lower(_ value: WalletBirthday) -> RustBuffer {
+    return FfiConverterTypeWalletBirthday.lower(value)
+}
+
+
+
+
 public enum WalletColor: Equatable, Hashable {
     
     case red
@@ -34847,6 +34932,30 @@ fileprivate struct FfiConverterOptionTypeTapSignerResponse: FfiConverterRustBuff
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeWalletBirthday: FfiConverterRustBuffer {
+    typealias SwiftType = WalletBirthday?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeWalletBirthday.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeWalletBirthday.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeWalletMode: FfiConverterRustBuffer {
     typealias SwiftType = WalletMode?
 
@@ -37440,7 +37549,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_constructor_rustwalletmanager_preview_new_wallet_with_metadata() != 41631) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_constructor_rustwalletmanager_try_new_from_tap_signer() != 14372) {
+    if (uniffi_cove_checksum_constructor_rustwalletmanager_try_new_from_tap_signer() != 10884) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_rustwalletmanager_try_new_from_xpub() != 15129) {
