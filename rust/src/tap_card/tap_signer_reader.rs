@@ -18,7 +18,10 @@ use crate::{
     database::Database,
     network::Network,
     psbt::Psbt,
-    wallet::metadata::{WalletBirthday, tap_signer_setup_birthday},
+    wallet::metadata::{
+        TAP_SIGNER_ANNOUNCEMENT_HEIGHT, WalletBirthday, tap_signer_setup_birthday,
+        valid_birth_height,
+    },
 };
 use cove_util::result_ext::ResultExt as _;
 
@@ -371,9 +374,7 @@ impl TapSignerReader {
             Database::global().global_config.wallet_mode(),
             derive_info.birth_height,
         )
-        .unwrap_or_else(|| {
-            WalletBirthday::Timestamp(jiff::Timestamp::now().as_second().try_into().unwrap_or(0))
-        });
+        .unwrap_or(WalletBirthday::BlockHeight(TAP_SIGNER_ANNOUNCEMENT_HEIGHT));
 
         let complete = TapSignerSetupComplete { backup, derive_info, birthday };
 
@@ -411,7 +412,7 @@ impl TapSignerReader {
 
         let (derive_response, birth_height) = {
             let mut reader = self.reader.lock().await;
-            let birth_height = reader.birth.try_into().ok();
+            let birth_height = valid_birth_height(reader.birth.try_into().ok());
             let derive_response = reader.derive(&path, pin).await?;
             (derive_response, birth_height)
         };

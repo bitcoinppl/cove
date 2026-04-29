@@ -393,10 +393,8 @@ impl Wallet {
         metadata.origin = descriptors.origin().ok();
         metadata.master_fingerprint = Some(Arc::new(fingerprint));
         metadata.wallet_type = WalletType::Cold;
-        metadata.birthday = Some(
-            birthday
-                .unwrap_or_else(|| tap_signer_import_birthday(network, mode, derive.birth_height)),
-        );
+        metadata.birthday =
+            birthday.or_else(|| tap_signer_import_birthday(network, mode, derive.birth_height));
 
         // make sure its not already imported
         check_for_duplicate_wallet(network, mode, fingerprint)?;

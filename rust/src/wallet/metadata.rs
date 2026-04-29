@@ -252,7 +252,7 @@ impl WalletMetadata {
     }
 
     pub fn set_creation_birthday(&mut self) {
-        self.birthday = Some(created_wallet_birthday(self.network, self.wallet_mode));
+        self.birthday = created_wallet_birthday(self.network, self.wallet_mode);
     }
 
     pub fn set_tap_signer_setup_birthday(&mut self, card_birth_height: Option<u64>) {
@@ -261,7 +261,8 @@ impl WalletMetadata {
     }
 
     pub fn set_tap_signer_import_birthday(&mut self, card_birth_height: Option<u64>) {
-        self.birthday = card_birth_height.map(WalletBirthday::BlockHeight);
+        self.birthday =
+            tap_signer_import_birthday(self.network, self.wallet_mode, card_birth_height);
     }
 
     pub fn matches_fingerprint(&self, fingerprint: Fingerprint) -> bool {
@@ -294,10 +295,17 @@ impl WalletMetadata {
     }
 }
 
-pub fn created_wallet_birthday(network: Network, mode: WalletMode) -> WalletBirthday {
-    cheap_current_block_height(network, mode)
-        .map(WalletBirthday::BlockHeight)
-        .unwrap_or_else(|| WalletBirthday::Timestamp(current_timestamp()))
+const MAINNET_COVE_RELEASE_BIRTHDAY_HEIGHT: u64 = 947_178;
+
+// block height at the time of the TapSigner announcement
+pub(crate) const TAP_SIGNER_ANNOUNCEMENT_HEIGHT: u64 = 720_102;
+
+pub fn created_wallet_birthday(network: Network, mode: WalletMode) -> Option<WalletBirthday> {
+    created_wallet_birthday_from_sources(
+        network,
+        cheap_current_block_height(network, mode),
+        current_timestamp(),
+    )
 }
 
 pub fn tap_signer_setup_birthday(
@@ -305,24 +313,67 @@ pub fn tap_signer_setup_birthday(
     mode: WalletMode,
     card_birth_height: Option<u64>,
 ) -> Option<WalletBirthday> {
-    cheap_current_block_height(network, mode)
-        .map(WalletBirthday::BlockHeight)
-        .or_else(|| card_birth_height.map(WalletBirthday::BlockHeight))
+    tap_signer_birthday_from_sources(
+        network,
+        card_birth_height,
+        cheap_current_block_height(network, mode),
+        current_timestamp(),
+    )
 }
 
 pub fn tap_signer_import_birthday(
     network: Network,
     mode: WalletMode,
     card_birth_height: Option<u64>,
-) -> WalletBirthday {
-    card_birth_height
-        .map(WalletBirthday::BlockHeight)
-        .or_else(|| tap_signer_setup_birthday(network, mode, None))
-        .unwrap_or_else(|| WalletBirthday::Timestamp(current_timestamp()))
+) -> Option<WalletBirthday> {
+    tap_signer_birthday_from_sources(
+        network,
+        card_birth_height,
+        cheap_current_block_height(network, mode),
+        current_timestamp(),
+    )
 }
 
-fn current_timestamp() -> u64 {
-    jiff::Timestamp::now().as_second().try_into().unwrap_or(0)
+fn created_wallet_birthday_from_sources(
+    network: Network,
+    cached_block_height: Option<u64>,
+    timestamp: Option<u64>,
+) -> Option<WalletBirthday> {
+    cached_block_height
+        .map(WalletBirthday::BlockHeight)
+        .or_else(|| timestamp.map(WalletBirthday::Timestamp))
+        .or_else(|| mainnet_cove_release_birthday(network))
+}
+
+fn tap_signer_birthday_from_sources(
+    network: Network,
+    card_birth_height: Option<u64>,
+    cached_block_height: Option<u64>,
+    timestamp: Option<u64>,
+) -> Option<WalletBirthday> {
+    valid_birth_height(card_birth_height)
+        .map(WalletBirthday::BlockHeight)
+        .or_else(|| cached_block_height.map(WalletBirthday::BlockHeight))
+        .or_else(|| timestamp.map(WalletBirthday::Timestamp))
+        .or_else(|| mainnet_tap_signer_fallback_birthday(network))
+}
+
+pub fn valid_birth_height(card_birth_height: Option<u64>) -> Option<u64> {
+    card_birth_height.filter(|height| *height > 0)
+}
+
+fn current_timestamp() -> Option<u64> {
+    jiff::Timestamp::now().as_second().try_into().ok()
+}
+
+fn mainnet_cove_release_birthday(network: Network) -> Option<WalletBirthday> {
+    (network == Network::Bitcoin)
+        .then_some(WalletBirthday::BlockHeight(MAINNET_COVE_RELEASE_BIRTHDAY_HEIGHT))
+}
+
+fn mainnet_tap_signer_fallback_birthday(network: Network) -> Option<WalletBirthday> {
+    (network == Network::Bitcoin)
+        .then_some(WalletBirthday::BlockHeight(TAP_SIGNER_ANNOUNCEMENT_HEIGHT))
 }
 
 fn cheap_current_block_height(network: Network, mode: WalletMode) -> Option<u64> {
@@ -488,5 +539,59 @@ mod tests {
 
             assert_eq!(deserialized.birthday, Some(birthday));
         }
+    }
+
+    #[test]
+    fn zero_tap_signer_birth_height_is_ignored() {
+        assert_eq!(valid_birth_height(Some(0)), None);
+        assert_eq!(valid_birth_height(Some(700_553)), Some(700_553));
+    }
+
+    #[test]
+    fn tap_signer_birthday_prefers_valid_card_birth_height() {
+        let birthday = tap_signer_birthday_from_sources(
+            Network::Bitcoin,
+            Some(700_553),
+            Some(800_000),
+            Some(1_700_000_000),
+        );
+
+        assert_eq!(birthday, Some(WalletBirthday::BlockHeight(700_553)));
+    }
+
+    #[test]
+    fn tap_signer_birthday_ignores_zero_card_birth_height() {
+        let birthday = tap_signer_birthday_from_sources(
+            Network::Bitcoin,
+            Some(0),
+            Some(800_000),
+            Some(1_700_000_000),
+        );
+
+        assert_eq!(birthday, Some(WalletBirthday::BlockHeight(800_000)));
+    }
+
+    #[test]
+    fn tap_signer_birthday_uses_mainnet_release_fallback() {
+        let birthday = tap_signer_birthday_from_sources(Network::Bitcoin, None, None, None);
+
+        assert_eq!(birthday, Some(WalletBirthday::BlockHeight(TAP_SIGNER_ANNOUNCEMENT_HEIGHT)));
+    }
+
+    #[test]
+    fn tap_signer_birthday_has_no_non_mainnet_release_fallback() {
+        let birthday = tap_signer_birthday_from_sources(Network::Signet, None, None, None);
+
+        assert_eq!(birthday, None);
+    }
+
+    #[test]
+    fn cove_created_birthday_uses_mainnet_release_fallback() {
+        let birthday = created_wallet_birthday_from_sources(Network::Bitcoin, None, None);
+
+        assert_eq!(
+            birthday,
+            Some(WalletBirthday::BlockHeight(MAINNET_COVE_RELEASE_BIRTHDAY_HEIGHT))
+        );
     }
 }
