@@ -4109,6 +4109,53 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
+    async fn restore_retries_platform_authorization_discover_failures() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        let manager = RustCloudBackupManager::init();
+
+        reset_cloud_backup_test_state(&manager, globals);
+
+        let prf_key = [7u8; 32];
+        let master_key = cove_cspp::master_key::MasterKey::generate();
+        let namespace = master_key.namespace_id();
+        let encrypted =
+            cove_cspp::master_key_crypto::encrypt_master_key(&master_key, &prf_key, &[9; 32])
+                .unwrap();
+
+        globals
+            .cloud
+            .set_master_key_backup(namespace.clone(), serde_json::to_vec(&encrypted).unwrap());
+        globals.passkey.push_discover_result(Err(PasskeyError::PlatformAuthorizationFailed));
+        globals.passkey.push_discover_result(Err(PasskeyError::PlatformAuthorizationFailed));
+        globals.passkey.push_discover_result(Err(PasskeyError::PlatformAuthorizationFailed));
+        globals.passkey.push_discover_result(Ok(DiscoveredPasskeyResult {
+            prf_output: prf_key.to_vec(),
+            credential_id: vec![1, 2, 3],
+        }));
+
+        let wallet = xpub_only_wallet_metadata();
+        Keychain::global()
+            .save_wallet_xpub(&wallet.id, sample_xpub(&wallet).parse().unwrap())
+            .unwrap();
+        let record_id = cove_cspp::backup_data::wallet_record_id(wallet.id.as_ref());
+        globals.cloud.set_wallet_backup(
+            namespace.clone(),
+            record_id.clone(),
+            encrypted_wallet_backup_bytes(&wallet, &master_key, "revision", 1).await,
+        );
+        globals.cloud.set_wallet_files(namespace, vec![wallet_filename_from_record_id(&record_id)]);
+
+        let operation = new_restore_operation_for_test(&manager).await;
+        manager.do_restore_from_cloud_backup(&operation).await.unwrap();
+
+        let report = manager.state().restore_report.expect("expected restore report");
+        assert_eq!(report.wallets_restored, 1);
+        assert_eq!(report.wallets_failed, 0);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
     async fn restore_does_not_persist_first_passkey_match_before_restore_work_succeeds() {
         let _guard = test_lock().lock();
         cove_tokio::init();

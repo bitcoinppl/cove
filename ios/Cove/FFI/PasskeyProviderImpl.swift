@@ -384,6 +384,11 @@ private class PasskeyDelegate: NSObject, ASAuthorizationControllerDelegate,
                     "[PASSKEY] \(context) cancelled code=\(authError.code.rawValue) description=\(error.localizedDescription)"
                 )
                 result = .failure(PasskeyError.UserCancelled)
+            case .failed where context == "discover assertion":
+                Log.warn(
+                    "[PASSKEY] \(context) platform authorization failed code=\(authError.code.rawValue) description=\(error.localizedDescription)"
+                )
+                result = .failure(PasskeyError.PlatformAuthorizationFailed)
             default:
                 Log.warn(
                     "[PASSKEY] \(context) failed code=\(authError.code.rawValue) description=\(error.localizedDescription)"

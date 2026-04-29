@@ -25,6 +25,9 @@ pub enum PasskeyError {
 
     #[error("no credential found")]
     NoCredentialFound,
+
+    #[error("platform authorization failed")]
+    PlatformAuthorizationFailed,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]

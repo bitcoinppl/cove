@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
@@ -371,7 +371,7 @@ impl CloudStorageAccess for MockCloudStorage {
 
 #[derive(Debug, Clone)]
 pub(crate) struct MockPasskeyProviderImpl {
-    discover_result: Arc<Mutex<MockDiscoverResult>>,
+    discover_results: Arc<Mutex<VecDeque<MockDiscoverResult>>>,
     create_result: MockPasskeyActionResult,
     authenticate_result: MockPasskeyActionResult,
 }
@@ -379,7 +379,7 @@ pub(crate) struct MockPasskeyProviderImpl {
 impl Default for MockPasskeyProviderImpl {
     fn default() -> Self {
         Self {
-            discover_result: Arc::new(Mutex::new(Err(PasskeyError::NoCredentialFound))),
+            discover_results: Arc::new(Mutex::new(VecDeque::new())),
             create_result: Arc::new(Mutex::new(None)),
             authenticate_result: Arc::new(Mutex::new(None)),
         }
@@ -388,7 +388,7 @@ impl Default for MockPasskeyProviderImpl {
 
 impl MockPasskeyProviderImpl {
     pub(crate) fn reset(&self) {
-        *self.discover_result.lock() = Err(PasskeyError::NoCredentialFound);
+        self.discover_results.lock().clear();
         *self.create_result.lock() = None;
         *self.authenticate_result.lock() = None;
     }
@@ -397,7 +397,18 @@ impl MockPasskeyProviderImpl {
         &self,
         result: Result<DiscoveredPasskeyResult, PasskeyError>,
     ) {
-        *self.discover_result.lock() = result.map(|value| (value.prf_output, value.credential_id));
+        let mut results = self.discover_results.lock();
+        results.clear();
+        results.push_back(result.map(|value| (value.prf_output, value.credential_id)));
+    }
+
+    pub(crate) fn push_discover_result(
+        &self,
+        result: Result<DiscoveredPasskeyResult, PasskeyError>,
+    ) {
+        self.discover_results
+            .lock()
+            .push_back(result.map(|value| (value.prf_output, value.credential_id)));
     }
 
     pub(crate) fn set_create_result(&self, result: Result<Vec<u8>, PasskeyError>) {
@@ -439,9 +450,14 @@ impl PasskeyProvider for MockPasskeyProviderImpl {
         _prf_salt: Vec<u8>,
         _challenge: Vec<u8>,
     ) -> Result<DiscoveredPasskeyResult, PasskeyError> {
-        self.discover_result.lock().clone().map(|(prf_output, credential_id)| {
-            DiscoveredPasskeyResult { prf_output, credential_id }
-        })
+        self.discover_results
+            .lock()
+            .pop_front()
+            .unwrap_or(Err(PasskeyError::NoCredentialFound))
+            .map(|(prf_output, credential_id)| DiscoveredPasskeyResult {
+                prf_output,
+                credential_id,
+            })
     }
 
     fn is_prf_supported(&self) -> bool {

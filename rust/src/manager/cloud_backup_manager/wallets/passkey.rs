@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use backon::{ExponentialBuilder, Retryable as _};
 use cove_cspp::backup_data::{EncryptedMasterKeyBackup, MasterKeyBackupVersion};
 use cove_device::cloud_storage::CloudStorageClient;
 use cove_device::passkey::{PasskeyAccess, PasskeyError};
@@ -262,18 +263,8 @@ impl NamespacePasskeyMatcher {
         }
 
         let (namespace_id, first_encrypted) = &downloaded[0];
-        let discovery = {
-            let passkey = self.passkey.clone();
-            let prf_salt = first_encrypted.prf_salt;
-            unblock::run_blocking(move || {
-                passkey.discover_and_authenticate_with_prf(
-                    PASSKEY_RP_ID.to_string(),
-                    prf_salt.to_vec(),
-                    random_challenge(),
-                )
-            })
-            .await
-        };
+        let discovery =
+            self.discover_with_platform_authorization_retry(first_encrypted.prf_salt).await;
         let discovered = match discovery {
             Ok(discovered) => discovered,
             Err(PasskeyError::UserCancelled) => return Ok(NamespaceMatchOutcome::UserDeclined),
@@ -359,6 +350,45 @@ impl NamespacePasskeyMatcher {
 
         Ok(NamespaceMatchOutcome::NoMatch)
     }
+
+    async fn discover_with_platform_authorization_retry(
+        &self,
+        prf_salt: [u8; 32],
+    ) -> Result<cove_device::passkey::DiscoveredPasskeyResult, PasskeyError> {
+        (|| self.discover_with_prf_salt(prf_salt))
+            .retry(
+                ExponentialBuilder::default()
+                    .with_min_delay(Duration::from_millis(50))
+                    .without_max_times()
+                    .with_total_delay(Some(Duration::from_secs(2))),
+            )
+            .when(is_platform_authorization_error)
+            .notify(|error, delay| {
+                warn!(
+                    "Passkey platform authorization failed before presentation: {error}; retrying in {delay:?}"
+                );
+            })
+            .await
+    }
+
+    async fn discover_with_prf_salt(
+        &self,
+        prf_salt: [u8; 32],
+    ) -> Result<cove_device::passkey::DiscoveredPasskeyResult, PasskeyError> {
+        let passkey = self.passkey.clone();
+        unblock::run_blocking(move || {
+            passkey.discover_and_authenticate_with_prf(
+                PASSKEY_RP_ID.to_string(),
+                prf_salt.to_vec(),
+                random_challenge(),
+            )
+        })
+        .await
+    }
+}
+
+fn is_platform_authorization_error(error: &PasskeyError) -> bool {
+    matches!(error, PasskeyError::PlatformAuthorizationFailed)
 }
 
 fn map_wrapper_repair_passkey_error(error: PasskeyError) -> CloudBackupError {

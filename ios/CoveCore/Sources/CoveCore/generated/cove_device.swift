@@ -1712,6 +1712,7 @@ enum PasskeyError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
     case AuthenticationFailed(String
     )
     case NoCredentialFound
+    case PlatformAuthorizationFailed
 
     
 
@@ -1763,6 +1764,7 @@ public struct FfiConverterTypePasskeyError: FfiConverterRustBuffer {
             try FfiConverterString.read(from: &buf)
             )
         case 6: return .NoCredentialFound
+        case 7: return .PlatformAuthorizationFailed
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -1800,6 +1802,10 @@ public struct FfiConverterTypePasskeyError: FfiConverterRustBuffer {
         
         case .NoCredentialFound:
             writeInt(&buf, Int32(6))
+        
+        
+        case .PlatformAuthorizationFailed:
+            writeInt(&buf, Int32(7))
         
         }
     }
