@@ -811,13 +811,15 @@ impl RustCloudBackupManager {
             Some(wallet_count),
         )?;
 
-        for (namespace, wallet_record_ids) in &namespace_wallets {
+        for (namespace_index, (namespace, wallet_record_ids)) in
+            namespace_wallets.iter().enumerate()
+        {
             let reader = WalletBackupReader::new(
                 cloud.clone(),
                 namespace.namespace_id.clone(),
                 Zeroizing::new(namespace.master_key.critical_data_key()),
             );
-            let mut namespace_downloaded = self
+            let namespace_downloaded = self
                 .download_wallets_for_restore(
                     operation,
                     &reader,
@@ -828,7 +830,9 @@ impl RustCloudBackupManager {
                 )
                 .await?;
 
-            downloaded_wallets.append(&mut namespace_downloaded);
+            downloaded_wallets.extend(
+                namespace_downloaded.into_iter().map(|downloaded| (namespace_index, downloaded)),
+            );
         }
 
         let restore_total = downloaded_wallets.len() as u32;
@@ -840,9 +844,12 @@ impl RustCloudBackupManager {
             Some(restore_total),
         )?;
 
-        for (index, (record_id, wallet)) in downloaded_wallets.iter().enumerate() {
+        let mut first_success_namespace_index = None;
+        for (index, (namespace_index, (record_id, wallet))) in downloaded_wallets.iter().enumerate()
+        {
             match operation.run_result(|| restore_session.restore_downloaded(wallet)) {
                 Ok(outcome) => {
+                    first_success_namespace_index.get_or_insert(*namespace_index);
                     report.wallets_restored += 1;
                     if let Some(warning) = outcome.labels_warning {
                         report.labels_failed_wallet_names.push(warning.wallet_name);
@@ -886,7 +893,9 @@ impl RustCloudBackupManager {
             &state,
             "persist restored cloud backup state",
         )?;
-        if let Some((active, _)) = namespace_wallets.first() {
+        if let Some(active_namespace_index) = first_success_namespace_index
+            && let Some((active, _)) = namespace_wallets.get(active_namespace_index)
+        {
             operation.run_result(|| {
                 cspp.save_master_key(&active.master_key)
                     .map_err_prefix("save master key", CloudBackupError::Internal)?;

@@ -49203,6 +49203,14 @@ sealed class WalletCreationException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
+    class Unexpected(
+        
+        val v1: kotlin.String
+        ) : WalletCreationException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+    
     class MultiFormat(
         
         val v1: MultiFormatException
@@ -49254,7 +49262,10 @@ public object FfiConverterTypeWalletCreationError : FfiConverterRustBuffer<Walle
             5 -> WalletCreationException.Import(
                 FfiConverterString.read(buf),
                 )
-            6 -> WalletCreationException.MultiFormat(
+            6 -> WalletCreationException.Unexpected(
+                FfiConverterString.read(buf),
+                )
+            7 -> WalletCreationException.MultiFormat(
                 FfiConverterTypeMultiFormatError.read(buf),
                 )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
@@ -49284,6 +49295,11 @@ public object FfiConverterTypeWalletCreationError : FfiConverterRustBuffer<Walle
                 + FfiConverterString.allocationSize(value.v1)
             )
             is WalletCreationException.Import -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+            is WalletCreationException.Unexpected -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
                 + FfiConverterString.allocationSize(value.v1)
@@ -49323,8 +49339,13 @@ public object FfiConverterTypeWalletCreationError : FfiConverterRustBuffer<Walle
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is WalletCreationException.MultiFormat -> {
+            is WalletCreationException.Unexpected -> {
                 buf.putInt(6)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is WalletCreationException.MultiFormat -> {
+                buf.putInt(7)
                 FfiConverterTypeMultiFormatError.write(value.v1, buf)
                 Unit
             }

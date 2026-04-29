@@ -73,6 +73,9 @@ pub enum WalletCreationError {
     #[error("failed to import hardware wallet: {0}")]
     Import(String),
 
+    #[error("unexpected wallet creation error: {0}")]
+    Unexpected(String),
+
     #[error(transparent)]
     MultiFormat(#[from] MultiFormatError),
 }
@@ -200,20 +203,20 @@ impl From<crate::wallet::WalletError> for WalletCreationError {
             }
 
             WalletError::WalletNotFound => {
-                Self::Import("unexpected wallet not found during creation".to_string())
+                Self::Unexpected("wallet not found during creation".to_string())
             }
             WalletError::LoadError(error) => {
-                Self::Import(format!("unexpected load error during creation: {error}"))
+                Self::Unexpected(format!("load error during creation: {error}"))
             }
             WalletError::MetadataNotFound => {
-                Self::Import("unexpected wallet metadata not found during creation".to_string())
+                Self::Unexpected("wallet metadata not found during creation".to_string())
             }
             WalletError::UnsupportedWallet(error) => {
-                Self::Import(format!("unexpected unsupported wallet during creation: {error}"))
+                Self::Unexpected(format!("unsupported wallet during creation: {error}"))
             }
-            WalletError::DescriptorKeyParseError(error) => Self::Import(format!(
-                "unexpected descriptor key parse error during creation: {error}"
-            )),
+            WalletError::DescriptorKeyParseError(error) => {
+                Self::Unexpected(format!("descriptor key parse error during creation: {error}"))
+            }
         }
     }
 }

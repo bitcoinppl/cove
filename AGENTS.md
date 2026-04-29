@@ -9,3 +9,4 @@ The role of this file is to describe common mistakes and confusion points that a
 - never use `pub(in ...)` or `pub(super)`; if non-private visibility is needed, use `pub(crate)` or `pub`
 - never manually edit generated files
 - no mod.rs files use the other format module_name.rs module_name/new_module.rs
+- generated UniFFI Kotlin enum readers have a tight ordinal contract with Rust enum variant order, for example `AppAction` ordinals in the generated `FfiConverterTypeAppAction` reader; never reorder, insert, or remove Rust variants without regenerating bindings and updating the generated checksum, because stale generated files can map ordinals like `SelectWallet`, `SelectLatestOrNewWallet`, and `ChangeNetwork` to the wrong action

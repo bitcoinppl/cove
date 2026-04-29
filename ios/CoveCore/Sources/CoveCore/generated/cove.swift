@@ -30475,6 +30475,8 @@ enum WalletCreationError: Swift.Error, Equatable, Hashable, Foundation.Localized
     )
     case Import(String
     )
+    case Unexpected(String
+    )
     case MultiFormat(MultiFormatError
     )
 
@@ -30531,7 +30533,10 @@ public struct FfiConverterTypeWalletCreationError: FfiConverterRustBuffer {
         case 5: return .Import(
             try FfiConverterString.read(from: &buf)
             )
-        case 6: return .MultiFormat(
+        case 6: return .Unexpected(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 7: return .MultiFormat(
             try FfiConverterTypeMultiFormatError.read(from: &buf)
             )
 
@@ -30571,8 +30576,13 @@ public struct FfiConverterTypeWalletCreationError: FfiConverterRustBuffer {
             FfiConverterString.write(v1, into: &buf)
             
         
-        case let .MultiFormat(v1):
+        case let .Unexpected(v1):
             writeInt(&buf, Int32(6))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .MultiFormat(v1):
+            writeInt(&buf, Int32(7))
             FfiConverterTypeMultiFormatError.write(v1, into: &buf)
             
         }
