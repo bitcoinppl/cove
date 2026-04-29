@@ -221,7 +221,7 @@ struct CoveMainView: View {
             }
             Button("Cancel", role: .cancel) {
                 app.alertState = .none
-                app.selectLatestOrNewWallet()
+                app.trySelectLatestOrNewWallet()
             }
         case .invalidWordGroup,
              .errorImportingHotWallet,

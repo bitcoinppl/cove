@@ -3,6 +3,7 @@ import Observation
 import SwiftUI
 
 private let walletModeChangeDelayMs = 250
+private let sidebarNavigationDelayMs = 250
 
 @Observable final class AppManager: FfiReconcile {
     static let shared = makeShared()
@@ -153,7 +154,7 @@ private let walletModeChangeDelayMs = 250
     public func reset() {
         pendingSidebarNavigationTask?.cancel()
         pendingSidebarNavigationTask = nil
-        beginNavigationIntent()
+        advanceNavigationGeneration()
 
         database = Database()
         walletManager = nil
@@ -190,18 +191,27 @@ private let walletModeChangeDelayMs = 250
     }
 
     func selectWalletOrThrow(_ id: WalletId) throws {
-        beginNavigationIntent()
+        advanceNavigationGeneration()
+        try selectWalletWithoutNavigationGeneration(id)
+    }
+
+    private func selectWalletWithoutNavigationGeneration(_ id: WalletId) throws {
         try rust.dispatch(action: .selectWallet(id: id))
         isSidebarVisible = false
     }
 
-    func selectLatestOrNewWallet() {
-        beginNavigationIntent()
+    func trySelectLatestOrNewWallet() {
         do {
-            try rust.dispatch(action: .selectLatestOrNewWallet)
+            try selectLatestOrNewWallet()
         } catch {
             Log.error("Unable to select latest wallet, error: \(error)")
         }
+    }
+
+    func selectLatestOrNewWallet() throws {
+        advanceNavigationGeneration()
+        try rust.dispatch(action: .selectLatestOrNewWallet)
+        isSidebarVisible = false
     }
 
     func toggleSidebar() {
@@ -213,19 +223,27 @@ private let walletModeChangeDelayMs = 250
     }
 
     func pushRoute(_ route: Route) {
-        beginNavigationIntent()
+        advanceNavigationGeneration()
+        pushRouteWithoutNavigationGeneration(route)
+    }
+
+    private func pushRouteWithoutNavigationGeneration(_ route: Route) {
         isSidebarVisible = false
         router.routes.append(route)
     }
 
     func pushRoutes(_ routes: [Route]) {
-        beginNavigationIntent()
+        advanceNavigationGeneration()
+        pushRoutesWithoutNavigationGeneration(routes)
+    }
+
+    private func pushRoutesWithoutNavigationGeneration(_ routes: [Route]) {
         isSidebarVisible = false
         router.routes.append(contentsOf: routes)
     }
 
     func popRoute() {
-        beginNavigationIntent()
+        advanceNavigationGeneration()
 
         if !router.routes.isEmpty {
             router.routes.removeLast()
@@ -233,17 +251,32 @@ private let walletModeChangeDelayMs = 250
     }
 
     func setRoute(_ routes: [Route]) {
-        beginNavigationIntent()
+        advanceNavigationGeneration()
         router.routes = routes
     }
 
     func scanQr() {
+        advanceNavigationGeneration()
         sheetState = TaggedItem(.qr)
+    }
+
+    func scanNfc() {
+        advanceNavigationGeneration()
+        scanNfcWithoutNavigationGeneration()
+    }
+
+    private func scanNfcWithoutNavigationGeneration() {
+        nfcReader.scan()
     }
 
     @MainActor
     func resetRoute(to routes: [Route]) {
-        beginNavigationIntent()
+        advanceNavigationGeneration()
+        resetRouteWithoutNavigationGeneration(to: routes)
+    }
+
+    @MainActor
+    private func resetRouteWithoutNavigationGeneration(to routes: [Route]) {
         if routes.count > 1 {
             rust.resetNestedRoutesTo(defaultRoute: routes[0], nestedRoutes: Array(routes[1...]))
         } else if let route = routes.first {
@@ -252,26 +285,68 @@ private let walletModeChangeDelayMs = 250
     }
 
     func resetRoute(to route: Route) {
-        beginNavigationIntent()
+        advanceNavigationGeneration()
+        resetRouteWithoutNavigationGeneration(to: route)
+    }
+
+    private func resetRouteWithoutNavigationGeneration(to route: Route) {
         rust.resetDefaultRouteTo(route: route)
     }
 
     @MainActor
     func loadAndReset(to route: Route) {
-        beginNavigationIntent()
+        advanceNavigationGeneration()
         rust.loadAndResetDefaultRoute(route: route)
     }
 
     @discardableResult
-    private func beginNavigationIntent() -> UInt64 {
+    private func advanceNavigationGeneration() -> UInt64 {
         navigationGeneration &+= 1
 
         return navigationGeneration
     }
 
-    func closeSidebarAndNavigate(_ action: @escaping @MainActor () -> Void) {
+    func closeSidebarAndSelectWallet(_ id: WalletId) {
+        closeSidebarThenNavigate {
+            do {
+                try self.selectWalletWithoutNavigationGeneration(id)
+            } catch {
+                Log.error("Unable to select wallet \(id), error: \(error)")
+            }
+        }
+    }
+
+    func closeSidebarAndOpenNewWallet() {
+        closeSidebarThenNavigate {
+            if self.hasWallets {
+                self.pushRouteWithoutNavigationGeneration(RouteFactory().newWalletSelect())
+            } else {
+                self.resetRouteWithoutNavigationGeneration(to: [RouteFactory().newWalletSelect()])
+            }
+        }
+    }
+
+    func closeSidebarAndOpenSettings() {
+        closeSidebarThenNavigate {
+            self.pushRouteWithoutNavigationGeneration(.settings(.main))
+        }
+    }
+
+    func closeSidebarAndOpenWalletSettings(_ id: WalletId) {
+        closeSidebarThenNavigate {
+            self.pushRoutesWithoutNavigationGeneration(RouteFactory().nestedWalletSettings(id: id))
+        }
+    }
+
+    func closeSidebarAndScanNfc() {
+        closeSidebarThenNavigate {
+            self.scanNfcWithoutNavigationGeneration()
+        }
+    }
+
+    private func closeSidebarThenNavigate(_ action: @escaping @MainActor () -> Void) {
         pendingSidebarNavigationTask?.cancel()
-        let generation = beginNavigationIntent()
+        let generation = advanceNavigationGeneration()
 
         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
             isSidebarVisible = false
@@ -279,7 +354,7 @@ private let walletModeChangeDelayMs = 250
 
         pendingSidebarNavigationTask = Task { @MainActor in
             do {
-                try await Task.sleep(for: .milliseconds(200))
+                try await Task.sleep(for: .milliseconds(sidebarNavigationDelayMs))
             } catch {
                 return
             }

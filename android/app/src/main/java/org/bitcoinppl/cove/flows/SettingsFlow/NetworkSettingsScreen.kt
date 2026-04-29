@@ -118,7 +118,7 @@ fun NetworkSettingsScreen(
                     onClick = {
                         pendingNetworkChange = null
                         app.dispatch(AppAction.ChangeNetwork(network))
-                        app.selectLatestOrNewWallet()
+                        app.trySelectLatestOrNewWallet()
                         app.popRoute()
                     },
                 ) {

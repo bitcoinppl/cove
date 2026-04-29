@@ -200,7 +200,7 @@ class AppManager private constructor() : FfiReconcile {
     fun reset() {
         pendingSidebarNavigationJob?.cancel()
         pendingSidebarNavigationJob = null
-        beginNavigationIntent()
+        advanceNavigationGeneration()
 
         // close managers before clearing them
         walletManager?.close()
@@ -236,18 +236,29 @@ class AppManager private constructor() : FfiReconcile {
 
     @Throws(Exception::class)
     fun selectWalletOrThrow(id: WalletId) {
-        beginNavigationIntent()
+        advanceNavigationGeneration()
+        selectWalletWithoutNavigationGeneration(id)
+    }
+
+    @Throws(Exception::class)
+    private fun selectWalletWithoutNavigationGeneration(id: WalletId) {
         rust.dispatch(AppAction.SelectWallet(id))
         isSidebarVisible = false
     }
 
-    fun selectLatestOrNewWallet() {
-        beginNavigationIntent()
+    fun trySelectLatestOrNewWallet() {
         try {
-            rust.dispatch(AppAction.SelectLatestOrNewWallet)
+            selectLatestOrNewWallet()
         } catch (e: Exception) {
             Log.e(tag, "Unable to select latest wallet", e)
         }
+    }
+
+    @Throws(Exception::class)
+    fun selectLatestOrNewWallet() {
+        advanceNavigationGeneration()
+        rust.dispatch(AppAction.SelectLatestOrNewWallet)
+        isSidebarVisible = false
     }
 
     fun toggleSidebar() {
@@ -258,9 +269,41 @@ class AppManager private constructor() : FfiReconcile {
         wallets = runCatching { database.wallets().all() }.getOrElse { emptyList() }
     }
 
-    fun closeSidebarAndNavigate(action: suspend () -> Unit) {
+    fun closeSidebarAndSelectWallet(id: WalletId) {
+        closeSidebarThenNavigate {
+            try {
+                selectWalletWithoutNavigationGeneration(id)
+            } catch (e: Exception) {
+                Log.e(tag, "Unable to select wallet $id", e)
+            }
+        }
+    }
+
+    fun closeSidebarAndOpenNewWallet() {
+        closeSidebarThenNavigate {
+            if (wallets.isEmpty()) {
+                resetRouteWithoutNavigationGeneration(RouteFactory().newWalletSelect())
+            } else {
+                pushRouteWithoutNavigationGeneration(RouteFactory().newWalletSelect())
+            }
+        }
+    }
+
+    fun closeSidebarAndOpenSettings() {
+        closeSidebarThenNavigate {
+            pushRouteWithoutNavigationGeneration(Route.Settings(SettingsRoute.Main))
+        }
+    }
+
+    fun closeSidebarAndScanNfc() {
+        closeSidebarThenNavigate {
+            scanNfcWithoutNavigationGeneration()
+        }
+    }
+
+    private fun closeSidebarThenNavigate(action: suspend () -> Unit) {
         pendingSidebarNavigationJob?.cancel()
-        val generation = beginNavigationIntent()
+        val generation = advanceNavigationGeneration()
         isSidebarVisible = false
         pendingSidebarNavigationJob = mainScope.launch {
             kotlinx.coroutines.delay(SIDEBAR_NAVIGATION_DELAY_MS)
@@ -270,7 +313,11 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     fun pushRoute(route: Route) {
-        beginNavigationIntent()
+        advanceNavigationGeneration()
+        pushRouteWithoutNavigationGeneration(route)
+    }
+
+    private fun pushRouteWithoutNavigationGeneration(route: Route) {
         Log.d(tag, "pushRoute: $route")
         isSidebarVisible = false
         val newRoutes = router.routes.toMutableList().apply { add(route) }
@@ -283,7 +330,11 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     fun pushRoutes(routes: List<Route>) {
-        beginNavigationIntent()
+        advanceNavigationGeneration()
+        pushRoutesWithoutNavigationGeneration(routes)
+    }
+
+    private fun pushRoutesWithoutNavigationGeneration(routes: List<Route>) {
         Log.d(tag, "pushRoutes: ${routes.size} routes")
         isSidebarVisible = false
         val newRoutes = router.routes.toMutableList().apply { addAll(routes) }
@@ -296,7 +347,7 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     fun popRoute() {
-        beginNavigationIntent()
+        advanceNavigationGeneration()
         Log.d(tag, "popRoute")
         if (rust.canGoBack()) {
             val newRoutes = router.routes.dropLast(1)
@@ -310,7 +361,7 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     fun setRoute(routes: List<Route>) {
-        beginNavigationIntent()
+        advanceNavigationGeneration()
         Log.d(tag, "setRoute: ${routes.size} routes")
 
         // only dispatch if routes actually changed
@@ -321,15 +372,25 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     fun scanQr() {
+        advanceNavigationGeneration()
         sheetState = TaggedItem(AppSheetState.Qr)
     }
 
     fun scanNfc() {
+        advanceNavigationGeneration()
+        scanNfcWithoutNavigationGeneration()
+    }
+
+    private fun scanNfcWithoutNavigationGeneration() {
         sheetState = TaggedItem(AppSheetState.Nfc)
     }
 
     fun resetRoute(to: List<Route>) {
-        beginNavigationIntent()
+        advanceNavigationGeneration()
+        resetRouteWithoutNavigationGeneration(to)
+    }
+
+    private fun resetRouteWithoutNavigationGeneration(to: List<Route>) {
         if (to.size > 1) {
             rust.resetNestedRoutesTo(to[0], to.drop(1))
         } else if (to.isNotEmpty()) {
@@ -338,12 +399,16 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     fun resetRoute(to: Route) {
-        beginNavigationIntent()
+        advanceNavigationGeneration()
+        resetRouteWithoutNavigationGeneration(to)
+    }
+
+    private fun resetRouteWithoutNavigationGeneration(to: Route) {
         rust.resetDefaultRouteTo(to)
     }
 
     fun loadAndReset(to: Route) {
-        beginNavigationIntent()
+        advanceNavigationGeneration()
         rust.loadAndResetDefaultRoute(to)
     }
 
@@ -359,7 +424,7 @@ class AppManager private constructor() : FfiReconcile {
         rust.resetAfterLoading(nextRoutes)
     }
 
-    private fun beginNavigationIntent(): Long {
+    private fun advanceNavigationGeneration(): Long {
         navigationGeneration += 1
         return navigationGeneration
     }
@@ -477,7 +542,7 @@ class AppManager private constructor() : FfiReconcile {
          *
          * allows sidebar dismiss animation to complete to avoid visual jump
          */
-        private const val SIDEBAR_NAVIGATION_DELAY_MS = 300L
+        private const val SIDEBAR_NAVIGATION_DELAY_MS = 250L
 
         /**
          * minimum loading indicator visibility duration

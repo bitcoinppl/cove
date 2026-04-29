@@ -1056,7 +1056,7 @@ private fun GlobalAlertDialog(
                         }
                         TextButton(onClick = {
                             onDismiss()
-                            app.selectLatestOrNewWallet()
+                            app.trySelectLatestOrNewWallet()
                         }) { Text("Cancel") }
                     }
                 },
