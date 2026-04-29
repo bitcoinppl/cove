@@ -12,7 +12,7 @@
 		ACA4CBEF2C2365430008F63E /* KeychainSwift in Frameworks */ = {isa = PBXBuildFile; productRef = ACA4CBEE2C2365430008F63E /* KeychainSwift */; };
 		ACC61E2F2ECBD8BE00D13947 /* MijickPopups in Frameworks */ = {isa = PBXBuildFile; productRef = ACC61E2E2ECBD8BE00D13947 /* MijickPopups */; };
 		ACD0053C2DB5309A003DC493 /* CoveCore in Frameworks */ = {isa = PBXBuildFile; productRef = ACD0053B2DB5309A003DC493 /* CoveCore */; };
-		C0A000012EF0000000000001 /* OnboardingSmokeUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A000002EF0000000000001 /* OnboardingSmokeUITests.swift */; };
+		C0A000012EF0000000000001 /* OnboardingFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A000002EF0000000000001 /* OnboardingFullLaunchUITests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -41,7 +41,7 @@
 /* Begin PBXFileReference section */
 		AC9AB5782C34956C00BAE3BE /* Logger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Logger.swift; sourceTree = "<group>"; };
 		D0245F4C2C0F7B4E0042B447 /* Cove.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Cove.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		C0A000002EF0000000000001 /* OnboardingSmokeUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingSmokeUITests.swift; sourceTree = "<group>"; };
+		C0A000002EF0000000000001 /* OnboardingFullLaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingFullLaunchUITests.swift; sourceTree = "<group>"; };
 		C0A000022EF0000000000001 /* CoveUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CoveUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -96,7 +96,7 @@
 		C0A000032EF0000000000001 /* CoveUITests */ = {
 			isa = PBXGroup;
 			children = (
-				C0A000002EF0000000000001 /* OnboardingSmokeUITests.swift */,
+				C0A000002EF0000000000001 /* OnboardingFullLaunchUITests.swift */,
 			);
 			path = CoveUITests;
 			sourceTree = "<group>";
@@ -233,7 +233,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				C0A000012EF0000000000001 /* OnboardingSmokeUITests.swift in Sources */,
+				C0A000012EF0000000000001 /* OnboardingFullLaunchUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

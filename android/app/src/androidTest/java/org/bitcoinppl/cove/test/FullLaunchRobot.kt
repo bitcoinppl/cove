@@ -335,7 +335,10 @@ fun launchFullApp() {
     val instrumentation = InstrumentationRegistry.getInstrumentation()
     val packageName = instrumentation.targetContext.packageName
     instrumentation.uiAutomation.executeShellCommand("am force-stop com.android.settings").drainAndClose()
-    val output = instrumentation.uiAutomation.executeShellCommand("am start -W -n $packageName/org.bitcoinppl.cove.MainActivity")
+    val output =
+        instrumentation.uiAutomation.executeShellCommand(
+            "am start -W -n $packageName/org.bitcoinppl.cove.MainActivity --ez org.bitcoinppl.cove.uitest.RESET_DATA true",
+        )
 
     output.drainAndClose()
 }

@@ -33,6 +33,9 @@ const IOS_DEVICE_DERIVED_DATA_DIR: &str = "Cove-device-run";
 const IOS_SIMULATOR_PRODUCTS_DIR: &str = "Debug-iphonesimulator";
 const IOS_DEVICE_PRODUCTS_DIR: &str = "Debug-iphoneos";
 const IOS_CONNECTED_DEVICE_FILTER: &str = "state == \"connected\"";
+const IOS_UI_SCHEME: &str = "CoveManualUITests";
+const IOS_UI_TEST_CLASS: &str = "CoveUITests/OnboardingFullLaunchUITests";
+const IOS_UI_TEST_FILE: &str = "CoveUITests/OnboardingFullLaunchUITests.swift";
 
 #[derive(Debug, Clone, Copy)]
 pub enum IosBuildType {
@@ -94,6 +97,19 @@ impl IosRunOptions {
         }
 
         Ok(IosRunTarget::Device(DeviceSelector::new(self.device_name.clone(), self.udid.clone())))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct IosUiOptions {
+    device: String,
+    test: String,
+    foreground: bool,
+}
+
+impl IosUiOptions {
+    pub fn new(device: String, test: String, foreground: bool) -> Self {
+        Self { device, test, foreground }
     }
 }
 
@@ -242,7 +258,12 @@ pub fn build_ios(build_type: IosBuildType, device: bool, _sign: bool, verbose: b
             color_eyre::eyre::bail!("Build failed: missing library at {}", lib_path);
         }
 
-        library_flags.push(format!("-library {} -headers {}", lib_path, BINDINGS_DIR));
+        library_flags.extend([
+            "-library".to_string(),
+            lib_path,
+            "-headers".to_string(),
+            BINDINGS_DIR.to_string(),
+        ]);
         print_success(&format!("Built library for {}", target));
     }
 
@@ -272,15 +293,9 @@ pub fn build_ios(build_type: IosBuildType, device: bool, _sign: bool, verbose: b
 
     let _ = sh.remove_path(&xcframework_output);
 
-    // build xcodebuild command with library flags
-    let library_flags_str = library_flags.join(" ");
-    let xcodebuild_cmd = format!(
-        "xcodebuild -create-xcframework {} -output {}",
-        library_flags_str, xcframework_output
-    );
-
-    // run xcodebuild command
-    sh.cmd("sh").arg("-c").arg(&xcodebuild_cmd).run().wrap_err("Failed to create XCFramework")?;
+    cmd!(sh, "xcodebuild -create-xcframework {library_flags...} -output {xcframework_output}")
+        .run()
+        .wrap_err("Failed to create XCFramework")?;
 
     print_success("Created XCFramework");
 
@@ -292,7 +307,7 @@ pub fn build_ios(build_type: IosBuildType, device: bool, _sign: bool, verbose: b
 
     // use sh -c to expand the glob properly
     let copy_cmd = format!("cp -r {}/*.swift {}", BINDINGS_DIR, generated_swift_sources);
-    sh.cmd("sh").arg("-c").arg(&copy_cmd).run().wrap_err("Failed to copy Swift sources")?;
+    cmd!(sh, "sh -c {copy_cmd}").run().wrap_err("Failed to copy Swift sources")?;
 
     // remove uniffi generated Package.swift file if it exists
     let package_swift = format!("{}{}", SPM_PACKAGE_DIR, PACKAGE_SWIFT_PATH);
@@ -322,6 +337,109 @@ pub fn run_ios(options: IosRunOptions, verbose: bool) -> Result<()> {
         IosRunTarget::Simulator => run_ios_simulator(&sh, verbose),
         IosRunTarget::Device(selector) => run_ios_device(&sh, &selector, verbose),
     }
+}
+
+pub fn run_ios_ui_tests(options: IosUiOptions, verbose: bool) -> Result<()> {
+    let sh = Shell::new()?;
+
+    if !command_exists("xcodebuild") {
+        print_error("xcodebuild not found. Please install Xcode");
+        color_eyre::eyre::bail!("xcodebuild command not found");
+    }
+
+    if !command_exists("xcrun") {
+        print_error("xcrun not found. Please install Xcode command line tools");
+        color_eyre::eyre::bail!("xcrun command not found");
+    }
+
+    sh.change_dir("../ios");
+
+    if options.foreground {
+        cmd!(sh, "open -a Simulator").run().wrap_err("Failed to open Simulator")?;
+    }
+
+    boot_simulator(&sh, &options.device)?;
+
+    for test in ios_ui_tests_to_run(&sh, &options.test)? {
+        reset_simulator_state(&sh);
+        run_ios_ui_test(&sh, &options.device, &test, verbose)?;
+    }
+
+    Ok(())
+}
+
+fn boot_simulator(sh: &Shell, device: &str) -> Result<()> {
+    if !simulator_is_booted(sh, device)? {
+        cmd!(sh, "xcrun simctl boot {device}")
+            .run()
+            .wrap_err_with(|| format!("Failed to boot simulator '{device}'"))?;
+    }
+
+    cmd!(sh, "xcrun simctl bootstatus {device} -b")
+        .run()
+        .wrap_err_with(|| format!("Failed waiting for simulator '{device}' to boot"))
+}
+
+fn simulator_is_booted(sh: &Shell, device: &str) -> Result<bool> {
+    let output = cmd!(sh, "xcrun simctl list devices booted")
+        .read()
+        .wrap_err("Failed to list booted simulators")?;
+
+    Ok(output.lines().any(|line| {
+        let line = line.trim_start();
+        line.starts_with(device) && line.contains("(Booted)")
+    }))
+}
+
+fn reset_simulator_state(sh: &Shell) {
+    let _ = cmd!(sh, "xcrun simctl keychain booted reset").quiet().run();
+    let _ = cmd!(sh, "xcrun simctl uninstall booted {IOS_BUNDLE_ID}").quiet().run();
+}
+
+fn run_ios_ui_test(sh: &Shell, device: &str, test: &str, _verbose: bool) -> Result<()> {
+    print_info(&format!("Running iOS UI test {test}"));
+
+    let destination = format!("platform=iOS Simulator,name={device}");
+    let only_testing = format!("-only-testing:{test}");
+
+    cmd!(
+        sh,
+        "xcodebuild test -project {IOS_PROJECT} -scheme {IOS_UI_SCHEME} -configuration {IOS_CONFIGURATION_DEBUG} -destination {destination} -parallel-testing-enabled NO {only_testing}"
+    )
+    .run()
+    .wrap_err_with(|| format!("Failed to run iOS UI test {test}"))?;
+
+    print_success(&format!("iOS UI test passed: {test}"));
+    Ok(())
+}
+
+fn ios_ui_tests_to_run(sh: &Shell, test: &str) -> Result<Vec<String>> {
+    if test != IOS_UI_TEST_CLASS {
+        return Ok(vec![test.to_string()]);
+    }
+
+    let contents = sh
+        .read_file(IOS_UI_TEST_FILE)
+        .wrap_err_with(|| format!("Failed to read {IOS_UI_TEST_FILE}"))?;
+
+    let tests = contents
+        .lines()
+        .filter_map(test_method_name)
+        .map(|method| format!("{IOS_UI_TEST_CLASS}/{method}"))
+        .collect::<Vec<_>>();
+
+    if tests.is_empty() {
+        color_eyre::eyre::bail!("No test methods found in {IOS_UI_TEST_FILE}");
+    }
+
+    Ok(tests)
+}
+
+fn test_method_name(line: &str) -> Option<&str> {
+    let line = line.trim_start();
+    let line = line.strip_prefix("func ")?;
+    let name = line.split_once("()")?.0;
+    name.starts_with("test").then_some(name)
 }
 
 fn normalize_arg(value: String) -> Option<String> {

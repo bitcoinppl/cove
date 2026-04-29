@@ -91,6 +91,8 @@ import org.bitcoinppl.cove_core.bootstrap
 import org.bitcoinppl.cove_core.activeMigration
 import org.bitcoinppl.cove_core.bootstrapProgress
 import org.bitcoinppl.cove_core.cancelBootstrap
+import org.bitcoinppl.cove_core.resetBootstrapForRestore
+import org.bitcoinppl.cove_core.resetLocalDataForCatastrophicRecovery
 import org.bitcoinppl.cove_core.AfterPinAction
 import org.bitcoinppl.cove_core.AppInitException
 import org.bitcoinppl.cove_core.BootstrapStep
@@ -204,6 +206,7 @@ class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        resetLocalDataForUiTestsIfRequested()
         enableEdgeToEdge(
             statusBarStyle =
                 SystemBarStyle.auto(
@@ -540,10 +543,22 @@ class MainActivity : FragmentActivity() {
 
     private class BootstrapTimeoutException : Exception("bootstrap timed out")
 
+    private fun resetLocalDataForUiTestsIfRequested() {
+        if (!BuildConfig.DEBUG || !intent.getBooleanExtra(UI_TEST_RESET_DATA_EXTRA, false)) return
+
+        try {
+            resetLocalDataForCatastrophicRecovery()
+            resetBootstrapForRestore()
+        } catch (e: Exception) {
+            Log.e(TAG, "failed to reset local data for UI tests", e)
+        }
+    }
+
     companion object {
         /** Delay before showing the loading spinner, in milliseconds.
          *  Prevents a distracting spinner flash when bootstrap completes quickly */
         const val SPINNER_DELAY_MS = 100L
+        private const val UI_TEST_RESET_DATA_EXTRA = "org.bitcoinppl.cove.uitest.RESET_DATA"
         private const val TAG = "MainActivity"
     }
 }

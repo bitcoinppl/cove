@@ -1,14 +1,14 @@
 import XCTest
 
-final class OnboardingSmokeUITests: XCTestCase {
+final class OnboardingFullLaunchUITests: XCTestCase {
     private var app: XCUIApplication!
     private let knownEmptyMainnetMnemonic = Array(repeating: "abandon", count: 11) + ["about"]
 
     override func setUp() {
         super.setUp()
         continueAfterFailure = false
+
         app = XCUIApplication()
-        app.launchArguments.append("-ui-testing-reset-data")
     }
 
     func testWelcomeScreenShowsFirstLaunchEntryPoint() {

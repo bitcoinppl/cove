@@ -84,6 +84,22 @@ enum Commands {
         udid: Option<String>,
     },
 
+    /// Run manual iOS full-launch UI tests
+    #[command(name = "ios-ui")]
+    IosUi {
+        /// iOS simulator device name
+        #[arg(long, default_value = "iPhone 17")]
+        device: String,
+
+        /// Test class or method to run
+        #[arg(long, default_value = "CoveUITests/OnboardingFullLaunchUITests")]
+        test: String,
+
+        /// Open Simulator before running tests
+        #[arg(long)]
+        foreground: bool,
+    },
+
     /// Install required build dependencies (cargo-ndk, etc.)
     #[command(name = "install-deps")]
     InstallDeps,
@@ -176,6 +192,11 @@ fn main() -> Result<()> {
         Commands::RunIos { simulator, device_name, udid } => {
             let options = ios::IosRunOptions::new(simulator, device_name, udid);
             ios::run_ios(options, cli.verbose)
+        }
+
+        Commands::IosUi { device, test, foreground } => {
+            let options = ios::IosUiOptions::new(device, test, foreground);
+            ios::run_ios_ui_tests(options, cli.verbose)
         }
 
         Commands::InstallDeps => install_deps(cli.verbose),

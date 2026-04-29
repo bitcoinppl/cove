@@ -154,56 +154,25 @@ android-ui-manual:
     trap cleanup EXIT
 
     ./gradlew :app:connectedUiTestDebugAndroidTest \
-        -Pandroid.testInstrumentationRunnerArguments.clearPackageData=true \
         -Pandroid.testInstrumentationRunnerArguments.annotation=org.bitcoinppl.cove.test.ManualFullLaunchTest
 
 [private]
 alias aum := android-ui-manual
 
-# Run iOS UI tests without opening Simulator
+# Run manual iOS full-launch UI tests without opening Simulator
 [group('test')]
 [script('bash')]
-ios-ui-background device="iPhone 17" test="CoveUITests/OnboardingSmokeUITests":
-    set -e
-
-    args=()
-    if [ -n "{{test}}" ]; then
-        args+=("-only-testing:{{test}}")
-    fi
-
-    xcodebuild test \
-        -project ios/Cove.xcodeproj \
-        -scheme Cove \
-        -configuration Debug \
-        -destination "platform=iOS Simulator,name={{device}}" \
-        -parallel-testing-enabled NO \
-        "${args[@]}"
+ios-ui-background device="iPhone 17" test="CoveUITests/OnboardingFullLaunchUITests":
+    cd rust && cargo build --package xtask -q && ./target/debug/xtask ios-ui --device "{{device}}" --test "{{test}}"
 
 [private]
 alias iub := ios-ui-background
 
-# Run iOS UI tests with Simulator visible
+# Run manual iOS full-launch UI tests with Simulator visible
 [group('test')]
 [script('bash')]
-ios-ui-foreground device="iPhone 17" test="CoveUITests/OnboardingSmokeUITests":
-    set -e
-
-    open -a Simulator
-    xcrun simctl boot "{{device}}" 2>/dev/null || true
-    xcrun simctl bootstatus "{{device}}" -b
-
-    args=()
-    if [ -n "{{test}}" ]; then
-        args+=("-only-testing:{{test}}")
-    fi
-
-    xcodebuild test \
-        -project ios/Cove.xcodeproj \
-        -scheme Cove \
-        -configuration Debug \
-        -destination "platform=iOS Simulator,name={{device}}" \
-        -parallel-testing-enabled NO \
-        "${args[@]}"
+ios-ui-foreground device="iPhone 17" test="CoveUITests/OnboardingFullLaunchUITests":
+    cd rust && cargo build --package xtask -q && ./target/debug/xtask ios-ui --foreground --device "{{device}}" --test "{{test}}"
 
 [private]
 alias iuf := ios-ui-foreground
