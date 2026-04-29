@@ -54,6 +54,11 @@ android {
             dimension = "distribution"
             applicationIdSuffix = ".dev"
         }
+        create("uiTest") {
+            dimension = "distribution"
+            applicationIdSuffix = ".uitest"
+            versionNameSuffix = "-uitest"
+        }
         create("store") {
             dimension = "distribution"
         }
@@ -76,6 +81,9 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+    testOptions {
+        execution = "ANDROIDX_TEST_ORCHESTRATOR"
+    }
 }
 
 dependencies {
@@ -96,6 +104,7 @@ dependencies {
     androidTestImplementation("androidx.test.espresso:espresso-core:3.7.0")
     androidTestImplementation(platform("androidx.compose:compose-bom:2025.12.01"))
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    androidTestUtil("androidx.test:orchestrator:1.6.1")
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 

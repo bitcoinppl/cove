@@ -139,6 +139,27 @@ compile-android:
 # test
 # ------------------------------------------------------------------------------
 
+# Run manual Android full-launch onboarding UI tests
+[group('test')]
+[working-directory: 'android']
+[script('bash')]
+android-ui-manual:
+    set -e
+
+    cleanup() {
+        adb uninstall org.bitcoinppl.cove.uitest.test >/dev/null 2>&1 || true
+        adb uninstall org.bitcoinppl.cove.uitest >/dev/null 2>&1 || true
+    }
+
+    trap cleanup EXIT
+
+    ./gradlew :app:connectedUiTestDebugAndroidTest \
+        -Pandroid.testInstrumentationRunnerArguments.clearPackageData=true \
+        -Pandroid.testInstrumentationRunnerArguments.annotation=org.bitcoinppl.cove.test.ManualFullLaunchTest
+
+[private]
+alias aum := android-ui-manual
+
 # Run all tests
 [group('test')]
 [working-directory: 'rust']
