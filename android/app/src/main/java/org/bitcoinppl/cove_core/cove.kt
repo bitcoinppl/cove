@@ -1140,6 +1140,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_ffiapp_dispatch(
     ): Short
+    external fun uniffi_cove_checksum_method_ffiapp_dispatchthrowing(
+    ): Short
     external fun uniffi_cove_checksum_method_ffiapp_email_mailto(
     ): Short
     external fun uniffi_cove_checksum_method_ffiapp_fees(
@@ -2049,6 +2051,8 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_method_ffiapp_delete_corrupted_wallet(`ptr`: Long,`id`: RustBufferWalletId.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     external fun uniffi_cove_fn_method_ffiapp_dispatch(`ptr`: Long,`action`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_cove_fn_method_ffiapp_dispatchthrowing(`ptr`: Long,`action`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     external fun uniffi_cove_fn_method_ffiapp_email_mailto(`ptr`: Long,`ios`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -3683,6 +3687,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_ffiapp_dispatch() != 37137.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_ffiapp_dispatchthrowing() != 20266.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_ffiapp_email_mailto() != 41824.toShort()) {
@@ -9965,6 +9972,11 @@ public interface FfiAppInterface {
      */
     fun `dispatch`(`action`: AppAction)
     
+    /**
+     * Frontend calls this method to send app events that can fail
+     */
+    fun `dispatchThrowing`(`action`: AppAction)
+    
     fun `emailMailto`(`ios`: kotlin.String): kotlin.String
     
     fun `fees`(): FeeResponse
@@ -10265,6 +10277,22 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_ffiapp_dispatch(
+        it,
+        FfiConverterTypeAppAction.lower(`action`),_status)
+}
+    }
+    
+    
+
+    
+    /**
+     * Frontend calls this method to send app events that can fail
+     */
+    @Throws(AppException::class)override fun `dispatchThrowing`(`action`: AppAction)
+        = 
+    callWithHandle {
+    uniffiRustCallWithError(AppException) { _status ->
+    UniffiLib.uniffi_cove_fn_method_ffiapp_dispatchthrowing(
         it,
         FfiConverterTypeAppAction.lower(`action`),_status)
 }
@@ -30302,6 +30330,18 @@ sealed class AppAction: Disposable  {
     object PopRoute : AppAction()
     
     
+    data class SelectWallet(
+        val `id`: org.bitcoinppl.cove_core.types.WalletId) : AppAction()
+        
+    {
+        
+
+        companion object
+    }
+    
+    object SelectLatestOrNewWallet : AppAction()
+    
+    
     data class ChangeNetwork(
         val `network`: org.bitcoinppl.cove_core.types.Network) : AppAction()
         
@@ -30371,6 +30411,15 @@ sealed class AppAction: Disposable  {
             }
             is AppAction.PopRoute -> {// Nothing to destroy
             }
+            is AppAction.SelectWallet -> {
+                
+    Disposable.destroy(
+        this.`id`
+    )
+                
+            }
+            is AppAction.SelectLatestOrNewWallet -> {// Nothing to destroy
+            }
             is AppAction.ChangeNetwork -> {
                 
     Disposable.destroy(
@@ -30431,22 +30480,26 @@ public object FfiConverterTypeAppAction : FfiConverterRustBuffer<AppAction>{
                 FfiConverterTypeRoute.read(buf),
                 )
             3 -> AppAction.PopRoute
-            4 -> AppAction.ChangeNetwork(
+            4 -> AppAction.SelectWallet(
+                FfiConverterTypeWalletId.read(buf),
+                )
+            5 -> AppAction.SelectLatestOrNewWallet
+            6 -> AppAction.ChangeNetwork(
                 FfiConverterTypeNetwork.read(buf),
                 )
-            5 -> AppAction.ChangeColorScheme(
+            7 -> AppAction.ChangeColorScheme(
                 FfiConverterTypeColorSchemeSelection.read(buf),
                 )
-            6 -> AppAction.ChangeFiatCurrency(
+            8 -> AppAction.ChangeFiatCurrency(
                 FfiConverterTypeFiatCurrency.read(buf),
                 )
-            7 -> AppAction.SetSelectedNode(
+            9 -> AppAction.SetSelectedNode(
                 FfiConverterTypeNode.read(buf),
                 )
-            8 -> AppAction.UpdateFiatPrices
-            9 -> AppAction.UpdateFees
-            10 -> AppAction.AcceptTerms
-            11 -> AppAction.RefreshAfterImport
+            10 -> AppAction.UpdateFiatPrices
+            11 -> AppAction.UpdateFees
+            12 -> AppAction.AcceptTerms
+            13 -> AppAction.RefreshAfterImport
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -30467,6 +30520,19 @@ public object FfiConverterTypeAppAction : FfiConverterRustBuffer<AppAction>{
             )
         }
         is AppAction.PopRoute -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is AppAction.SelectWallet -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeWalletId.allocationSize(value.`id`)
+            )
+        }
+        is AppAction.SelectLatestOrNewWallet -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
@@ -30542,40 +30608,49 @@ public object FfiConverterTypeAppAction : FfiConverterRustBuffer<AppAction>{
                 buf.putInt(3)
                 Unit
             }
-            is AppAction.ChangeNetwork -> {
+            is AppAction.SelectWallet -> {
                 buf.putInt(4)
+                FfiConverterTypeWalletId.write(value.`id`, buf)
+                Unit
+            }
+            is AppAction.SelectLatestOrNewWallet -> {
+                buf.putInt(5)
+                Unit
+            }
+            is AppAction.ChangeNetwork -> {
+                buf.putInt(6)
                 FfiConverterTypeNetwork.write(value.`network`, buf)
                 Unit
             }
             is AppAction.ChangeColorScheme -> {
-                buf.putInt(5)
+                buf.putInt(7)
                 FfiConverterTypeColorSchemeSelection.write(value.v1, buf)
                 Unit
             }
             is AppAction.ChangeFiatCurrency -> {
-                buf.putInt(6)
+                buf.putInt(8)
                 FfiConverterTypeFiatCurrency.write(value.v1, buf)
                 Unit
             }
             is AppAction.SetSelectedNode -> {
-                buf.putInt(7)
+                buf.putInt(9)
                 FfiConverterTypeNode.write(value.v1, buf)
                 Unit
             }
             is AppAction.UpdateFiatPrices -> {
-                buf.putInt(8)
-                Unit
-            }
-            is AppAction.UpdateFees -> {
-                buf.putInt(9)
-                Unit
-            }
-            is AppAction.AcceptTerms -> {
                 buf.putInt(10)
                 Unit
             }
-            is AppAction.RefreshAfterImport -> {
+            is AppAction.UpdateFees -> {
                 buf.putInt(11)
+                Unit
+            }
+            is AppAction.AcceptTerms -> {
+                buf.putInt(12)
+                Unit
+            }
+            is AppAction.RefreshAfterImport -> {
+                buf.putInt(13)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -31544,6 +31619,14 @@ sealed class AppException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
+    class WalletSelection(
+        
+        val v1: kotlin.String
+        ) : AppException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+    
 
     
 
@@ -31578,6 +31661,9 @@ public object FfiConverterTypeAppError : FfiConverterRustBuffer<AppException> {
             2 -> AppException.FeesException(
                 FfiConverterString.read(buf),
                 )
+            3 -> AppException.WalletSelection(
+                FfiConverterString.read(buf),
+                )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
@@ -31594,6 +31680,11 @@ public object FfiConverterTypeAppError : FfiConverterRustBuffer<AppException> {
                 4UL
                 + FfiConverterString.allocationSize(value.v1)
             )
+            is AppException.WalletSelection -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
         }
     }
 
@@ -31606,6 +31697,11 @@ public object FfiConverterTypeAppError : FfiConverterRustBuffer<AppException> {
             }
             is AppException.FeesException -> {
                 buf.putInt(2)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is AppException.WalletSelection -> {
+                buf.putInt(3)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }

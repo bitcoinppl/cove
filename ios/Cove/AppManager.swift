@@ -193,13 +193,13 @@ private let walletModeChangeDelayMs = 250
 
     func selectWalletOrThrow(_ id: WalletId) throws {
         beginNavigationIntent()
-        try rust.selectWallet(id: id)
+        try rust.dispatchThrowing(action: .selectWallet(id: id))
         isSidebarVisible = false
     }
 
     func selectLatestOrNewWallet() {
         beginNavigationIntent()
-        rust.selectLatestOrNewWallet()
+        rust.dispatch(action: .selectLatestOrNewWallet)
     }
 
     func toggleSidebar() {
@@ -223,6 +223,8 @@ private let walletModeChangeDelayMs = 250
     }
 
     func popRoute() {
+        guard !router.routes.isEmpty else { return }
+
         beginNavigationIntent()
         router.routes.removeLast()
     }
@@ -260,6 +262,7 @@ private let walletModeChangeDelayMs = 250
     @discardableResult
     private func beginNavigationIntent() -> UInt64 {
         navigationGeneration &+= 1
+
         return navigationGeneration
     }
 

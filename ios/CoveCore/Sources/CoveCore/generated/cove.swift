@@ -2881,6 +2881,11 @@ public protocol FfiAppProtocol: AnyObject, Sendable {
      */
     func dispatch(action: AppAction) 
     
+    /**
+     * Frontend calls this method to send app events that can fail
+     */
+    func dispatchThrowing(action: AppAction) throws 
+    
     func emailMailto(ios: String)  -> String
     
     func fees() throws  -> FeeResponse
@@ -3103,6 +3108,17 @@ open func deleteCorruptedWallet(id: WalletId)  {try! rustCall() {
      */
 open func dispatch(action: AppAction)  {try! rustCall() {
     uniffi_cove_fn_method_ffiapp_dispatch(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeAppAction_lower(action),$0
+    )
+}
+}
+    
+    /**
+     * Frontend calls this method to send app events that can fail
+     */
+open func dispatchThrowing(action: AppAction)throws   {try rustCallWithError(FfiConverterTypeAppError_lift) {
+    uniffi_cove_fn_method_ffiapp_dispatchthrowing(
             self.uniffiCloneHandle(),
         FfiConverterTypeAppAction_lower(action),$0
     )
@@ -16064,6 +16080,9 @@ public enum AppAction {
     case pushRoute(Route
     )
     case popRoute
+    case selectWallet(id: WalletId
+    )
+    case selectLatestOrNewWallet
     case changeNetwork(network: Network
     )
     case changeColorScheme(ColorSchemeSelection
@@ -16105,25 +16124,30 @@ public struct FfiConverterTypeAppAction: FfiConverterRustBuffer {
         
         case 3: return .popRoute
         
-        case 4: return .changeNetwork(network: try FfiConverterTypeNetwork.read(from: &buf)
+        case 4: return .selectWallet(id: try FfiConverterTypeWalletId.read(from: &buf)
         )
         
-        case 5: return .changeColorScheme(try FfiConverterTypeColorSchemeSelection.read(from: &buf)
+        case 5: return .selectLatestOrNewWallet
+        
+        case 6: return .changeNetwork(network: try FfiConverterTypeNetwork.read(from: &buf)
         )
         
-        case 6: return .changeFiatCurrency(try FfiConverterTypeFiatCurrency.read(from: &buf)
+        case 7: return .changeColorScheme(try FfiConverterTypeColorSchemeSelection.read(from: &buf)
         )
         
-        case 7: return .setSelectedNode(try FfiConverterTypeNode.read(from: &buf)
+        case 8: return .changeFiatCurrency(try FfiConverterTypeFiatCurrency.read(from: &buf)
         )
         
-        case 8: return .updateFiatPrices
+        case 9: return .setSelectedNode(try FfiConverterTypeNode.read(from: &buf)
+        )
         
-        case 9: return .updateFees
+        case 10: return .updateFiatPrices
         
-        case 10: return .acceptTerms
+        case 11: return .updateFees
         
-        case 11: return .refreshAfterImport
+        case 12: return .acceptTerms
+        
+        case 13: return .refreshAfterImport
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -16147,40 +16171,49 @@ public struct FfiConverterTypeAppAction: FfiConverterRustBuffer {
             writeInt(&buf, Int32(3))
         
         
-        case let .changeNetwork(network):
+        case let .selectWallet(id):
             writeInt(&buf, Int32(4))
+            FfiConverterTypeWalletId.write(id, into: &buf)
+            
+        
+        case .selectLatestOrNewWallet:
+            writeInt(&buf, Int32(5))
+        
+        
+        case let .changeNetwork(network):
+            writeInt(&buf, Int32(6))
             FfiConverterTypeNetwork.write(network, into: &buf)
             
         
         case let .changeColorScheme(v1):
-            writeInt(&buf, Int32(5))
+            writeInt(&buf, Int32(7))
             FfiConverterTypeColorSchemeSelection.write(v1, into: &buf)
             
         
         case let .changeFiatCurrency(v1):
-            writeInt(&buf, Int32(6))
+            writeInt(&buf, Int32(8))
             FfiConverterTypeFiatCurrency.write(v1, into: &buf)
             
         
         case let .setSelectedNode(v1):
-            writeInt(&buf, Int32(7))
+            writeInt(&buf, Int32(9))
             FfiConverterTypeNode.write(v1, into: &buf)
             
         
         case .updateFiatPrices:
-            writeInt(&buf, Int32(8))
-        
-        
-        case .updateFees:
-            writeInt(&buf, Int32(9))
-        
-        
-        case .acceptTerms:
             writeInt(&buf, Int32(10))
         
         
-        case .refreshAfterImport:
+        case .updateFees:
             writeInt(&buf, Int32(11))
+        
+        
+        case .acceptTerms:
+            writeInt(&buf, Int32(12))
+        
+        
+        case .refreshAfterImport:
+            writeInt(&buf, Int32(13))
         
         }
     }
@@ -16590,6 +16623,8 @@ enum AppError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
     )
     case FeesError(String
     )
+    case WalletSelection(String
+    )
 
     
 
@@ -16635,6 +16670,9 @@ public struct FfiConverterTypeAppError: FfiConverterRustBuffer {
         case 2: return .FeesError(
             try FfiConverterString.read(from: &buf)
             )
+        case 3: return .WalletSelection(
+            try FfiConverterString.read(from: &buf)
+            )
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -16654,6 +16692,11 @@ public struct FfiConverterTypeAppError: FfiConverterRustBuffer {
         
         case let .FeesError(v1):
             writeInt(&buf, Int32(2))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .WalletSelection(v1):
+            writeInt(&buf, Int32(3))
             FfiConverterString.write(v1, into: &buf)
             
         }
@@ -36316,6 +36359,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_dispatch() != 37137) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_ffiapp_dispatchthrowing() != 20266) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_email_mailto() != 41824) {
