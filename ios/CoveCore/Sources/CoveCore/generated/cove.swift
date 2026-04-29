@@ -8922,6 +8922,14 @@ public static func previewNewWalletWithMetadata(metadata: WalletMetadata) -> Rus
 })
 }
     
+public static func tryNewFromMultisigDescriptor(descriptor: String)throws  -> RustWalletManager  {
+    return try  FfiConverterTypeRustWalletManager_lift(try rustCallWithError(FfiConverterTypeWalletManagerError_lift) {
+    uniffi_cove_fn_constructor_rustwalletmanager_try_new_from_multisig_descriptor(
+        FfiConverterString.lower(descriptor),$0
+    )
+})
+}
+    
 public static func tryNewFromTapSigner(tapSigner: TapSigner, deriveInfo: DeriveInfo, backup: Data? = nil)throws  -> RustWalletManager  {
     return try  FfiConverterTypeRustWalletManager_lift(try rustCallWithError(FfiConverterTypeWalletManagerError_lift) {
     uniffi_cove_fn_constructor_rustwalletmanager_try_new_from_tap_signer(
@@ -11683,6 +11691,14 @@ public static func newFromExport(export: HardwareExport)throws  -> Wallet  {
     return try  FfiConverterTypeWallet_lift(try rustCallWithError(FfiConverterTypeWalletError_lift) {
     uniffi_cove_fn_constructor_wallet_new_from_export(
         FfiConverterTypeHardwareExport_lower(export),$0
+    )
+})
+}
+    
+public static func newFromMultisigDescriptor(descriptor: String)throws  -> Wallet  {
+    return try  FfiConverterTypeWallet_lift(try rustCallWithError(FfiConverterTypeWalletError_lift) {
+    uniffi_cove_fn_constructor_wallet_new_from_multisig_descriptor(
+        FfiConverterString.lower(descriptor),$0
     )
 })
 }
@@ -37440,6 +37456,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_constructor_rustwalletmanager_preview_new_wallet_with_metadata() != 41631) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_constructor_rustwalletmanager_try_new_from_multisig_descriptor() != 57425) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_constructor_rustwalletmanager_try_new_from_tap_signer() != 14372) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -37513,6 +37532,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_wallet_new_from_export() != 38500) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_constructor_wallet_new_from_multisig_descriptor() != 20465) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_wallet_new_from_xpub() != 12329) {

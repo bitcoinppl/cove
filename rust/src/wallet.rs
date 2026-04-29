@@ -361,6 +361,48 @@ impl Wallet {
         Ok(Self { id, metadata, network, bdk: wallet, db: Mutex::new(store.conn) })
     }
 
+    pub fn try_new_persisted_multisig_watch_only(descriptor: String) -> Result<Self, WalletError> {
+        use bdk_wallet::keys::KeyMap;
+
+        let (external, internal, name) = parse_multisig_descriptors(&descriptor)?;
+
+        let keychain = Keychain::global();
+        let database = Database::global();
+        let network = database.global_config.selected_network();
+        let mode = database.global_config.wallet_mode();
+
+        let external_str = external.to_string();
+        let existing = database.wallets.get_all(network, mode).unwrap_or_default();
+        for wm in existing {
+            if let Ok(Some((stored_ext, _))) = keychain.get_public_descriptor(&wm.id)
+                && stored_ext.to_string() == external_str
+            {
+                return Err(WalletError::WalletAlreadyExists(wm.id));
+            }
+        }
+
+        let id = WalletId::new();
+        let mut metadata = WalletMetadata::new_for_hardware(id.clone(), name, None);
+        metadata.wallet_type = WalletType::WatchOnly;
+
+        let mut store = BdkStore::try_new(&id, network).map_err_str(WalletError::LoadError)?;
+
+        let wallet = Descriptors {
+            external: Descriptor { extended_descriptor: external.clone(), key_map: KeyMap::new() },
+            internal: Descriptor { extended_descriptor: internal.clone(), key_map: KeyMap::new() },
+        }
+        .into_create_params()
+        .network(network.into())
+        .create_wallet(&mut store.conn)
+        .map_err_str(WalletError::BdkError)?;
+
+        keychain.save_public_descriptor(&id, external, internal)?;
+        database.wallets.save_new_wallet_metadata(metadata.clone())?;
+        CLOUD_BACKUP_MANAGER.handle_wallet_set_change();
+
+        Ok(Self { id, metadata, network, bdk: wallet, db: Mutex::new(store.conn) })
+    }
+
     pub fn try_new_persisted_from_tap_signer(
         tap_signer: Arc<cove_tap_card::TapSigner>,
         derive: DeriveInfo,
@@ -712,9 +754,118 @@ pub fn delete_wallet_specific_data(wallet_id: &WalletId) -> eyre::Result<()> {
     Ok(())
 }
 
+/// Parse a multisig descriptor string into (external, internal, wallet_name).
+///
+/// Accepts either two newline-separated descriptors (external then internal),
+/// or a single descriptor containing `<0;1>` multipath notation.
+/// Only `wsh(sortedmulti(...))` is supported.
+fn parse_multisig_descriptors(
+    input: &str,
+) -> Result<
+    (
+        bdk_wallet::descriptor::ExtendedDescriptor,
+        bdk_wallet::descriptor::ExtendedDescriptor,
+        String,
+    ),
+    WalletError,
+> {
+    use bdk_wallet::descriptor::ExtendedDescriptor;
+    use bdk_wallet::keys::DescriptorPublicKey;
+    use bdk_wallet::miniscript::Descriptor as MiniscriptDescriptor;
+    use bdk_wallet::miniscript::descriptor::WshInner;
+    use bitcoin::secp256k1::Secp256k1;
+
+    let secp = Secp256k1::signing_only();
+
+    let parse = |s: &str| -> Result<ExtendedDescriptor, WalletError> {
+        MiniscriptDescriptor::<DescriptorPublicKey>::parse_descriptor(&secp, s)
+            .map(|(d, _)| d)
+            .map_err_str(WalletError::DescriptorKeyParseError)
+    };
+
+    let lines: Vec<&str> = input.lines().map(str::trim).filter(|l| !l.is_empty()).collect();
+
+    let (external, internal) = match lines.as_slice() {
+        [ext, int] => (parse(ext)?, parse(int)?),
+        [single] if single.contains("<0;1>") => {
+            let ext_str = single.replace("<0;1>", "0");
+            let int_str = single.replace("<0;1>", "1");
+            (parse(&ext_str)?, parse(&int_str)?)
+        }
+        _ => return Err(WalletError::UnsupportedWallet(
+            "expected two descriptor lines (external, internal) or a single multipath descriptor"
+                .to_string(),
+        )),
+    };
+
+    let name = match &external {
+        MiniscriptDescriptor::Wsh(wsh) => match wsh.as_inner() {
+            WshInner::SortedMulti(sm) => {
+                format!("{}-of-{} Multisig Watch-Only", sm.k(), sm.pks().len())
+            }
+            _ => {
+                return Err(WalletError::UnsupportedWallet(
+                    "only wsh(sortedmulti) descriptors are supported".to_string(),
+                ));
+            }
+        },
+        _ => {
+            return Err(WalletError::UnsupportedWallet(
+                "only wsh(sortedmulti) descriptors are supported".to_string(),
+            ));
+        }
+    };
+
+    Ok((external, internal, name))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const XPUB1: &str = "xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM";
+    const XPUB2: &str = "xpub6DM7CYgaTMdMbhTcLTUWmNUE5WLXK5hx8ZMa4sRw8qYJPqtqKYiKnwsmT8A6AijDVAUZRivdBnXdR8QE7Y9vVnqvzPL3fXCmu1WtCRLdAoz";
+
+    fn multisig_two_line() -> String {
+        let ext = format!(
+            "wsh(sortedmulti(2,[817e7be0/48h/0h/0h/2h]{XPUB1}/0/*,[a262308d/48h/0h/0h/2h]{XPUB2}/0/*))"
+        );
+        let int = format!(
+            "wsh(sortedmulti(2,[817e7be0/48h/0h/0h/2h]{XPUB1}/1/*,[a262308d/48h/0h/0h/2h]{XPUB2}/1/*))"
+        );
+        format!("{ext}\n{int}")
+    }
+
+    fn multisig_multipath() -> String {
+        format!(
+            "wsh(sortedmulti(2,[817e7be0/48h/0h/0h/2h]{XPUB1}/<0;1>/*,[a262308d/48h/0h/0h/2h]{XPUB2}/<0;1>/*))"
+        )
+    }
+
+    #[test]
+    fn test_parse_multisig_two_line() {
+        let (_, _, name) = parse_multisig_descriptors(&multisig_two_line()).unwrap();
+        assert_eq!(name, "2-of-2 Multisig Watch-Only");
+    }
+
+    #[test]
+    fn test_parse_multisig_multipath() {
+        let (_, _, name) = parse_multisig_descriptors(&multisig_multipath()).unwrap();
+        assert_eq!(name, "2-of-2 Multisig Watch-Only");
+    }
+
+    #[test]
+    fn test_parse_multisig_rejects_singlesig() {
+        let singlesig = format!("wpkh([817e7be0/84h/0h/0h]{XPUB1}/0/*)");
+        let result = parse_multisig_descriptors(&singlesig);
+        assert!(matches!(result, Err(WalletError::UnsupportedWallet(_))));
+    }
+
+    #[test]
+    fn test_parse_multisig_rejects_empty() {
+        let result = parse_multisig_descriptors("");
+        assert!(matches!(result, Err(WalletError::UnsupportedWallet(_))));
+    }
 
     #[test]
     fn test_fingerprint() {
@@ -749,5 +900,10 @@ impl Wallet {
     ) -> Result<Self, WalletError> {
         let export = Arc::unwrap_or_clone(export);
         Self::try_new_persisted_from_pubport(export.into_format())
+    }
+
+    #[uniffi::constructor]
+    pub fn new_from_multisig_descriptor(descriptor: String) -> Result<Self, WalletError> {
+        Self::try_new_persisted_multisig_watch_only(descriptor)
     }
 }

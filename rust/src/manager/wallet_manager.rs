@@ -388,6 +388,34 @@ impl RustWalletManager {
         })
     }
 
+    #[uniffi::constructor]
+    pub fn try_new_from_multisig_descriptor(descriptor: String) -> Result<Self, Error> {
+        let (sender, receiver) = flume::bounded(100);
+
+        let wallet = Wallet::try_new_persisted_multisig_watch_only(descriptor)?;
+        let id = wallet.id.clone();
+        let metadata = wallet.metadata.clone();
+
+        let wallet_actor = WalletActor::new(wallet, sender.clone())
+            .map_err(|e| Error::DatabaseCorruption { id: id.clone(), error: e.to_string() })?;
+        let actor = task::spawn_actor(wallet_actor);
+
+        let scanner =
+            WalletScanner::try_new(metadata.clone(), sender.clone()).ok().map(spawn_actor);
+        let label_manager = LabelManager::new(id.clone()).into();
+
+        Ok(Self {
+            id,
+            actor,
+            metadata: Arc::new(RwLock::new(metadata)),
+            reconciler: MessageSender::new(sender),
+            reconcile_receiver: Arc::new(receiver),
+            label_manager,
+            initial_load_state: WalletLoadState::Loading,
+            scanner,
+        })
+    }
+
     #[uniffi::constructor(default(backup = None))]
     pub fn try_new_from_tap_signer(
         tap_signer: Arc<cove_tap_card::TapSigner>,
