@@ -24,7 +24,7 @@ pub struct NamespaceMatch {
 }
 
 pub enum NamespaceMatchOutcome {
-    Matched(NamespaceMatch),
+    Matched(Vec<NamespaceMatch>),
     UserDeclined,
     NoMatch,
     Inconclusive,
@@ -284,15 +284,16 @@ impl NamespacePasskeyMatcher {
             Err(error) => return Err(CloudBackupError::Passkey(error.to_string())),
         };
 
+        let mut matches = Vec::new();
         let prf_key = prf_output_to_key(discovered.prf_output.clone())?;
         let try_first = cove_cspp::master_key_crypto::decrypt_master_key(first_encrypted, &prf_key);
         if let Ok(master_key) = try_first {
-            return Ok(NamespaceMatchOutcome::Matched(NamespaceMatch {
+            matches.push(NamespaceMatch {
                 namespace_id: namespace_id.clone(),
                 master_key,
                 prf_salt: first_encrypted.prf_salt,
-                credential_id: discovered.credential_id,
-            }));
+                credential_id: discovered.credential_id.clone(),
+            });
         }
 
         for (namespace_id, encrypted) in downloaded.iter().skip(1) {
@@ -313,7 +314,13 @@ impl NamespacePasskeyMatcher {
 
             let prf_output = match prf_output_result {
                 Ok(prf_output) => prf_output,
-                Err(PasskeyError::UserCancelled) => return Ok(NamespaceMatchOutcome::UserDeclined),
+                Err(PasskeyError::UserCancelled) => {
+                    if matches.is_empty() {
+                        return Ok(NamespaceMatchOutcome::UserDeclined);
+                    }
+
+                    break;
+                }
                 Err(PasskeyError::PrfUnsupportedProvider) => {
                     return Err(CloudBackupError::UnsupportedPasskeyProvider);
                 }
@@ -329,15 +336,17 @@ impl NamespacePasskeyMatcher {
             if let Ok(master_key) =
                 cove_cspp::master_key_crypto::decrypt_master_key(encrypted, &prf_key)
             {
-                let matched = NamespaceMatch {
+                matches.push(NamespaceMatch {
                     namespace_id: namespace_id.clone(),
                     master_key,
                     prf_salt: encrypted.prf_salt,
                     credential_id: discovered.credential_id.clone(),
-                };
-
-                return Ok(NamespaceMatchOutcome::Matched(matched));
+                });
             }
+        }
+
+        if !matches.is_empty() {
+            return Ok(NamespaceMatchOutcome::Matched(matches));
         }
 
         if had_download_failures {

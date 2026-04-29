@@ -2969,7 +2969,7 @@ public protocol FfiAppProtocol: AnyObject, Sendable {
      * Select the latest (most recently used) wallet or navigate to new wallet flow
      * This selects the wallet with the most recent scan activity
      */
-    func selectLatestOrNewWallet() throws
+    func selectLatestOrNewWallet() throws 
     
     /**
      * Select a wallet
