@@ -2969,7 +2969,7 @@ public protocol FfiAppProtocol: AnyObject, Sendable {
      * Select the latest (most recently used) wallet or navigate to new wallet flow
      * This selects the wallet with the most recent scan activity
      */
-    func selectLatestOrNewWallet() 
+    func selectLatestOrNewWallet() throws
     
     /**
      * Select a wallet
@@ -3339,7 +3339,7 @@ open func saveTapSignerBackup(tapSigner: TapSigner, backup: Data) -> Bool  {
      * Select the latest (most recently used) wallet or navigate to new wallet flow
      * This selects the wallet with the most recent scan activity
      */
-open func selectLatestOrNewWallet()  {try! rustCall() {
+open func selectLatestOrNewWallet()throws   {try rustCallWithError(FfiConverterTypeAppError_lift) {
     uniffi_cove_fn_method_ffiapp_select_latest_or_new_wallet(
             self.uniffiCloneHandle(),$0
     )
@@ -36421,7 +36421,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_ffiapp_save_tap_signer_backup() != 24217) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_ffiapp_select_latest_or_new_wallet() != 31849) {
+    if (uniffi_cove_checksum_method_ffiapp_select_latest_or_new_wallet() != 29596) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_select_wallet() != 51673) {

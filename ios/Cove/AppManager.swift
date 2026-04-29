@@ -155,8 +155,6 @@ private let walletModeChangeDelayMs = 250
         pendingSidebarNavigationTask = nil
         beginNavigationIntent()
 
-        rust = FfiApp()
-        rust.listenForUpdates(updater: self)
         database = Database()
         walletManager = nil
 
@@ -223,10 +221,11 @@ private let walletModeChangeDelayMs = 250
     }
 
     func popRoute() {
-        guard !router.routes.isEmpty else { return }
-
         beginNavigationIntent()
-        router.routes.removeLast()
+
+        if !router.routes.isEmpty {
+            router.routes.removeLast()
+        }
     }
 
     func setRoute(_ routes: [Route]) {

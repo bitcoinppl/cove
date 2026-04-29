@@ -243,7 +243,11 @@ class AppManager private constructor() : FfiReconcile {
 
     fun selectLatestOrNewWallet() {
         beginNavigationIntent()
-        rust.selectLatestOrNewWallet()
+        try {
+            rust.selectLatestOrNewWallet()
+        } catch (e: Exception) {
+            Log.e(tag, "Unable to select latest wallet", e)
+        }
     }
 
     fun toggleSidebar() {

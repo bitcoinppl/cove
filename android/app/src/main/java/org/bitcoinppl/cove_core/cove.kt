@@ -3749,7 +3749,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_ffiapp_save_tap_signer_backup() != 24217.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_ffiapp_select_latest_or_new_wallet() != 31849.toShort()) {
+    if (lib.uniffi_cove_checksum_method_ffiapp_select_latest_or_new_wallet() != 29596.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_ffiapp_select_wallet() != 51673.toShort()) {
@@ -10597,10 +10597,11 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
     /**
      * Select the latest (most recently used) wallet or navigate to new wallet flow
      * This selects the wallet with the most recent scan activity
-     */override fun `selectLatestOrNewWallet`()
+     */
+    @Throws(AppException::class)override fun `selectLatestOrNewWallet`()
         = 
     callWithHandle {
-    uniffiRustCall() { _status ->
+    uniffiRustCallWithError(AppException) { _status ->
     UniffiLib.uniffi_cove_fn_method_ffiapp_select_latest_or_new_wallet(
         it,
         _status)

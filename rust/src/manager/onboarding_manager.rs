@@ -577,8 +577,7 @@ impl RustOnboardingManager {
     fn complete_onboarding(&self, target: CompletionTarget) {
         let result = match target {
             CompletionTarget::SelectLatestOrNew => {
-                FfiApp::global().select_latest_or_new_wallet();
-                Ok(())
+                FfiApp::global().select_latest_or_new_wallet().map_err_str(std::convert::identity)
             }
             CompletionTarget::SelectWallet { wallet_id, post_onboarding } => {
                 let next_route = match post_onboarding {
