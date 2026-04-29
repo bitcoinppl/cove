@@ -1,3 +1,5 @@
+use std::str::FromStr as _;
+
 use cove_cspp::backup_data::{
     DescriptorPair, WalletEntry, WalletMode, WalletSecret as CloudWalletSecret,
 };
@@ -11,9 +13,10 @@ use super::super::LocalWalletSecret;
 use super::{CloudBackupError, LocalWalletMode, MAX_CLOUD_LABELS_SIZE, PreparedWalletBackup};
 use crate::backup::model::DescriptorPair as LocalDescriptorPair;
 use crate::label_manager::LabelManager;
+use crate::mnemonic::MnemonicExt as _;
 use crate::wallet::{
     WalletAddressType,
-    metadata::{WalletColor, WalletMetadata, WalletType},
+    metadata::{WalletBirthday, WalletColor, WalletMetadata, WalletType},
 };
 
 #[derive(Debug)]
@@ -30,6 +33,8 @@ struct WalletBackupRevisionPayload {
     color: WalletColor,
     address_type: WalletAddressType,
     wallet_type: WalletType,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    birthday: Option<WalletBirthday>,
     #[serde(skip_serializing_if = "Option::is_none")]
     origin: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -50,6 +55,7 @@ impl WalletBackupRevisionPayload {
             color: metadata.color,
             address_type: metadata.address_type,
             wallet_type: metadata.wallet_type,
+            birthday: metadata.birthday,
             origin: metadata.origin.clone(),
             fingerprint: metadata.master_fingerprint.as_ref().map(|fp| fp.as_uppercase()),
             labels_hash: None,
@@ -71,6 +77,7 @@ impl WalletBackupRevisionPayload {
             color: metadata.color,
             address_type: metadata.address_type,
             wallet_type: metadata.wallet_type,
+            birthday: metadata.birthday,
             origin: metadata.origin.clone(),
             fingerprint: metadata.master_fingerprint.as_ref().map(|fp| fp.as_uppercase()),
             labels_hash,
@@ -132,17 +139,7 @@ pub async fn build_wallet_entry(
         }
     };
 
-    let descriptors = match keychain.get_public_descriptor(id) {
-        Ok(Some((external, internal))) => {
-            Some(DescriptorPair { external: external.to_string(), internal: internal.to_string() })
-        }
-        Ok(None) => None,
-        Err(error) => {
-            return Err(CloudBackupError::Internal(format!(
-                "failed to read descriptors for '{name}': {error}"
-            )));
-        }
-    };
+    let descriptors = backup_descriptors(keychain, metadata, id, name, &secret)?;
 
     let metadata_value = serde_json::to_value(metadata)
         .map_err_prefix("serialize metadata", CloudBackupError::Internal)?;
@@ -175,6 +172,50 @@ pub async fn build_wallet_entry(
         content_revision_hash,
         updated_at,
     })
+}
+
+fn backup_descriptors(
+    keychain: &Keychain,
+    metadata: &WalletMetadata,
+    id: &crate::wallet::metadata::WalletId,
+    name: &str,
+    secret: &CloudWalletSecret,
+) -> Result<Option<DescriptorPair>, CloudBackupError> {
+    match keychain.get_public_descriptor(id) {
+        Ok(Some((external, internal))) => {
+            return Ok(Some(DescriptorPair {
+                external: external.to_string(),
+                internal: internal.to_string(),
+            }));
+        }
+        Ok(None) => {}
+        Err(error) => {
+            return Err(CloudBackupError::Internal(format!(
+                "failed to read descriptors for '{name}': {error}"
+            )));
+        }
+    }
+
+    match secret {
+        CloudWalletSecret::Mnemonic(mnemonic) => {
+            let mnemonic = bip39::Mnemonic::from_str(mnemonic).map_err(|error| {
+                CloudBackupError::Internal(format!(
+                    "failed to parse mnemonic for '{name}': {error}"
+                ))
+            })?;
+            let descriptors =
+                mnemonic.into_descriptors(None, metadata.network, metadata.address_type);
+
+            Ok(Some(DescriptorPair {
+                external: descriptors.external.extended_descriptor.to_string(),
+                internal: descriptors.internal.extended_descriptor.to_string(),
+            }))
+        }
+        CloudWalletSecret::TapSignerBackup(_) => Err(CloudBackupError::Internal(format!(
+            "tap signer wallet '{name}' has no public descriptors"
+        ))),
+        CloudWalletSecret::Descriptor(_) | CloudWalletSecret::WatchOnly => Ok(None),
+    }
 }
 
 fn build_cold_wallet_secret(
@@ -405,6 +446,16 @@ mod tests {
     }
 
     #[test]
+    fn content_revision_hash_changes_when_birthday_changes() {
+        let mut metadata = WalletMetadata::preview_new();
+        let original_hash = content_revision_hash_for_metadata(&metadata);
+
+        metadata.birthday = Some(WalletBirthday::BlockHeight(800_000));
+
+        assert_ne!(content_revision_hash_for_metadata(&metadata), original_hash);
+    }
+
+    #[test]
     fn content_revision_hash_changes_when_origin_changes() {
         let mut metadata = WalletMetadata::preview_new();
         let original_hash = content_revision_hash_for_metadata(&metadata);
@@ -476,6 +527,10 @@ mod tests {
         let mut wallet_type_changed = original.clone();
         wallet_type_changed.wallet_type = WalletType::WatchOnly;
         assert!(wallet_metadata_change_requires_upload(&original, &wallet_type_changed));
+
+        let mut birthday_changed = original.clone();
+        birthday_changed.birthday = Some(WalletBirthday::Timestamp(1_700_000_000));
+        assert!(wallet_metadata_change_requires_upload(&original, &birthday_changed));
 
         let mut origin_changed = original.clone();
         origin_changed.origin = Some("wpkh([abcd1234/84h/0h/0h])".into());

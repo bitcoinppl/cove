@@ -295,6 +295,7 @@ mod tests {
             pubkey: xpub_bytes.to_vec(),
             chain_code: original_xpub.chain_code.to_bytes().to_vec(),
             path: vec![84, 0, 0],
+            birth_height: Some(700_553),
         }
     }
 

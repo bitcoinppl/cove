@@ -632,7 +632,7 @@ impl RustOnboardingManager {
 
         let name = format!("Wallet {}", number_of_wallets + 1);
         let fingerprint: Fingerprint = mnemonic.xpub(network.into()).fingerprint().into();
-        let wallet_metadata = WalletMetadata::new(name, Some(fingerprint));
+        let wallet_metadata = WalletMetadata::new_cove_created_wallet(name, Some(fingerprint));
         let wallet =
             Wallet::try_new_persisted_and_selected(wallet_metadata, mnemonic.clone(), None)
                 .map_err_str(std::convert::identity)?;

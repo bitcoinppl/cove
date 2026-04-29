@@ -125,7 +125,7 @@ impl RustPendingWalletManager {
         let fingerprint: Fingerprint =
             self.state.read().wallet.mnemonic.xpub(network.into()).fingerprint().into();
 
-        let wallet_metadata = WalletMetadata::new(name, Some(fingerprint));
+        let wallet_metadata = WalletMetadata::new_cove_created_wallet(name, Some(fingerprint));
 
         // create, persist and select the wallet
         let wallet = Wallet::try_new_persisted_and_selected(

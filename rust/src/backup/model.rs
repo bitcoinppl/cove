@@ -310,6 +310,7 @@ mod tests {
             address_type: WalletAddressType::NativeSegwit,
             fiat_or_btc: FiatOrBtc::Btc,
             origin: None,
+            birthday: None,
             hardware_metadata: Some(HardwareWalletMetadata::TapSigner(tap_signer)),
             show_labels: true,
             internal: InternalOnlyMetadata::default(),

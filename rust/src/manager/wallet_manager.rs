@@ -41,7 +41,10 @@ use crate::{
         Address, AddressInfo, Wallet, WalletAddressType, WalletError,
         balance::Balance,
         fingerprint::Fingerprint,
-        metadata::{DiscoveryState, FiatOrBtc, WalletColor, WalletId, WalletMetadata, WalletType},
+        metadata::{
+            DiscoveryState, FiatOrBtc, WalletBirthday, WalletColor, WalletId, WalletMetadata,
+            WalletType,
+        },
     },
     wallet_scanner::{ScannerResponse, WalletScanner},
     word_validator::WordValidator,
@@ -388,16 +391,21 @@ impl RustWalletManager {
         })
     }
 
-    #[uniffi::constructor(default(backup = None))]
+    #[uniffi::constructor(default(backup = None, birthday = None))]
     pub fn try_new_from_tap_signer(
         tap_signer: Arc<cove_tap_card::TapSigner>,
         derive_info: DeriveInfo,
         backup: Option<Vec<u8>>,
+        birthday: Option<WalletBirthday>,
     ) -> Result<Self, Error> {
         let (sender, receiver) = flume::bounded(100);
 
-        let wallet =
-            Wallet::try_new_persisted_from_tap_signer(tap_signer.clone(), derive_info, backup)?;
+        let wallet = Wallet::try_new_persisted_from_tap_signer(
+            tap_signer.clone(),
+            derive_info,
+            backup,
+            birthday,
+        )?;
         let id = wallet.id.clone();
         let metadata = wallet.metadata.clone();
 
