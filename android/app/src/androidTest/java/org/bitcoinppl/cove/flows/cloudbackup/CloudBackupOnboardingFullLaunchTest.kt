@@ -1,43 +1,45 @@
 package org.bitcoinppl.cove.flows.cloudbackup
 
-import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onNodeWithText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
-import org.bitcoinppl.cove.MainActivity
+import androidx.test.uiautomator.UiDevice
 import org.bitcoinppl.cove.test.FullLaunchTestRule
+import org.bitcoinppl.cove.test.FullLaunchOnboardingRobot
+import org.bitcoinppl.cove.test.FullLaunchStartupRobot
 import org.bitcoinppl.cove.test.ManualFullLaunchTest
-import org.bitcoinppl.cove.test.OnboardingRobot
-import org.bitcoinppl.cove.test.StartupRobot
+import org.bitcoinppl.cove.test.fullLaunchDevice
+import org.bitcoinppl.cove.test.launchFullApp
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
-import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 
 @ManualFullLaunchTest
 @LargeTest
 @RunWith(AndroidJUnit4::class)
 class CloudBackupOnboardingFullLaunchTest {
-    private val compose = createAndroidComposeRule<MainActivity>()
+    private lateinit var device: UiDevice
 
     @get:Rule
-    val rule: RuleChain =
-        RuleChain
-            .outerRule(FullLaunchTestRule())
-            .around(compose)
+    val fullLaunch = FullLaunchTestRule()
+
+    @Before
+    fun launchActivity() {
+        device = fullLaunchDevice()
+        launchFullApp()
+    }
 
     @Test
     fun newUserCloudBackupDetailsCanCancel() {
-        StartupRobot(compose).assertBootstrappedIntoOnboarding()
+        FullLaunchStartupRobot(device).assertBootstrappedIntoOnboarding()
 
-        OnboardingRobot(compose)
+        FullLaunchOnboardingRobot(device)
             .tapGetStarted()
             .chooseNewUser()
             .openCloudBackupFromBackupWallet()
             .assertCloudBackupDetails()
             .cancelCloudBackupDetails()
 
-        compose.onNodeWithText("Back up your wallet", substring = true).assertIsDisplayed()
+        FullLaunchOnboardingRobot(device).assertBackupWallet()
     }
 }

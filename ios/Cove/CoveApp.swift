@@ -53,6 +53,9 @@ struct CoveApp: App {
         _ = Connectivity(connectivity: CloudConnectivityMonitor.shared)
         _ = PasskeyAccess(provider: PasskeyProviderImpl())
         _ = CloudStorage(cloudStorage: CloudStorageAccessImpl())
+        #if DEBUG
+        Self.resetLocalDataForUITestsIfRequested()
+        #endif
         Self.excludeDataDirFromBackup(logFailure: false)
     }
 
@@ -92,6 +95,21 @@ struct CoveApp: App {
         }
     }
 }
+
+#if DEBUG
+extension CoveApp {
+    private static func resetLocalDataForUITestsIfRequested() {
+        guard ProcessInfo.processInfo.arguments.contains("-ui-testing-reset-data") else { return }
+
+        do {
+            try resetLocalDataForCatastrophicRecovery()
+            resetBootstrapForRestore()
+        } catch {
+            Log.error("Failed to reset local data for UI tests: \(error)")
+        }
+    }
+}
+#endif
 
 extension CoveApp {
     @MainActor

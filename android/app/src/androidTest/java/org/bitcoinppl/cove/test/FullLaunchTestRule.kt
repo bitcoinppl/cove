@@ -1,6 +1,5 @@
 package org.bitcoinppl.cove.test
 
-import android.os.ParcelFileDescriptor
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assume.assumeTrue
 import org.junit.rules.TestRule
@@ -14,30 +13,19 @@ class FullLaunchTestRule : TestRule {
     ): Statement =
         object : Statement() {
             override fun evaluate() {
-                assumeTrue("manual full-launch tests require the ManualFullLaunchTest annotation argument", isManualRun())
-                clearTargetPackageData()
+                assumeTrue("manual full-launch tests require the ManualFullLaunchTest annotation argument", isManualRun(description))
                 base.evaluate()
             }
         }
 
-    private fun isManualRun(): Boolean {
+    private fun isManualRun(description: Description): Boolean {
         val args = InstrumentationRegistry.getArguments()
         val annotation = args.getString("annotation").orEmpty()
         val className = args.getString("class").orEmpty()
 
         return annotation.contains(ManualFullLaunchTest::class.java.name) ||
-            className.contains(ManualFullLaunchTest::class.java.name)
-    }
-
-    private fun clearTargetPackageData() {
-        val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val packageName = instrumentation.targetContext.packageName
-        val output = instrumentation.uiAutomation.executeShellCommand("pm clear $packageName")
-
-        output.drainAndClose()
-    }
-
-    private fun ParcelFileDescriptor.drainAndClose() {
-        ParcelFileDescriptor.AutoCloseInputStream(this).bufferedReader().use { it.readText() }
+            className.contains(ManualFullLaunchTest::class.java.name) ||
+            description.getAnnotation(ManualFullLaunchTest::class.java) != null ||
+            description.testClass?.isAnnotationPresent(ManualFullLaunchTest::class.java) == true
     }
 }

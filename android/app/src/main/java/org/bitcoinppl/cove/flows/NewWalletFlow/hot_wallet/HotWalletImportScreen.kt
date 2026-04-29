@@ -52,6 +52,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -485,7 +486,7 @@ fun HotWalletImportScreen(
                                 disabledContainerColor = CoveColor.btnPrimary.copy(alpha = 0.5f),
                                 disabledContentColor = CoveColor.midnightBlue.copy(alpha = 0.5f),
                             ),
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().testTag("hotWalletImport.import"),
                     )
                 }
             }

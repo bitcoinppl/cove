@@ -160,6 +160,54 @@ android-ui-manual:
 [private]
 alias aum := android-ui-manual
 
+# Run iOS UI tests without opening Simulator
+[group('test')]
+[script('bash')]
+ios-ui-background device="iPhone 17" test="CoveUITests/OnboardingSmokeUITests":
+    set -e
+
+    args=()
+    if [ -n "{{test}}" ]; then
+        args+=("-only-testing:{{test}}")
+    fi
+
+    xcodebuild test \
+        -project ios/Cove.xcodeproj \
+        -scheme Cove \
+        -configuration Debug \
+        -destination "platform=iOS Simulator,name={{device}}" \
+        -parallel-testing-enabled NO \
+        "${args[@]}"
+
+[private]
+alias iub := ios-ui-background
+
+# Run iOS UI tests with Simulator visible
+[group('test')]
+[script('bash')]
+ios-ui-foreground device="iPhone 17" test="CoveUITests/OnboardingSmokeUITests":
+    set -e
+
+    open -a Simulator
+    xcrun simctl boot "{{device}}" 2>/dev/null || true
+    xcrun simctl bootstatus "{{device}}" -b
+
+    args=()
+    if [ -n "{{test}}" ]; then
+        args+=("-only-testing:{{test}}")
+    fi
+
+    xcodebuild test \
+        -project ios/Cove.xcodeproj \
+        -scheme Cove \
+        -configuration Debug \
+        -destination "platform=iOS Simulator,name={{device}}" \
+        -parallel-testing-enabled NO \
+        "${args[@]}"
+
+[private]
+alias iuf := ios-ui-foreground
+
 # Run all tests
 [group('test')]
 [working-directory: 'rust']

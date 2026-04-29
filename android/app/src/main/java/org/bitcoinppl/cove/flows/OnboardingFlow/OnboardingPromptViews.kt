@@ -31,6 +31,8 @@ import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.WifiOff
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -213,11 +215,16 @@ private fun OnboardingTermsCheckboxCard(
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalAlignment = Alignment.Top,
     ) {
-        Icon(
-            imageVector = if (checked) Icons.Default.AddCircle else Icons.Default.Warning,
-            contentDescription = null,
-            tint = if (checked) OnboardingGradientLight else OnboardingGradientLight.copy(alpha = 0.92f),
-            modifier = Modifier.padding(top = 2.dp).size(18.dp),
+        Checkbox(
+            checked = checked,
+            onCheckedChange = null,
+            colors =
+                CheckboxDefaults.colors(
+                    checkedColor = OnboardingGradientLight,
+                    uncheckedColor = OnboardingTextSecondary,
+                    checkmarkColor = Color.White,
+                ),
+            modifier = Modifier.size(22.dp),
         )
         Text(
             text = text,
@@ -281,11 +288,16 @@ private fun OnboardingTermsAgreementCard(
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalAlignment = Alignment.Top,
     ) {
-        Icon(
-            imageVector = if (checked) Icons.Default.AddCircle else Icons.Default.Warning,
-            contentDescription = null,
-            tint = if (checked) OnboardingGradientLight else OnboardingGradientLight.copy(alpha = 0.92f),
-            modifier = Modifier.padding(top = 2.dp).size(18.dp),
+        Checkbox(
+            checked = checked,
+            onCheckedChange = null,
+            colors =
+                CheckboxDefaults.colors(
+                    checkedColor = OnboardingGradientLight,
+                    uncheckedColor = OnboardingTextSecondary,
+                    checkmarkColor = Color.White,
+                ),
+            modifier = Modifier.size(22.dp),
         )
 
         ClickableText(

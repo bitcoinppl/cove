@@ -39,7 +39,10 @@ internal fun OnboardingContainer(
         OnboardingStep.TERMS ->
             OnboardingTermsScreen(
                 errorMessage = manager.state.errorMessage,
-                onAgree = { manager.dispatch(OnboardingAction.AcceptTerms) },
+                onAgree = {
+                    manager.app.agreeToTerms()
+                    manager.dispatch(OnboardingAction.AcceptTerms)
+                },
             )
 
         OnboardingStep.CLOUD_CHECK -> CloudCheckContent()

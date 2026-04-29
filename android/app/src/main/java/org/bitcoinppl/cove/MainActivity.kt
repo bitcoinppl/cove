@@ -67,6 +67,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.fragment.app.FragmentActivity
@@ -410,14 +412,22 @@ class MainActivity : FragmentActivity() {
                             )
                         },
                     ) { _ ->
-                        Box(modifier = Modifier.fillMaxSize()) {
+                        Box(
+                            modifier =
+                                Modifier
+                                    .fillMaxSize()
+                                    .semantics { testTagsAsResourceId = true },
+                        ) {
                             LockView {
                                 when (startupMode) {
                                     StartupMode.ONBOARDING -> {
                                         if (onboardingManager != null) {
                                             OnboardingContainer(
                                                 manager = onboardingManager,
-                                                onComplete = { startupMode = StartupMode.READY },
+                                                onComplete = {
+                                                    persistedOnboardingProgress = null
+                                                    startupMode = StartupMode.READY
+                                                },
                                             )
                                         }
                                     }

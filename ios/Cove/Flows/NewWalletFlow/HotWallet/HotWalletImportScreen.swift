@@ -310,6 +310,7 @@ struct HotWalletImportScreen: View {
         Button("Import wallet") {
             importWallet()
         }
+        .accessibilityIdentifier("hotWalletImport.import")
         .font(.subheadline)
         .fontWeight(.medium)
         .frame(maxWidth: .infinity)

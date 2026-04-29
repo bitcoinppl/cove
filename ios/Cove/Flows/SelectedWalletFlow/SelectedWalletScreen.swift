@@ -272,6 +272,7 @@ struct SelectedWalletScreen: View {
                         .adaptiveToolbarItemStyle(isPastHeader: shouldShowNavBar)
                         .font(.callout)
                 }
+                .accessibilityIdentifier("selectedWallet.more")
                 .confirmationDialog(
                     "Export Labels",
                     isPresented: $showExportLabelsConfirmation
