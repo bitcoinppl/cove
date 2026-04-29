@@ -58,6 +58,8 @@ pub enum AppAction {
     UpdateRoute { routes: Vec<Route> },
     PushRoute(Route),
     PopRoute,
+    SelectWallet { id: WalletId },
+    SelectLatestOrNewWallet,
     ChangeNetwork { network: Network },
     ChangeColorScheme(ColorSchemeSelection),
     ChangeFiatCurrency(FiatCurrency),
@@ -75,6 +77,8 @@ pub enum AppError {
     PricesError(String),
     #[error("fees error: {0}")]
     FeesError(String),
+    #[error("wallet selection error: {0}")]
+    WalletSelection(String),
 }
 
 type Error = AppError;
@@ -140,7 +144,14 @@ impl App {
 
     /// Handle event received from frontend
     pub fn handle_action(&self, event: AppAction) {
-        // Handle event
+        if let Err(error) = self.handle_action_result(event) {
+            error!("Unable to handle app action: {error}");
+        }
+    }
+
+    /// Handle event received from frontend and report action errors
+    pub fn handle_action_result(&self, event: AppAction) -> Result<(), AppError> {
+        // handle event
         let state = self.state.clone();
         match event {
             AppAction::UpdateRoute { routes } => {
@@ -228,6 +239,16 @@ impl App {
                 Updater::send_update(AppMessage::RouteUpdated(routes));
             }
 
+            AppAction::SelectWallet { id } => {
+                FfiApp::global()
+                    .select_wallet(id, None)
+                    .map_err(|error| AppError::WalletSelection(error.to_string()))?;
+            }
+
+            AppAction::SelectLatestOrNewWallet => {
+                FfiApp::global().select_latest_or_new_wallet();
+            }
+
             AppAction::AcceptTerms => {
                 if let Err(error) = Database::global()
                     .global_flag
@@ -262,6 +283,8 @@ impl App {
                 Updater::send_update(AppMessage::SelectedNodeChanged(config.selected_node()));
             }
         }
+
+        Ok(())
     }
 
     pub fn listen_for_updates(&self, updater: Box<dyn FfiReconcile>) {
@@ -598,6 +621,12 @@ impl FfiApp {
     #[uniffi::method(name = "dispatch")]
     fn ffi_dispatch(&self, action: AppAction) {
         self.inner().handle_action(action);
+    }
+
+    /// Frontend calls this method to send app events that can fail
+    #[uniffi::method(name = "dispatchThrowing")]
+    fn ffi_dispatch_throwing(&self, action: AppAction) -> Result<(), Error> {
+        self.inner().handle_action_result(action)
     }
 
     pub fn listen_for_updates(&self, updater: Box<dyn FfiReconcile>) {
