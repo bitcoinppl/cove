@@ -12023,6 +12023,17 @@ public protocol WalletsTableProtocol: AnyObject, Sendable {
     
     func len(network: Network, mode: WalletMode) throws  -> UInt16
     
+    /**
+     * Move a wallet to `to_position`. Out-of-range positions clamp to the list bounds.
+     */
+    func moveWallet(walletId: WalletId, toPosition: UInt32) throws  -> [WalletMetadata]
+    
+    /**
+     * Reorder wallets for the current (network, mode) to match `ordered_ids`.
+     * `ordered_ids` must be a permutation of the current wallet IDs.
+     */
+    func reorderWallets(orderedIds: [WalletId]) throws  -> [WalletMetadata]
+    
 }
 open class WalletsTable: WalletsTableProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -12118,6 +12129,32 @@ open func len(network: Network, mode: WalletMode)throws  -> UInt16  {
             self.uniffiCloneHandle(),
         FfiConverterTypeNetwork_lower(network),
         FfiConverterTypeWalletMode_lower(mode),$0
+    )
+})
+}
+    
+    /**
+     * Move a wallet to `to_position`. Out-of-range positions clamp to the list bounds.
+     */
+open func moveWallet(walletId: WalletId, toPosition: UInt32)throws  -> [WalletMetadata]  {
+    return try  FfiConverterSequenceTypeWalletMetadata.lift(try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
+    uniffi_cove_fn_method_walletstable_move_wallet(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeWalletId_lower(walletId),
+        FfiConverterUInt32.lower(toPosition),$0
+    )
+})
+}
+    
+    /**
+     * Reorder wallets for the current (network, mode) to match `ordered_ids`.
+     * `ordered_ids` must be a permutation of the current wallet IDs.
+     */
+open func reorderWallets(orderedIds: [WalletId])throws  -> [WalletMetadata]  {
+    return try  FfiConverterSequenceTypeWalletMetadata.lift(try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
+    uniffi_cove_fn_method_walletstable_reorder_wallets(
+            self.uniffiCloneHandle(),
+        FfiConverterSequenceTypeWalletId.lower(orderedIds),$0
     )
 })
 }
@@ -15460,6 +15497,11 @@ public struct WalletMetadata: Equatable, Hashable {
     public var fiatOrBtc: FiatOrBtc
     public var origin: String?
     /**
+     * Position in the wallet list within its (network, mode); lower appears first.
+     * Backfilled by `WalletsTable::migrate_positions` for pre-existing records.
+     */
+    public var position: UInt32
+    /**
      * Metadata data specific to different hardware wallets
      */
     public var hardwareMetadata: HardwareWalletMetadata?
@@ -15473,6 +15515,10 @@ public struct WalletMetadata: Equatable, Hashable {
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
     public init(id: WalletId, name: String, color: WalletColor, verified: Bool, network: Network, masterFingerprint: Fingerprint?, selectedUnit: BitcoinUnit, sensitiveVisible: Bool, detailsExpanded: Bool, walletType: WalletType, walletMode: WalletMode, discoveryState: DiscoveryState, addressType: WalletAddressType, fiatOrBtc: FiatOrBtc, origin: String?, 
+        /**
+         * Position in the wallet list within its (network, mode); lower appears first.
+         * Backfilled by `WalletsTable::migrate_positions` for pre-existing records.
+         */position: UInt32, 
         /**
          * Metadata data specific to different hardware wallets
          */hardwareMetadata: HardwareWalletMetadata?, 
@@ -15495,6 +15541,7 @@ public struct WalletMetadata: Equatable, Hashable {
         self.addressType = addressType
         self.fiatOrBtc = fiatOrBtc
         self.origin = origin
+        self.position = position
         self.hardwareMetadata = hardwareMetadata
         self.showLabels = showLabels
         self.`internal` = `internal`
@@ -15570,6 +15617,7 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
                 addressType: FfiConverterTypeWalletAddressType.read(from: &buf), 
                 fiatOrBtc: FfiConverterTypeFiatOrBtc.read(from: &buf), 
                 origin: FfiConverterOptionString.read(from: &buf), 
+                position: FfiConverterUInt32.read(from: &buf), 
                 hardwareMetadata: FfiConverterOptionTypeHardwareWalletMetadata.read(from: &buf), 
                 showLabels: FfiConverterBool.read(from: &buf), 
                 internal: FfiConverterTypeInternalOnlyMetadata.read(from: &buf)
@@ -15592,6 +15640,7 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
         FfiConverterTypeWalletAddressType.write(value.addressType, into: &buf)
         FfiConverterTypeFiatOrBtc.write(value.fiatOrBtc, into: &buf)
         FfiConverterOptionString.write(value.origin, into: &buf)
+        FfiConverterUInt32.write(value.position, into: &buf)
         FfiConverterOptionTypeHardwareWalletMetadata.write(value.hardwareMetadata, into: &buf)
         FfiConverterBool.write(value.showLabels, into: &buf)
         FfiConverterTypeInternalOnlyMetadata.write(value.`internal`, into: &buf)
@@ -32164,6 +32213,8 @@ enum WalletTableError: Swift.Error, Equatable, Hashable, Foundation.LocalizedErr
     case ReadError(String
     )
     case WalletAlreadyExists
+    case WalletNotFound
+    case ReorderMismatch
 
     
 
@@ -32210,6 +32261,8 @@ public struct FfiConverterTypeWalletTableError: FfiConverterRustBuffer {
             try FfiConverterString.read(from: &buf)
             )
         case 3: return .WalletAlreadyExists
+        case 4: return .WalletNotFound
+        case 5: return .ReorderMismatch
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -32234,6 +32287,14 @@ public struct FfiConverterTypeWalletTableError: FfiConverterRustBuffer {
         
         case .WalletAlreadyExists:
             writeInt(&buf, Int32(3))
+        
+        
+        case .WalletNotFound:
+            writeInt(&buf, Int32(4))
+        
+        
+        case .ReorderMismatch:
+            writeInt(&buf, Int32(5))
         
         }
     }
@@ -36580,6 +36641,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_walletstable_len() != 51436) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_walletstable_move_wallet() != 47857) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_walletstable_reorder_wallets() != 55038) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_priceresponse_get() != 6552) {

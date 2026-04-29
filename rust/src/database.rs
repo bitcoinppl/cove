@@ -138,6 +138,10 @@ impl Database {
 
         write_txn.commit()?;
 
+        if let Err(err) = wallets.migrate_positions() {
+            error!("wallet position migration failed: {err}");
+        }
+
         Ok(Self {
             global_flag,
             global_config,

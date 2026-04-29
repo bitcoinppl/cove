@@ -13,6 +13,9 @@ struct SidebarView: View {
 
     let currentRoute: Route
 
+    @State private var editMode: EditMode = .inactive
+    @State private var reorderTask: Task<Void, Never>?
+
     func setForeground(_ route: Route) -> LinearGradient {
         if RouteFactory().isSameParentRoute(route: route, routeToCheck: currentRoute) {
             LinearGradient(
@@ -63,12 +66,22 @@ struct SidebarView: View {
                         .foregroundStyle(.white)
 
                     Spacer()
+
+                    if editMode.isEditing {
+                        Button("Done") {
+                            withAnimation { editMode = .inactive }
+                        }
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundStyle(.white)
+                    }
                 }
                 .padding(.bottom, 16)
 
-                VStack(spacing: 12) {
+                List {
                     ForEach(app.wallets, id: \.id) { wallet in
                         Button(action: {
+                            guard !editMode.isEditing else { return }
                             goTo(Route.selectedWallet(wallet.id))
                         }) {
                             HStack(spacing: 10) {
@@ -89,6 +102,9 @@ struct SidebarView: View {
                         .padding()
                         .background(Color.coveLightGray.opacity(0.06))
                         .cornerRadius(10)
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                        .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
                         .contentShape(
                             .contextMenuPreview,
                             RoundedRectangle(cornerRadius: 10)
@@ -98,11 +114,22 @@ struct SidebarView: View {
                                 app.isSidebarVisible = false
                                 app.pushRoutes(RouteFactory().nestedWalletSettings(id: wallet.id))
                             }
+                            Button("Edit Order") {
+                                HapticFeedback.progress.trigger()
+                                withAnimation { editMode = .active }
+                            }
                         }
                     }
+                    .onMove(perform: handleMove)
                 }
-
-                Spacer()
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+                .environment(\.editMode, $editMode)
+                .onChange(of: app.isSidebarVisible) { _, isVisible in
+                    if !isVisible, editMode.isEditing {
+                        editMode = .inactive
+                    }
+                }
 
                 VStack(spacing: 32) {
                     Divider()
@@ -146,6 +173,48 @@ struct SidebarView: View {
         Task {
             try? await Task.sleep(for: .milliseconds(200))
             await navigateRoute(route)
+        }
+    }
+
+    private func handleMove(from source: IndexSet, to destination: Int) {
+        let previous = app.wallets
+        var reordered = previous
+        reordered.move(fromOffsets: source, toOffset: destination)
+
+        guard reordered.map(\.id) != previous.map(\.id) else { return }
+
+        app.wallets = reordered
+        HapticFeedback.progress.trigger()
+
+        persistWalletOrder(orderedIds: reordered.map(\.id))
+    }
+
+    private func persistWalletOrder(orderedIds: [WalletId]) {
+        let database = app.database
+        let appRef = app
+        let pending = reorderTask
+        reorderTask = Task {
+            await pending?.value
+
+            do {
+                let persisted = try await Task.detached {
+                    try database.wallets().reorderWallets(orderedIds: orderedIds)
+                }.value
+
+                await MainActor.run {
+                    if appRef.wallets.map(\.id) == orderedIds {
+                        appRef.wallets = persisted
+                        HapticFeedback.success.trigger()
+                    }
+                }
+            } catch {
+                Log.error("Failed to reorder wallets: \(error)")
+                await MainActor.run {
+                    if appRef.wallets.map(\.id) == orderedIds {
+                        appRef.loadWallets()
+                    }
+                }
+            }
         }
     }
 

@@ -44,6 +44,11 @@ pub struct WalletMetadata {
     #[serde(default)]
     pub origin: Option<String>,
 
+    /// Position in the wallet list within its (network, mode); lower appears first.
+    /// Backfilled by `WalletsTable::migrate_positions` for pre-existing records.
+    #[serde(default)]
+    pub position: u32,
+
     /// Metadata data specific to different hardware wallets
     #[serde(default)]
     pub hardware_metadata: Option<HardwareWalletMetadata>,
@@ -193,6 +198,7 @@ impl WalletMetadata {
             color: WalletColor::random(),
             master_fingerprint: fingerprint.map(Into::into),
             origin: None,
+            position: 0,
             verified: false,
             network,
             fiat_or_btc: FiatOrBtc::Btc,
@@ -241,6 +247,7 @@ impl WalletMetadata {
             name: "Test Wallet".to_string(),
             master_fingerprint: Some(Arc::new(Fingerprint::default())),
             origin: None,
+            position: 0,
             color: WalletColor::random(),
             verified: false,
             network: Network::Bitcoin,
