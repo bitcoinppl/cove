@@ -385,10 +385,13 @@ fn simulator_is_booted(sh: &Shell, device: &str) -> Result<bool> {
         .read()
         .wrap_err("Failed to list booted simulators")?;
 
-    Ok(output.lines().any(|line| {
-        let line = line.trim_start();
-        line.starts_with(device) && line.contains("(Booted)")
-    }))
+    Ok(output.lines().any(|line| simulator_line_matches_device(line, device)))
+}
+
+fn simulator_line_matches_device(line: &str, device: &str) -> bool {
+    let line = line.trim_start();
+
+    line.starts_with(&format!("{device} (")) && line.contains("(Booted)")
 }
 
 fn reset_simulator_state(sh: &Shell) {
@@ -598,4 +601,33 @@ fn parse_device_detail(output: &str, prefix: &str) -> Result<String> {
         .find_map(|line| line.strip_prefix(prefix))
         .map(ToOwned::to_owned)
         .ok_or_else(|| eyre!("Missing `{prefix}` in devicectl device details"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::simulator_line_matches_device;
+
+    #[test]
+    fn simulator_line_matches_exact_booted_device_name() {
+        assert!(simulator_line_matches_device(
+            "    iPhone 17 (F4E2B0AD-2E89-4E34-8B69-879F4C580475) (Booted)",
+            "iPhone 17",
+        ));
+    }
+
+    #[test]
+    fn simulator_line_does_not_match_device_name_prefix() {
+        assert!(!simulator_line_matches_device(
+            "    iPhone 17 (F4E2B0AD-2E89-4E34-8B69-879F4C580475) (Booted)",
+            "iPhone 1",
+        ));
+    }
+
+    #[test]
+    fn simulator_line_does_not_match_shutdown_device() {
+        assert!(!simulator_line_matches_device(
+            "    iPhone 17 (F4E2B0AD-2E89-4E34-8B69-879F4C580475) (Shutdown)",
+            "iPhone 17",
+        ));
+    }
 }

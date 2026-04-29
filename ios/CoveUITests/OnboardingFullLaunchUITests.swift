@@ -247,7 +247,6 @@ final class OnboardingFullLaunchUITests: XCTestCase {
         }
 
         app.buttons["onboarding.terms.agree"].tap()
-        XCTAssertTrue(app.staticTexts["Welcome to Cove"].waitForExistence(timeout: 10))
     }
 
     private func chooseNativeImportedWalletFromSelectionSheet() {

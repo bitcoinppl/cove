@@ -22,7 +22,8 @@ class FullLaunchStartupRobot(
         assertNull(device.findObject(By.textContains("App startup timed out")))
         assertNull(device.findObject(By.textContains("App initialization error")))
 
-        if (device.waitUntilAnyVisible(tag("onboarding.terms.check.backup"), tag("onboarding.getStarted")).description == "terms") {
+        val termsSelector = tag("onboarding.terms.check.backup")
+        if (device.waitUntilAnyVisible(termsSelector, tag("onboarding.getStarted")).description == termsSelector.description) {
             acceptTermsAndContinue()
         }
 
@@ -334,7 +335,6 @@ fun fullLaunchDevice(): UiDevice =
 fun launchFullApp() {
     val instrumentation = InstrumentationRegistry.getInstrumentation()
     val packageName = instrumentation.targetContext.packageName
-    instrumentation.uiAutomation.executeShellCommand("am force-stop com.android.settings").drainAndClose()
     val output =
         instrumentation.uiAutomation.executeShellCommand(
             "am start -W -n $packageName/org.bitcoinppl.cove.MainActivity --ez org.bitcoinppl.cove.uitest.RESET_DATA true",
@@ -376,8 +376,8 @@ private fun UiDevice.waitUntilAnyVisible(
 ): VisibleSelector {
     val deadline = System.currentTimeMillis() + timeoutMillis
     while (System.currentTimeMillis() < deadline) {
-        findObject(first.value)?.let { return VisibleSelector("terms", it) }
-        findObject(second.value)?.let { return VisibleSelector("welcome", it) }
+        findObject(first.value)?.let { return VisibleSelector(first.description, it) }
+        findObject(second.value)?.let { return VisibleSelector(second.description, it) }
         Thread.sleep(100)
     }
 
