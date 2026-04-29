@@ -1,6 +1,9 @@
 package org.bitcoinppl.cove.test
 
 import android.os.ParcelFileDescriptor
+import android.view.WindowManager
+import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
+import androidx.test.runner.lifecycle.Stage
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.BySelector
@@ -9,6 +12,8 @@ import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
 import java.io.ByteArrayOutputStream
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
 
 class FullLaunchStartupRobot(
     private val device: UiDevice,
@@ -22,6 +27,12 @@ class FullLaunchStartupRobot(
         }
 
         device.waitUntilVisible(tag("onboarding.getStarted"))
+
+        return this
+    }
+
+    fun assertScreenshotsAllowed(): FullLaunchStartupRobot {
+        assertFalse("expected screenshots to be allowed", isFlagSecureSet())
 
         return this
     }
@@ -154,6 +165,18 @@ class FullLaunchOnboardingRobot(
         return this
     }
 
+    fun assertScreenshotsBlocked(): FullLaunchOnboardingRobot {
+        assertTrue("expected screenshots to be blocked", isFlagSecureSet())
+
+        return this
+    }
+
+    fun assertScreenshotsAllowed(): FullLaunchOnboardingRobot {
+        assertFalse("expected screenshots to be allowed", isFlagSecureSet())
+
+        return this
+    }
+
     fun saveRecoveryWords(): FullLaunchOnboardingRobot {
         viewRecoveryWords()
         device.waitUntilVisible(tag("onboarding.secretWords.saved")).click()
@@ -233,6 +256,16 @@ class FullLaunchOnboardingRobot(
         return this
     }
 
+    fun assertImportScreenBlocksScreenshots(): FullLaunchOnboardingRobot {
+        device.waitUntilVisible(text("Enter recovery words")).click()
+        device.waitUntilVisible(text("How many words do you have?"))
+        device.waitUntilVisible(text("12 words")).click()
+        device.waitUntilVisible(text("Import Wallet"))
+        assertScreenshotsBlocked()
+
+        return this
+    }
+
     fun skipCloudBackupAfterImport(): FullLaunchOnboardingRobot {
         device.waitUntilVisible(text("Not Now")).click()
 
@@ -305,6 +338,25 @@ fun launchFullApp() {
     val output = instrumentation.uiAutomation.executeShellCommand("am start -W -n $packageName/org.bitcoinppl.cove.MainActivity")
 
     output.drainAndClose()
+}
+
+private fun isFlagSecureSet(): Boolean {
+    val activity = resumedActivity()
+
+    return (activity.window.attributes.flags and WindowManager.LayoutParams.FLAG_SECURE) != 0
+}
+
+private fun resumedActivity(): android.app.Activity {
+    var activity: android.app.Activity? = null
+    InstrumentationRegistry.getInstrumentation().runOnMainSync {
+        activity =
+            ActivityLifecycleMonitorRegistry
+                .getInstance()
+                .getActivitiesInStage(Stage.RESUMED)
+                .firstOrNull()
+    }
+
+    return activity ?: error("No resumed activity")
 }
 
 private fun UiDevice.waitUntilVisible(

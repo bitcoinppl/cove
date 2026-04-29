@@ -31,7 +31,9 @@ class OnboardingFullLaunchTest {
 
     @Test
     fun freshInstallShowsWelcomeAfterBootstrap() {
-        FullLaunchStartupRobot(device).assertBootstrappedIntoOnboarding()
+        FullLaunchStartupRobot(device)
+            .assertBootstrappedIntoOnboarding()
+            .assertScreenshotsAllowed()
     }
 
     @Test
@@ -134,6 +136,7 @@ class OnboardingFullLaunchTest {
             .chooseSoftwareCreate()
             .assertBackupWallet()
             .viewRecoveryWords()
+            .assertScreenshotsBlocked()
     }
 
     @Test
@@ -160,6 +163,19 @@ class OnboardingFullLaunchTest {
             .chooseSoftwareWallet()
             .chooseSoftwareImport()
             .openSoftwareQrScanner()
+    }
+
+    @Test
+    fun softwareWalletImportWordsBlocksScreenshots() {
+        FullLaunchStartupRobot(device).assertBootstrappedIntoOnboarding()
+
+        FullLaunchOnboardingRobot(device)
+            .tapGetStarted()
+            .chooseExistingUser()
+            .useAnotherWallet()
+            .chooseSoftwareWallet()
+            .chooseSoftwareImport()
+            .assertImportScreenBlocksScreenshots()
     }
 
     @Test
