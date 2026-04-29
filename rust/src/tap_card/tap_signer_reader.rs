@@ -412,7 +412,9 @@ impl TapSignerReader {
 
         let (derive_response, birth_height) = {
             let mut reader = self.reader.lock().await;
-            let birth_height = valid_birth_height(reader.birth.try_into().ok());
+            let birth_height = valid_birth_height(Some(
+                reader.birth.try_into().expect("usize birth height fits in u64"),
+            ));
             let derive_response = reader.derive(&path, pin).await?;
             (derive_response, birth_height)
         };
