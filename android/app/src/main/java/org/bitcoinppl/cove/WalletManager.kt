@@ -129,8 +129,19 @@ class WalletManager :
         }
 
         // create from TapSigner
-        fun fromTapSigner(tapSigner: TapSigner, deriveInfo: DeriveInfo, backup: ByteArray? = null): WalletManager {
-            val rust = RustWalletManager.tryNewFromTapSigner(tapSigner, deriveInfo, backup)
+        fun fromTapSigner(
+            tapSigner: TapSigner,
+            deriveInfo: DeriveInfo,
+            backup: ByteArray? = null,
+            birthday: WalletBirthday? = null,
+        ): WalletManager {
+            val rust =
+                RustWalletManager.tryNewFromTapSigner(
+                    tapSigner,
+                    deriveInfo,
+                    backup,
+                    birthday,
+                )
             val metadata = rust.walletMetadata()
             android.util.Log.d("WalletManager", "Initialized WalletManager from TapSigner")
             return WalletManager(metadata.id, rust, metadata)
