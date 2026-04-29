@@ -55,6 +55,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -242,6 +243,7 @@ internal fun OnboardingBackupWalletView(
                 icon = Icons.Default.Description,
                 isComplete = secretWordsSaved,
                 onClick = onShowWords,
+                modifier = Modifier.testTag("onboarding.secretWords"),
             )
             OnboardingStatusCard(
                 title = "Enable Cloud Backup",
@@ -250,6 +252,7 @@ internal fun OnboardingBackupWalletView(
                 icon = Icons.Default.Lock,
                 isComplete = cloudBackupEnabled,
                 onClick = onEnableCloudBackup,
+                modifier = Modifier.testTag("onboarding.cloudBackup.prompt"),
             )
         }
 
@@ -258,6 +261,7 @@ internal fun OnboardingBackupWalletView(
         OnboardingPrimaryButton(
             text = "Continue",
             onClick = onContinue,
+            modifier = Modifier.testTag("onboarding.continue"),
             enabled = secretWordsSaved || cloudBackupEnabled,
         )
     }
@@ -347,6 +351,7 @@ internal fun OnboardingSecretWordsView(
                 OnboardingPrimaryButton(
                     text = "I Saved These Words",
                     onClick = onSaved,
+                    modifier = Modifier.testTag("onboarding.secretWords.saved"),
                 )
             }
         }
@@ -471,9 +476,17 @@ private fun OnboardingSoftwareImportCloudBackupStepView(
             }
 
             Spacer(modifier = Modifier.size(14.dp))
-            OnboardingPrimaryButton(text = "Enable Cloud Backup", onClick = { showingDetails = true })
+            OnboardingPrimaryButton(
+                text = "Enable Cloud Backup",
+                onClick = { showingDetails = true },
+                modifier = Modifier.testTag("onboarding.cloudBackup.enable"),
+            )
             Spacer(modifier = Modifier.size(14.dp))
-            OnboardingSecondaryButton(text = "Not Now", onClick = onSkip)
+            OnboardingSecondaryButton(
+                text = "Not Now",
+                onClick = onSkip,
+                modifier = Modifier.testTag("onboarding.cloudBackup.skip"),
+            )
         }
     }
 }
@@ -533,9 +546,17 @@ private fun OnboardingHardwareImportCloudBackupStepView(
             }
 
             Spacer(modifier = Modifier.size(14.dp))
-            OnboardingPrimaryButton(text = "Enable Cloud Backup", onClick = { showingDetails = true })
+            OnboardingPrimaryButton(
+                text = "Enable Cloud Backup",
+                onClick = { showingDetails = true },
+                modifier = Modifier.testTag("onboarding.cloudBackup.enable"),
+            )
             Spacer(modifier = Modifier.size(14.dp))
-            OnboardingSecondaryButton(text = "Not Now", onClick = onSkip)
+            OnboardingSecondaryButton(
+                text = "Not Now",
+                onClick = onSkip,
+                modifier = Modifier.testTag("onboarding.cloudBackup.skip"),
+            )
         }
     }
 }
@@ -656,6 +677,7 @@ private fun CloudBackupEnableOnboardingView(
                     fontWeight = FontWeight.SemiBold,
                     modifier =
                         Modifier
+                            .testTag("onboarding.cloudBackup.cancel")
                             .clip(RoundedCornerShape(12.dp))
                             .clickable(enabled = !isBusy, onClick = onCancel)
                             .padding(horizontal = 8.dp, vertical = 4.dp),
@@ -768,6 +790,7 @@ private fun CloudBackupEnableOnboardingView(
                 OnboardingPrimaryButton(
                     text = "Enable Cloud Backup",
                     onClick = onEnable,
+                    modifier = Modifier.testTag("onboarding.cloudBackup.enable"),
                     enabled = allChecked && !isBusy,
                 )
 

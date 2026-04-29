@@ -41,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.SpanStyle
@@ -134,26 +135,31 @@ internal fun OnboardingTermsScreen(
                     checked = checks[0],
                     onCheckedChange = { checks[0] = it },
                     text = "I understand that I am responsible for securely managing and backing up my wallets. Cove does not store or recover wallet information.",
+                    modifier = Modifier.testTag("onboarding.terms.check.backup"),
                 )
                 OnboardingTermsCheckboxCard(
                     checked = checks[1],
                     onCheckedChange = { checks[1] = it },
                     text = "I understand that any unlawful use of Cove is strictly prohibited.",
+                    modifier = Modifier.testTag("onboarding.terms.check.legal"),
                 )
                 OnboardingTermsCheckboxCard(
                     checked = checks[2],
                     onCheckedChange = { checks[2] = it },
                     text = "I understand that Cove is not a bank, exchange, or licensed financial institution, and does not offer financial services.",
+                    modifier = Modifier.testTag("onboarding.terms.check.financial"),
                 )
                 OnboardingTermsCheckboxCard(
                     checked = checks[3],
                     onCheckedChange = { checks[3] = it },
                     text = "I understand that if I lose access to my wallet, Cove cannot recover my funds or credentials.",
+                    modifier = Modifier.testTag("onboarding.terms.check.recovery"),
                 )
                 OnboardingTermsAgreementCard(
                     checked = checks[4],
                     onCheckedChange = { checks[4] = it },
                     onOpenUrl = { uriHandler.openUri(it) },
+                    modifier = Modifier.testTag("onboarding.terms.check.agreement"),
                 )
             }
 
@@ -175,6 +181,7 @@ internal fun OnboardingTermsScreen(
             OnboardingPrimaryButton(
                 text = "Agree and Continue",
                 onClick = onAgree,
+                modifier = Modifier.testTag("onboarding.terms.agree"),
                 enabled = allChecked,
             )
 
@@ -188,10 +195,11 @@ private fun OnboardingTermsCheckboxCard(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     text: String,
+    modifier: Modifier = Modifier,
 ) {
     Row(
         modifier =
-            Modifier
+            modifier
                 .fillMaxWidth()
                 .background(OnboardingCardFill, RoundedCornerShape(16.dp))
                 .toggleable(
@@ -224,6 +232,7 @@ private fun OnboardingTermsAgreementCard(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     onOpenUrl: (String) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val text =
         remember {
@@ -258,7 +267,7 @@ private fun OnboardingTermsAgreementCard(
 
     Row(
         modifier =
-            Modifier
+            modifier
                 .fillMaxWidth()
                 .background(OnboardingCardFill, RoundedCornerShape(16.dp))
                 .toggleable(
@@ -470,6 +479,7 @@ internal fun OnboardingWelcomeScreen(
         OnboardingPrimaryButton(
             text = "Get Started",
             onClick = onContinue,
+            modifier = Modifier.testTag("onboarding.getStarted"),
         )
     }
 }
@@ -496,12 +506,14 @@ internal fun OnboardingBitcoinChoiceScreen(
                 subtitle = "Create a new wallet and learn the basics",
                 icon = Icons.Default.AutoAwesome,
                 onClick = onNewHere,
+                modifier = Modifier.testTag("onboarding.bitcoinChoice.new"),
             )
             OnboardingChoiceCard(
                 title = "Yes, I have Bitcoin",
                 subtitle = "Import or connect the wallet you already use",
                 icon = Icons.Default.Download,
                 onClick = onHasBitcoin,
+                modifier = Modifier.testTag("onboarding.bitcoinChoice.existing"),
             )
         }
     }
@@ -530,6 +542,7 @@ internal fun OnboardingReturningUserChoiceScreen(
                 subtitle = "Import or connect a wallet from somewhere else",
                 icon = Icons.Default.Storage,
                 onClick = onUseAnotherWallet,
+                modifier = Modifier.testTag("onboarding.returningUser.anotherWallet"),
             )
         }
 
@@ -612,18 +625,21 @@ internal fun OnboardingStorageChoiceScreen(
                 subtitle = "Move funds into a wallet you control",
                 icon = Icons.Default.AccountBalance,
                 onClick = { onSelectStorage(OnboardingStorageSelection.EXCHANGE) },
+                modifier = Modifier.testTag("onboarding.storage.exchange"),
             )
             OnboardingChoiceCard(
                 title = "Hardware wallet",
                 subtitle = "Import a watch-only wallet from an existing device",
                 icon = Icons.Default.Security,
                 onClick = { onSelectStorage(OnboardingStorageSelection.HARDWARE_WALLET) },
+                modifier = Modifier.testTag("onboarding.storage.hardware"),
             )
             OnboardingChoiceCard(
                 title = "Software wallet",
                 subtitle = "Import recovery data from another wallet app",
                 icon = Icons.Default.PhoneIphone,
                 onClick = { onSelectStorage(OnboardingStorageSelection.SOFTWARE_WALLET) },
+                modifier = Modifier.testTag("onboarding.storage.software"),
             )
         }
 
@@ -632,6 +648,7 @@ internal fun OnboardingStorageChoiceScreen(
         OnboardingSecondaryButton(
             text = "Back",
             onClick = onBack,
+            modifier = Modifier.testTag("onboarding.back"),
         )
     }
 }
@@ -662,12 +679,14 @@ internal fun OnboardingSoftwareChoiceScreen(
                 subtitle = "Generate a fresh 12-word recovery phrase",
                 icon = Icons.Default.AddCircle,
                 onClick = { onSelectSoftwareAction(OnboardingSoftwareSelection.CREATE_NEW_WALLET) },
+                modifier = Modifier.testTag("onboarding.software.create"),
             )
             OnboardingChoiceCard(
                 title = "Import existing wallet",
                 subtitle = "Use words or QR from another wallet",
                 icon = Icons.Default.Download,
                 onClick = { onSelectSoftwareAction(OnboardingSoftwareSelection.IMPORT_EXISTING_WALLET) },
+                modifier = Modifier.testTag("onboarding.software.import"),
             )
         }
 
