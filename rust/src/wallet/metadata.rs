@@ -310,6 +310,17 @@ pub fn tap_signer_setup_birthday(
         .or_else(|| card_birth_height.map(WalletBirthday::BlockHeight))
 }
 
+pub fn tap_signer_import_birthday(
+    network: Network,
+    mode: WalletMode,
+    card_birth_height: Option<u64>,
+) -> WalletBirthday {
+    card_birth_height
+        .map(WalletBirthday::BlockHeight)
+        .or_else(|| tap_signer_setup_birthday(network, mode, None))
+        .unwrap_or_else(|| WalletBirthday::Timestamp(current_timestamp()))
+}
+
 fn current_timestamp() -> u64 {
     jiff::Timestamp::now().as_second().try_into().unwrap_or(0)
 }
