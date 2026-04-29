@@ -2604,7 +2604,7 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_cove_fn_constructor_rustwalletmanager_preview_new_wallet_with_metadata(`metadata`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Long
-    external fun uniffi_cove_fn_constructor_rustwalletmanager_try_new_from_tap_signer(`tapSigner`: Long,`deriveInfo`: RustBuffer.ByValue,`backup`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_fn_constructor_rustwalletmanager_try_new_from_tap_signer(`tapSigner`: Long,`deriveInfo`: RustBuffer.ByValue,`backup`: RustBuffer.ByValue,`birthday`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Long
     external fun uniffi_cove_fn_constructor_rustwalletmanager_try_new_from_xpub(`xpub`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Long
@@ -4820,7 +4820,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_constructor_rustwalletmanager_preview_new_wallet_with_metadata() != 41631.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_constructor_rustwalletmanager_try_new_from_tap_signer() != 14372.toShort()) {
+    if (lib.uniffi_cove_checksum_constructor_rustwalletmanager_try_new_from_tap_signer() != 10884.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_constructor_rustwalletmanager_try_new_from_xpub() != 15129.toShort()) {
@@ -22020,12 +22020,12 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     
 
         
-    @Throws(WalletManagerException::class) fun `tryNewFromTapSigner`(`tapSigner`: TapSigner, `deriveInfo`: DeriveInfo, `backup`: kotlin.ByteArray? = null): RustWalletManager {
+    @Throws(WalletManagerException::class) fun `tryNewFromTapSigner`(`tapSigner`: TapSigner, `deriveInfo`: DeriveInfo, `backup`: kotlin.ByteArray? = null, `birthday`: WalletBirthday? = null): RustWalletManager {
             return FfiConverterTypeRustWalletManager.lift(
     uniffiRustCallWithError(WalletManagerException) { _status ->
     UniffiLib.uniffi_cove_fn_constructor_rustwalletmanager_try_new_from_tap_signer(
     
-        FfiConverterTypeTapSigner.lower(`tapSigner`),FfiConverterTypeDeriveInfo.lower(`deriveInfo`),FfiConverterOptionalByteArray.lower(`backup`),_status)
+        FfiConverterTypeTapSigner.lower(`tapSigner`),FfiConverterTypeDeriveInfo.lower(`deriveInfo`),FfiConverterOptionalByteArray.lower(`backup`),FfiConverterOptionalTypeWalletBirthday.lower(`birthday`),_status)
 }
     )
     }
@@ -28469,6 +28469,8 @@ data class DeriveInfo (
     var `path`: List<kotlin.UInt>
     , 
     var `network`: Network
+    , 
+    var `birthHeight`: kotlin.ULong?
     
 ){
     
@@ -28490,6 +28492,7 @@ public object FfiConverterTypeDeriveInfo: FfiConverterRustBuffer<DeriveInfo> {
             FfiConverterByteArray.read(buf),
             FfiConverterSequenceUInt.read(buf),
             FfiConverterTypeNetwork.read(buf),
+            FfiConverterOptionalULong.read(buf),
         )
     }
 
@@ -28498,7 +28501,8 @@ public object FfiConverterTypeDeriveInfo: FfiConverterRustBuffer<DeriveInfo> {
             FfiConverterByteArray.allocationSize(value.`pubkey`) +
             FfiConverterByteArray.allocationSize(value.`chainCode`) +
             FfiConverterSequenceUInt.allocationSize(value.`path`) +
-            FfiConverterTypeNetwork.allocationSize(value.`network`)
+            FfiConverterTypeNetwork.allocationSize(value.`network`) +
+            FfiConverterOptionalULong.allocationSize(value.`birthHeight`)
     )
 
     override fun write(value: DeriveInfo, buf: ByteBuffer) {
@@ -28507,6 +28511,7 @@ public object FfiConverterTypeDeriveInfo: FfiConverterRustBuffer<DeriveInfo> {
             FfiConverterByteArray.write(value.`chainCode`, buf)
             FfiConverterSequenceUInt.write(value.`path`, buf)
             FfiConverterTypeNetwork.write(value.`network`, buf)
+            FfiConverterOptionalULong.write(value.`birthHeight`, buf)
     }
 }
 
@@ -29536,6 +29541,8 @@ data class TapSignerSetupComplete (
     var `backup`: kotlin.ByteArray
     , 
     var `deriveInfo`: DeriveInfo
+    , 
+    var `birthday`: WalletBirthday
     
 ){
     
@@ -29554,17 +29561,20 @@ public object FfiConverterTypeTapSignerSetupComplete: FfiConverterRustBuffer<Tap
         return TapSignerSetupComplete(
             FfiConverterByteArray.read(buf),
             FfiConverterTypeDeriveInfo.read(buf),
+            FfiConverterTypeWalletBirthday.read(buf),
         )
     }
 
     override fun allocationSize(value: TapSignerSetupComplete) = (
             FfiConverterByteArray.allocationSize(value.`backup`) +
-            FfiConverterTypeDeriveInfo.allocationSize(value.`deriveInfo`)
+            FfiConverterTypeDeriveInfo.allocationSize(value.`deriveInfo`) +
+            FfiConverterTypeWalletBirthday.allocationSize(value.`birthday`)
     )
 
     override fun write(value: TapSignerSetupComplete, buf: ByteBuffer) {
             FfiConverterByteArray.write(value.`backup`, buf)
             FfiConverterTypeDeriveInfo.write(value.`deriveInfo`, buf)
+            FfiConverterTypeWalletBirthday.write(value.`birthday`, buf)
     }
 }
 
@@ -29677,6 +29687,8 @@ data class WalletMetadata (
     , 
     var `origin`: kotlin.String?
     , 
+    var `birthday`: WalletBirthday?
+    , 
     /**
      * Metadata data specific to different hardware wallets
      */
@@ -29754,6 +29766,7 @@ data class WalletMetadata (
         this.`addressType`,
         this.`fiatOrBtc`,
         this.`origin`,
+        this.`birthday`,
         this.`hardwareMetadata`,
         this.`showLabels`,
         this.`internal`
@@ -29784,6 +29797,7 @@ public object FfiConverterTypeWalletMetadata: FfiConverterRustBuffer<WalletMetad
             FfiConverterTypeWalletAddressType.read(buf),
             FfiConverterTypeFiatOrBtc.read(buf),
             FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalTypeWalletBirthday.read(buf),
             FfiConverterOptionalTypeHardwareWalletMetadata.read(buf),
             FfiConverterBoolean.read(buf),
             FfiConverterTypeInternalOnlyMetadata.read(buf),
@@ -29806,6 +29820,7 @@ public object FfiConverterTypeWalletMetadata: FfiConverterRustBuffer<WalletMetad
             FfiConverterTypeWalletAddressType.allocationSize(value.`addressType`) +
             FfiConverterTypeFiatOrBtc.allocationSize(value.`fiatOrBtc`) +
             FfiConverterOptionalString.allocationSize(value.`origin`) +
+            FfiConverterOptionalTypeWalletBirthday.allocationSize(value.`birthday`) +
             FfiConverterOptionalTypeHardwareWalletMetadata.allocationSize(value.`hardwareMetadata`) +
             FfiConverterBoolean.allocationSize(value.`showLabels`) +
             FfiConverterTypeInternalOnlyMetadata.allocationSize(value.`internal`)
@@ -29827,6 +29842,7 @@ public object FfiConverterTypeWalletMetadata: FfiConverterRustBuffer<WalletMetad
             FfiConverterTypeWalletAddressType.write(value.`addressType`, buf)
             FfiConverterTypeFiatOrBtc.write(value.`fiatOrBtc`, buf)
             FfiConverterOptionalString.write(value.`origin`, buf)
+            FfiConverterOptionalTypeWalletBirthday.write(value.`birthday`, buf)
             FfiConverterOptionalTypeHardwareWalletMetadata.write(value.`hardwareMetadata`, buf)
             FfiConverterBoolean.write(value.`showLabels`, buf)
             FfiConverterTypeInternalOnlyMetadata.write(value.`internal`, buf)
@@ -48840,6 +48856,89 @@ public object FfiConverterTypeWalletAddressType: FfiConverterRustBuffer<WalletAd
 
 
 
+sealed class WalletBirthday {
+    
+    data class BlockHeight(
+        val v1: kotlin.ULong) : WalletBirthday()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class Timestamp(
+        val v1: kotlin.ULong) : WalletBirthday()
+        
+    {
+        
+
+        companion object
+    }
+    
+
+    
+
+    
+    
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeWalletBirthday : FfiConverterRustBuffer<WalletBirthday>{
+    override fun read(buf: ByteBuffer): WalletBirthday {
+        return when(buf.getInt()) {
+            1 -> WalletBirthday.BlockHeight(
+                FfiConverterULong.read(buf),
+                )
+            2 -> WalletBirthday.Timestamp(
+                FfiConverterULong.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: WalletBirthday): ULong = when(value) {
+        is WalletBirthday.BlockHeight -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterULong.allocationSize(value.v1)
+            )
+        }
+        is WalletBirthday.Timestamp -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterULong.allocationSize(value.v1)
+            )
+        }
+    }
+
+    override fun write(value: WalletBirthday, buf: ByteBuffer) {
+        when(value) {
+            is WalletBirthday.BlockHeight -> {
+                buf.putInt(1)
+                FfiConverterULong.write(value.v1, buf)
+                Unit
+            }
+            is WalletBirthday.Timestamp -> {
+                buf.putInt(2)
+                FfiConverterULong.write(value.v1, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
 sealed class WalletColor {
     
     object Red : WalletColor()
@@ -53934,6 +54033,38 @@ public object FfiConverterOptionalTypeTapSignerResponse: FfiConverterRustBuffer<
         } else {
             buf.put(1)
             FfiConverterTypeTapSignerResponse.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypeWalletBirthday: FfiConverterRustBuffer<WalletBirthday?> {
+    override fun read(buf: ByteBuffer): WalletBirthday? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeWalletBirthday.read(buf)
+    }
+
+    override fun allocationSize(value: WalletBirthday?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeWalletBirthday.allocationSize(value)
+        }
+    }
+
+    override fun write(value: WalletBirthday?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeWalletBirthday.write(value, buf)
         }
     }
 }
