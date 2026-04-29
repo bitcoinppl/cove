@@ -191,13 +191,17 @@ private let walletModeChangeDelayMs = 250
 
     func selectWalletOrThrow(_ id: WalletId) throws {
         beginNavigationIntent()
-        try rust.dispatchThrowing(action: .selectWallet(id: id))
+        try rust.dispatch(action: .selectWallet(id: id))
         isSidebarVisible = false
     }
 
     func selectLatestOrNewWallet() {
         beginNavigationIntent()
-        rust.dispatch(action: .selectLatestOrNewWallet)
+        do {
+            try rust.dispatch(action: .selectLatestOrNewWallet)
+        } catch {
+            Log.error("Unable to select latest wallet, error: \(error)")
+        }
     }
 
     func toggleSidebar() {
@@ -384,6 +388,10 @@ private let walletModeChangeDelayMs = 250
 
     public func dispatch(action: AppAction) {
         logger.debug("dispatch \(action)")
-        rust.dispatch(action: action)
+        do {
+            try rust.dispatch(action: action)
+        } catch {
+            logger.error("Unable to dispatch app action \(action), error: \(error)")
+        }
     }
 }

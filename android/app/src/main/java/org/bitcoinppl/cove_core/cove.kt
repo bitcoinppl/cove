@@ -1140,8 +1140,6 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_ffiapp_dispatch(
     ): Short
-    external fun uniffi_cove_checksum_method_ffiapp_dispatchthrowing(
-    ): Short
     external fun uniffi_cove_checksum_method_ffiapp_email_mailto(
     ): Short
     external fun uniffi_cove_checksum_method_ffiapp_fees(
@@ -1179,10 +1177,6 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_checksum_method_ffiapp_reset_nested_routes_to(
     ): Short
     external fun uniffi_cove_checksum_method_ffiapp_save_tap_signer_backup(
-    ): Short
-    external fun uniffi_cove_checksum_method_ffiapp_select_latest_or_new_wallet(
-    ): Short
-    external fun uniffi_cove_checksum_method_ffiapp_select_wallet(
     ): Short
     external fun uniffi_cove_checksum_method_ffiapp_state(
     ): Short
@@ -2052,8 +2046,6 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_cove_fn_method_ffiapp_dispatch(`ptr`: Long,`action`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
-    external fun uniffi_cove_fn_method_ffiapp_dispatchthrowing(`ptr`: Long,`action`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-    ): Unit
     external fun uniffi_cove_fn_method_ffiapp_email_mailto(`ptr`: Long,`ios`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_ffiapp_fees(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -2092,10 +2084,6 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_cove_fn_method_ffiapp_save_tap_signer_backup(`ptr`: Long,`tapSigner`: Long,`backup`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Byte
-    external fun uniffi_cove_fn_method_ffiapp_select_latest_or_new_wallet(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-    ): Unit
-    external fun uniffi_cove_fn_method_ffiapp_select_wallet(`ptr`: Long,`id`: RustBufferWalletId.ByValue,`nextRoute`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-    ): Unit
     external fun uniffi_cove_fn_method_ffiapp_state(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_ffiapp_unverified_wallet_ids(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -3686,10 +3674,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_ffiapp_delete_corrupted_wallet() != 27181.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_ffiapp_dispatch() != 37137.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_method_ffiapp_dispatchthrowing() != 20266.toShort()) {
+    if (lib.uniffi_cove_checksum_method_ffiapp_dispatch() != 7288.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_ffiapp_email_mailto() != 41824.toShort()) {
@@ -3747,12 +3732,6 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_ffiapp_save_tap_signer_backup() != 24217.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_method_ffiapp_select_latest_or_new_wallet() != 29596.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_method_ffiapp_select_wallet() != 51673.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_ffiapp_state() != 49253.toShort()) {
@@ -9972,11 +9951,6 @@ public interface FfiAppInterface {
      */
     fun `dispatch`(`action`: AppAction)
     
-    /**
-     * Frontend calls this method to send app events that can fail
-     */
-    fun `dispatchThrowing`(`action`: AppAction)
-    
     fun `emailMailto`(`ios`: kotlin.String): kotlin.String
     
     fun `fees`(): FeeResponse
@@ -10055,17 +10029,6 @@ public interface FfiAppInterface {
      * Save the backup for the tap signer in the keychain
      */
     fun `saveTapSignerBackup`(`tapSigner`: TapSigner, `backup`: kotlin.ByteArray): kotlin.Boolean
-    
-    /**
-     * Select the latest (most recently used) wallet or navigate to new wallet flow
-     * This selects the wallet with the most recent scan activity
-     */
-    fun `selectLatestOrNewWallet`()
-    
-    /**
-     * Select a wallet
-     */
-    fun `selectWallet`(`id`: WalletId, `nextRoute`: Route? = null)
     
     fun `state`(): AppState
     
@@ -10272,27 +10235,12 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
     
     /**
      * Frontend calls this method to send events to the rust application logic
-     */override fun `dispatch`(`action`: AppAction)
-        = 
-    callWithHandle {
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_method_ffiapp_dispatch(
-        it,
-        FfiConverterTypeAppAction.lower(`action`),_status)
-}
-    }
-    
-    
-
-    
-    /**
-     * Frontend calls this method to send app events that can fail
      */
-    @Throws(AppException::class)override fun `dispatchThrowing`(`action`: AppAction)
+    @Throws(AppException::class)override fun `dispatch`(`action`: AppAction)
         = 
     callWithHandle {
     uniffiRustCallWithError(AppException) { _status ->
-    UniffiLib.uniffi_cove_fn_method_ffiapp_dispatchthrowing(
+    UniffiLib.uniffi_cove_fn_method_ffiapp_dispatch(
         it,
         FfiConverterTypeAppAction.lower(`action`),_status)
 }
@@ -10591,39 +10539,6 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
     }
     )
     }
-    
-
-    
-    /**
-     * Select the latest (most recently used) wallet or navigate to new wallet flow
-     * This selects the wallet with the most recent scan activity
-     */
-    @Throws(AppException::class)override fun `selectLatestOrNewWallet`()
-        = 
-    callWithHandle {
-    uniffiRustCallWithError(AppException) { _status ->
-    UniffiLib.uniffi_cove_fn_method_ffiapp_select_latest_or_new_wallet(
-        it,
-        _status)
-}
-    }
-    
-    
-
-    
-    /**
-     * Select a wallet
-     */
-    @Throws(DatabaseException::class)override fun `selectWallet`(`id`: WalletId, `nextRoute`: Route?)
-        = 
-    callWithHandle {
-    uniffiRustCallWithError(DatabaseException) { _status ->
-    UniffiLib.uniffi_cove_fn_method_ffiapp_select_wallet(
-        it,
-        FfiConverterTypeWalletId.lower(`id`),FfiConverterOptionalTypeRoute.lower(`nextRoute`),_status)
-}
-    }
-    
     
 
     override fun `state`(): AppState {
@@ -53870,38 +53785,6 @@ public object FfiConverterOptionalTypeOnboardingBranch: FfiConverterRustBuffer<O
         } else {
             buf.put(1)
             FfiConverterTypeOnboardingBranch.write(value, buf)
-        }
-    }
-}
-
-
-
-
-/**
- * @suppress
- */
-public object FfiConverterOptionalTypeRoute: FfiConverterRustBuffer<Route?> {
-    override fun read(buf: ByteBuffer): Route? {
-        if (buf.get().toInt() == 0) {
-            return null
-        }
-        return FfiConverterTypeRoute.read(buf)
-    }
-
-    override fun allocationSize(value: Route?): ULong {
-        if (value == null) {
-            return 1UL
-        } else {
-            return 1UL + FfiConverterTypeRoute.allocationSize(value)
-        }
-    }
-
-    override fun write(value: Route?, buf: ByteBuffer) {
-        if (value == null) {
-            buf.put(0)
-        } else {
-            buf.put(1)
-            FfiConverterTypeRoute.write(value, buf)
         }
     }
 }

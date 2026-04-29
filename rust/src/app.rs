@@ -312,32 +312,6 @@ impl FfiApp {
         Arc::new(Self)
     }
 
-    /// Select a wallet
-    #[uniffi::method(default(next_route = None))]
-    pub fn select_wallet(
-        &self,
-        id: WalletId,
-        next_route: Option<Route>,
-    ) -> Result<(), DatabaseError> {
-        let mut deferred = DeferredDispatch::<AppAction>::new();
-        deferred.queue(AppAction::UpdateFees);
-        deferred.queue(AppAction::UpdateFiatPrices);
-
-        Database::global().global_config.select_wallet(id.clone())?;
-
-        // update the router
-        if let Some(next_route) = next_route {
-            let wallet_route = Route::SelectedWallet(id.clone());
-            let loading_route =
-                RouteFactory.load_and_reset_nested_to(wallet_route, vec![next_route]);
-            self.load_and_reset_default_route(loading_route);
-        } else {
-            self.go_to_selected_wallet();
-        }
-
-        Ok(())
-    }
-
     /// Find tapsigner wallet by card ident
     /// Get the backup for the tap signer
     #[uniffi::method]
@@ -455,19 +429,6 @@ impl FfiApp {
     /// Check if there's any wallets
     pub fn has_wallets(&self) -> bool {
         self.num_wallets() > 0
-    }
-
-    /// Select the latest (most recently used) wallet or navigate to new wallet flow
-    /// This selects the wallet with the most recent scan activity
-    pub fn select_latest_or_new_wallet(&self) -> Result<(), AppError> {
-        match self.select_latest_wallet() {
-            Ok(()) => Ok(()),
-            Err(SelectLatestWalletError::NoWalletsFound) => {
-                self.load_and_reset_default_route(Route::NewWallet(NewWalletRoute::default()));
-                Ok(())
-            }
-            Err(SelectLatestWalletError::WalletSelection(error)) => Err(error),
-        }
     }
 
     /// Number of wallets
@@ -621,13 +582,7 @@ impl FfiApp {
 
     /// Frontend calls this method to send events to the rust application logic
     #[uniffi::method(name = "dispatch")]
-    fn ffi_dispatch(&self, action: AppAction) {
-        self.inner().handle_action(action);
-    }
-
-    /// Frontend calls this method to send app events that can fail
-    #[uniffi::method(name = "dispatchThrowing")]
-    fn ffi_dispatch_throwing(&self, action: AppAction) -> Result<(), Error> {
+    fn ffi_dispatch(&self, action: AppAction) -> Result<(), Error> {
         self.inner().handle_action_result(action)
     }
 
@@ -672,21 +627,53 @@ impl FfiApp {
         App::global()
     }
 
+    pub(crate) fn select_wallet(
+        &self,
+        id: WalletId,
+        next_route: Option<Route>,
+    ) -> Result<(), DatabaseError> {
+        let mut deferred = DeferredDispatch::<AppAction>::new();
+        deferred.queue(AppAction::UpdateFees);
+        deferred.queue(AppAction::UpdateFiatPrices);
+
+        Database::global().global_config.select_wallet(id.clone())?;
+
+        if let Some(next_route) = next_route {
+            let wallet_route = Route::SelectedWallet(id.clone());
+            let loading_route =
+                RouteFactory.load_and_reset_nested_to(wallet_route, vec![next_route]);
+            self.load_and_reset_default_route(loading_route);
+        } else {
+            self.go_to_selected_wallet();
+        }
+
+        Ok(())
+    }
+
+    pub(crate) fn select_latest_or_new_wallet(&self) -> Result<(), AppError> {
+        match self.select_latest_wallet() {
+            Ok(()) => Ok(()),
+            Err(SelectLatestWalletError::NoWalletsFound) => {
+                self.load_and_reset_default_route(Route::NewWallet(NewWalletRoute::default()));
+                Ok(())
+            }
+            Err(SelectLatestWalletError::WalletSelection(error)) => Err(error),
+        }
+    }
+
     fn select_latest_wallet(&self) -> Result<(), SelectLatestWalletError> {
         let database = Database::global();
 
-        let wallets = database.wallets().all_sorted_active().map_err_str(|error| {
-            SelectLatestWalletError::WalletSelection(AppError::WalletSelection(format!(
-                "unable to get sorted wallets: {error}"
-            )))
-        })?;
+        let wallets = database
+            .wallets()
+            .all_sorted_active()
+            .map_err_prefix("unable to get sorted wallets", AppError::WalletSelection)
+            .map_err(SelectLatestWalletError::WalletSelection)?;
         let latest_wallet = wallets.first().ok_or(SelectLatestWalletError::NoWalletsFound)?;
 
-        self.select_wallet(latest_wallet.id.clone(), None).map_err_str(|error| {
-            SelectLatestWalletError::WalletSelection(AppError::WalletSelection(format!(
-                "unable to select latest wallet: {error}"
-            )))
-        })?;
+        self.select_wallet(latest_wallet.id.clone(), None)
+            .map_err_prefix("unable to select latest wallet", AppError::WalletSelection)
+            .map_err(SelectLatestWalletError::WalletSelection)?;
 
         Ok(())
     }

@@ -2879,12 +2879,7 @@ public protocol FfiAppProtocol: AnyObject, Sendable {
     /**
      * Frontend calls this method to send events to the rust application logic
      */
-    func dispatch(action: AppAction) 
-    
-    /**
-     * Frontend calls this method to send app events that can fail
-     */
-    func dispatchThrowing(action: AppAction) throws 
+    func dispatch(action: AppAction) throws 
     
     func emailMailto(ios: String)  -> String
     
@@ -2964,17 +2959,6 @@ public protocol FfiAppProtocol: AnyObject, Sendable {
      * Save the backup for the tap signer in the keychain
      */
     func saveTapSignerBackup(tapSigner: TapSigner, backup: Data)  -> Bool
-    
-    /**
-     * Select the latest (most recently used) wallet or navigate to new wallet flow
-     * This selects the wallet with the most recent scan activity
-     */
-    func selectLatestOrNewWallet() throws 
-    
-    /**
-     * Select a wallet
-     */
-    func selectWallet(id: WalletId, nextRoute: Route?) throws 
     
     func state()  -> AppState
     
@@ -3106,19 +3090,8 @@ open func deleteCorruptedWallet(id: WalletId)  {try! rustCall() {
     /**
      * Frontend calls this method to send events to the rust application logic
      */
-open func dispatch(action: AppAction)  {try! rustCall() {
+open func dispatch(action: AppAction)throws   {try rustCallWithError(FfiConverterTypeAppError_lift) {
     uniffi_cove_fn_method_ffiapp_dispatch(
-            self.uniffiCloneHandle(),
-        FfiConverterTypeAppAction_lower(action),$0
-    )
-}
-}
-    
-    /**
-     * Frontend calls this method to send app events that can fail
-     */
-open func dispatchThrowing(action: AppAction)throws   {try rustCallWithError(FfiConverterTypeAppError_lift) {
-    uniffi_cove_fn_method_ffiapp_dispatchthrowing(
             self.uniffiCloneHandle(),
         FfiConverterTypeAppAction_lower(action),$0
     )
@@ -3333,29 +3306,6 @@ open func saveTapSignerBackup(tapSigner: TapSigner, backup: Data) -> Bool  {
         FfiConverterData.lower(backup),$0
     )
 })
-}
-    
-    /**
-     * Select the latest (most recently used) wallet or navigate to new wallet flow
-     * This selects the wallet with the most recent scan activity
-     */
-open func selectLatestOrNewWallet()throws   {try rustCallWithError(FfiConverterTypeAppError_lift) {
-    uniffi_cove_fn_method_ffiapp_select_latest_or_new_wallet(
-            self.uniffiCloneHandle(),$0
-    )
-}
-}
-    
-    /**
-     * Select a wallet
-     */
-open func selectWallet(id: WalletId, nextRoute: Route? = nil)throws   {try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
-    uniffi_cove_fn_method_ffiapp_select_wallet(
-            self.uniffiCloneHandle(),
-        FfiConverterTypeWalletId_lower(id),
-        FfiConverterOptionTypeRoute.lower(nextRoute),$0
-    )
-}
 }
     
 open func state() -> AppState  {
@@ -34791,30 +34741,6 @@ fileprivate struct FfiConverterOptionTypeOnboardingBranch: FfiConverterRustBuffe
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterOptionTypeRoute: FfiConverterRustBuffer {
-    typealias SwiftType = Route?
-
-    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
-        guard let value = value else {
-            writeInt(&buf, Int8(0))
-            return
-        }
-        writeInt(&buf, Int8(1))
-        FfiConverterTypeRoute.write(value, into: &buf)
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
-        switch try readInt(&buf) as Int8 {
-        case 0: return nil
-        case 1: return try FfiConverterTypeRoute.read(from: &buf)
-        default: throw UniffiInternalError.unexpectedOptionalTag
-        }
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
 fileprivate struct FfiConverterOptionTypeSetAmountFocusField: FfiConverterRustBuffer {
     typealias SwiftType = SetAmountFocusField?
 
@@ -36358,10 +36284,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_ffiapp_delete_corrupted_wallet() != 27181) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_ffiapp_dispatch() != 37137) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_ffiapp_dispatchthrowing() != 20266) {
+    if (uniffi_cove_checksum_method_ffiapp_dispatch() != 7288) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_email_mailto() != 41824) {
@@ -36419,12 +36342,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_save_tap_signer_backup() != 24217) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_ffiapp_select_latest_or_new_wallet() != 29596) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_ffiapp_select_wallet() != 51673) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_state() != 49253) {

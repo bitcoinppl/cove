@@ -237,14 +237,14 @@ class AppManager private constructor() : FfiReconcile {
     @Throws(Exception::class)
     fun selectWalletOrThrow(id: WalletId) {
         beginNavigationIntent()
-        rust.selectWallet(id)
+        rust.dispatch(AppAction.SelectWallet(id))
         isSidebarVisible = false
     }
 
     fun selectLatestOrNewWallet() {
         beginNavigationIntent()
         try {
-            rust.selectLatestOrNewWallet()
+            rust.dispatch(AppAction.SelectLatestOrNewWallet)
         } catch (e: Exception) {
             Log.e(tag, "Unable to select latest wallet", e)
         }
@@ -464,7 +464,8 @@ class AppManager private constructor() : FfiReconcile {
 
     fun dispatch(action: AppAction) {
         Log.d(tag, "dispatch $action")
-        rust.dispatch(action)
+        runCatching { rust.dispatch(action) }
+            .onFailure { Log.e(tag, "Unable to dispatch app action $action", it) }
     }
 
     companion object {

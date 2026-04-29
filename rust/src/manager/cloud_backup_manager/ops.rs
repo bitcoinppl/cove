@@ -44,6 +44,13 @@ enum EnablePasskeyAcquisition {
 struct RestorableNamespace {
     namespace_id: String,
     master_key: cove_cspp::master_key::MasterKey,
+    passkey: Option<RestorableNamespacePasskey>,
+}
+
+#[derive(Clone)]
+struct RestorableNamespacePasskey {
+    credential_id: Vec<u8>,
+    prf_salt: [u8; 32],
 }
 
 struct RestoreDownloadProgress {
@@ -469,18 +476,17 @@ impl RustCloudBackupManager {
         match match_outcome {
             NamespaceMatchOutcome::Matched(matches) => {
                 let matched_count = matches.len();
+                if matched_count > 1 {
+                    return Err(CloudBackupError::Internal(format!(
+                        "passkey matched {matched_count} cloud backup namespaces; choosing one is ambiguous"
+                    )));
+                }
+
                 let Some(matched) = matches.into_iter().next() else {
                     self.set_existing_backup_found_prompt();
                     self.clear_enable_progress(CloudBackupStatus::Disabled);
                     return Ok(());
                 };
-
-                if matched_count > 1 {
-                    info!(
-                        "Enable: passkey matched {matched_count} namespaces, using {}",
-                        matched.namespace_id
-                    );
-                }
 
                 self.complete_recovery(keychain, &cloud, &cspp, matched).await
             }
@@ -628,7 +634,7 @@ impl RustCloudBackupManager {
 
     /// Same as `do_enable_cloud_backup_create_new` but skips passkey discovery,
     /// going straight to passkey registration
-    pub(super) async fn do_enable_cloud_backup_no_discovery(&self) -> Result<(), CloudBackupError> {
+    pub(crate) async fn do_enable_cloud_backup_no_discovery(&self) -> Result<(), CloudBackupError> {
         self.ensure_cloud_connectivity(BlockingCloudStep::Enable)?;
         if let Some(pending) = self.take_retry_pending_enable_session() {
             let (master_key, passkey) = pending.into_parts();
@@ -730,31 +736,19 @@ impl RustCloudBackupManager {
         let passkey = PasskeyAccess::global();
         let restorable_namespaces = match self.restore_via_passkey_matching(&cloud, passkey).await {
             Ok(matches) => {
-                let Some(active_match) = matches.first() else {
+                if matches.is_empty() {
                     return Err(CloudBackupError::PasskeyMismatch);
-                };
-
-                operation.run_result(|| {
-                    cspp.save_master_key(&active_match.master_key)
-                        .map_err_prefix("save master key", CloudBackupError::Internal)?;
-                    Ok(())
-                })?;
-                operation.run_result(|| {
-                    keychain
-                        .save_cspp_passkey_and_namespace(
-                            &active_match.credential_id,
-                            active_match.prf_salt,
-                            &active_match.namespace_id,
-                        )
-                        .map_err_prefix("save cspp credentials", CloudBackupError::Internal)?;
-                    Ok(())
-                })?;
+                }
 
                 matches
                     .into_iter()
                     .map(|matched| RestorableNamespace {
                         namespace_id: matched.namespace_id,
                         master_key: matched.master_key,
+                        passkey: Some(RestorableNamespacePasskey {
+                            credential_id: matched.credential_id,
+                            prf_salt: matched.prf_salt,
+                        }),
                     })
                     .collect::<Vec<_>>()
             }
@@ -772,7 +766,7 @@ impl RustCloudBackupManager {
                     persist_namespace_id(keychain, &namespace_id)?;
                     Ok(())
                 })?;
-                vec![RestorableNamespace { namespace_id, master_key }]
+                vec![RestorableNamespace { namespace_id, master_key, passkey: None }]
             }
             Err(e) => return Err(e),
         };
@@ -892,6 +886,26 @@ impl RustCloudBackupManager {
             &state,
             "persist restored cloud backup state",
         )?;
+        if let Some((active, _)) = namespace_wallets.first() {
+            operation.run_result(|| {
+                cspp.save_master_key(&active.master_key)
+                    .map_err_prefix("save master key", CloudBackupError::Internal)?;
+                Ok(())
+            })?;
+
+            if let Some(passkey) = active.passkey.as_ref() {
+                operation.run_result(|| {
+                    keychain
+                        .save_cspp_passkey_and_namespace(
+                            &passkey.credential_id,
+                            passkey.prf_salt,
+                            &active.namespace_id,
+                        )
+                        .map_err_prefix("save cspp credentials", CloudBackupError::Internal)?;
+                    Ok(())
+                })?;
+            }
+        }
 
         self.set_restore_progress_for_restore_operation(operation, None)?;
         self.set_restore_report_for_restore_operation(operation, Some(report))?;
@@ -1856,6 +1870,58 @@ mod tests {
         manager.do_enable_cloud_backup_no_discovery().await.unwrap();
 
         assert_eq!(manager.current_status(), CloudBackupStatus::Enabled);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn enable_with_multiple_matching_namespaces_fails_without_picking_first() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        let manager = RustCloudBackupManager::init();
+
+        reset_cloud_backup_test_state(&manager, globals);
+        CONNECTIVITY_MANAGER.set_connection_state(true);
+
+        let prf_key = [7u8; 32];
+        let first_master_key = cove_cspp::master_key::MasterKey::generate();
+        let second_master_key = cove_cspp::master_key::MasterKey::generate();
+        let first_namespace = first_master_key.namespace_id();
+        let second_namespace = second_master_key.namespace_id();
+        let first_encrypted =
+            cove_cspp::master_key_crypto::encrypt_master_key(&first_master_key, &prf_key, &[9; 32])
+                .unwrap();
+        let second_encrypted = cove_cspp::master_key_crypto::encrypt_master_key(
+            &second_master_key,
+            &prf_key,
+            &[8; 32],
+        )
+        .unwrap();
+
+        globals.cloud.set_master_key_backup(
+            first_namespace.clone(),
+            serde_json::to_vec(&first_encrypted).unwrap(),
+        );
+        globals.cloud.set_master_key_backup(
+            second_namespace.clone(),
+            serde_json::to_vec(&second_encrypted).unwrap(),
+        );
+        globals.cloud.set_wallet_files(first_namespace, vec!["wallet-1.json".into()]);
+        globals.cloud.set_wallet_files(second_namespace, vec!["wallet-2.json".into()]);
+        globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
+            prf_output: prf_key.to_vec(),
+            credential_id: vec![1, 2, 3],
+        }));
+        globals.passkey.set_authenticate_result(Ok(prf_key.to_vec()));
+
+        let error = manager.do_enable_cloud_backup().await.unwrap_err();
+
+        assert!(matches!(
+            error,
+            CloudBackupError::Internal(message)
+                if message.contains("passkey matched 2 cloud backup namespaces")
+                    && message.contains("ambiguous")
+        ));
+        assert_eq!(Keychain::global().get(CSPP_NAMESPACE_ID_KEY.into()), None);
     }
 
     #[tokio::test(flavor = "current_thread")]
@@ -4031,6 +4097,54 @@ mod tests {
         assert_eq!(report.wallets_failed, 0);
         assert!(report.failed_wallet_errors.is_empty(), "{:?}", report.failed_wallet_errors);
         assert_eq!(Database::global().cloud_backup_state.get().unwrap().wallet_count, Some(2));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn restore_does_not_persist_first_passkey_match_before_restore_work_succeeds() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        let manager = RustCloudBackupManager::init();
+
+        reset_cloud_backup_test_state(&manager, globals);
+
+        let prf_key = [7u8; 32];
+        let first_master_key = cove_cspp::master_key::MasterKey::generate();
+        let second_master_key = cove_cspp::master_key::MasterKey::generate();
+        let first_namespace = first_master_key.namespace_id();
+        let second_namespace = second_master_key.namespace_id();
+        let first_encrypted =
+            cove_cspp::master_key_crypto::encrypt_master_key(&first_master_key, &prf_key, &[9; 32])
+                .unwrap();
+        let second_encrypted = cove_cspp::master_key_crypto::encrypt_master_key(
+            &second_master_key,
+            &prf_key,
+            &[8; 32],
+        )
+        .unwrap();
+
+        globals.cloud.set_master_key_backup(
+            first_namespace.clone(),
+            serde_json::to_vec(&first_encrypted).unwrap(),
+        );
+        globals.cloud.set_master_key_backup(
+            second_namespace.clone(),
+            serde_json::to_vec(&second_encrypted).unwrap(),
+        );
+        globals.cloud.set_wallet_files(first_namespace, vec!["wallet-1.json".into()]);
+        globals.cloud.set_wallet_files(second_namespace, vec!["wallet-2.json".into()]);
+        globals.cloud.fail_list_wallet_files("list failed");
+        globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
+            prf_output: prf_key.to_vec(),
+            credential_id: vec![1, 2, 3],
+        }));
+        globals.passkey.set_authenticate_result(Ok(prf_key.to_vec()));
+
+        let operation = new_restore_operation_for_test(&manager).await;
+        let error = manager.do_restore_from_cloud_backup(&operation).await.unwrap_err();
+
+        assert!(error.to_string().contains("list failed"), "{error}");
+        assert_eq!(Keychain::global().get(CSPP_NAMESPACE_ID_KEY.into()), None);
     }
 
     #[tokio::test(flavor = "current_thread")]
