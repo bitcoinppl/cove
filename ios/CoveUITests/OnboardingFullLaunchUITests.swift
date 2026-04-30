@@ -208,18 +208,18 @@ final class OnboardingFullLaunchUITests: XCTestCase {
     }
 
     private func reachBackupWallet() {
-        app.buttons["Get Started"].tap()
+        tapButton(named: "Get Started")
         acceptTermsIfNeeded()
-        button(startingWith: "No, I").tap()
+        tapButton(startingWith: "No, I")
 
         assertBackupWallet(titlePrefix: "Back up your wallet")
     }
 
     private func reachStorageChoices() {
-        app.buttons["Get Started"].tap()
+        tapButton(named: "Get Started")
         acceptTermsIfNeeded()
-        button(startingWith: "Yes, I have Bitcoin").tap()
-        button(startingWith: "Use another wallet").tap()
+        tapButton(startingWith: "Yes, I have Bitcoin")
+        tapButton(startingWith: "Use another wallet")
 
         XCTAssertTrue(app.staticTexts["How do you store your Bitcoin?"].waitForExistence(timeout: 10))
     }
@@ -313,6 +313,26 @@ final class OnboardingFullLaunchUITests: XCTestCase {
 
     private func button(startingWith labelPrefix: String) -> XCUIElement {
         app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", labelPrefix)).firstMatch
+    }
+
+    private func tapButton(named name: String) {
+        let button = app.buttons[name]
+        guard button.waitForExistence(timeout: 10) else {
+            XCTFail("Timed out waiting for button '\(name)'")
+            return
+        }
+
+        button.tap()
+    }
+
+    private func tapButton(startingWith labelPrefix: String) {
+        let button = button(startingWith: labelPrefix)
+        guard button.waitForExistence(timeout: 10) else {
+            XCTFail("Timed out waiting for button starting with '\(labelPrefix)'")
+            return
+        }
+
+        button.tap()
     }
 
     private func staticText(startingWith labelPrefix: String) -> XCUIElement {

@@ -13,7 +13,6 @@ import androidx.test.uiautomator.Until
 import java.io.ByteArrayOutputStream
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
-import org.junit.Assert.assertFalse
 
 class FullLaunchStartupRobot(
     private val device: UiDevice,
@@ -23,6 +22,7 @@ class FullLaunchStartupRobot(
         assertNull(device.findObject(By.textContains("App initialization error")))
 
         val termsSelector = tag("onboarding.terms.check.backup")
+
         if (device.waitUntilAnyVisible(termsSelector, tag("onboarding.getStarted")).description == termsSelector.description) {
             acceptTermsAndContinue()
         }
@@ -33,7 +33,7 @@ class FullLaunchStartupRobot(
     }
 
     fun assertScreenshotsAllowed(): FullLaunchStartupRobot {
-        assertFalse("expected screenshots to be allowed", isFlagSecureSet())
+        assertFlagSecureSet(false, "expected screenshots to be allowed")
 
         return this
     }
@@ -167,13 +167,13 @@ class FullLaunchOnboardingRobot(
     }
 
     fun assertScreenshotsBlocked(): FullLaunchOnboardingRobot {
-        assertTrue("expected screenshots to be blocked", isFlagSecureSet())
+        assertFlagSecureSet(true, "expected screenshots to be blocked")
 
         return this
     }
 
     fun assertScreenshotsAllowed(): FullLaunchOnboardingRobot {
-        assertFalse("expected screenshots to be allowed", isFlagSecureSet())
+        assertFlagSecureSet(false, "expected screenshots to be allowed")
 
         return this
     }
@@ -343,6 +343,25 @@ fun launchFullApp() {
     output.drainAndClose()
 }
 
+private fun assertFlagSecureSet(
+    expected: Boolean,
+    message: String,
+    timeoutMillis: Long = 500,
+    intervalMillis: Long = 50,
+) {
+    val deadline = System.currentTimeMillis() + timeoutMillis
+
+    while (System.currentTimeMillis() < deadline) {
+        if (isFlagSecureSet() == expected) {
+            return
+        }
+
+        Thread.sleep(intervalMillis)
+    }
+
+    assertTrue(message, isFlagSecureSet() == expected)
+}
+
 private fun isFlagSecureSet(): Boolean {
     val activity = resumedActivity()
 
@@ -375,6 +394,7 @@ private fun UiDevice.waitUntilAnyVisible(
     timeoutMillis: Long = 20_000,
 ): VisibleSelector {
     val deadline = System.currentTimeMillis() + timeoutMillis
+
     while (System.currentTimeMillis() < deadline) {
         findObject(first.value)?.let { return VisibleSelector(first.description, it) }
         findObject(second.value)?.let { return VisibleSelector(second.description, it) }

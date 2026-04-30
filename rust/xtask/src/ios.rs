@@ -361,7 +361,8 @@ pub fn run_ios_ui_tests(options: IosUiOptions, verbose: bool) -> Result<()> {
     boot_simulator(&sh, &options.device)?;
 
     for test in ios_ui_tests_to_run(&sh, &options.test)? {
-        reset_simulator_state(&sh);
+        reset_simulator_state(&sh, &options.device)?;
+        boot_simulator(&sh, &options.device)?;
         run_ios_ui_test(&sh, &options.device, &test, verbose)?;
     }
 
@@ -394,26 +395,68 @@ fn simulator_line_matches_device(line: &str, device: &str) -> bool {
     line.starts_with(&format!("{device} (")) && line.contains("(Booted)")
 }
 
-fn reset_simulator_state(sh: &Shell) {
-    let _ = cmd!(sh, "xcrun simctl keychain booted reset").quiet().run();
-    let _ = cmd!(sh, "xcrun simctl uninstall booted {IOS_BUNDLE_ID}").quiet().run();
+fn reset_simulator_state(sh: &Shell, device: &str) -> Result<()> {
+    cmd!(sh, "xcrun simctl shutdown {device}")
+        .quiet()
+        .run()
+        .wrap_err_with(|| format!("Failed to shut down simulator '{device}'"))?;
+
+    cmd!(sh, "xcrun simctl erase {device}")
+        .quiet()
+        .run()
+        .wrap_err_with(|| format!("Failed to erase simulator '{device}'"))?;
+
+    Ok(())
 }
 
-fn run_ios_ui_test(sh: &Shell, device: &str, test: &str, _verbose: bool) -> Result<()> {
+fn run_ios_ui_test(sh: &Shell, device: &str, test: &str, verbose: bool) -> Result<()> {
     print_info(&format!("Running iOS UI test {test}"));
 
     let destination = format!("platform=iOS Simulator,name={device}");
     let only_testing = format!("-only-testing:{test}");
 
-    cmd!(
+    let test_cmd = cmd!(
         sh,
         "xcodebuild test -project {IOS_PROJECT} -scheme {IOS_UI_SCHEME} -configuration {IOS_CONFIGURATION_DEBUG} -destination {destination} -parallel-testing-enabled NO {only_testing}"
-    )
-    .run()
-    .wrap_err_with(|| format!("Failed to run iOS UI test {test}"))?;
+    );
+
+    if verbose {
+        test_cmd.run().wrap_err_with(|| format!("Failed to run iOS UI test {test}"))?;
+    } else {
+        let output = test_cmd
+            .quiet()
+            .ignore_status()
+            .output()
+            .wrap_err_with(|| format!("Failed to run iOS UI test {test}"))?;
+
+        if !output.status.success() {
+            let stdout =
+                String::from_utf8(output.stdout).wrap_err("Failed to parse xcodebuild stdout")?;
+            let stderr =
+                String::from_utf8(output.stderr).wrap_err("Failed to parse xcodebuild stderr")?;
+
+            Err(eyre!("xcodebuild exited with status {}", output.status)).with_context(|| {
+                format!(
+                    "Failed to run iOS UI test {test}\nstdout:\n{}\nstderr:\n{}",
+                    non_empty_output(&stdout, "<empty>"),
+                    non_empty_output(&stderr, "<empty>"),
+                )
+            })?;
+        }
+    }
 
     print_success(&format!("iOS UI test passed: {test}"));
     Ok(())
+}
+
+fn non_empty_output<'a>(output: &'a str, fallback: &'a str) -> &'a str {
+    let output = output.trim();
+
+    if output.is_empty() {
+        fallback
+    } else {
+        output
+    }
 }
 
 fn ios_ui_tests_to_run(sh: &Shell, test: &str) -> Result<Vec<String>> {
