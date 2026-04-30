@@ -22,7 +22,8 @@ struct TapSignerSetupSuccess: View {
             let manager = try WalletManager(
                 tapSigner: tapSigner,
                 deriveInfo: setup.deriveInfo,
-                backup: setup.backup
+                backup: setup.backup,
+                birthday: setup.birthday
             )
 
             walletId = manager.id

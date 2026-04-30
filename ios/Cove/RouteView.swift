@@ -35,7 +35,7 @@ struct RouteView: View {
     Group {
         switch route {
         case let .loadAndReset(resetTo: routes, afterMillis: time):
-            LoadAndResetContainer(nextRoute: routes.routes, loadingTimeMs: Int(time))
+            LoadAndResetContainer(route: route, nextRoute: routes.routes, loadingTimeMs: Int(time))
         case let .settings(route):
             SettingsContainer(route: route)
         case let .newWallet(route: route):

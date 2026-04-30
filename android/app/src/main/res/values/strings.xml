@@ -4,6 +4,16 @@
     <string name="title_settings_general">General</string>
     <string name="title_settings_network">Network</string>
     <string name="title_settings_appearance">Appearance</string>
+    <string name="title_cloud_backup">Cloud Backup</string>
+    <string name="cloud_backup_status_off">Off</string>
+    <string name="cloud_backup_status_setting_up">Setting up</string>
+    <string name="cloud_backup_status_restoring">Restoring</string>
+    <string name="cloud_backup_status_active">Active</string>
+    <string name="cloud_backup_status_passkey_missing">Passkey missing</string>
+    <string name="cloud_backup_status_passkey_provider_unsupported">Passkey provider unsupported</string>
+    <string name="cloud_backup_status_error">%1$s</string>
+    <string name="onboarding_restore_card_title">Restore from Cove backup</string>
+    <string name="onboarding_restore_card_subtitle">Use your passkey to restore from Google Drive</string>
     <string name="title_settings_node">Node</string>
     <string name="title_settings_currency">Currency</string>
     <string name="title_wallet_information">Wallet information</string>

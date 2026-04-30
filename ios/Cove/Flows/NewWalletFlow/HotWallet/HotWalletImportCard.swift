@@ -302,6 +302,7 @@ private struct AutocompleteField: View {
 
     var textField: some View {
         TextField("", text: $text)
+            .accessibilityIdentifier("hotWalletImport.word.\(number)")
             .font(.subheadline)
             .fontWeight(.bold)
             .foregroundColor(textColor)

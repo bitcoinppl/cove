@@ -243,9 +243,7 @@ impl GlobalConfigTable {
     pub fn selected_node(&self) -> Node {
         let network = self.selected_network();
         let selected_node_key = GlobalConfigKey::SelectedNode(network);
-
         let node_json = self.get(selected_node_key).unwrap_or(None).unwrap_or_default();
-
         serde_json::from_str(&node_json).unwrap_or_else(|_| Node::default(network))
     }
 

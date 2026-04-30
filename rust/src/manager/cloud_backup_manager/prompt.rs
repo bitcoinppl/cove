@@ -1,9 +1,6 @@
-use crate::manager::cloud_backup_detail_manager::{
-    RecoveryAction, RecoveryState, VerificationState,
-};
-
 use super::{
     CloudBackupPasskeyChoiceFlow, CloudBackupPromptIntent, CloudBackupState, CloudBackupStatus,
+    RecoveryAction, RecoveryState, VerificationState,
 };
 
 #[derive(Debug, Clone, Default)]
@@ -47,6 +44,7 @@ impl CloudBackupPromptState {
             return CloudBackupPromptIntent::PasskeyChoice(flow.clone());
         }
 
+        // show a reminder while cloud backup needs a passkey, unless repair is already underway
         if matches!(state.status, CloudBackupStatus::PasskeyMissing)
             && !self.missing_passkey_dismissed
             && !matches!(state.recovery, RecoveryState::Recovering(RecoveryAction::RepairPasskey))
@@ -54,31 +52,28 @@ impl CloudBackupPromptState {
             return CloudBackupPromptIntent::MissingPasskeyReminder;
         }
 
-        if state.has_pending_upload_verification
-            && matches!(state.verification, VerificationState::Verifying)
-        {
-            return CloudBackupPromptIntent::None;
+        // decide whether verification needs user attention while accounting for background upload checks
+        use VerificationState as Vs;
+        match (&state.verification, state.should_prompt_verification) {
+            (Vs::Verifying, _) if state.has_pending_upload_verification => {
+                CloudBackupPromptIntent::None
+            }
+            (Vs::Verifying | Vs::Failed(_), _) => CloudBackupPromptIntent::VerificationPrompt,
+            (Vs::Idle | Vs::Verified(_) | Vs::PasskeyConfirmed | Vs::Cancelled, true) => {
+                CloudBackupPromptIntent::VerificationPrompt
+            }
+            (Vs::Idle | Vs::Verified(_) | Vs::PasskeyConfirmed | Vs::Cancelled, false) => {
+                CloudBackupPromptIntent::None
+            }
         }
-
-        if matches!(state.verification, VerificationState::Verifying | VerificationState::Failed(_))
-            || state.should_prompt_verification
-        {
-            return CloudBackupPromptIntent::VerificationPrompt;
-        }
-
-        CloudBackupPromptIntent::None
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::manager::cloud_backup_detail_manager::{
-        RecoveryAction, RecoveryState, VerificationState,
-    };
-
     use super::{
         CloudBackupPasskeyChoiceFlow, CloudBackupPromptIntent, CloudBackupPromptState,
-        CloudBackupState, CloudBackupStatus,
+        CloudBackupState, CloudBackupStatus, RecoveryAction, RecoveryState, VerificationState,
     };
     use crate::manager::cloud_backup_manager::{DeepVerificationFailure, VerificationFailureKind};
 

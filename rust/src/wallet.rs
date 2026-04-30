@@ -28,7 +28,10 @@ use cove_types::{Network, address::AddressInfoWithDerivation};
 use cove_util::result_ext::ResultExt as _;
 use eyre::Context as _;
 use fingerprint::Fingerprint;
-use metadata::{DiscoveryState, HardwareWalletMetadata, WalletId, WalletMetadata, WalletType};
+use metadata::{
+    DiscoveryState, HardwareWalletMetadata, WalletBirthday, WalletId, WalletMetadata, WalletType,
+    tap_signer_import_birthday,
+};
 use parking_lot::Mutex;
 use pubport::formats::Format;
 use tracing::{debug, error, warn};
@@ -365,6 +368,7 @@ impl Wallet {
         tap_signer: Arc<cove_tap_card::TapSigner>,
         derive: DeriveInfo,
         backup: Option<Vec<u8>>,
+        birthday: Option<WalletBirthday>,
     ) -> Result<Self, WalletError> {
         let keychain = Keychain::global();
         let database = Database::global();
@@ -389,6 +393,8 @@ impl Wallet {
         metadata.origin = descriptors.origin().ok();
         metadata.master_fingerprint = Some(Arc::new(fingerprint));
         metadata.wallet_type = WalletType::Cold;
+        metadata.birthday =
+            birthday.or_else(|| tap_signer_import_birthday(network, derive.birth_height));
 
         // make sure its not already imported
         check_for_duplicate_wallet(network, mode, fingerprint)?;

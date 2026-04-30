@@ -29,6 +29,28 @@
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       shouldUseLaunchSchemeArgsEnv = "YES"
       shouldAutocreateTestPlan = "YES">
+      <PreActions>
+         <ExecutionAction
+            ActionType = "Xcode.IDEStandardExecutionActionsCore.ExecutionActionType.ShellScriptAction">
+            <ActionContent
+               title = "Reset Cove simulator app state"
+               scriptText = "if [[ &quot;${TARGET_NAME}&quot; == *UITests* || &quot;${TEST_BUNDLE_NAME}&quot; == *UITests* ]]; then&#10;  APP_BUNDLE_ID=&quot;&quot;&#10;  if [[ -n &quot;${TEST_HOST}&quot; ]]; then&#10;    APP_BUNDLE_ID=$(/usr/libexec/PlistBuddy -c &quot;Print CFBundleIdentifier&quot; &quot;${TEST_HOST%/*}/Info.plist&quot; 2&gt;/dev/null || true)&#10;  fi&#10;  APP_BUNDLE_ID=&quot;${APP_BUNDLE_ID:-org.bitcoinppl.cove}&quot;&#10;  /usr/bin/xcrun simctl list devices booted -j | /usr/bin/python3 -c &apos;import json,sys; data=json.load(sys.stdin); [print(device[&quot;udid&quot;]) for devices in data.get(&quot;devices&quot;, {}).values() for device in devices if device.get(&quot;state&quot;) == &quot;Booted&quot;]&apos; | while read -r UDID; do&#10;    UNINSTALL_OUTPUT=$(/usr/bin/xcrun simctl uninstall &quot;${UDID}&quot; &quot;${APP_BUNDLE_ID}&quot; 2&gt;&amp;1)&#10;    UNINSTALL_STATUS=$?&#10;    if [[ ${UNINSTALL_STATUS} -ne 0 ]]; then&#10;      case &quot;${UNINSTALL_OUTPUT}&quot; in&#10;        *&quot;No such file&quot;*|*&quot;not installed&quot;*|*&quot;not found&quot;*) continue ;;&#10;      esac&#10;      echo &quot;${UNINSTALL_OUTPUT}&quot; &gt;&amp;2&#10;      exit ${UNINSTALL_STATUS}&#10;    fi&#10;  done&#10;fi">
+            </ActionContent>
+         </ExecutionAction>
+      </PreActions>
+      <Testables>
+         <TestableReference
+            skipped = "YES"
+            parallelizable = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "C0A000052EF0000000000001"
+               BuildableName = "CoveUITests.xctest"
+               BlueprintName = "CoveUITests"
+               ReferencedContainer = "container:Cove.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+      </Testables>
    </TestAction>
    <LaunchAction
       buildConfiguration = "Debug"

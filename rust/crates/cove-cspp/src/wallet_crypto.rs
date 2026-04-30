@@ -9,8 +9,11 @@ use crate::key_derivation::derive_wallet_key;
 
 /// Encrypt a wallet entry for cloud backup
 ///
-/// Generates a random wallet_salt, derives a per-wallet key via HKDF,
-/// serializes to JSON, and encrypts with ChaCha20-Poly1305
+/// Each encrypted wallet backup gets a random wallet salt, and that salt is
+/// mixed with the critical data key through HKDF-SHA256 before encryption. This
+/// gives each backup its own encryption key. The envelope must keep both the
+/// generated wallet salt and generated nonce so restore can derive the same key
+/// and decrypt with the nonce paired to that ciphertext.
 pub fn encrypt_wallet_entry(
     entry: &WalletEntry,
     critical_data_key: &[u8; 32],

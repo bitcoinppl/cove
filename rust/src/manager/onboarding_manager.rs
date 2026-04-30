@@ -480,15 +480,14 @@ impl RustOnboardingManager {
                 return;
             }
 
-            let cloud = CloudStorage::global().clone();
-            let outcome = determine_cloud_check_outcome_async(
-                || {
-                    let cloud = cloud.clone();
-                    async move { cloud.has_any_cloud_backup().await }
-                },
-                |duration| tokio::time::sleep(duration),
-            )
-            .await;
+            let cloud = CloudStorage::global_silent_client();
+            let check_cloud_backup = || {
+                let cloud = cloud.clone();
+                async move { cloud.has_any_cloud_backup().await }
+            };
+
+            let outcome =
+                determine_cloud_check_outcome(check_cloud_backup, tokio::time::sleep).await;
             me.finish_cloud_check(outcome);
         });
     }
@@ -578,8 +577,7 @@ impl RustOnboardingManager {
     fn complete_onboarding(&self, target: CompletionTarget) {
         let result = match target {
             CompletionTarget::SelectLatestOrNew => {
-                FfiApp::global().select_latest_or_new_wallet();
-                Ok(())
+                FfiApp::global().select_latest_or_new_wallet().map_err_str(std::convert::identity)
             }
             CompletionTarget::SelectWallet { wallet_id, post_onboarding } => {
                 let next_route = match post_onboarding {
@@ -634,7 +632,7 @@ impl RustOnboardingManager {
 
         let name = format!("Wallet {}", number_of_wallets + 1);
         let fingerprint: Fingerprint = mnemonic.xpub(network.into()).fingerprint().into();
-        let wallet_metadata = WalletMetadata::new(name, Some(fingerprint));
+        let wallet_metadata = WalletMetadata::new_cove_created_wallet(name, Some(fingerprint));
         let wallet =
             Wallet::try_new_persisted_and_selected(wallet_metadata, mnemonic.clone(), None)
                 .map_err_str(std::convert::identity)?;
@@ -1570,6 +1568,9 @@ impl RestoreOrigin {
 
 fn classify_cloud_check_error(error: &CloudStorageError) -> CloudCheckIssue {
     match RustCloudBackupManager::cloud_storage_issue(error) {
+        crate::manager::cloud_backup_manager::CloudStorageIssue::AuthorizationRequired => {
+            CloudCheckIssue::CloudUnavailable
+        }
         crate::manager::cloud_backup_manager::CloudStorageIssue::Offline => {
             CloudCheckIssue::Offline
         }
@@ -1587,18 +1588,18 @@ fn classify_cloud_check_error(error: &CloudStorageError) -> CloudCheckIssue {
 fn cloud_check_inconclusive_message(issue: CloudCheckIssue) -> String {
     match issue {
         CloudCheckIssue::Offline => {
-            "You're offline, so Cove can't check for an iCloud backup right now. You can continue onboarding now and check Cloud Backup later in Settings.".into()
+            "You're offline, so Cove can't check for a cloud backup right now. You can continue onboarding now and check Cloud Backup later in Settings.".into()
         }
         CloudCheckIssue::CloudUnavailable => {
-            "We couldn't confirm whether an iCloud backup is available because iCloud may be unavailable. You can still try restoring with your passkey if you're reinstalling this device.".into()
+            "We couldn't confirm whether a cloud backup is available because cloud storage may be unavailable. You can still try restoring with your passkey if you're reinstalling this device.".into()
         }
         CloudCheckIssue::Unknown => {
-            "We couldn't confirm whether an iCloud backup is available. You can still try restoring with your passkey if you're reinstalling this device.".into()
+            "We couldn't confirm whether a cloud backup is available. You can still try restoring with your passkey if you're reinstalling this device.".into()
         }
     }
 }
 
-async fn determine_cloud_check_outcome_async<F, Fut, S>(
+async fn determine_cloud_check_outcome<F, Fut, S>(
     mut has_any_cloud_backup: F,
     sleep: S,
 ) -> CloudCheckOutcome
@@ -1760,6 +1761,36 @@ mod tests {
     }
 
     #[test]
+    fn skipping_cloud_backup_after_software_import_goes_to_terms() {
+        let wallet_id = WalletId::new();
+        let mut flow = FlowState::CloudBackup(CloudBackupFlow::SoftwareImport {
+            wallet_id: wallet_id.clone(),
+        });
+        let mut restore_offer_allowed = false;
+
+        let command = flow.apply_user_action(
+            OnboardingAction::SkipCloudBackup,
+            CloudRestoreDiscovery::Checking,
+            &mut restore_offer_allowed,
+        );
+
+        assert_eq!(command, TransitionCommand::None);
+        match flow {
+            FlowState::Terms {
+                context:
+                    TermsContext::SelectWallet {
+                        wallet_id: id,
+                        post_onboarding: PostOnboardingDestination::None,
+                    },
+                ..
+            } => {
+                assert_eq!(id, wallet_id)
+            }
+            other => panic!("unexpected flow state: {other:?}"),
+        }
+    }
+
+    #[test]
     fn skipping_cloud_backup_after_hardware_import_goes_to_terms() {
         let wallet_id = WalletId::new();
         let mut flow = FlowState::CloudBackup(CloudBackupFlow::HardwareImport {
@@ -1798,6 +1829,150 @@ mod tests {
 
         assert_eq!(state.step, OnboardingStep::CloudBackup);
         assert_eq!(state.branch, Some(OnboardingBranch::Hardware));
+    }
+
+    #[test]
+    fn new_user_saved_words_flow_completes_with_verify_destination() {
+        let preview = preview_created_wallet_flow(OnboardingBranch::NewUser);
+        let wallet_id = preview.wallet_id.clone();
+        let mut flow = FlowState::BackupWallet(preview);
+
+        assert_eq!(
+            apply_action(&mut flow, OnboardingAction::ShowSecretWords),
+            TransitionCommand::None
+        );
+        assert!(matches!(flow, FlowState::SecretWords(_)));
+
+        assert_eq!(
+            apply_action(&mut flow, OnboardingAction::SecretWordsSaved),
+            TransitionCommand::None
+        );
+        assert!(matches!(
+            flow,
+            FlowState::BackupWallet(CreatedWalletFlow { secret_words_saved: true, .. })
+        ));
+
+        assert_eq!(
+            apply_action(&mut flow, OnboardingAction::ContinueFromBackup),
+            TransitionCommand::None
+        );
+        assert_terms_select_wallet(&flow, &wallet_id, PostOnboardingDestination::VerifyWords);
+
+        assert_eq!(
+            apply_action(&mut flow, OnboardingAction::AcceptTerms),
+            TransitionCommand::CompleteOnboarding(CompletionTarget::SelectWallet {
+                wallet_id,
+                post_onboarding: PostOnboardingDestination::VerifyWords,
+            })
+        );
+    }
+
+    #[test]
+    fn exchange_created_wallet_flow_completes_after_funding_screen() {
+        let mut preview = preview_created_wallet_flow(OnboardingBranch::Exchange);
+        preview.secret_words_saved = true;
+        let wallet_id = preview.wallet_id.clone();
+        let mut flow = FlowState::BackupWallet(preview);
+
+        assert_eq!(
+            apply_action(&mut flow, OnboardingAction::ContinueFromBackup),
+            TransitionCommand::None
+        );
+        assert!(matches!(flow, FlowState::ExchangeFunding(_)));
+
+        assert_eq!(
+            apply_action(&mut flow, OnboardingAction::ContinueFromExchangeFunding),
+            TransitionCommand::None
+        );
+        assert_terms_select_wallet(&flow, &wallet_id, PostOnboardingDestination::VerifyWords);
+
+        assert_eq!(
+            apply_action(&mut flow, OnboardingAction::AcceptTerms),
+            TransitionCommand::CompleteOnboarding(CompletionTarget::SelectWallet {
+                wallet_id,
+                post_onboarding: PostOnboardingDestination::VerifyWords,
+            })
+        );
+    }
+
+    #[test]
+    fn software_create_saved_words_flow_completes_with_verify_destination() {
+        let mut preview = preview_created_wallet_flow(OnboardingBranch::SoftwareCreate);
+        preview.secret_words_saved = true;
+        let wallet_id = preview.wallet_id.clone();
+        let mut flow = FlowState::BackupWallet(preview);
+
+        assert_eq!(
+            apply_action(&mut flow, OnboardingAction::ContinueFromBackup),
+            TransitionCommand::None
+        );
+        assert_terms_select_wallet(&flow, &wallet_id, PostOnboardingDestination::VerifyWords);
+
+        assert_eq!(
+            apply_action(&mut flow, OnboardingAction::AcceptTerms),
+            TransitionCommand::CompleteOnboarding(CompletionTarget::SelectWallet {
+                wallet_id,
+                post_onboarding: PostOnboardingDestination::VerifyWords,
+            })
+        );
+    }
+
+    #[test]
+    fn software_import_skip_cloud_backup_flow_completes_selected_wallet() {
+        let wallet_id = WalletId::new();
+        let mut flow = FlowState::SoftwareImport;
+
+        assert_eq!(
+            apply_action(
+                &mut flow,
+                OnboardingAction::SoftwareImportCompleted { wallet_id: wallet_id.clone() },
+            ),
+            TransitionCommand::None
+        );
+        assert!(matches!(flow, FlowState::CloudBackup(CloudBackupFlow::SoftwareImport { .. })));
+
+        assert_eq!(
+            apply_action(&mut flow, OnboardingAction::SkipCloudBackup),
+            TransitionCommand::None
+        );
+        assert_terms_select_wallet(&flow, &wallet_id, PostOnboardingDestination::None);
+
+        assert_eq!(
+            apply_action(&mut flow, OnboardingAction::AcceptTerms),
+            TransitionCommand::CompleteOnboarding(CompletionTarget::SelectWallet {
+                wallet_id,
+                post_onboarding: PostOnboardingDestination::None,
+            })
+        );
+    }
+
+    #[test]
+    fn hardware_import_skip_cloud_backup_flow_completes_selected_wallet() {
+        let wallet_id = WalletId::new();
+        let mut flow = FlowState::HardwareImport;
+
+        assert_eq!(
+            apply_action(
+                &mut flow,
+                OnboardingAction::HardwareImportCompleted { wallet_id: wallet_id.clone() },
+            ),
+            TransitionCommand::None
+        );
+        assert!(matches!(flow, FlowState::CloudBackup(CloudBackupFlow::HardwareImport { .. })));
+
+        assert_eq!(
+            apply_action(&mut flow, OnboardingAction::SkipCloudBackup),
+            TransitionCommand::None
+        );
+        assert_terms_select_wallet(&flow, &wallet_id, PostOnboardingDestination::None);
+
+        assert_eq!(
+            apply_action(&mut flow, OnboardingAction::AcceptTerms),
+            TransitionCommand::CompleteOnboarding(CompletionTarget::SelectWallet {
+                wallet_id,
+                post_onboarding: PostOnboardingDestination::None,
+            })
+        );
     }
 
     #[test]
@@ -1889,6 +2064,43 @@ mod tests {
         );
 
         assert!(matches!(flow, FlowState::StorageChoice { error_message: None }));
+    }
+
+    #[test]
+    fn invalid_action_leaves_current_flow_unchanged() {
+        let mut flow = FlowState::SoftwareImport;
+        let mut restore_offer_allowed = true;
+
+        let command = flow.apply_user_action(
+            OnboardingAction::ContinueFromBackup,
+            CloudRestoreDiscovery::BackupFound,
+            &mut restore_offer_allowed,
+        );
+
+        assert_eq!(command, TransitionCommand::None);
+        assert!(matches!(flow, FlowState::SoftwareImport));
+        assert!(restore_offer_allowed);
+    }
+
+    #[test]
+    fn restoring_failure_returns_to_restore_offer_with_error() {
+        let mut flow = FlowState::Restoring { origin: RestoreOrigin::ReturningUserChoice };
+        let mut restore_offer_allowed = true;
+
+        let command = flow.apply_user_action(
+            OnboardingAction::RestoreFailed { error: "passkey verification failed".into() },
+            CloudRestoreDiscovery::BackupFound,
+            &mut restore_offer_allowed,
+        );
+
+        assert_eq!(command, TransitionCommand::None);
+        assert!(matches!(
+            flow,
+            FlowState::RestoreOffer {
+                origin: RestoreOrigin::ReturningUserChoice,
+                error_message: Some(message),
+            } if message == "passkey verification failed"
+        ));
     }
 
     #[test]
@@ -2524,7 +2736,7 @@ mod tests {
     async fn cloud_check_false_short_circuits_without_sleeping() {
         let slept = Arc::new(Mutex::new(Vec::new()));
         let sleep_log = Arc::clone(&slept);
-        let outcome = determine_cloud_check_outcome_async(
+        let outcome = determine_cloud_check_outcome(
             || async { Ok(false) },
             move |duration| {
                 let sleep_log = Arc::clone(&sleep_log);
@@ -2541,7 +2753,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn cloud_check_retries_errors_and_returns_inconclusive() {
-        let outcome = determine_cloud_check_outcome_async(
+        let outcome = determine_cloud_check_outcome(
             || async { Err(CloudStorageError::NotAvailable("network timed out".into())) },
             |_| async {},
         )
@@ -2683,6 +2895,28 @@ mod tests {
 
     fn assert_no_reconcile_messages(manager: &RustOnboardingManager) {
         assert!(matches!(manager.reconcile_receiver.try_recv(), Err(flume::TryRecvError::Empty)));
+    }
+
+    fn apply_action(flow: &mut FlowState, action: OnboardingAction) -> TransitionCommand {
+        let mut restore_offer_allowed = false;
+        flow.apply_user_action(action, CloudRestoreDiscovery::Checking, &mut restore_offer_allowed)
+    }
+
+    fn assert_terms_select_wallet(
+        flow: &FlowState,
+        expected_wallet_id: &WalletId,
+        expected_destination: PostOnboardingDestination,
+    ) {
+        match flow {
+            FlowState::Terms {
+                context: TermsContext::SelectWallet { wallet_id, post_onboarding },
+                ..
+            } => {
+                assert_eq!(wallet_id, expected_wallet_id);
+                assert_eq!(*post_onboarding, expected_destination);
+            }
+            other => panic!("unexpected flow state: {other:?}"),
+        }
     }
 
     fn prepare_offline_cloud_check_retry(state: &mut InternalState) -> bool {

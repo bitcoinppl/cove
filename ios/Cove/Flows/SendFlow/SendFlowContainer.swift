@@ -43,7 +43,7 @@ public struct SendFlowContainer: View {
             self.sendFlowManager = sendFlowManager
         } catch {
             Log.error("Something went very wrong: \(error)")
-            app.rust.selectLatestOrNewWallet()
+            app.trySelectLatestOrNewWallet()
         }
     }
 
@@ -70,8 +70,7 @@ public struct SendFlowContainer: View {
             SendFlowConfirmScreen(
                 id: confirm.id, manager: manager,
                 details: confirm.details,
-                signedTransaction: confirm.signedTransaction,
-                signedPsbt: confirm.signedPsbt
+                input: confirm.input
             )
         case let .hardwareExport(id: id, details: details):
             SendFlowHardwareScreen(id: id, manager: manager, details: details)

@@ -6,11 +6,14 @@ import android.content.res.Configuration
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
+import org.bitcoinppl.cove.cloudbackup.AndroidCloudStorageAccess
+import org.bitcoinppl.cove.cloudbackup.AndroidPasskeyProvider
 import org.bitcoinppl.cove_core.AuthType
-import org.bitcoinppl.cove_core.device.Connectivity
-import org.bitcoinppl.cove_core.RustCloudBackupManager
 import org.bitcoinppl.cove_core.device.Device
+import org.bitcoinppl.cove_core.device.CloudStorage
+import org.bitcoinppl.cove_core.device.Connectivity
 import org.bitcoinppl.cove_core.device.Keychain
+import org.bitcoinppl.cove_core.device.PasskeyAccess
 import org.bitcoinppl.cove_core.setRootDataDir
 import java.time.Instant
 
@@ -24,6 +27,8 @@ class CoveApplication : Application() {
     private var keychain: Keychain? = null
     private var device: Device? = null
     private var connectivity: Connectivity? = null
+    private var passkeyAccess: PasskeyAccess? = null
+    private var cloudStorage: CloudStorage? = null
     private var connectivityMonitor: ConnectivityMonitor? = null
     private var bootstrapCompleted = false
 
@@ -48,6 +53,8 @@ class CoveApplication : Application() {
             device = Device(DeviceAccessor())
             connectivityMonitor = ConnectivityMonitor(this)
             connectivity = Connectivity(connectivityMonitor!!)
+            passkeyAccess = PasskeyAccess(AndroidPasskeyProvider(this))
+            cloudStorage = CloudStorage(AndroidCloudStorageAccess(this))
             Log.d(TAG, "Keychain and device initialized")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize keychain and device", e)
@@ -62,11 +69,7 @@ class CoveApplication : Application() {
         if (bootstrapCompleted) return
         bootstrapCompleted = true
 
-        AppManager.getInstance()
         connectivityMonitor?.start()
-        RustCloudBackupManager().use { rustCloudBackupManager ->
-            rustCloudBackupManager.resumePendingCloudUploadVerification()
-        }
         setupLifecycleObserver()
         setupMemoryCallbacks()
     }
@@ -110,6 +113,22 @@ class CoveApplication : Application() {
         }
 
         try {
+            cloudStorage?.close()
+            cloudStorage = null
+            Log.d(TAG, "CloudStorage FFI object closed")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error closing CloudStorage FFI object", e)
+        }
+
+        try {
+            passkeyAccess?.close()
+            passkeyAccess = null
+            Log.d(TAG, "PasskeyAccess FFI object closed")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error closing PasskeyAccess FFI object", e)
+        }
+
+        try {
             keychain?.close()
             keychain = null
             Log.d(TAG, "Keychain FFI object closed")
@@ -117,19 +136,27 @@ class CoveApplication : Application() {
             Log.e(TAG, "Error closing Keychain FFI object", e)
         }
 
-        // close AppManager and AuthManager FFI objects
-        try {
-            AppManager.getInstance().rust.close()
-            Log.d(TAG, "AppManager FFI object closed")
-        } catch (e: Exception) {
-            Log.e(TAG, "Error closing AppManager FFI object", e)
-        }
+        if (bootstrapCompleted) {
+            try {
+                AppManager.getInstance().cloudBackupManager.close()
+                Log.d(TAG, "CloudBackupManager FFI object closed")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error closing CloudBackupManager FFI object", e)
+            }
 
-        try {
-            AuthManager.getInstance().rust.close()
-            Log.d(TAG, "AuthManager FFI object closed")
-        } catch (e: Exception) {
-            Log.e(TAG, "Error closing AuthManager FFI object", e)
+            try {
+                AppManager.getInstance().rust.close()
+                Log.d(TAG, "AppManager FFI object closed")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error closing AppManager FFI object", e)
+            }
+
+            try {
+                AuthManager.getInstance().rust.close()
+                Log.d(TAG, "AuthManager FFI object closed")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error closing AuthManager FFI object", e)
+            }
         }
     }
 

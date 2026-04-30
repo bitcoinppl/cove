@@ -118,3 +118,22 @@ impl Amount {
         format!("{} SATS", self.sats_string())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_amount_fmt_strings() {
+        let amount = Amount::from_sat(12000);
+
+        assert_eq!(amount.sats_string(), "12,000");
+        assert_eq!(amount.sats_string_with_unit(), "12,000 SATS");
+
+        assert_eq!(amount.btc_string(), "0.00012");
+        assert_eq!(amount.btc_string_with_unit(), "0.00012 BTC");
+
+        assert_eq!(amount.fmt_string_with_unit(BitcoinUnit::Sat), "12,000 SATS");
+        assert_eq!(amount.fmt_string_with_unit(BitcoinUnit::Btc), "0.00012 BTC");
+    }
+}

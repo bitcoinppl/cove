@@ -30,8 +30,15 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
     var fiatAmount: Double? = nil
 
     var presenter: SendFlowPresenter
-    var selectedFeeRate: FeeRateOptionWithTotalFee? = nil
-    var feeRateOptions: FeeRateOptionsWithTotalFee? = nil
+    var feeSelection: FeeSelection? = nil
+    var selectedFeeRate: FeeRateOptionWithTotalFee? {
+        feeSelection?.selected
+    }
+
+    var feeRateOptions: FeeRateOptionsWithTotalFee? {
+        feeSelection?.options
+    }
+
     var maxSelected: Amount? = nil
 
     // presenting
@@ -124,9 +131,9 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
             self.refreshPresenters()
             self.amount = Amount.fromSat(sats: sats)
 
-        case let .updateFeeRateOptions(options):
+        case let .updateFeeSelection(selection):
             self.refreshPresenters()
-            self.feeRateOptions = options
+            self.feeSelection = selection
 
         case let .updateAddress(address):
             self.address = address
@@ -139,10 +146,6 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
 
         case let .updateEnteringFiatAmount(amount):
             self.enteringFiatAmount = amount
-
-        case let .updateSelectedFeeRate(rate):
-            self.refreshPresenters()
-            self.selectedFeeRate = rate
 
         case let .updateFocusField(field):
             self.presenter.focusField = field

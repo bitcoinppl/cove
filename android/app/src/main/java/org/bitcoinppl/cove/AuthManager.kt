@@ -137,7 +137,7 @@ class AuthManager private constructor() : AuthManagerReconciler {
         app.isLoading = true
 
         // select the latest (most recently used) wallet or navigate to new wallet flow
-        app.rust.selectLatestOrNewWallet()
+        app.trySelectLatestOrNewWallet()
     }
 
     /**

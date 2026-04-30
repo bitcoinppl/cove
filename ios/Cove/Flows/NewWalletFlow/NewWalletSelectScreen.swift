@@ -171,8 +171,8 @@ struct NewWalletSelectScreen: View {
             let wallet = try Wallet.newFromXpub(xpub: xpub)
             let id = wallet.id()
             Log.debug("Imported Wallet: \(id)")
+            try app.selectWalletOrThrow(id)
             app.alertState = TaggedItem(.importedSuccessfully)
-            try app.rust.selectWallet(id: id)
         } catch {
             alert = AlertItem(type: .error(error.localizedDescription))
         }

@@ -101,6 +101,9 @@ final class CloudBackupPresentationCoordinator {
             transitionTask?.cancel()
             transitionTask = nil
             queuedPresentation = desiredPresentation
+            if blockers.contains(.settingsLocalModal) {
+                requiresPresentationDelay = true
+            }
             if currentPresentation != nil {
                 ignoreNextDismissEvent = true
                 currentPresentation = nil

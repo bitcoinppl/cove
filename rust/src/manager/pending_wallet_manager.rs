@@ -73,6 +73,9 @@ pub enum WalletCreationError {
     #[error("failed to import hardware wallet: {0}")]
     Import(String),
 
+    #[error("unexpected wallet creation error: {0}")]
+    Unexpected(String),
+
     #[error(transparent)]
     MultiFormat(#[from] MultiFormatError),
 }
@@ -122,7 +125,7 @@ impl RustPendingWalletManager {
         let fingerprint: Fingerprint =
             self.state.read().wallet.mnemonic.xpub(network.into()).fingerprint().into();
 
-        let wallet_metadata = WalletMetadata::new(name, Some(fingerprint));
+        let wallet_metadata = WalletMetadata::new_cove_created_wallet(name, Some(fingerprint));
 
         // create, persist and select the wallet
         let wallet = Wallet::try_new_persisted_and_selected(
@@ -199,14 +202,20 @@ impl From<crate::wallet::WalletError> for WalletCreationError {
                 Self::Import(format!("wallet already exists: {id}"))
             }
 
-            WalletError::WalletNotFound => unreachable!("no wallet found in creation"),
-            WalletError::LoadError(error) => unreachable!("no loading in creation:{error}"),
-            WalletError::MetadataNotFound => unreachable!("no metadata found in creation"),
+            WalletError::WalletNotFound => {
+                Self::Unexpected("wallet not found during creation".to_string())
+            }
+            WalletError::LoadError(error) => {
+                Self::Unexpected(format!("load error during creation: {error}"))
+            }
+            WalletError::MetadataNotFound => {
+                Self::Unexpected("wallet metadata not found during creation".to_string())
+            }
             WalletError::UnsupportedWallet(error) => {
-                unreachable!("unreachable unsupported wallet: {error}")
+                Self::Unexpected(format!("unsupported wallet during creation: {error}"))
             }
             WalletError::DescriptorKeyParseError(error) => {
-                unreachable!("unreachable descriptor key parse error: {error}")
+                Self::Unexpected(format!("descriptor key parse error during creation: {error}"))
             }
         }
     }

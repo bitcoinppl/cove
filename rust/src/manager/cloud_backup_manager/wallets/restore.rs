@@ -2,7 +2,9 @@ use std::str::FromStr as _;
 
 use cove_cspp::backup_data::{EncryptedWalletBackup, WalletEntry};
 use cove_cspp::wallet_crypto;
-use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
+#[cfg(test)]
+use cove_device::cloud_storage::CloudStorage;
+use cove_device::cloud_storage::{CloudStorageClient, CloudStorageError};
 use cove_util::ResultExt as _;
 use tracing::{info, warn};
 use zeroize::Zeroizing;
@@ -24,18 +26,35 @@ type ExistingFingerprints = Vec<(Fingerprint, cove_types::network::Network, Loca
 
 #[derive(Clone)]
 pub(crate) struct WalletBackupReader {
-    cloud: CloudStorage,
+    cloud: Option<CloudStorageClient>,
+    #[cfg(test)]
+    _local_cloud: Option<CloudStorage>,
     namespace: String,
     critical_key: Zeroizing<[u8; 32]>,
 }
 
 impl WalletBackupReader {
     pub(crate) fn new(
+        cloud: CloudStorageClient,
+        namespace: String,
+        critical_key: Zeroizing<[u8; 32]>,
+    ) -> Self {
+        Self {
+            cloud: Some(cloud),
+            #[cfg(test)]
+            _local_cloud: None,
+            namespace,
+            critical_key,
+        }
+    }
+
+    #[cfg(test)]
+    fn new_with_local_storage(
         cloud: CloudStorage,
         namespace: String,
         critical_key: Zeroizing<[u8; 32]>,
     ) -> Self {
-        Self { cloud, namespace, critical_key }
+        Self { cloud: None, _local_cloud: Some(cloud), namespace, critical_key }
     }
 
     pub(crate) async fn download(
@@ -109,15 +128,14 @@ impl WalletBackupReader {
         &self,
         record_id: &str,
     ) -> Result<WalletBackupLookup<EncryptedWalletBackup>, CloudBackupError> {
-        let wallet_json = match self
-            .cloud
-            .download_wallet_backup(self.namespace.clone(), record_id.to_string())
-            .await
-        {
+        let wallet_json = match self.download_wallet_json(record_id).await {
             Ok(wallet_json) => wallet_json,
             Err(CloudStorageError::NotFound(_)) => return Ok(WalletBackupLookup::NotFound),
             Err(error) => {
-                return Err(CloudBackupError::Cloud(format!("download {record_id}: {error}")));
+                return Err(CloudBackupError::cloud_storage_context(
+                    format!("download {record_id}"),
+                    error,
+                ));
             }
         };
 
@@ -133,6 +151,15 @@ impl WalletBackupReader {
         }
 
         Ok(WalletBackupLookup::Found(encrypted))
+    }
+
+    async fn download_wallet_json(&self, record_id: &str) -> Result<Vec<u8>, CloudStorageError> {
+        let Some(cloud) = &self.cloud else {
+            return Err(CloudStorageError::NotAvailable(
+                "test cloud storage cannot download wallet backups".into(),
+            ));
+        };
+        cloud.download_wallet_backup(self.namespace.clone(), record_id.to_string()).await
     }
 
     pub(crate) fn decrypt_entry(
@@ -248,7 +275,9 @@ impl DownloadedWalletBackup {
 mod tests {
     use super::*;
     use cove_cspp::backup_data::WalletSecret;
-    use cove_device::cloud_storage::{CloudStorageAccess, CloudStorageError, CloudSyncHealth};
+    use cove_device::cloud_storage::{
+        CloudAccessPolicy, CloudStorage, CloudStorageAccess, CloudStorageError, CloudSyncHealth,
+    };
 
     fn test_wallet_entry(metadata: &WalletMetadata) -> WalletEntry {
         WalletEntry {
@@ -276,6 +305,7 @@ mod tests {
             &self,
             _namespace: String,
             _data: Vec<u8>,
+            _policy: CloudAccessPolicy,
         ) -> Result<(), CloudStorageError> {
             Err(CloudStorageError::NotAvailable("unused in test".into()))
         }
@@ -285,6 +315,7 @@ mod tests {
             _namespace: String,
             _record_id: String,
             _data: Vec<u8>,
+            _policy: CloudAccessPolicy,
         ) -> Result<(), CloudStorageError> {
             Err(CloudStorageError::NotAvailable("unused in test".into()))
         }
@@ -292,6 +323,7 @@ mod tests {
         async fn download_master_key_backup(
             &self,
             _namespace: String,
+            _policy: CloudAccessPolicy,
         ) -> Result<Vec<u8>, CloudStorageError> {
             Err(CloudStorageError::NotAvailable("unused in test".into()))
         }
@@ -300,6 +332,7 @@ mod tests {
             &self,
             _namespace: String,
             _record_id: String,
+            _policy: CloudAccessPolicy,
         ) -> Result<Vec<u8>, CloudStorageError> {
             Err(CloudStorageError::NotAvailable("unused in test".into()))
         }
@@ -308,17 +341,22 @@ mod tests {
             &self,
             _namespace: String,
             _record_id: String,
+            _policy: CloudAccessPolicy,
         ) -> Result<(), CloudStorageError> {
             Err(CloudStorageError::NotAvailable("unused in test".into()))
         }
 
-        async fn list_namespaces(&self) -> Result<Vec<String>, CloudStorageError> {
+        async fn list_namespaces(
+            &self,
+            _policy: CloudAccessPolicy,
+        ) -> Result<Vec<String>, CloudStorageError> {
             Ok(Vec::new())
         }
 
         async fn list_wallet_files(
             &self,
             _namespace: String,
+            _policy: CloudAccessPolicy,
         ) -> Result<Vec<String>, CloudStorageError> {
             Ok(Vec::new())
         }
@@ -327,11 +365,12 @@ mod tests {
             &self,
             _namespace: String,
             _record_id: String,
+            _policy: CloudAccessPolicy,
         ) -> Result<bool, CloudStorageError> {
             Ok(false)
         }
 
-        async fn overall_sync_health(&self) -> CloudSyncHealth {
+        async fn overall_sync_health(&self, _policy: CloudAccessPolicy) -> CloudSyncHealth {
             CloudSyncHealth::NoFiles
         }
     }
@@ -346,7 +385,7 @@ mod tests {
         let entry = test_wallet_entry(&metadata);
         let critical_key = [7; 32];
         let encrypted = wallet_crypto::encrypt_wallet_entry(&entry, &critical_key).unwrap();
-        let reader = WalletBackupReader::new(
+        let reader = WalletBackupReader::new_with_local_storage(
             test_cloud_storage(),
             "test-namespace".into(),
             Zeroizing::new(critical_key),

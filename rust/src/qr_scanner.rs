@@ -346,7 +346,10 @@ impl QrScanner {
                 Self::scan_ur_part(*ur, &qr)?
             }
 
-            Self::Complete(_) => unreachable!("handled above"),
+            Self::Complete(result) => {
+                *self = Self::Complete(result.clone());
+                return Ok(result);
+            }
         };
 
         *self = new_state;

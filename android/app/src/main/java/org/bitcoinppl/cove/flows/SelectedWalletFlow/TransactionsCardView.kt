@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -61,15 +62,19 @@ import org.bitcoinppl.cove.ui.theme.isLight
 import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.FiatOrBtc
+import org.bitcoinppl.cove_core.FiatAmount
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.RouteFactory
 import org.bitcoinppl.cove_core.Transaction
 import org.bitcoinppl.cove_core.UnsignedTransaction
+import org.bitcoinppl.cove_core.types.SentAndReceived
 import org.bitcoinppl.cove_core.types.TransactionDirection
 
 private const val SCROLL_THRESHOLD_INDEX = 5
 
 enum class TransactionType { SENT, RECEIVED }
+
+private enum class AmountPosition { PRIMARY, SECONDARY }
 
 /**
  * Displays the list of transactions with a header
@@ -85,8 +90,8 @@ fun TransactionsCardView(
     fiatOrBtc: FiatOrBtc,
     sensitiveVisible: Boolean,
     showLabels: Boolean,
-    manager: WalletManager?,
-    app: AppManager?,
+    manager: WalletManager,
+    app: AppManager,
     listState: LazyListState = rememberLazyListState(),
     modifier: Modifier = Modifier,
 ) {
@@ -104,8 +109,8 @@ fun TransactionsCardView(
     }
 
     // scroll to saved transaction when returning from details
-    LaunchedEffect(manager?.scrolledTransactionId, hasTransactions, transactions, unsignedTransactions) {
-        val targetId = manager?.scrolledTransactionId ?: return@LaunchedEffect
+    LaunchedEffect(manager.scrolledTransactionId, hasTransactions, transactions, unsignedTransactions) {
+        val targetId = manager.scrolledTransactionId ?: return@LaunchedEffect
         if (!hasTransactions) return@LaunchedEffect
 
         // find the index of the transaction with the matching ID
@@ -268,8 +273,8 @@ fun TransactionsCardView(
 internal fun TransactionItem(
     txn: Transaction,
     index: Int,
-    manager: WalletManager?,
-    app: AppManager?,
+    manager: WalletManager,
+    app: AppManager,
     fiatOrBtc: FiatOrBtc,
     showLabels: Boolean,
     sensitiveVisible: Boolean,
@@ -297,39 +302,10 @@ internal fun TransactionItem(
                     )
                 }
 
-            val formattedAmount: String =
-                manager?.let {
-                    when (fiatOrBtc) {
-                        FiatOrBtc.BTC -> it.rust.displaySentAndReceivedAmount(txn.v1.sentAndReceived())
-                        FiatOrBtc.FIAT -> {
-                            val fiatAmount = txn.v1.fiatAmount()
-                            if (fiatAmount != null) {
-                                it.rust.displayFiatAmountWithDirection(fiatAmount.amount, direction)
-                            } else {
-                                "---"
-                            }
-                        }
-                    }
-                } ?: txn.v1.sentAndReceived().label()
-
-            val secondaryAmount: String =
-                manager?.let {
-                    when (fiatOrBtc) {
-                        FiatOrBtc.BTC -> {
-                            // primary is BTC, secondary is fiat
-                            val fiatAmount = txn.v1.fiatAmount()
-                            if (fiatAmount != null) {
-                                it.rust.displayFiatAmountWithDirection(fiatAmount.amount, direction)
-                            } else {
-                                "---"
-                            }
-                        }
-                        FiatOrBtc.FIAT -> {
-                            // primary is fiat, secondary is BTC
-                            it.rust.displaySentAndReceivedAmount(txn.v1.sentAndReceived())
-                        }
-                    }
-                } ?: "---"
+            val formattedAmount =
+                formatAmountFor(fiatOrBtc, AmountPosition.PRIMARY, txn.v1.sentAndReceived(), txn.v1.fiatAmount(), direction, manager)
+            val secondaryAmount =
+                formatAmountFor(fiatOrBtc, AmountPosition.SECONDARY, txn.v1.sentAndReceived(), txn.v1.fiatAmount(), direction, manager)
 
             ConfirmedTransactionWidget(
                 type = txType,
@@ -367,39 +343,10 @@ internal fun TransactionItem(
                     )
                 }
 
-            val formattedAmount: String =
-                manager?.let {
-                    when (fiatOrBtc) {
-                        FiatOrBtc.BTC -> it.rust.displaySentAndReceivedAmount(txn.v1.sentAndReceived())
-                        FiatOrBtc.FIAT -> {
-                            val fiatAmount = txn.v1.fiatAmount()
-                            if (fiatAmount != null) {
-                                it.rust.displayFiatAmountWithDirection(fiatAmount.amount, direction)
-                            } else {
-                                "---"
-                            }
-                        }
-                    }
-                } ?: txn.v1.sentAndReceived().label()
-
-            val secondaryAmount: String =
-                manager?.let {
-                    when (fiatOrBtc) {
-                        FiatOrBtc.BTC -> {
-                            // primary is BTC, secondary is fiat
-                            val fiatAmount = txn.v1.fiatAmount()
-                            if (fiatAmount != null) {
-                                it.rust.displayFiatAmountWithDirection(fiatAmount.amount, direction)
-                            } else {
-                                "---"
-                            }
-                        }
-                        FiatOrBtc.FIAT -> {
-                            // primary is fiat, secondary is BTC
-                            it.rust.displaySentAndReceivedAmount(txn.v1.sentAndReceived())
-                        }
-                    }
-                } ?: "---"
+            val formattedAmount =
+                formatAmountFor(fiatOrBtc, AmountPosition.PRIMARY, txn.v1.sentAndReceived(), txn.v1.fiatAmount(), direction, manager)
+            val secondaryAmount =
+                formatAmountFor(fiatOrBtc, AmountPosition.SECONDARY, txn.v1.sentAndReceived(), txn.v1.fiatAmount(), direction, manager)
 
             UnconfirmedTransactionWidget(
                 type = txType,
@@ -418,6 +365,27 @@ internal fun TransactionItem(
     }
 }
 
+private fun formatAmountFor(
+    fiatOrBtc: FiatOrBtc,
+    position: AmountPosition,
+    sentAndReceived: SentAndReceived,
+    fiatAmount: FiatAmount?,
+    direction: TransactionDirection,
+    manager: WalletManager,
+): String {
+    val showFiat =
+        when (position) {
+            AmountPosition.PRIMARY -> fiatOrBtc == FiatOrBtc.FIAT
+            AmountPosition.SECONDARY -> fiatOrBtc == FiatOrBtc.BTC
+        }
+
+    return if (showFiat) {
+        fiatAmount?.let { manager.rust.displayFiatAmountWithDirection(it.amount, direction) } ?: "---"
+    } else {
+        manager.rust.displaySentAndReceivedAmount(sentAndReceived)
+    }
+}
+
 @Composable
 internal fun ConfirmedTransactionWidget(
     type: TransactionType,
@@ -429,8 +397,8 @@ internal fun ConfirmedTransactionWidget(
     primaryText: Color,
     secondaryText: Color,
     transaction: Transaction.Confirmed,
-    app: AppManager?,
-    manager: WalletManager?,
+    app: AppManager,
+    manager: WalletManager,
     sensitiveVisible: Boolean,
 ) {
     val scope = rememberCoroutineScope()
@@ -448,20 +416,18 @@ internal fun ConfirmedTransactionWidget(
                 .fillMaxWidth()
                 .padding(vertical = 6.dp)
                 .clickable {
-                    if (app != null && manager != null) {
-                        scope.launch {
-                            try {
-                                val details = manager.transactionDetails(transaction.v1.id())
-                                val walletId = manager.walletMetadata?.id
-                                if (walletId != null) {
-                                    if (index > SCROLL_THRESHOLD_INDEX) {
-                                        manager.pendingScrollTransactionId = transaction.v1.id().toString()
-                                    }
-                                    app.pushRoute(Route.TransactionDetails(walletId, details))
+                    scope.launch {
+                        try {
+                            val details = manager.transactionDetails(transaction.v1.id())
+                            val walletId = manager.walletMetadata?.id
+                            if (walletId != null) {
+                                if (index > SCROLL_THRESHOLD_INDEX) {
+                                    manager.pendingScrollTransactionId = transaction.v1.id().toString()
                                 }
-                            } catch (e: Exception) {
-                                android.util.Log.e("ConfirmedTxWidget", "Failed to load transaction details", e)
+                                app.pushRoute(Route.TransactionDetails(walletId, details))
                             }
+                        } catch (e: Exception) {
+                            android.util.Log.e("ConfirmedTxWidget", "Failed to load transaction details", e)
                         }
                     }
                 },
@@ -537,8 +503,8 @@ internal fun UnconfirmedTransactionWidget(
     primaryText: Color,
     secondaryText: Color,
     transaction: Transaction.Unconfirmed,
-    app: AppManager?,
-    manager: WalletManager?,
+    app: AppManager,
+    manager: WalletManager,
     sensitiveVisible: Boolean,
 ) {
     val scope = rememberCoroutineScope()
@@ -555,20 +521,18 @@ internal fun UnconfirmedTransactionWidget(
                 .fillMaxWidth()
                 .padding(vertical = 6.dp)
                 .clickable {
-                    if (app != null && manager != null) {
-                        scope.launch {
-                            try {
-                                val details = manager.transactionDetails(transaction.v1.id())
-                                val walletId = manager.walletMetadata?.id
-                                if (walletId != null) {
-                                    if (index > SCROLL_THRESHOLD_INDEX) {
-                                        manager.pendingScrollTransactionId = transaction.v1.id().toString()
-                                    }
-                                    app.pushRoute(Route.TransactionDetails(walletId, details))
+                    scope.launch {
+                        try {
+                            val details = manager.transactionDetails(transaction.v1.id())
+                            val walletId = manager.walletMetadata?.id
+                            if (walletId != null) {
+                                if (index > SCROLL_THRESHOLD_INDEX) {
+                                    manager.pendingScrollTransactionId = transaction.v1.id().toString()
                                 }
-                            } catch (e: Exception) {
-                                android.util.Log.e("UnconfirmedTxWidget", "Failed to load transaction details", e)
+                                app.pushRoute(Route.TransactionDetails(walletId, details))
                             }
+                        } catch (e: Exception) {
+                            android.util.Log.e("UnconfirmedTxWidget", "Failed to load transaction details", e)
                         }
                     }
                 },
@@ -636,8 +600,8 @@ internal fun UnsignedTransactionWidget(
     index: Int,
     primaryText: Color,
     secondaryText: Color,
-    app: AppManager?,
-    manager: WalletManager?,
+    app: AppManager,
+    manager: WalletManager,
     fiatOrBtc: FiatOrBtc,
     sensitiveVisible: Boolean,
 ) {
@@ -650,7 +614,7 @@ internal fun UnsignedTransactionWidget(
         fiatAmount = null
         fiatAmount =
             try {
-                manager?.rust?.amountInFiat(txn.spendingAmount())
+                manager.rust.amountInFiat(txn.spendingAmount())
             } catch (e: Exception) {
                 android.util.Log.d("UnsignedTxWidget", "Fiat fetch failed", e)
                 null
@@ -670,38 +634,30 @@ internal fun UnsignedTransactionWidget(
 
     // format the spending amount (unsigned transactions are always outgoing)
     val formattedAmount =
-        manager?.let {
-            when (fiatOrBtc) {
-                FiatOrBtc.BTC -> it.rust.displayAmountWithDirection(txn.spendingAmount(), TransactionDirection.OUTGOING)
-                FiatOrBtc.FIAT -> {
-                    val amount = fiatAmount
-                    if (amount != null) {
-                        it.rust.displayFiatAmountWithDirection(amount, TransactionDirection.OUTGOING)
-                    } else {
-                        "---"
-                    }
+        when (fiatOrBtc) {
+            FiatOrBtc.BTC -> manager.rust.displayAmountWithDirection(txn.spendingAmount(), TransactionDirection.OUTGOING)
+            FiatOrBtc.FIAT -> {
+                val amount = fiatAmount
+                if (amount != null) {
+                    manager.rust.displayFiatAmountWithDirection(amount, TransactionDirection.OUTGOING)
+                } else {
+                    "---"
                 }
             }
-        } ?: txn.spendingAmount().satsStringWithUnit()
+        }
 
     val secondaryAmount =
-        manager?.let {
-            when (fiatOrBtc) {
-                FiatOrBtc.BTC -> {
-                    // primary is BTC, secondary is fiat
-                    val amount = fiatAmount
-                    if (amount != null) {
-                        it.rust.displayFiatAmountWithDirection(amount, TransactionDirection.OUTGOING)
-                    } else {
-                        "---"
-                    }
-                }
-                FiatOrBtc.FIAT -> {
-                    // primary is fiat, secondary is BTC
-                    it.rust.displayAmountWithDirection(txn.spendingAmount(), TransactionDirection.OUTGOING)
+        when (fiatOrBtc) {
+            FiatOrBtc.BTC -> {
+                val amount = fiatAmount
+                if (amount != null) {
+                    manager.rust.displayFiatAmountWithDirection(amount, TransactionDirection.OUTGOING)
+                } else {
+                    "---"
                 }
             }
-        } ?: "---"
+            FiatOrBtc.FIAT -> manager.rust.displayAmountWithDirection(txn.spendingAmount(), TransactionDirection.OUTGOING)
+        }
 
     Box {
         Row(
@@ -710,10 +666,10 @@ internal fun UnsignedTransactionWidget(
                     .fillMaxWidth()
                     .combinedClickable(
                         onClick = {
-                            val walletId = manager?.walletMetadata?.id
-                            if (app != null && walletId != null) {
+                            val walletId = manager.walletMetadata?.id
+                            if (walletId != null) {
                                 if (index > SCROLL_THRESHOLD_INDEX) {
-                                    manager?.pendingScrollTransactionId = txn.id().toString()
+                                    manager.pendingScrollTransactionId = txn.id().toString()
                                 }
                                 val route = RouteFactory().sendHardwareExport(walletId, txn.details())
                                 app.pushRoute(route)
@@ -805,18 +761,16 @@ internal fun UnsignedTransactionWidget(
                 onClick = {
                     showDeleteMenu = false
                     try {
-                        manager?.rust?.deleteUnsignedTransaction(txn.id())
+                        manager.rust.deleteUnsignedTransaction(txn.id())
                     } catch (e: Exception) {
                         android.util.Log.e("UnsignedTxWidget", "Failed to delete unsigned transaction", e)
-                        app?.let {
-                            it.alertState =
-                                TaggedItem(
-                                    AppAlertState.General(
-                                        title = "Delete Failed",
-                                        message = "Unable to delete transaction: ${e.localizedMessage ?: e.message ?: "Unknown error"}",
-                                    ),
-                                )
-                        }
+                        app.alertState =
+                            TaggedItem(
+                                AppAlertState.General(
+                                    title = "Delete Failed",
+                                    message = "Unable to delete transaction: ${e.localizedMessage ?: e.message ?: "Unknown error"}",
+                                ),
+                            )
                     }
                 },
             )
@@ -839,8 +793,8 @@ fun LazyListScope.transactionItems(
     fiatOrBtc: FiatOrBtc,
     sensitiveVisible: Boolean,
     showLabels: Boolean,
-    manager: WalletManager?,
-    app: AppManager?,
+    manager: WalletManager,
+    app: AppManager,
     primaryText: Color,
     secondaryText: Color,
     dividerColor: Color,
@@ -984,31 +938,76 @@ fun LazyListScope.transactionItems(
 @Preview(showBackground = true)
 @Composable
 private fun TransactionsCardViewEmptyPreview() {
-    TransactionsCardView(
-        transactions = emptyList(),
-        unsignedTransactions = emptyList(),
-        isScanning = false,
-        isFirstScan = false,
-        fiatOrBtc = FiatOrBtc.BTC,
-        sensitiveVisible = true,
-        showLabels = false,
-        manager = null,
-        app = null,
-    )
+    TransactionsPreviewShell(isScanning = false, isFirstScan = false)
 }
 
 @Preview(showBackground = true)
 @Composable
 private fun TransactionsCardViewLoadingPreview() {
-    TransactionsCardView(
-        transactions = emptyList(),
-        unsignedTransactions = emptyList(),
-        isScanning = true,
-        isFirstScan = true,
-        fiatOrBtc = FiatOrBtc.BTC,
-        sensitiveVisible = true,
-        showLabels = false,
-        manager = null,
-        app = null,
-    )
+    TransactionsPreviewShell(isScanning = true, isFirstScan = true)
+}
+
+@Composable
+private fun TransactionsPreviewShell(
+    isScanning: Boolean,
+    isFirstScan: Boolean,
+) {
+    val primaryText = MaterialTheme.colorScheme.onSurface
+    val secondaryText = MaterialTheme.colorScheme.onSurfaceVariant
+
+    Column(
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .padding(horizontal = 20.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.title_transactions),
+            color = secondaryText,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold,
+        )
+
+        if (isScanning && isFirstScan) {
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(200.dp),
+                contentAlignment = Alignment.TopCenter,
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.padding(top = 80.dp),
+                    color = primaryText,
+                )
+            }
+        } else {
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(top = 20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Icon(
+                    painter = androidx.compose.ui.res.painterResource(R.drawable.icon_currency_bitcoin),
+                    contentDescription = null,
+                    modifier = Modifier.size(48.dp),
+                    tint = secondaryText,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = stringResource(R.string.no_transactions_yet),
+                    color = secondaryText,
+                    fontWeight = FontWeight.Medium,
+                )
+                Text(
+                    text = stringResource(R.string.go_buy_some_bitcoin),
+                    color = secondaryText.copy(alpha = 0.7f),
+                    fontSize = 14.sp,
+                )
+            }
+        }
+    }
 }
