@@ -11,6 +11,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -115,49 +117,57 @@ internal fun OnboardingPromptScreen(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     OnboardingBackground(modifier = modifier) {
-        Column(
+        BoxWithConstraints(
             modifier =
                 Modifier
                     .fillMaxSize()
                     .statusBarsPadding()
-                    .navigationBarsPadding()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 28.dp, vertical = 18.dp),
+                    .navigationBarsPadding(),
         ) {
-            topContent?.invoke(this)
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = maxHeight)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 28.dp, vertical = 18.dp),
+                verticalArrangement = Arrangement.Center,
+            ) {
+                topContent?.invoke(this)
 
-            Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
-            OnboardingStatusHero(
-                icon = icon,
-                pulse = true,
-            )
+                OnboardingStatusHero(
+                    icon = icon,
+                    pulse = true,
+                )
 
-            Spacer(modifier = Modifier.height(44.dp))
+                Spacer(modifier = Modifier.height(44.dp))
 
-            Text(
-                text = title,
-                color = Color.White,
-                fontSize = 34.sp,
-                fontWeight = FontWeight.SemiBold,
-                lineHeight = 38.sp,
-                modifier = Modifier.fillMaxWidth(),
-            )
+                Text(
+                    text = title,
+                    color = Color.White,
+                    fontSize = 34.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    lineHeight = 38.sp,
+                    modifier = Modifier.fillMaxWidth(),
+                )
 
-            Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
-            Text(
-                text = subtitle,
-                color = OnboardingTextSecondary,
-                style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 20.sp),
-                modifier = Modifier.fillMaxWidth(),
-            )
+                Text(
+                    text = subtitle,
+                    color = OnboardingTextSecondary,
+                    style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 20.sp),
+                    modifier = Modifier.fillMaxWidth(),
+                )
 
-            Spacer(modifier = Modifier.height(28.dp))
+                Spacer(modifier = Modifier.height(28.dp))
 
-            content()
+                content()
 
-            Spacer(modifier = Modifier.height(28.dp))
+                Spacer(modifier = Modifier.height(28.dp))
+            }
         }
     }
 }
