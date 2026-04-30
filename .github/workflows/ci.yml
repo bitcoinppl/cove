@@ -89,7 +89,7 @@ jobs:
           fi
 
       - name: Compile Android
-        run: cd android && ./gradlew assembleDebug
+        run: cd android && ./gradlew assembleDevDebug
 
   compile-ios:
     runs-on: macos-26
