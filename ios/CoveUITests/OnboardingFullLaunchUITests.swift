@@ -74,7 +74,10 @@ final class OnboardingFullLaunchUITests: XCTestCase {
         app.buttons["Continue"].tap()
 
         XCTAssertTrue(app.staticTexts["Your wallet is ready to fund"].waitForExistence(timeout: 15))
-        XCTAssertTrue(app.staticTexts["Loading deposit address"].waitForExistence(timeout: 10) || app.staticTexts["Deposit address"].exists)
+        XCTAssertTrue(app.staticTexts["Deposit address"].waitForExistence(timeout: 30))
+
+        app.buttons["Copy Address"].tap()
+        XCTAssertTrue(app.buttons["Copied"].waitForExistence(timeout: 2))
     }
 
     func testHardwareWalletUserCanReachImportChoices() {

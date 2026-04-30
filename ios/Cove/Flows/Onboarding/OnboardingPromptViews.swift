@@ -349,12 +349,15 @@ struct OnboardingChoiceCard: View {
                         .font(.headline)
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
 
                     Text(subtitle)
                         .font(.footnote)
                         .foregroundStyle(.coveLightGray.opacity(0.74))
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
+                .layoutPriority(1)
 
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "chevron.right")
                     .font(.system(size: isSelected ? 18 : 14, weight: .semibold))
