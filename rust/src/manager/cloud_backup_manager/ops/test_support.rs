@@ -15,7 +15,7 @@ use cove_device::cloud_storage::{
 use cove_device::keychain::{CSPP_NAMESPACE_ID_KEY, Keychain, KeychainAccess};
 use cove_device::passkey::{
     DiscoveredPasskeyResult, PasskeyAccess, PasskeyCredentialPresence, PasskeyError,
-    PasskeyProvider,
+    PasskeyFailureReason, PasskeyOperation, PasskeyProvider,
 };
 use parking_lot::Mutex;
 use sha2::Digest as _;
@@ -428,7 +428,12 @@ impl PasskeyProvider for MockPasskeyProviderImpl {
         _challenge: Vec<u8>,
     ) -> Result<Vec<u8>, PasskeyError> {
         self.create_result.lock().take().unwrap_or_else(|| {
-            Err(PasskeyError::CreationFailed("unexpected create_passkey call".into()))
+            Err(PasskeyError::RequestFailed {
+                operation: PasskeyOperation::Registration,
+                reason: PasskeyFailureReason::Unknown {
+                    diagnostic_message: "unexpected create_passkey call".into(),
+                },
+            })
         })
     }
 
@@ -440,7 +445,12 @@ impl PasskeyProvider for MockPasskeyProviderImpl {
         _challenge: Vec<u8>,
     ) -> Result<Vec<u8>, PasskeyError> {
         self.authenticate_result.lock().take().unwrap_or_else(|| {
-            Err(PasskeyError::AuthenticationFailed("unexpected authenticate_with_prf call".into()))
+            Err(PasskeyError::RequestFailed {
+                operation: PasskeyOperation::AuthenticateAssertion,
+                reason: PasskeyFailureReason::Unknown {
+                    diagnostic_message: "unexpected authenticate_with_prf call".into(),
+                },
+            })
         })
     }
 
@@ -900,7 +910,10 @@ mod tests {
         );
         assert!(matches!(
             provider.create_passkey("rp".into(), vec![1], vec![2]),
-            Err(PasskeyError::CreationFailed(message)) if message == "unexpected create_passkey call"
+            Err(PasskeyError::RequestFailed {
+                operation: PasskeyOperation::Registration,
+                reason: PasskeyFailureReason::Unknown { diagnostic_message },
+            }) if diagnostic_message == "unexpected create_passkey call"
         ));
     }
 
@@ -917,8 +930,10 @@ mod tests {
         );
         assert!(matches!(
             provider.authenticate_with_prf("rp".into(), vec![1], vec![2], vec![3]),
-            Err(PasskeyError::AuthenticationFailed(message))
-                if message == "unexpected authenticate_with_prf call"
+            Err(PasskeyError::RequestFailed {
+                operation: PasskeyOperation::AuthenticateAssertion,
+                reason: PasskeyFailureReason::Unknown { diagnostic_message },
+            }) if diagnostic_message == "unexpected authenticate_with_prf call"
         ));
     }
 }

@@ -8,8 +8,8 @@ static REF: OnceCell<PasskeyAccess> = OnceCell::new();
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
 #[uniffi::export(Display)]
 pub enum PasskeyError {
-    #[error("not supported: {0}")]
-    NotSupported(String),
+    #[error("not supported: {reason}")]
+    NotSupported { reason: PasskeyFailureReason },
 
     #[error("passkey provider does not support PRF")]
     PrfUnsupportedProvider,
@@ -17,17 +17,64 @@ pub enum PasskeyError {
     #[error("user cancelled")]
     UserCancelled,
 
-    #[error("creation failed: {0}")]
-    CreationFailed(String),
-
-    #[error("authentication failed: {0}")]
-    AuthenticationFailed(String),
+    #[error("{operation} failed: {reason}")]
+    RequestFailed { operation: PasskeyOperation, reason: PasskeyFailureReason },
 
     #[error("no credential found")]
     NoCredentialFound,
+}
 
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Enum, thiserror::Error)]
+#[uniffi::export(Display)]
+pub enum PasskeyOperation {
+    #[error("registration")]
+    Registration,
+
+    #[error("discover assertion")]
+    DiscoverAssertion,
+
+    #[error("authenticate assertion")]
+    AuthenticateAssertion,
+}
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum, thiserror::Error)]
+#[uniffi::export(Display)]
+pub enum PasskeyFailureReason {
     #[error("platform authorization failed")]
     PlatformAuthorizationFailed,
+
+    #[error("invalid response")]
+    InvalidResponse,
+
+    #[error("not handled")]
+    NotHandled,
+
+    #[error("interrupted")]
+    Interrupted,
+
+    #[error("provider configuration")]
+    ProviderConfiguration,
+
+    #[error("no create option")]
+    NoCreateOption,
+
+    #[error("device not configured")]
+    DeviceNotConfigured,
+
+    #[error("unexpected credential type")]
+    UnexpectedCredentialType,
+
+    #[error("missing credential id")]
+    MissingCredentialId,
+
+    #[error("malformed response")]
+    MalformedResponse,
+
+    #[error("timed out")]
+    TimedOut,
+
+    #[error("unknown: {diagnostic_message}")]
+    Unknown { diagnostic_message: String },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]

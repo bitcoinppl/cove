@@ -222,6 +222,7 @@ fn map_discovery_error(error: PasskeyError) -> Result<PasskeyAuthOutcome, CloudB
 #[cfg(test)]
 mod tests {
     use super::*;
+    use cove_device::passkey::{PasskeyFailureReason, PasskeyOperation};
 
     #[test]
     fn map_discovery_error_returns_user_cancelled() {
@@ -237,10 +238,13 @@ mod tests {
 
     #[test]
     fn map_discovery_error_preserves_unexpected_errors() {
-        let error =
-            map_discovery_error(PasskeyError::AuthenticationFailed("boom".into())).unwrap_err();
+        let error = map_discovery_error(PasskeyError::RequestFailed {
+            operation: PasskeyOperation::AuthenticateAssertion,
+            reason: PasskeyFailureReason::Unknown { diagnostic_message: "boom".into() },
+        })
+        .unwrap_err();
         assert!(
-            matches!(error, CloudBackupError::Passkey(message) if message == "authentication failed: boom")
+            matches!(error, CloudBackupError::Passkey(message) if message == "authenticate assertion failed: unknown: boom")
         );
     }
 

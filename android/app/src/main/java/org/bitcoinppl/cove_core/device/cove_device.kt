@@ -962,6 +962,10 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_device_fn_method_passkeyerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_cove_device_fn_method_passkeyfailurereason_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_device_fn_method_passkeyoperation_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     external fun ffi_cove_device_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun ffi_cove_device_rustbuffer_from_bytes(`bytes`: ForeignBytes.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -3484,10 +3488,10 @@ sealed class PasskeyException: kotlin.Exception() {
     
     class NotSupported(
         
-        val v1: kotlin.String
+        val `reason`: PasskeyFailureReason
         ) : PasskeyException() {
         override val message
-            get() = "v1=${ v1 }"
+            get() = "reason=${ `reason` }"
     }
     
     class PrfUnsupportedProvider(
@@ -3502,20 +3506,14 @@ sealed class PasskeyException: kotlin.Exception() {
             get() = ""
     }
     
-    class CreationFailed(
+    class RequestFailed(
         
-        val v1: kotlin.String
+        val `operation`: PasskeyOperation, 
+        
+        val `reason`: PasskeyFailureReason
         ) : PasskeyException() {
         override val message
-            get() = "v1=${ v1 }"
-    }
-    
-    class AuthenticationFailed(
-        
-        val v1: kotlin.String
-        ) : PasskeyException() {
-        override val message
-            get() = "v1=${ v1 }"
+            get() = "operation=${ `operation` }, reason=${ `reason` }"
     }
     
     class NoCredentialFound(
@@ -3553,17 +3551,15 @@ public object FfiConverterTypePasskeyError : FfiConverterRustBuffer<PasskeyExcep
 
         return when(buf.getInt()) {
             1 -> PasskeyException.NotSupported(
-                FfiConverterString.read(buf),
+                FfiConverterTypePasskeyFailureReason.read(buf),
                 )
             2 -> PasskeyException.PrfUnsupportedProvider()
             3 -> PasskeyException.UserCancelled()
-            4 -> PasskeyException.CreationFailed(
-                FfiConverterString.read(buf),
+            4 -> PasskeyException.RequestFailed(
+                FfiConverterTypePasskeyOperation.read(buf),
+                FfiConverterTypePasskeyFailureReason.read(buf),
                 )
-            5 -> PasskeyException.AuthenticationFailed(
-                FfiConverterString.read(buf),
-                )
-            6 -> PasskeyException.NoCredentialFound()
+            5 -> PasskeyException.NoCredentialFound()
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
@@ -3573,7 +3569,7 @@ public object FfiConverterTypePasskeyError : FfiConverterRustBuffer<PasskeyExcep
             is PasskeyException.NotSupported -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
-                + FfiConverterString.allocationSize(value.v1)
+                + FfiConverterTypePasskeyFailureReason.allocationSize(value.`reason`)
             )
             is PasskeyException.PrfUnsupportedProvider -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
@@ -3583,15 +3579,11 @@ public object FfiConverterTypePasskeyError : FfiConverterRustBuffer<PasskeyExcep
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
             )
-            is PasskeyException.CreationFailed -> (
+            is PasskeyException.RequestFailed -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
-                + FfiConverterString.allocationSize(value.v1)
-            )
-            is PasskeyException.AuthenticationFailed -> (
-                // Add the size for the Int that specifies the variant plus the size needed for all fields
-                4UL
-                + FfiConverterString.allocationSize(value.v1)
+                + FfiConverterTypePasskeyOperation.allocationSize(value.`operation`)
+                + FfiConverterTypePasskeyFailureReason.allocationSize(value.`reason`)
             )
             is PasskeyException.NoCredentialFound -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
@@ -3604,7 +3596,7 @@ public object FfiConverterTypePasskeyError : FfiConverterRustBuffer<PasskeyExcep
         when(value) {
             is PasskeyException.NotSupported -> {
                 buf.putInt(1)
-                FfiConverterString.write(value.v1, buf)
+                FfiConverterTypePasskeyFailureReason.write(value.`reason`, buf)
                 Unit
             }
             is PasskeyException.PrfUnsupportedProvider -> {
@@ -3615,24 +3607,295 @@ public object FfiConverterTypePasskeyError : FfiConverterRustBuffer<PasskeyExcep
                 buf.putInt(3)
                 Unit
             }
-            is PasskeyException.CreationFailed -> {
+            is PasskeyException.RequestFailed -> {
                 buf.putInt(4)
-                FfiConverterString.write(value.v1, buf)
-                Unit
-            }
-            is PasskeyException.AuthenticationFailed -> {
-                buf.putInt(5)
-                FfiConverterString.write(value.v1, buf)
+                FfiConverterTypePasskeyOperation.write(value.`operation`, buf)
+                FfiConverterTypePasskeyFailureReason.write(value.`reason`, buf)
                 Unit
             }
             is PasskeyException.NoCredentialFound -> {
-                buf.putInt(6)
+                buf.putInt(5)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
 
 }
+
+
+
+sealed class PasskeyFailureReason {
+    
+    object PlatformAuthorizationFailed : PasskeyFailureReason()
+    
+    
+    object InvalidResponse : PasskeyFailureReason()
+    
+    
+    object NotHandled : PasskeyFailureReason()
+    
+    
+    object Interrupted : PasskeyFailureReason()
+    
+    
+    object ProviderConfiguration : PasskeyFailureReason()
+    
+    
+    object NoCreateOption : PasskeyFailureReason()
+    
+    
+    object DeviceNotConfigured : PasskeyFailureReason()
+    
+    
+    object UnexpectedCredentialType : PasskeyFailureReason()
+    
+    
+    object MissingCredentialId : PasskeyFailureReason()
+    
+    
+    object MalformedResponse : PasskeyFailureReason()
+    
+    
+    object TimedOut : PasskeyFailureReason()
+    
+    
+    data class Unknown(
+        val `diagnosticMessage`: kotlin.String) : PasskeyFailureReason()
+        
+    {
+        
+
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_device_fn_method_passkeyfailurereason_uniffi_trait_display(FfiConverterTypePasskeyFailureReason.lower(this),
+        _status)
+}
+    )
+    }
+        companion object
+    }
+    
+
+    
+
+    
+    
+
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_device_fn_method_passkeyfailurereason_uniffi_trait_display(FfiConverterTypePasskeyFailureReason.lower(this),
+        _status)
+}
+    )
+    }
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypePasskeyFailureReason : FfiConverterRustBuffer<PasskeyFailureReason>{
+    override fun read(buf: ByteBuffer): PasskeyFailureReason {
+        return when(buf.getInt()) {
+            1 -> PasskeyFailureReason.PlatformAuthorizationFailed
+            2 -> PasskeyFailureReason.InvalidResponse
+            3 -> PasskeyFailureReason.NotHandled
+            4 -> PasskeyFailureReason.Interrupted
+            5 -> PasskeyFailureReason.ProviderConfiguration
+            6 -> PasskeyFailureReason.NoCreateOption
+            7 -> PasskeyFailureReason.DeviceNotConfigured
+            8 -> PasskeyFailureReason.UnexpectedCredentialType
+            9 -> PasskeyFailureReason.MissingCredentialId
+            10 -> PasskeyFailureReason.MalformedResponse
+            11 -> PasskeyFailureReason.TimedOut
+            12 -> PasskeyFailureReason.Unknown(
+                FfiConverterString.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: PasskeyFailureReason): ULong = when(value) {
+        is PasskeyFailureReason.PlatformAuthorizationFailed -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is PasskeyFailureReason.InvalidResponse -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is PasskeyFailureReason.NotHandled -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is PasskeyFailureReason.Interrupted -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is PasskeyFailureReason.ProviderConfiguration -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is PasskeyFailureReason.NoCreateOption -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is PasskeyFailureReason.DeviceNotConfigured -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is PasskeyFailureReason.UnexpectedCredentialType -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is PasskeyFailureReason.MissingCredentialId -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is PasskeyFailureReason.MalformedResponse -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is PasskeyFailureReason.TimedOut -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is PasskeyFailureReason.Unknown -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`diagnosticMessage`)
+            )
+        }
+    }
+
+    override fun write(value: PasskeyFailureReason, buf: ByteBuffer) {
+        when(value) {
+            is PasskeyFailureReason.PlatformAuthorizationFailed -> {
+                buf.putInt(1)
+                Unit
+            }
+            is PasskeyFailureReason.InvalidResponse -> {
+                buf.putInt(2)
+                Unit
+            }
+            is PasskeyFailureReason.NotHandled -> {
+                buf.putInt(3)
+                Unit
+            }
+            is PasskeyFailureReason.Interrupted -> {
+                buf.putInt(4)
+                Unit
+            }
+            is PasskeyFailureReason.ProviderConfiguration -> {
+                buf.putInt(5)
+                Unit
+            }
+            is PasskeyFailureReason.NoCreateOption -> {
+                buf.putInt(6)
+                Unit
+            }
+            is PasskeyFailureReason.DeviceNotConfigured -> {
+                buf.putInt(7)
+                Unit
+            }
+            is PasskeyFailureReason.UnexpectedCredentialType -> {
+                buf.putInt(8)
+                Unit
+            }
+            is PasskeyFailureReason.MissingCredentialId -> {
+                buf.putInt(9)
+                Unit
+            }
+            is PasskeyFailureReason.MalformedResponse -> {
+                buf.putInt(10)
+                Unit
+            }
+            is PasskeyFailureReason.TimedOut -> {
+                buf.putInt(11)
+                Unit
+            }
+            is PasskeyFailureReason.Unknown -> {
+                buf.putInt(12)
+                FfiConverterString.write(value.`diagnosticMessage`, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+
+enum class PasskeyOperation {
+    
+    REGISTRATION,
+    DISCOVER_ASSERTION,
+    AUTHENTICATE_ASSERTION;
+
+    
+
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_device_fn_method_passkeyoperation_uniffi_trait_display(FfiConverterTypePasskeyOperation.lower(this),
+        _status)
+}
+    )
+    }
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypePasskeyOperation: FfiConverterRustBuffer<PasskeyOperation> {
+    override fun read(buf: ByteBuffer) = try {
+        PasskeyOperation.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: PasskeyOperation) = 4UL
+
+    override fun write(value: PasskeyOperation, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
 
 
 

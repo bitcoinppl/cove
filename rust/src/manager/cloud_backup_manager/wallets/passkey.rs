@@ -3,7 +3,7 @@ use std::time::Duration;
 use backon::{ExponentialBuilder, Retryable as _};
 use cove_cspp::backup_data::{EncryptedMasterKeyBackup, MasterKeyBackupVersion};
 use cove_device::cloud_storage::CloudStorageClient;
-use cove_device::passkey::{PasskeyAccess, PasskeyError};
+use cove_device::passkey::{PasskeyAccess, PasskeyError, PasskeyFailureReason, PasskeyOperation};
 use cove_tokio::unblock;
 use rand::RngExt as _;
 use tracing::{info, warn};
@@ -388,7 +388,14 @@ impl NamespacePasskeyMatcher {
 }
 
 fn is_platform_authorization_error(error: &PasskeyError) -> bool {
-    matches!(error, PasskeyError::PlatformAuthorizationFailed)
+    matches!(
+        error,
+        PasskeyError::RequestFailed {
+            operation: PasskeyOperation::DiscoverAssertion,
+            reason: PasskeyFailureReason::PlatformAuthorizationFailed,
+            ..
+        }
+    )
 }
 
 fn map_wrapper_repair_passkey_error(error: PasskeyError) -> CloudBackupError {

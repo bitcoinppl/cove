@@ -10,17 +10,26 @@ import androidx.credentials.GetPublicKeyCredentialOption
 import androidx.credentials.PublicKeyCredential
 import androidx.credentials.exceptions.CreateCredentialCancellationException
 import androidx.credentials.exceptions.CreateCredentialException
+import androidx.credentials.exceptions.CreateCredentialInterruptedException
+import androidx.credentials.exceptions.CreateCredentialNoCreateOptionException
+import androidx.credentials.exceptions.CreateCredentialProviderConfigurationException
 import androidx.credentials.exceptions.CreateCredentialUnsupportedException
 import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.credentials.exceptions.GetCredentialException
+import androidx.credentials.exceptions.GetCredentialInterruptedException
+import androidx.credentials.exceptions.GetCredentialProviderConfigurationException
 import androidx.credentials.exceptions.GetCredentialUnsupportedException
 import androidx.credentials.exceptions.NoCredentialException
+import androidx.credentials.exceptions.publickeycredential.CreatePublicKeyCredentialDomException
+import androidx.credentials.exceptions.publickeycredential.GetPublicKeyCredentialDomException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove_core.device.DiscoveredPasskeyResult
 import org.bitcoinppl.cove_core.device.PasskeyCredentialPresence
 import org.bitcoinppl.cove_core.device.PasskeyException
+import org.bitcoinppl.cove_core.device.PasskeyFailureReason
+import org.bitcoinppl.cove_core.device.PasskeyOperation
 import org.bitcoinppl.cove_core.device.PasskeyProvider
 import org.json.JSONArray
 import org.json.JSONObject
@@ -53,7 +62,10 @@ class AndroidPasskeyProvider(
 
                 val registration =
                     response as? CreatePublicKeyCredentialResponse
-                        ?: throw PasskeyException.CreationFailed("unexpected credential response type")
+                        ?: throw passkeyRequestFailed(
+                            PasskeyOperation.REGISTRATION,
+                            PasskeyFailureReason.UnexpectedCredentialType,
+                        )
 
                 validatePasskeyRegistrationPrf(registration.registrationResponseJson)
                 extractCreatedCredentialId(registration.registrationResponseJson)
@@ -85,12 +97,15 @@ class AndroidPasskeyProvider(
 
                 val credential =
                     response.credential as? PublicKeyCredential
-                        ?: throw PasskeyException.AuthenticationFailed("unexpected credential type")
+                        ?: throw passkeyRequestFailed(
+                            PasskeyOperation.AUTHENTICATE_ASSERTION,
+                            PasskeyFailureReason.UnexpectedCredentialType,
+                        )
 
                 extractPrfOutput(credential.authenticationResponseJson)
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
-                throw mapPasskeyGetError(error)
+                throw mapPasskeyGetError(error, PasskeyOperation.AUTHENTICATE_ASSERTION)
             }
         }
     }
@@ -123,7 +138,7 @@ class AndroidPasskeyProvider(
                 )
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
-                throw mapPasskeyGetError(error)
+                throw mapPasskeyGetError(error, PasskeyOperation.DISCOVER_ASSERTION)
             }
         }
     }
@@ -236,7 +251,10 @@ class AndroidPasskeyProvider(
         val json = JSONObject(responseJson)
         val rawId = json.optString("rawId").ifBlank { json.optString("id") }
         if (rawId.isBlank()) {
-            throw PasskeyException.AuthenticationFailed("credential id was missing from the passkey response")
+            throw passkeyRequestFailed(
+                PasskeyOperation.DISCOVER_ASSERTION,
+                PasskeyFailureReason.MissingCredentialId,
+            )
         }
         return rawId.fromBase64Url()
     }
@@ -245,7 +263,10 @@ class AndroidPasskeyProvider(
         val json = JSONObject(responseJson)
         val rawId = json.optString("rawId").ifBlank { json.optString("id") }
         if (rawId.isBlank()) {
-            throw PasskeyException.CreationFailed("credential id was missing from the passkey response")
+            throw passkeyRequestFailed(
+                PasskeyOperation.REGISTRATION,
+                PasskeyFailureReason.MissingCredentialId,
+            )
         }
         return rawId.fromBase64Url()
     }
@@ -285,24 +306,93 @@ internal fun mapPasskeyCreateError(error: Exception): PasskeyException =
     when (error) {
         is PasskeyException -> error
         is CreateCredentialCancellationException -> PasskeyException.UserCancelled()
+        is CreateCredentialInterruptedException ->
+            passkeyRequestFailed(
+                PasskeyOperation.REGISTRATION,
+                PasskeyFailureReason.Interrupted,
+            )
+        is CreateCredentialProviderConfigurationException ->
+            passkeyRequestFailed(
+                PasskeyOperation.REGISTRATION,
+                PasskeyFailureReason.ProviderConfiguration,
+            )
+        is CreateCredentialNoCreateOptionException ->
+            passkeyRequestFailed(
+                PasskeyOperation.REGISTRATION,
+                PasskeyFailureReason.NoCreateOption,
+            )
+        is CreatePublicKeyCredentialDomException ->
+            passkeyRequestFailed(
+                PasskeyOperation.REGISTRATION,
+                PasskeyFailureReason.MalformedResponse,
+            )
         is CreateCredentialUnsupportedException ->
-            PasskeyException.NotSupported(error.message ?: "credential manager is unavailable")
+            passkeyNotSupported(PasskeyFailureReason.ProviderConfiguration)
         is CreateCredentialException ->
-            PasskeyException.CreationFailed(error.message ?: "passkey creation failed")
-        else -> PasskeyException.CreationFailed(error.message ?: "passkey creation failed")
+            passkeyRequestFailed(
+                PasskeyOperation.REGISTRATION,
+                passkeyUnknownReason(error.passkeyMessage("passkey creation failed")),
+            )
+        else ->
+            passkeyRequestFailed(
+                PasskeyOperation.REGISTRATION,
+                passkeyUnknownReason(error.passkeyMessage("passkey creation failed")),
+            )
     }
 
-internal fun mapPasskeyGetError(error: Exception): PasskeyException =
+internal fun mapPasskeyGetError(
+    error: Exception,
+    operation: PasskeyOperation = PasskeyOperation.AUTHENTICATE_ASSERTION,
+): PasskeyException =
     when (error) {
         is PasskeyException -> error
         is NoCredentialException -> PasskeyException.NoCredentialFound()
         is GetCredentialCancellationException -> PasskeyException.UserCancelled()
+        is GetCredentialInterruptedException ->
+            passkeyRequestFailed(
+                operation,
+                PasskeyFailureReason.Interrupted,
+            )
+        is GetCredentialProviderConfigurationException ->
+            passkeyRequestFailed(
+                operation,
+                PasskeyFailureReason.ProviderConfiguration,
+            )
+        is GetPublicKeyCredentialDomException ->
+            passkeyRequestFailed(
+                operation,
+                PasskeyFailureReason.MalformedResponse,
+            )
         is GetCredentialUnsupportedException ->
-            PasskeyException.NotSupported(error.message ?: "credential manager is unavailable")
+            passkeyNotSupported(PasskeyFailureReason.ProviderConfiguration)
         is GetCredentialException ->
-            PasskeyException.AuthenticationFailed(error.message ?: "passkey authentication failed")
-        else -> PasskeyException.AuthenticationFailed(error.message ?: "passkey authentication failed")
+            passkeyRequestFailed(
+                operation,
+                passkeyUnknownReason(error.passkeyMessage("passkey authentication failed")),
+            )
+        else ->
+            passkeyRequestFailed(
+                operation,
+                passkeyUnknownReason(error.passkeyMessage("passkey authentication failed")),
+            )
     }
+
+private fun passkeyNotSupported(
+    reason: PasskeyFailureReason,
+): PasskeyException =
+    PasskeyException.NotSupported(reason = reason)
+
+private fun passkeyRequestFailed(
+    operation: PasskeyOperation,
+    reason: PasskeyFailureReason,
+): PasskeyException =
+    PasskeyException.RequestFailed(operation = operation, reason = reason)
+
+private fun passkeyUnknownReason(message: String): PasskeyFailureReason =
+    PasskeyFailureReason.Unknown(diagnosticMessage = message)
+
+private fun Throwable.passkeyMessage(fallback: String): String =
+    message?.takeIf(String::isNotBlank) ?: fallback
 
 internal fun buildPasskeyCreateRequestJson(
     rpId: String,

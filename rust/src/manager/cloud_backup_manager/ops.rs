@@ -1195,7 +1195,10 @@ mod tests {
     use cove_device::keychain::{
         CSPP_CREDENTIAL_ID_KEY, CSPP_NAMESPACE_ID_KEY, CSPP_PRF_SALT_KEY, Keychain,
     };
-    use cove_device::passkey::{DiscoveredPasskeyResult, PasskeyAccess, PasskeyError};
+    use cove_device::passkey::{
+        DiscoveredPasskeyResult, PasskeyAccess, PasskeyError, PasskeyFailureReason,
+        PasskeyOperation,
+    };
 
     use super::test_support::*;
     use super::*;
@@ -1218,6 +1221,13 @@ mod tests {
         metadata::{WalletMetadata, WalletMode, WalletType},
     };
     use bip39::Mnemonic;
+
+    fn platform_authorization_failed() -> PasskeyError {
+        PasskeyError::RequestFailed {
+            operation: PasskeyOperation::DiscoverAssertion,
+            reason: PasskeyFailureReason::PlatformAuthorizationFailed,
+        }
+    }
 
     mod cove_tokio {
         pub(super) fn init() {
@@ -1827,9 +1837,10 @@ mod tests {
         let globals = test_globals();
         globals.reset();
         globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
-        globals
-            .passkey
-            .set_authenticate_result(Err(PasskeyError::AuthenticationFailed("boom".into())));
+        globals.passkey.set_authenticate_result(Err(PasskeyError::RequestFailed {
+            operation: PasskeyOperation::AuthenticateAssertion,
+            reason: PasskeyFailureReason::Unknown { diagnostic_message: "boom".into() },
+        }));
 
         let manager = RustCloudBackupManager::init();
         let error = manager.do_enable_cloud_backup_no_discovery().await.unwrap_err();
@@ -4127,9 +4138,9 @@ mod tests {
         globals
             .cloud
             .set_master_key_backup(namespace.clone(), serde_json::to_vec(&encrypted).unwrap());
-        globals.passkey.push_discover_result(Err(PasskeyError::PlatformAuthorizationFailed));
-        globals.passkey.push_discover_result(Err(PasskeyError::PlatformAuthorizationFailed));
-        globals.passkey.push_discover_result(Err(PasskeyError::PlatformAuthorizationFailed));
+        globals.passkey.push_discover_result(Err(platform_authorization_failed()));
+        globals.passkey.push_discover_result(Err(platform_authorization_failed()));
+        globals.passkey.push_discover_result(Err(platform_authorization_failed()));
         globals.passkey.push_discover_result(Ok(DiscoveredPasskeyResult {
             prf_output: prf_key.to_vec(),
             credential_id: vec![1, 2, 3],

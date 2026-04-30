@@ -1,10 +1,14 @@
 package org.bitcoinppl.cove.cloudbackup
 
 import androidx.credentials.exceptions.CreateCredentialCancellationException
+import androidx.credentials.exceptions.CreateCredentialInterruptedException
 import androidx.credentials.exceptions.CreateCredentialUnsupportedException
 import androidx.credentials.exceptions.GetCredentialCancellationException
+import androidx.credentials.exceptions.GetCredentialInterruptedException
 import androidx.credentials.exceptions.GetCredentialUnsupportedException
 import org.bitcoinppl.cove_core.device.PasskeyException
+import org.bitcoinppl.cove_core.device.PasskeyFailureReason
+import org.bitcoinppl.cove_core.device.PasskeyOperation
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -80,6 +84,11 @@ class AndroidPasskeyProviderTest {
             mapPasskeyCreateError(CreateCredentialUnsupportedException())
                 is PasskeyException.NotSupported,
         )
+
+        val interrupted = mapPasskeyCreateError(CreateCredentialInterruptedException())
+        assertTrue(interrupted is PasskeyException.RequestFailed)
+        assertEquals(PasskeyOperation.REGISTRATION, (interrupted as PasskeyException.RequestFailed).operation)
+        assertEquals(PasskeyFailureReason.Interrupted, interrupted.reason)
     }
 
     @Test
@@ -92,6 +101,14 @@ class AndroidPasskeyProviderTest {
             mapPasskeyGetError(GetCredentialUnsupportedException())
                 is PasskeyException.NotSupported,
         )
+
+        val interrupted = mapPasskeyGetError(
+            GetCredentialInterruptedException(),
+            PasskeyOperation.DISCOVER_ASSERTION,
+        )
+        assertTrue(interrupted is PasskeyException.RequestFailed)
+        assertEquals(PasskeyOperation.DISCOVER_ASSERTION, (interrupted as PasskeyException.RequestFailed).operation)
+        assertEquals(PasskeyFailureReason.Interrupted, interrupted.reason)
     }
 
     private fun registrationResponseJson(clientExtensionResults: JSONObject): String =
