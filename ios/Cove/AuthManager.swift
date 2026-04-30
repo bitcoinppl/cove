@@ -98,7 +98,13 @@ enum UnlockMode {
 
                 let db = Database()
                 if let selectedWalletId = db.globalConfig().selectedWallet() {
-                    try? app.rust.selectWallet(id: selectedWalletId)
+                    do {
+                        try app.selectWalletOrThrow(selectedWalletId)
+                    } catch {
+                        logger.error("Failed to select decoy wallet after auth fallback: \(error)")
+                        app.isLoading = false
+                        app.loadAndReset(to: RouteFactory().newWalletSelect())
+                    }
                 } else {
                     app.loadAndReset(to: RouteFactory().newWalletSelect())
                 }
@@ -137,7 +143,13 @@ enum UnlockMode {
 
         let db = Database()
         if let selectedWalletId = db.globalConfig().selectedWallet() {
-            try? app.rust.selectWallet(id: selectedWalletId)
+            do {
+                try app.selectWalletOrThrow(selectedWalletId)
+            } catch {
+                logger.error("Failed to select main wallet after auth fallback: \(error)")
+                app.isLoading = false
+                app.loadAndReset(to: RouteFactory().newWalletSelect())
+            }
         } else {
             app.loadAndReset(to: RouteFactory().newWalletSelect())
         }

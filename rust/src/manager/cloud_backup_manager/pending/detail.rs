@@ -2,8 +2,8 @@ use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
 use tracing::{info, warn};
 
 use super::super::{
-    BlockingCloudStep, CloudBackupDetailResult, CloudBackupStatus, RustCloudBackupManager,
-    cloud_inventory::RemoteWalletTruth,
+    BlockingCloudStep, CloudBackupDetailResult, CloudBackupError, CloudBackupStatus,
+    RustCloudBackupManager, cloud_inventory::RemoteWalletTruth,
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{CloudBlobConfirmedState, PersistedCloudBlobState};
@@ -11,8 +11,8 @@ use crate::database::cloud_backup::{CloudBlobConfirmedState, PersistedCloudBlobS
 impl RustCloudBackupManager {
     /// List wallet backups in the current namespace and build detail
     ///
-    /// Returns None if disabled. On NotFound, re-uploads all wallets automatically.
-    /// On other errors, returns AccessError so the UI can offer a re-upload button
+    /// Returns None if disabled. On access errors, returns AccessError so the UI can
+    /// surface an explicit recovery action instead of mutating backup state during refresh
     pub(crate) async fn refresh_cloud_backup_detail(&self) -> Option<CloudBackupDetailResult> {
         let status = self.state.read().status.clone();
         if !matches!(status, CloudBackupStatus::Enabled | CloudBackupStatus::PasskeyMissing) {
@@ -32,40 +32,26 @@ impl RustCloudBackupManager {
         }
 
         info!("refresh_cloud_backup_detail: listing wallets for namespace {namespace}");
-        let cloud = CloudStorage::global();
-        let wallet_record_ids = match cloud.list_wallet_backups(namespace.clone()).await {
+        let cloud = CloudStorage::global_explicit_client();
+        let wallet_record_ids = match cloud.list_wallet_backups(namespace).await {
             Ok(ids) => ids,
-            Err(CloudStorageError::NotFound(_)) => {
-                info!("No wallet backups found in namespace, re-uploading all wallets");
-                if let Err(error) = self.do_reupload_all_wallets().await {
-                    return Some(CloudBackupDetailResult::AccessError(format!(
-                        "Failed to re-upload wallets: {error}"
-                    )));
-                }
-
-                match cloud.list_wallet_backups(namespace.clone()).await {
-                    Ok(ids) => ids,
-                    Err(error) => {
-                        return Some(CloudBackupDetailResult::AccessError(error.to_string()));
-                    }
-                }
-            }
+            Err(CloudStorageError::NotFound(_)) => Vec::new(),
             Err(error) => {
-                if RustCloudBackupManager::is_connectivity_related_issue(
-                    RustCloudBackupManager::cloud_storage_issue(&error),
-                ) {
-                    return Some(CloudBackupDetailResult::AccessError(
-                        self.offline_error_for_step(BlockingCloudStep::DetailRefresh).to_string(),
-                    ));
-                }
+                let error = self.blocking_cloud_error(
+                    BlockingCloudStep::DetailRefresh,
+                    CloudBackupError::cloud_storage_context("list wallet backups", error),
+                );
+
                 return Some(CloudBackupDetailResult::AccessError(error.to_string()));
             }
         };
 
-        let remote_wallet_truth = match self.load_remote_wallet_truth(&wallet_record_ids).await {
-            Ok(remote_wallet_truth) => remote_wallet_truth,
-            Err(error) => return Some(CloudBackupDetailResult::AccessError(error.to_string())),
-        };
+        let remote_wallet_truth =
+            match self.load_remote_wallet_truth(&wallet_record_ids, cloud.clone()).await {
+                Ok(remote_wallet_truth) => remote_wallet_truth,
+                Err(error) => return Some(CloudBackupDetailResult::AccessError(error.to_string())),
+            };
+
         self.cleanup_confirmed_pending_blobs(&remote_wallet_truth);
 
         match self
@@ -102,10 +88,14 @@ impl RustCloudBackupManager {
                 continue;
             }
 
-            let PersistedCloudBlobState::UploadedPendingConfirmation(pending_state) = &state.state
-            else {
-                continue;
+            let pending_state = match &state.state {
+                PersistedCloudBlobState::UploadedPendingConfirmation(pending_state) => {
+                    pending_state
+                }
+
+                _ => continue,
             };
+
             if !remote_wallet_revision_matches(
                 remote_wallet_truth,
                 &state.record_id,
@@ -132,6 +122,7 @@ impl RustCloudBackupManager {
                     continue;
                 }
             };
+
             if !persisted {
                 continue;
             }

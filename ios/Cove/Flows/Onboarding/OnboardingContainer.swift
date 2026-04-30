@@ -41,6 +41,7 @@ struct OnboardingContainer: View {
         switch step {
         case .terms:
             TermsAndConditionsView(errorMessage: manager.state.errorMessage) {
+                manager.app.agreeToTerms()
                 manager.dispatch(.acceptTerms)
             }
 

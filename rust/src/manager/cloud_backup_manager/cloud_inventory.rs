@@ -490,6 +490,7 @@ mod tests {
                     revision_hash: Some("rev-1".into()),
                     retryable: true,
                     error: "offline".into(),
+                    issue: None,
                     failed_at: 10,
                 })),
             )]),

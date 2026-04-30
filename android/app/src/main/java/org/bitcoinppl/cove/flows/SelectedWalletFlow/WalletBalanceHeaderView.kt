@@ -49,6 +49,7 @@ fun WalletBalanceHeaderView(
     sensitiveVisible: Boolean,
     primaryAmount: String?,
     secondaryAmount: String?,
+    pendingAmount: String? = null,
     onToggleUnit: () -> Unit,
     onToggleSensitive: () -> Unit,
     onSend: () -> Unit,
@@ -94,6 +95,7 @@ fun WalletBalanceHeaderView(
                 sensitiveVisible = sensitiveVisible,
                 primaryAmount = primaryAmount,
                 secondaryAmount = secondaryAmount,
+                pendingAmount = pendingAmount,
                 onToggleUnit = onToggleUnit,
                 onToggleSensitive = onToggleSensitive,
             )
@@ -112,6 +114,7 @@ internal fun BalanceWidget(
     sensitiveVisible: Boolean,
     primaryAmount: String?,
     secondaryAmount: String?,
+    pendingAmount: String? = null,
     onToggleUnit: () -> Unit,
     onToggleSensitive: () -> Unit,
 ) {
@@ -175,6 +178,29 @@ internal fun BalanceWidget(
                     Modifier
                         .size(24.dp)
                         .clickable { onToggleSensitive() },
+            )
+        }
+
+        if (pendingAmount != null) {
+            AmountDisplay(
+                amount = pendingAmount,
+                isHidden = isHidden,
+                hiddenText = "+ •••••• pending",
+                textContent = { text ->
+                    Text(
+                        text = text,
+                        color = Color.White.copy(alpha = 0.6f),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                    )
+                },
+                loadingContent = {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(12.dp),
+                        color = Color.White.copy(alpha = 0.6f),
+                        strokeWidth = 1.5.dp,
+                    )
+                },
             )
         }
     }

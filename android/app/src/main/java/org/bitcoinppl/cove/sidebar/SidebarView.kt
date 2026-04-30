@@ -42,9 +42,6 @@ import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.views.AutoSizeText
-import org.bitcoinppl.cove_core.Route
-import org.bitcoinppl.cove_core.RouteFactory
-import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.WalletColor
 import org.bitcoinppl.cove_core.WalletMetadata
 
@@ -80,9 +77,7 @@ fun SidebarView(
 
             IconButton(
                 onClick = {
-                    app.closeSidebarAndNavigate {
-                        app.scanNfc()
-                    }
+                    app.closeSidebarAndScanNfc()
                 },
             ) {
                 Icon(
@@ -122,9 +117,7 @@ fun SidebarView(
                 WalletItem(
                     wallet = wallet,
                     onClick = {
-                        app.closeSidebarAndNavigate {
-                            app.rust.selectWallet(wallet.id)
-                        }
+                        app.closeSidebarAndSelectWallet(wallet.id)
                     },
                 )
             }
@@ -145,13 +138,7 @@ fun SidebarView(
                 Modifier
                     .fillMaxWidth()
                     .clickable {
-                        app.closeSidebarAndNavigate {
-                            if (app.wallets.isEmpty()) {
-                                app.resetRoute(RouteFactory().newWalletSelect())
-                            } else {
-                                app.pushRoute(RouteFactory().newWalletSelect())
-                            }
-                        }
+                        app.closeSidebarAndOpenNewWallet()
                     }.padding(vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(20.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -177,9 +164,7 @@ fun SidebarView(
                 Modifier
                     .fillMaxWidth()
                     .clickable {
-                        app.closeSidebarAndNavigate {
-                            app.pushRoute(Route.Settings(SettingsRoute.Main))
-                        }
+                        app.closeSidebarAndOpenSettings()
                     }.padding(vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(20.dp),
             verticalAlignment = Alignment.CenterVertically,

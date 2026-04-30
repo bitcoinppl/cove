@@ -156,8 +156,8 @@ impl MultiFormat {
                     return Ok(Self::from(card));
                 }
 
-                cove_tap_card::TapCard::SatsCard(_card) => {
-                    unreachable!("tap card should not be a sats card");
+                cove_tap_card::TapCard::SatsCard(_) => {
+                    return Err(MultiFormatError::UnrecognizedFormat);
                 }
             }
         }

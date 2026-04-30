@@ -218,6 +218,15 @@ impl Keychain {
         ])
     }
 
+    /// Loads the stored CSPP passkey credential ID from the keychain
+    pub fn load_cspp_credential_id(&self) -> Option<Vec<u8>> {
+        self.get(CSPP_CREDENTIAL_ID_KEY.into()).and_then(|hex_str| {
+            hex::decode(hex_str)
+                .inspect_err(|error| warn!("Failed to decode stored credential_id: {error}"))
+                .ok()
+        })
+    }
+
     /// Saves CSPP passkey credentials and namespace ID to the keychain
     pub fn save_cspp_passkey_and_namespace(
         &self,
@@ -737,6 +746,19 @@ mod tests {
         assert_eq!(kc.0.get(CSPP_CREDENTIAL_ID_KEY.into()).as_deref(), Some("old_credential"));
         assert_eq!(kc.0.get(CSPP_PRF_SALT_KEY.into()).as_deref(), Some("old_salt"));
         assert_eq!(kc.0.get(CSPP_NAMESPACE_ID_KEY.into()).as_deref(), Some("old_namespace"));
+    }
+
+    #[test]
+    fn load_cspp_credential_id_returns_none_for_invalid_hex_and_decodes_valid_hex() {
+        let kc = make_keychain(MockKeychain::new());
+        kc.0.save(CSPP_CREDENTIAL_ID_KEY.into(), "not-hex".into()).unwrap();
+
+        assert!(kc.load_cspp_credential_id().is_none());
+
+        let credential_id = vec![1, 2, 3, 254, 255];
+        kc.0.save(CSPP_CREDENTIAL_ID_KEY.into(), hex::encode(&credential_id)).unwrap();
+
+        assert_eq!(kc.load_cspp_credential_id(), Some(credential_id));
     }
 
     #[test]

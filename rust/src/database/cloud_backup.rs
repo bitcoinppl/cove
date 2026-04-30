@@ -185,7 +185,18 @@ pub struct CloudBlobFailedState {
     #[serde(default)]
     pub retryable: bool,
     pub error: String,
+    #[serde(default)]
+    pub issue: Option<CloudBlobFailureIssue>,
     pub failed_at: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CloudBlobFailureIssue {
+    AuthorizationRequired,
+    Offline,
+    Unavailable,
+    NotFound,
+    QuotaExceeded,
 }
 
 #[derive(Debug, Clone)]
@@ -451,5 +462,6 @@ mod tests {
         .unwrap();
 
         assert!(!failed_state.retryable);
+        assert_eq!(failed_state.issue, None);
     }
 }

@@ -54,24 +54,29 @@ struct TermsAndConditionsView: View {
                 TermsCheckboxCard(isOn: $checks[0], cardPadding: cardPadding) {
                     Text("I understand that I am responsible for securely managing and backing up my wallets. Cove does not store or recover wallet information.")
                 }
+                .accessibilityIdentifier("onboarding.terms.check.backup")
 
                 TermsCheckboxCard(isOn: $checks[1], cardPadding: cardPadding) {
                     Text("I understand that any unlawful use of Cove is strictly prohibited.")
                 }
+                .accessibilityIdentifier("onboarding.terms.check.legal")
 
                 TermsCheckboxCard(isOn: $checks[2], cardPadding: cardPadding) {
                     Text("I understand that Cove is not a bank, exchange, or licensed financial institution, and does not offer financial services.")
                 }
+                .accessibilityIdentifier("onboarding.terms.check.financial")
 
                 TermsCheckboxCard(isOn: $checks[3], cardPadding: cardPadding) {
                     Text("I understand that if I lose access to my wallet, Cove cannot recover my funds or credentials.")
                 }
+                .accessibilityIdentifier("onboarding.terms.check.recovery")
 
                 TermsCheckboxCard(isOn: $checks[4], cardPadding: cardPadding) {
                     TermsAgreementText {
                         openURL($0)
                     }
                 }
+                .accessibilityIdentifier("onboarding.terms.check.agreement")
             }
 
             Spacer()
@@ -97,6 +102,7 @@ struct TermsAndConditionsView: View {
             }
             .buttonStyle(OnboardingPrimaryButtonStyle())
             .disabled(!allChecked)
+            .accessibilityIdentifier("onboarding.terms.agree")
         }
     }
 }

@@ -142,10 +142,11 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
         userId: Data,
         challenge: Data
     ) throws -> ASAuthorizationPlatformPublicKeyCredentialRegistration {
-        let delegate = PasskeyDelegate()
+        let delegate = PasskeyDelegate(context: "registration")
         let controller: ASAuthorizationController
 
         controller = DispatchQueue.main.sync {
+            Log.info("[PASSKEY] registration request start rpId=\(rpId)")
             let provider = ASAuthorizationPlatformPublicKeyCredentialProvider(
                 relyingPartyIdentifier: rpId
             )
@@ -174,6 +175,7 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
             throw PasskeyError.CreationFailed("unexpected credential type")
         }
 
+        Log.info("[PASSKEY] registration request succeeded credential_len=\(registration.credentialID.count)")
         return registration
     }
 
@@ -228,12 +230,15 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
         credentialId: Data?,
         prfSalt: Data,
         challenge: Data,
-        context _: String
+        context: String
     ) throws -> ASAuthorizationPlatformPublicKeyCredentialAssertion {
-        let delegate = PasskeyDelegate()
+        let delegate = PasskeyDelegate(context: "\(context) assertion")
         let controller: ASAuthorizationController
 
         controller = DispatchQueue.main.sync {
+            Log.info(
+                "[PASSKEY] \(context) assertion request start rpId=\(rpId) targeted=\(credentialId != nil)"
+            )
             let provider = ASAuthorizationPlatformPublicKeyCredentialProvider(
                 relyingPartyIdentifier: rpId
             )
@@ -274,6 +279,7 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
             throw PasskeyError.AuthenticationFailed("unexpected credential type")
         }
 
+        Log.info("[PASSKEY] \(context) assertion request succeeded credential_len=\(assertion.credentialID.count)")
         return assertion
     }
 
@@ -301,29 +307,67 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
 
 // MARK: - PasskeyDelegate
 
+private func passkeyPresentationAnchor() -> ASPresentationAnchor {
+    let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+    let activeScene = scenes.first { $0.activationState == .foregroundActive }
+    let foregroundScene = activeScene ?? scenes.first { $0.activationState == .foregroundInactive }
+
+    if let window = foregroundScene?.windows.first(where: \.isKeyWindow) {
+        return window
+    }
+
+    if let window = foregroundScene?.windows.first(where: {
+        !$0.isHidden && $0.windowLevel == .normal
+    }) {
+        return window
+    }
+
+    for scene in scenes {
+        if let window = scene.windows.first(where: \.isKeyWindow) {
+            return window
+        }
+
+        if let window = scene.windows.first(where: {
+            !$0.isHidden && $0.windowLevel == .normal
+        }) {
+            return window
+        }
+    }
+
+    Log.warn("[PASSKEY] no foreground presentation anchor found")
+    return ASPresentationAnchor()
+}
+
 private class PasskeyDelegate: NSObject, ASAuthorizationControllerDelegate,
     ASAuthorizationControllerPresentationContextProviding
 {
     private let semaphore = DispatchSemaphore(value: 0)
     private var result: Result<ASAuthorizationCredential, Error>?
+    private let context: String
+
+    init(context: String) {
+        self.context = context
+    }
 
     func waitForResult() throws -> ASAuthorizationCredential {
         let status = semaphore.wait(timeout: .now() + 120)
-        if status == .timedOut { throw PasskeyError.AuthenticationFailed("passkey operation timed out after 120s") }
+        if status == .timedOut {
+            Log.error("[PASSKEY] \(context) timed out after 120s")
+            throw PasskeyError.AuthenticationFailed("passkey operation timed out after 120s")
+        }
         guard let result else { throw PasskeyError.AuthenticationFailed("no result received from delegate") }
         return try result.get()
     }
 
     func presentationAnchor(for _: ASAuthorizationController) -> ASPresentationAnchor {
-        let scenes = UIApplication.shared.connectedScenes
-        let windowScene = scenes.first as? UIWindowScene
-        return windowScene?.keyWindow ?? ASPresentationAnchor()
+        passkeyPresentationAnchor()
     }
 
     func authorizationController(
         controller _: ASAuthorizationController,
         didCompleteWithAuthorization authorization: ASAuthorization
     ) {
+        Log.info("[PASSKEY] \(context) completed credential_type=\(type(of: authorization.credential))")
         result = .success(authorization.credential)
         semaphore.signal()
     }
@@ -336,13 +380,20 @@ private class PasskeyDelegate: NSObject, ASAuthorizationControllerDelegate,
         case let authError?:
             switch authError.code {
             case .canceled:
+                Log.info(
+                    "[PASSKEY] \(context) cancelled code=\(authError.code.rawValue) description=\(error.localizedDescription)"
+                )
                 result = .failure(PasskeyError.UserCancelled)
             default:
+                Log.warn(
+                    "[PASSKEY] \(context) failed code=\(authError.code.rawValue) description=\(error.localizedDescription)"
+                )
                 result = .failure(
                     PasskeyError.AuthenticationFailed(error.localizedDescription)
                 )
             }
         case nil:
+            Log.warn("[PASSKEY] \(context) failed with non-auth error: \(error.localizedDescription)")
             result = .failure(
                 PasskeyError.AuthenticationFailed(error.localizedDescription)
             )
@@ -366,9 +417,7 @@ private class PasskeyExistenceDelegate: NSObject, ASAuthorizationControllerDeleg
 
     func presentationAnchor(for _: ASAuthorizationController) -> ASPresentationAnchor {
         didRequestPresentationAnchor = true
-        let scenes = UIApplication.shared.connectedScenes
-        let windowScene = scenes.first as? UIWindowScene
-        return windowScene?.keyWindow ?? ASPresentationAnchor()
+        return passkeyPresentationAnchor()
     }
 
     func authorizationController(

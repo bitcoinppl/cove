@@ -8,7 +8,7 @@ use crate::database::cloud_backup::{
 use crate::wallet::metadata::WalletMetadata;
 use cove_cspp::backup_data::wallet_record_id;
 use cove_cspp::wallet_crypto;
-use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
+use cove_device::cloud_storage::{CloudStorage, CloudStorageClient, CloudStorageError};
 use cove_device::keychain::Keychain;
 use cove_util::ResultExt as _;
 use tracing::info;
@@ -71,7 +71,7 @@ impl RustCloudBackupManager {
         };
 
         let critical_key = Zeroizing::new(master_key.critical_data_key());
-        let cloud = CloudStorage::global();
+        let cloud = CloudStorage::global_explicit_client();
         let existing_cloud_record_ids = cloud
             .list_wallet_backups(namespace.clone())
             .await
@@ -96,7 +96,7 @@ impl RustCloudBackupManager {
             cloud
                 .upload_wallet_backup(namespace.clone(), prepared.record_id.clone(), wallet_json)
                 .await
-                .map_err_str(CloudBackupError::Cloud)?;
+                .map_err(CloudBackupError::CloudStorage)?;
 
             let uploaded_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
             self.mark_wallet_uploaded_pending_confirmation_if_revision_current(
@@ -210,7 +210,7 @@ impl RustCloudBackupManager {
         };
 
         let PreparedDirtyWalletUpload { prepared, wallet_json } = prepared_upload;
-        let cloud = CloudStorage::global();
+        let cloud = CloudStorage::global_silent_client();
         let uploading_state = PersistedCloudBlobSyncState {
             state: PersistedCloudBlobState::Uploading(CloudBlobUploadingState {
                 revision_hash: prepared.revision_hash.clone(),
@@ -254,7 +254,9 @@ impl RustCloudBackupManager {
         error: CloudStorageError,
     ) -> Result<(), CloudBackupError> {
         let issue = Self::cloud_storage_issue(&error);
-        let cloud_error = CloudBackupError::Cloud(error.to_string());
+        let retryable = is_upload_failure_retryable(&error);
+        let persisted_issue = Self::cloud_blob_failure_issue(issue);
+        let cloud_error = CloudBackupError::CloudStorage(error);
         if Self::is_connectivity_related_issue(issue) {
             self.mark_blob_dirty_state(current_state)?;
             return Err(CloudBackupError::Deferred(
@@ -265,7 +267,8 @@ impl RustCloudBackupManager {
         self.mark_blob_failed_if_current(
             current_state,
             revision_hash,
-            is_upload_failure_retryable(&error),
+            retryable,
+            persisted_issue,
             cloud_error.to_string(),
         )?;
         Err(cloud_error)
@@ -277,7 +280,8 @@ impl RustCloudBackupManager {
         revision_hash: Option<String>,
         error: CloudBackupError,
     ) -> Result<(), CloudBackupError> {
-        if Self::is_connectivity_related_issue(self.cloud_backup_issue(&error)) {
+        let issue = self.cloud_backup_issue(&error);
+        if Self::is_connectivity_related_issue(issue) {
             self.mark_blob_dirty_state(current_state)?;
             return Err(CloudBackupError::Deferred(
                 "wallet backup upload is waiting for a connection".into(),
@@ -288,6 +292,7 @@ impl RustCloudBackupManager {
             current_state,
             revision_hash,
             is_upload_preparation_failure_retryable(&error),
+            Self::cloud_blob_failure_issue(issue),
             error.to_string(),
         )?;
         Err(error)
@@ -416,7 +421,7 @@ fn is_stale_uploading_state(started_at: u64) -> bool {
 }
 
 pub async fn upload_all_wallets(
-    cloud: &CloudStorage,
+    cloud: &CloudStorageClient,
     namespace: &str,
     critical_key: &[u8; 32],
     db: &Database,
@@ -433,7 +438,7 @@ pub async fn upload_all_wallets(
         cloud
             .upload_wallet_backup(namespace.to_string(), prepared.record_id.clone(), wallet_json)
             .await
-            .map_err_str(CloudBackupError::Cloud)?;
+            .map_err(CloudBackupError::CloudStorage)?;
 
         uploaded_wallets.push(prepared);
     }
@@ -444,6 +449,8 @@ pub async fn upload_all_wallets(
 fn is_upload_preparation_failure_retryable(error: &CloudBackupError) -> bool {
     match error {
         CloudBackupError::Cloud(_)
+        | CloudBackupError::CloudStorage(_)
+        | CloudBackupError::CloudStorageContext { .. }
         | CloudBackupError::Offline(_)
         | CloudBackupError::Deferred(_) => true,
         CloudBackupError::NotSupported(_)
@@ -452,6 +459,7 @@ fn is_upload_preparation_failure_retryable(error: &CloudBackupError) -> bool {
         | CloudBackupError::Passkey(_)
         | CloudBackupError::Crypto(_)
         | CloudBackupError::Internal(_)
+        | CloudBackupError::Compatibility(_)
         | CloudBackupError::PasskeyMismatch
         | CloudBackupError::PasskeyDiscoveryCancelled
         | CloudBackupError::Cancelled => false,
@@ -461,7 +469,8 @@ fn is_upload_preparation_failure_retryable(error: &CloudBackupError) -> bool {
 fn is_upload_failure_retryable(error: &CloudStorageError) -> bool {
     matches!(
         error,
-        CloudStorageError::Offline(_)
+        CloudStorageError::AuthorizationRequired(_)
+            | CloudStorageError::Offline(_)
             | CloudStorageError::NotAvailable(_)
             | CloudStorageError::UploadFailed(_)
             | CloudStorageError::DownloadFailed(_)

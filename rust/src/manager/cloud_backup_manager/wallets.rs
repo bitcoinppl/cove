@@ -32,6 +32,12 @@ impl UnpersistedPrfKey {
             credential_id: self.credential_id.clone(),
         }
     }
+
+    pub(crate) fn into_parts(mut self) -> ([u8; 32], [u8; 32], Vec<u8>) {
+        let credential_id = std::mem::take(&mut self.credential_id);
+
+        (self.prf_key, self.prf_salt, credential_id)
+    }
 }
 
 pub(super) struct DownloadedWalletBackup {
@@ -54,8 +60,7 @@ pub(crate) struct PreparedWalletBackup {
 }
 
 pub(crate) use passkey::{
-    NamespaceMatch, NamespaceMatchOutcome, create_new_prf_key, create_prf_key_without_persisting,
-    discover_or_create_prf_key_without_persisting, try_match_namespace_with_passkey,
+    NamespaceMatch, NamespaceMatchOutcome, NamespacePasskeyMatcher, PasskeyMaterialAcquirer,
 };
 #[cfg(test)]
 pub(crate) use payload::convert_cloud_secret;
@@ -65,6 +70,7 @@ pub(crate) use payload::{
 pub(crate) use restore::{
     WalletBackupLookup, WalletBackupReader, WalletRestoreOutcome, WalletRestoreSession,
 };
+
 pub(crate) use upload::upload_all_wallets;
 
 pub(super) fn persist_enabled_cloud_backup_state(

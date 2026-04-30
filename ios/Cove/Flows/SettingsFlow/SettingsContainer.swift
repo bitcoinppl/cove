@@ -89,7 +89,7 @@ struct SettingsContainer: View {
             Button("Yes, Change Network") {
                 if let network = pendingNetwork {
                     app.dispatch(action: .changeNetwork(network: network))
-                    app.rust.selectLatestOrNewWallet()
+                    app.trySelectLatestOrNewWallet()
                 }
                 pendingNetwork = nil
             }

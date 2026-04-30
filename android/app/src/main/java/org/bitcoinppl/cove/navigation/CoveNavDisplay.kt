@@ -177,8 +177,7 @@ private fun RouteContent(app: AppManager, route: Route) {
         is Route.LoadAndReset -> {
             LoadAndResetContent(
                 app = app,
-                nextRoutes = route.resetTo.map { it.route() },
-                loadingTimeMs = route.afterMillis.toLong(),
+                route = route,
             )
         }
     }
@@ -190,15 +189,18 @@ private fun RouteContent(app: AppManager, route: Route) {
 @Composable
 private fun LoadAndResetContent(
     app: AppManager,
-    nextRoutes: List<Route>,
-    loadingTimeMs: Long,
+    route: Route.LoadAndReset,
 ) {
+    val nextRoutes = route.resetTo.map { it.route() }
+    val loadingTimeMs = route.afterMillis.toLong()
+
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         CircularProgressIndicator()
     }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(route) {
+        val generation = app.captureLoadAndResetGeneration()
         delay(loadingTimeMs)
-        app.rust.resetAfterLoading(nextRoutes)
+        app.resetAfterLoadingIfCurrent(generation, route, nextRoutes)
     }
 }

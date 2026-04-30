@@ -12,6 +12,9 @@ import android.view.View
 import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.ImageView
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -50,6 +53,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -63,6 +67,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.fragment.app.FragmentActivity
@@ -71,6 +77,9 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.bitcoinppl.cove.cloudbackup.CloudBackupPresentationHost
+import org.bitcoinppl.cove.cloudbackup.ForegroundUiBridge
+import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingContainer
 import org.bitcoinppl.cove.flows.TapSignerFlow.TapSignerContainer
 import org.bitcoinppl.cove.navigation.CoveNavDisplay
 import org.bitcoinppl.cove.nfc.NfcScanSheet
@@ -78,12 +87,12 @@ import org.bitcoinppl.cove.nfc.TapCardNfcManager
 import org.bitcoinppl.cove.sidebar.SidebarContainer
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove.views.LockView
-import org.bitcoinppl.cove_core.RustCloudBackupManager
-import org.bitcoinppl.cove.views.TermsAndConditionsSheet
 import org.bitcoinppl.cove_core.bootstrap
 import org.bitcoinppl.cove_core.activeMigration
 import org.bitcoinppl.cove_core.bootstrapProgress
 import org.bitcoinppl.cove_core.cancelBootstrap
+import org.bitcoinppl.cove_core.resetBootstrapForRestore
+import org.bitcoinppl.cove_core.resetLocalDataForCatastrophicRecovery
 import org.bitcoinppl.cove_core.AfterPinAction
 import org.bitcoinppl.cove_core.AppInitException
 import org.bitcoinppl.cove_core.BootstrapStep
@@ -92,6 +101,7 @@ import org.bitcoinppl.cove_core.AppAction
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.ColdWalletRoute
 import org.bitcoinppl.cove_core.Database
+import org.bitcoinppl.cove_core.GlobalConfigKey
 import org.bitcoinppl.cove_core.HotWalletRoute
 import org.bitcoinppl.cove_core.ImportType
 import org.bitcoinppl.cove_core.NewWalletRoute
@@ -102,12 +112,39 @@ import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.TapSignerRoute
 import org.bitcoinppl.cove_core.Wallet
 import org.bitcoinppl.cove_core.WalletType
+import org.bitcoinppl.cove_core.CloudBackupStatus
 import org.bitcoinppl.cove_core.types.ColorSchemeSelection
+
+internal enum class StartupMode {
+    ONBOARDING,
+    READY,
+}
+
+internal fun hasPersistedOnboardingProgress(
+    persistedProgress: String?,
+): Boolean = !persistedProgress.isNullOrBlank()
+
+internal fun resolveStartupMode(
+    termsAccepted: Boolean,
+    hasWallets: Boolean,
+    cloudBackupStatus: CloudBackupStatus,
+    hasPersistedOnboardingProgress: Boolean,
+): StartupMode {
+    // mirror CoveApp.swift's app-shell onboarding decision while preserving Android auth and Drive constraints
+    val shouldStartStartupRestore = !hasWallets && cloudBackupStatus is CloudBackupStatus.Disabled
+    return if (!termsAccepted || hasPersistedOnboardingProgress || shouldStartStartupRestore) {
+        StartupMode.ONBOARDING
+    } else {
+        StartupMode.READY
+    }
+}
 
 class MainActivity : FragmentActivity() {
     // view-based privacy cover - updates synchronously (unlike Compose state)
     private var privacyCoverView: View? = null
     private var isBootstrapped = false
+    private var authorizationLauncher: ActivityResultLauncher<IntentSenderRequest>? = null
+    private var isPrivacyCoverVisible by mutableStateOf(false)
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
@@ -126,10 +163,12 @@ class MainActivity : FragmentActivity() {
 
     override fun onPause() {
         super.onPause()
+        ForegroundUiBridge.pause(this)
         if (!isBootstrapped) return
         // show cover only on actual app transitions (not internal popups like DropdownMenu)
         if (Auth.isAuthEnabled) {
             privacyCoverView?.visibility = View.VISIBLE
+            isPrivacyCoverVisible = true
             window.setFlags(
                 WindowManager.LayoutParams.FLAG_SECURE,
                 WindowManager.LayoutParams.FLAG_SECURE,
@@ -139,23 +178,35 @@ class MainActivity : FragmentActivity() {
 
     override fun onResume() {
         super.onResume()
+        authorizationLauncher?.let { ForegroundUiBridge.attach(this, it) }
         if (!isBootstrapped) return
         privacyCoverView?.visibility = View.GONE
+        isPrivacyCoverVisible = false
         if (!ScreenSecurity.isSensitiveScreen) {
             window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
         }
 
+        val app = AppManager.getInstance()
+        app.cloudBackupManager.refreshCloudState()
+
         // refresh fees and prices in background (30-sec throttle protects against excessive requests)
         // only dispatch if async runtime is ready (initialized in LaunchedEffect)
-        val app = AppManager.getInstance()
         if (app.asyncRuntimeReady) {
             app.dispatch(AppAction.UpdateFees)
             app.dispatch(AppAction.UpdateFiatPrices)
         }
     }
 
+    override fun onDestroy() {
+        if (isFinishing && !isChangingConfigurations) {
+            ForegroundUiBridge.detach(this)
+        }
+        super.onDestroy()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        resetLocalDataForUiTestsIfRequested()
         enableEdgeToEdge(
             statusBarStyle =
                 SystemBarStyle.auto(
@@ -168,6 +219,11 @@ class MainActivity : FragmentActivity() {
                     darkScrim = android.graphics.Color.TRANSPARENT,
                 ),
         )
+
+        authorizationLauncher =
+            registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
+                ForegroundUiBridge.handleAuthorizationResult(result)
+            }
 
         // initialize NFC manager with activity context
         TapCardNfcManager.getInstance().initialize(this)
@@ -203,6 +259,13 @@ class MainActivity : FragmentActivity() {
                             (application as CoveApplication).onBootstrapComplete()
                             val appInstance = AppManager.getInstance()
                             appInstance.asyncRuntimeReady = true
+
+                            runCatching {
+                                appInstance.cloudBackupManager.rust.resumePendingCloudUploadVerification()
+                            }.onFailure { error ->
+                                Log.w(TAG, "[STARTUP] resumePendingCloudUploadVerification failed before startup routing", error)
+                            }
+
                             isBootstrapped = true
                             bootstrapped = true
                             bdkMigrationWarning = warning
@@ -280,6 +343,46 @@ class MainActivity : FragmentActivity() {
             }
 
             val app = remember { AppManager.getInstance() }
+            val auth = remember { AuthManager.getInstance() }
+            val snackbarHostState = remember { SnackbarHostState() }
+            val cloudBackupStatus = app.cloudBackupManager.state.status
+            val hasWallets = app.wallets.isNotEmpty() || app.hasWallets
+            val readPersistedOnboardingProgress = {
+                runCatching {
+                    Database().globalConfig().get(GlobalConfigKey.OnboardingProgress)
+                }.onFailure { error ->
+                    Log.w(TAG, "[STARTUP] failed to read persisted onboarding progress before routing", error)
+                }.getOrNull()
+            }
+            var persistedOnboardingProgress by remember { mutableStateOf(readPersistedOnboardingProgress()) }
+            var startupMode by remember {
+                mutableStateOf(
+                    resolveStartupMode(
+                        termsAccepted = app.isTermsAccepted,
+                        hasWallets = hasWallets,
+                        cloudBackupStatus = cloudBackupStatus,
+                        hasPersistedOnboardingProgress = hasPersistedOnboardingProgress(persistedOnboardingProgress),
+                    ),
+                )
+            }
+            LaunchedEffect(app.isTermsAccepted, hasWallets, cloudBackupStatus, persistedOnboardingProgress) {
+                persistedOnboardingProgress = readPersistedOnboardingProgress()
+                startupMode =
+                    resolveStartupMode(
+                        termsAccepted = app.isTermsAccepted,
+                        hasWallets = hasWallets,
+                        cloudBackupStatus = cloudBackupStatus,
+                        hasPersistedOnboardingProgress = hasPersistedOnboardingProgress(persistedOnboardingProgress),
+                    )
+            }
+            val onboardingManager =
+                remember(startupMode) {
+                    if (startupMode == StartupMode.ONBOARDING) {
+                        OnboardingManager(app)
+                    } else {
+                        null
+                    }
+                }
 
             // compute dark theme based on user preference
             val systemDarkTheme = isSystemInDarkTheme()
@@ -291,12 +394,17 @@ class MainActivity : FragmentActivity() {
                 }
 
             CoveTheme(darkTheme = darkTheme) {
-                if (!app.isTermsAccepted) {
-                    // fullscreen blocking terms view (matches iOS behavior)
-                    FullScreenTermsView(app = app)
-                } else {
-                    val snackbarHostState = remember { SnackbarHostState() }
+                DisposableEffect(onboardingManager) {
+                    onDispose {
+                        onboardingManager?.close()
+                    }
+                }
 
+                CloudBackupPresentationHost(
+                    app = app,
+                    auth = auth,
+                    isCoverPresented = isPrivacyCoverVisible,
+                ) {
                     Scaffold(
                         containerColor = Color.Transparent,
                         contentWindowInsets = WindowInsets(0),
@@ -307,18 +415,34 @@ class MainActivity : FragmentActivity() {
                             )
                         },
                     ) { _ ->
-                        Box(modifier = Modifier.fillMaxSize()) {
+                        Box(
+                            modifier =
+                                Modifier
+                                    .fillMaxSize()
+                                    .semantics { testTagsAsResourceId = true },
+                        ) {
                             LockView {
-                                SidebarContainer(app = app) {
-                                    // NavDisplay handles transitions and back gestures
-                                    // key resets view when network/routeId changes
-                                    key(app.selectedNetwork, app.routeId) {
-                                        CoveNavDisplay(app = app)
+                                when (startupMode) {
+                                    StartupMode.ONBOARDING -> {
+                                        if (onboardingManager != null) {
+                                            OnboardingContainer(
+                                                manager = onboardingManager,
+                                                onComplete = {
+                                                    persistedOnboardingProgress = null
+                                                    startupMode = StartupMode.READY
+                                                },
+                                            )
+                                        }
                                     }
+                                    StartupMode.READY ->
+                                        SidebarContainer(app = app) {
+                                            key(app.selectedNetwork, app.routeId) {
+                                                CoveNavDisplay(app = app)
+                                            }
+                                        }
                                 }
                             }
 
-                            // global sheet rendering
                             app.sheetState?.let { taggedState ->
                                 SheetContent(
                                     state = taggedState,
@@ -327,7 +451,6 @@ class MainActivity : FragmentActivity() {
                                 )
                             }
 
-                            // global alert rendering
                             GlobalAlertHandler(
                                 app = app,
                                 snackbarHostState = snackbarHostState,
@@ -420,10 +543,22 @@ class MainActivity : FragmentActivity() {
 
     private class BootstrapTimeoutException : Exception("bootstrap timed out")
 
+    private fun resetLocalDataForUiTestsIfRequested() {
+        if (!BuildConfig.DEBUG || !intent.getBooleanExtra(UI_TEST_RESET_DATA_EXTRA, false)) return
+
+        try {
+            resetLocalDataForCatastrophicRecovery()
+            resetBootstrapForRestore()
+        } catch (e: Exception) {
+            Log.e(TAG, "failed to reset local data for UI tests", e)
+        }
+    }
+
     companion object {
         /** Delay before showing the loading spinner, in milliseconds.
          *  Prevents a distracting spinner flash when bootstrap completes quickly */
         const val SPINNER_DELAY_MS = 100L
+        private const val UI_TEST_RESET_DATA_EXTRA = "org.bitcoinppl.cove.uitest.RESET_DATA"
         private const val TAG = "MainActivity"
     }
 }
@@ -529,7 +664,7 @@ private fun GlobalAlertDialog(
                     TextButton(onClick = {
                         onDismiss()
                         try {
-                            app.rust.selectWallet(state.walletId)
+                            app.selectWalletOrThrow(state.walletId)
                             app.resetRoute(Route.SelectedWallet(state.walletId))
                         } catch (e: Exception) {
                             Log.e("GlobalAlert", "Failed to select wallet", e)
@@ -542,9 +677,7 @@ private fun GlobalAlertDialog(
 
         is AppAlertState.HotWalletKeyMissing -> {
             val walletId = state.walletId
-            val cloudBackupEnabled =
-                runCatching { RustCloudBackupManager().use { it.isCloudBackupEnabled() } }
-                    .getOrDefault(false)
+            val cloudBackupEnabled = app.cloudBackupManager.isCloudBackupEnabled
             AlertDialog(
                 onDismissRequest = onDismiss,
                 title = { Text(state.title()) },
@@ -711,12 +844,13 @@ private fun GlobalAlertDialog(
                 text = { Text(state.message()) },
                 confirmButton = {
                     TextButton(onClick = {
-                        onDismiss()
                         try {
-                            app.rust.selectWallet(state.walletId)
+                            app.selectWalletOrThrow(state.walletId)
+                            onDismiss()
                             app.resetRoute(Route.SelectedWallet(state.walletId))
                         } catch (e: Exception) {
                             Log.e("GlobalAlert", "Failed to select wallet", e)
+                            app.alertState = TaggedItem(AppAlertState.UnableToSelectWallet)
                         }
                     }) { Text("Yes") }
                 },
@@ -884,10 +1018,11 @@ private fun GlobalAlertDialog(
                                     ?.toString()
                             if (!text.isNullOrBlank()) {
                                 try {
-                                    val wallet = Wallet.newFromXpub(xpub = text.trim())
-                                    val id = wallet.id()
-                                    app.rust.selectWallet(id)
-                                    app.resetRoute(Route.SelectedWallet(id))
+                                    Wallet.newFromXpub(xpub = text.trim()).use { wallet ->
+                                        val id = wallet.id()
+                                        app.selectWalletOrThrow(id)
+                                        app.resetRoute(Route.SelectedWallet(id))
+                                    }
                                 } catch (e: Exception) {
                                     app.alertState =
                                         TaggedItem(
@@ -946,7 +1081,7 @@ private fun GlobalAlertDialog(
                         }
                         TextButton(onClick = {
                             onDismiss()
-                            app.rust.selectLatestOrNewWallet()
+                            app.trySelectLatestOrNewWallet()
                         }) { Text("Cancel") }
                     }
                 },
@@ -1036,44 +1171,6 @@ private fun SplashLoadingView(
                     trackColor = Color.White.copy(alpha = 0.2f),
                 )
             }
-        }
-    }
-}
-
-@Composable
-private fun FullScreenTermsView(app: AppManager) {
-    // prevent back button from dismissing
-    BackHandler { }
-
-    Box(
-        modifier =
-            Modifier
-                .fillMaxSize()
-                .background(Color.Black),
-    ) {
-        // Cove icon at top center (visible behind terms content)
-        Image(
-            painter = painterResource(id = R.drawable.cove_logo),
-            contentDescription = "Cove",
-            modifier =
-                Modifier
-                    .align(Alignment.TopCenter)
-                    .statusBarsPadding()
-                    .padding(top = 24.dp)
-                    .size(100.dp)
-                    .clip(RoundedCornerShape(20.dp)),
-        )
-
-        // Terms content - starts below icon, fills rest of screen
-        Surface(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .fillMaxHeight(0.88f)
-                    .align(Alignment.BottomCenter),
-            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-        ) {
-            TermsAndConditionsSheet(app = app)
         }
     }
 }

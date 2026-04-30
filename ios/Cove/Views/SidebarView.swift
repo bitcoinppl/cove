@@ -9,7 +9,6 @@ import SwiftUI
 
 struct SidebarView: View {
     @Environment(AppManager.self) private var app
-    @Environment(\.navigate) private var navigate
 
     let currentRoute: Route
 
@@ -45,7 +44,7 @@ struct SidebarView: View {
 
                     Spacer()
 
-                    Button(action: app.nfcReader.scan) {
+                    Button(action: app.closeSidebarAndScanNfc) {
                         Image(systemName: "wave.3.right")
                     }
                     .foregroundStyle(.white)
@@ -69,7 +68,7 @@ struct SidebarView: View {
                 VStack(spacing: 12) {
                     ForEach(app.wallets, id: \.id) { wallet in
                         Button(action: {
-                            goTo(Route.selectedWallet(wallet.id))
+                            app.closeSidebarAndSelectWallet(wallet.id)
                         }) {
                             HStack(spacing: 10) {
                                 Circle()
@@ -95,8 +94,7 @@ struct SidebarView: View {
                         )
                         .contextMenu {
                             Button("Settings") {
-                                app.isSidebarVisible = false
-                                app.pushRoutes(RouteFactory().nestedWalletSettings(id: wallet.id))
+                                app.closeSidebarAndOpenWalletSettings(wallet.id)
                             }
                         }
                     }
@@ -109,7 +107,7 @@ struct SidebarView: View {
                         .overlay(.coveLightGray)
                         .opacity(0.50)
 
-                    Button(action: { goTo(RouteFactory().newWalletSelect()) }) {
+                    Button(action: app.closeSidebarAndOpenNewWallet) {
                         HStack(spacing: 20) {
                             Image(systemName: "wallet.bifold")
                             Text("Add Wallet")
@@ -120,7 +118,7 @@ struct SidebarView: View {
                         .contentShape(Rectangle())
                     }
 
-                    Button(action: { goTo(Route.settings(.main)) }) {
+                    Button(action: app.closeSidebarAndOpenSettings) {
                         HStack(spacing: 22) {
                             Image(systemName: "gear")
                             Text("Settings")
@@ -136,38 +134,5 @@ struct SidebarView: View {
         .padding(20)
         .frame(maxWidth: .infinity)
         .background(.midnightBlue)
-    }
-
-    func goTo(_ route: Route) {
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-            app.isSidebarVisible = false
-        }
-
-        Task {
-            try? await Task.sleep(for: .milliseconds(200))
-            await navigateRoute(route)
-        }
-    }
-
-    private func navigateRouteOnMain(_ route: Route) {
-        navigate(route)
-    }
-
-    private func navigateRoute(_ route: Route) async {
-        do {
-            if case let Route.selectedWallet(id: id) = route {
-                try app.rust.selectWallet(id: id)
-                return
-            }
-
-            if !app.hasWallets, route == Route.newWallet(.select) {
-                app.resetRoute(to: [RouteFactory().newWalletSelect()])
-                return
-            }
-        } catch {
-            Log.error("Failed to select wallet \(error)")
-        }
-
-        navigateRouteOnMain(route)
     }
 }

@@ -40,7 +40,7 @@ struct CoveMainView: View {
             Button("OK") {
                 app.alertState = .none
                 app.isSidebarVisible = false
-                try? app.rust.selectWallet(id: walletId)
+                try? app.selectWalletOrThrow(walletId)
             }
         case let .hotWalletKeyMissing(walletId: walletId):
             if CloudBackupManager.shared.isCloudBackupEnabled {
@@ -181,7 +181,7 @@ struct CoveMainView: View {
                 if text.isEmpty { return }
                 do {
                     let wallet = try Wallet.newFromXpub(xpub: text)
-                    try app.rust.selectWallet(id: wallet.id())
+                    try app.selectWalletOrThrow(wallet.id())
                     app.resetRoute(to: .selectedWallet(wallet.id()))
                 } catch {
                     DispatchQueue.main.async {
@@ -221,7 +221,7 @@ struct CoveMainView: View {
             }
             Button("Cancel", role: .cancel) {
                 app.alertState = .none
-                app.rust.selectLatestOrNewWallet()
+                app.trySelectLatestOrNewWallet()
             }
         case .invalidWordGroup,
              .errorImportingHotWallet,

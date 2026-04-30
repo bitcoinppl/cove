@@ -48,6 +48,14 @@ Key actors include:
 
 Actors are ideal for components that need to process messages sequentially, maintain internal state, and send reconciliation updates back to the UI when work completes.
 
+**Responsive actor handlers.** Act Zero actors process messages sequentially. An actor method that awaits slow network, wallet scan, cloud backup, filesystem, keychain, or persistence-heavy work inline can keep later actor messages waiting even though the awaited work is async. UI-facing manager actors should keep message handling short: validate inputs, snapshot state, update local authoritative state such as pending or scanning flags, emit immediate reconcile messages when useful, delegate slow work, then apply the result from a later typed actor message.
+
+Use `cove_tokio::task::spawn` for narrow stateless one-shot work. Use `task::spawn_actor()` or an existing child actor pattern for queued, cancellable, stateful, retrying, coalesced, or ordered workflows. Existing examples include `WalletScanner`, `WalletScanWorker`, `TransactionWatcher`, and `CloudBackupRuntimeActor`.
+
+Workers should report progress or completion through typed messages or an explicitly owned reconcile stream. They should not directly mutate a UI-facing manager's authoritative state or emit that manager's reconcile messages unless they own that state/reconcile path. The manager applies results, persists final state when needed, and emits targeted reconcile messages.
+
+Rust closures are fine for narrow synchronous helpers, local transactions, and test hooks. They become a design smell when a lower-level service accepts a closure that mutates manager state, emits reconcile messages, dispatches actions, or drives a multi-step async workflow. Prefer an owned task or Act Zero actor with typed progress/completion messages so the owning manager remains responsible for state changes and reconciliation.
+
 **Singleton pattern.** Many core components use singleton patterns for global access, implemented via `OnceLock`, `LazyLock`, or `ArcSwap`. Creating new instances returns cheap clones (typically `Arc` clones) of the global singleton, similar to how `AppManager.shared` works on iOS or `AppManager.getInstance()` on Android. Key singletons include:
 
 - `Database::global()` (`rust/src/database.rs`) - Database access via `OnceCell<ArcSwap<Database>>`. Calling `Database()` from Kotlin/Swift returns an `Arc` clone of the global instance.

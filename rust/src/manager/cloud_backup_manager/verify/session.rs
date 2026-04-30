@@ -1,7 +1,7 @@
-use cove_cspp::backup_data::EncryptedMasterKeyBackup;
+use cove_cspp::backup_data::{EncryptedMasterKeyBackup, MasterKeyBackupVersion};
 use cove_cspp::master_key::MasterKey;
 use cove_cspp::master_key_crypto;
-use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
+use cove_device::cloud_storage::{CloudStorage, CloudStorageClient, CloudStorageError};
 use cove_device::keychain::Keychain;
 use cove_device::passkey::{PasskeyAccess, PasskeyCredentialPresence};
 use cove_util::ResultExt as _;
@@ -16,7 +16,6 @@ use super::super::{
     cloud_inventory::CloudWalletInventory,
     wallets::{WalletBackupLookup, WalletBackupReader, prepare_wallet_backup},
 };
-use super::load_stored_credential_id;
 use super::passkey_auth::PasskeyAuthOutcome;
 use super::wrapper_repair::{WrapperRepairError, WrapperRepairOperation, WrapperRepairStrategy};
 use crate::manager::cloud_backup_manager::pending::remote_wallet_revision_matches;
@@ -36,11 +35,16 @@ enum MasterKeyResolution {
     Finished(DeepVerificationResult),
 }
 
+enum RepairedMasterKeyResolution {
+    Verified(MasterKey),
+    Finished(DeepVerificationResult),
+}
+
 pub(crate) struct VerificationSession {
     pub(crate) manager: RustCloudBackupManager,
     pub(crate) keychain: Keychain,
     pub(crate) cspp: cove_cspp::Cspp<Keychain>,
-    pub(crate) cloud: CloudStorage,
+    pub(crate) cloud: CloudStorageClient,
     pub(crate) passkey: PasskeyAccess,
     pub(crate) namespace: String,
     pub(crate) report: DeepVerificationReport,
@@ -65,7 +69,7 @@ impl VerificationSession {
             manager: manager.clone(),
             keychain,
             cspp,
-            cloud: CloudStorage::global().clone(),
+            cloud: CloudStorage::global_explicit_client(),
             passkey: PasskeyAccess::global().clone(),
             namespace: manager.current_namespace_id()?,
             report: DeepVerificationReport {
@@ -98,27 +102,30 @@ impl VerificationSession {
         let master_key = match self.resolve_master_key_step(encrypted_master.as_ref()).await? {
             MasterKeyResolution::VerifiedCloudMasterKey(master_key) => {
                 let master_key = self.apply_verified_cloud_master_key(master_key)?;
+
+                // a valid master key with no wallet inventory means the cloud manifest is missing
                 if self.wallets_missing {
                     return Ok(self.recreate_manifest_result());
                 }
+
                 master_key
             }
+
             MasterKeyResolution::NeedsWrapperRepair { reuse_credential_id } => {
                 let master_key =
                     match self.repair_wrapper_from_local_key(reuse_credential_id).await? {
-                        MasterKeyResolution::VerifiedCloudMasterKey(master_key) => master_key,
-                        MasterKeyResolution::Finished(result) => return Ok(result),
-                        MasterKeyResolution::NeedsWrapperRepair { .. } => {
-                            unreachable!("wrapper repair must resolve master key")
-                        }
+                        RepairedMasterKeyResolution::Verified(master_key) => master_key,
+                        RepairedMasterKeyResolution::Finished(result) => return Ok(result),
                     };
 
+                // a valid master key with no wallet inventory means the cloud manifest is missing
                 if self.wallets_missing {
                     return Ok(self.recreate_manifest_result());
                 }
 
                 master_key
             }
+
             MasterKeyResolution::Finished(result) => return Ok(result),
         };
 
@@ -132,17 +139,20 @@ impl VerificationSession {
     async fn load_wallet_inventory(&mut self) -> Option<DeepVerificationResult> {
         match self.cloud.list_wallet_backups(self.namespace.clone()).await {
             Ok(ids) => {
-                let remote_wallet_truth = match self.manager.load_remote_wallet_truth(&ids).await {
-                    Ok(remote_wallet_truth) => remote_wallet_truth,
-                    Err(error) => return Some(self.remote_truth_retry_result(&error)),
-                };
+                let remote_wallet_truth =
+                    match self.manager.load_remote_wallet_truth(&ids, self.cloud.clone()).await {
+                        Ok(remote_wallet_truth) => remote_wallet_truth,
+                        Err(error) => return Some(self.remote_truth_retry_result(&error)),
+                    };
+
                 self.manager.cleanup_confirmed_pending_blobs(&remote_wallet_truth);
 
-                let detail = match self
+                let detail_result = self
                     .manager
                     .build_cloud_backup_detail_with_remote_truth(&ids, remote_wallet_truth)
-                    .await
-                {
+                    .await;
+
+                let detail = match detail_result {
                     Ok(detail) => detail,
                     Err(error) => return Some(self.local_inventory_retry_result(&error)),
                 };
@@ -151,11 +161,13 @@ impl VerificationSession {
                 self.wallet_record_ids = Some(ids);
                 None
             }
+
             Err(CloudStorageError::NotFound(_)) => {
                 self.wallets_missing = true;
                 self.wallet_record_ids = None;
                 None
             }
+
             Err(error) => {
                 Some(self.retry_result(format!("failed to list wallet backups: {error}")))
             }
@@ -168,21 +180,25 @@ impl VerificationSession {
                 let encrypted: EncryptedMasterKeyBackup =
                     serde_json::from_slice(&json).map_err_str(CloudBackupError::Internal)?;
 
-                if encrypted.version != 1 {
-                    return Ok(EncryptedMasterKeyStep::Finished(DeepVerificationResult::Failed(
-                        DeepVerificationFailure {
-                            kind: VerificationFailureKind::UnsupportedVersion,
-                            message: format!(
-                                "master key backup version {} is not supported",
-                                encrypted.version
-                            ),
-                            detail: self.detail(),
-                        },
-                    )));
+                match encrypted.backup_version() {
+                    Ok(MasterKeyBackupVersion::V1) => {}
+                    Err(unsupported) => {
+                        let version = unsupported.0;
+                        return Ok(EncryptedMasterKeyStep::Finished(
+                            DeepVerificationResult::Failed(DeepVerificationFailure {
+                                kind: VerificationFailureKind::UnsupportedVersion,
+                                message: format!(
+                                    "master key backup version {version} is not supported",
+                                ),
+                                detail: self.detail(),
+                            }),
+                        ));
+                    }
                 }
 
                 Ok(EncryptedMasterKeyStep::Loaded(encrypted))
             }
+
             Err(CloudStorageError::NotFound(_)) => {
                 if self.local_master_key.is_some() {
                     return Ok(EncryptedMasterKeyStep::Missing);
@@ -194,6 +210,7 @@ impl VerificationSession {
                     ),
                 ))
             }
+
             Err(error) => Ok(EncryptedMasterKeyStep::Finished(
                 self.retry_result(format!("failed to download master key backup: {error}")),
             )),
@@ -230,6 +247,7 @@ impl VerificationSession {
         self.report.credential_recovered = authenticated.credential_recovered;
 
         match master_key_crypto::decrypt_master_key(encrypted_master, &authenticated.prf_key) {
+            // cloud wrapper decrypted, so this is the trusted master key for later wallet checks
             Ok(master_key) => {
                 if let Err(error) =
                     self.keychain.save_cspp_passkey(&authenticated.credential_id, prf_salt)
@@ -241,11 +259,13 @@ impl VerificationSession {
 
                 Ok(MasterKeyResolution::VerifiedCloudMasterKey(master_key))
             }
+            // the passkey worked but the wrapper is stale; use the local key to replace it
             Err(_) if self.local_master_key.is_some() => {
                 Ok(MasterKeyResolution::NeedsWrapperRepair {
                     reuse_credential_id: Some(authenticated.credential_id),
                 })
             }
+            // without a local key there is no trusted source left to rebuild the cloud wrapper
             Err(_) => Ok(MasterKeyResolution::Finished(self.reinitialize_result(
                 "could not decrypt cloud master key and no local key available",
             ))),
@@ -257,6 +277,7 @@ impl VerificationSession {
         master_key: MasterKey,
     ) -> Result<MasterKey, CloudBackupError> {
         match &self.local_master_key {
+            // restore the missing local key from the verified cloud backup
             None => {
                 self.cspp
                     .save_master_key(&master_key)
@@ -264,6 +285,8 @@ impl VerificationSession {
                 self.report.local_master_key_repaired = true;
                 info!("Repaired local master key from cloud");
             }
+
+            // replace a stale local key after cloud decryption proves the cloud key is valid
             Some(local_key) if local_key.as_bytes() != master_key.as_bytes() => {
                 self.cspp
                     .save_master_key(&master_key)
@@ -271,6 +294,8 @@ impl VerificationSession {
                 self.report.local_master_key_repaired = true;
                 info!("Repaired local master key to match cloud");
             }
+
+            // keep the local key when it already matches the verified cloud key
             Some(_) => {}
         }
 
@@ -280,9 +305,9 @@ impl VerificationSession {
     async fn repair_wrapper_from_local_key(
         &mut self,
         reuse_credential_id: Option<Vec<u8>>,
-    ) -> Result<MasterKeyResolution, CloudBackupError> {
+    ) -> Result<RepairedMasterKeyResolution, CloudBackupError> {
         let Some(local_master_key) = self.local_master_key.as_ref() else {
-            return Ok(MasterKeyResolution::Finished(
+            return Ok(RepairedMasterKeyResolution::Finished(
                 self.reinitialize_result("no local master key available for wrapper repair"),
             ));
         };
@@ -294,28 +319,32 @@ impl VerificationSession {
             &self.passkey,
             &self.namespace,
         );
+
         let strategy = match reuse_credential_id {
             Some(credential_id) => WrapperRepairStrategy::ReuseExisting(credential_id),
             None => WrapperRepairStrategy::CreateNew,
         };
-        let wallet_record_ids = self.wallet_record_ids.as_deref().unwrap_or(&[]);
 
+        let wallet_record_ids = self.wallet_record_ids.as_deref().unwrap_or(&[]);
         match repair.run(local_master_key, wallet_record_ids, strategy).await {
             Ok(()) => {
                 self.report.master_key_wrapper_repaired = true;
                 info!("Repaired cloud master key wrapper");
-                Ok(MasterKeyResolution::VerifiedCloudMasterKey(MasterKey::from_bytes(
+                Ok(RepairedMasterKeyResolution::Verified(MasterKey::from_bytes(
                     *local_master_key.as_bytes(),
                 )))
             }
+
             Err(WrapperRepairError::WrongKey) => {
-                Ok(MasterKeyResolution::Finished(self.reinitialize_result(
+                Ok(RepairedMasterKeyResolution::Finished(self.reinitialize_result(
                     "local master key cannot decrypt existing cloud wallet backups",
                 )))
             }
-            Err(WrapperRepairError::Inconclusive) => Ok(MasterKeyResolution::Finished(
+
+            Err(WrapperRepairError::Inconclusive) => Ok(RepairedMasterKeyResolution::Finished(
                 self.retry_result("could not download any wallet to verify local key"),
             )),
+
             Err(WrapperRepairError::Operation(error)) => Err(error),
         }
     }
@@ -331,18 +360,19 @@ impl VerificationSession {
         self.report.wallets_verified = verified;
         self.report.wallets_failed = failed;
         self.report.wallets_unsupported = unsupported;
-        let remote_wallet_truth =
-            match self.manager.load_remote_wallet_truth(&wallet_record_ids).await {
-                Ok(remote_wallet_truth) => remote_wallet_truth,
-                Err(error) => return Some(self.remote_truth_retry_result(&error)),
-            };
+        let remote_wallet_truth_result =
+            self.manager.load_remote_wallet_truth(&wallet_record_ids, self.cloud.clone()).await;
 
-        let unsynced = match CloudWalletInventory::load_with_remote_truth(
-            &wallet_record_ids,
-            remote_wallet_truth,
-        )
-        .await
-        {
+        let remote_wallet_truth = match remote_wallet_truth_result {
+            Ok(remote_wallet_truth) => remote_wallet_truth,
+            Err(error) => return Some(self.remote_truth_retry_result(&error)),
+        };
+
+        let inventory_result =
+            CloudWalletInventory::load_with_remote_truth(&wallet_record_ids, remote_wallet_truth)
+                .await;
+
+        let unsynced = match inventory_result {
             Ok(inventory) => {
                 let detail = inventory.build_detail();
                 self.report.detail = Some(detail.clone());
@@ -354,6 +384,7 @@ impl VerificationSession {
 
                 inventory.upload_candidate_wallets()
             }
+
             Err(error) => return Some(self.local_inventory_retry_result(&error)),
         };
 
@@ -392,11 +423,14 @@ impl VerificationSession {
             }
         };
 
-        let remote_wallet_truth = match self.manager.load_remote_wallet_truth(&updated_ids).await {
-            Ok(remote_wallet_truth) => remote_wallet_truth,
-            Err(error) => return Some(self.remote_truth_retry_result(&error)),
-        };
+        let remote_wallet_truth =
+            match self.manager.load_remote_wallet_truth(&updated_ids, self.cloud.clone()).await {
+                Ok(remote_wallet_truth) => remote_wallet_truth,
+                Err(error) => return Some(self.remote_truth_retry_result(&error)),
+            };
+
         self.manager.cleanup_confirmed_pending_blobs(&remote_wallet_truth);
+
         let unconfirmed_pending_uploads = pending_uploads
             .iter()
             .filter(|upload| {
@@ -407,6 +441,7 @@ impl VerificationSession {
                 )
             })
             .count();
+
         let inventory =
             match CloudWalletInventory::load_with_remote_truth(&updated_ids, remote_wallet_truth)
                 .await
@@ -414,16 +449,19 @@ impl VerificationSession {
                 Ok(inventory) => inventory,
                 Err(error) => return Some(self.local_inventory_retry_result(&error)),
             };
-        let listed: std::collections::HashSet<_> = updated_ids.iter().cloned().collect();
 
+        let listed: std::collections::HashSet<_> = updated_ids.iter().cloned().collect();
         let remaining_unsynced = inventory.upload_candidate_wallets();
+
         self.report.detail = Some(inventory.build_detail());
         self.wallet_record_ids = Some(updated_ids);
+
         if inventory.has_unknown_remote_wallets() {
             return Some(
                 self.retry_result("failed to refresh remote wallet truth for some wallets"),
             );
         }
+
         let missing_listed_uploads =
             pending_uploads.iter().any(|upload| !listed.contains(upload.record_id()));
 
@@ -438,9 +476,11 @@ impl VerificationSession {
         let missing_count =
             pending_uploads.iter().filter(|upload| !listed.contains(upload.record_id())).count();
         let stale_count = unconfirmed_pending_uploads.saturating_sub(missing_count);
+
         warn!(
             "Deep verify: auto-sync finished but confirmation is still pending missing_listed={missing_count} stale={stale_count} stale_or_unsynced={remaining_count}"
         );
+
         self.manager.replace_pending_verification_completion(PendingVerificationCompletion::new(
             self.report.clone(),
             self.namespace.clone(),
@@ -498,6 +538,7 @@ impl VerificationSession {
         self.retry_result(format!("failed to refresh remote wallet truth: {error}"))
     }
 
+    /// Builds a retryable verification failure while preserving the latest backup detail for UI recovery prompts
     fn retry_result(&self, message: impl Into<String>) -> DeepVerificationResult {
         DeepVerificationResult::Failed(DeepVerificationFailure {
             kind: VerificationFailureKind::Retry,
@@ -506,6 +547,7 @@ impl VerificationSession {
         })
     }
 
+    /// Builds the failure shown when wallet blobs are missing but local data can recreate the manifest
     fn recreate_manifest_result(&self) -> DeepVerificationResult {
         DeepVerificationResult::Failed(DeepVerificationFailure {
             kind: VerificationFailureKind::RecreateManifest { warning: RECREATE_WARNING.into() },
@@ -514,6 +556,7 @@ impl VerificationSession {
         })
     }
 
+    /// Builds the failure shown when the backup cannot be trusted and should be recreated from scratch
     fn reinitialize_result(&self, message: impl Into<String>) -> DeepVerificationResult {
         DeepVerificationResult::Failed(DeepVerificationFailure {
             kind: VerificationFailureKind::ReinitializeBackup {
@@ -529,8 +572,11 @@ impl VerificationSession {
     /// we avoid downgrading persisted state. If the credential is gone the
     /// passkey is durably missing and the user needs repair
     fn resolve_cancellation_outcome(&self) -> DeepVerificationResult {
-        if let Some(credential_id) = load_stored_credential_id(&self.keychain) {
-            match self.passkey.check_passkey_presence(PASSKEY_RP_ID.to_string(), credential_id) {
+        match self.keychain.load_cspp_credential_id() {
+            Some(credential_id) => match self
+                .passkey
+                .check_passkey_presence(PASSKEY_RP_ID.to_string(), credential_id)
+            {
                 PasskeyCredentialPresence::Present => {
                     info!("Passkey picker cancelled but stored credential still exists");
                     cancellation_outcome(PasskeyCredentialPresence::Present, self.detail())
@@ -546,14 +592,16 @@ impl VerificationSession {
                     );
                     cancellation_outcome(PasskeyCredentialPresence::Indeterminate, self.detail())
                 }
+            },
+            None => {
+                info!("Passkey picker cancelled and no stored credential found");
+                DeepVerificationResult::PasskeyMissing(self.detail())
             }
-        } else {
-            info!("Passkey picker cancelled and no stored credential found");
-            DeepVerificationResult::PasskeyMissing(self.detail())
         }
     }
 }
 
+/// Maps passkey presence after cancellation to the verification result the UI should show
 fn cancellation_outcome(
     presence: PasskeyCredentialPresence,
     detail: Option<CloudBackupDetail>,

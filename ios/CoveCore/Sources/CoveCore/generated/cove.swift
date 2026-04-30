@@ -1366,6 +1366,8 @@ public protocol BalanceProtocol: AnyObject, Sendable {
     
     func spendable()  -> Amount
     
+    func untrustedPending()  -> Amount
+    
 }
 open class Balance: BalanceProtocol, @unchecked Sendable, Equatable {
     fileprivate let handle: UInt64
@@ -1430,6 +1432,14 @@ public static func zero() -> Balance  {
 open func spendable() -> Amount  {
     return try!  FfiConverterTypeAmount_lift(try! rustCall() {
     uniffi_cove_fn_method_balance_spendable(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+open func untrustedPending() -> Amount  {
+    return try!  FfiConverterTypeAmount_lift(try! rustCall() {
+    uniffi_cove_fn_method_balance_untrusted_pending(
             self.uniffiCloneHandle(),$0
     )
 })
@@ -2869,7 +2879,7 @@ public protocol FfiAppProtocol: AnyObject, Sendable {
     /**
      * Frontend calls this method to send events to the rust application logic
      */
-    func dispatch(action: AppAction) 
+    func dispatch(action: AppAction) throws 
     
     func emailMailto(ios: String)  -> String
     
@@ -2949,17 +2959,6 @@ public protocol FfiAppProtocol: AnyObject, Sendable {
      * Save the backup for the tap signer in the keychain
      */
     func saveTapSignerBackup(tapSigner: TapSigner, backup: Data)  -> Bool
-    
-    /**
-     * Select the latest (most recently used) wallet or navigate to new wallet flow
-     * This selects the wallet with the most recent scan activity
-     */
-    func selectLatestOrNewWallet() 
-    
-    /**
-     * Select a wallet
-     */
-    func selectWallet(id: WalletId, nextRoute: Route?) throws 
     
     func state()  -> AppState
     
@@ -3091,7 +3090,7 @@ open func deleteCorruptedWallet(id: WalletId)  {try! rustCall() {
     /**
      * Frontend calls this method to send events to the rust application logic
      */
-open func dispatch(action: AppAction)  {try! rustCall() {
+open func dispatch(action: AppAction)throws   {try rustCallWithError(FfiConverterTypeAppError_lift) {
     uniffi_cove_fn_method_ffiapp_dispatch(
             self.uniffiCloneHandle(),
         FfiConverterTypeAppAction_lower(action),$0
@@ -3307,29 +3306,6 @@ open func saveTapSignerBackup(tapSigner: TapSigner, backup: Data) -> Bool  {
         FfiConverterData.lower(backup),$0
     )
 })
-}
-    
-    /**
-     * Select the latest (most recently used) wallet or navigate to new wallet flow
-     * This selects the wallet with the most recent scan activity
-     */
-open func selectLatestOrNewWallet()  {try! rustCall() {
-    uniffi_cove_fn_method_ffiapp_select_latest_or_new_wallet(
-            self.uniffiCloneHandle(),$0
-    )
-}
-}
-    
-    /**
-     * Select a wallet
-     */
-open func selectWallet(id: WalletId, nextRoute: Route? = nil)throws   {try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
-    uniffi_cove_fn_method_ffiapp_select_wallet(
-            self.uniffiCloneHandle(),
-        FfiConverterTypeWalletId_lower(id),
-        FfiConverterOptionTypeRoute.lower(nextRoute),$0
-    )
-}
 }
     
 open func state() -> AppState  {
@@ -6315,7 +6291,11 @@ public protocol RouteFactoryProtocol: AnyObject, Sendable {
     
     func send(send: SendRoute)  -> Route
     
-    func sendConfirm(id: WalletId, details: ConfirmDetails, signedTransaction: BitcoinTransaction?, signedPsbt: Psbt?)  -> Route
+    func sendConfirm(id: WalletId, details: ConfirmDetails)  -> Route
+    
+    func sendConfirmSignedPsbt(id: WalletId, details: ConfirmDetails, psbt: Psbt)  -> Route
+    
+    func sendConfirmSignedTransaction(id: WalletId, details: ConfirmDetails, transaction: BitcoinTransaction)  -> Route
     
     func sendHardwareExport(id: WalletId, details: ConfirmDetails)  -> Route
     
@@ -6528,14 +6508,34 @@ open func send(send: SendRoute) -> Route  {
 })
 }
     
-open func sendConfirm(id: WalletId, details: ConfirmDetails, signedTransaction: BitcoinTransaction? = nil, signedPsbt: Psbt? = nil) -> Route  {
+open func sendConfirm(id: WalletId, details: ConfirmDetails) -> Route  {
     return try!  FfiConverterTypeRoute_lift(try! rustCall() {
     uniffi_cove_fn_method_routefactory_send_confirm(
             self.uniffiCloneHandle(),
         FfiConverterTypeWalletId_lower(id),
+        FfiConverterTypeConfirmDetails_lower(details),$0
+    )
+})
+}
+    
+open func sendConfirmSignedPsbt(id: WalletId, details: ConfirmDetails, psbt: Psbt) -> Route  {
+    return try!  FfiConverterTypeRoute_lift(try! rustCall() {
+    uniffi_cove_fn_method_routefactory_send_confirm_signed_psbt(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeWalletId_lower(id),
         FfiConverterTypeConfirmDetails_lower(details),
-        FfiConverterOptionTypeBitcoinTransaction.lower(signedTransaction),
-        FfiConverterOptionTypePsbt.lower(signedPsbt),$0
+        FfiConverterTypePsbt_lower(psbt),$0
+    )
+})
+}
+    
+open func sendConfirmSignedTransaction(id: WalletId, details: ConfirmDetails, transaction: BitcoinTransaction) -> Route  {
+    return try!  FfiConverterTypeRoute_lift(try! rustCall() {
+    uniffi_cove_fn_method_routefactory_send_confirm_signed_transaction(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeWalletId_lower(id),
+        FfiConverterTypeConfirmDetails_lower(details),
+        FfiConverterTypeBitcoinTransaction_lower(transaction),$0
     )
 })
 }
@@ -7043,8 +7043,6 @@ public func FfiConverterTypeRustAuthManager_lower(_ value: RustAuthManager) -> U
 
 public protocol RustCloudBackupManagerProtocol: AnyObject, Sendable {
     
-    func dispatch(action: CloudBackupManagerAction) 
-    
     /**
      * Back up a newly created wallet, fire-and-forget
      *
@@ -7108,6 +7106,8 @@ public protocol RustCloudBackupManagerProtocol: AnyObject, Sendable {
      */
     func verifyBackupIntegrity() async  -> String?
     
+    func dispatch(action: CloudBackupManagerAction) 
+    
 }
 open class RustCloudBackupManager: RustCloudBackupManagerProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -7168,14 +7168,6 @@ public convenience init() {
 
     
 
-    
-open func dispatch(action: CloudBackupManagerAction)  {try! rustCall() {
-    uniffi_cove_fn_method_rustcloudbackupmanager_dispatch(
-            self.uniffiCloneHandle(),
-        FfiConverterTypeCloudBackupManagerAction_lower(action),$0
-    )
-}
-}
     
     /**
      * Back up a newly created wallet, fire-and-forget
@@ -7339,6 +7331,14 @@ open func verifyBackupIntegrity()async  -> String?  {
             errorHandler: nil
             
         )
+}
+    
+open func dispatch(action: CloudBackupManagerAction)  {try! rustCall() {
+    uniffi_cove_fn_method_rustcloudbackupmanager_dispatch(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeCloudBackupManagerAction_lower(action),$0
+    )
+}
 }
     
 
@@ -8703,6 +8703,12 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
     func displayAmount(amount: Amount, showUnit: Bool)  -> String
     
     /**
+     * Formats a pending BTC amount (e.g. "+ 0.00050000 BTC pending")
+     * Returns None if the amount is zero.
+     */
+    func displayAmountPendingFmt(amount: Amount)  -> String?
+    
+    /**
      * Formats a BTC amount with direction prefix (e.g., "-0.00050000 BTC")
      *
      * Includes "-" prefix for outgoing transactions, no prefix for incoming.
@@ -8711,6 +8717,12 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
     func displayAmountWithDirection(amount: Amount, direction: TransactionDirection)  -> String
     
     func displayFiatAmount(amount: Double, withSuffix: Bool)  -> String
+    
+    /**
+     * Formats a pending fiat amount (e.g. "+ $50.00 pending")
+     * Returns None if the amount is zero.
+     */
+    func displayFiatAmountPendingFmt(amount: Double, withSuffix: Bool)  -> String?
     
     /**
      * Formats a fiat amount with direction prefix (e.g., "-$50.00")
@@ -8910,12 +8922,13 @@ public static func previewNewWalletWithMetadata(metadata: WalletMetadata) -> Rus
 })
 }
     
-public static func tryNewFromTapSigner(tapSigner: TapSigner, deriveInfo: DeriveInfo, backup: Data? = nil)throws  -> RustWalletManager  {
+public static func tryNewFromTapSigner(tapSigner: TapSigner, deriveInfo: DeriveInfo, backup: Data? = nil, birthday: WalletBirthday? = nil)throws  -> RustWalletManager  {
     return try  FfiConverterTypeRustWalletManager_lift(try rustCallWithError(FfiConverterTypeWalletManagerError_lift) {
     uniffi_cove_fn_constructor_rustwalletmanager_try_new_from_tap_signer(
         FfiConverterTypeTapSigner_lower(tapSigner),
         FfiConverterTypeDeriveInfo_lower(deriveInfo),
-        FfiConverterOptionData.lower(backup),$0
+        FfiConverterOptionData.lower(backup),
+        FfiConverterOptionTypeWalletBirthday.lower(birthday),$0
     )
 })
 }
@@ -9117,6 +9130,19 @@ open func displayAmount(amount: Amount, showUnit: Bool = true) -> String  {
 }
     
     /**
+     * Formats a pending BTC amount (e.g. "+ 0.00050000 BTC pending")
+     * Returns None if the amount is zero.
+     */
+open func displayAmountPendingFmt(amount: Amount) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+    uniffi_cove_fn_method_rustwalletmanager_display_amount_pending_fmt(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeAmount_lower(amount),$0
+    )
+})
+}
+    
+    /**
      * Formats a BTC amount with direction prefix (e.g., "-0.00050000 BTC")
      *
      * Includes "-" prefix for outgoing transactions, no prefix for incoming.
@@ -9135,6 +9161,20 @@ open func displayAmountWithDirection(amount: Amount, direction: TransactionDirec
 open func displayFiatAmount(amount: Double, withSuffix: Bool = true) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_cove_fn_method_rustwalletmanager_display_fiat_amount(
+            self.uniffiCloneHandle(),
+        FfiConverterDouble.lower(amount),
+        FfiConverterBool.lower(withSuffix),$0
+    )
+})
+}
+    
+    /**
+     * Formats a pending fiat amount (e.g. "+ $50.00 pending")
+     * Returns None if the amount is zero.
+     */
+open func displayFiatAmountPendingFmt(amount: Double, withSuffix: Bool = true) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+    uniffi_cove_fn_method_rustwalletmanager_display_fiat_amount_pending_fmt(
             self.uniffiCloneHandle(),
         FfiConverterDouble.lower(amount),
         FfiConverterBool.lower(withSuffix),$0
@@ -13874,15 +13914,17 @@ public struct DeriveInfo: Equatable, Hashable {
     public var chainCode: Data
     public var path: [UInt32]
     public var network: Network
+    public var birthHeight: UInt64?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(masterPubkey: Data, pubkey: Data, chainCode: Data, path: [UInt32], network: Network) {
+    public init(masterPubkey: Data, pubkey: Data, chainCode: Data, path: [UInt32], network: Network, birthHeight: UInt64?) {
         self.masterPubkey = masterPubkey
         self.pubkey = pubkey
         self.chainCode = chainCode
         self.path = path
         self.network = network
+        self.birthHeight = birthHeight
     }
 
     
@@ -13905,7 +13947,8 @@ public struct FfiConverterTypeDeriveInfo: FfiConverterRustBuffer {
                 pubkey: FfiConverterData.read(from: &buf), 
                 chainCode: FfiConverterData.read(from: &buf), 
                 path: FfiConverterSequenceUInt32.read(from: &buf), 
-                network: FfiConverterTypeNetwork.read(from: &buf)
+                network: FfiConverterTypeNetwork.read(from: &buf), 
+                birthHeight: FfiConverterOptionUInt64.read(from: &buf)
         )
     }
 
@@ -13915,6 +13958,7 @@ public struct FfiConverterTypeDeriveInfo: FfiConverterRustBuffer {
         FfiConverterData.write(value.chainCode, into: &buf)
         FfiConverterSequenceUInt32.write(value.path, into: &buf)
         FfiConverterTypeNetwork.write(value.network, into: &buf)
+        FfiConverterOptionUInt64.write(value.birthHeight, into: &buf)
     }
 }
 
@@ -13997,6 +14041,60 @@ public func FfiConverterTypeFeeResponse_lift(_ buf: RustBuffer) throws -> FeeRes
 #endif
 public func FfiConverterTypeFeeResponse_lower(_ value: FeeResponse) -> RustBuffer {
     return FfiConverterTypeFeeResponse.lower(value)
+}
+
+
+public struct FeeSelection {
+    public var options: FeeRateOptionsWithTotalFee
+    public var selected: FeeRateOptionWithTotalFee
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(options: FeeRateOptionsWithTotalFee, selected: FeeRateOptionWithTotalFee) {
+        self.options = options
+        self.selected = selected
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FeeSelection: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFeeSelection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeeSelection {
+        return
+            try FeeSelection(
+                options: FfiConverterTypeFeeRateOptionsWithTotalFee.read(from: &buf), 
+                selected: FfiConverterTypeFeeRateOptionWithTotalFee.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FeeSelection, into buf: inout [UInt8]) {
+        FfiConverterTypeFeeRateOptionsWithTotalFee.write(value.options, into: &buf)
+        FfiConverterTypeFeeRateOptionWithTotalFee.write(value.selected, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeeSelection_lift(_ buf: RustBuffer) throws -> FeeSelection {
+    return try FfiConverterTypeFeeSelection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeeSelection_lower(_ value: FeeSelection) -> RustBuffer {
+    return FfiConverterTypeFeeSelection.lower(value)
 }
 
 
@@ -14892,16 +14990,14 @@ public func FfiConverterTypeSendFlowCoinControlMode_lower(_ value: SendFlowCoinC
 public struct SendRouteConfirmArgs {
     public var id: WalletId
     public var details: ConfirmDetails
-    public var signedTransaction: BitcoinTransaction?
-    public var signedPsbt: Psbt?
+    public var input: SendConfirmationInput
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: WalletId, details: ConfirmDetails, signedTransaction: BitcoinTransaction?, signedPsbt: Psbt?) {
+    public init(id: WalletId, details: ConfirmDetails, input: SendConfirmationInput) {
         self.id = id
         self.details = details
-        self.signedTransaction = signedTransaction
-        self.signedPsbt = signedPsbt
+        self.input = input
     }
 
     
@@ -14922,16 +15018,14 @@ public struct FfiConverterTypeSendRouteConfirmArgs: FfiConverterRustBuffer {
             try SendRouteConfirmArgs(
                 id: FfiConverterTypeWalletId.read(from: &buf), 
                 details: FfiConverterTypeConfirmDetails.read(from: &buf), 
-                signedTransaction: FfiConverterOptionTypeBitcoinTransaction.read(from: &buf), 
-                signedPsbt: FfiConverterOptionTypePsbt.read(from: &buf)
+                input: FfiConverterTypeSendConfirmationInput.read(from: &buf)
         )
     }
 
     public static func write(_ value: SendRouteConfirmArgs, into buf: inout [UInt8]) {
         FfiConverterTypeWalletId.write(value.id, into: &buf)
         FfiConverterTypeConfirmDetails.write(value.details, into: &buf)
-        FfiConverterOptionTypeBitcoinTransaction.write(value.signedTransaction, into: &buf)
-        FfiConverterOptionTypePsbt.write(value.signedPsbt, into: &buf)
+        FfiConverterTypeSendConfirmationInput.write(value.input, into: &buf)
     }
 }
 
@@ -15161,12 +15255,14 @@ public func FfiConverterTypeTapSignerNewPinArgs_lower(_ value: TapSignerNewPinAr
 public struct TapSignerSetupComplete: Equatable, Hashable {
     public var backup: Data
     public var deriveInfo: DeriveInfo
+    public var birthday: WalletBirthday
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(backup: Data, deriveInfo: DeriveInfo) {
+    public init(backup: Data, deriveInfo: DeriveInfo, birthday: WalletBirthday) {
         self.backup = backup
         self.deriveInfo = deriveInfo
+        self.birthday = birthday
     }
 
     
@@ -15186,13 +15282,15 @@ public struct FfiConverterTypeTapSignerSetupComplete: FfiConverterRustBuffer {
         return
             try TapSignerSetupComplete(
                 backup: FfiConverterData.read(from: &buf), 
-                deriveInfo: FfiConverterTypeDeriveInfo.read(from: &buf)
+                deriveInfo: FfiConverterTypeDeriveInfo.read(from: &buf), 
+                birthday: FfiConverterTypeWalletBirthday.read(from: &buf)
         )
     }
 
     public static func write(_ value: TapSignerSetupComplete, into buf: inout [UInt8]) {
         FfiConverterData.write(value.backup, into: &buf)
         FfiConverterTypeDeriveInfo.write(value.deriveInfo, into: &buf)
+        FfiConverterTypeWalletBirthday.write(value.birthday, into: &buf)
     }
 }
 
@@ -15336,6 +15434,7 @@ public struct WalletMetadata: Equatable, Hashable {
     public var addressType: WalletAddressType
     public var fiatOrBtc: FiatOrBtc
     public var origin: String?
+    public var birthday: WalletBirthday?
     /**
      * Metadata data specific to different hardware wallets
      */
@@ -15349,7 +15448,7 @@ public struct WalletMetadata: Equatable, Hashable {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: WalletId, name: String, color: WalletColor, verified: Bool, network: Network, masterFingerprint: Fingerprint?, selectedUnit: BitcoinUnit, sensitiveVisible: Bool, detailsExpanded: Bool, walletType: WalletType, walletMode: WalletMode, discoveryState: DiscoveryState, addressType: WalletAddressType, fiatOrBtc: FiatOrBtc, origin: String?, 
+    public init(id: WalletId, name: String, color: WalletColor, verified: Bool, network: Network, masterFingerprint: Fingerprint?, selectedUnit: BitcoinUnit, sensitiveVisible: Bool, detailsExpanded: Bool, walletType: WalletType, walletMode: WalletMode, discoveryState: DiscoveryState, addressType: WalletAddressType, fiatOrBtc: FiatOrBtc, origin: String?, birthday: WalletBirthday?, 
         /**
          * Metadata data specific to different hardware wallets
          */hardwareMetadata: HardwareWalletMetadata?, 
@@ -15372,6 +15471,7 @@ public struct WalletMetadata: Equatable, Hashable {
         self.addressType = addressType
         self.fiatOrBtc = fiatOrBtc
         self.origin = origin
+        self.birthday = birthday
         self.hardwareMetadata = hardwareMetadata
         self.showLabels = showLabels
         self.`internal` = `internal`
@@ -15447,6 +15547,7 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
                 addressType: FfiConverterTypeWalletAddressType.read(from: &buf), 
                 fiatOrBtc: FfiConverterTypeFiatOrBtc.read(from: &buf), 
                 origin: FfiConverterOptionString.read(from: &buf), 
+                birthday: FfiConverterOptionTypeWalletBirthday.read(from: &buf), 
                 hardwareMetadata: FfiConverterOptionTypeHardwareWalletMetadata.read(from: &buf), 
                 showLabels: FfiConverterBool.read(from: &buf), 
                 internal: FfiConverterTypeInternalOnlyMetadata.read(from: &buf)
@@ -15469,6 +15570,7 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
         FfiConverterTypeWalletAddressType.write(value.addressType, into: &buf)
         FfiConverterTypeFiatOrBtc.write(value.fiatOrBtc, into: &buf)
         FfiConverterOptionString.write(value.origin, into: &buf)
+        FfiConverterOptionTypeWalletBirthday.write(value.birthday, into: &buf)
         FfiConverterOptionTypeHardwareWalletMetadata.write(value.hardwareMetadata, into: &buf)
         FfiConverterBool.write(value.showLabels, into: &buf)
         FfiConverterTypeInternalOnlyMetadata.write(value.`internal`, into: &buf)
@@ -15941,6 +16043,9 @@ public enum AppAction {
     case pushRoute(Route
     )
     case popRoute
+    case selectWallet(id: WalletId
+    )
+    case selectLatestOrNewWallet
     case changeNetwork(network: Network
     )
     case changeColorScheme(ColorSchemeSelection
@@ -15982,25 +16087,30 @@ public struct FfiConverterTypeAppAction: FfiConverterRustBuffer {
         
         case 3: return .popRoute
         
-        case 4: return .changeNetwork(network: try FfiConverterTypeNetwork.read(from: &buf)
+        case 4: return .selectWallet(id: try FfiConverterTypeWalletId.read(from: &buf)
         )
         
-        case 5: return .changeColorScheme(try FfiConverterTypeColorSchemeSelection.read(from: &buf)
+        case 5: return .selectLatestOrNewWallet
+        
+        case 6: return .changeNetwork(network: try FfiConverterTypeNetwork.read(from: &buf)
         )
         
-        case 6: return .changeFiatCurrency(try FfiConverterTypeFiatCurrency.read(from: &buf)
+        case 7: return .changeColorScheme(try FfiConverterTypeColorSchemeSelection.read(from: &buf)
         )
         
-        case 7: return .setSelectedNode(try FfiConverterTypeNode.read(from: &buf)
+        case 8: return .changeFiatCurrency(try FfiConverterTypeFiatCurrency.read(from: &buf)
         )
         
-        case 8: return .updateFiatPrices
+        case 9: return .setSelectedNode(try FfiConverterTypeNode.read(from: &buf)
+        )
         
-        case 9: return .updateFees
+        case 10: return .updateFiatPrices
         
-        case 10: return .acceptTerms
+        case 11: return .updateFees
         
-        case 11: return .refreshAfterImport
+        case 12: return .acceptTerms
+        
+        case 13: return .refreshAfterImport
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -16024,40 +16134,49 @@ public struct FfiConverterTypeAppAction: FfiConverterRustBuffer {
             writeInt(&buf, Int32(3))
         
         
-        case let .changeNetwork(network):
+        case let .selectWallet(id):
             writeInt(&buf, Int32(4))
+            FfiConverterTypeWalletId.write(id, into: &buf)
+            
+        
+        case .selectLatestOrNewWallet:
+            writeInt(&buf, Int32(5))
+        
+        
+        case let .changeNetwork(network):
+            writeInt(&buf, Int32(6))
             FfiConverterTypeNetwork.write(network, into: &buf)
             
         
         case let .changeColorScheme(v1):
-            writeInt(&buf, Int32(5))
+            writeInt(&buf, Int32(7))
             FfiConverterTypeColorSchemeSelection.write(v1, into: &buf)
             
         
         case let .changeFiatCurrency(v1):
-            writeInt(&buf, Int32(6))
+            writeInt(&buf, Int32(8))
             FfiConverterTypeFiatCurrency.write(v1, into: &buf)
             
         
         case let .setSelectedNode(v1):
-            writeInt(&buf, Int32(7))
+            writeInt(&buf, Int32(9))
             FfiConverterTypeNode.write(v1, into: &buf)
             
         
         case .updateFiatPrices:
-            writeInt(&buf, Int32(8))
-        
-        
-        case .updateFees:
-            writeInt(&buf, Int32(9))
-        
-        
-        case .acceptTerms:
             writeInt(&buf, Int32(10))
         
         
-        case .refreshAfterImport:
+        case .updateFees:
             writeInt(&buf, Int32(11))
+        
+        
+        case .acceptTerms:
+            writeInt(&buf, Int32(12))
+        
+        
+        case .refreshAfterImport:
+            writeInt(&buf, Int32(13))
         
         }
     }
@@ -16467,6 +16586,8 @@ enum AppError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
     )
     case FeesError(String
     )
+    case WalletSelection(String
+    )
 
     
 
@@ -16512,6 +16633,9 @@ public struct FfiConverterTypeAppError: FfiConverterRustBuffer {
         case 2: return .FeesError(
             try FfiConverterString.read(from: &buf)
             )
+        case 3: return .WalletSelection(
+            try FfiConverterString.read(from: &buf)
+            )
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -16531,6 +16655,11 @@ public struct FfiConverterTypeAppError: FfiConverterRustBuffer {
         
         case let .FeesError(v1):
             writeInt(&buf, Int32(2))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .WalletSelection(v1):
+            writeInt(&buf, Int32(3))
             FfiConverterString.write(v1, into: &buf)
             
         }
@@ -26535,6 +26664,85 @@ public func FfiConverterTypeSeedQrError_lower(_ value: SeedQrError) -> RustBuffe
 
 
 
+public enum SendConfirmationInput {
+    
+    case unsigned
+    case signedTransaction(BitcoinTransaction
+    )
+    case signedPsbt(Psbt
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension SendConfirmationInput: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSendConfirmationInput: FfiConverterRustBuffer {
+    typealias SwiftType = SendConfirmationInput
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SendConfirmationInput {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .unsigned
+        
+        case 2: return .signedTransaction(try FfiConverterTypeBitcoinTransaction.read(from: &buf)
+        )
+        
+        case 3: return .signedPsbt(try FfiConverterTypePsbt.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: SendConfirmationInput, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .unsigned:
+            writeInt(&buf, Int32(1))
+        
+        
+        case let .signedTransaction(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeBitcoinTransaction.write(v1, into: &buf)
+            
+        
+        case let .signedPsbt(v1):
+            writeInt(&buf, Int32(3))
+            FfiConverterTypePsbt.write(v1, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSendConfirmationInput_lift(_ buf: RustBuffer) throws -> SendConfirmationInput {
+    return try FfiConverterTypeSendConfirmationInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSendConfirmationInput_lower(_ value: SendConfirmationInput) -> RustBuffer {
+    return FfiConverterTypeSendConfirmationInput.lower(value)
+}
+
+
+
+
 public enum SendFlowAlertState: Equatable, Hashable {
     
     case error(SendFlowError
@@ -27318,9 +27526,7 @@ public enum SendFlowManagerReconcileMessage {
     )
     case updateFocusField(SetAmountFocusField?
     )
-    case updateSelectedFeeRate(FeeRateOptionWithTotalFee
-    )
-    case updateFeeRateOptions(FeeRateOptionsWithTotalFee
+    case updateFeeSelection(FeeSelection
     )
     case refreshPresenters
     case setAlert(SendFlowAlertState
@@ -27373,18 +27579,15 @@ public struct FfiConverterTypeSendFlowManagerReconcileMessage: FfiConverterRustB
         case 9: return .updateFocusField(try FfiConverterOptionTypeSetAmountFocusField.read(from: &buf)
         )
         
-        case 10: return .updateSelectedFeeRate(try FfiConverterTypeFeeRateOptionWithTotalFee.read(from: &buf)
+        case 10: return .updateFeeSelection(try FfiConverterTypeFeeSelection.read(from: &buf)
         )
         
-        case 11: return .updateFeeRateOptions(try FfiConverterTypeFeeRateOptionsWithTotalFee.read(from: &buf)
+        case 11: return .refreshPresenters
+        
+        case 12: return .setAlert(try FfiConverterTypeSendFlowAlertState.read(from: &buf)
         )
         
-        case 12: return .refreshPresenters
-        
-        case 13: return .setAlert(try FfiConverterTypeSendFlowAlertState.read(from: &buf)
-        )
-        
-        case 14: return .clearAlert
+        case 13: return .clearAlert
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -27438,27 +27641,22 @@ public struct FfiConverterTypeSendFlowManagerReconcileMessage: FfiConverterRustB
             FfiConverterOptionTypeSetAmountFocusField.write(v1, into: &buf)
             
         
-        case let .updateSelectedFeeRate(v1):
+        case let .updateFeeSelection(v1):
             writeInt(&buf, Int32(10))
-            FfiConverterTypeFeeRateOptionWithTotalFee.write(v1, into: &buf)
-            
-        
-        case let .updateFeeRateOptions(v1):
-            writeInt(&buf, Int32(11))
-            FfiConverterTypeFeeRateOptionsWithTotalFee.write(v1, into: &buf)
+            FfiConverterTypeFeeSelection.write(v1, into: &buf)
             
         
         case .refreshPresenters:
-            writeInt(&buf, Int32(12))
+            writeInt(&buf, Int32(11))
         
         
         case let .setAlert(v1):
-            writeInt(&buf, Int32(13))
+            writeInt(&buf, Int32(12))
             FfiConverterTypeSendFlowAlertState.write(v1, into: &buf)
             
         
         case .clearAlert:
-            writeInt(&buf, Int32(14))
+            writeInt(&buf, Int32(13))
         
         }
     }
@@ -30086,6 +30284,78 @@ public func FfiConverterTypeWalletAddressType_lower(_ value: WalletAddressType) 
 
 
 
+public enum WalletBirthday: Equatable, Hashable {
+    
+    case blockHeight(UInt64
+    )
+    case timestamp(UInt64
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension WalletBirthday: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeWalletBirthday: FfiConverterRustBuffer {
+    typealias SwiftType = WalletBirthday
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WalletBirthday {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .blockHeight(try FfiConverterUInt64.read(from: &buf)
+        )
+        
+        case 2: return .timestamp(try FfiConverterUInt64.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: WalletBirthday, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .blockHeight(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterUInt64.write(v1, into: &buf)
+            
+        
+        case let .timestamp(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterUInt64.write(v1, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWalletBirthday_lift(_ buf: RustBuffer) throws -> WalletBirthday {
+    return try FfiConverterTypeWalletBirthday.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWalletBirthday_lower(_ value: WalletBirthday) -> RustBuffer {
+    return FfiConverterTypeWalletBirthday.lower(value)
+}
+
+
+
+
 public enum WalletColor: Equatable, Hashable {
     
     case red
@@ -30290,6 +30560,8 @@ enum WalletCreationError: Swift.Error, Equatable, Hashable, Foundation.Localized
     )
     case Import(String
     )
+    case Unexpected(String
+    )
     case MultiFormat(MultiFormatError
     )
 
@@ -30346,7 +30618,10 @@ public struct FfiConverterTypeWalletCreationError: FfiConverterRustBuffer {
         case 5: return .Import(
             try FfiConverterString.read(from: &buf)
             )
-        case 6: return .MultiFormat(
+        case 6: return .Unexpected(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 7: return .MultiFormat(
             try FfiConverterTypeMultiFormatError.read(from: &buf)
             )
 
@@ -30386,8 +30661,13 @@ public struct FfiConverterTypeWalletCreationError: FfiConverterRustBuffer {
             FfiConverterString.write(v1, into: &buf)
             
         
-        case let .MultiFormat(v1):
+        case let .Unexpected(v1):
             writeInt(&buf, Int32(6))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .MultiFormat(v1):
+            writeInt(&buf, Int32(7))
             FfiConverterTypeMultiFormatError.write(v1, into: &buf)
             
         }
@@ -34556,30 +34836,6 @@ fileprivate struct FfiConverterOptionTypeOnboardingBranch: FfiConverterRustBuffe
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterOptionTypeRoute: FfiConverterRustBuffer {
-    typealias SwiftType = Route?
-
-    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
-        guard let value = value else {
-            writeInt(&buf, Int8(0))
-            return
-        }
-        writeInt(&buf, Int8(1))
-        FfiConverterTypeRoute.write(value, into: &buf)
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
-        switch try readInt(&buf) as Int8 {
-        case 0: return nil
-        case 1: return try FfiConverterTypeRoute.read(from: &buf)
-        default: throw UniffiInternalError.unexpectedOptionalTag
-        }
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
 fileprivate struct FfiConverterOptionTypeSetAmountFocusField: FfiConverterRustBuffer {
     typealias SwiftType = SetAmountFocusField?
 
@@ -34668,6 +34924,30 @@ fileprivate struct FfiConverterOptionTypeTapSignerResponse: FfiConverterRustBuff
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeTapSignerResponse.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeWalletBirthday: FfiConverterRustBuffer {
+    typealias SwiftType = WalletBirthday?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeWalletBirthday.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeWalletBirthday.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -36123,7 +36403,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_ffiapp_delete_corrupted_wallet() != 27181) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_ffiapp_dispatch() != 37137) {
+    if (uniffi_cove_checksum_method_ffiapp_dispatch() != 7288) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_email_mailto() != 41824) {
@@ -36181,12 +36461,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_save_tap_signer_backup() != 24217) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_ffiapp_select_latest_or_new_wallet() != 31849) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_ffiapp_select_wallet() != 51673) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_state() != 49253) {
@@ -36489,9 +36763,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustauthmanager_validate_security_action() != 4302) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustcloudbackupmanager_dispatch() != 54131) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_cove_checksum_method_rustcloudbackupmanager_backup_new_wallet() != 25342) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -36538,6 +36809,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustcloudbackupmanager_verify_backup_integrity() != 35162) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustcloudbackupmanager_dispatch() != 23570) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustcoincontrolmanager_button_presentation() != 24764) {
@@ -36732,10 +37006,16 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustwalletmanager_display_amount() != 41368) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_rustwalletmanager_display_amount_pending_fmt() != 5678) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_rustwalletmanager_display_amount_with_direction() != 60498) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_display_fiat_amount() != 60595) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustwalletmanager_display_fiat_amount_pending_fmt() != 55764) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_display_fiat_amount_with_direction() != 5406) {
@@ -36945,7 +37225,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_routefactory_send() != 47898) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_routefactory_send_confirm() != 50845) {
+    if (uniffi_cove_checksum_method_routefactory_send_confirm() != 22813) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_routefactory_send_confirm_signed_psbt() != 57735) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_routefactory_send_confirm_signed_transaction() != 58855) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_routefactory_send_hardware_export() != 49069) {
@@ -37152,6 +37438,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_balance_spendable() != 31487) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_balance_untrusted_pending() != 30274) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_fingerprint_as_lowercase() != 43161) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -37260,7 +37549,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_constructor_rustwalletmanager_preview_new_wallet_with_metadata() != 41631) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_constructor_rustwalletmanager_try_new_from_tap_signer() != 14372) {
+    if (uniffi_cove_checksum_constructor_rustwalletmanager_try_new_from_tap_signer() != 10884) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_rustwalletmanager_try_new_from_xpub() != 15129) {

@@ -139,7 +139,7 @@ extension ScanManager {
         do {
             let manager = ImportWalletManager()
             let walletMetadata = try manager.rust.importWallet(enteredWords: [words])
-            try app.rust.selectWallet(id: walletMetadata.id)
+            try app.selectWalletOrThrow(walletMetadata.id)
         } catch let error as ImportWalletError {
             switch error {
             case let .InvalidWordGroup(error):
@@ -170,7 +170,7 @@ extension ScanManager {
             Log.debug("Imported Wallet: \(id)")
             app.alertState = TaggedItem(.importedSuccessfully)
 
-            if app.walletManager?.id != id { try app.rust.selectWallet(id: id) }
+            if app.walletManager?.id != id { try app.selectWalletOrThrow(id) }
 
             if app.walletManager?.id == id, app.walletManager?.walletMetadata.walletType != .hot {
                 try app.walletManager?.rust.setWalletType(walletType: .cold)
@@ -178,7 +178,7 @@ extension ScanManager {
         } catch let WalletError.WalletAlreadyExists(id) {
             app.alertState = TaggedItem(.duplicateWallet(walletId: id))
 
-            if (try? app.rust.selectWallet(id: id)) == nil {
+            if (try? app.selectWalletOrThrow(id)) == nil {
                 app.alertState = TaggedItem(.unableToSelectWallet)
             }
         } catch {
@@ -228,9 +228,10 @@ extension ScanManager {
             return
         }
 
-        let route = RouteFactory().sendConfirm(
-            id: txnRecord.walletId(), details: txnRecord.confirmDetails(),
-            signedTransaction: transaction
+        let route = RouteFactory().sendConfirmSignedTransaction(
+            id: txnRecord.walletId(),
+            details: txnRecord.confirmDetails(),
+            transaction: transaction
         )
 
         app.pushRoute(route)
@@ -249,9 +250,10 @@ extension ScanManager {
             return
         }
 
-        let route = RouteFactory().sendConfirm(
-            id: txnRecord.walletId(), details: txnRecord.confirmDetails(),
-            signedPsbt: psbt
+        let route = RouteFactory().sendConfirmSignedPsbt(
+            id: txnRecord.walletId(),
+            details: txnRecord.confirmDetails(),
+            psbt: psbt
         )
 
         app.pushRoute(route)
