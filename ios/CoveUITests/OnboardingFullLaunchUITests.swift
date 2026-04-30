@@ -49,6 +49,7 @@ final class OnboardingFullLaunchUITests: XCTestCase {
         app.launch()
 
         app.buttons["Get Started"].tap()
+        acceptTermsIfNeeded()
         button(startingWith: "Yes, I have Bitcoin").tap()
         app.buttons["Back"].tap()
 
@@ -208,6 +209,7 @@ final class OnboardingFullLaunchUITests: XCTestCase {
 
     private func reachBackupWallet() {
         app.buttons["Get Started"].tap()
+        acceptTermsIfNeeded()
         button(startingWith: "No, I").tap()
 
         assertBackupWallet(titlePrefix: "Back up your wallet")
@@ -215,6 +217,7 @@ final class OnboardingFullLaunchUITests: XCTestCase {
 
     private func reachStorageChoices() {
         app.buttons["Get Started"].tap()
+        acceptTermsIfNeeded()
         button(startingWith: "Yes, I have Bitcoin").tap()
         button(startingWith: "Use another wallet").tap()
 
@@ -235,6 +238,22 @@ final class OnboardingFullLaunchUITests: XCTestCase {
 
     private func acceptTermsAndContinue() {
         XCTAssertTrue(app.staticTexts["Terms & Conditions"].waitForExistence(timeout: 10))
+
+        [
+            "onboarding.terms.check.backup",
+            "onboarding.terms.check.legal",
+            "onboarding.terms.check.financial",
+            "onboarding.terms.check.recovery",
+            "onboarding.terms.check.agreement",
+        ].forEach { identifier in
+            element(identifier: identifier).tap()
+        }
+
+        app.buttons["onboarding.terms.agree"].tap()
+    }
+
+    private func acceptTermsIfNeeded() {
+        guard app.staticTexts["Terms & Conditions"].waitForExistence(timeout: 2) else { return }
 
         [
             "onboarding.terms.check.backup",
